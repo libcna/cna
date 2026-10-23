@@ -3098,14 +3098,15 @@
       ],
       "subsystem": "game/lifecycle",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "CNA/Misc.hpp publicly declares five Runtime methods but the runtime module supplies no definitions; the associated graphics-profile demo never uses this facade.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "379bac6d3f76f452ffce7c7760149b2d1df30b95",
       "validation": [
         "Existing tools/repro_runtime_facade.cpp freshly compiles with C++23/Wall/Wextra/Werror but fails its actual current1ad0a3916 libcna.so link with all five missing Runtime symbols. repair-runtime-facade-before-build.log; permanent ../cna-demos/docs/repair-evidence/api-shape/. No implementation or closure claimed."
       ],
-      "final_disposition": null
+      "final_disposition": "UNSUPPORTED_CONTRACT_CORRECTED",
+      "closure_evidence": "Retired never-implemented CNA/Misc.hpp and RuntimeOptions, as explicitly permitted by the original issue; no implementation/export removed. Game and CNA::Runtime CMake target remain supported. New CApi_RetiredRuntimeFacade fails before removal and passes after; native runtime244PASS/4sameSKIP, six audit/retirement gates PASS, C runtime smokes PASS on SOFTWARE/GLES after separate019 fixture correction8a21c594d. Both47-case Game/C-game renderer subsets unchanged; all275 external binaries match full019 checkpoint. Original link reproducer preserved. ../cna-demos/docs/repair-evidence/api-shape/RUNTIME_FACADE_RETIREMENT.md."
     },
     {
       "id": "CNA-DEMOS-ISSUE-151",

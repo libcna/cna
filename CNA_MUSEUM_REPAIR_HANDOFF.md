@@ -27,7 +27,15 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: commit/close ISSUE-150, then ISSUE-050 (2026-10-23)
+### Current task: publish ISSUE-150 closure, then ISSUE-050 (2026-10-23)
+
+ISSUE-150 repair is committed as379bac6d3f76f452ffce7c7760149b2d1df30b95. Matrix and demos inventory
+now close150 as UNSUPPORTED_CONTRACT_CORRECTED, preserving its historical link reproducer and
+description. Census156 IDs/119 final dispositions/37 without. The separate C smoke correction is
+8a21c594d. Demos closure/evidence commit4e9f461881aae09db5c86df5108a800c484346bd is complete.
+Pending owned closure work:150 matrix hunk and this handoff. Do not stage the inherited113
+matrix/inventory hunk. Next commit the closure records, publish normal fast-forward, verify
+remote SHAs and begin050.
 
 C API audit commit079a2fbe2891dae7e144a95a55963fa45adb48de is published and its remote SHA verified.
 ISSUE-150 remains OPEN until validation/closure. The issue explicitly permits retiring the
