@@ -36,10 +36,16 @@ namespace CNA::Devices
     {
     public:
         /**
-         * @brief Gets whether a system tray is supported on the current platform.
+         * @brief Gets whether the selected platform provides a native tray service.
          *
-         * @return true on Desktop (Windows/Linux/macOS); false on Android, iOS, and
-         * Web/Emscripten, where no native tray backend exists.
+         * This is a platform capability query, not a probe for a running notification-area
+         * host. It creates no icon and does not guarantee that construction will succeed.
+         * In particular, Linux may provide the service but lack a session bus or StatusNotifier
+         * watcher. Callers must also handle construction failure.
+         *
+         * @return True when the selected platform advertises the tray service. SDL3 desktop
+         * builds advertise it on Windows/Linux/macOS; mobile, web, headless and terminal
+         * implementations do not.
          */
         [[nodiscard]] static bool getIsSupportedProperty();
 
@@ -51,6 +57,9 @@ namespace CNA::Devices
          * supported on all platforms.
          * @throws CNA::Platform::PlatformNotSupportedException If the selected platform reports
          * no tray capability.
+         * @throws CNA::Platform::PlatformException If the native host cannot create an icon,
+         * including a missing Linux session bus or StatusNotifier watcher. A true support query
+         * does not suppress or prevent this environmental failure.
          */
         explicit SystemTray(const std::string& tooltip);
 

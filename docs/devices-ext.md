@@ -58,6 +58,13 @@ the desktop, with `bash tools/platform/run_message_box_tests_private.sh cmake-bu
 That harness requires xdotool, opts into the otherwise noninteractive test suite, and deliberately
 selects the X11 toolkit rather than Zenity; it is not a Zenity, Windows or macOS validation claim.
 
+`SystemTray.getIsSupportedProperty()` reports the selected platform's tray-service capability,
+not the presence of a running desktop notification-area host. On Linux it can be true with no
+session bus or StatusNotifier watcher. Constructing `SystemTray` still reports that failure
+through `CNA::Platform::PlatformException`; handle it and continue without the icon when a tray
+is optional. The query does not initialize a tray or probe D-Bus. This preserves the documented
+support-query link boundary and avoids treating a point-in-time host probe as an allocation guarantee.
+
 ## Considered and rejected
 
 These were rejected in the original analysis (2026-07-06) and its second round (2026-07-07).

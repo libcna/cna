@@ -27,7 +27,28 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: museum B14 native dialog keyboard defaults (2026-10-23)
+### Current task: museum B13 tray-capability contract (2026-10-23)
+
+B14 native flag repair is published as
+`aff773b3bd99a02154d0ace2543c9c65bd32f7f8` (push75043, remote verified).
+The museum explicitly offered either a watcher probe or an accurate capability contract
+for B13. Source audit confirms this getter intentionally lives in SystemTraySupport.cpp
+and links no native tray; Sdl3ServiceSupport.cpp reports desktop service availability,
+while construction performs actual allocation and propagates PlatformException.
+The prior public header described desktop support but omitted the host-dependent failure.
+Disposition: DOCUMENTATION_DEFECT corrected, no runtime behavior change. Header and
+devices guide now explicitly say the query is not a live StatusNotifier/D-Bus probe and
+document constructor failure even when it is true. The museum's supplied no-host failure
+is consistent with this contract; no new live tray runtime pass is claimed here.
+Existing canned tests cover capability selection, no-service refusal and icon ownership;
+they were inspected, not rerun (current multi tree has CNA_DEVICES=OFF). The preceding
+platform regression525PASS/12SKIP is not relabeled as public SystemTray coverage.
+Only two documentation files and this handoff belong to this batch. This checkpoint is
+the commit containing this entry, based onaff773b3b. Next: StorageDevice.SetAppNameEXT
+eager root creation, including the Sharp Runtime isolated-storage override; do not fix
+only the CNA caller while losing per-game isolated-storage identity.
+
+### Previous checkpoint: museum B14 native dialog keyboard defaults (2026-10-23)
 
 B10 documentation/regression commit is published as
 `376eb834b17b2a47fbb92afe50014ede0a78ba08` (push92404).
