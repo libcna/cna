@@ -105,6 +105,20 @@ namespace Microsoft::Xna::Framework::Graphics
         std::is_same_v<std::remove_cv_t<T>, VertexPositionNormalTexture> ||
         std::is_same_v<std::remove_cv_t<T>, VertexPositionTexture>;
 
+    /**
+     * @brief A vertex structure the raw VertexDeclaration-driven user draws cannot read as a GPU
+     * stream: it is not trivially copyable, so its bytes include object-model state (a vtable
+     * pointer) the declaration does not describe.
+     *
+     * Every CNA packed vector is such a type -- `Color` included, which is a 16-byte polymorphic
+     * object here rather than XNA's 4-byte value -- and so is any structure embedding one, the
+     * usual XNA custom-vertex pattern (CNA-DEMOS-ISSUE-005).
+     */
+    template <typename T>
+    inline constexpr bool IsUnreadableUserVertexTypeEXT =
+        !std::is_void_v<std::remove_cv_t<T>> && !IsStockUserVertexTypeEXT<T> &&
+        !std::is_trivially_copyable_v<std::remove_cv_t<T>>;
+
     class GraphicsDevice : public System::Object, public System::IDisposable
     {
     public:
@@ -675,6 +689,27 @@ namespace Microsoft::Xna::Framework::Graphics
                                 const VertexDeclaration& vertexDeclaration);
 
         /**
+         * @brief Refuses (deleted), at compile time, a vertex structure that is not trivially
+         * copyable.
+         *
+         * The raw overload reads @p vertexData as the bytes @p vertexDeclaration describes, which
+         * a structure carrying object-model bytes is not, so it would draw garbage. Store a colour
+         * as its packed `std::uint32_t` (`Color::getPackedValueProperty()`) instead of a `Color`
+         * (CNA-DEMOS-ISSUE-005).
+         *
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         The vertices.
+         * @param vertexOffset       Starting vertex index.
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  The layout the vertices were meant to have.
+         */
+        template <typename T>
+            requires IsUnreadableUserVertexTypeEXT<T>
+        void DrawUserPrimitives(PrimitiveType primitiveType, const T* vertexData, int vertexOffset,
+                                int primitiveCount,
+                                const VertexDeclaration& vertexDeclaration) = delete;
+
+        /**
          * @brief Draws non-indexed primitives from a VertexPositionColor array with an explicit
          *        VertexDeclaration.
          *
@@ -1018,6 +1053,32 @@ namespace Microsoft::Xna::Framework::Graphics
                                        const VertexDeclaration& vertexDeclaration);
 
         /**
+         * @brief Refuses (deleted), at compile time, a vertex structure that is not trivially
+         * copyable.
+         *
+         * The raw overload reads @p vertexData as the bytes @p vertexDeclaration describes, which
+         * a structure carrying object-model bytes is not, so it would draw garbage. Store a colour
+         * as its packed `std::uint32_t` (`Color::getPackedValueProperty()`) instead of a `Color`
+         * (CNA-DEMOS-ISSUE-005).
+         *
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         The vertices.
+         * @param vertexOffset       Offset into @p vertexData (in vertices).
+         * @param numVertices        Number of vertices in @p vertexData.
+         * @param indexData          The 16-bit indices.
+         * @param indexOffset        Offset into @p indexData (in indices).
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  The layout the vertices were meant to have.
+         */
+        template <typename T>
+            requires IsUnreadableUserVertexTypeEXT<T>
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType, const T* vertexData,
+                                       int vertexOffset, int numVertices,
+                                       const std::uint16_t* indexData, int indexOffset,
+                                       int primitiveCount,
+                                       const VertexDeclaration& vertexDeclaration) = delete;
+
+        /**
          * @brief Draws indexed VertexPositionColor primitives with an explicit VertexDeclaration
          *        (16-bit indices).
          *
@@ -1126,6 +1187,32 @@ namespace Microsoft::Xna::Framework::Graphics
                                        const void* vertexData, int vertexOffset, int numVertices,
                                        const std::uint32_t* indexData, int indexOffset, int primitiveCount,
                                        const VertexDeclaration& vertexDeclaration);
+
+        /**
+         * @brief Refuses (deleted), at compile time, a vertex structure that is not trivially
+         * copyable.
+         *
+         * The raw overload reads @p vertexData as the bytes @p vertexDeclaration describes, which
+         * a structure carrying object-model bytes is not, so it would draw garbage. Store a colour
+         * as its packed `std::uint32_t` (`Color::getPackedValueProperty()`) instead of a `Color`
+         * (CNA-DEMOS-ISSUE-005).
+         *
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         The vertices.
+         * @param vertexOffset       Offset into @p vertexData (in vertices).
+         * @param numVertices        Number of vertices in @p vertexData.
+         * @param indexData          The 32-bit indices.
+         * @param indexOffset        Offset into @p indexData (in indices).
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  The layout the vertices were meant to have.
+         */
+        template <typename T>
+            requires IsUnreadableUserVertexTypeEXT<T>
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType, const T* vertexData,
+                                       int vertexOffset, int numVertices,
+                                       const std::uint32_t* indexData, int indexOffset,
+                                       int primitiveCount,
+                                       const VertexDeclaration& vertexDeclaration) = delete;
 
         /**
          * @brief Draws indexed VertexPositionColor primitives with an explicit VertexDeclaration
