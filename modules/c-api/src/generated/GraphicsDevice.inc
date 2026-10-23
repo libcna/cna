@@ -679,7 +679,7 @@ CNA_Result cna_graphics_device_supports_image_based_lighting_ext(
 
 CNA_Result cna_graphics_device_get_display_color_space_ext(
     const CNA_Handle graphics_device,
-    uint32_t* const out_space)
+    CNA_DisplayColorSpace* const out_space)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         if (out_space == nullptr) {
@@ -690,7 +690,7 @@ CNA_Result cna_graphics_device_get_display_color_space_ext(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        *out_space = static_cast<uint32_t>(static_cast<uint32_t>(object->value->GetDisplayColorSpaceEXT()));
+        *out_space = static_cast<CNA_DisplayColorSpace>(static_cast<uint32_t>(object->value->GetDisplayColorSpaceEXT()));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -903,7 +903,7 @@ CNA_Result cna_graphics_device_set_string_marker_ext(
 
 CNA_Result cna_graphics_device_set_display_color_space_ext(
     const CNA_Handle graphics_device,
-    const uint32_t space,
+    const CNA_DisplayColorSpace space,
     CNA_Bool* const out_changed)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
@@ -926,7 +926,7 @@ CNA_Result cna_graphics_device_set_display_color_space_ext(
 
 CNA_Result cna_graphics_device_supports_display_color_space_ext(
     const CNA_Handle graphics_device,
-    const uint32_t space,
+    const CNA_DisplayColorSpace space,
     CNA_Bool* const out_supported)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {

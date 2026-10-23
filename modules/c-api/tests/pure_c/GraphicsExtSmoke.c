@@ -452,7 +452,7 @@ static CNA_Result on_load(CNA_Handle game, const CNA_GameTime *game_time,
   }
 
   CNA_Bool supported = CNA_FALSE;
-  uint32_t color_space = 0;
+  CNA_DisplayColorSpace color_space = CNA_DISPLAY_COLOR_SPACE_SCRGB;
   if (cna_graphics_device_executes_shader_effect_source_ext(
           graphics_device, &supported) != CNA_RESULT_SUCCESS ||
       cna_graphics_device_supports_image_based_lighting_ext(
@@ -468,6 +468,18 @@ static CNA_Result on_load(CNA_Handle game, const CNA_GameTime *game_time,
           graphics_device, color_space, &supported)) ||
       !is_supported(cna_graphics_device_notify_content_lost_resources_ext(
           graphics_device))) {
+    return CNA_RESULT_INVALID_STATE;
+  }
+  /* CNA-DEMOS-ISSUE-067: the colour spaces have C names. Every renderer outputs sRGB, and the
+     identity after HDR10 is undefined. */
+  supported = CNA_FALSE;
+  if (cna_graphics_device_supports_display_color_space_ext(
+          graphics_device, CNA_DISPLAY_COLOR_SPACE_SRGB, &supported) !=
+          CNA_RESULT_SUCCESS ||
+      supported != CNA_TRUE ||
+      cna_graphics_device_supports_display_color_space_ext(
+          graphics_device, CNA_DISPLAY_COLOR_SPACE_HDR10 + 1U, &supported) !=
+          CNA_RESULT_INVALID_ARGUMENT) {
     return CNA_RESULT_INVALID_STATE;
   }
 

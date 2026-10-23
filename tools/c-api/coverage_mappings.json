@@ -14739,7 +14739,7 @@
         "enum",
         "enum-value"
       ],
-      "mapping": "`CNA_DisplayColorSpace` and `CNA_LutInterpolation` with their constants at the canonical ordinals, and **`CNA_TONEMAPPING_MODE_UNCHARTED2`**, which `CBIND-088A` found declared canonically but absent from the C identity -- so a C caller could not select it and the settings validator refused its ordinal. Adding the macro and widening that bound are one change: `CBIND-088A` deliberately left the bound at three because the fifth identity had no C name, and widening it without one would have accepted an ordinal nobody could spell.",
+      "mapping": "`CNA_DisplayColorSpace` in graphics_device.h with `CNA_DISPLAY_COLOR_SPACE_SRGB`, `_SCRGB` and `_HDR10` at the canonical ordinals, the type of the three display-colour-space routes. MOD-RETIRE-1 removed it with the engine layer and left the routes on bare ordinals; CNA-DEMOS-ISSUE-067 restored it. (`CNA_LutInterpolation` and `CNA_TONEMAPPING_MODE_UNCHARTED2` retired with that layer.)",
       "tests": "Retained C routes are exercised by GraphicsExtSmoke.c and other pure-C smoke tests; core behavior is covered by the focused graphics tests.",
       "status": "implemented",
       "task": "CBIND-090",

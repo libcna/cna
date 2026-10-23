@@ -1444,6 +1444,23 @@ CNA_C_API CNA_Result cna_graphics_device_supports_image_based_lighting_ext(
     CNA_Handle graphics_device, CNA_Bool* out_supported);
 
 /**
+ * @brief Fixed-width identity of a display colour space, the C counterpart of
+ * `CNA::DisplayColorSpace`.
+ *
+ * The defined values are `CNA_DISPLAY_COLOR_SPACE_SRGB` (0), `CNA_DISPLAY_COLOR_SPACE_SCRGB` (1)
+ * and `CNA_DISPLAY_COLOR_SPACE_HDR10` (2); the routes below refuse any other value with
+ * `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+typedef uint32_t CNA_DisplayColorSpace;
+
+/** @brief Ordinary SDR output: Rec. 709 primaries and the sRGB transfer function. */
+#define CNA_DISPLAY_COLOR_SPACE_SRGB UINT32_C(0)
+/** @brief scRGB: linear Rec. 709 where 1.0 is 80 nits; values outside [0, 1] are legal. */
+#define CNA_DISPLAY_COLOR_SPACE_SCRGB UINT32_C(1)
+/** @brief HDR10: Rec. 2020 primaries with the ST 2084 (PQ) transfer function. */
+#define CNA_DISPLAY_COLOR_SPACE_HDR10 UINT32_C(2)
+
+/**
  * @brief Returns the colour space the display is currently in.
  *
  * @param graphics_device The device.
@@ -1452,7 +1469,7 @@ CNA_C_API CNA_Result cna_graphics_device_supports_image_based_lighting_ext(
  * `CNA_RESULT_INVALID_ARGUMENT` for a null output, or an error.
  */
 CNA_C_API CNA_Result cna_graphics_device_get_display_color_space_ext(
-    CNA_Handle graphics_device, uint32_t* out_space);
+    CNA_Handle graphics_device, CNA_DisplayColorSpace* out_space);
 
 /**
  * @brief Asks the display to change colour space.
@@ -1468,7 +1485,7 @@ CNA_C_API CNA_Result cna_graphics_device_get_display_color_space_ext(
  * `CNA_RESULT_INVALID_ARGUMENT` for an undefined space or a null output, or an error.
  */
 CNA_C_API CNA_Result cna_graphics_device_set_display_color_space_ext(
-    CNA_Handle graphics_device, uint32_t space, CNA_Bool* out_changed);
+    CNA_Handle graphics_device, CNA_DisplayColorSpace space, CNA_Bool* out_changed);
 
 /**
  * @brief Reports whether the display can enter a colour space.
@@ -1485,7 +1502,7 @@ CNA_C_API CNA_Result cna_graphics_device_set_display_color_space_ext(
  * `CNA_RESULT_INVALID_ARGUMENT` for an undefined space or a null output, or an error.
  */
 CNA_C_API CNA_Result cna_graphics_device_supports_display_color_space_ext(
-    CNA_Handle graphics_device, uint32_t space, CNA_Bool* out_supported);
+    CNA_Handle graphics_device, CNA_DisplayColorSpace space, CNA_Bool* out_supported);
 
 #ifdef __cplusplus
 }

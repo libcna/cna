@@ -7,9 +7,13 @@ The current experimental ABI is **0.50.0** (2026-10-23). It adds two routes,
 `cna_skinned_model_ext_set_part_diffuse_color_at`, for the diffuse colour and alpha a
 `SkinnedModelEXT` part now carries (`PartEXT::DiffuseColor`, the converter's glTF
 `baseColorFactor`; galaxy-eggbert UB-002). A part added through this ABI starts white, and
-attaching, moving or removing parts keeps each part's colour. The library exports 3,207 symbols.
-Purely additive: no existing route, constant, structure field or error rule changes, but a binding
-that requires the new routes needs this minor.
+attaching, moving or removing parts keeps each part's colour. It also restores
+`CNA_DisplayColorSpace` with `CNA_DISPLAY_COLOR_SPACE_SRGB`, `_SCRGB` and `_HDR10` in
+`graphics_device.h` and types the three `cna_graphics_device_*_display_color_space_ext` routes with
+it (CNA-DEMOS-ISSUE-067); the 0.47.0 engine-layer retirement had removed the type and left those
+routes on bare ordinals. The typedef is `uint32_t`, so their binary signatures do not change. The
+library exports 3,207 symbols. Purely additive: no existing route, constant, structure field or
+error rule changes, but a binding that requires the new routes or names needs this minor.
 
 ### Previous ABI 0.49.0
 
