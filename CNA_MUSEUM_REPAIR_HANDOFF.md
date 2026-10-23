@@ -27,7 +27,19 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: ISSUE-026 discovery after an earlier search (2026-10-23)
+### Current task: ISSUE-018 network failure exceptions (2026-10-23)
+
+ISSUE-026 fix5c60a2028f0688fa8b728109156bd6921dc4dbe2 is committed and validated below.
+Its permanent matrix/inventory disposition is RESOLVED/FIXED_VALIDATED:156 historical IDs,
+123 final dispositions,33 without. Commit026 closure/evidence and publish/verify normal refs.
+Next add an isolated native witness for018's public exception type, using the existing
+independent-process failure harness and private networking. Preserve cleanup/retry controls.
+XNA XML and NetworkSessionErrorHandler distinguish unavailable network from communication
+failure; do not translate every arbitrary runtime_error or infer one subtype for all ENet errors.
+Existing public Begin/End timing must remain unchanged. No018 source/test change or new runtime
+reproduction yet. No pending permission; preserve foreign content/graphics/audio work and113.
+
+#### Completed ISSUE-026 validation
 
 ISSUE-075 fix40f286237cdbf7bdc05eb0a2ee9c9ee584eb677f is committed and fully validated.
 Matrix075 is RESOLVED/FIXED_VALIDATED; census156 IDs/122 final dispositions/34 without.

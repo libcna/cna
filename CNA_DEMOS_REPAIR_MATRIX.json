@@ -548,12 +548,16 @@
       ],
       "subsystem": "network/gamer-services",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Linux searches receive unicast replies on the shared discovery port, so a later-bound host receives its own reply. The existing private search socket was compiled only on Apple platforms.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "5c60a2028f0688fa8b728109156bd6921dc4dbe2",
+      "validation": [
+        "On unchanged538069391 the independent-process witness has2PASS/1FAIL: direct transport and host-first discovery pass, search-first discovery fails. Single public Find after an explicit readiness barrier; no supplied port, retry or client restart. The candidate generalizes the existing private reply socket while preserving protocol and search timing.",
+        "Builds PASS without diagnostics. Complete native networking551/551PASS (48.278s); all549 preceding outcomes unchanged and two added discovery controls pass. Native CApi_NetSmoke/GeneratedRoutesSmoke PASS. All24 C++/C network demos PASS on SOFTWARE and all24 on OPENGLES3; exact075 comparison preserves statuses/markers/check counts/messages and logged assertion multiplicities.",
+        "Catalog719 identical and zero validation problems; all275 frozen artifacts match after the suite. No demo assertion or knownIssue marker changed. Linux runtime validated; no new other-platform/browser/service/visual/sanitizer/full719/full-native-aggregate claim. Last full checkpoint remains075 with six explicit CTest residuals. Evidence: demos docs/repair-evidence/net/DISCOVERY_PREFLIGHT.md."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-027",
