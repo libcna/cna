@@ -6,19 +6,18 @@ and also carried the dated session log of 2026-07 to 2026-10; that log is in Git
 
 ## 0. CNA/cna-demos repair campaign handoff — 2026-10-23
 
-This is the current continuation point for a fresh-context agent. The owner asked that the
-inherited work be reviewed, corrected, committed and pushed, then that work stop here for a new
-context. This is not a claim that the overall campaign is complete. No Codex goal is active and no
-validation process should remain live at the published checkpoint.
+This is the current continuation point for a fresh-context agent. It is not a claim that the
+overall campaign is complete. Work since the last push (2026-10-23 evening) is committed locally
+and **not pushed**; push only on the owner's word, Sharp Runtime before CNA.
 
 Repositories and branches:
 
-- CNA: this repository, branch `next`. Product fixes through `65e69cc5e`; campaign closure commit
-  `ad65aecf7653aa24daf785424a98689c8b944fbf` and the final handoff commit containing this
-  section follow it.
-- cna-demos: `../cna-demos`, branch `next`, campaign closure commit
-  `fb6c6530493289f08a6487b52445adc47e435310`; its
-  `docs/CNA_ISSUES.md` is the permanent historical inventory and its assertions remain the oracle.
+- CNA: this repository, branch `next`. Published through `15d5d6f3d`; local since then:
+  `c30925496`/`162e07b8a` (ISSUE-010), `a24c75b2e` (storage dangling-symlink escape),
+  `6068c1ec4` (avatar converter, galaxy-eggbert UB-001) and the ISSUE-010 closure commit.
+- cna-demos: `../cna-demos`, branch `next`. Published through `92ee315`; local since then: the
+  ISSUE-010 evidence and closure commits. Its `docs/CNA_ISSUES.md` is the permanent historical
+  inventory and its assertions remain the oracle.
 - Sharp Runtime: `../sharp-runtime`, branch `next`. Published `2f644cf4`; local commit
   `530e217f` (Directory creation error mapping, ISSUE-010) is required by CNA's container
   construction repair and is not pushed yet -- publish it before the CNA commit that needs it.
@@ -26,25 +25,35 @@ Repositories and branches:
 - Museum and cna-engine inventories are consumer-owned. Do not edit them from CNA; their agents
   move pins/findings after published CNA commits are available.
 
-Campaign accounting from `CNA_DEMOS_REPAIR_MATRIX.json`: **156 historical IDs, 133 final
-dispositions, 23 pending**. Final dispositions are 96 `FIXED_VALIDATED`, 23
+Campaign accounting from `CNA_DEMOS_REPAIR_MATRIX.json`: **156 historical IDs, 134 final
+dispositions, 22 pending**. Final dispositions are 97 `FIXED_VALIDATED`, 23
 `DOCUMENTATION_CORRECTED`, 8 `ALREADY_FIXED`, 3 `FIXED_PLATFORM_VALIDATION_PENDING`, one
 `DEMO_EXPECTATION_BUG`, one `DUPLICATE_ROOT_CAUSE`, and one
-`UNSUPPORTED_CONTRACT_CORRECTED`. The 23 remaining historical IDs, each of which must remain
+`UNSUPPORTED_CONTRACT_CORRECTED`. The 22 remaining historical IDs, each of which must remain
 visible until resolved, are:
 
-`005`, `006`, `007`, `008`, `010`, `020`, `022`, `023`, `029`, `031`, `062`, `066`, `067`,
+`005`, `006`, `007`, `008`, `020`, `022`, `023`, `029`, `031`, `062`, `066`, `067`,
 `081`, `091`, `092`, `093`, `094`, `095`, `096`, `098`, `104`, `114`.
 
 Their full titles, classification, reproduction and accumulated evidence are in the matrix and
 `../cna-demos/docs/CNA_ISSUES.md`. `005/006/007/008/022/023/031/062/067/081/091/092/093/094/095/
-096/098/104/114` are `PENDING_VERIFICATION`; `010/020/029/066` are `CONFIRMED_OPEN`. Two
+096/098/104/114` are `PENDING_VERIFICATION`; `020/029/066` are `CONFIRMED_OPEN`. Two
 additional graphics findings outside the historical count remain open: `DC-R1` (SDL_GPU mixed
 cube/2D MRT) and `DC-R2` (SDL_GPU multisample mask), both recorded in the matrix and
 `../cna-demos/docs/repair-evidence/graphics/DEVICE_CONTEXT_EXTERNAL_RESIDUALS.md`.
 
 ### Latest accepted work
 
+- ISSUE-010 closed (`FIXED_VALIDATED`, 2026-10-23, not pushed). `162e07b8a` completes the
+  residual paths against genuine XNA (`StorageResidualPathsOracle`): a device's `DeleteContainer`
+  removes only its own player folder and creates nothing; Exists queries answer false on any
+  failure; operations beneath an unsearchable directory report `UnauthorizedAccessException`; an
+  unresolvable root is a disconnected device. The C ABI keeps refusing an empty title name. Three
+  older CNA tests and the `storage_root` demo encoded whole-folder deletion and were corrected to
+  XNA's scope; `path_rules`/`directories` now require XNA exception types. Accepted on a complete
+  checkpoint (below). `a24c75b2e` separately refuses a dangling symlink in a container, through
+  which `CreateFile` used to create a file outside it. Evidence:
+  `../cna-demos/docs/repair-evidence/storage/STORAGE_RESIDUAL_PATHS.md`.
 - ISSUE-010 StorageContainer construction (2026-10-23, not pushed): genuine XNA
   `StorageContainerCreationOracle` (real `EndOpenContainer` in an isolated Wine overlay profile)
   shows End creating the whole chain and a file at any level escaping as an exact `IOException`,
@@ -53,7 +62,7 @@ cube/2D MRT) and `DC-R2` (SDL_GPU multisample mask), both recorded in the matrix
   `530e217f`); the extension root routes keep `StorageDeviceNotConnectedException`. Native
   storage 62/62 (ASan/UBSan/leaks too), Sharp 18,230/18,230, storage 7/7 and C storage 2/2 on
   SOFTWARE/OPENGLES3. Evidence: `../cna-demos/docs/repair-evidence/storage/
-  STORAGE_CONTAINER_CREATION.md`. 010 stays `CONFIRMED_OPEN`.
+  STORAGE_CONTAINER_CREATION.md`.
 - `39ef8ea2f` fixes CNA-DEMOS-ISSUE-011 and the real GraphicsResource event defect found while
   correcting ISSUE-082. ContentManager records/disposes materialized resources in XNA order;
   nested/model children and failed partial reads are covered; value wrappers have an internal
@@ -97,26 +106,30 @@ Validation for the latest lifetime batch:
 The first native lifetime driver used the build directory for asset-dependent Content/Media
 tests and consequently recorded 102/234 setup failures. The same unchanged binaries pass when
 run from the source directory required by `cmake/UnitTests.cmake`. Those failed logs are retained
-and are not product regressions. The last complete cross-subsystem campaign checkpoint remains
-checkpoint 075 (CNA `40f286237`, closure `538069391`, demos `6e85316`): full 719-ID SOFTWARE
-647 PASS/21 FAIL/48 SKIP/3 NOTRUN, OPENGLES3 689 PASS/20 FAIL/7 SKIP/3 NOTRUN; serial CTest
-678 PASS/48 SKIP/6 FAIL/3 disabled. Later focused checkpoints do not silently replace it.
+and are not product regressions.
+
+The last complete cross-subsystem checkpoint is the ISSUE-010 closure (2026-10-23, CNA
+`162e07b8a`, demos tree rebuilt against it): full 719-ID SOFTWARE 653 PASS/15 FAIL/48 SKIP/3
+NOTRUN, OPENGLES3 695 PASS/14 FAIL/7 SKIP/3 NOTRUN; serial CTest 735 registered/732 enabled,
+684 PASS/48 SKIP/**0 FAIL**/3 disabled (878.91 s). The remaining sweep failures are rows whose
+`knownIssue` markers name still-open findings; the CTest gate counts them as expected. It
+replaces checkpoint 075 (CNA `40f286237`: 647/21/48/3, 689/20/7/3, CTest 678/48/6 FAIL/3); the
+difference is only FAIL-to-PASS rows of committed repairs. Reports:
+`../cna-demos/build/linux-full/reports/repair-storage-closure-{full,ctest}*`.
 
 ### Exact next task
 
-Finish CNA-DEMOS-ISSUE-010's residual storage paths, then close it only if every part passes.
-`StorageDevice::DeleteContainer` uses the throwing `fs::remove_all` (a denied subtree leaks
-`std::filesystem::filesystem_error`), creates the root just to resolve it, and removes the whole
-named container where XNA's `DeleteContainer` removes only this device's player folder and ignores
-a missing one. `StorageContainer::FileExists`/`DirectoryExists` use throwing `fs::is_regular_file`/
-`fs::is_directory`, where XNA's `File.Exists`/`Directory.Exists` answer false. Measure each with
-genuine XNA -- `StorageContainerCreationRunner.mjs` beside the oracle in
-`../cna-demos/docs/repair-evidence/storage/` shows how to call real `StorageDevice` code without
-touching `~/Documents` -- add failing native tests, repair, and validate native storage, the
-storage demos and the strict-C storage boundary on SOFTWARE/OPENGLES3 before any marker/status
-change. The next confirmed-open coherent batch after
-010 is ISSUE-020 (compiled Song/Video sidecar path), followed by ISSUE-029 or ISSUE-066 according to
-locality.
+Finish the three batches already implemented in the working tree and commit them separately:
+ISSUE-020 (compiled `.cnb` references resolved where the build sits below the manager's root, via
+CMET `contentName`; `CnbRelocatedReferenceTests.cpp`, `docs/cnb-format.md`, the two media demos),
+ISSUE-029 (`SoundEffect::FromStream(System::IO::Stream&)` porting XNA's WavFile; 28 tests pass,
+demo `audio.sound_effect.from_stream`) and ISSUE-062 (C accelerometer/gyroscope routes refuse a
+disposed sensor; `Sensors.toml` `require`, `SensorDeviceSmoke.c`). Each still needs the full
+content/audio/C suites through the private runner, its demos on SOFTWARE/OPENGLES3 and its
+derived C API documents regenerated for that commit alone. Then galaxy-eggbert UB-002, which the
+owner decided on 2026-10-23 to support fully: the avatar converter keeps glTF `baseColorFactor`
+and the embedded `baseColorTexture` in the manifest, and `SkinnedModelEXT` loads and draws them.
+ISSUE-066 waits for the owner's answer on what enabling blending installs.
 
 Consumer-only work still matters. cna-engine's current `upstream-issues.md` reports UP-001,
 UP-006, UP-018, UP-019 and UP-020 resolved; UP-002 remains an informational documentation request
