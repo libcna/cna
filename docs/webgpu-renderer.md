@@ -86,8 +86,10 @@ renderer that actually succeeded. Without fallback, the creation exception propa
 does not silently change the renderer. Recovery after a failed construction remains possible.
 
 The native regression `MultiRendererFallbackTest.SurfaceFreeWebGpuFailureRecordsAnActionableFallback`
-checks both a windowless request and, when launched with `SDL_VIDEODRIVER=offscreen`, an actual
-SDL offscreen window. It verifies the failure history and exact SOFTWARE clear/readback pixels.
+checks both a windowless request and, when launched with `SDL_VIDEODRIVER=offscreen`
+and `CNA_TEST_OFFSCREEN_WINDOW=1`, an actual SDL offscreen window. The latter opt-in belongs
+to the platform-neutral test; only its launcher selects a native driver. The test verifies
+the failure history and exact SOFTWARE clear/readback pixels.
 This documents existing fallback behavior, not a claim that WebGPU itself rendered without a surface.
 
 ## Web / browser target (Emscripten) — in progress

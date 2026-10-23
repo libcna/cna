@@ -562,7 +562,7 @@ TEST_F(MultiRendererFallbackTest, SurfaceFreeWebGpuFailureRecordsAnActionableFal
     // With SDL's actual offscreen driver, exercise its window with no native surface.
     // Otherwise request a genuinely windowless device, without a simulated init failure.
     const bool offscreenDriver =
-        System::Environment::GetEnvironmentVariable("SDL_VIDEODRIVER") == "offscreen";
+        System::Environment::GetEnvironmentVariable("CNA_TEST_OFFSCREEN_WINDOW") == "1";
     SCOPED_TRACE(offscreenDriver ? "SDL offscreen window" : "HeadlessEXT device");
     parameters.setHeadlessEXTProperty(!offscreenDriver);
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
