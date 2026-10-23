@@ -66,7 +66,8 @@ AchievementCollectionXnaOracle.cs; ignored reports repair-achievements-*. Artifa
 
 Publication VERIFIED: CNA origin/next f3ac0166b4e79f855b28df156e5cb0d4319e74b8,
 demos origin/next46b16ee3398e83cddbc981222c62e7e200592319. Normal pushes only.
-Current task017 is validated and ready for a coherent source commit. Four focused witnesses
+017 source repair `2ac45d2f06b8f3fe7e8a38d8419919ad9bf0ff16` is committed and validated.
+Its permanent disposition is now RESOLVED/FIXED_VALIDATED:156 historical IDs,127 final/29 without. Four focused witnesses
 failed before repair (0.002s); candidate defaults synthetic/offline EarnedOnline to false and sets
 true only for earned authenticated service records. Public native/C docs state the synthetic
 default. Corrected one old native and one C synthetic-fixture assertion; added C offline provenance
@@ -83,9 +84,8 @@ only017 metadata changed. All275 frozen artifact hashes verified after final tes
 No new full719/native aggregate/sanitizer/visual/other-platform/live-service claim. Evidence:
 demos docs/repair-evidence/gamer/EARNED_ONLINE.md; ignored reports repair-achievement-origin-*.
 Corrections-only publication verified: CNA f61dc24ef5646cc0a759575882f5b633eca275d9 and demos
-b190f8f102bf37fa8e4a0f6723873903d4dc477f.017 production changes remain uncommitted until the
-immediate next step: commit source/tests/docs, close017 with actual SHA, commit demos separately,
-publish normal fast-forwards and verify. Then continue offline leaderboard025/085 root-cause batch.
+b190f8f102bf37fa8e4a0f6723873903d4dc477f.017 source and disposition are ready for the next closure/evidence commits, then normal
+fast-forward publication and remote verification. Continue offline leaderboard025/085 afterward.
 No active build/test. Preserve foreign113/content/audio work and the corrected077/078 totals.
 Preserve077/078 and compare surrounding gamer results. Evidence demos EARNED_ONLINE.md.
 The old Achievement ctor set EarnedOnline=true, including unearned/synthetic/offline values;

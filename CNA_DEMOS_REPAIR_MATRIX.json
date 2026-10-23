@@ -374,12 +374,16 @@
       ],
       "subsystem": "network/gamer-services",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Achievement constructor unconditionally marks every value earned-online; offline and unearned materializers never correct it. Synthetic creation has no authenticated provenance. Default false and mark only earned service records online.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "2ac45d2f06b8f3fe7e8a38d8419919ad9bf0ff16",
+      "validation": [
+        "Four focused provenance regressions FAIL before repair: synthetic earned/unearned values, offline catalog before/after award/reload, offline no-catalog persistence, service before/after award. Genuine Windows XNA getter is a ProFeatureNotSupported stub; the documented earned-while-online meaning is the reference, with no runtime XNA online/offline-value claim. Offline store has key/ticks only; historical claim of an online flag is corrected.",
+        "After: complete native732=731PASS/1 unchanged declared no-3D rendererSKIP78.538s; all728 preceding outcomes retained and4newPASS. Six native C gamer/boundary controlsPASS0.20s, complete buildsPASS, existing nodiscard warnings only. Public native/C synthetic defaults documented; old synthetic true assumptions corrected with field/ownership/control assertions preserved. Original C++ award14/14PASS SOFTWARE and OPENGLES3 before removing017 marker.",
+        "Both35-scenario gamer runs=33PASS/1 unchanged085FAIL/1 manualNOTRUN. Exact077/078 checkpoint comparison changes only017 FAILED->PASSED and one new C signed-in provenance control; other33 rows retain outcomes/assertion multiplicities, including C collection33 controls. Five registered achievement/catalog CTestsPASS11.38s with award now passing normally. Catalog719 valid with only017 metadata change; generated3197 routes/57 files current;275 frozen hashes verify. No new full719/native aggregate/sanitizer/visual/other-platform/live-service claim. Evidence: demos docs/repair-evidence/gamer/EARNED_ONLINE.md."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-018",
