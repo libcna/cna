@@ -90,6 +90,10 @@ namespace Microsoft::Xna::Framework::Storage
          * @brief Deletes a relative directory (must be empty).
          *
          * @param directory Relative directory path to delete.
+         * @throws System::IO::DirectoryNotFoundException If the directory is missing.
+         * @throws System::IO::IOException If the directory is nonempty, the path names
+         * a regular file, or another filesystem deletion error occurs.
+         * @throws System::UnauthorizedAccessException If access is denied.
          */
         void DeleteDirectory(const std::string& directory);
 

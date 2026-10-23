@@ -10,6 +10,9 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/IO/DirectoryNotFoundException.hpp"
+#include "System/IO/IOException.hpp"
+#include "System/UnauthorizedAccessException.hpp"
 
 namespace
 {
@@ -18,6 +21,20 @@ namespace
     {
         if (container.getIsDisposedProperty())
             throw System::ObjectDisposedException("StorageContainer");
+    }
+
+    [[noreturn]] void ThrowDirectoryDeletionError(const std::filesystem::path& path,
+                                                  const std::error_code& error)
+    {
+        const std::string message = "Unable to delete directory '" +
+            CNA::Internal::PathToUtf8(path) + "': " + error.message();
+        const auto cause = std::make_exception_ptr(
+            std::filesystem::filesystem_error("DeleteDirectory", path, error));
+        if (error == std::errc::no_such_file_or_directory || error == std::errc::not_a_directory)
+            throw System::IO::DirectoryNotFoundException(message, cause);
+        if (error == std::errc::permission_denied || error == std::errc::operation_not_permitted)
+            throw System::UnauthorizedAccessException(message, cause);
+        throw System::IO::IOException(message, cause);
     }
 
     // Minimal glob: '*' = any sequence, '?' = any single char
@@ -162,7 +179,20 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (directory.empty())
             throw System::ArgumentNullException("directory");
-        fs::remove(ResolveNativePath(directory));
+        const fs::path path = ResolveNativePath(directory);
+        std::error_code error;
+        const auto status = fs::status(path, error);
+        if (error) ThrowDirectoryDeletionError(path, error);
+        if (!fs::exists(status))
+            ThrowDirectoryDeletionError(path, std::make_error_code(std::errc::no_such_file_or_directory));
+        // filesystem::remove also deletes regular files; Directory.Delete must not.
+        if (!fs::is_directory(status))
+            throw System::IO::IOException("The path names a file, not a directory.");
+        if (!fs::remove(path, error))
+        {
+            if (!error) error = std::make_error_code(std::errc::no_such_file_or_directory);
+            ThrowDirectoryDeletionError(path, error);
+        }
     }
 
     std::vector<std::string> StorageContainer::GetDirectoryNames() const

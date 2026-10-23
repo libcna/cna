@@ -24,6 +24,8 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/IO/IOException.hpp"
+#include "System/IO/DirectoryNotFoundException.hpp"
 
 using Microsoft::Xna::Framework::Storage::StorageDevice;
 
@@ -261,6 +263,47 @@ TEST_F(StorageDeviceDeleteContainerTest, DisposalStillPrecedesEmptyContainerPatt
     EXPECT_THROW((void)container->CreateFile(""), System::ObjectDisposedException);
     EXPECT_THROW((void)container->GetFileNames(""), System::ObjectDisposedException);
     EXPECT_THROW((void)container->GetDirectoryNames(""), System::ObjectDisposedException);
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, NonemptyDirectoryDeletionHasAnIoExceptionAndPreservesFiles)
+{
+    auto container = OpenContainer("DeletionErrors");
+    CreateMarker("DeletionErrors/AllPlayers/child/keep.txt");
+    try
+    {
+        container->DeleteDirectory("child");
+        ADD_FAILURE() << "expected IOException";
+    }
+    catch (const System::IO::IOException& error)
+    {
+        EXPECT_TRUE(typeid(error) == typeid(System::IO::IOException));
+    }
+    EXPECT_TRUE(MarkerExists("DeletionErrors/AllPlayers/child/keep.txt"));
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, MissingDirectoryDeletionHasTheDirectoryNotFoundType)
+{
+    auto container = OpenContainer("MissingDirectory");
+    EXPECT_THROW(container->DeleteDirectory("missing"), System::IO::DirectoryNotFoundException);
+    EXPECT_THROW(container->DeleteDirectory("missing/child"), System::IO::DirectoryNotFoundException);
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, DirectoryDeletionNeverTreatsARegularFileAsADirectory)
+{
+    auto container = OpenContainer("FileIsNotDirectory");
+    CreateMarker("FileIsNotDirectory/AllPlayers/keep.txt");
+    EXPECT_THROW(container->DeleteDirectory("keep.txt"), System::IO::IOException);
+    EXPECT_TRUE(MarkerExists("FileIsNotDirectory/AllPlayers/keep.txt"));
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, EmptyUnicodeDirectoryDeletionStillWorks)
+{
+    auto container = OpenContainer("UnicodeDeletion");
+    const std::string name = "empty-\xc3\xa9-\xe6\x97\xa5";
+    container->CreateDirectory(name);
+    ASSERT_TRUE(container->DirectoryExists(name));
+    container->DeleteDirectory(name);
+    EXPECT_FALSE(container->DirectoryExists(name));
 }
 
 // ---------------------------------------------------------------------------

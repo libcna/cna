@@ -27,7 +27,48 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: museum B11 empty storage arguments/patterns (2026-10-23)
+### Current task: museum B11 directory deletion errors (2026-10-23)
+
+Previous argument/pattern repair is published as
+`17c66a9d3541511881ff8fc9f8f9aaf82b5f326a` (push82218, remote verified).
+Confirmed remaining defects: std::filesystem::remove's error escapes as filesystem_error,
+missing directory silently succeeds, and a regular file supplied to DeleteDirectory is
+actually deleted. The last case was found while minimizing this batch and reproduced by
+a new test checking both exception and retained file. XNA delegates to Directory.Delete;
+its nonempty/missing cases have the29/29 genuine reference evidence above. Microsoft's
+documented regular-file contract is IOException:
+https://learn.microsoft.com/en-us/dotnet/api/system.io.directory.delete?view=net-7.0 .
+
+Repair keeps CNA's existing resolved native path (important for Windows UTF-8), rejects
+regular-file status, maps missing-directory and IO/access errors to the framework types,
+and retains the native filesystem error as an inner diagnostic cause. No recursive delete
+or containment-policy changes. This is not a claim of atomic behavior under concurrent
+external replacement of directory entries. Sharp Directory currently narrows paths, so
+redirecting through it would regress the established Unicode behavior.
+
+Four permanent regressions in existing StorageDeviceTests.cpp: BEFORE3FAIL/1PASS (Unicode
+success control). AFTER full native storage **46/46 PASS**, zero skips/failures, including
+all seven inherited untracked tests without changing them. One separately seeded-order
+run (2310) also46/46PASS to check global-policy/fixture ordering; not a retry for a failure.
+Native build71657 clean. Consumer rebuilt only cna_shared in existing demos build/linux-full
+(43523,7steps), since no API/ABI or demo source changed; ldd verifies the demo loads that
+exact CNA/libcna.so. SOFTWARE/OPENGLES3 each retain6PASS/1knownISSUE-152FAIL, exact
+status/check-count/knownIssue/message delta empty. C API storage children2/2PASS on each
+(35member +38save checks; outer report checks0 is only the process wrapper). All six
+boundary audits PASS, budgets unchanged. One compiler/shared cache/6GiB/private display.
+No full CNA, new sanitizer, Windows or Android runtime pass is claimed for this batch.
+
+This checkpoint is the commit containing this entry, based on17c66a9d3. Owned files:
+StorageContainer.cpp/.hpp, StorageDeviceTests.cpp and this handoff only. Next: publish,
+then resume CNA-DEMOS-ISSUE-152 FileShare at the actual Sharp Runtime FileStream layer.
+Current CNA OpenFile ignores its share argument; Sharp Runtime has only the three-argument
+fstream constructor, so a caller-only change cannot implement sharing. Owner selected
+native .NET behavior per platform (Windows stricter than Linux); preserve the original
+FileShare.None oracle on both. Do not emulate Windows sharing using an extra second file
+handle that conflicts with the stream's own handle, or silently weaken that oracle.
+Evidence prefix: demos build/linux-full/reports/repair-museum-storage-delete-*.
+
+### Previous checkpoint: museum B11 empty storage arguments/patterns (2026-10-23)
 
 Lazy-root checkpoint published: CNA `fffa552ad4b4567c772f2f293302b8b103a5b16f`,
 Sharp Runtime `31c7c08f1987a284ce1b84bf1c779ce236a6e1c6`, demos
