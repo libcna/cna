@@ -415,6 +415,7 @@ namespace CNA::Internal::Renderers::Fna3d
             case Xna::Color:
             case Xna::NormalizedByte2:
             case Xna::NormalizedByte4:
+            case Xna::Single:
             case Xna::Vector4:
                 return RendererFormatVerdict::Supported;
 

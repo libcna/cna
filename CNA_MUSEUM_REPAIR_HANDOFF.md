@@ -27,7 +27,44 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: WebGPU deferred volume lifetime (2026-10-23)
+### Current task: FNA3D Single-format verdict (2026-10-23)
+
+Volume repair below is published and remote-verified as
+`c105303dc7520df0483f477f43e9545a204cc716` (push23524).
+The B8 cross-control revealed a pre-existing CNA FNA3D gate defect: its underlying
+storage/transfer/enum mapping supports Single, but ClassifySurfaceFormatEXT returns
+Defer and the shared gate refuses SurfaceFormat13. Local FNA Texture2D reference
+accepts that format; the XNA HiDef vertex fixture uses a four-channel texture but
+its height read uses only red, so the same asserted graph applies to Single.
+Three new tests cover vertex sampling, exact float mip/rectangle transfer (including
+negative and >1 values), and all six cube faces/three mips. Cube needs explicit
+coverage because its default verdict delegates to the 2D verdict. All3 fail before
+the production change (before-v2,exit1) with the same format refusal. Test builds
+41242/64659 completed0. The production fix is one Supported case; no vendor change.
+Affected build73341 completed0. SDL_GPU/Vulkan45181 and OpenGL72212 each pass
+114/115 with the unchanged Reach-volume skip. However public-format control21442
+FAILS two existing assertions: Single's missing G/B sample as zero, where the XNA
+oracle expects one, for both a sprite and environment-map cube. Do NOT publish the
+gate-only change. This is precisely why the whole promoted format contract matters.
+The follow-up adapter fix uses its existing NormalizedByte2 strategy: FNA3D has no
+texture-component swizzle API, so ordinary Single 2D/cube storage expands to native
+Vector4, fills missing channels with one and contracts readback without changing red
+bits, logical format or transfer sizes. This costs4x native storage for those textures;
+it does not quantize and does not alter vendor/native renderer drivers. Transfer byte
+expansion is overflow-checked. Build50944 completed0. Final SDL_GPU/Vulkan66278 and
+OpenGL3200 each pass114/115 renderer tests (same Reach-volumeSKIP) and19/25 public
+format tests (six identical capabilitySKIP, no failures). Both previously failing
+missing-channel checks now pass without assertion changes. XML comparison preserves
+all112 original renderer outcomes and adds3PASS. All boundary gates/diff checks pass.
+This batch is the commit containing this entry, based on c105303dc. No owned process
+remains live. No new sanitizer/Windows/Apple/full-CNA-corpus pass is claimed.
+Next: reproduce museum B10 (surface-free WebGPU) and inspect availability/fallback
+policy before deciding between support and an explicit unavailable result.
+Only FNA renderer source/tests, relevant
+docs and this handoff belong to this batch. Evidence prefix:
+demos build/linux-full/reports/repair-museum-fna-single-*.
+
+### Previous checkpoint: WebGPU deferred volume lifetime (2026-10-23)
 
 Vertex-texture repair below is published as
 `e8bfdf2c5584bb0f8f6f4b7c6d84c1c32336fdf9`; push16173 and ls-remote confirm it.

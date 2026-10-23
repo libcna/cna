@@ -34,6 +34,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
@@ -1692,6 +1693,68 @@ TEST(Fna3dCompiledEffectTest, CompiledSpriteEffectRendersThroughDrawUserPrimitiv
     EXPECT_NEAR(pixel.getRProperty(), 20, 2);
     EXPECT_NEAR(pixel.getGProperty(), 210, 2);
     EXPECT_NEAR(pixel.getBProperty(), 60, 2);
+}
+
+TEST(Fna3dCompiledEffectTest, SingleVertexTextureAndSamplerReachTheDraw)
+{
+    using namespace Microsoft::Xna::Framework::Graphics;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    CNA::TestSupport::RunCompiledEffectVertexTextureContract(device, SurfaceFormat::Single);
+}
+
+TEST(Fna3dCompiledEffectTest, SingleTexturePreservesFloatValuesAcrossMipAndRegionTransfers)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    Texture2D texture(device, 4, 4, true, SurfaceFormat::Single);
+    ASSERT_EQ(texture.getFormatProperty(), SurfaceFormat::Single);
+    ASSERT_EQ(texture.getLevelCountProperty(), 3);
+    for (int level = 0; level < 3; ++level)
+    {
+        SCOPED_TRACE(level);
+        const int extent = 4 >> level;
+        std::vector<float> expected(static_cast<std::size_t>(extent * extent));
+        for (std::size_t i = 0; i < expected.size(); ++i)
+            expected[i] = -1.25f + static_cast<float>(i) * 0.125f + level;
+        texture.SetData(level, nullptr, expected.data(), 0, static_cast<int>(expected.size()));
+        std::vector<float> actual(expected.size(), 100.0f);
+        texture.GetData(level, nullptr, actual.data(), 0, static_cast<int>(actual.size()));
+        EXPECT_EQ(actual, expected);
+    }
+    const Rectangle region(1, 1, 2, 2);
+    const float patch[] = {0.123456f, 0.654321f, -2.75f, 12.5f};
+    texture.SetData(0, &region, patch, 0, 4);
+    float actual[4] = {};
+    texture.GetData(0, &region, actual, 0, 4);
+    for (int i = 0; i < 4; ++i) EXPECT_EQ(actual[i], patch[i]);
+}
+
+TEST(Fna3dCompiledEffectTest, SingleCubePreservesFloatValuesAcrossFacesAndMips)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    TextureCube texture(device, 4, true, SurfaceFormat::Single);
+    for (int face = 0; face < 6; ++face)
+        for (int level = 0; level < 3; ++level)
+        {
+            SCOPED_TRACE("face=" + std::to_string(face) + " level=" + std::to_string(level));
+            const int extent = 4 >> level;
+            std::vector<float> expected(static_cast<std::size_t>(extent * extent));
+            for (std::size_t i = 0; i < expected.size(); ++i)
+                expected[i] = -2.25f + face + level * 0.125f + static_cast<float>(i) * 0.0625f;
+            const auto cubeFace = static_cast<CubeMapFace>(face);
+            texture.SetData(cubeFace, level, nullptr, expected.data(), 0,
+                            static_cast<int>(expected.size()));
+            std::vector<float> actual(expected.size(), 100.0f);
+            texture.GetData(cubeFace, level, nullptr, actual.data(), 0,
+                            static_cast<int>(actual.size()));
+            EXPECT_EQ(actual, expected);
+        }
 }
 
 TEST(Fna3dCompiledEffectTest, VertexTextureAndSamplerDeviceCollectionsReachTheDraw)

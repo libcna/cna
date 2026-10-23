@@ -15,6 +15,38 @@ namespace CNA::Internal::Renderers::Fna3d
 {
     namespace
     {
+        bool IsSingleFormat(int surfaceFormat)
+        {
+            return surfaceFormat ==
+                static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Single);
+        }
+
+        // FNA3D exposes no component swizzle. As for NormalizedByte2 below, keep the
+        // logical format but widen native storage so D3D9's missing channels sample as one.
+        std::vector<float> SingleStorage(int logicalBytes)
+        {
+            if (logicalBytes <= 0 || logicalBytes % sizeof(float) != 0 ||
+                logicalBytes > std::numeric_limits<int>::max() / 4)
+                throw std::overflow_error("FNA3D: expanded Single transfer size is invalid");
+            return std::vector<float>(static_cast<std::size_t>(logicalBytes), 1.0f);
+        }
+
+        std::vector<float> ExpandSingle(const void* data, int logicalBytes)
+        {
+            auto expanded = SingleStorage(logicalBytes);
+            const auto* bytes = static_cast<const std::uint8_t*>(data);
+            for (std::size_t i = 0; i < expanded.size() / 4u; ++i)
+                std::memcpy(&expanded[i * 4u], bytes + i * sizeof(float), sizeof(float));
+            return expanded;
+        }
+
+        void CollapseSingle(const std::vector<float>& expanded, void* data)
+        {
+            auto* bytes = static_cast<std::uint8_t*>(data);
+            for (std::size_t i = 0; i < expanded.size() / 4u; ++i)
+                std::memcpy(bytes + i * sizeof(float), &expanded[i * 4u], sizeof(float));
+        }
+
         /** Mip dimension at @p level, floored at one texel, matching XNA's own chain. */
         int LevelExtent(int base, int level)
         {
@@ -202,6 +234,13 @@ namespace CNA::Internal::Renderers::Fna3d
                                                 const std::uint8_t* logical, int logicalBytes)
     {
         FNA3D_Device* device = deviceState_->RequireDevice("Texture2D upload");
+        if (IsSingleFormat(surfaceFormat_))
+        {
+            auto expanded = ExpandSingle(logical, logicalBytes);
+            FNA3D_SetTextureData2D(device, texture_, 0, 0, levelW, levelH, level,
+                                   expanded.data(), static_cast<int>(expanded.size() * sizeof(float)));
+            return;
+        }
         if (!WidensNormalizedByte2EXT())
         {
             FNA3D_SetTextureData2D(device, texture_, 0, 0, levelW, levelH, level,
@@ -334,6 +373,14 @@ namespace CNA::Internal::Renderers::Fna3d
         if (!compressedReadback_ && IsBlockCompressedFormat(surfaceFormat_))
         {
             return false;
+        }
+        if (IsSingleFormat(surfaceFormat_))
+        {
+            auto expanded = SingleStorage(regionBytes);
+            FNA3D_GetTextureData2D(device, texture_, x, y, w, h, level, expanded.data(),
+                                   static_cast<int>(expanded.size() * sizeof(float)));
+            CollapseSingle(expanded, data);
+            return true;
         }
         if (WidensNormalizedByte2EXT())
         {
@@ -597,6 +644,14 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             return false;
         }
+        if (IsSingleFormat(surfaceFormat_))
+        {
+            auto expanded = ExpandSingle(data, regionBytes);
+            FNA3D_SetTextureDataCube(device, texture_, x, y, w, h,
+                                     static_cast<FNA3D_CubeMapFace>(face), level, expanded.data(),
+                                     static_cast<int>(expanded.size() * sizeof(float)));
+            return true;
+        }
         FNA3D_SetTextureDataCube(device, texture_, x, y, w, h,
                                  static_cast<FNA3D_CubeMapFace>(face), level,
                                  const_cast<void*>(data), regionBytes);
@@ -615,6 +670,15 @@ namespace CNA::Internal::Renderers::Fna3d
             regionBytes <= 0 || dataLength < regionBytes)
         {
             return false;
+        }
+        if (IsSingleFormat(surfaceFormat_))
+        {
+            auto expanded = SingleStorage(regionBytes);
+            FNA3D_GetTextureDataCube(device, texture_, x, y, w, h,
+                                     static_cast<FNA3D_CubeMapFace>(face), level, expanded.data(),
+                                     static_cast<int>(expanded.size() * sizeof(float)));
+            CollapseSingle(expanded, data);
+            return true;
         }
         FNA3D_GetTextureDataCube(device, texture_, x, y, w, h,
                                  static_cast<FNA3D_CubeMapFace>(face), level, data, regionBytes);
@@ -1189,7 +1253,8 @@ namespace CNA::Internal::Renderers::Fna3d
             static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::NormalizedByte2);
         const FNA3D_SurfaceFormat format = widenNormalizedByte2
             ? FNA3D_SURFACEFORMAT_NORMALIZEDBYTE4
-            : ToFna3dSurfaceFormat(data.surfaceFormat);
+            : IsSingleFormat(data.surfaceFormat) ? FNA3D_SURFACEFORMAT_VECTOR4
+                                                : ToFna3dSurfaceFormat(data.surfaceFormat);
         RequireTextureFormatSupportedEXT(data.surfaceFormat, "Texture2D");
         if (!data.pixels.empty())
         {
@@ -1284,7 +1349,9 @@ namespace CNA::Internal::Renderers::Fna3d
         const int edge = size > 0 ? size : 1;
         const int levelCount = LevelCountFor(edge, mipMap);
         FNA3D_Texture* texture = FNA3D_CreateTextureCube(
-            device_, ToFna3dSurfaceFormat(surfaceFormat), edge, levelCount, 0);
+            device_, IsSingleFormat(surfaceFormat) ? FNA3D_SURFACEFORMAT_VECTOR4
+                                                   : ToFna3dSurfaceFormat(surfaceFormat),
+            edge, levelCount, 0);
         if (texture == nullptr)
         {
             return nullptr;

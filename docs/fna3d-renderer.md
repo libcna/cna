@@ -33,6 +33,17 @@ oracle adds 21 rigid/skinned checks, including independent base-colour UV0 and e
 
 ## Identity
 
+HiDef vertex textures support `SurfaceFormat::Single` and `Vector4`. The Single
+format uses binary32 storage, including ordinary 2D and cube textures;
+uploads/readbacks do not convert it through 8-bit colour. FNA3D exposes no texture
+component swizzle, so CNA stores ordinary Single 2D/cube textures as Vector4 with
+missing channels set to one, as XNA samples them. This uses four times the native
+storage but preserves every red-channel bit and the public Single transfer layout.
+Regression coverage checks
+vertex-slot sampling with PointClamp/PointWrap, exact 2D mip/rectangle transfers and
+all six cube faces across mip levels. These checks pass on Linux with both FNA3D's
+OpenGL and SDL_GPU/Vulkan drivers; this is not a new Windows or Apple qualification.
+
 | Field | Value |
 |---|---|
 | Public identity | `FNA3D` (`GraphicsRendererType::Fna3d`) |
