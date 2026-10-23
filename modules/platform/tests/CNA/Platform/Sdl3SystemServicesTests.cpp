@@ -39,6 +39,60 @@ protected:
     std::unique_ptr<IPlatform> platform_;
 };
 
+class Sdl3DialogKeyboardTest : public Sdl3ServiceTest
+{
+protected:
+    void SetUp() override
+    {
+        if (std::getenv("CNA_TEST_NATIVE_MESSAGE_BOX") == nullptr)
+            GTEST_SKIP() << "run tools/platform/run_message_box_tests_private.sh for native key injection";
+        Sdl3ServiceTest::SetUp();
+        if (IsSkipped()) return;
+        platform_->AcquireSubsystem(PlatformSubsystem::Video);
+        acquired_ = true;
+    }
+
+    void TearDown() override
+    {
+        if (acquired_) platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+    }
+
+private:
+    bool acquired_ = false;
+};
+
+TEST_F(Sdl3DialogKeyboardTest, ReturnChoosesFirstButton)
+{
+    ASSERT_NE(platform_->GetDialogs(), nullptr);
+    EXPECT_EQ(platform_->GetDialogs()->ShowMessageBoxWithButtons(
+        MessageBoxSeverity::Information, "CNA dialog Return regression", "Choose with Return",
+        {"Accept", "More", "Cancel"}, nullptr), 0);
+}
+
+TEST_F(Sdl3DialogKeyboardTest, EscapeChoosesLastButton)
+{
+    ASSERT_NE(platform_->GetDialogs(), nullptr);
+    EXPECT_EQ(platform_->GetDialogs()->ShowMessageBoxWithButtons(
+        MessageBoxSeverity::Information, "CNA dialog Escape regression", "Choose with Escape",
+        {"Accept", "More", "Cancel"}, nullptr), 2);
+}
+
+TEST_F(Sdl3DialogKeyboardTest, ReturnChoosesTheOnlyButton)
+{
+    ASSERT_NE(platform_->GetDialogs(), nullptr);
+    EXPECT_EQ(platform_->GetDialogs()->ShowMessageBoxWithButtons(
+        MessageBoxSeverity::Information, "CNA dialog SingleReturn regression", "Choose with Return",
+        {"OK"}, nullptr), 0);
+}
+
+TEST_F(Sdl3DialogKeyboardTest, EscapeChoosesTheOnlyButton)
+{
+    ASSERT_NE(platform_->GetDialogs(), nullptr);
+    EXPECT_EQ(platform_->GetDialogs()->ShowMessageBoxWithButtons(
+        MessageBoxSeverity::Information, "CNA dialog SingleEscape regression", "Choose with Escape",
+        {"OK"}, nullptr), 0);
+}
+
 // --- services are present, because SDL3 advertises them ---------------------------------------------
 
 TEST_F(Sdl3ServiceTest, ServicesTheCapabilitySetClaimsAreActuallyReturned)

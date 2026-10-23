@@ -263,7 +263,9 @@ namespace CNA::Platform {
          * @param severity How prominently to present it.
          * @param title The dialog title.
          * @param message The message body.
-         * @param buttons The button labels, in display order. Must not be empty.
+         * @param buttons The button labels, in display order. Must not be empty. The first
+         * is the Return default and the last the Escape default where the native provider
+         * supports keyboard defaults; a sole button receives both defaults.
          * @param parent The window to parent the dialog to, or null for none.
          * @return The index of the chosen button, or -1 when the dialog was dismissed without a
          * choice. Dismissal is an ordinary outcome and does not throw.

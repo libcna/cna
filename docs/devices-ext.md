@@ -50,6 +50,14 @@ native file dialogs, tray icon, message boxes and camera capture. The real XNA s
 | `MessageBox` | `ShowSimple` and `Show` with custom buttons. Synchronous: it blocks the calling thread. | Every desktop, mobile and web platform; not headless or terminal. |
 | `Camera` | Enumerates cameras, opens the first one and polls RGBA8 frames into a `Texture2D` (`TryAcquireFrame` once per frame). States: `NotSupported`, `Closed`, `Opening`, `Denied`, `Ready`, `Lost`. | Wherever the platform has a camera provider. Web needs HTTPS and a user gesture. Design: `docs/cna-devices-camera-design.md`. |
 
+`MessageBox.Show` marks the first custom button as the Return default and the last as the
+Escape default (both keys choose index zero for one button). These are native-provider hints:
+SDL's Zenity implementation currently ignores keyboard-default flags, so that route does not
+guarantee these key-to-button choices. The native SDL X11 toolkit can be regression-tested, without touching
+the desktop, with `bash tools/platform/run_message_box_tests_private.sh cmake-build-multi`.
+That harness requires xdotool, opts into the otherwise noninteractive test suite, and deliberately
+selects the X11 toolkit rather than Zenity; it is not a Zenity, Windows or macOS validation claim.
+
 ## Considered and rejected
 
 These were rejected in the original analysis (2026-07-06) and its second round (2026-07-07).

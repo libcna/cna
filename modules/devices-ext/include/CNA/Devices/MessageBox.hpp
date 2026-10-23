@@ -35,8 +35,8 @@ namespace CNA::Devices
          * @brief Gets whether native message boxes are supported on the current
          * platform.
          *
-         * @return Always true — a real backend exists on every platform this
-         * project targets.
+         * @return True when the current platform reports message-box support;
+         * false on platforms without a dialog service.
          */
         [[nodiscard]] static bool getIsSupportedProperty();
 
@@ -52,15 +52,21 @@ namespace CNA::Devices
 
         /**
          * @brief Shows a message box with caller-specified buttons and returns which
-         * one the user clicked.
+         * one the user chose.
+         *
+         * The first button is marked as the Return default and the last as the Escape
+         * default for native dialog implementations that support keyboard defaults.
+         * A single button receives both defaults. Some platform dialog providers
+         * (including SDL's Zenity route) ignore these defaults; explicit button selection
+         * may be required instead.
          *
          * @param type Icon/severity of the dialog.
          * @param title Dialog title text.
          * @param message Dialog body text.
          * @param buttonLabels Labels for each button, left to right; must not be
          * empty.
-         * @return The index into `buttonLabels` of the button the user clicked, or
-         * -1 if the dialog could not be shown.
+         * @return The index into `buttonLabels` of the chosen button, or
+         * -1 if the dialog was dismissed without a choice or could not be shown.
          */
         static int Show(
             MessageBoxType type,

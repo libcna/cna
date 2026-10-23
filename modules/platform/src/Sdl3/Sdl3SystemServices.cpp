@@ -665,6 +665,8 @@ namespace CNA::Platform::Sdl3 {
         {
             SDL_MessageBoxButtonData button{};
             button.flags = 0;
+            if (i == 0) button.flags |= SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;
+            if (i + 1 == buttons.size()) button.flags |= SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT;
             button.buttonID = static_cast<int>(i);
             button.text = buttons[i].c_str();
             sdlButtons.push_back(button);

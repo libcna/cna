@@ -27,7 +27,52 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: museum B10 surface-free WebGPU audit (2026-10-23)
+### Current task: museum B14 native dialog keyboard defaults (2026-10-23)
+
+B10 documentation/regression commit is published as
+`376eb834b17b2a47fbb92afe50014ede0a78ba08` (push92404).
+MessageBox is CNA::Devices, explicitly a CNA extension with no XNA equivalent.
+Sdl3Dialogs passes every custom button with flags0, confirming the museum's source
+finding. Candidate sets Return on first and Escape on last (both for one button),
+and corrects stale MessageBox support/return documentation. No API signature changed.
+Native opt-in platform tests plus tools/platform/run_message_box_tests_private.sh
+exercise actual keys on a private X11 display, with hard timeout and no desktop input.
+No additional SDL test-reference budget was needed; inventory regenerated (959 names),
+classification and ratchet pass with unchanged budgets.
+
+Test build1107 completed0, BEFORE production edits. Initial runs v1-v3 and diagnostic
+v1/v2 are harness diagnostics, NOT valid behavior reproductions: Zenity chose Wayland,
+then xdotool's title search could not decode the native toolkit WM_NAME (UTF-8 atom),
+although xwininfo and _NET_WM_NAME saw the visible window. The first timeout's SIGTERM
+was ignored; only its confirmed owned PID756455 was killed. All subsequent runs have
+timeout -k2s. Current harness uses xev substructure events plus xwininfo for discovery,
+then one focused XTest key event. Before-v4 process83054 confirms injected Return
+reaches the visible native dialog but selects nothing and hits the hard timeout137.
+Build20071 completed0 (61steps,one compiler,6GiB cap). The same harness after repair
+passes4/4 with all four injections logged. Full platform run63720 passes525/537;
+12 skips consist of the4 opt-in keyboard tests (separately4PASS) and8 hardware/platform
+cases. No failures. Production defaults/docs are still uncommitted.
+Evidence prefix: demos build/linux-full/reports/repair-museum-dialog-*.
+
+Separate DEPENDENCY_DEFECT: SDL's optional Zenity implementation ignores keyboard-default
+flags entirely (third_party/SDL/src/dialog/unix/SDL_zenitymessagebox.c). The native test
+deliberately limits the test child's PATH to the build directory to select X11, not
+Zenity; it must not be described as Zenity validation. Public docs disclose this residual.
+Do not claim all B14 paths fixed or modify the shared prebuilt SDL in place. Need a
+separate correct-layer dependency decision/patch and independent validation afterward.
+An additional non-production configure audit caught B10's direct SDL_VIDEODRIVER string
+in a platform-neutral test. Corrected to CNA_TEST_OFFSCREEN_WINDOW, leaving the native
+driver choice only in the launcher; no manifest ceiling change. Actual configure/build
+77173 passed all audits. Corrected selection1006 passes51/51, real offscreen1/1.
+The two-file B10 correction is a47766886, published separately. This B14 native/doc
+repair is the commit containing this entry. No owned test/build process remains live.
+Native coverage is Linux X11; no Zenity, real Windows, Apple or sanitizer pass claimed.
+Museum B14's CNA flag-forwarding defect is fixed; the optional provider limitation is
+explicit, not hidden behind these passes. Next: review the remaining museum platform
+contracts (tray-support reporting and storage root laziness), then the content queue.
+Preserve all inherited content/audio/occlusion work.
+
+### Previous checkpoint: museum B10 surface-free WebGPU audit (2026-10-23)
 
 FNA3D repair below is published/remote-verified as
 `932b04dec06373588088c034ef87c761aeff0b5b` (push60183).
