@@ -32,7 +32,6 @@ static int CnaBrowserStorageReady()
 #  include <windows.h>
 #endif
 
-#include "CNA/Internal/PathContainment.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 #include "System/ArgumentException.hpp"
@@ -169,7 +168,16 @@ namespace Microsoft::Xna::Framework::Storage
         }
         else
         {
-            root = fs::current_path() / appComponent;
+            std::error_code code;
+            const fs::path current = fs::current_path(code);
+            if (code)
+            {
+                throw StorageDeviceNotConnectedException(
+                    "No per-user data directory or working directory to store in.",
+                    std::make_exception_ptr(std::filesystem::filesystem_error(
+                        "current_path", code)));
+            }
+            root = current / appComponent;
         }
 #endif
         return CNA::Internal::PathToGenericUtf8(root);
@@ -299,25 +307,15 @@ namespace Microsoft::Xna::Framework::Storage
 
     void StorageDevice::DeleteContainer(const std::string& titleName)
     {
-        if (titleName.empty())
-            throw System::ArgumentException("titleName must not be empty.");
-
-        // TitleName is caller-supplied. fs::path::operator/ silently discards
-        // the storage root for an absolute titleName, and does not reject ".." segments -- either
-        // one previously let DeleteContainer("../../../SomeOtherAppData") (or an absolute path)
-        // recursively delete anything the process can reach, not just this game's own storage.
-        // CNA-introduced (FNA's own DeleteContainer always throws NotImplementedException), so no
-        // FNA behavior constrains this fix.
-        const auto contained = CNA::Internal::ResolveContainedPath(EnsureStorageRoot(), titleName);
-        if (!contained.ok)
-        {
-            throw System::ArgumentException(
-                "titleName must be a simple name within the storage root, not an absolute path "
-                "or one that escapes it.");
-        }
-        // resolvedPath is UTF-8; the narrow overload would remove nothing at all -- remove_all on
-        // a path that does not exist returns 0 without an error, so this failed silently.
-        fs::remove_all(CNA::Internal::PathFromUtf8(contained.resolvedPath));
+        // TitleName is caller-supplied. fs::path::operator/ silently discards the storage root for
+        // an absolute titleName and does not reject ".." segments -- either one previously let
+        // DeleteContainer("../../../SomeOtherAppData") (or an absolute path) recursively delete
+        // anything the process can reach. Unlike XNA's Path.Combine, both are refused; otherwise
+        // this is XNA's deletion, resolved without creating the root.
+        const int playerIdx = devicePlayer_.has_value()
+            ? static_cast<int>(devicePlayer_.value())
+            : -1;
+        StorageContainer::DeleteContainer(ResolveStorageRoot(), titleName, playerIdx);
     }
 
     // -------------------------------------------------------------------------

@@ -122,8 +122,12 @@ is `CNA_RESULT_IO`, and the next open succeeds once the obstruction is gone. Onl
 routes that ask for the root itself (`cna_storage_get_root_size_ext`, `cna_storage_copy_root_ext`)
 report an unusable root as a disconnected device.
 
-`cna_storage_device_delete_container` keeps the containment guard: a title name that is absolute or
-escapes the storage root is refused with `CNA_RESULT_INVALID_ARGUMENT` instead of being resolved.
+`cna_storage_device_delete_container` removes what XNA's `DeleteContainer` removes: the device's
+own player folder of the container (`AllPlayers` or `Player1`..`Player4`), never another player's
+folder or the named folder; a missing container or a file of that name is left alone and nothing
+is created. It keeps the containment guard: a title name that is absolute or escapes the storage
+root is refused with `CNA_RESULT_INVALID_ARGUMENT` instead of being resolved, and so is an empty
+title name, which the C++ call would apply to the player folder at the storage root.
 The same result protects container opening and all paths used through a container. No native
 exception object, type name or C++ throw crosses the ABI; messages reach the caller through the
 per-thread UTF-8 diagnostic.

@@ -518,6 +518,11 @@ namespace {
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
+    // The ABI refuses every empty relative path. The canonical call follows XNA instead, where an
+    // empty name addresses the player folder at the storage root.
+    if (titleNameCopy.empty()) {
+        return InvalidArgument("The container title name is empty.");
+    }
     std::shared_ptr<StorageDeviceResource> device;
     if (const CNA_Result result = GetDevice(deviceHandle, &device);
         result != CNA_RESULT_SUCCESS) {

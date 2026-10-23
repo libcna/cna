@@ -216,6 +216,14 @@ namespace Microsoft::Xna::Framework::Storage
 
         [[nodiscard]] std::string ResolvePath(const std::string& relative) const;
         [[nodiscard]] std::filesystem::path ResolveNativePath(const std::string& relative) const;
+
+        // Joins UTF-8 relative onto root. An escape throws System::ArgumentException(escapeMessage).
+        [[nodiscard]] static std::filesystem::path ResolveBelow(const std::filesystem::path& root,
+                                                                const std::string& relative,
+                                                                const char* escapeMessage);
+        [[nodiscard]] static std::string PlayerFolder(int playerIndex);
+        static void DeleteContainer(const std::string& rootPath, const std::string& displayName,
+                                    int playerIndex);
     };
 
 } // namespace Microsoft::Xna::Framework::Storage

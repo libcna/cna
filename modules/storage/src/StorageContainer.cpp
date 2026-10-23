@@ -25,13 +25,14 @@ namespace
             throw System::ObjectDisposedException("StorageContainer");
     }
 
-    [[noreturn]] void ThrowDirectoryDeletionError(const std::filesystem::path& path,
+    [[noreturn]] void ThrowDirectoryDeletionError(const char* operation,
+                                                  const std::filesystem::path& path,
                                                   const std::error_code& error)
     {
         const std::string message = "Unable to delete directory '" +
             CNA::Internal::PathToUtf8(path) + "': " + error.message();
         const auto cause = std::make_exception_ptr(
-            std::filesystem::filesystem_error("DeleteDirectory", path, error));
+            std::filesystem::filesystem_error(operation, path, error));
         if (error == std::errc::no_such_file_or_directory || error == std::errc::not_a_directory)
             throw System::IO::DirectoryNotFoundException(message, cause);
         if (error == std::errc::permission_denied || error == std::errc::operation_not_permitted)
@@ -78,21 +79,12 @@ namespace Microsoft::Xna::Framework::Storage
         if (displayName.empty())
             throw System::ArgumentNullException("You must pass in a non-null title name.");
 
-        std::string playerFolder = (playerIndex >= 0)
-            ? "Player" + std::to_string(playerIndex + 1)
-            : "AllPlayers";
-
         // Intentional security deviation from FNA: Path.Combine permits a rooted display name to
         // discard the storage root and permits parent traversal. A StorageContainer is an
         // authority boundary in CNA, so construction must remain below the device storage root.
-        const auto contained = CNA::Internal::ResolveContainedPath(
-            rootPath, displayName + "/" + playerFolder);
-        if (!contained.ok)
-        {
-            throw System::ArgumentException(
-                "The storage container name must resolve within the storage root.");
-        }
-        storagePath_ = contained.resolvedPath;
+        storagePath_ = CNA::Internal::PathToGenericUtf8(ResolveBelow(
+            CNA::Internal::PathFromUtf8(rootPath), displayName + "/" + PlayerFolder(playerIndex),
+            "The storage container name must resolve within the storage root."));
 
         // XNA's FinishCreation: DirectoryInfo.Create builds the whole chain, including the storage
         // root, and its System.IO failure escapes. A file occupying any level is an IOException
@@ -139,15 +131,48 @@ namespace Microsoft::Xna::Framework::Storage
         // The native form exists so the filesystem calls below never narrow: ResolvePath's string
         // was being handed straight back to fs::exists / fs::remove / directory_iterator, whose
         // narrow overloads re-read it as ANSI code page bytes on Windows.
-        const auto contained = CNA::Internal::ResolveContainedNativePathFromBase(
-            CNA::Internal::PathFromUtf8(storagePath_), CNA::Internal::PathFromUtf8(storagePath_),
-            relative);
-        if (!contained.ok)
-        {
-            throw System::ArgumentException(
-                "The storage path must be relative and remain within the container.");
-        }
-        return contained.resolvedPath;
+        return ResolveBelow(CNA::Internal::PathFromUtf8(storagePath_), relative,
+                            "The storage path must be relative and remain within the container.");
+    }
+
+    std::filesystem::path StorageContainer::ResolveBelow(const std::filesystem::path& root,
+                                                         const std::string& relative,
+                                                         const char* escapeMessage)
+    {
+        const auto contained = CNA::Internal::ResolveContainedUtf8Path(root, relative);
+        if (contained.ok) return contained.resolvedPath;
+        // A component the filesystem cannot inspect (no search permission, a symlink loop, an
+        // overlong name) is not an escape: the operation cannot traverse it either, so it fails
+        // with the filesystem's own error, as XNA's does (StorageResidualPathsOracle). A lexical
+        // or symlink escape is still refused.
+        const auto lexical = CNA::Internal::ResolveContainedUtf8Path(root, relative, false);
+        std::error_code error;
+        if (lexical.ok) (void)fs::weakly_canonical(lexical.resolvedPath, error);
+        if (!lexical.ok || !error) throw System::ArgumentException(escapeMessage);
+        return lexical.resolvedPath;
+    }
+
+    std::string StorageContainer::PlayerFolder(int playerIndex)
+    {
+        return playerIndex >= 0 ? "Player" + std::to_string(playerIndex + 1) : "AllPlayers";
+    }
+
+    void StorageContainer::DeleteContainer(const std::string& rootPath,
+                                           const std::string& displayName, int playerIndex)
+    {
+        // XNA removes this device's player folder of the container, and only when it is a
+        // directory: another player's folder, the named folder and a file of that name stay, and
+        // nothing is created (StorageResidualPathsOracle). Path.Combine(root, "") is the root.
+        const std::string relative = displayName.empty()
+            ? PlayerFolder(playerIndex) : displayName + "/" + PlayerFolder(playerIndex);
+        const fs::path path = ResolveBelow(CNA::Internal::PathFromUtf8(rootPath), relative,
+            "titleName must be a simple name within the storage root, not an absolute path "
+            "or one that escapes it.");
+        std::error_code error;
+        if (!fs::is_directory(path, error)) return;
+        fs::remove_all(path, error);
+        if (error && error != std::errc::no_such_file_or_directory)
+            ThrowDirectoryDeletionError("DeleteContainer", path, error);
     }
 
     std::string StorageContainer::ResolvePath(const std::string& relative) const
@@ -170,7 +195,9 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (directory.empty())
             throw System::ArgumentNullException("directory");
-        return fs::is_directory(ResolveNativePath(directory));
+        // Directory.Exists answers false for any failure.
+        std::error_code error;
+        return fs::is_directory(ResolveNativePath(directory), error) && !error;
     }
 
     void StorageContainer::DeleteDirectory(const std::string& directory)
@@ -181,16 +208,17 @@ namespace Microsoft::Xna::Framework::Storage
         const fs::path path = ResolveNativePath(directory);
         std::error_code error;
         const auto status = fs::status(path, error);
-        if (error) ThrowDirectoryDeletionError(path, error);
+        if (error) ThrowDirectoryDeletionError("DeleteDirectory", path, error);
         if (!fs::exists(status))
-            ThrowDirectoryDeletionError(path, std::make_error_code(std::errc::no_such_file_or_directory));
+            ThrowDirectoryDeletionError("DeleteDirectory", path,
+                                        std::make_error_code(std::errc::no_such_file_or_directory));
         // filesystem::remove also deletes regular files; Directory.Delete must not.
         if (!fs::is_directory(status))
             throw System::IO::IOException("The path names a file, not a directory.");
         if (!fs::remove(path, error))
         {
             if (!error) error = std::make_error_code(std::errc::no_such_file_or_directory);
-            ThrowDirectoryDeletionError(path, error);
+            ThrowDirectoryDeletionError("DeleteDirectory", path, error);
         }
     }
 
@@ -233,7 +261,9 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (file.empty())
             throw System::ArgumentNullException("file");
-        return fs::is_regular_file(ResolveNativePath(file));
+        // File.Exists answers false for any failure.
+        std::error_code error;
+        return fs::is_regular_file(ResolveNativePath(file), error) && !error;
     }
 
     void StorageContainer::DeleteFile(const std::string& file)

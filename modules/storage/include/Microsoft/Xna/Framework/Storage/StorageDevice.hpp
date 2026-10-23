@@ -95,9 +95,19 @@ namespace Microsoft::Xna::Framework::Storage
             System::IAsyncResult* result);
 
         /**
-         * @brief Removes the container directory tree for the given title name entirely.
+         * @brief Deletes this device's player folder of the named container.
+         *
+         * Like XNA, only the folder this device opens (AllPlayers, or Player1 to Player4) is
+         * removed, with everything below it; another player's folder and the named folder stay.
+         * A container that is missing, or a file of that name, is left alone and nothing is
+         * created. An empty name addresses the player folder at the storage root itself.
          *
          * @param titleName Name of the container to delete.
+         * @throws System::ArgumentException If titleName is absolute or escapes the storage root
+         * (a deliberate refusal; XNA's Path.Combine would follow it).
+         * @throws System::UnauthorizedAccessException If an entry cannot be removed for lack of
+         * permission.
+         * @throws System::IO::IOException If removal fails otherwise.
          */
         void DeleteContainer(const std::string& titleName);
 

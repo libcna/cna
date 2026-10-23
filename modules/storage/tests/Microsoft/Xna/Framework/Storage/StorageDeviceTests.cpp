@@ -85,9 +85,15 @@ namespace
     };
 }
 
-TEST_F(StorageDeviceDeleteContainerTest, EmptyTitleNameThrowsArgumentException)
+// Genuine XNA (StorageResidualPathsOracle.cs): Path.Combine(root, "") is the root, so an empty
+// name removes the player folder there -- never the root itself.
+TEST_F(StorageDeviceDeleteContainerTest, EmptyTitleNameDeletesOnlyTheRootPlayerFolder)
 {
-    EXPECT_THROW(device_->DeleteContainer(""), System::ArgumentException);
+    CreateMarker("AllPlayers/save.dat");
+    CreateMarker("sentinel.txt");
+    EXPECT_NO_THROW(device_->DeleteContainer(""));
+    EXPECT_FALSE(MarkerExists("AllPlayers"));
+    EXPECT_TRUE(MarkerExists("sentinel.txt")) << "an empty name must not delete the storage root";
 }
 
 TEST_F(StorageDeviceDeleteContainerTest, AppNameAlsoScopesSharpRuntimeIsolatedStorage)
@@ -114,21 +120,25 @@ TEST_F(StorageDeviceDeleteContainerTest, EscapingTitleNameThrowsAndDeletesNothin
     EXPECT_TRUE(MarkerExists("sentinel.txt")) << "storage root must be untouched by a rejected call";
 }
 
-TEST_F(StorageDeviceDeleteContainerTest, DotTitleNameThrowsAndDoesNotDeleteTheWholeRoot)
+TEST_F(StorageDeviceDeleteContainerTest, DotTitleNameDeletesOnlyTheRootPlayerFolder)
 {
+    CreateMarker("AllPlayers/save.dat");
+    CreateMarker("MyGame/AllPlayers/save1.dat");
     CreateMarker("sentinel.txt");
-    EXPECT_THROW(device_->DeleteContainer("."), System::ArgumentException);
+    EXPECT_NO_THROW(device_->DeleteContainer("."));
+    EXPECT_FALSE(MarkerExists("AllPlayers"));
+    EXPECT_TRUE(MarkerExists("MyGame/AllPlayers/save1.dat"));
     EXPECT_TRUE(MarkerExists("sentinel.txt")) << "'.' must not delete the entire storage root";
 }
 
 TEST_F(StorageDeviceDeleteContainerTest, SimpleTitleNameDeletesOnlyThatContainer)
 {
-    CreateMarker("MyGame/save1.dat");
+    CreateMarker("MyGame/AllPlayers/save1.dat");
     CreateMarker("sentinel.txt"); // sibling that must survive
 
     EXPECT_NO_THROW(device_->DeleteContainer("MyGame"));
 
-    EXPECT_FALSE(MarkerExists("MyGame/save1.dat"));
+    EXPECT_FALSE(MarkerExists("MyGame/AllPlayers/save1.dat"));
     EXPECT_TRUE(MarkerExists("sentinel.txt"));
 }
 
