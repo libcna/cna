@@ -1402,6 +1402,15 @@ flips to true before it passes the `FX-060` shared suite in full.
 
 ### 10.5 Limitation classes on a supported backend (2026-08-18)
 
+**Vertex-texture update, 2026-10-23 (museum B8):** the historical vertex-sampling
+rows below predate the public-collection routing in FNA3D/EasyGL. SDL_GPU now also
+captures and binds independent vertex samplers, with lifetime-owning textures and
+post-Apply public state. The Single/Vector4 pixel contract and deferred-disposal
+regression live in `RunCompiledEffectVertexTextureContract` and
+`SdlGpuCompiledEffectDrawTest`. WebGPU still needs its separate stage-binding and
+float-texture repair. Do not interpret FX-109's historical scope decision as a
+current renderer-wide absence on every renderer.
+
 Once a renderer advertises `CompiledEffects == true`, every remaining "this does not work" needs to
 say *which kind* of not-working it is, because the two kinds carry different obligations. Folding
 them together is how a compiled-Effect gap gets excused as a renderer property, and how a renderer

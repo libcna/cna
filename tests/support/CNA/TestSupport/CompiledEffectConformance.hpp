@@ -145,6 +145,96 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief HiDef vertex textures and post-Apply sampler changes reach the generated geometry.
+     * @param device A HiDef device with compiled effects enabled.
+     * @param format Single or Vector4, two XNA vertex texture formats.
+     * @param releaseBeforeReadback Dispose the sampled texture and effect after issuing the last draw.
+     */
+    inline void RunCompiledEffectVertexTextureContract(GraphicsDevice& device, SurfaceFormat format,
+                                                       bool releaseBeforeReadback = false)
+    {
+        ASSERT_EQ(device.getGraphicsProfileProperty(), GraphicsProfile::HiDef);
+        ASSERT_TRUE(format == SurfaceFormat::Single || format == SurfaceFormat::Vector4);
+        std::ifstream input(CompiledEffectFixtureDirectory() /
+                            "vertex-texture-device-slots-xna4.fxb", std::ios::binary);
+        ASSERT_TRUE(input.good());
+        const std::vector<std::uint8_t> bytes{
+            std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+        Effect effect(device, bytes);
+        auto* amount = effect.getParametersProperty()["Amount"];
+        ASSERT_NE(amount, nullptr);
+        amount->SetValue(0.42f);
+
+        Texture2D heights(device, 4, 1, false, format);
+        const float values[] = {0.08f, 0.94f, 0.22f, 0.78f};
+        if (format == SurfaceFormat::Single)
+            heights.SetData(values, 4);
+        else
+        {
+            const Vector4 data[] = {Vector4(values[0], 0, 0, 1), Vector4(values[1], 0, 0, 1),
+                                    Vector4(values[2], 0, 0, 1), Vector4(values[3], 0, 0, 1)};
+            heights.SetData(data, 4);
+        }
+        struct Vertex { Vector3 position; Vector2 sample; };
+        constexpr int bars = 24;
+        std::vector<Vertex> vertices;
+        for (int i = 0; i < bars; ++i)
+        {
+            const float x0 = -0.9f + 1.8f * static_cast<float>(i) / bars;
+            const float x1 = -0.9f + 1.8f * static_cast<float>(i + 1) / bars;
+            const float u = -0.25f + 1.5f * (static_cast<float>(i) + 0.5f) / bars;
+            const Vertex a{Vector3(x0, 0, 0), Vector2(u, 0)};
+            const Vertex b{Vector3(x1, 0, 0), Vector2(u, 0)};
+            const Vertex c{Vector3(x1, 0, 0), Vector2(u, 1)};
+            const Vertex d{Vector3(x0, 0, 0), Vector2(u, 1)};
+            vertices.insert(vertices.end(), {a, b, c, a, c, d});
+        }
+        const VertexDeclaration declaration(sizeof(Vertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0)});
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto draw = [&](const SamplerState& sampler, bool releaseResources) {
+            device.Clear(Color::Black);
+            effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
+            device.getVertexTexturesProperty()(2, &heights);
+            device.getVertexSamplerStatesProperty()[2] = sampler;
+            // The fragment-stage slot must not override the independent vertex-stage sampler.
+            device.getSamplerStatesProperty()[2] = SamplerState::PointClamp;
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices.data(), 0,
+                                      static_cast<int>(vertices.size() / 3), declaration);
+            if (releaseResources)
+            {
+                heights.Dispose();
+                effect.Dispose();
+            }
+            const auto viewport = device.getViewportProperty();
+            std::vector<Color> pixels(static_cast<std::size_t>(viewport.getWidthProperty()) *
+                                      static_cast<std::size_t>(viewport.getHeightProperty()));
+            device.GetBackBufferData(pixels.data(), static_cast<int>(pixels.size()));
+            return pixels;
+        };
+        const auto clamp = draw(SamplerState::PointClamp, false);
+        const auto wrap = draw(SamplerState::PointWrap, releaseBeforeReadback);
+        int clampLit = 0;
+        int wrapLit = 0;
+        int different = 0;
+        for (std::size_t i = 0; i < clamp.size(); ++i)
+        {
+            clampLit += clamp[i].getRProperty() > 8 || clamp[i].getGProperty() > 8 ||
+                        clamp[i].getBProperty() > 8;
+            wrapLit += wrap[i].getRProperty() > 8 || wrap[i].getGProperty() > 8 ||
+                       wrap[i].getBProperty() > 8;
+            different += clamp[i].getPackedValueProperty() != wrap[i].getPackedValueProperty();
+        }
+        EXPECT_GT(clampLit, 1000);
+        EXPECT_GT(wrapLit, 1000);
+        EXPECT_GT(different, 1000)
+            << "PointClamp and PointWrap produced the same vertex-texture geometry";
+    }
+
+    /**
      * @brief Contract: the format boundary accepts only Effect Framework bytecode, by name.
      *
      * @param device Device whose renderer claims CompiledEffects.
@@ -6355,6 +6445,7 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectTruncationContract` -- every truncation refuses or parses whole
      * - `RunCompiledEffectHalfPixelCoverageContract` -- Direct3D 9 pixel centres for compiled draws
      * - `RunCompiledEffectDeviceTextureSlotAfterApplyContract` -- a slot replaced after Apply wins
+     * - `RunCompiledEffectVertexTextureContract` -- HiDef vertex slots, sampler changes and lifetime
      * - `RunCompiledEffectMrtWriteMaskContract` -- each MRT slot under its own write mask (HiDef)
      * - `RunCompiledEffectLodBiasRegisterContract` -- the bias belongs to its own sampler register
      * - `RunCompiledEffectLodBiasPerDrawContract` -- the bias in force when the draw was issued

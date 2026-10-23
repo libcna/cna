@@ -1449,6 +1449,33 @@ TEST(SdlGpuCompiledEffectDrawTest, SharedMrtWriteMaskContract)
     CNA::TestSupport::RunCompiledEffectMrtWriteMaskContract(device);
 }
 
+TEST(SdlGpuCompiledEffectDrawTest, VertexVector4TextureAndSamplerReachTheDraw)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectVertexTextureContract(device, SurfaceFormat::Vector4);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, VertexSingleTextureAndSamplerReachTheDraw)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectVertexTextureContract(device, SurfaceFormat::Single);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, VertexTextureAndEffectOutliveTheirDeferredDraw)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectVertexTextureContract(device, SurfaceFormat::Vector4, true);
+}
+
 TEST(SdlGpuCompiledEffectDrawTest, SharedLodBiasRegisterContract)
 {
     GraphicsDevice device;

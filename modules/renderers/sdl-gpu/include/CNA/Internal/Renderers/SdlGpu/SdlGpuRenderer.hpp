@@ -2049,8 +2049,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// CompiledEffectDrawCommand::binding's own doc comment for the unreflected-slot
             /// dummy-binding rule this follows.
             std::vector<CompiledEffectSamplerBinding> pixelSamplers;
-            Uint32 vertexDummySamplerCount = 0;
-            SdlGpuSampledTextureEXT vertexDummyTexture;
+            /// Independent vertex-stage slots, with the same lifetime and dummy-binding rules.
+            std::vector<CompiledEffectSamplerBinding> vertexSamplers;
         };
 #endif  // CNA_SDL_GPU_COMPILED_EFFECTS
 

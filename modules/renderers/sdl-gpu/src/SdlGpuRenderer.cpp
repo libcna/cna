@@ -8324,12 +8324,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             MOJOSHADER_sdlGetShaderParseData(vertexShaderData);
         const MOJOSHADER_parseData* pixelParseData =
             MOJOSHADER_sdlGetShaderParseData(pixelShaderData);
-        if (vertexParseData != nullptr && vertexParseData->sampler_count > 0)
-        {
-            throw System::NotSupportedException(
-                "CNA SDL_GPU: this compiled effect's vertex shader samples a texture; vertex-stage "
-                "texture sampling is unsupported by this renderer.");
-        }
 
         effect.CaptureUniformSnapshotEXT(binding.vertexUniformBytes, binding.pixelUniformBytes);
 
@@ -8341,65 +8335,162 @@ namespace CNA::Internal::Renderers::SdlGpu
         // pass's reflection lists one for it; an unlisted slot gets this renderer's default white
         // texture, which the shader never actually samples.
         EnsureDefaultPbrTextures();  // lazily creates defaultWhiteTexture_, reused here
-        const unsigned int pixelSamplerSlotCount = MOJOSHADER_sdlGetSamplerSlots(pixelShaderData);
-        binding.pixelSamplers.resize(pixelSamplerSlotCount);
-        for (unsigned int slot = 0; slot < pixelSamplerSlotCount; ++slot)
-        {
-            CompiledEffectSamplerBinding& samplerBinding = binding.pixelSamplers[slot];
-            const MOJOSHADER_sampler* reflectedSampler = nullptr;
-            if (pixelParseData != nullptr)
+        const auto captureSamplers = [&](bool vertexStage, MOJOSHADER_sdlShaderData* shaderData,
+                                         const MOJOSHADER_parseData* parseData,
+                                         std::vector<CompiledEffectSamplerBinding>& samplers) {
+            const char* stageName = vertexStage ? "vertex" : "pixel";
+            const unsigned int samplerSlotCount = MOJOSHADER_sdlGetSamplerSlots(shaderData);
+            samplers.resize(samplerSlotCount);
+            for (unsigned int slot = 0; slot < samplerSlotCount; ++slot)
             {
-                for (int i = 0; i < pixelParseData->sampler_count; ++i)
+                CompiledEffectSamplerBinding& samplerBinding = samplers[slot];
+                const MOJOSHADER_sampler* reflectedSampler = nullptr;
+                if (parseData != nullptr)
                 {
-                    if (static_cast<unsigned int>(pixelParseData->samplers[i].index) == slot)
+                    for (int i = 0; i < parseData->sampler_count; ++i)
                     {
-                        reflectedSampler = &pixelParseData->samplers[i];
-                        break;
+                        if (static_cast<unsigned int>(parseData->samplers[i].index) == slot)
+                        {
+                            reflectedSampler = &parseData->samplers[i];
+                            break;
+                        }
                     }
                 }
-            }
 
-            if (reflectedSampler == nullptr)
-            {
-                samplerBinding.texture = ResolveSampledTextureEXT(
-                    defaultWhiteTexture_.get(), "CompiledEffect.UnreflectedSampler");
-                continue;
-            }
+                if (reflectedSampler == nullptr)
+                {
+                    samplerBinding.texture = ResolveSampledTextureEXT(
+                        defaultWhiteTexture_.get(), "CompiledEffect.UnreflectedSampler");
+                    continue;
+                }
 
-            Texture* boundTexture = nullptr;
-            Microsoft::Xna::Framework::Graphics::SamplerState samplerState;
-            bool samplerAssigned = false;
-            effect.GetBoundSamplerEXT(slot, /*vertexStage=*/false, boundTexture, samplerState,
-                                      &samplerAssigned);
-            // Apply() publishes the pass's textures to the device slots, and a texture the game
-            // sets on a device slot afterwards is the one XNA samples, so a filled device slot
-            // takes precedence over the texture the effect captured (as on DIRECTX9).
-            if (params != nullptr && params->compiledDeviceTextures != nullptr &&
-                slot < static_cast<unsigned int>(
-                           Microsoft::Xna::Framework::Graphics::TextureCollection::MaxTextures) &&
-                (*params->compiledDeviceTextures)[static_cast<int>(slot)] != nullptr)
-            {
-                boundTexture =
-                    (*params->compiledDeviceTextures)[static_cast<int>(slot)];
-            }
-            if (!samplerAssigned && params != nullptr &&
-                params->compiledDeviceSamplerStates != nullptr &&
-                slot < static_cast<unsigned int>(SamplerStateCollection::MaxSamplers))
-            {
-                samplerState =
-                    (*params->compiledDeviceSamplerStates)[static_cast<int>(slot)];
-            }
-            if (slot == 0 && spriteTextureOverride != nullptr && *spriteTextureOverride)
-            {
-                if (reflectedSampler->type != MOJOSHADER_SAMPLER_2D)
+                Texture* boundTexture = nullptr;
+                Microsoft::Xna::Framework::Graphics::SamplerState samplerState;
+                bool samplerAssigned = false;
+                effect.GetBoundSamplerEXT(slot, vertexStage, boundTexture, samplerState,
+                                          &samplerAssigned);
+                // Apply() publishes the pass's textures to the device slots, and a texture the game
+                // sets on a device slot afterwards is the one XNA samples, so a filled device slot
+                // takes precedence over the texture the effect captured (as on DIRECTX9).
+                if (vertexStage)
+                {
+                    // Vertex states are independent of the fragment-stage sampler cache. Apply()
+                    // has already published pass assignments, so the current public slots win.
+                    if (params != nullptr && params->compiledDeviceVertexTextures != nullptr &&
+                        params->compiledDeviceVertexSamplerStates != nullptr &&
+                        slot < static_cast<unsigned int>(
+                                   params->compiledDeviceVertexSamplerStates->ActiveSamplerCount()))
+                    {
+                        boundTexture = (*params->compiledDeviceVertexTextures)[static_cast<int>(slot)];
+                        samplerState =
+                            (*params->compiledDeviceVertexSamplerStates)[static_cast<int>(slot)];
+                    }
+                }
+                else
+                {
+                    if (params != nullptr && params->compiledDeviceTextures != nullptr &&
+                        slot < static_cast<unsigned int>(
+                                   Microsoft::Xna::Framework::Graphics::TextureCollection::MaxTextures) &&
+                        (*params->compiledDeviceTextures)[static_cast<int>(slot)] != nullptr)
+                    {
+                        boundTexture =
+                            (*params->compiledDeviceTextures)[static_cast<int>(slot)];
+                    }
+                    if (!samplerAssigned && params != nullptr &&
+                        params->compiledDeviceSamplerStates != nullptr &&
+                        slot < static_cast<unsigned int>(SamplerStateCollection::MaxSamplers))
+                    {
+                        samplerState =
+                            (*params->compiledDeviceSamplerStates)[static_cast<int>(slot)];
+                    }
+                }
+                if (!vertexStage && slot == 0 && spriteTextureOverride != nullptr &&
+                    *spriteTextureOverride)
+                {
+                    if (reflectedSampler->type != MOJOSHADER_SAMPLER_2D)
+                    {
+                        throw System::NotSupportedException(
+                            "CNA SDL_GPU: SpriteBatch texture slot 0 is Texture2D, but the compiled "
+                            "effect declares a different sampler dimension there.");
+                    }
+                    samplerBinding.texture = *spriteTextureOverride;
+                    if (!samplerAssigned && slot < samplerSlots_.size())
+                    {
+                        const SamplerSlotState& deviceSlot = samplerSlots_[slot];
+                        samplerBinding.filter = deviceSlot.filter;
+                        samplerBinding.addressU = deviceSlot.addressU;
+                        samplerBinding.addressV = deviceSlot.addressV;
+                        samplerBinding.maxAnisotropy = deviceSlot.maxAnisotropy;
+                        samplerBinding.maxMipLevel = deviceSlot.maxMipLevel;
+                        samplerBinding.lodBias = deviceSlot.lodBias;
+                        samplerBinding.addressW = deviceSlot.addressW;
+                    }
+                    continue;
+                }
+                if (boundTexture == nullptr)
+                {
+                    const char* name = reflectedSampler->name != nullptr ? reflectedSampler->name
+                                                                          : "<unnamed>";
+                    throw std::runtime_error(
+                        std::string("CNA SDL_GPU: this compiled effect's ") + stageName + " shader samples '" +
+                        name + "', but no texture is bound to it.");
+                }
+                // plans/plan_fx.md FX-110: the shader's declared sampler dimension decides which resolver
+                // the bound texture has to go through, and the two must agree. SDL_GPU binds a texture
+                // by handle rather than by target, so a cube bound where the shader declared sampler2D
+                // is a validation error at best and a wrongly-sampled image at worst -- named here
+                // instead of either.
+                using Microsoft::Xna::Framework::Graphics::Texture2D;
+                using Microsoft::Xna::Framework::Graphics::Texture3D;
+                using Microsoft::Xna::Framework::Graphics::TextureCube;
+                auto* texture2D = dynamic_cast<Texture2D*>(boundTexture);
+                auto* textureCube = CNA::Internal::Graphics::AsTextureCube(boundTexture);
+                auto* texture3D = CNA::Internal::Graphics::AsTexture3D(boundTexture);
+                const MOJOSHADER_samplerType boundKind =
+                    textureCube != nullptr ? MOJOSHADER_SAMPLER_CUBE
+                    : texture3D != nullptr ? MOJOSHADER_SAMPLER_VOLUME
+                                           : MOJOSHADER_SAMPLER_2D;
+                const auto kindName = [](MOJOSHADER_samplerType type) {
+                    switch (type)
+                    {
+                        case MOJOSHADER_SAMPLER_CUBE:   return "samplerCUBE (TextureCube)";
+                        case MOJOSHADER_SAMPLER_VOLUME: return "sampler3D (Texture3D)";
+                        default:                        return "sampler2D (Texture2D)";
+                    }
+                };
+                if (reflectedSampler->type != boundKind)
                 {
                     throw System::NotSupportedException(
-                        "CNA SDL_GPU: SpriteBatch texture slot 0 is Texture2D, but the compiled "
-                        "effect declares a different sampler dimension there.");
+                        std::string("CNA SDL_GPU: this compiled effect's ") + stageName + " shader declares " +
+                        kindName(reflectedSampler->type) + " at slot " + std::to_string(slot) +
+                        ", but the texture bound there is a " + kindName(boundKind) +
+                        ". The dimensions must match.");
                 }
-                samplerBinding.texture = *spriteTextureOverride;
-                if (!samplerAssigned && slot < samplerSlots_.size())
+                samplerBinding.texture =
+                    texture3D != nullptr
+                        ? ResolveSampledVolumeEXT(&texture3D->GetRenderer(),
+                                                  "CompiledEffect.VolumeSampler")
+                    : textureCube != nullptr
+                        ? ResolveSampledCubeEXT(&textureCube->GetRenderer(),
+                                                "CompiledEffect.CubeSampler")
+                        : ResolveSampledTextureEXT(&texture2D->GetRenderer(),
+                                                   "CompiledEffect.Sampler");
+                if (vertexStage || samplerAssigned)
                 {
+                    // The vertex device state or fragment pass assignment, including LOD limits.
+                    samplerBinding.filter = static_cast<int>(samplerState.getFilterProperty());
+                    samplerBinding.addressU = static_cast<int>(samplerState.getAddressUProperty());
+                    samplerBinding.addressV = static_cast<int>(samplerState.getAddressVProperty());
+                    samplerBinding.maxAnisotropy = samplerState.getMaxAnisotropyProperty();
+                    samplerBinding.maxMipLevel = samplerState.getMaxMipLevelProperty();
+                    samplerBinding.lodBias = samplerState.getMipMapLevelOfDetailBiasProperty();
+                    samplerBinding.addressW = static_cast<int>(samplerState.getAddressWProperty());
+                }
+                else if (slot < samplerSlots_.size())
+                {
+                    // No pass has assigned this slot, so what the game selected on the device stands --
+                    // GraphicsDevice.SamplerStates[slot], recorded here by ApplySamplerState /
+                    // ApplySamplerMipState. Filling in defaults instead would silently override it.
                     const SamplerSlotState& deviceSlot = samplerSlots_[slot];
                     samplerBinding.filter = deviceSlot.filter;
                     samplerBinding.addressU = deviceSlot.addressU;
@@ -8409,83 +8500,10 @@ namespace CNA::Internal::Renderers::SdlGpu
                     samplerBinding.lodBias = deviceSlot.lodBias;
                     samplerBinding.addressW = deviceSlot.addressW;
                 }
-                continue;
             }
-            if (boundTexture == nullptr)
-            {
-                const char* name = reflectedSampler->name != nullptr ? reflectedSampler->name
-                                                                      : "<unnamed>";
-                throw std::runtime_error(
-                    std::string("CNA SDL_GPU: this compiled effect's pixel shader samples '") +
-                    name + "', but no texture is bound to it.");
-            }
-            // plans/plan_fx.md FX-110: the shader's declared sampler dimension decides which resolver
-            // the bound texture has to go through, and the two must agree. SDL_GPU binds a texture
-            // by handle rather than by target, so a cube bound where the shader declared sampler2D
-            // is a validation error at best and a wrongly-sampled image at worst -- named here
-            // instead of either.
-            using Microsoft::Xna::Framework::Graphics::Texture2D;
-            using Microsoft::Xna::Framework::Graphics::Texture3D;
-            using Microsoft::Xna::Framework::Graphics::TextureCube;
-            auto* texture2D = dynamic_cast<Texture2D*>(boundTexture);
-            auto* textureCube = CNA::Internal::Graphics::AsTextureCube(boundTexture);
-            auto* texture3D = CNA::Internal::Graphics::AsTexture3D(boundTexture);
-            const MOJOSHADER_samplerType boundKind =
-                textureCube != nullptr ? MOJOSHADER_SAMPLER_CUBE
-                : texture3D != nullptr ? MOJOSHADER_SAMPLER_VOLUME
-                                       : MOJOSHADER_SAMPLER_2D;
-            const auto kindName = [](MOJOSHADER_samplerType type) {
-                switch (type)
-                {
-                    case MOJOSHADER_SAMPLER_CUBE:   return "samplerCUBE (TextureCube)";
-                    case MOJOSHADER_SAMPLER_VOLUME: return "sampler3D (Texture3D)";
-                    default:                        return "sampler2D (Texture2D)";
-                }
-            };
-            if (reflectedSampler->type != boundKind)
-            {
-                throw System::NotSupportedException(
-                    std::string("CNA SDL_GPU: this compiled effect's pixel shader declares ") +
-                    kindName(reflectedSampler->type) + " at slot " + std::to_string(slot) +
-                    ", but the texture bound there is a " + kindName(boundKind) +
-                    ". The dimensions must match.");
-            }
-            samplerBinding.texture =
-                texture3D != nullptr
-                    ? ResolveSampledVolumeEXT(&texture3D->GetRenderer(),
-                                              "CompiledEffect.VolumeSampler")
-                : textureCube != nullptr
-                    ? ResolveSampledCubeEXT(&textureCube->GetRenderer(),
-                                            "CompiledEffect.CubeSampler")
-                    : ResolveSampledTextureEXT(&texture2D->GetRenderer(),
-                                               "CompiledEffect.Sampler");
-            if (samplerAssigned)
-            {
-                // plans/plan_fx.md FX-083: the pass's own sampler_state block, LOD clamp and bias
-                // included -- SDL_GPU expresses both exactly.
-                samplerBinding.filter = static_cast<int>(samplerState.getFilterProperty());
-                samplerBinding.addressU = static_cast<int>(samplerState.getAddressUProperty());
-                samplerBinding.addressV = static_cast<int>(samplerState.getAddressVProperty());
-                samplerBinding.maxAnisotropy = samplerState.getMaxAnisotropyProperty();
-                samplerBinding.maxMipLevel = samplerState.getMaxMipLevelProperty();
-                samplerBinding.lodBias = samplerState.getMipMapLevelOfDetailBiasProperty();
-                samplerBinding.addressW = static_cast<int>(samplerState.getAddressWProperty());
-            }
-            else if (slot < samplerSlots_.size())
-            {
-                // No pass has assigned this slot, so what the game selected on the device stands --
-                // GraphicsDevice.SamplerStates[slot], recorded here by ApplySamplerState /
-                // ApplySamplerMipState. Filling in defaults instead would silently override it.
-                const SamplerSlotState& deviceSlot = samplerSlots_[slot];
-                samplerBinding.filter = deviceSlot.filter;
-                samplerBinding.addressU = deviceSlot.addressU;
-                samplerBinding.addressV = deviceSlot.addressV;
-                samplerBinding.maxAnisotropy = deviceSlot.maxAnisotropy;
-                samplerBinding.maxMipLevel = deviceSlot.maxMipLevel;
-                samplerBinding.lodBias = deviceSlot.lodBias;
-                samplerBinding.addressW = deviceSlot.addressW;
-            }
-        }
+        };
+        captureSamplers(false, pixelShaderData, pixelParseData, binding.pixelSamplers);
+        captureSamplers(true, vertexShaderData, vertexParseData, binding.vertexSamplers);
 
         if (binding.pixelUsesLodBias)
         {
@@ -8500,13 +8518,6 @@ namespace CNA::Internal::Renderers::SdlGpu
                 std::memcpy(binding.pixelLodBiasBytes.data() + slot * 16u,
                             &value, sizeof(value));
             }
-        }
-
-        binding.vertexDummySamplerCount = MOJOSHADER_sdlGetSamplerSlots(vertexShaderData);
-        if (binding.vertexDummySamplerCount > 0)
-        {
-            binding.vertexDummyTexture = ResolveSampledTextureEXT(
-                defaultWhiteTexture_.get(), "CompiledEffect.VertexDummySampler");
         }
 
         // The public Effect owns the MojoShader objects, but the draw is replayed only at the next
@@ -8690,16 +8701,22 @@ namespace CNA::Internal::Renderers::SdlGpu
                 static_cast<Uint32>(binding.pixelLodBiasBytes.size()));
         }
 
-        if (binding.vertexDummySamplerCount > 0)
+        if (!binding.vertexSamplers.empty())
         {
-            SDL_GPUTextureSamplerBinding dummyBinding{};
-            dummyBinding.texture = binding.vertexDummyTexture.texture;
-            dummyBinding.sampler =
-                GetOrCreateSampler(0, 0, 0, 4, "CompiledEffectVertexDummy");
-            std::vector<SDL_GPUTextureSamplerBinding> dummyBindings(
-                binding.vertexDummySamplerCount, dummyBinding);
-            SDL_BindGPUVertexSamplers(pass, 0, dummyBindings.data(),
-                                      static_cast<Uint32>(dummyBindings.size()));
+            std::vector<SDL_GPUTextureSamplerBinding> samplerBindings;
+            samplerBindings.reserve(binding.vertexSamplers.size());
+            for (const CompiledEffectSamplerBinding& samplerBinding : binding.vertexSamplers)
+            {
+                SDL_GPUTextureSamplerBinding gpuSamplerBinding{};
+                gpuSamplerBinding.texture = samplerBinding.texture.texture;
+                gpuSamplerBinding.sampler = GetOrCreateSampler(
+                    samplerBinding.filter, samplerBinding.addressU, samplerBinding.addressV,
+                    samplerBinding.maxAnisotropy, "CompiledEffectVertex",
+                    samplerBinding.maxMipLevel, samplerBinding.lodBias, samplerBinding.addressW);
+                samplerBindings.push_back(gpuSamplerBinding);
+            }
+            SDL_BindGPUVertexSamplers(pass, 0, samplerBindings.data(),
+                                      static_cast<Uint32>(samplerBindings.size()));
         }
 
         if (!binding.pixelSamplers.empty())

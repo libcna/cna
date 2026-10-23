@@ -27,7 +27,80 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current checkpoint: avatar load lifetime repair validated (2026-10-23)
+### Current checkpoint: SDL_GPU HiDef vertex-texture repair validated (2026-10-23)
+
+Avatar lifetime repair is published and remote-verified as
+`2b39eb9341791b711008205d0d70f89bb9e4e799`. Sharp Runtime remains1dc8785b,
+demos1295899b and museumce761bea. No consumer pin or source changed.
+
+Museum B8 was confirmed: SDL_GPU explicitly rejected reflected vertex samplers,
+while WebGPU's ordinary texture-format verdict omits Single/Vector4 despite storage
+mappings for them. WebGPU separately rejects reflected vertex samplers as well.
+Existing Fna3dCompiledEffectTest.VertexTextureAndSamplerDeviceCollectionsReachTheDraw
+uses the genuine XNA vertex-texture fixture and only public graphics APIs. Its
+unchanged baseline passed on FNA3D (SDL_GPU/Vulkan driver), failed on WEBGPU with
+SurfaceFormat15 refusal and failed on SDL_GPU with explicit vertex-sampler refusal.
+The full SDL_GPU compiled-effect baseline completed:59 tests,58PASS/1declaredSKIP
+(optional shadercross OFF). Logs/XML use
+`repair-museum-vertex-texture-*-before-v1` under the demos reports directory.
+
+Coverage correction discovered during this audit: cmake-build-museum-asan retained
+the seven renderers and museum feature switches, but its four optional compiled-
+effect switches defaulted OFF, unlike the original museum build-probe (all ON).
+Do not describe that avatar run as an identical full configuration. It covers the
+stock avatar path/SkinnedEffect and mutex repair, not compiled-effect execution.
+cmake-build-multi has WEBGPU/SDL_GPU compiled effects ON and EasyGL/SOFTWARE OFF;
+FNA3D supplies the existing working fixture reference. This new shader baseline
+must not use the ASan consumer's unsupported compiled-effect path as evidence.
+
+SDL_GPU now resolves both stages through the existing lifetime-owning sampler
+capture, but reads the independent current public vertex slots after Apply. The
+native vertex binding replaces dummy-only bindings; unreflected sparse slots still
+receive valid dummy textures. Pixel-stage behavior is unchanged. No public API,
+fixture, demo expectation, HiDef request or knownIssue was weakened.
+
+Native tests add Single/Vector4 geometry checks with fragment slot2 fixed (stage
+independence), plus disposal of texture/effect after issuing the last draw and
+before readback. Both format checks failed before production changes (new-before-v1
+XML/log, exit1). The original unchanged FNA fixture also transitions FAIL to PASS
+on SDL_GPU. Final expanded native run40505:82 tests,81PASS/1unchanged shadercross
+SKIP, including all SDL_GPU renderer unit tests and the unchanged fixture.
+The v1 narrower after-run was62 tests,61PASS/1sameSKIP. Build95012 initially found
+a private TextureCollection count accessor; corrected to the existing public
+vertex sampler count, builds9592/36129 exit0. Boundary inventory/classification,
+renderer SDL audit, ratchet, hot-path lint and diff checks all pass.
+
+Cross-renderer controls6813:3PASS/1FAIL on FNA3D. Vector4, the original fixture and
+deferred disposal pass. **New pre-existing gap:** FNA3D refuses ordinary Single
+textures (SurfaceFormat13); none of its implementation changed in this batch.
+Do not call this control sweep all-green or turn its assertion into a skip. Audit
+that format verdict after the two museum-requested renderer repairs. The independent
+WebGPU baseline71835:57 tests,56PASS/1existing cube/volumeSKIP (WGSL path included).
+
+The broad incremental CNA build50950 included1790 stale/unbuilt targets. It was
+intentionally interrupted at137 (exit130, no source error) to avoid spending this
+focused batch rebuilding unrelated subsystems. Its completed cache/artifacts remain.
+**No full CNA build/test corpus pass is claimed.** Focused renderer/shared-library
+builds passed. External demos rebuild22957 completed0 with compiled effects OFF;
+before/after public-binding demo results are exactly unchanged except elapsed time:
+4PASS each on SOFTWARE,OPENGLES3,SDL_GPU, no knownIssue. This is a regression control,
+not evidence that it executes a vertex shader. Final affected build23741 completed0;
+final native run56782 again81PASS/1sameSKIP. XML comparison preserves all59 original
+outcomes. SDL_GPU-specific CTest33654 passed10/10. No owned build/test remains live.
+
+All evidence is under demos build/linux-full/reports/repair-museum-vertex-texture-*.
+The repair is the commit containing this entry, based on2b39eb934. Stage only the
+seven SDL_GPU/shared-test/documentation files, not inherited work. Next: publish
+this validated SDL_GPU-only repair with a normal fast-forward, then implement WebGPU vertex
+group0 and float-format support with the same oracle. Its float cube transfer code
+still assumes4-byte texels, so do not accidentally enable float cubes by changing
+the shared 2D verdict. WebGPU sampling layouts must distinguish non-filtering
+float32 vertex samplers without requiring Float32Filterable. No sanitizer, browser,
+Windows or Apple runtime pass is claimed for this SDL_GPU batch yet. Inherited
+content/audio/occlusion work remains untouched. Builds use one compiler, shared
+ccache and a6GiB scope limit. The demos156-ID/40-unfinalized census is unchanged.
+
+### Previous checkpoint: avatar load lifetime repair validated (2026-10-23)
 
 GLES float readback repair below is committed and published as
 `53292f1472e2681ce9f75e4fe53168ba928a000c`. The current investigation is museum B3,
