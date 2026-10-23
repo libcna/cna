@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "System/DateTime.hpp"
+#include "System/Collections/Generic/KeyNotFoundException.hpp"
 
 #include <cstring>
 #include <memory>
@@ -169,7 +170,13 @@ struct AchievementCollectionResource final {
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    return PublishAchievement((*collection->value)[nativeKey], outAchievement);
+    const Achievement* value;
+    try {
+        value = &(*collection->value)[nativeKey];
+    } catch (const System::Collections::Generic::KeyNotFoundException&) {
+        return InvalidArgument("No achievement has the requested key.");
+    }
+    return PublishAchievement(*value, outAchievement);
 }
 
 [[nodiscard]] CNA_Result AchievementCollectionInsert(

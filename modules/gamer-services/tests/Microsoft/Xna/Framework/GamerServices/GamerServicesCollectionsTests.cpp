@@ -15,6 +15,8 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/DateTime.hpp"
+#include "System/Collections/Generic/KeyNotFoundException.hpp"
+#include "System/NotSupportedException.hpp"
 #include "System/IndexOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NullReferenceException.hpp"
@@ -47,11 +49,10 @@ TEST(AchievementCollectionTest, IndexByKey) {
     EXPECT_EQ("ach1", col["ach1"].getKeyProperty());
 }
 
-// Task 7.9: FNA's own string-key indexer explicitly does `throw new IndexOutOfRangeException();`
-// - not std::out_of_range.
+// Genuine XNA uses dictionary lookup; FNA differs for absent keys.
 TEST(AchievementCollectionTest, IndexByKeyNotFound) {
     auto col = AchievementCollection::CreateInternal({});
-    EXPECT_THROW(col["missing"], System::IndexOutOfRangeException);
+    EXPECT_THROW((void)col["missing"], System::Collections::Generic::KeyNotFoundException);
 }
 
 // Task 7.9: FNA's own int indexer (List<T>) throws ArgumentOutOfRangeException, not
@@ -119,68 +120,62 @@ TEST(AchievementCollectionTest, IndexOfFindsAndReportsNotFound) {
     EXPECT_EQ(-1, col.IndexOf(MakeAchievement("missing")));
 }
 
-TEST(AchievementCollectionTest, InsertAtIndexShiftsLaterElements) {
+// Genuine XNA refuses all ICollection/IList mutations, including invalid indices.
+TEST(AchievementCollectionTest, InsertAtIndexRefusesAndPreservesElements) {
     std::vector<Achievement> v{MakeAchievement("a"), MakeAchievement("c")};
     auto col = AchievementCollection::CreateInternal(v);
-    col.Insert(1, MakeAchievement("b"));
-    ASSERT_EQ(3, col.getCountProperty());
-    EXPECT_EQ("a", col[0].getKeyProperty());
-    EXPECT_EQ("b", col[1].getKeyProperty());
-    EXPECT_EQ("c", col[2].getKeyProperty());
+    EXPECT_THROW(col.Insert(1, MakeAchievement("b")), System::NotSupportedException);
+    EXPECT_EQ(v, std::vector<Achievement>(col.begin(), col.end()));
 }
 
-TEST(AchievementCollectionTest, InsertAtCountAppends) {
+TEST(AchievementCollectionTest, InsertAtCountRefuses) {
     std::vector<Achievement> v{MakeAchievement("a")};
     auto col = AchievementCollection::CreateInternal(v);
-    col.Insert(col.getCountProperty(), MakeAchievement("b"));
-    ASSERT_EQ(2, col.getCountProperty());
-    EXPECT_EQ("b", col[1].getKeyProperty());
+    EXPECT_THROW(col.Insert(col.getCountProperty(), MakeAchievement("b")), System::NotSupportedException);
+    EXPECT_EQ(v, std::vector<Achievement>(col.begin(), col.end()));
 }
 
-TEST(AchievementCollectionTest, InsertOutOfRangeThrows) {
+TEST(AchievementCollectionTest, InsertOutOfRangeRefusesModificationFirst) {
     auto col = AchievementCollection::CreateInternal({});
-    EXPECT_THROW(col.Insert(-1, MakeAchievement("a")), System::ArgumentOutOfRangeException);
-    EXPECT_THROW(col.Insert(1, MakeAchievement("a")), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(col.Insert(-1, MakeAchievement("a")), System::NotSupportedException);
+    EXPECT_THROW(col.Insert(1, MakeAchievement("a")), System::NotSupportedException);
+    EXPECT_EQ(0, col.getCountProperty());
 }
 
-TEST(AchievementCollectionTest, RemoveAtDeletesTheRightElement) {
+TEST(AchievementCollectionTest, RemoveAtRefusesAndPreservesElements) {
     std::vector<Achievement> v{MakeAchievement("a"), MakeAchievement("b"), MakeAchievement("c")};
     auto col = AchievementCollection::CreateInternal(v);
-    col.RemoveAt(1);
-    ASSERT_EQ(2, col.getCountProperty());
-    EXPECT_EQ("a", col[0].getKeyProperty());
-    EXPECT_EQ("c", col[1].getKeyProperty());
+    EXPECT_THROW(col.RemoveAt(1), System::NotSupportedException);
+    EXPECT_EQ(v, std::vector<Achievement>(col.begin(), col.end()));
 }
 
-TEST(AchievementCollectionTest, RemoveAtOutOfRangeThrows) {
+TEST(AchievementCollectionTest, RemoveAtOutOfRangeRefusesModificationFirst) {
     auto col = AchievementCollection::CreateInternal({});
-    EXPECT_THROW(col.RemoveAt(-1), System::ArgumentOutOfRangeException);
-    EXPECT_THROW(col.RemoveAt(0), System::ArgumentOutOfRangeException);
-}
-
-TEST(AchievementCollectionTest, AddAppendsToTheEnd) {
-    auto col = AchievementCollection::CreateInternal({});
-    col.Add(MakeAchievement("a"));
-    col.Add(MakeAchievement("b"));
-    ASSERT_EQ(2, col.getCountProperty());
-    EXPECT_EQ("a", col[0].getKeyProperty());
-    EXPECT_EQ("b", col[1].getKeyProperty());
-}
-
-TEST(AchievementCollectionTest, RemoveDeletesMatchingElementAndReportsNotFound) {
-    std::vector<Achievement> v{MakeAchievement("a"), MakeAchievement("b")};
-    auto col = AchievementCollection::CreateInternal(v);
-    EXPECT_TRUE(col.Remove(v[0]));
-    ASSERT_EQ(1, col.getCountProperty());
-    EXPECT_EQ("b", col[0].getKeyProperty());
-    EXPECT_FALSE(col.Remove(MakeAchievement("missing")));
-}
-
-TEST(AchievementCollectionTest, ClearRemovesEverythingWithoutDisposing) {
-    std::vector<Achievement> v{MakeAchievement("a"), MakeAchievement("b")};
-    auto col = AchievementCollection::CreateInternal(v);
-    col.Clear();
+    EXPECT_THROW(col.RemoveAt(-1), System::NotSupportedException);
+    EXPECT_THROW(col.RemoveAt(0), System::NotSupportedException);
     EXPECT_EQ(0, col.getCountProperty());
+}
+
+TEST(AchievementCollectionTest, AddRefusesEvenWhenEmpty) {
+    auto col = AchievementCollection::CreateInternal({});
+    EXPECT_THROW(col.Add(MakeAchievement("a")), System::NotSupportedException);
+    EXPECT_THROW(col.Add(MakeAchievement("b")), System::NotSupportedException);
+    EXPECT_EQ(0, col.getCountProperty());
+}
+
+TEST(AchievementCollectionTest, RemoveRefusesPresentAndAbsentElements) {
+    std::vector<Achievement> v{MakeAchievement("a"), MakeAchievement("b")};
+    auto col = AchievementCollection::CreateInternal(v);
+    EXPECT_THROW((void)col.Remove(v[0]), System::NotSupportedException);
+    EXPECT_THROW((void)col.Remove(MakeAchievement("missing")), System::NotSupportedException);
+    EXPECT_EQ(v, std::vector<Achievement>(col.begin(), col.end()));
+}
+
+TEST(AchievementCollectionTest, ClearRefusesWithoutDisposing) {
+    std::vector<Achievement> v{MakeAchievement("a"), MakeAchievement("b")};
+    auto col = AchievementCollection::CreateInternal(v);
+    EXPECT_THROW(col.Clear(), System::NotSupportedException);
+    EXPECT_EQ(v, std::vector<Achievement>(col.begin(), col.end()));
     EXPECT_FALSE(col.getIsDisposedProperty());
 }
 
@@ -214,14 +209,10 @@ TEST(AchievementCollectionTest, CopyToThrowsForNegativeArrayIndex) {
     EXPECT_THROW(col.CopyTo(dest, -1), System::ArgumentOutOfRangeException);
 }
 
-// Task 8.2: FNA's own hardcoded ICollection<Achievement>.IsReadOnly getter, despite
-// Insert/RemoveAt/Add/Remove/Clear all being real, working mutators - the conventional .NET
-// pattern for an explicit-interface-only mutable surface, not an inconsistency like Task 8.1's
-// PropertyDictionary case (there is no upstream bug here).
 TEST(AchievementCollectionTest, IsReadOnlyIsAlwaysTrue) {
     auto col = AchievementCollection::CreateInternal({});
     EXPECT_TRUE(col.getIsReadOnlyProperty());
-    col.Add(MakeAchievement("a"));
+    EXPECT_THROW(col.Add(MakeAchievement("a")), System::NotSupportedException);
     EXPECT_TRUE(col.getIsReadOnlyProperty());
 }
 

@@ -201,9 +201,14 @@ comparable with one the caller built.
 
 The collection **copies what it is given**, so releasing a source handle afterwards changes nothing
 in it, and **both indexers answer a copy rather than a view**: the canonical reference points into
-storage that a later insert or remove would invalidate, and copying a value loses nothing. Both
-canonical indexers are mapped — by position and by key. Removal here **answers whether anything was
-found**, unlike the gamer collection's, because the canonical operation does. `begin`/`end` have no C
+storage owned by the collection, and the copy remains independently owned. Both
+canonical indexers are mapped — by position and by key; an absent key returns
+`CNA_RESULT_INVALID_ARGUMENT` with an invalid output handle.
+Collections are **read-only**, including those built by `create_ext`. Add, Insert, RemoveAt,
+Remove and Clear return `CNA_RESULT_NOT_SUPPORTED` after handle validation; this refusal precedes
+index validation and also applies to empty collections or absent values. Remove leaves its scalar
+output unchanged on refusal. This follows XNA's ICollection/IList contract; older CNA versions incorrectly allowed
+mutation while reporting read-only. `begin`/`end` have no C
 form for the reason already settled: a C++ iterator is not expressible across a C ABI.
 
 Two absences differ, and the difference is reported rather than flattened. A **gamer picture** that

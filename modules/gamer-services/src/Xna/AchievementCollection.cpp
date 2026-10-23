@@ -2,7 +2,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
-#include "System/IndexOutOfRangeException.hpp"
+#include "System/Collections/Generic/KeyNotFoundException.hpp"
+#include "System/NotSupportedException.hpp"
 #include <algorithm>
 
 namespace Microsoft::Xna::Framework::GamerServices
@@ -40,9 +41,8 @@ namespace Microsoft::Xna::Framework::GamerServices
             if (ach.getKeyProperty() == achievementKey)
                 return ach;
         }
-        // Task 7.9: FNA's own string-key indexer explicitly does `throw new
-        // IndexOutOfRangeException();` - not std::out_of_range.
-        throw System::IndexOutOfRangeException();
+        // XNA's dictionary lookup differs from FNA's IndexOutOfRangeException.
+        throw System::Collections::Generic::KeyNotFoundException();
     }
 
     void AchievementCollection::Dispose()
@@ -66,43 +66,31 @@ namespace Microsoft::Xna::Framework::GamerServices
         return -1;
     }
 
-    void AchievementCollection::Insert(int index, const Achievement& item)
+    void AchievementCollection::Insert(int, const Achievement&)
     {
-        System::ArgumentOutOfRangeException::ThrowIfNegative(index, "index");
-        System::ArgumentOutOfRangeException::ThrowIfGreaterThan(
-            index, static_cast<int>(collection_.size()), "index"
-        );
-        collection_.insert(collection_.begin() + index, item);
+        // XNA refuses IList/ICollection mutation before checking arguments;
+        // FNA's writable implementation contradicts this read-only contract.
+        throw System::NotSupportedException();
     }
 
-    void AchievementCollection::RemoveAt(int index)
+    void AchievementCollection::RemoveAt(int)
     {
-        System::ArgumentOutOfRangeException::ThrowIfNegative(index, "index");
-        System::ArgumentOutOfRangeException::ThrowIfGreaterThanOrEqual(
-            index, static_cast<int>(collection_.size()), "index"
-        );
-        collection_.erase(collection_.begin() + index);
+        throw System::NotSupportedException();
     }
 
-    void AchievementCollection::Add(const Achievement& item)
+    void AchievementCollection::Add(const Achievement&)
     {
-        collection_.push_back(item);
+        throw System::NotSupportedException();
     }
 
-    bool AchievementCollection::Remove(const Achievement& item)
+    bool AchievementCollection::Remove(const Achievement&)
     {
-        int index = IndexOf(item);
-        if (index < 0)
-        {
-            return false;
-        }
-        collection_.erase(collection_.begin() + index);
-        return true;
+        throw System::NotSupportedException();
     }
 
     void AchievementCollection::Clear()
     {
-        collection_.clear();
+        throw System::NotSupportedException();
     }
 
     bool AchievementCollection::Contains(const Achievement& item) const

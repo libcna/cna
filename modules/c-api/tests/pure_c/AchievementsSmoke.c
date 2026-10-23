@@ -102,7 +102,7 @@ static int validate_collection(void)
     CNA_AchievementHandle second = CNA_INVALID_HANDLE;
     CNA_AchievementHandle third = CNA_INVALID_HANDLE;
     CNA_AchievementHandle borrowed = CNA_INVALID_HANDLE;
-    CNA_AchievementHandle copied[4];
+    CNA_AchievementHandle copied[4] = {CNA_INVALID_HANDLE};
     CNA_AchievementCollectionHandle collection = CNA_INVALID_HANDLE;
     CNA_Bool flag = UINT8_C(9);
     int32_t count = -1;
@@ -132,7 +132,8 @@ static int validate_collection(void)
         count == 2 &&
         cna_achievement_collection_get_is_disposed(collection, &flag) == CNA_RESULT_SUCCESS &&
         flag == CNA_FALSE &&
-        cna_achievement_collection_get_is_read_only(collection, &flag) == CNA_RESULT_SUCCESS;
+        cna_achievement_collection_get_is_read_only(collection, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
 
     /* The collection copied the achievements in, so releasing the caller's handle changes nothing. */
     ok = (cna_achievement_destroy(first) == CNA_RESULT_SUCCESS) && ok;
@@ -153,6 +154,8 @@ static int validate_collection(void)
         flag == CNA_TRUE &&
         cna_achievement_collection_index_of(collection, borrowed, &index) == CNA_RESULT_SUCCESS &&
         index == 0;
+    ok = (cna_achievement_destroy(borrowed) == CNA_RESULT_SUCCESS) && ok;
+    borrowed = CNA_INVALID_HANDLE;
     ok = ok && cna_achievement_collection_get_at(collection, 2, &borrowed) ==
                    CNA_RESULT_INVALID_ARGUMENT &&
         cna_achievement_collection_get_at(collection, -1, &borrowed) ==
@@ -170,28 +173,33 @@ static int validate_collection(void)
         if (by_key != CNA_INVALID_HANDLE) {
             ok = (cna_achievement_destroy(by_key) == CNA_RESULT_SUCCESS) && ok;
         }
-        ok = ok && cna_achievement_collection_get_by_key(collection, view("Nope"), &by_key) !=
-                       CNA_RESULT_SUCCESS;
+        by_key = UINT64_C(99);
+        ok = ok && cna_achievement_collection_get_by_key(collection, view("Nope"), &by_key) ==
+                       CNA_RESULT_INVALID_ARGUMENT && by_key == CNA_INVALID_HANDLE;
+        by_key = UINT64_C(99);
+        ok = ok && cna_achievement_collection_get_by_key(collection, view(""), &by_key) ==
+                       CNA_RESULT_INVALID_ARGUMENT && by_key == CNA_INVALID_HANDLE;
     }
 
-    ok = ok && cna_achievement_collection_add(collection, third) == CNA_RESULT_SUCCESS &&
-        cna_achievement_collection_get_count(collection, &count) == CNA_RESULT_SUCCESS &&
-        count == 3;
-    ok = ok && cna_achievement_collection_insert(collection, 0, third) == CNA_RESULT_SUCCESS &&
-        cna_achievement_collection_get_count(collection, &count) == CNA_RESULT_SUCCESS &&
-        count == 4 &&
-        cna_achievement_collection_insert(collection, 99, third) == CNA_RESULT_INVALID_ARGUMENT;
+    /* XNA's read-only collection refuses all mutation, before index validation. */
+    ok = ok && cna_achievement_collection_add(collection, third) == CNA_RESULT_NOT_SUPPORTED &&
+        cna_achievement_collection_get_count(collection, &count) == CNA_RESULT_SUCCESS && count == 2;
+    ok = ok && cna_achievement_collection_insert(collection, 0, third) == CNA_RESULT_NOT_SUPPORTED &&
+        cna_achievement_collection_insert(collection, 99, third) == CNA_RESULT_NOT_SUPPORTED &&
+        cna_achievement_collection_insert(collection, -1, third) == CNA_RESULT_NOT_SUPPORTED &&
+        cna_achievement_collection_get_count(collection, &count) == CNA_RESULT_SUCCESS && count == 2;
+    flag = CNA_TRUE;
+    ok = ok && cna_achievement_collection_remove(collection, third, &flag) == CNA_RESULT_NOT_SUPPORTED &&
+        flag == CNA_TRUE;
+    flag = CNA_TRUE;
+    ok = ok && cna_achievement_collection_remove(collection, second, &flag) == CNA_RESULT_NOT_SUPPORTED &&
+        flag == CNA_TRUE;
+    ok = ok && cna_achievement_collection_remove_at(collection, 0) == CNA_RESULT_NOT_SUPPORTED &&
+        cna_achievement_collection_remove_at(collection, 99) == CNA_RESULT_NOT_SUPPORTED &&
+        cna_achievement_collection_remove_at(collection, -1) == CNA_RESULT_NOT_SUPPORTED &&
+        cna_achievement_collection_get_count(collection, &count) == CNA_RESULT_SUCCESS && count == 2;
 
-    /* Removal answers whether anything was found, unlike the gamer collection's. */
-    ok = ok && cna_achievement_collection_remove(collection, third, &flag) == CNA_RESULT_SUCCESS &&
-        flag == CNA_TRUE &&
-        cna_achievement_collection_get_count(collection, &count) == CNA_RESULT_SUCCESS &&
-        count == 3;
-    ok = ok && cna_achievement_collection_remove_at(collection, 0) == CNA_RESULT_SUCCESS &&
-        cna_achievement_collection_get_count(collection, &count) == CNA_RESULT_SUCCESS &&
-        count == 2 &&
-        cna_achievement_collection_remove_at(collection, 99) == CNA_RESULT_INVALID_ARGUMENT;
-
+    size = 0;
     ok = ok && cna_achievement_collection_copy_to(collection, copied, UINT64_C(4), 1, &size) ==
                    CNA_RESULT_SUCCESS &&
         size == UINT64_C(2) && copied[1] != CNA_INVALID_HANDLE && copied[2] != CNA_INVALID_HANDLE;
@@ -203,9 +211,9 @@ static int validate_collection(void)
                    CNA_RESULT_BUFFER_TOO_SMALL &&
         size == UINT64_C(2);
 
-    ok = ok && cna_achievement_collection_clear(collection) == CNA_RESULT_SUCCESS &&
+    ok = ok && cna_achievement_collection_clear(collection) == CNA_RESULT_NOT_SUPPORTED &&
         cna_achievement_collection_get_count(collection, &count) == CNA_RESULT_SUCCESS &&
-        count == 0;
+        count == 2;
 
     if (borrowed != CNA_INVALID_HANDLE) {
         ok = (cna_achievement_destroy(borrowed) == CNA_RESULT_SUCCESS) && ok;

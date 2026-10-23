@@ -10,7 +10,7 @@
 namespace Microsoft::Xna::Framework::GamerServices
 {
     /**
-     * @brief A disposable, indexed collection of Achievement objects.
+     * @brief A disposable, read-only indexed collection of Achievement objects.
      */
     class AchievementCollection : public System::IDisposable
     {
@@ -43,7 +43,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @param achievementKey The key to search for.
          * @return Const reference to the matching Achievement.
-         * @throws System::IndexOutOfRangeException if no achievement with that key exists.
+         * @throws System::Collections::Generic::KeyNotFoundException if no achievement has that key.
          */
         [[nodiscard]] const Achievement& operator[](const std::string& achievementKey) const;
 
@@ -82,47 +82,42 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] int IndexOf(const Achievement& item) const;
 
         /**
-         * @brief Inserts item at the specified index.
-         *
-         * Task 8.2: matches FNA's explicit `IList<Achievement>.Insert`.
+         * @brief Refuses insertion into this read-only collection.
          *
          * @param index The zero-based index to insert at.
          * @param item The achievement to insert.
+         * @throws System::NotSupportedException always, before validating the index.
          */
         void Insert(int index, const Achievement& item);
 
         /**
-         * @brief Removes the achievement at the specified index.
-         *
-         * Task 8.2: matches FNA's explicit `IList<Achievement>.RemoveAt`.
+         * @brief Refuses indexed removal from this read-only collection.
          *
          * @param index The zero-based index to remove.
+         * @throws System::NotSupportedException always, before validating the index.
          */
         void RemoveAt(int index);
 
         /**
-         * @brief Appends item to the collection.
-         *
-         * Task 8.2: matches FNA's explicit `ICollection<Achievement>.Add`.
+         * @brief Refuses addition to this read-only collection.
          *
          * @param item The achievement to append.
+         * @throws System::NotSupportedException always.
          */
         void Add(const Achievement& item);
 
         /**
-         * @brief Removes the first achievement equal to item.
-         *
-         * Task 8.2: matches FNA's explicit `ICollection<Achievement>.Remove`.
+         * @brief Refuses removal from this read-only collection.
          *
          * @param item The achievement to remove.
-         * @return true if a matching achievement was found and removed; otherwise false.
+         * @return Never returns normally.
+         * @throws System::NotSupportedException always, even when item is absent.
          */
         bool Remove(const Achievement& item);
 
         /**
-         * @brief Removes every achievement from the collection.
-         *
-         * Task 8.2: matches FNA's explicit `ICollection<Achievement>.Clear`.
+         * @brief Refuses clearing this read-only collection.
+         * @throws System::NotSupportedException always, even when empty.
          */
         void Clear();
 
@@ -155,10 +150,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Gets whether this collection is read-only.
          *
-         * Always true, matching FNA's own hardcoded `ICollection<Achievement>.IsReadOnly`
-         * getter (the conventional .NET pattern for a collection whose explicit-interface
-         * mutators exist only to satisfy the interface contract, not for ordinary callers to
-         * rely on).
+         * The ICollection/IList mutation methods always throw NotSupportedException.
          *
          * @return Always true.
          */

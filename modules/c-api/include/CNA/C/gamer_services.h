@@ -2759,8 +2759,8 @@ CNA_C_API CNA_Result cna_achievement_collection_get_is_read_only(
  *         a documented handle/thread failure.
  *
  * **The handle is a copy, not a view into the collection.** The canonical indexer answers a reference
- * into storage that inserting or removing would invalidate; an achievement is a value, so copying it
- * is safe and loses nothing — equality is by value, so the copy still compares equal to what the
+ * into storage owned by the collection; an achievement is a value, so copying it
+ * preserves its lifetime independently — equality is by value, so the copy still compares equal to what the
  * collection holds.
  */
 CNA_C_API CNA_Result cna_achievement_collection_get_at(
@@ -2811,23 +2811,23 @@ CNA_C_API CNA_Result cna_achievement_collection_contains(
     CNA_Bool* out_contains);
 
 /**
- * @brief Appends an achievement to a collection.
+ * @brief Refuses addition to the read-only achievement collection.
  *
  * @param collection Owned collection handle.
  * @param achievement Owned achievement handle to copy in.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ * @return `CNA_RESULT_NOT_SUPPORTED` for valid handles, or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_achievement_collection_add(
     CNA_AchievementCollectionHandle collection,
     CNA_AchievementHandle achievement);
 
 /**
- * @brief Inserts an achievement at an index.
+ * @brief Refuses insertion into the read-only achievement collection.
  *
  * @param collection Owned collection handle.
  * @param index Index to insert at.
  * @param achievement Owned achievement handle to copy in.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the collection, or
+ * @return `CNA_RESULT_NOT_SUPPORTED` for valid handles, regardless of index, or
  *         a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_achievement_collection_insert(
@@ -2836,11 +2836,11 @@ CNA_C_API CNA_Result cna_achievement_collection_insert(
     CNA_AchievementHandle achievement);
 
 /**
- * @brief Removes the achievement at an index.
+ * @brief Refuses indexed removal from the read-only achievement collection.
  *
  * @param collection Owned collection handle.
  * @param index Index to remove.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the collection, or
+ * @return `CNA_RESULT_NOT_SUPPORTED` for a valid handle, regardless of index, or
  *         a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_achievement_collection_remove_at(
@@ -2848,15 +2848,13 @@ CNA_C_API CNA_Result cna_achievement_collection_remove_at(
     int32_t index);
 
 /**
- * @brief Removes an achievement equal to the one given.
+ * @brief Refuses removal from the read-only achievement collection.
  *
  * @param collection Owned collection handle.
  * @param achievement Owned achievement handle to remove.
- * @param out_removed Receives non-zero when one was found and removed.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
- *
- * Unlike the gamer collection's remove, this one **answers whether anything was removed**, because
- * the canonical operation does.
+ * @param out_removed Left unchanged on refusal; no removal result is published.
+ * @return `CNA_RESULT_NOT_SUPPORTED` for valid handles, even for an absent value, or
+ *         a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_achievement_collection_remove(
     CNA_AchievementCollectionHandle collection,
@@ -2864,10 +2862,10 @@ CNA_C_API CNA_Result cna_achievement_collection_remove(
     CNA_Bool* out_removed);
 
 /**
- * @brief Empties a collection.
+ * @brief Refuses clearing the read-only achievement collection, even when empty.
  *
  * @param collection Owned collection handle.
- * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ * @return `CNA_RESULT_NOT_SUPPORTED` for a valid handle, or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_achievement_collection_clear(
     CNA_AchievementCollectionHandle collection);

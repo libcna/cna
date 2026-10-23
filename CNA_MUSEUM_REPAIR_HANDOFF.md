@@ -27,20 +27,52 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: achievement contracts017/077/078 (2026-10-23)
+### Current task: achievement contracts077/078 validated;017 next (2026-10-23)
 
-ISSUE-018 fix494e24d09de742b639d46cc5982a363e338c610d is committed and validated below.
-Its permanent disposition is RESOLVED/FIXED_VALIDATED:156 historical IDs,124 final dispositions,
-32 without. Commit018 matrix/evidence closure, run final catalog checks, publish/verify refs.
-Next verify genuine XNA achievement collection mutation/missing-key behavior before touching
-the implementation: decompiled XNA uses a read-only IList and Dictionary key lookup; current
-CNA follows FNA's permissive mutators and IndexOutOfRangeException. The C property/documentation
-disagrees with successful mutation, and the C missing-key route promises INVALID_ARGUMENT.
-Investigate the documented C extension boundary rather than changing IsReadOnly to false blindly.
-017's source constructor still sets EarnedOnline=true; review all offline/online materialization
-paths before changing that default. No achievement code, test or oracle has changed yet.
-No active build/test scope, no pending permission. Preserve foreign changes, especially113 and
-content/audio ownership. Last full checkpoint remains075;026/018 are narrower network checkpoints.
+Publication base: CNA2db9a7646bdce9f91c15a53fe23c78db0312745b and demos
+0e33c8aa40cce4ad6034c1430c28510019e8e4a4, both origin/next verified. Sharp unchanged2f644cf47.
+077/078 source repair and native/C/demo evidence are validated and ready for coherent commits;
+permanent dispositions still await the source commit SHA. Current census156 historical IDs,
+124 final dispositions/32 without; closing these two will yield126/30. Do not call campaign complete.
+
+Genuine XNA Framework4/Wine oracle passes24 checks: read-only ICollection/IList refuses mutation
+before argument validation; absent string key uses KeyNotFoundException. Native collection now
+matches, and C translates only this missing-key route to INVALID_ARGUMENT. All mutators report
+NOT_SUPPORTED through the existing barrier. C scalar output remains unchanged on refusal; handle
+outputs are still cleared. No ABI/generator/numeric-index/copy/ownership/factory flag changes.
+Native/C docs and the old FNA-based tests explicitly adopt genuine XNA. Both C collection and
+C++ award demos needed these reference-backed oracle corrections, with all old controls retained.
+
+Before: native728=710PASS/18newFAIL93.759s, original C demo29/30 on both renderers. After:
+full native728PASS75.355s, six C gamer/boundary testsPASS0.19s, complete consumer buildsPASS.
+Existing nodiscard warnings only (30 before/17 after in unchanged test files); consumer no warnings.
+First C run had one incorrect new scalar-output assumption and three unbuilt executables;
+corrected test/docs and built missing targets, then all six passed. No production output-policy
+change. The bounded debugger was stopped during symbol load without evidence; generated source
+identified the scalar-output behavior. Generated3197 routes/57 files current.
+
+C demo33/33PASS on SOFTWARE and OPENGLES3, then077 marker removed. The initial35-scenario run
+exposed the C++ award demo's stale FNA collection oracle, which aborted after10 controls. Corrected
+only its collection controls and reran the affected demo on both renderers: original14 controls,
+same independent017 failure. Latest35 scenarios each renderer=32PASS/2sameFAIL/1sameNOTRUN;
+only C collection outcome changes versus075. Other34 statuses/check counts/markers/messages and
+logged assertion multiplicities unchanged. Exact comparison is sequential and retains first-run
+failures. Only cna-demos relinked for the final oracle correction; other274 artifacts unchanged,
+all275 final hashes verified after five registered achievement/catalog CTestsPASS11.48s. Catalog719
+valid with only repaired collection metadata changed. No new full719/aggregate/sanitizer/visual/
+browser/online-service/platform claim. Full cross-subsystem checkpoint stays075 with six residuals.
+Evidence: demos docs/repair-evidence/gamer/ACHIEVEMENTS_PREFLIGHT.md and
+AchievementCollectionXnaOracle.cs; ignored reports repair-achievements-*. Artifact freeze released.
+
+Exact next task: commit only owned077/078 source/tests/docs (stage only our upstream-plan row;
+foreign082 row must remain unstaged), close both permanent IDs with real source SHA, commit demos
+separately, publish normal fast-forwards and verify remote refs. Then continue017: Achievement ctor
+sets EarnedOnline=true, including unearned/synthetic/offline values. Three materialization paths
+need provenance review. Offline store contains key/ticks, not an online flag (historical issue
+sentence is wrong); service awards are authenticated calls. Genuine Windows XNA getter is a Pro
+feature stub, so no runtime online/offline XNA-value claim. Preserve foreign113/content/audio work.
+No pending approval; no active build or test. Neither repository is globally clean because foreign
+changes remain. No downstream engine/extended/museum edits.
 
 #### Completed ISSUE-018 validation
 
