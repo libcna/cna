@@ -92,13 +92,14 @@ does not cover native Draw/End. A fresh-process real-device observation fixture
 `SpriteBatchDisposedGpuObservation.cs` is prepared to resolve those paths before
 implementation. Preparation alone is not runtime evidence.
 
-- ISSUE-113: replace the disproved saturating tally with defined 32-bit counting,
-  validate native/renderer/C/demo behavior, then commit the interval repair.
+- ISSUE-113: runtime c303d3ad9 committed and closure validated; obsolete marker
+  removed, inventory resolved, five catalog/query CTests PASS.
 - ISSUE-011: finish reviewing resource ownership and metadata changes; implement
   the owner's C Effect/Model contract decision with exact disposal diagnostics.
 - GraphicsResource event ordering: validate and commit separately from content
   metadata where possible.
-- Review reference-only input evidence and regenerate affected C API inventories.
+- Input reference-only evidence committed in demos f148654 (70 genuine XNA checks).
+  Regenerate affected C API inventories after remaining repairs.
 - Reconcile inherited chronological handoffs, then prepare the final English
   `handoff.md` for Opus 5.5 xhigh, commit and push. Ordinary remaining campaign
   issues belong in that handoff; do not claim they were all fixed.

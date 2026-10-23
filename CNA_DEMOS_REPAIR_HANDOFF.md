@@ -1,3 +1,19 @@
+# Current review checkpoint — 2026-10-23
+
+CNA repair `c303d3ad9821ca7ad5cf04490d6f1a0555b2af8c` closes ISSUE-113;
+156 historical IDs / 131 final dispositions / 25 pending. See
+`CNA_INHERITED_REVIEW.md` and demos' `OCCLUSION_REPAIR_REVIEW.md` for accepted
+native, renderer, sanitizer, external132, six visual and five closure CTest gates.
+Owner authorized review/completion of inherited work before final English
+`handoff.md` for Opus 5.5 xhigh, commits and normal pushes. No new goal.
+Next: finish content ownership (011), C contract alignment, and SpriteBatch/event
+semantics (082); then final validation and handoff, not a fresh campaign batch.
+Earlier live-process/no-push/preserve-foreign notes below are historical only.
+
+---
+
+## Historical checkpoints
+
 # CNA demos repair campaign
 
 **Latest completed repair: ISSUE-131 (2026-10-22).** CNA `9a5e5d896` fixes
@@ -18,6 +34,178 @@ before changing production code. Work in coherent subsystem/root-cause commits.
 Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-22)
+
+**Latest checkpoint: museum intake repairs committed; browser WebGPU investigation active.**
+CNA next is `93baa9363c0dafac23ad37f72ff876424cbcbe66`; demos is `059bf7ee8`.
+See `CNA_MUSEUM_REPAIR_HANDOFF.md`: migration `cd9868526`, welcome state `04fb4978a`,
+tray labels `93baa9363`. Museum revalidation is outstanding; no push/merge.
+The external-v4 ISSUE-113 job has finished: all132 previous outcomes preserved,
+six exact visuals PASS, eight unchanged ISSUE-082 failures explicitly retained.
+No old external-v3/v4 or count job is live (authoritative process/scope check).
+The uncommitted113 count saturation is disproved by shipped XNA DWORD and real-GPU
+oracles: signed boundary wraps, and 2^32 samples wraps to zero. New deterministic
+tests reproduce the mismatch. Count baseline normal run exited1 as expected;
+sanitizer compilation succeeded but its driver then failed on a nonexistent
+`build-asan/libcna.so` (that configuration uses component archives). No sanitizer
+runtime result is claimed for those new boundary cases. Preserve the failed audit
+`repair-occlusion-count-native-before-audit.json`; correct the link before rerunning.
+ISSUE-113 remains OPEN/uncommitted; no knownIssue removal. The owner-requested museum
+browser WebGPU blockers are the current task; resume the count fix/closure afterwards.
+All inherited content/audio/resource ownership changes remain untouched.
+
+**Latest113 checkpoint: precision-cache correction proved; external-v3/38286 live.**
+External-v2/67313 finished build82641ms and C++18 checks PASS SOFTWARE/GLES/GL33;
+C23 PASS SOFTWARE/GLES, but OPENGL33 FAILED because the demo cached precision=false
+before Begin then read384000 exact samples. Broader132 and visual gates did not run.
+Three changed frozen inputs were completed C executable relinks (device_capabilities,
+render_target_bindings, shader_effect_state); each link step is verified in the log.
+Cold minimized55387 proves this is NOT a coordinator regression: unchanged raw
+EasyGL factory and logical adapter in separate OPENGL33 processes both report
+cached0/current1/count496. Each intentionally fails exactly the stale-cache assertion
+while passing the current-precision check. Build3824/link986/raw374/logical312ms,
+peak465387520/events0/no drift. Native EasyGL source matches HEAD, last touched3b6a2eaf.
+Retained evidence: docs/repair-evidence/graphics/OcclusionPrecisionCacheObservation.cpp.
+C demo now reads precision alongside its completed count, preserving all23 controls
+and the original count assertion. Public C/C++ query comments explain conservative
+precision before the first Begin. Runtime source is unchanged since the accepted
+11109-native/45-renderer/45-sanitizer checkpoint. No test tolerance was relaxed.
+Sole live scope cna-repair-occlusion-external-v3/session38286 rebuilds affected demos/
+C API (462 dependency tasks; one worker, 4G high/6G max/no swap, build limit900000ms),
+then reruns C++18/C23 focused cases,132 unchanged prior outcomes, and six exact
+visual references. It records the three reviewed source deltas and build outputs.
+V2 screenshots on SOFTWARE/GLES/GL33 have been visually inspected: expected wall,
+moving light and precision HUD, no probe-draw residue. No cross-renderer pixel-equality
+claim. Inspect final V3 captures and reference results after completion.
+Next: collect38286; investigate any actual failure, then product commit,113 knownIssue/
+status closure and metadata CTests. No113 commit/closure yet; preserve inherited011/082
+changes. No push/merge. Historical156/44 null plusDC-R1/DC-R2 remain unchanged.
+
+**Latest113 checkpoint: native and sanitizer gates accepted; external-v2/67313 live.**
+Native11109 =10991PASS/118 unchangedSKIP; graphics3094 =3004PASS/90 unchangedSKIP.
+Final-v2 sequential92628:45PASS each SOFTWARE/GLES/GL33/FNA3D-OpenGL/WebGPU;
+SDL_GPU/FNA3D-default31PASS/14 declared capabilitySKIP. Consumer/multi peaks
+493326336/280821760, no drift/events. SOFTWARE ASan/UBSan/float-cast/leaks45PASS:
+instrumented closure111652ms, fixtures17579ms, run6475ms; peak999878656/events0,
+no drift or sanitizer findings. All actual product/source instrumentation checked.
+After those jobs ended, strengthened visible_pixels with a control square and7/2
+nested intervals, precise/boolean expectations and bounded-frame completion. All14
+previous checks retained plus4 new checks (expected18 total); first-frame probe draws
+are cleared before the normal scene. C graphics_device.h now explicitly documents
+independent intervals and same-handle reentry refusal; no C signatures changed.
+Sole live scope cna-repair-occlusion-external-v2/session67313 rebuilds cna-demos and
+cna-demo-c_api-graphics-occlusion_query (459 dependency tasks), then checks original
+C++18/C23 query scenarios on four renderers,132 previous assertion/outcome rows,
+and six exact visuals. SDL_GPU query skips and eight prior082 failures stay explicit.
+Initial21569 ended with a real CMake SIGTERM/ETIMEDOUT at300099ms, before any test;
+no compiler error or OOM, peak1593294848/events0. Authoritative scope/process check
+confirmed all descendants gone before the incremental continuation. The C API shared
+library was successfully relinked before timeout; its changed hash is recorded as a
+continued build artifact, not source drift. V2 build limit900000ms; tests stay300000ms.
+This external run explicitly records only the strengthened demo and C comment as
+approved source deltas from the validated product; all other source drift is refused.
+Next: collect67313, inspect screenshots and exact deltas, then product commit and
+113 metadata/knownIssue closure with focused CTests. No113 commit/closure yet; no
+push/merge. Preserve all inherited011/082 changes. Prepared next104 source audit
+is recorded below, but no104 runtime reproduction or repair has been performed.
+
+**2026-10-22 native85382 accepted; sequential validation92628 is live.**
+Full native11109 =10991PASS/118 unchangedSKIP; graphics3094 =3004PASS/90 unchangedSKIP.
+Both compare exactly to prior checkpoints plus19 new PASS (eight real-query and11
+coordinator cases); no missing/changed/unexpected cases, no source/artifact drift.
+Native build268108ms, focus1630ms, graphics41568ms, full1263236ms. Peak4302938112;
+memory.high1990 throttles, max0/OOM0. The slow XNA pipeline/reference tests completed;
+they were not restarted or suppressed.
+Session92628 runs sequentially: repair-occlusion-final-v2 consumer then multi (45
+query/buffer cases, now including40-query stress), then repair-occlusion-sanitizer
+(SOFTWARE instrumented closure and the same45 cases). Exactly one heavy step at a
+time, one compiler worker, private GPU, 4G high/6G max/no swap. Collect before edits.
+Next required demo strengthening: visible_pixels currently corrects the disproved
+refusal assertion but does not yet assert overlapping sample counts. Add a one-square
+control and7/2 nested measurements in the first frame, poll normally with the existing
+frame budget, and retain all14 current checks plus exact count/completion assertions.
+Keep its rendered scene unchanged by clearing after the extra measurements. Then
+rebuild/validate original C/C++ demos, external132 parity (eight082 failures retained),
+six exact visuals and metadata/closure gates. Do not remove113 knownIssue yet.
+Prepared external driver currently expects14 checks; update to the actual strengthened
+oracle and explicitly refresh only its reviewed demo input/build artifacts before use.
+All113 source changes remain uncommitted; no push/merge. Handoff/matrix totals unchanged.
+Read-only next-batch investigation:104 STUB inherits a null CreateTexture3D factory;
+public WarnAndStub promises usable no-op objects, newer AM4-196 explicitly preserves
+that opt-in contract. The old plan_stub documents default null factories. Reproduce
+before choosing a narrow opt-in repair; preserve default behavior and no rendering.
+
+**2026-10-22 ISSUE-113 capacity refinement; native85382 is live.**
+Previous multi86445 is terminal and accepted: FNA3D/OpenGL and WebGPU39PASS each;
+SDL_GPU and FNA3D/default27PASS/12 explicit capabilitySKIP. Build232296ms,
+peak1799491584, no drift or memory events. No process was restarted.
+Two minimized two-native-slot witnesses93372 then failed the first candidate:
+End allocated before retiring a completed segment; unstarted logical queries each
+reserved a native slot. Refinement shares one construction probe per live group,
+compacts before allocation, releases completed native resources while retaining
+shared cached counts, and destroys the last unused probe under its owner lease.
+Capacity59248: both original witnesses plus11 coordinator unit cases PASS (13 total),
+peak885571584/events0/no drift; this was an isolated production-TU test, not a full build.
+Normal rebuilt libraries47489/87477:43PASS SOFTWARE/GLES/GL33/FNA3D-OpenGL/WebGPU;
+SDL_GPU/FNA3D-default31PASS/12 capabilitySKIP. Consumer build8353ms, multi2561ms;
+peaks1149460480/773070848, no events/drift/new diagnostics.
+Two additional native/evidence tests now exercise40 unstarted and40 nested queries.
+Sole live scope cna-repair-occlusion-native/session85382 rebuilds CnaTests and
+CnaGraphicsTests in existing cmake-build-debug, one worker, MemoryHigh4G/Max6G/
+Swap0, private GPU and isolated networking. It will run19 new witnesses, all graphics,
+then the full native suite and compare each prior result against11090-case baseline.
+Collect this job before further heavy work. Driver: build-probe/repair-occlusion-native.mjs.
+Next: inspect40-query runtime outcomes; run new cases on multi renderers, instrumented
+SOFTWARE lifetime coverage, C API/original demos, visuals/metadata and closure gates.
+No113 closure/commit yet; knownIssue retained. Historical156/44 null plusDC-R1/DC-R2
+unchanged. Preserve inherited011/082 dirt. No push/merge.
+
+**Latest113 checkpoint: focus44216 and controls68477 accepted; multi86445 live.**
+Candidate6 native PASS on SOFTWARE/GLES/GL33; SDL_GPU6 capabilitySKIP. Corrected
+original demo PASS first3/renderers; SDL_GPU SKIP. Build269379ms/no diagnostics,
+fixture2665ms, peak4303982592, memory.high1128 throttles/max0/OOM0, no source drift.
+Controls68477:39PASS each SOFTWARE/GLES/GL33; SDL_GPU27PASS/12 explicit capability
+skips (six overlap, four lifecycle, two precision). Includes7 new deterministic
+coordinator tests for pending shared results, reuse, boolean OR, disposal, bounded
+completed-resource retention, saturating counts and transactional allocation failure.
+No findings/drift/events; peak457297920. Unit fixture now copied to native
+graphics/tests/CNA/Internal/Renderers/Common/OcclusionIntervalCoordinatorTests.cpp.
+Pre-candidate multi library reused before rebuilding:67361 WEBGPU4FAIL/2PASS,
+FNA3D default SDL_GPU-driver6SKIP; explicit FNA3D_FORCE_DRIVER=OpenGL39309 gives
+5FAIL/1PASS. These are real runtime baselines, not inferred from source.
+Sole running scope cna-repair-occlusion-overlap-multi-after/session86445 builds
+existing cmake-build-multi cna_shared (one worker), then39 tests on SDL_GPU,
+FNA3D/default, FNA3D/OpenGL and WebGPU. Collect before next heavy job/source edits.
+Prepared UNRUN extra capacity witness: build-probe/repair-occlusion-capacity-test.cpp.
+It simulates only two native slots and checks completed segments are retired BEFORE
+allocating a replacement. Current End allocates before Prepare/Compact; minimize
+this potential avoidable exhaustion after86445, then fix locally if reproduced.
+Broader native/full regression, C API, sanitizer, visuals and metadata/commit still
+due;113 remains CONFIRMED_OPEN. All113 changes uncommitted and separate from
+inherited011/082. No push/merge; no final-state totals changed.
+
+**2026-10-22 ISSUE-113 shared interval candidate; collect44216 first.**
+Prior turn closed086/112 and established113 genuine/native evidence (progress).
+Current source/HEADs and host processes revalidated; no prior job was live.
+CNA28046c8bb / demos059bf7e. Uncommitted113 candidate adds a weak per-renderer
+logical-query coordinator, partitions logical overlap into disjoint native segments,
+shares their results, sums precise counts/ORs boolean results, and retires completed
+segments without waiting. Existing native implementations and draw paths unchanged.
+OcclusionQuery uses the logical factory; public header and demo now state the
+genuine XNA independent-object contract, with knownIssue retained. Six native
+witnesses copied from the frozen evidence fixture; no assertions weakened.
+Files: graphics IGraphicsRenderer.hpp, OcclusionQuery.hpp/.cpp, new
+src/Internal/OcclusionQueryIntervals.cpp, new native OcclusionOverlapTests.cpp;
+demos visible_pixels.cpp. Additional UNRUN7-case coordinator unit fixture:
+docs/repair-evidence/graphics/OcclusionIntervalCoordinatorTests.cpp (not native yet).
+Sole live scope cna-repair-occlusion-overlap-after/session44216 rebuilds the consumer
+and demos with one worker (shared-header dependency rebuild303 tasks), then six
+witnesses and corrected original demo on four renderers. Collect before any other
+heavy job or source change. No product commit/113 closure yet. After this: run
+coordinator units, existing query lifecycle/precision/dynamic-buffer controls,
+FNA3D/WebGPU runtime coverage, sanitizer, full native/regression/visual/C API gates.
+Review destructor/context-loss/native allocation failure and many-overlap capacity.
+No native Windows claim. Matrix156/44 null plus DC-R1/DC-R2 unchanged; inherited
+011/082 work preserved. No push/merge.
 
 **Latest terminal checkpoint (2026-10-22):113 reproduced, no heavy job live.**
 086/112 product9e4d0279affcb9f05f9d28807403f798fc948906; CNA closure039607ee7c37d3568e0c51e2c249be94e0c5b627;

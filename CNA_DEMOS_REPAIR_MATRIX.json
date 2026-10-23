@@ -708,7 +708,9 @@
       "classification": "CODE_DEFECT",
       "status": "RESOLVED",
       "root_cause": "ServerWelcome omitted the host's Playing state; the joiner therefore kept its default Lobby state.",
-      "related_issues": ["MUSEUM-NET-002"],
+      "related_issues": [
+        "MUSEUM-NET-002"
+      ],
       "cna_fix_commit": "04fb4978ae6d3304442c3899bf7a3746f3d77d85",
       "validation": [
         "Revalidated at CNA28145a201/demosadbeeaf: native network547/547 PASS; original join_refused Playing assertion passes on SOFTWARE and OPENGLES3. Six scenarios per renderer:10 PASS,2 retained ISSUE032 failures. Native codec/event/two-process regressions retained. Private GPU/network namespace, one worker, peak2062786560/events0/drift0. Evidence: ../cna-demos/docs/repair-evidence/net/JOIN_IN_PROGRESS.md. No service/other-platform runtime claim."
@@ -1797,14 +1799,16 @@
       "classification": "CODE_DEFECT",
       "status": "RESOLVED",
       "root_cause": "Renderer native members were released under another device's active GL context; the shared GraphicsDevice teardown now holds an owning-context lease through renderer destruction, ending before window destruction.",
-      "related_issues": ["CNA-DEMOS-ISSUE-112"],
+      "related_issues": [
+        "CNA-DEMOS-ISSUE-112"
+      ],
       "cna_fix_commit": "9e4d0279affcb9f05f9d28807403f798fc948906",
       "validation": [
         "Original12 observations reproduced GLES cube/target and OPENGL33 target failures; native6 baseline GLES6FAIL/OPENGL33 binding4FAIL.",
         "Focused candidate8590:8 native PASS plus17/12/27 original demo checks PASS on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU. All12 screenshots inspected. No source drift or OOM.",
-      "Readback-before41922: independent Color/packed overload witnesses FAIL on both GL profiles before the shared readback lease.",
-      "Native-v2 full10972PASS/118 unchangedSKIP. New8 witnesses PASS on SOFTWARE/GLES/GL33/SDL_GPU/FNA3D/WebGPU; compiled renderer existing skips separately audited. SOFTWARE ASan/UBSan/float-cast/leak8PASS/no findings.",
-      "External132 exact prior outcomes retain8 independent082FAIL;8DDS/C controls PASS;192 device/texture runs183PASS/7SKIP/2 SDL_GPU residualFAIL tracked as DC-R1/DC-R2. Source proves context lease is a no-op on SDL_GPU. Six exact visuals PASS/all inspected. Scoped regression accepted, not full-green. Product9e4d0279affcb9f05f9d28807403f798fc948906. Metadata93054 accepted: registry719 exact two-marker delta,12 original runs PASS17/12/27 checks,7 enabled CTests PASS/noSKIP14326ms, build12006ms/no diagnostics, no drift/events, peak2029166592. Historical assertions retained; volume adds two exact pixel checks."
+        "Readback-before41922: independent Color/packed overload witnesses FAIL on both GL profiles before the shared readback lease.",
+        "Native-v2 full10972PASS/118 unchangedSKIP. New8 witnesses PASS on SOFTWARE/GLES/GL33/SDL_GPU/FNA3D/WebGPU; compiled renderer existing skips separately audited. SOFTWARE ASan/UBSan/float-cast/leak8PASS/no findings.",
+        "External132 exact prior outcomes retain8 independent082FAIL;8DDS/C controls PASS;192 device/texture runs183PASS/7SKIP/2 SDL_GPU residualFAIL tracked as DC-R1/DC-R2. Source proves context lease is a no-op on SDL_GPU. Six exact visuals PASS/all inspected. Scoped regression accepted, not full-green. Product9e4d0279affcb9f05f9d28807403f798fc948906. Metadata93054 accepted: registry719 exact two-marker delta,12 original runs PASS17/12/27 checks,7 enabled CTests PASS/noSKIP14326ms, build12006ms/no diagnostics, no drift/events, peak2029166592. Historical assertions retained; volume adds two exact pixel checks."
       ],
       "final_disposition": "FIXED_VALIDATED"
     },
@@ -2094,7 +2098,7 @@
       "validation": [
         "Historical unaccepted external-v2: native59093 full10847PASS/101sameSKIP;97309 sanitizer43PASS/no findings.68581 build2576494ms/zero diagnostics, actual43PASS, original101 URI9PASS on SOFTWARE/OPENGLES3. Each renderer50PASS/5FAIL/1manual; same C player five failures and pure-C exit2; frozen unchanged,peak4302946304/high3924/max0/OOM0. Both C choices were unanswered then. Genuine32 later corrected the FNA FileNotFound hypothesis; Wine codec observation aborted its positive control and cannot establish arbitrary invalid-codec behavior. This historical record was moved from a duplicate current_validation key, without discarding evidence.",
         "94692 strict native baseline9=5FAIL/4PASS: absolute file URI, escaped filename, title-relative path, non-file URI exact refusal, deferred missing-file refusal fail; absolute path/raw missing-file/trusted metadata/atomic mismatch controls pass. Build2332ms/run351ms/audit23ms, unchanged hashes,peak475160576/events0. External37654 unchanged original101 demo retains exactly four failures on both renderers. FNA b35512475 plus Microsoft LocalPath documentation supports the URI contract. At this historical baseline no101 production edit/closure; C Play undecodable-file success contract requires separate review. See demos VideoUriContractTests.cpp and VIDEO_REPAIR_VALIDATION_CHECKPOINT.md.",
-        "2026-10-21 candidate: genuine Framework4/Wine and .NET8/Linux URI34-input oracle measured version differences. Runtime full18158 baseline→18193PASS across41 executables,0fail/skip/diagnostics; URI311→345 plus1IO; peak830410752/events0/frozen hashes unchanged. Dependency committed locally c26614e85dffff4cadc5c4803b00d78953706b21, no push. New file-boundary5 allFAIL against old native library.18544 failed test-only TitleLocation linkage; moved unchanged9 checks to cross-module fixture.14068 guard caught an already-rebuilt artifact; old logs retained.59093 native-v3 TERMINAL0:build18503ms/zero diagnostics,43focusPASS1037ms,345mediaPASS12715ms; full10948=10847PASS/101sameSKIP1341053ms, exact old10934 parity and14newPASS/compare136ms. Frozen hashes unchanged,peak2626609152/events0.97309 sanitizer TERMINAL0:43PASS, actual Video/runtime/TitleLocation instrumented,57823/22209/501/27ms, no findings/suppressions,peak920498176/events0,unchanged hashes.43227 external stopped before build on superseded ASan hashes;68581 external-v2 RUNNING using the accepted sanitizer snapshot without relaxing native source/artifact checks. C099/101 choices unanswered. One worker/private GPU/network(native)/6GiB/no swap. No closure/marker removal/C contract edit. See VIDEO_URI_REPAIR_CHECKPOINT.md.",
+        "2026-10-21 candidate: genuine Framework4/Wine and .NET8/Linux URI34-input oracle measured version differences. Runtime full18158 baseline\u219218193PASS across41 executables,0fail/skip/diagnostics; URI311\u2192345 plus1IO; peak830410752/events0/frozen hashes unchanged. Dependency committed locally c26614e85dffff4cadc5c4803b00d78953706b21, no push. New file-boundary5 allFAIL against old native library.18544 failed test-only TitleLocation linkage; moved unchanged9 checks to cross-module fixture.14068 guard caught an already-rebuilt artifact; old logs retained.59093 native-v3 TERMINAL0:build18503ms/zero diagnostics,43focusPASS1037ms,345mediaPASS12715ms; full10948=10847PASS/101sameSKIP1341053ms, exact old10934 parity and14newPASS/compare136ms. Frozen hashes unchanged,peak2626609152/events0.97309 sanitizer TERMINAL0:43PASS, actual Video/runtime/TitleLocation instrumented,57823/22209/501/27ms, no findings/suppressions,peak920498176/events0,unchanged hashes.43227 external stopped before build on superseded ASan hashes;68581 external-v2 RUNNING using the accepted sanitizer snapshot without relaxing native source/artifact checks. C099/101 choices unanswered. One worker/private GPU/network(native)/6GiB/no swap. No closure/marker removal/C contract edit. See VIDEO_URI_REPAIR_CHECKPOINT.md.",
         "2026-10-21: native62083 full1869465ms/compare159ms, sanitizer63740 all53, external62468 112 cases/errors0, C ABI91302 and final48985 accepted. C player33, C++ guards27, tracks9 and URI9 pass on both renderers. Failed gates/baselines retained; owner-approved C/URI expectation corrections documented. No audible output or native Windows codec timing claimed."
       ],
       "final_disposition": "FIXED_PLATFORM_VALIDATION_PENDING",
@@ -2316,7 +2320,9 @@
       "classification": "CODE_DEFECT",
       "status": "RESOLVED",
       "root_cause": "SetRenderTargets transitions and GetBackBufferDataCore native reads lacked the owning-context lease while another device owned the thread; validation/no-op ordering is retained.",
-      "related_issues": ["CNA-DEMOS-ISSUE-086"],
+      "related_issues": [
+        "CNA-DEMOS-ISSUE-086"
+      ],
       "cna_fix_commit": "9e4d0279affcb9f05f9d28807403f798fc948906",
       "validation": [
         "Original target demo fails on OPENGLES3 and OPENGL33; six-case native baseline isolates binding/unbind and independent device teardown failures.",
@@ -2337,15 +2343,18 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "Historical distinct-query refusal expectation is disproved by genuine XNA: distinct overlapping intervals are supported. Actual CNA Software/EasyGL singleton native ownership silently loses contender measurements; tests expose never-completing results. Header/demo correction alone is insufficient.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "c303d3ad9821ca7ad5cf04490d6f1a0555b2af8c",
       "validation": [
         "Genuine XNA assembly under Wine/DXVK/RADV33342: one triangle496, nested owner3472/contender992, crossed1488/2976; active disposal preserves survivor3472/2976, fresh/reuse496/992. Same-object guards refuse. Not native Windows validation.",
-        "Six-case native evidence85698: SOFTWARE/GLES/GL33 each5FAIL/1PASS; SDL_GPU6 declaredSKIP. Original demo distinct-Begin assertion fails on first three and skipsSDL_GPU. Compile2019ms, no unexpected diagnostics/drift/events, peak454422528. No product patch or demo expectation change yet. Evidence: demos graphics/OCCLUSION_BEGIN_TRIAGE.md, OcclusionOverlapXnaOracle.cs, OcclusionOverlapTests.cpp."
+        "Six-case pre-repair evidence85698: SOFTWARE/GLES/GL33 each5FAIL/1PASS; SDL_GPU6 declaredSKIP. Original demo distinct-Begin assertion fails on first three and skipsSDL_GPU. Compile2019ms, no unexpected diagnostics/drift/events, peak454422528. Evidence: demos graphics/OCCLUSION_BEGIN_TRIAGE.md, OcclusionOverlapXnaOracle.cs, OcclusionOverlapTests.cpp.",
+        "Pre-candidate multi67361/39309: WEBGPU4FAIL/2PASS, FNA3D/OpenGL5FAIL/1PASS, FNA3D/default SDL_GPU driver6 capabilitySKIP. First candidate multi86445:39PASS on WEBGPU/FNA3D-OpenGL,27PASS/12SKIP on SDL_GPU/FNA3D-default; no drift/events.",
+        "Two-slot minimized candidate regressions93372 both FAIL (premature allocation and per-object native reservation). Refined shared construction probe, retirement-before-allocation and cached-result/native-handle separation: both original witnesses plus11 unit cases PASS59248. Normal rebuilt consumer47489/multi87477:43PASS on SOFTWARE/GLES/GL33/WebGPU/FNA3D-OpenGL;31PASS/12 capabilitySKIP on SDL_GPU/FNA3D-default. No new diagnostics/drift/events. Added40-query runtime cases; full native85382 and remaining sanitizer/C API/external gates pending. Candidate uncommitted, knownIssue retained; not closed.",
+        "2026-10-23 inherited review accepted: corrected signed overflow/saturation, shared DWORD wrapping in SOFTWARE/WebGPU/coordinator, independent boolean visibility. Graphics3163=3048PASS/115sameSKIP; seven renderer/driver focused gates; actual17case coordinator/counter ASan/UBSan probe PASS. External v3:132 exact prior outcomes (eight separate082FAIL), six exact visual refs PASS, C++18/C24 PASS SW/GLES/GL33, SDL_GPU capabilitySKIP and fault negative control. Closure v2: unmarked controls same and5query/catalog CTestsPASS. See demos OCCLUSION_REPAIR_REVIEW.md. No Windows/macOS/browser runtime claim."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-114",
@@ -2748,7 +2757,7 @@
       "validation": [
         "2026-10-21 read-only continuation audit: current BoundingFrustum.cpp still contains the origin-only implementation and reserved exception. CNA handoff.md section6 explicitly forbids implementing/generating the real method or removing the exception; geometry/CONTAINMENT_CHECKPOINT.md records the previously measured two remaining131 demo failures and96 genuine boundary-ray passes. No implementation, oracle change or new runtime run performed.",
         "Asked owner asynchronously whether the explicit reservation is lifted for this campaign or must remain. Awaiting that narrow decision; unrelated native88430 and subsequent repairs continue. BLOCKED here is an issue-level authority boundary, not a completed final disposition or a blocked campaign.",
-        "2026-10-22 owner authorization: Ano, oprav ji v rámci kampaně. Genuine XNA4 passes72/72 checks. Native baseline967PASS/two addedFAIL/two existing fixtureSKIP; repaired969PASS/same twoSKIP. Strict C17/Werror GeometrySmoke including14 new ray/frustum C calls PASS. Both SOFTWARE/GLES math sweeps95/95PASS, exactly two former131 failures repaired with all assertions/check counts unchanged and markers removed only after successful validation. Both19-demo C math sweeps and12 focused CTests PASS. No unintended comparison delta; no OOM/kill. Evidence ../cna-demos/docs/repair-evidence/math/FRUSTUM_RAY_CHECKPOINT.md. No full-CNA, sanitizer or native-Windows claim; museum revalidation remains external."
+        "2026-10-22 owner authorization: Ano, oprav ji v r\u00e1mci kampan\u011b. Genuine XNA4 passes72/72 checks. Native baseline967PASS/two addedFAIL/two existing fixtureSKIP; repaired969PASS/same twoSKIP. Strict C17/Werror GeometrySmoke including14 new ray/frustum C calls PASS. Both SOFTWARE/GLES math sweeps95/95PASS, exactly two former131 failures repaired with all assertions/check counts unchanged and markers removed only after successful validation. Both19-demo C math sweeps and12 focused CTests PASS. No unintended comparison delta; no OOM/kill. Evidence ../cna-demos/docs/repair-evidence/math/FRUSTUM_RAY_CHECKPOINT.md. No full-CNA, sanitizer or native-Windows claim; museum revalidation remains external."
       ],
       "final_disposition": "FIXED_VALIDATED"
     },
