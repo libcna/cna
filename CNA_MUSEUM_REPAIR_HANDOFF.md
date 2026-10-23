@@ -31,9 +31,9 @@ by this validation step.
 
 Publication base: CNA2db9a7646bdce9f91c15a53fe23c78db0312745b and demos
 0e33c8aa40cce4ad6034c1430c28510019e8e4a4, both origin/next verified. Sharp unchanged2f644cf47.
-077/078 source repair and native/C/demo evidence are validated and ready for coherent commits;
-permanent dispositions still await the source commit SHA. Current census156 historical IDs,
-124 final dispositions/32 without; closing these two will yield126/30. Do not call campaign complete.
+077/078 source repair `4a756413f779f5f74d5d3e48e92bcb53ecc00b0e` is committed and validated.
+Both permanent dispositions are now RESOLVED/FIXED_VALIDATED:156 historical IDs,
+126 final dispositions/30 without. Do not call campaign complete.
 
 Genuine XNA Framework4/Wine oracle passes24 checks: read-only ICollection/IList refuses mutation
 before argument validation; absent string key uses KeyNotFoundException. Native collection now
@@ -64,9 +64,8 @@ browser/online-service/platform claim. Full cross-subsystem checkpoint stays075 
 Evidence: demos docs/repair-evidence/gamer/ACHIEVEMENTS_PREFLIGHT.md and
 AchievementCollectionXnaOracle.cs; ignored reports repair-achievements-*. Artifact freeze released.
 
-Exact next task: commit only owned077/078 source/tests/docs (stage only our upstream-plan row;
-foreign082 row must remain unstaged), close both permanent IDs with real source SHA, commit demos
-separately, publish normal fast-forwards and verify remote refs. Then continue017: Achievement ctor
+Exact next task: commit the owned permanent-disposition updates and demos evidence, publish
+normal fast-forwards and verify remote refs. Then continue017: Achievement ctor
 sets EarnedOnline=true, including unearned/synthetic/offline values. Three materialization paths
 need provenance review. Offline store contains key/ticks, not an online flag (historical issue
 sentence is wrong); service awards are authenticated calls. Genuine Windows XNA getter is a Pro
