@@ -9,6 +9,8 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <optional>
+#include <span>
 #include <cstring>
 #include <istream>
 #include <vector>
@@ -16,7 +18,11 @@
 
 #include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/IO/BinaryReader.hpp"
+#include "System/IO/EndOfStreamException.hpp"
+#include "System/IO/MemoryStream.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -47,6 +53,8 @@ namespace Microsoft::Xna::Framework::Audio
         // still report it (plans/plan_native_platform_validation.md NPV-0105).
         std::int64_t frames = 0;
         SharpRuntime::intcs frameRate = 0;
+        // Set by the XNA stream overload: WavFile's Duration, rounded to whole milliseconds.
+        std::int64_t durationTicks = -1;
     };
 
     void SoundEffect::RegisterInstance(const std::shared_ptr<void>& keepAlive, SoundEffectInstance* instance)
@@ -467,6 +475,8 @@ namespace Microsoft::Xna::Framework::Audio
 
     System::TimeSpan SoundEffect::getDurationProperty() const
     {
+        if (impl_ && impl_->durationTicks >= 0)
+            return System::TimeSpan(impl_->durationTicks);
 #ifdef SOUND_ENABLED
         if (impl_ && impl_->audio && impl_->sampleRate > 0)
         {
@@ -878,6 +888,268 @@ namespace Microsoft::Xna::Framework::Audio
         (void)bytes;
         return new SoundEffect(std::make_shared<Impl>());
 #endif
+    }
+
+    namespace
+    {
+        // XNA's internal WavFile, which FromStream(Stream) parses with before creating the sound
+        // (cna-demos SoundEffectStreamOracle.cs and SoundEffectWaveChunksOracle.cs measure it).
+        // Narrower than the decoder behind the std::istream extension, and deliberately separate
+        // from it: PCM 8/16, mono/stereo, 8000-48000 Hz.
+        struct XnaWave
+        {
+            SharpRuntime::intcs sampleRate = 0;
+            SharpRuntime::intcs channels = 0;
+            SharpRuntime::intcs bitsPerSample = 0;
+            SharpRuntime::intcs blockAlign = 0;
+            std::vector<SharpRuntime::bytecs> data;
+            SharpRuntime::intcs loopStart = 0;
+            SharpRuntime::intcs loopLength = 0;
+        };
+
+        constexpr std::uint32_t RiffTag(const char (&id)[5])
+        {
+            return static_cast<std::uint32_t>(static_cast<unsigned char>(id[0])) |
+                   static_cast<std::uint32_t>(static_cast<unsigned char>(id[1])) << 8 |
+                   static_cast<std::uint32_t>(static_cast<unsigned char>(id[2])) << 16 |
+                   static_cast<std::uint32_t>(static_cast<unsigned char>(id[3])) << 24;
+        }
+
+        SharpRuntime::intcs Le16(const std::vector<SharpRuntime::bytecs>& bytes, std::size_t at)
+        {
+            return static_cast<std::int16_t>(bytes[at] | bytes[at + 1] << 8);
+        }
+
+        SharpRuntime::intcs Le32(const std::vector<SharpRuntime::bytecs>& bytes, std::size_t at)
+        {
+            return static_cast<std::int32_t>(
+                static_cast<std::uint32_t>(bytes[at]) | static_cast<std::uint32_t>(bytes[at + 1]) << 8 |
+                static_cast<std::uint32_t>(bytes[at + 2]) << 16 | static_cast<std::uint32_t>(bytes[at + 3]) << 24);
+        }
+
+        // A loop chunk read as WavFile does, through a reader over its own bytes.
+        class ChunkReader
+        {
+        public:
+            explicit ChunkReader(const std::vector<SharpRuntime::bytecs>& bytes)
+                : stream_(bytes.empty() ? &empty_ : bytes.data(),
+                          static_cast<SharpRuntime::intcs>(bytes.size())),
+                  reader(&stream_) { }
+
+        private:
+            static constexpr SharpRuntime::bytecs empty_ = 0;
+            System::IO::MemoryStream stream_;
+
+        public:
+            System::IO::BinaryReader reader;
+        };
+
+        // C# int addition wraps; WavFile's wsmp bound check relies on it.
+        SharpRuntime::intcs WrappingSum(SharpRuntime::intcs a, SharpRuntime::intcs b)
+        {
+            return static_cast<SharpRuntime::intcs>(static_cast<std::uint32_t>(a) + static_cast<std::uint32_t>(b));
+        }
+
+        class XnaWaveParser
+        {
+        public:
+            explicit XnaWaveParser(System::IO::Stream& source) : source_(source), reader_(&source, true) { }
+
+            XnaWave Parse()
+            {
+                ParseHeader();
+                const SharpRuntime::intcs length = source_.getLengthProperty();
+                while (source_.getPositionProperty() < length)
+                {
+                    // WavFile stops at the first chunk it cannot read, whatever the failure.
+                    try { ReadChunk(); }
+                    catch (...) { break; }
+                }
+                if (!haveFormat_ || !haveData_)
+                {
+                    throw System::ArgumentException(
+                        "Ensure that the specified stream contains valid PCM mono or stereo wave data.");
+                }
+                ParseLoopRegion();
+                return std::move(wave_);
+            }
+
+        private:
+            void ParseHeader()
+            {
+                const auto riff = static_cast<std::uint32_t>(reader_.ReadInt32());
+                const SharpRuntime::intcs size = reader_.ReadInt32();
+                const auto wave = static_cast<std::uint32_t>(reader_.ReadInt32());
+                if (riff != RiffTag("RIFF") || source_.getLengthProperty() - 8 != size ||
+                    wave != RiffTag("WAVE"))
+                {
+                    throw System::InvalidOperationException("The stream is not a RIFF wave file.");
+                }
+            }
+
+            void ReadChunk()
+            {
+                if (source_.getPositionProperty() % 2 > 0)
+                    throw System::InvalidOperationException("A wave chunk is not word aligned.");
+                const auto id = static_cast<std::uint32_t>(reader_.ReadInt32());
+                if (id == RiffTag("fmt ")) ParseFormat();
+                else if (id == RiffTag("data")) ParseData();
+                else if (id == RiffTag("smpl")) smpl_ = reader_.ReadBytes(reader_.ReadInt32());
+                else if (id == RiffTag("wsmp")) wsmp_ = reader_.ReadBytes(reader_.ReadInt32());
+                else (void)reader_.ReadBytes(reader_.ReadInt32());
+                if (source_.getPositionProperty() % 2 > 0) (void)reader_.ReadByte();
+            }
+
+            void ParseFormat()
+            {
+                const SharpRuntime::intcs size = reader_.ReadInt32();
+                if (size < 16) throw System::InvalidOperationException("The wave format is too short.");
+                const auto format = reader_.ReadBytes(size);
+                // AudioFormat's constructor fails before anything replaces an earlier format.
+                if (format.size() < 16) throw System::IO::EndOfStreamException();
+                const SharpRuntime::intcs tag = Le16(format, 0);
+                wave_.channels = Le16(format, 2);
+                wave_.sampleRate = Le32(format, 4);
+                wave_.blockAlign = Le16(format, 12);
+                wave_.bitsPerSample = Le16(format, 14);
+                if (tag != 1 || (wave_.channels != 1 && wave_.channels != 2) ||
+                    wave_.sampleRate < 8000 || wave_.sampleRate > 48000 ||
+                    (wave_.bitsPerSample != 8 && wave_.bitsPerSample != 16) ||
+                    wave_.blockAlign != wave_.channels * wave_.bitsPerSample / 8)
+                {
+                    haveFormat_ = false;
+                    throw System::InvalidOperationException("The wave format is not supported.");
+                }
+                haveFormat_ = true;
+            }
+
+            void ParseData()
+            {
+                if (!haveFormat_) throw System::InvalidOperationException("Wave data precedes its format.");
+                const SharpRuntime::intcs size = reader_.ReadInt32();
+                if (size < wave_.blockAlign) throw System::InvalidOperationException("The wave data is too short.");
+                wave_.data = reader_.ReadBytes(size - size % wave_.blockAlign);
+                const auto partial = reader_.ReadBytes(size % wave_.blockAlign);
+                haveData_ = wave_.data.size() + partial.size() >= static_cast<std::size_t>(size);
+                if (!haveData_) throw System::InvalidOperationException("The wave data is truncated.");
+            }
+
+            void ParseLoopRegion()
+            {
+                const auto sampleLength =
+                    static_cast<SharpRuntime::intcs>(wave_.data.size()) / wave_.blockAlign;
+                wave_.loopStart = 0;
+                wave_.loopLength = sampleLength;
+                if (wsmp_)
+                {
+                    ChunkReader chunk(*wsmp_);
+                    System::IO::BinaryReader& reader = chunk.reader;
+                    (void)reader.ReadBytes(16);
+                    const SharpRuntime::intcs loops = reader.ReadInt32();
+                    for (SharpRuntime::intcs i = 0; i < loops; ++i)
+                    {
+                        (void)reader.ReadInt32();
+                        const SharpRuntime::intcs type = reader.ReadInt32();
+                        if (type != 0 && type != 1) continue;
+                        const SharpRuntime::intcs start = reader.ReadInt32();
+                        const SharpRuntime::intcs length = reader.ReadInt32();
+                        if (start >= 0 && WrappingSum(start, length) <= sampleLength)
+                        {
+                            wave_.loopStart = start;
+                            wave_.loopLength = length;
+                            break;
+                        }
+                    }
+                }
+                else if (smpl_)
+                {
+                    ChunkReader chunk(*smpl_);
+                    System::IO::BinaryReader& reader = chunk.reader;
+                    (void)reader.ReadBytes(28);
+                    const SharpRuntime::intcs loops = reader.ReadInt32();
+                    (void)reader.ReadInt32();
+                    for (SharpRuntime::intcs i = 0; i < loops; ++i)
+                    {
+                        (void)reader.ReadInt32();
+                        if (reader.ReadInt32() == 0)
+                        {
+                            const SharpRuntime::intcs start = reader.ReadInt32();
+                            const SharpRuntime::intcs end = reader.ReadInt32();
+                            if (start >= 0 && start < sampleLength && start < end && end <= sampleLength)
+                            {
+                                wave_.loopStart = start;
+                                wave_.loopLength = end - start + 1;
+                            }
+                            break;
+                        }
+                        (void)reader.ReadBytes(16);
+                    }
+                }
+            }
+
+            System::IO::Stream& source_;
+            // leaveOpen: WavFile closes its source only after a successful parse.
+            System::IO::BinaryReader reader_;
+            XnaWave wave_;
+            bool haveFormat_ = false;
+            bool haveData_ = false;
+            std::optional<std::vector<SharpRuntime::bytecs>> smpl_;
+            std::optional<std::vector<SharpRuntime::bytecs>> wsmp_;
+        };
+    }
+
+    SoundEffect* SoundEffect::FromStream(System::IO::Stream& stream)
+    {
+        if (stream.getLengthProperty() == 0)
+            throw System::ArgumentNullException("source");
+        XnaWave wave = XnaWaveParser(stream).Parse();
+        stream.Close();
+
+        auto implPtr = std::make_shared<Impl>();
+        const auto frames = static_cast<std::int64_t>(wave.data.size()) / wave.blockAlign;
+        implPtr->frames = frames;
+        implPtr->frameRate = wave.sampleRate;
+        // AudioFormat.DurationFromSize: TimeSpan.FromMilliseconds of a float, which .NET Framework
+        // rounds to whole milliseconds.
+        const double milliseconds =
+            static_cast<float>(frames) * 1000.0f / static_cast<float>(wave.sampleRate);
+        implPtr->durationTicks =
+            static_cast<std::int64_t>(milliseconds + 0.5) * System::TimeSpan::TicksPerMillisecond;
+
+#ifdef SOUND_ENABLED
+        EnsureMixerOrThrowXna();
+        std::vector<SharpRuntime::bytecs> pcm16;
+        const std::vector<SharpRuntime::bytecs>* samples = &wave.data;
+        if (wave.bitsPerSample == 8)
+        {
+            // The mixer takes signed 16-bit; 8-bit wave samples are unsigned around 128.
+            pcm16.reserve(wave.data.size() * 2);
+            for (const SharpRuntime::bytecs sample : wave.data)
+            {
+                const auto value = static_cast<std::int16_t>((static_cast<int>(sample) - 128) * 256);
+                pcm16.push_back(static_cast<SharpRuntime::bytecs>(value & 0xFF));
+                pcm16.push_back(static_cast<SharpRuntime::bytecs>((value >> 8) & 0xFF));
+            }
+            samples = &pcm16;
+        }
+        const auto* first = reinterpret_cast<const std::byte*>(samples->data());
+        implPtr->audio = CNA::Internal::Audio::LoadMixerRawAudio(
+            std::span<const std::byte>(first, samples->size()),
+            {wave.sampleRate, wave.channels, CNA::Internal::Audio::MixerSampleFormat::Signed16});
+        if (!implPtr->audio)
+        {
+            throw System::NotSupportedException(
+                std::string("SoundEffect::FromStream: failed to create the sound: ")
+                + CNA::Internal::Audio::GetMixerError());
+        }
+        implPtr->sampleRate = wave.sampleRate;
+        implPtr->channels = static_cast<SharpRuntime::uintcs>(wave.channels);
+#endif
+
+        auto* result = new SoundEffect(std::move(implPtr));
+        result->loopStart_ = static_cast<SharpRuntime::uintcs>(wave.loopStart);
+        result->loopLength_ = static_cast<SharpRuntime::uintcs>(wave.loopLength);
+        return result;
     }
 
     GetTypeNameCPP(SoundEffect, "Microsoft.Xna.Framework.Audio.SoundEffect")

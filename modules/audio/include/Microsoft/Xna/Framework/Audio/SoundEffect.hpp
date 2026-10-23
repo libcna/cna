@@ -16,6 +16,8 @@
 #include "System/TimeSpan.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
+namespace System::IO { class Stream; }
+
 namespace CNA::Internal::Xnb
 {
     class SoundEffectReader;
@@ -319,12 +321,32 @@ namespace Microsoft::Xna::Framework::Audio
             AudioChannels channels);
 
         /**
-         * @brief Loads a SoundEffect from a WAV stream. The caller owns the returned object.
+         * @brief Creates a SoundEffect from a PCM wave stream, as XNA's FromStream does. The caller
+         *        owns the returned object.
          *
-         * @param stream Input stream containing WAV audio data.
+         * Accepts 8- or 16-bit PCM, mono or stereo, 8000-48000 Hz. A `smpl` or `wsmp` chunk sets
+         * the loop region; Duration is the data length rounded to whole milliseconds. The stream
+         * is closed after it has been parsed and left open when it is refused.
+         *
+         * @param stream Readable stream positioned at the start of the RIFF wave data.
+         * @return Pointer to the newly created SoundEffect.
+         * @throws System::ArgumentNullException If the stream is empty (parameter "source").
+         * @throws System::ArgumentException If the stream cannot be read, or holds no supported
+         *         format followed by its data.
+         * @throws System::InvalidOperationException If the RIFF header is malformed.
+         * @throws System::IO::EndOfStreamException If the header or a loop chunk is truncated.
+         * @throws NoAudioHardwareException If no audio device is available.
+         */
+        [[nodiscard]] static SoundEffect* FromStream(System::IO::Stream& stream);
+
+        /**
+         * @brief Loads a SoundEffect from a std::istream holding any audio file the mixer decodes.
+         *        The caller owns the returned object.
+         *
+         * @param stream Input stream containing the audio file.
          * @return Pointer to the newly created SoundEffect.
          */
-        [[nodiscard]] static SoundEffect* FromStream(std::istream& stream);
+        CNAEXT [[nodiscard]] static SoundEffect* FromStream(std::istream& stream);
 
         GetTypeNameHPP()
     };

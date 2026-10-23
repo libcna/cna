@@ -37745,7 +37745,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework",
         "xna_signature": "Microsoft.Xna.Framework.Audio.SoundEffect.FromStream(System.IO.Stream)",
-        "cna_symbol": "modules/audio/include/Microsoft/Xna/Framework/Audio/SoundEffect.hpp::FromStream(std::istream &)",
+        "cna_symbol": "modules/audio/include/Microsoft/Xna/Framework/Audio/SoundEffect.hpp::FromStream(System::IO::Stream &)",
         "notes": "",
         "metadata": {
           "kind": "method",
