@@ -27,7 +27,40 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: achievement contracts077/078 validated;017 next (2026-10-23)
+### Current task: offline leaderboard streams085, then write timing025 (2026-10-23)
+
+Latest publication verified: CNA108fc0e46be3024e815f9f83c3636ac100e3ffe7,
+demos1a978376acd795bed3efb3ae2e3cf2b3c75a9a9d.017 closure is published; Sharp unchanged.
+085 root causes confirmed in source: offline writers never enable stream creation and the local
+JSON codec skips streams. Four focused regression tests are added, before production edits.
+The first build caught two test-fixture mistakes involving collection element proxies; corrected
+to explicit entry copies/const collection views. The second build passed. Red run:4/4FAIL,0.001s.
+085 candidate implements owned stream restoration and bounded local persistence. Full native
+737 registered=736PASS/1sameSKIP74.437s; all732 previous outcomes retained plus5newPASS.
+ASan/UBSan/leaks:41 writer/reader testsPASS0.018s, no changed frozen inputs. Eight relevant
+translation units instrumented (including store, dictionary, writer, reader, entry, MemoryStream,
+native fixture and user-data isolation); other static dependencies are not instrumented. First
+sanitizer link lacked canonical WebGPU -L path; added it, then v2 link/tests passed. No suppression.
+Six native C controlsPASS0.20s; complete consumer buildPASS without warnings. Original demo21
+checks PASS on SOFTWARE2.839s/OPENGLES3 1.682s after three exact nine-column shape corrections.
+The first focused GLES run correctly caught the repeat-run writer Count assumption: its stored
+Replay was already present before the eight-scalar check. Preserve that failure evidence; moving
+the check after stream access and requiring9 on both first/repeated runs fixed the demo oracle.
+085 metadata removed only after both passes. Final consumer SOFTWARE35/OPENGLES3 35 each
+34PASS/1manualNOTRUN; exact017 comparison changes only085 FAILED->PASSED, other34 rows unchanged.
+Seven registered focused/catalog CTestsPASS16.65s. Catalog719 valid, only paging metadata changed;
+generated3197 routes/57 files current. All275 frozen consumer artifacts verified after validation;
+freeze released. Source fix420a4572a721f750978e496c3cc0b3b34e2e26a2 committed.085 is now
+RESOLVED/FIXED_VALIDATED:156 historical IDs,128 final dispositions/28 without. No new full719,
+native aggregate, visual, other-platform or live-service claim. Last full checkpoint stays075.
+Evidence demos LEADERBOARD_STREAMS.md. Next: commit closure/evidence, normal fast-forward push
+and remote verification, then025 native red tests for post-rating scalar/retained stream writes
+at EndGame. Source confirms offline EndGame has no final column flush. Protect unchanged cached
+rows from overwriting another writer and preserve existing immediate Rating fixture persistence.
+025 needs a separate commit-boundary repair, including retained stream/reference writes. Do not
+pretend a pre-mutation callback fixes it. Preserve all foreign content/audio/113 changes.
+Owned uncommitted work:085 matrix block and this handoff; demos paging exact nine-column
+assertions/metadata,085 inventory block and LEADERBOARD_STREAMS.md. No pending approval.
 
 Publication base: CNA2db9a7646bdce9f91c15a53fe23c78db0312745b and demos
 0e33c8aa40cce4ad6034c1430c28510019e8e4a4, both origin/next verified. Sharp unchanged2f644cf47.
@@ -84,8 +117,8 @@ only017 metadata changed. All275 frozen artifact hashes verified after final tes
 No new full719/native aggregate/sanitizer/visual/other-platform/live-service claim. Evidence:
 demos docs/repair-evidence/gamer/EARNED_ONLINE.md; ignored reports repair-achievement-origin-*.
 Corrections-only publication verified: CNA f61dc24ef5646cc0a759575882f5b633eca275d9 and demos
-b190f8f102bf37fa8e4a0f6723873903d4dc477f.017 source and disposition are ready for the next closure/evidence commits, then normal
-fast-forward publication and remote verification. Continue offline leaderboard025/085 afterward.
+b190f8f102bf37fa8e4a0f6723873903d4dc477f.017 source and disposition were subsequently published in the
+closure commits recorded at the top of this section. Continue offline leaderboard025/085.
 No active build/test. Preserve foreign113/content/audio work and the corrected077/078 totals.
 Preserve077/078 and compare surrounding gamer results. Evidence demos EARNED_ONLINE.md.
 The old Achievement ctor set EarnedOnline=true, including unearned/synthetic/offline values;

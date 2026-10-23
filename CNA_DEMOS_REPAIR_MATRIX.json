@@ -1756,12 +1756,21 @@
       ],
       "subsystem": "network/gamer-services",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
-      "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "status": "RESOLVED",
+      "root_cause": "Offline writers never enabled stream creation and the local store deliberately omitted Stream pointers. Enable writer columns, serialize bounded byte contents, and restore dictionary-owned read-only reader / writable writer streams; preserve failed-write rollback and malformed-column tolerance.",
+      "related_issues": [
+        "CNA-DEMOS-ISSUE-025"
+      ],
+      "cna_fix_commit": "420a4572a721f750978e496c3cc0b3b34e2e26a2",
+      "validation": [
+        "Four native witnesses FAIL before repair (three missing map keys, one omitted stored stream),0.001s. Public CNA writer/read stream ownership contract is the oracle; genuine Windows XNA type is a ProFeatureNotSupported stub.256 bytes is CNA own service/local policy, not a measured Xbox limit.",
+        "Full native GamerServices737=736PASS/1unchanged declared rendererSKIP,74.437s; exact XML name/status comparison preserves all732 previous outcomes and adds5PASS. Six rebuilt native C gamer/boundary controlsPASS0.20s.17 existing nodiscard warnings; consumer and C builds no warnings.",
+        "ASan/UBSan with leak detection:41 writer/reader controlsPASS0.018s. Eight relevant translation units instrumented including store/dictionary/writer/reader/entry/MemoryStream/test/isolation; other native/third-party dependencies uninstrumented. No findings, no suppression, all frozen input hashes unchanged. First link lacked WebGPU search path, corrected from canonical target before v2 passed.",
+        "Original demo21 controlsPASS SOFTWARE2.839s/OPENGLES3 1.682s. Three exact shape assertions now require9 columns including persisted Replay; initial repeated GLES run exposed old8-column writer Count assumption, retained as evidence. Stream assertion retained; marker removed only after both passes.",
+        "Final SOFTWARE35 and OPENGLES3 35 each34PASS/1manualNOTRUN. Exact017 checkpoint comparison changes only085 FAILED->PASSED; other34 outcomes/counts/markers/messages/logged assertions unchanged. Catalog719 valid, only paging metadata changed; generated3197 routes/57 files current.275 consumer artifacts unchanged after final validation.",
+        "Seven affected registered CTestsPASS16.65s; no new full719/native aggregate/visual/other-platform/live-service claim. Last complete cross-subsystem checkpoint remains075 with six residual CTest failures.025 write timing is a separate open root cause. See demos docs/repair-evidence/gamer/LEADERBOARD_STREAMS.md."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-086",
