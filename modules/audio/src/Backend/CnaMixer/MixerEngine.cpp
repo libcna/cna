@@ -460,6 +460,19 @@ namespace CNA::Internal::Audio
         track->loopsRemaining = loops < -1 ? -1 : loops;
     }
 
+    void ExitMixerTrackLoop(MixerTrack* track) noexcept
+    {
+        if (track == nullptr)
+        {
+            return;
+        }
+        std::lock_guard lock(GetEngine().mutex);
+        track->loopsRemaining = 0;
+        // A bounded loop region ended each pass at its max frame; the final pass plays on through
+        // the rest of the audio instead.
+        track->maxFrame = -1;
+    }
+
     void SetMixerTrackMixCallback(MixerTrack* track, const MixerTrackMixCallback callback,
                                   void* userdata) noexcept
     {

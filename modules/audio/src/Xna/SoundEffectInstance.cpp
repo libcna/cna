@@ -585,7 +585,8 @@ namespace Microsoft::Xna::Framework::Audio
             if (loopLength_ != 0)
             {
                 // The current engine has no separate "loop end" distinct from "track end" --
-                // MAX_FRAME_NUMBER treats this position as EOF for the whole track. Combined with
+                // MAX_FRAME_NUMBER treats this position as EOF for the whole track, and
+                // ExitMixerTrackLoop (Stop(false)) is what plays on past it. Combined with
                 // LOOP_START_FRAME_NUMBER above, this matches FNA/XAudio2's LoopBegin/LoopLength
                 // exactly: the intro plays once, then only [loopStart_, loopStart_+loopLength_)
                 // repeats -- confirmed against real decoded audio via a raw mixer callback
@@ -636,8 +637,10 @@ namespace Microsoft::Xna::Framework::Audio
             }
             else
             {
-                // Exit loop so the track plays to the end and stops naturally.
-                CNA::Internal::Audio::SetMixerTrackLoops(track, 0);
+                // Exit the loop: the current pass finishes and the sound plays to its end --
+                // through the tail after an authored loop region too (CNA-DEMOS-ISSUE-114),
+                // as FNA's FAudioSourceVoice_ExitLoop does.
+                CNA::Internal::Audio::ExitMixerTrackLoop(track);
             }
         }
 #endif

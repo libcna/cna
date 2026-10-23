@@ -170,6 +170,10 @@ namespace CNA::Internal::Audio
             std::atomic<bool> stoppedCallbackActive{false};
             std::atomic<bool> destructionDeferred{false};
             std::atomic<bool> diagnosticAlive{true};
+            // ExitMixerTrackLoop: the bounded loop end this play stops at (-1 for none), and
+            // whether reaching it resumes from there through the rest of the audio.
+            std::atomic<std::int64_t> boundedLoopEnd{-1};
+            std::atomic<bool> resumePastLoopEnd{false};
         };
 
         struct PostMixContext
@@ -250,9 +254,40 @@ namespace CNA::Internal::Audio
             }
         }
 
+        // Every path that stops or replaces a track's audio other than its own exhaustion forgets
+        // a pending loop exit, so only the end of the final loop pass resumes.
+        void DisarmLoopExit(MIX_Track* track) noexcept
+        {
+            if (TrackContext* context = GetTrackContext(track))
+            {
+                context->resumePastLoopEnd.store(false, std::memory_order_relaxed);
+                context->boundedLoopEnd.store(-1, std::memory_order_relaxed);
+            }
+        }
+
+        // SDL_mixer re-enters the track's read loop after its stopped callback, so a play started
+        // here continues without a gap.
+        [[nodiscard]] bool ResumeTrackFrom(MIX_Track* track, const std::int64_t frame) noexcept
+        {
+            const SDL_PropertiesID properties = SDL_CreateProperties();
+            if (properties == 0) return false;
+            SDL_SetNumberProperty(properties, MIX_PROP_PLAY_START_FRAME_NUMBER, frame);
+            SDL_SetNumberProperty(properties, MIX_PROP_PLAY_LOOPS_NUMBER, 0);
+            const bool resumed = MIX_PlayTrack(track, properties);
+            SDL_DestroyProperties(properties);
+            return resumed;
+        }
+
         void SDLCALL StoppedCallback(void* userdata, MIX_Track* track)
         {
             auto* context = static_cast<TrackContext*>(userdata);
+            if (context->resumePastLoopEnd.exchange(false, std::memory_order_acq_rel))
+            {
+                // The final pass of a bounded loop ended at its loop end: play on from there.
+                const std::int64_t frame =
+                    context->boundedLoopEnd.exchange(-1, std::memory_order_acq_rel);
+                if (frame >= 0 && ResumeTrackFrom(track, frame)) return;
+            }
             const auto callback = context->stoppedCallback;
             const auto callbackUserdata = context->stoppedUserdata;
             context->stoppedCallbackActive.store(true, std::memory_order_release);
@@ -493,6 +528,7 @@ namespace CNA::Internal::Audio
     void DestroyMixerTrack(MixerTrack* track) noexcept
     {
         if (!track) return;
+        DisarmLoopExit(Native(track));
         TrackContext* context = GetTrackContext(Native(track));
         if (context && context->diagnosticAlive.exchange(false, std::memory_order_relaxed))
             CNA_DIAGNOSTICS_GAUGE_ADD("Audio/AllocatedVoices", -1);
@@ -514,6 +550,7 @@ namespace CNA::Internal::Audio
     bool SetMixerTrackAudio(MixerTrack* track, MixerAudio* audio) noexcept
     {
         if (!track || !audio) return false;
+        DisarmLoopExit(Native(track));
         try
         {
             MIX_Audio* native = GetCurrentNative(audio);
@@ -527,7 +564,9 @@ namespace CNA::Internal::Audio
 
     bool SetMixerTrackStream(MixerTrack* track, MixerStream* stream) noexcept
     {
-        return track && MIX_SetTrackAudioStream(Native(track), Native(stream));
+        if (!track) return false;
+        DisarmLoopExit(Native(track));
+        return MIX_SetTrackAudioStream(Native(track), Native(stream));
     }
 
     void SetMixerTrackGain(MixerTrack* track, const float gain) noexcept
@@ -585,6 +624,12 @@ namespace CNA::Internal::Audio
     bool PlayMixerTrack(MixerTrack* track, const MixerPlayOptions& options) noexcept
     {
         if (!track) return false;
+        DisarmLoopExit(Native(track));
+        if (TrackContext* context = GetTrackContext(Native(track)); context && options.hasMaxFrame)
+        {
+            context->boundedLoopEnd.store(static_cast<std::int64_t>(options.maxFrame),
+                                          std::memory_order_relaxed);
+        }
         if (options.loopCount == 0 && options.haltWhenExhausted
             && !options.hasLoopStartFrame && !options.hasMaxFrame)
         {
@@ -619,7 +664,25 @@ namespace CNA::Internal::Audio
         // recursive mixer lock also allows callback-side callback replacement.
         MIX_Mixer* mixer = MIX_GetTrackMixer(Native(track));
         MIX_LockMixer(mixer);
+        DisarmLoopExit(Native(track));
         (void)MIX_StopTrack(Native(track), 0);
+        MIX_UnlockMixer(mixer);
+    }
+
+    void ExitMixerTrackLoop(MixerTrack* track) noexcept
+    {
+        if (!track) return;
+        TrackContext* context = GetTrackContext(Native(track));
+        MIX_Mixer* mixer = MIX_GetTrackMixer(Native(track));
+        MIX_LockMixer(mixer);
+        (void)MIX_SetTrackLoops(Native(track), 0);
+        // SDL_mixer cannot move a playing track's max frame, so a bounded loop region still ends
+        // the final pass at its loop end; the stopped callback then resumes from there.
+        if (context && context->boundedLoopEnd.load(std::memory_order_relaxed) >= 0)
+        {
+            context->resumePastLoopEnd.store(true, std::memory_order_release);
+            (void)MIX_SetTrackStoppedCallback(Native(track), StoppedCallback, context);
+        }
         MIX_UnlockMixer(mixer);
     }
 

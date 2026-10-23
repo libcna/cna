@@ -2214,6 +2214,99 @@ TEST_F(SoundEffectInstanceTest, BoundedLoopRegionPlaysIntroOnceThenRepeatsOnlyTh
         << "expected several real wraps of the loop region within the observation window";
 }
 
+// CNA-DEMOS-ISSUE-114: Stop(false) exits the loop the way FNA's FAudioSourceVoice_ExitLoop does --
+// the current pass finishes and playback continues from the loop end through the rest of the
+// buffer. A bounded loop region ends each pass at its max frame, which used to end the whole
+// sound there and drop the authored tail.
+namespace
+{
+    struct LoopTailRawCallbackCtx
+    {
+        std::atomic<bool> sawLoopRegion{false};
+        std::atomic<bool> sawTail{false};
+    };
+
+    void SDLCALL LoopTailRawCallback(void* userdata, MIX_Track*, const SDL_AudioSpec*,
+                                     float* pcm, int samples)
+    {
+        auto* ctx = static_cast<LoopTailRawCallbackCtx*>(userdata);
+        for (int i = 0; i < samples; ++i)
+        {
+            if (pcm[i] < -0.5f) ctx->sawLoopRegion.store(true);
+            // The tail is the only region near +0.3 (10000 / 32768).
+            if (pcm[i] > 0.2f && pcm[i] < 0.4f) ctx->sawTail.store(true);
+        }
+    }
+}
+
+TEST_F(SoundEffectInstanceTest, StopAsAuthoredLeavesABoundedLoopAndPlaysItsTail)
+{
+    REQUIRE_DEVICE();
+    constexpr int introFrames = 2205;  // 50 ms of +0.92
+    constexpr int loopFrames  = 2205;  // 50 ms of -0.92
+    constexpr int tailFrames  = 13230; // 300 ms of +0.31
+    std::vector<unsigned char> pcm((introFrames + loopFrames + tailFrames) * 2);
+    int16_t* samples = reinterpret_cast<int16_t*>(pcm.data());
+    for (int i = 0; i < introFrames; ++i) samples[i] = 30000;
+    for (int i = 0; i < loopFrames; ++i) samples[introFrames + i] = -30000;
+    for (int i = 0; i < tailFrames; ++i) samples[introFrames + loopFrames + i] = 10000;
+
+    SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Mono,
+                       introFrames, loopFrames);
+    SoundEffectInstance inst = effect.CreateInstance();
+    inst.setIsLoopedProperty(true);
+    inst.Play();
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    LoopTailRawCallbackCtx ctx;
+    MIX_SetTrackRawCallback(track, LoopTailRawCallback, &ctx);
+
+    // Several passes of the loop region, and none of the tail.
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    ASSERT_TRUE(ctx.sawLoopRegion.load());
+    ASSERT_FALSE(ctx.sawTail.load());
+
+    inst.Stop(false);
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Playing)
+        << "Stop(false) must let the current sound finish";
+    EXPECT_TRUE(inst.getIsLoopedProperty());
+
+    // The remaining pass is at most 50 ms; the tail alone is 300 ms.
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Playing)
+        << "the sound stopped at the loop end instead of playing its tail";
+    for (int waited = 0; waited < 40 && inst.getStateProperty() != SoundState::Stopped; ++waited)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped) << "the tail never finished";
+    EXPECT_TRUE(ctx.sawTail.load()) << "no tail sample was ever mixed";
+}
+
+TEST_F(SoundEffectInstanceTest, StopImmediatelyAfterStopAsAuthoredDoesNotResumeTheTail)
+{
+    REQUIRE_DEVICE();
+    constexpr int introFrames = 2205;
+    constexpr int loopFrames  = 2205;
+    constexpr int tailFrames  = 13230;
+    std::vector<unsigned char> pcm((introFrames + loopFrames + tailFrames) * 2);
+    int16_t* samples = reinterpret_cast<int16_t*>(pcm.data());
+    for (int i = 0; i < introFrames + loopFrames + tailFrames; ++i) samples[i] = 10000;
+
+    SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Mono,
+                       introFrames, loopFrames);
+    SoundEffectInstance inst = effect.CreateInstance();
+    inst.setIsLoopedProperty(true);
+    inst.Play();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    inst.Stop(false);
+    inst.Stop(true);
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped)
+        << "an immediate Stop after Stop(false) must not be undone by the pending loop exit";
+}
+
 // AUD-15-005: stress test creating/playing/destroying thousands of short-lived instances from a
 // shared SoundEffect, checking for leaks or unbounded internal registry growth
 // (SoundEffect::Impl::instances, the per-effect live-instance list used for the Dispose cascade,

@@ -115,6 +115,9 @@ namespace CNA::Internal::Audio
     void SetMixerTrackStereoUnity(MixerTrack* track) noexcept;
     void SetMixerTrackFrequencyRatio(MixerTrack* track, float ratio) noexcept;
     void SetMixerTrackLoops(MixerTrack* track, int loops) noexcept;
+    /// XAudio2's ExitLoop: the current pass finishes and playback continues to the end of the
+    /// audio, through any frames after a bounded loop region (its max frame).
+    void ExitMixerTrackLoop(MixerTrack* track) noexcept;
     void SetMixerTrackMixCallback(MixerTrack* track, MixerTrackMixCallback callback,
                                   void* userdata) noexcept;
     void SetMixerTrackStoppedCallback(MixerTrack* track, MixerTrackStoppedCallback callback,
