@@ -187,23 +187,23 @@ object.
 copy-assigns. The caller keeps its own manager, later changes to it never reach the game, and the
 borrowed handle keeps addressing the game's own object rather than the source.
 
-## The one runtime type C cannot bind
+## Retired standalone runtime facade
 
-`CNA::Runtime` — the facade that would turn graphics, audio, input and content on and off before a
-game exists — is **declared and defined nowhere**. All five of its methods would fail to link if
-anything called them, nothing in the tree calls them, no translation unit includes `CNA/Misc.hpp`,
-and the compiled runtime archive contains no `CNA::Runtime::` symbol at all. This ABI cannot bind a
-symbol that does not exist, so its rows are recorded not-applicable rather than left planned as if
-they were work waiting to be done.
+CNA-DEMOS-ISSUE-150 removed `CNA/Misc.hpp`, `CNA::Runtime` and `CNA::RuntimeOptions`.
+The header declared five methods but none ever had a definition; a consumer could compile
+against it but could not link. Its four option flags configured nothing. It was not an XNA API,
+and retiring it removes no implementation or exported symbol. Code that included the old header
+must stop including it; there is no supported replacement with the same five-method contract.
 
-`RuntimeOptions` is a sound four-flag value on its own, but its only purpose is to parameterize
-`Initialize`. Mapping it alone would hand a C consumer a structure that configures nothing.
+Use `Microsoft::Xna::Framework::Game` and its `GraphicsDeviceManager` for the game lifecycle;
+C applications use `cna_game_create`, the game configuration/run routes and `cna_game_destroy`.
+These established APIs manage the game and its resources. `CNA::Runtime` as a CMake module target
+is unrelated to the removed C++ class and remains available.
 
-The `CApi_UnimplementedRuntimeFacade` test is what keeps that record honest: it inspects the built
-runtime archive and fails the moment any `CNA::Runtime::` symbol appears. If the facade is ever
-implemented, the check fires and the coverage rows become real work instead of quietly staying
-wrong.
+`CApi_RetiredRuntimeFacade` checks that the obsolete public header stays absent and that the
+runtime archive contains none of its five former methods. The original link-failure reproducer
+remains in cna-demos as historical evidence; it is not a supported consumer example.
 
-What a caller actually needs from this area already exists elsewhere and is answered honestly:
+For capability queries,
 `cna_graphics_ext_is_available` and `cna_devices_ext_is_available` report which extension layers this
 build contains, and the audio and renderer capability queries report what the machine can do.

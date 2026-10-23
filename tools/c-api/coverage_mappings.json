@@ -11829,33 +11829,6 @@
       ]
     },
     {
-      "id": "cna-runtime-facade",
-      "qualified_name_regex": "^CNA::(Runtime(::(Initialize|Shutdown|IsGraphicsEnabled|IsAudioEnabled|IsInputEnabled))?|RuntimeOptions(::(enableGraphics|enableAudio|enableInput|enableContent))?)$",
-      "kinds": [
-        "class",
-        "struct",
-        "field",
-        "method"
-      ],
-      "mapping": "No C mapping, and the reason is not a design choice: **`CNA::Runtime` is declared and defined nowhere**. All five of its methods would fail to link if anything called them, nothing in the tree calls them, no translation unit includes `CNA/Misc.hpp`, and the compiled runtime archive contains no `CNA::Runtime::` symbol at all. This ABI cannot bind a symbol that does not exist. `RuntimeOptions` is a sound four-flag value on its own, but its only purpose is to parameterize `Initialize`, so mapping it alone would hand a C consumer a structure that configures nothing. If the facade is ever implemented, these rows become real work rather than a record",
-      "tests": "the `CApi_UnimplementedRuntimeFacade` CTest check inspects the built runtime archive and fails if any `CNA::Runtime::` symbol ever appears, so this record cannot go stale in silence; subsystem availability that a caller actually needs is answered by `cna_graphics_ext_is_available`, `cna_devices_ext_is_available` and the audio/renderer capability queries instead",
-      "status": "not-applicable",
-      "task": "CBIND-037E5",
-      "approved_symbols": [
-        "CPP-0C6ED45813C7",
-        "CPP-0D8435BF5603",
-        "CPP-36FE11E08CF4",
-        "CPP-4D3603163D92",
-        "CPP-62F99C64313A",
-        "CPP-849F6AD21572",
-        "CPP-9140BE1D2419",
-        "CPP-C164DA4F7EFE",
-        "CPP-CC7A579829D2",
-        "CPP-E0961773BE35",
-        "CPP-EFC3FCB256F0"
-      ]
-    },
-    {
       "id": "audio-stop-options",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::AudioStopOptions(::[A-Za-z]+)?$",
       "kinds": [

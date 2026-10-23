@@ -281,7 +281,7 @@ CApiAbiBaseline
 CApiDeclaredExports
 CApi_Exports
 CApi_HeaderAudit
-CApi_UnimplementedRuntimeFacade
+CApi_RetiredRuntimeFacade
 CApi_KeyIdentities
 CApi_GamePadButtonIdentities
 CApi_AbiSmoke

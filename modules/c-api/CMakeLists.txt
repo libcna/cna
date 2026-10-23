@@ -651,13 +651,13 @@ if(CNA_BUILD_TESTS)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckPublicHeaders.cmake
     )
 
-    # CBIND-037E5: the `CNA::Runtime` facade is declared and never defined, which is why its rows are
-    # recorded not-applicable. This is what stops that record from going stale in silence.
-    add_test(NAME CApi_UnimplementedRuntimeFacade
+    # CNA-DEMOS-ISSUE-150: the declaration-only Runtime facade is retired.
+    add_test(NAME CApi_RetiredRuntimeFacade
         COMMAND ${CMAKE_COMMAND}
             -DCNA_RUNTIME_LIBRARY=$<TARGET_FILE:cna_runtime>
             -DCNA_RUNTIME_NM=${CMAKE_NM}
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckUnimplementedRuntimeFacade.cmake
+            -DCNA_RUNTIME_INCLUDE_DIRECTORY=${PROJECT_SOURCE_DIR}/modules/runtime/include
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckRetiredRuntimeFacade.cmake
     )
 
     add_custom_target(cna_c_api_key_identity_audit

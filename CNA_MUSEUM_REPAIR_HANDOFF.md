@@ -27,7 +27,7 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: ISSUE-150 facade retirement validation (2026-10-23)
+### Current task: commit/close ISSUE-150, then ISSUE-050 (2026-10-23)
 
 C API audit commit079a2fbe2891dae7e144a95a55963fa45adb48de is published and its remote SHA verified.
 ISSUE-150 remains OPEN until validation/closure. The issue explicitly permits retiring the
@@ -41,7 +41,23 @@ it intentionally does not reject CNA::Runtime::Testing. Before header removal it
 failed on the old public header; after removal it passes against the actual runtime archive.
 Original reproducer remains unchanged. One-job/6GiB incremental CnaRuntimeTests build is running;
 next run native runtime regression, clean/shared C API gates and the external consumer checks.
-No facade closure, new sanitizer claim or new full renderer checkpoint yet.
+ISSUE-150 validation is now complete: native248=244PASS/4 unchanged SKIP, full consumer build
+passes and275 binaries are byte-identical to the last full019 checkpoint. Catalog719/zero problems.
+Fresh Game33 and C game14 cases per SOFTWARE/GLES preserve every status/marker/check count and
+the same050/051 failures. Six audit/retirement CTests pass. The two additionally built C runtime
+smokes pass on both renderers after the separate fixture correction below. Clean inventory removes
+exactly11 obsolete declarations:466headers/8093symbols,7009implemented/15partial/626planned/443N/A;
+shared worktree has8102symbols/635planned because of inherited work. Strict clean/shared audits
+and33 scope-model tests pass. No sanitizer or new full renderer/visual run is claimed; old full
+evidence remains byte-identical. Retained setup failures: nonexistent c_api.runtime category and
+initially missing native smoke binaries. The catalog prefix c_api.game was verified before use.
+Stage only own150 files and clean snapshot mapping/generated docs. Preserve inherited content,
+audio, occlusion, matrix113 and upstream082 changes. The original150 reproducer is unchanged.
+Next after the repair/closure commits: ISSUE-050, confirmed again by both C game category runs.
+Read-only source diagnosis finds generated Runtime routes always use CallWithExceptionBarrier,
+whose foreign-thread retry overrides the owner-only contract. CallHereWithExceptionBarrier already
+provides local exception translation; review generator/spec policy and ordinary queued-call controls.
+No050 production/test edit yet. ISSUE-051 remains separate.
 
 Additional native C smoke audit exposed an independent stale ISSUE-019 test assumption:
 RuntimeGameSmoke reset the clock in every Update and then expected each of two fixed-step calls
@@ -51,8 +67,8 @@ may execute no Update/Draw. The test now exercises ResetElapsedTime once inside 
 its pending clock-reset step before the independent SuppressDraw checks, and preserves the reset
 success, callback-reentry and exact draw-count assertions. No runtime implementation changed.
 Separate test-only fix: strict C build passes; both C runtime smoke tests pass on OPENGLES3
-in10.57s and on SOFTWARE in0.38s. Logs repair-runtime-facade-c-smoke-ctest (original failure) and
-repair-reset-c-smoke-isolation-* (repair). Commit this fixture correction separately from150.
+in10.57s and on SOFTWARE in0.35s. Logs repair-runtime-facade-c-smoke-ctest (original failure) and
+repair-reset-c-smoke-isolation-* (repair). Fixture-only commit8a21c594d is separate from150.
 
 ISSUE-019 publication is VERIFIED: origin/next CNA70a7a4ef9f01faf071cbda6d3868de75ba5d56ba,
 demosfe283d03b2054cbc8ef766358d0a1644609c78e8. Normal fast-forward pushes only; all owned019

@@ -37,6 +37,13 @@ umbrella targets and the physical source-partition validator.
 | modules/gamer-services | base (optional, `CNA_ENABLE_NET`) | `CNA_GamerServices` (`CNA::GamerServices`) | runtime, storage | Core.Base, IO, Collections.Core, Globalization, Runtime, Threading |
 | modules/net | base (optional, `CNA_ENABLE_NET`) | `CNA_Net` (`CNA::Net`) | gamer-services, enet | Core.Base, IO, Collections.Core, Runtime, Threading |
 
+The `CNA::Runtime` target above remains the runtime module. The unrelated C++ class
+`CNA::Runtime` and its `RuntimeOptions` in `CNA/Misc.hpp` were retired for
+CNA-DEMOS-ISSUE-150: their five declared methods never had definitions, so no consumer could
+link them. Remove that obsolete include and use `Microsoft::Xna::Framework::Game` with
+`GraphicsDeviceManager` for the game lifecycle. This does not introduce a replacement
+five-method initialization API or change the module target.
+
 Umbrellas (defined in `modules/CMakeLists.txt`):
 
 - **`CNA`** — the historical full-runtime INTERFACE umbrella: runtime modules + the selected

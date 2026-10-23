@@ -97,15 +97,6 @@
       "note": "A friend declaration grants a canonical CNA type access to another's internals. It declares no callable operation."
     },
     {
-      "id": "unimplemented-facade",
-      "title": "Declared and never defined in CNA itself",
-      "match": [
-        "declared and defi",
-        "declared and never"
-      ],
-      "note": "Not a design choice: the canonical declaration has no definition anywhere in CNA, so there is nothing to bind. CApi_UnimplementedRuntimeFacade keeps that record from going stale in silence."
-    },
-    {
       "id": "lifetime-owned",
       "title": "Objects the caller never constructs or destroys",
       "match": [
