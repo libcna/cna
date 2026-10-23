@@ -15,6 +15,13 @@
 #include <vector>
 #include <functional>
 
+namespace Microsoft::Xna::Framework::GamerServices { class PropertyDictionary; }
+namespace CNA::Internal::GamerServices
+{
+    void LoadLeaderboardEntryColumnsEXT(const std::string&, const std::string&,
+        Microsoft::Xna::Framework::GamerServices::PropertyDictionary&);
+}
+
 namespace Microsoft::Xna::Framework::GamerServices
 {
     /**
@@ -355,6 +362,8 @@ namespace Microsoft::Xna::Framework::GamerServices
     private:
         friend class LeaderboardWriter;
         friend class LeaderboardReader;
+        friend void CNA::Internal::GamerServices::LoadLeaderboardEntryColumnsEXT(
+            const std::string&, const std::string&, PropertyDictionary&);
         std::function<void()> writeGuard_;
         explicit PropertyDictionary(std::map<std::string, std::any> dict);
         // Adds a stream this dictionary owns (a leaderboard Stream column) and returns it.

@@ -607,6 +607,146 @@ namespace {
     };
 }
 
+TEST(LeaderboardWriterTest, OfflineStreamRoundTripKeepsOwnershipAndWriterCanGrowRestoredBytes) {
+    GamerServicesStoreGuard guard;
+    const auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    auto gamer = SignedInGamer::CreateInternal("stream_tag");
+    SignedInGamersGuard signedIn({&gamer});
+    auto* entry = gamer.getLeaderboardWriterProperty().GetLeaderboard(id);
+    auto* stream = entry->getColumnsProperty().GetValueStream("Replay");
+    ASSERT_NE(nullptr, stream);
+    EXPECT_TRUE(stream->getCanWriteProperty());
+    const std::array<SharpRuntime::bytecs, 3> bytes{0, 0x80, 0xff};
+    stream->Write(bytes.data(), 0, 3);
+    entry->setRatingProperty(42);
+    EXPECT_EQ(3, stream->getPositionProperty());
+    auto snapshot = [&] {
+        auto reader = LeaderboardReader::Read(id, 0, 10);
+        const auto entries = reader.getEntriesProperty();
+        EXPECT_EQ(1, entries.getCountProperty());
+        LeaderboardEntry copy = entries[0];
+        reader.Dispose();
+        return copy;
+    }();
+    auto* restored = snapshot.getColumnsProperty().GetValueStream("Replay");
+    EXPECT_FALSE(restored->getCanWriteProperty());
+    EXPECT_EQ(0, restored->getPositionProperty());
+    std::array<SharpRuntime::bytecs, 3> actual{};
+    EXPECT_EQ(3, restored->Read(actual.data(), 0, 3));
+    EXPECT_EQ(bytes, actual);
+    EXPECT_THROW(restored->WriteByte(7), System::NotSupportedException);
+
+    auto reopened = SignedInGamer::CreateInternal("stream_tag");
+    auto* next = reopened.getLeaderboardWriterProperty().GetLeaderboard(id);
+    auto* writable = next->getColumnsProperty().GetValueStream("Replay");
+    ASSERT_TRUE(writable->getCanWriteProperty());
+    EXPECT_EQ(3, writable->getLengthProperty());
+    writable->setPositionProperty(3);
+    writable->WriteByte(0x7f);
+    next->setRatingProperty(43);
+    EXPECT_EQ(4, writable->getPositionProperty());
+    auto reread = LeaderboardReader::Read(id, 0, 10);
+    const auto extendedEntries = reread.getEntriesProperty();
+    ASSERT_EQ(1, extendedEntries.getCountProperty());
+    auto* extended = extendedEntries[0].getColumnsProperty().GetValueStream("Replay");
+    std::array<SharpRuntime::bytecs, 4> extendedBytes{};
+    EXPECT_EQ(4, extended->Read(extendedBytes.data(), 0, 4));
+    EXPECT_EQ((std::array<SharpRuntime::bytecs, 4>{0, 0x80, 0xff, 0x7f}), extendedBytes);
+    EXPECT_EQ(3, restored->getLengthProperty());
+}
+
+TEST(LeaderboardWriterTest, OfflineStreamEmptyColumnIsPresentAndReadOnlyAfterReload) {
+    GamerServicesStoreGuard guard;
+    const auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    auto gamer = SignedInGamer::CreateInternal("stream_tag");
+    SignedInGamersGuard signedIn({&gamer});
+    auto* entry = gamer.getLeaderboardWriterProperty().GetLeaderboard(id);
+    EXPECT_NE(nullptr, entry->getColumnsProperty().GetValueStream("Empty"));
+    entry->setRatingProperty(1);
+    auto reader = LeaderboardReader::Read(id, 0, 10);
+    ASSERT_EQ(1, reader.getEntriesProperty().getCountProperty());
+    const auto entries = reader.getEntriesProperty();
+    const auto& columns = entries[0].getColumnsProperty();
+    ASSERT_TRUE(columns.ContainsKey("Empty"));
+    auto* stream = columns.GetValueStream("Empty");
+    EXPECT_EQ(0, stream->getLengthProperty());
+    EXPECT_FALSE(stream->getCanWriteProperty());
+    EXPECT_EQ(-1, stream->ReadByte());
+}
+
+TEST(LeaderboardWriterTest, OfflineStreamClosedWriterStillPersistsItsContents) {
+    GamerServicesStoreGuard guard;
+    const auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    auto gamer = SignedInGamer::CreateInternal("stream_tag");
+    SignedInGamersGuard signedIn({&gamer});
+    auto* entry = gamer.getLeaderboardWriterProperty().GetLeaderboard(id);
+    auto* stream = entry->getColumnsProperty().GetValueStream("Replay");
+    stream->WriteByte(0xab);
+    stream->Close();
+    entry->setRatingProperty(1);
+    auto reader = LeaderboardReader::Read(id, 0, 10);
+    const auto entries = reader.getEntriesProperty();
+    ASSERT_EQ(1, entries.getCountProperty());
+    auto* restored = entries[0].getColumnsProperty().GetValueStream("Replay");
+    EXPECT_EQ(0xab, restored->ReadByte());
+    EXPECT_EQ(-1, restored->ReadByte());
+}
+
+TEST(LeaderboardWriterTest, OfflineStreamUsesCnaBoundAndRefusalPreservesPriorRecord) {
+    GamerServicesStoreGuard guard;
+    const auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    auto gamer = SignedInGamer::CreateInternal("stream_tag");
+    SignedInGamersGuard signedIn({&gamer});
+    auto* entry = gamer.getLeaderboardWriterProperty().GetLeaderboard(id);
+    auto* stream = entry->getColumnsProperty().GetValueStream("Replay");
+    const std::vector<SharpRuntime::bytecs> bytes(256, 0xa5);
+    stream->Write(bytes.data(), 0, 256);
+    entry->setRatingProperty(9);
+    stream->WriteByte(0xff);
+    EXPECT_THROW(entry->setRatingProperty(10), System::ArgumentException);
+    EXPECT_EQ(9, entry->getRatingProperty());
+    auto reader = LeaderboardReader::Read(id, 0, 10);
+    ASSERT_EQ(1, reader.getEntriesProperty().getCountProperty());
+    const auto entries = reader.getEntriesProperty();
+    EXPECT_EQ(9, entries[0].getRatingProperty());
+    auto* stored = entries[0].getColumnsProperty().GetValueStream("Replay");
+    EXPECT_EQ(256, stored->getLengthProperty());
+    std::vector<SharpRuntime::bytecs> actual(256);
+    EXPECT_EQ(256, stored->Read(actual.data(), 0, 256));
+    EXPECT_EQ(bytes, actual);
+    stream->SetLength(256);
+    EXPECT_NO_THROW(entry->setRatingProperty(10));
+}
+
+TEST(LeaderboardWriterTest, OfflineStreamMalformedEncodingSkipsOnlyInvalidColumns) {
+    GamerServicesStoreGuard guard;
+    const auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    auto gamer = SignedInGamer::CreateInternal("stream_tag");
+    SignedInGamersGuard signedIn({&gamer});
+    const auto dir = std::filesystem::path(CNA::Internal::GamerServices::GetGamerServicesStoreRootEXT()) / "leaderboards";
+    std::filesystem::create_directories(dir);
+    {
+        std::ofstream file(dir / "BestScoreLifeTime_0.json");
+        file << R"({"entries":[{"gamertag":"stream_tag","rating":7,"columns":[)"
+             << R"({"key":"Valid","type":"stream","value":"0080ff"},)"
+             << R"({"key":"Odd","type":"stream","value":"0"},)"
+             << R"({"key":"Invalid","type":"stream","value":"gg"},)"
+             << R"({"key":"Wrong","type":"stream","value":7},)"
+             << R"({"key":"Large","type":"stream","value":")" << std::string(514, '0') << R"("},)"
+             << R"({"key":"Wins","type":"int32","value":17}]}]})";
+    }
+    auto reader = LeaderboardReader::Read(id, 0, 10);
+    ASSERT_EQ(1, reader.getEntriesProperty().getCountProperty());
+    const auto entries = reader.getEntriesProperty();
+    const auto& columns = entries[0].getColumnsProperty();
+    EXPECT_EQ(17, columns.GetValueInt32("Wins"));
+    for (const char* key : {"Odd", "Invalid", "Wrong", "Large"}) EXPECT_FALSE(columns.ContainsKey(key));
+    ASSERT_TRUE(columns.ContainsKey("Valid"));
+    std::array<SharpRuntime::bytecs, 3> bytes{};
+    EXPECT_EQ(3, columns.GetValueStream("Valid")->Read(bytes.data(), 0, 3));
+    EXPECT_EQ((std::array<SharpRuntime::bytecs, 3>{0, 0x80, 0xff}), bytes);
+}
+
 TEST(LeaderboardReaderTest, ReadReturnsEntriesSortedByRatingDescending) {
     GamerServicesStoreGuard guard;
     auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);

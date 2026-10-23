@@ -57,6 +57,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         // full, sorted leaderboard read) - 0, matching this class's own lack of any read/sort
         // context.
         LeaderboardEntry entry = LeaderboardEntry::CreateInternal(owner_, rating, 0);
+        entry.columns_.createsStreams_ = true;
         CNA::Internal::GamerServices::LoadLeaderboardEntryColumnsEXT(
             fileKey, owner_->getGamertagProperty(), entry.getColumnsProperty()
         );

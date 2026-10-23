@@ -497,8 +497,10 @@ claim about how Xbox LIVE decided.
 - **Status:** partially implemented.
 - **XNA / Xbox:** `PropertyDictionary.GetValueStream` for Stream columns (size limit not
   documented); Xbox validated writes and chose centring rules not documented in XNA.
-- **CNA now:** Stream columns work online, up to 256 bytes (CNA's bound); offline local boards (no
-  service) do not keep Stream columns. Columns are at most 2 KiB per row; pages up to 100 rows;
+- **CNA now:** Stream columns work online and in offline local boards, up to 256 bytes (CNA's
+  bound). Writers create writable streams; persisted reads own read-only snapshots. Offline
+  storage preserves empty streams and refuses oversized writes without replacing the previous row.
+  Online columns are at most 2 KiB per row; pages up to 100 rows;
   ranks are global ordinals with ties broken by user ID; centring starts half a page above the
   pivot. These are CNA rules; Xbox's validation and pivot rules were never measured.
 - **Reason:** no evidence for the Xbox values.

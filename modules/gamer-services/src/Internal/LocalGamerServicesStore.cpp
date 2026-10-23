@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/LocalGamerServicesStore.hpp"
 #include "CNA/Internal/GamerServices/LocalStoreLock.hpp"
+#include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 
 #include "CNA/Internal/Json.hpp"
@@ -8,6 +9,9 @@
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
 #include "Microsoft/Xna/Framework/TitleContainer.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/NotSupportedException.hpp"
+#include "System/IO/MemoryStream.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/DateTime.hpp"
 #include "System/TimeSpan.hpp"
@@ -243,13 +247,6 @@ namespace CNA::Internal::GamerServices
 
     namespace
     {
-        // Task 4.2: PropertyDictionary's std::any values are only ever one of these 8 concrete
-        // types (see PropertyDictionary::SetValue's own overload set) - Stream* is deliberately
-        // excluded (and simply skipped when persisting), matching Achievement::GetPicture()'s own
-        // "genuine platform unavailability" precedent: a live I/O handle has no meaningful
-        // persisted form.
-        enum class ColumnType { Int32, Int64, Double, Single, StringValue, DateTimeTicks, TimeSpanTicks, Outcome };
-
         StoreJson ColumnsToJson(const PropertyDictionary& columns)
         {
             StoreJson array = StoreJson::array();
@@ -298,9 +295,30 @@ namespace CNA::Internal::GamerServices
                     entry["type"] = "outcome";
                     entry["value"] = static_cast<int>(std::any_cast<LeaderboardOutcome>(value));
                 }
+                else if (const auto* stream = std::any_cast<System::IO::Stream*>(&value))
+                {
+                    const auto* memory = dynamic_cast<const System::IO::MemoryStream*>(*stream);
+                    if (!memory)
+                        throw System::NotSupportedException("Only a leaderboard's own column streams can be written.");
+                    // ToArray preserves the position and also supports a closed writer, just
+                    // like the service commit path. Persist contents, never a stream address.
+                    const auto bytes = memory->ToArray();
+                    if (bytes.size() > MaxLeaderboardStreamBytes)
+                        throw System::ArgumentException("A leaderboard stream column holds at most 256 bytes.");
+                    constexpr char digits[] = "0123456789abcdef";
+                    std::string hex;
+                    hex.reserve(bytes.size() * 2);
+                    for (const auto byte : bytes)
+                    {
+                        hex += digits[byte >> 4];
+                        hex += digits[byte & 15];
+                    }
+                    entry["type"] = "stream";
+                    entry["value"] = std::move(hex);
+                }
                 else
                 {
-                    // Stream* (or any future unsupported type) - skip, not an error.
+                    // Future unsupported types retain the existing skip policy.
                     continue;
                 }
                 array.push_back(std::move(entry));
@@ -308,7 +326,8 @@ namespace CNA::Internal::GamerServices
             return array;
         }
 
-        void JsonToColumns(const StoreJson& array, PropertyDictionary& outColumns)
+        template<typename RestoreStream>
+        void JsonToColumns(const StoreJson& array, PropertyDictionary& outColumns, RestoreStream restoreStream)
         {
             if (!array.is_array())
             {
@@ -362,6 +381,27 @@ namespace CNA::Internal::GamerServices
                 else if (t == "outcome")
                 {
                     outColumns.SetValue(key->get_ref<const std::string&>(), static_cast<LeaderboardOutcome>(static_cast<int>(*integer)));
+                }
+                else if (t == "stream" && value->is_string())
+                {
+                    const auto& hex = value->get_ref<const std::string&>();
+                    if (hex.size() % 2 != 0 || hex.size() > MaxLeaderboardStreamBytes * 2) continue;
+                    const auto nibble = [](char c) -> int {
+                        if (c >= '0' && c <= '9') return c - '0';
+                        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+                        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+                        return -1;
+                    };
+                    std::vector<unsigned char> bytes;
+                    bytes.reserve(hex.size() / 2);
+                    bool valid = true;
+                    for (std::size_t i = 0; i < hex.size(); i += 2)
+                    {
+                        const int high = nibble(hex[i]), low = nibble(hex[i + 1]);
+                        if (high < 0 || low < 0) { valid = false; break; }
+                        bytes.push_back(static_cast<unsigned char>((high << 4) | low));
+                    }
+                    if (valid) restoreStream(key->get_ref<const std::string&>(), bytes);
                 }
                 // Unrecognized type tag (e.g. from a future version): skip rather than throw -
                 // matches the "corrupt/missing store never crashes" requirement.
@@ -471,7 +511,9 @@ namespace CNA::Internal::GamerServices
             const StoreJson* columns = Find(entry, "columns");
             if (columns != nullptr)
             {
-                JsonToColumns(*columns, outColumns);
+                JsonToColumns(*columns, outColumns, [&outColumns](const std::string& key, const auto& bytes) {
+                    outColumns.AddStreamInternal(key, bytes, outColumns.createsStreams_);
+                });
             }
             return;
         }

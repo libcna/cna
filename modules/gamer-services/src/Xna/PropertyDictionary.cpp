@@ -98,9 +98,16 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     System::IO::Stream* PropertyDictionary::AddStreamInternal(const std::string& key, const std::vector<unsigned char>& bytes, bool writable) const
     {
-        auto stream = std::make_shared<System::IO::MemoryStream>(bytes.empty() ? nullptr : bytes.data(),
-            static_cast<SharpRuntime::intcs>(bytes.size()), writable);
-        if (bytes.empty() && writable) stream = std::make_shared<System::IO::MemoryStream>();
+        // Restored writers need expandable streams. Use the default constructor rather
+        // than relying on the byte-buffer constructor's capacity semantics.
+        auto stream = writable ? std::make_shared<System::IO::MemoryStream>() :
+            std::make_shared<System::IO::MemoryStream>(bytes.empty() ? nullptr : bytes.data(),
+                static_cast<SharpRuntime::intcs>(bytes.size()), false);
+        if (writable && !bytes.empty())
+        {
+            stream->Write(bytes.data(), 0, static_cast<SharpRuntime::intcs>(bytes.size()));
+            stream->setPositionProperty(0);
+        }
         ownedStreams_->push_back(stream);
         dictionary_[key] = static_cast<System::IO::Stream*>(stream.get());
         return stream.get();
