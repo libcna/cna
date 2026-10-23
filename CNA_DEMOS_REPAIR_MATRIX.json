@@ -1698,12 +1698,13 @@
       ],
       "subsystem": "model/gltf",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Both CNAEXT ModelMesh constructors set each part's parent after its effect and never seeded Effects; the C adapter's retained effect list likewise started empty.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "da6c5c120",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at da6c5c120: construction adds each distinct part effect once, in part order, natively and in the C retained list; ModelMeshTest and ModelMeshSmoke cases; graphics 3,056, content 2,071, all 132 CApi tests. c_api.graphics.model_meshes asserted the defect itself and now requires the pre-attached effect (7afb5e4). Complete checkpoint (batch 8, 2026-10-24; demos tree rebuilt from CNA da6c5c120 plus the demo corrections): 719-ID SOFTWARE 664 PASS/4 FAIL/48 SKIP/3 NOTRUN, OPENGLES3 706/3/7/3, against the 020/029/062 closure only FAIL-to-PASS rows plus node_animation check count 19->20; serial CTest 735 registered/732 enabled, 684 PASS/48 SKIP/0 FAIL/3 disabled (790.22 s). Reports ../cna-demos/build/linux-full/reports/repair-batch8-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-082",
@@ -1913,12 +1914,13 @@
       ],
       "subsystem": "c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "ImageBasedLightExtIsValid accepted every live handle kind for the two TextureCube fields and the Texture2D field.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "78d6433c7",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at 78d6433c7: each field requires its texture kind (render target included); GraphicsExtSmoke's new checks fail on the old route and pass on OPENGLES3, SOFTWARE and HEADLESS; all 132 CApi tests. Demo image_based_light_values passes its 25 checks with the marker removed (f9a66d9). Complete checkpoint (batch 8, 2026-10-24; demos tree rebuilt from CNA da6c5c120 plus the demo corrections): 719-ID SOFTWARE 664 PASS/4 FAIL/48 SKIP/3 NOTRUN, OPENGLES3 706/3/7/3, against the 020/029/062 closure only FAIL-to-PASS rows plus node_animation check count 19->20; serial CTest 735 registered/732 enabled, 684 PASS/48 SKIP/0 FAIL/3 disabled (790.22 s). Reports ../cna-demos/build/linux-full/reports/repair-batch8-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-092",
@@ -1930,12 +1932,13 @@
       ],
       "subsystem": "model/gltf",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "CollectMeshGroups imported every mesh at the identity root whenever no placement was reachable, including for a file that has scenes and selects an empty one.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "5f136988a",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at 5f136988a: the fallback fires only for a file with no scenes; content 2,071. Demo node_instances passes its 24 checks with the marker removed (5f038f4). Complete checkpoint (batch 8, 2026-10-24; demos tree rebuilt from CNA da6c5c120 plus the demo corrections): 719-ID SOFTWARE 664 PASS/4 FAIL/48 SKIP/3 NOTRUN, OPENGLES3 706/3/7/3, against the 020/029/062 closure only FAIL-to-PASS rows plus node_animation check count 19->20; serial CTest 735 registered/732 enabled, 684 PASS/48 SKIP/0 FAIL/3 disabled (790.22 s). Reports ../cna-demos/build/linux-full/reports/repair-batch8-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-093",
@@ -1947,12 +1950,13 @@
       ],
       "subsystem": "model/gltf",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "cgltf keeps only LINEAR/STEP/CUBICSPLINE and otherwise leaves its zero value LINEAR, and neither cgltf_validate nor ValidateGltfEXT checked the token.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "eb9653bf2",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at eb9653bf2: ValidateGltfEXT re-tokenizes the JSON with cgltf's jsmn and refuses any other interpolation (ContentLoadException at runtime, error in gltf_to_cnj); content 2,067. Demo animation_validation passes its 5 checks with the marker removed (f9a66d9). Complete checkpoint (batch 8, 2026-10-24; demos tree rebuilt from CNA da6c5c120 plus the demo corrections): 719-ID SOFTWARE 664 PASS/4 FAIL/48 SKIP/3 NOTRUN, OPENGLES3 706/3/7/3, against the 020/029/062 closure only FAIL-to-PASS rows plus node_animation check count 19->20; serial CTest 735 registered/732 enabled, 684 PASS/48 SKIP/0 FAIL/3 disabled (790.22 s). Reports ../cna-demos/build/linux-full/reports/repair-batch8-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-094",
@@ -1964,12 +1968,13 @@
       ],
       "subsystem": "model/gltf",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "The scene-node extractor counted a weights channel as an unsupported path (and its animation as empty) although the part's MorphTargetDataEXT::WeightTrack kept it, and the Model report never reconciled the two.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "ab0ab883c",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at ab0ab883c: ReconcileGltfAnimationLossesEXT recomputes the Model's loss counts from the source channels once every carrier is known, in the runtime loader and gltf_to_cnj; GltfAnimationReportReconciliation tests; content 2,070. morph_animation_import's defect-shape check now pins the repaired shape and the marker is removed (5f038f4); node_animation required the same false loss and was corrected with a check that the weight track exists (26bc94d). Complete checkpoint (batch 8, 2026-10-24; demos tree rebuilt from CNA da6c5c120 plus the demo corrections): 719-ID SOFTWARE 664 PASS/4 FAIL/48 SKIP/3 NOTRUN, OPENGLES3 706/3/7/3, against the 020/029/062 closure only FAIL-to-PASS rows plus node_animation check count 19->20; serial CTest 735 registered/732 enabled, 684 PASS/48 SKIP/0 FAIL/3 disabled (790.22 s). Reports ../cna-demos/build/linux-full/reports/repair-batch8-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-095",
@@ -1981,12 +1986,13 @@
       ],
       "subsystem": "model/gltf",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Each joint palette's ExtractClips report counted the channels on another palette's joints as unavailable, and the Model report summed those palette-local skips.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "ab0ab883c",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at ab0ab883c (see ISSUE-094): a channel counts as lost only when no retained palette keeps its target, and a channel no carrier keeps is reported once, not once per palette. multi_skin_animation_report passes its 9 checks; its defect-shape check now pins the repaired shape and the marker is removed (5f038f4). Complete checkpoint (batch 8, 2026-10-24; demos tree rebuilt from CNA da6c5c120 plus the demo corrections): 719-ID SOFTWARE 664 PASS/4 FAIL/48 SKIP/3 NOTRUN, OPENGLES3 706/3/7/3, against the 020/029/062 closure only FAIL-to-PASS rows plus node_animation check count 19->20; serial CTest 735 registered/732 enabled, 684 PASS/48 SKIP/0 FAIL/3 disabled (790.22 s). Reports ../cna-demos/build/linux-full/reports/repair-batch8-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-096",
@@ -1998,12 +2004,13 @@
       ],
       "subsystem": "model/gltf",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "AnimationPlayer::RecomputeTransforms validated the required skeleton arrays against BoneCount but treated SkeletonRootPrefix as present only at exactly BoneCount entries, so any other nonempty length silently meant all identity.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "b98629c89",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at b98629c89: a nonempty prefix of another length is an ArgumentException at construction and at every recomputation; three new AnimationPlayer tests; CnaGraphicsTests 3,054. Demo animation_player_validation passes its 10 checks with the marker removed (f9a66d9). Complete checkpoint (batch 8, 2026-10-24; demos tree rebuilt from CNA da6c5c120 plus the demo corrections): 719-ID SOFTWARE 664 PASS/4 FAIL/48 SKIP/3 NOTRUN, OPENGLES3 706/3/7/3, against the 020/029/062 closure only FAIL-to-PASS rows plus node_animation check count 19->20; serial CTest 735 registered/732 enabled, 684 PASS/48 SKIP/0 FAIL/3 disabled (790.22 s). Reports ../cna-demos/build/linux-full/reports/repair-batch8-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-097",
@@ -2037,12 +2044,13 @@
       ],
       "subsystem": "audio/media",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Every CNA media library entity, collection and MediaLibrary only set a disposed flag; no ordinary member checked it, while XNA's call ThrowIfDisposed first (decompiled Windows assembly).",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "45f704c04",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at 45f704c04: a shared ThrowIfDisposed guards the seven entities, seven collections and MediaLibrary; equality is reference-first and a disposed argument equals only itself; internal MediaPlayer/MediaLibrary paths bypass the guards; Play(disposed Song) is XNA's InvalidOperationException. CnaMediaTests 364/364 (eight new tests fail on the old code), build-asan 364/364, content 2,065, all 132 CApi tests. The C media smokes and the c_api.media.{library_collections,library_pictures,media_player} demos asserted the old live-after-dispose contract and were corrected (demos 94dd5b2); music_index, save_picture and song.properties pass with every refusal group complete and their markers removed (dbd9fc1). Complete checkpoint (batch 8, 2026-10-24; demos tree rebuilt from CNA da6c5c120 plus the demo corrections): 719-ID SOFTWARE 664 PASS/4 FAIL/48 SKIP/3 NOTRUN, OPENGLES3 706/3/7/3, against the 020/029/062 closure only FAIL-to-PASS rows plus node_animation check count 19->20; serial CTest 735 registered/732 enabled, 684 PASS/48 SKIP/0 FAIL/3 disabled (790.22 s). Reports ../cna-demos/build/linux-full/reports/repair-batch8-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-099",
@@ -2164,12 +2172,13 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "STUB inherited IGraphicsRenderer's nullptr CreateTexture3D and HEADLESS returned a volume object that refuses every upload, so the Texture3D WarnAndStub path threw at the first SetData.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "718e428fe",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at 718e428fe: both factories answer WarnAndStub with the shared NoOpTexture3DRenderer after a warn-once RENDER message; CrossRendererContractTest covers every compiled-in renderer without volume storage; graphics 3,055. Demo supports_capability passes 7/7 on STUB (repair-batch7-parts) and 5/5 on SOFTWARE/OPENGLES3; marker and knownIssueRenderers removed (7afb5e4). Complete checkpoint (batch 8, 2026-10-24; demos tree rebuilt from CNA da6c5c120 plus the demo corrections): 719-ID SOFTWARE 664 PASS/4 FAIL/48 SKIP/3 NOTRUN, OPENGLES3 706/3/7/3, against the 020/029/062 closure only FAIL-to-PASS rows plus node_animation check count 19->20; serial CTest 735 registered/732 enabled, 684 PASS/48 SKIP/0 FAIL/3 disabled (790.22 s). Reports ../cna-demos/build/linux-full/reports/repair-batch8-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-105",
@@ -2373,12 +2382,13 @@
       ],
       "subsystem": "audio/media",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "An authored loop end was the mixer track's max frame, and Stop(false) only zeroed the remaining loops, so the final pass ended the sound at the loop end.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "6102058bb",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at 6102058bb: MixerEngine::ExitMixerTrackLoop -- CNA's mixer clears the max frame; the SDL_mixer backend resumes from the loop end in the track-stopped callback, gaplessly; two SoundEffectInstance tests (10/10 repeats); audio 805. Demo loop_region passes its 7 checks with the marker removed (7afb5e4). The ALSA backend is syntax-checked only. Complete checkpoint (batch 8, 2026-10-24; demos tree rebuilt from CNA da6c5c120 plus the demo corrections): 719-ID SOFTWARE 664 PASS/4 FAIL/48 SKIP/3 NOTRUN, OPENGLES3 706/3/7/3, against the 020/029/062 closure only FAIL-to-PASS rows plus node_animation check count 19->20; serial CTest 735 registered/732 enabled, 684 PASS/48 SKIP/0 FAIL/3 disabled (790.22 s). Reports ../cna-demos/build/linux-full/reports/repair-batch8-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-115",
