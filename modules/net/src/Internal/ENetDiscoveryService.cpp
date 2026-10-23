@@ -4,6 +4,7 @@
 #include "CNA/Internal/Net/ENetLibrary.hpp"
 #include "CNA/Internal/Net/NetDiscoveryProtocol.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
@@ -27,6 +28,7 @@
 
 namespace CNA::Internal::Net
 {
+    using Microsoft::Xna::Framework::GamerServices::NetworkNotAvailableException;
     using Microsoft::Xna::Framework::Net::LocalNetworkGamer;
     using Microsoft::Xna::Framework::Net::NetworkGamer;
     using Microsoft::Xna::Framework::Net::QualityOfService;
@@ -229,7 +231,7 @@ namespace CNA::Internal::Net
             ENetSocket sock = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
             if (sock == ENET_SOCKET_NULL)
             {
-                throw std::runtime_error("Failed to create discovery UDP socket.");
+                throw NetworkNotAvailableException("Failed to create discovery UDP socket.");
             }
             // Task 6.5: lets multiple independent OS processes on the same machine each bind this
             // exact well-known port (kDiscoveryPort) simultaneously - required so two genuinely
@@ -277,7 +279,7 @@ namespace CNA::Internal::Net
             if (enet_socket_bind(sock, &address) != 0)
             {
                 enet_socket_destroy(sock);
-                throw std::runtime_error("Failed to bind discovery UDP socket.");
+                throw NetworkNotAvailableException("Failed to bind discovery UDP socket.");
             }
 
             socket_ = sock;
@@ -512,7 +514,7 @@ namespace CNA::Internal::Net
                 socket_ = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
                 if (socket_ == ENET_SOCKET_NULL)
                 {
-                    return;
+                    throw NetworkNotAvailableException("Failed to create discovery search UDP socket.");
                 }
                 ENetAddress address{};
                 address.host = ENET_HOST_ANY;
@@ -523,6 +525,7 @@ namespace CNA::Internal::Net
                 {
                     enet_socket_destroy(socket_);
                     socket_ = ENET_SOCKET_NULL;
+                    throw NetworkNotAvailableException("Failed to configure discovery search UDP socket.");
                 }
             }
             ~SearchSocket()
@@ -641,9 +644,9 @@ namespace CNA::Internal::Net
 
         queryStartTime_ = std::chrono::steady_clock::now(); // Task 4.2
 
-        // See SearchSocket. Should it fail to open, the search falls back to the shared socket.
+        // The shared port cannot reliably receive this search's replies from another process.
         const SearchSocket search;
-        const ENetSocket replies = search.Get() != ENET_SOCKET_NULL ? search.Get() : sock;
+        const ENetSocket replies = search.Get();
 #if defined(__APPLE__)
         SendToEveryInterfaceBroadcast(replies, bytes);
 #endif
@@ -672,14 +675,9 @@ namespace CNA::Internal::Net
                 break;
             }
             auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count();
-            if (replies != sock)
-            {
-                // The shared socket still answers other machines' queries while this one waits.
-                PollOnce(replies, static_cast<uint32_t>(std::min<long long>(remaining, 5)));
-                while (PollOnce(sock, 0)) { }
-                continue;
-            }
-            PollOnce(sock, static_cast<uint32_t>(remaining));
+            // The shared socket still answers other machines' queries while this one waits.
+            PollOnce(replies, static_cast<uint32_t>(std::min<long long>(remaining, 5)));
+            while (PollOnce(sock, 0)) { }
         }
 
         std::vector<AvailableNetworkSession> results;

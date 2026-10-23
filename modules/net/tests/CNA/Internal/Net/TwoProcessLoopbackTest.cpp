@@ -312,6 +312,24 @@ TEST(TwoProcessLoopbackTest, StartHostingRollsBackCleanlyOnDiscoveryRegistration
     EXPECT_EQ(exitCode, 0) << "process exited with code " << exitCode << "; output: " << output;
 }
 
+class NetworkUnavailableProcessTest : public testing::TestWithParam<const char*> { };
+
+TEST_P(NetworkUnavailableProcessTest, ReportsAvailabilityAndAllowsRecovery) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kOuterWatchdogSeconds);
+    auto child = SpawnHarness({"--role=unavailable-network", std::string("--failure=") + GetParam()});
+    ASSERT_GT(child.pid, 0);
+    int code = -1;
+    const bool finished = WaitWithWatchdog(child.pid, deadline, &code);
+    std::string output;
+    DrainRemaining(child.readFd, &output);
+    close(child.readFd);
+    EXPECT_TRUE(finished) << output;
+    EXPECT_EQ(code, 0) << output;
+}
+
+INSTANTIATE_TEST_SUITE_P(RequiredSocketFailures, NetworkUnavailableProcessTest,
+    testing::Values("host", "client", "discovery", "find", "reply", "end-create", "end-find"));
+
 // Task 5.5 (plans/plan_net.md Phase 5): spawns 3 real, independent OS processes - one migration-host and
 // two migration-survivor roles - and proves real host migration works across genuinely separate
 // address spaces: the host dies mid-session, exactly one survivor gets deterministically promoted

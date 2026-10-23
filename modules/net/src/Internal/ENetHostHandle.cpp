@@ -2,6 +2,7 @@
 // Copyright (c) Robert Vokac and contributors
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/ENetLibrary.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp"
 #include "RelayEnetPolicy.hpp"
 #include "CnaService/Protocol.hpp"
 
@@ -25,7 +26,7 @@ namespace CNA::Internal::Net
         ::ENetHost* host = enet_host_create(&address, maxPeers, channelLimit, 0, 0);
         if (!host)
         {
-            throw std::runtime_error("Failed to create ENet host.");
+            throw Microsoft::Xna::Framework::GamerServices::NetworkNotAvailableException("Failed to create ENet host.");
         }
         return ENetHostHandle(host);
     }
@@ -37,7 +38,7 @@ namespace CNA::Internal::Net
         ::ENetHost* host = enet_host_create(nullptr, 1, channelLimit, 0, 0);
         if (!host)
         {
-            throw std::runtime_error("Failed to create ENet client host.");
+            throw Microsoft::Xna::Framework::GamerServices::NetworkNotAvailableException("Failed to create ENet client host.");
         }
         return ENetHostHandle(host);
     }

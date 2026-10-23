@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) Robert Vokac and contributors
 #include "CNA/Internal/Net/ENetLibrary.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp"
 
 #include <enet/enet.h>
-#include <stdexcept>
 
 namespace CNA::Internal::Net
 {
@@ -15,7 +15,7 @@ namespace CNA::Internal::Net
             {
                 if (enet_initialize() != 0)
                 {
-                    throw std::runtime_error("Failed to initialize ENet.");
+                    throw Microsoft::Xna::Framework::GamerServices::NetworkNotAvailableException("Failed to initialize ENet.");
                 }
             }
         };

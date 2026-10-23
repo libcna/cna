@@ -24,9 +24,11 @@
 // AttemptHostMigration's own doc comment in ENetBackend.cpp), deliberately exercising the exact
 // cross-process discovery-port sharing this file's own host/client roles avoid.
 #include "CNA/Internal/Net/ENetBackend.hpp"
+#include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/VoiceChat.hpp"
 #include "../../modules/gamer-services/src/Internal/Guide/GuideScreen.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
@@ -45,17 +47,22 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cerrno>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <memory>
 #include <set>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include <sys/resource.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
 
 using namespace CNA::Internal::Net;
 using namespace Microsoft::Xna::Framework::Net;
@@ -1114,6 +1121,134 @@ namespace {
         return 0;
     }
 
+    // Exhaust only this child's descriptors, retaining an exact amount of socket headroom.
+    // Unlike a fixed rlim_cur=4, this also works when the test parent had inherited open files.
+    struct DescriptorBudget {
+        rlimit original{};
+        bool changed = false;
+        std::vector<int> held;
+        ~DescriptorBudget() { (void)Restore(); }
+        bool Exhaust(unsigned spare) {
+            held.reserve(256);
+            if (getrlimit(RLIMIT_NOFILE, &original) != 0) return false;
+            rlimit limited = original;
+            limited.rlim_cur = std::min<rlim_t>(original.rlim_cur, 256);
+            if (setrlimit(RLIMIT_NOFILE, &limited) != 0) return false;
+            changed = true;
+            for (;;) {
+                int fd = dup(STDOUT_FILENO);
+                if (fd < 0) break;
+                held.push_back(fd);
+            }
+            if (errno != EMFILE || held.size() < spare) return false;
+            while (spare-- > 0) {
+                close(held.back());
+                held.pop_back();
+            }
+            return true;
+        }
+        bool Restore() {
+            for (int fd : held) close(fd);
+            held.clear();
+            if (!changed) return true;
+            if (setrlimit(RLIMIT_NOFILE, &original) != 0) return false;
+            changed = false;
+            return true;
+        }
+    };
+
+    int RunUnavailableNetwork(const std::string& operation) {
+        const bool finding = operation == "find" || operation == "end-find" || operation == "reply";
+        const bool asynchronous = operation == "end-create" || operation == "end-find";
+        const bool discovery = operation == "discovery" || operation == "end-create";
+        const bool client = operation == "client";
+        const bool bind = operation == "bind";
+        if (!finding && !discovery && !client && !bind && operation != "host") return 64;
+        auto gamer = SignedInGamer::CreateInternal("UnavailableTest");
+        if (operation == "reply") {
+            // Keep discovery's shared socket alive, then fail only the next private search socket.
+            (void)NetworkSession::Find(NetworkSessionType::SystemLink, 1, {});
+        }
+        struct Blocker {
+            int fd = -1;
+            void Close() { if (fd >= 0) close(fd); fd = -1; }
+            ~Blocker() { Close(); }
+        } blocker;
+        if (bind) {
+            // Run this literal historical reproducer alone in a private network namespace.
+            blocker.fd = socket(AF_INET, SOCK_DGRAM, 0);
+            sockaddr_in address{};
+            address.sin_family = AF_INET;
+            address.sin_addr.s_addr = htonl(INADDR_ANY);
+            address.sin_port = htons(61190);
+            if (blocker.fd < 0 || ::bind(blocker.fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0) {
+                std::fprintf(stderr, "unavailable: cannot establish the exclusive-bind fixture\n");
+                return 2;
+            }
+        }
+        DescriptorBudget budget;
+        if (!bind && !budget.Exhaust(discovery ? 1U : 0U)) {
+            std::fprintf(stderr, "unavailable: cannot establish descriptor budget\n");
+            return 2;
+        }
+        const char* expected = bind ? "Failed to bind discovery UDP socket."
+            : operation == "reply" ? "Failed to create discovery search UDP socket."
+            : finding || discovery ? "Failed to create discovery UDP socket."
+            : client ? "Failed to create ENet client host." : "Failed to create ENet host.";
+        bool typed = false, correctMessage = false, began = false;
+        int callbacks = 0;
+        try {
+            if (client) {
+                (void)ENetHostHandle::CreateClient(2);
+            } else if (finding) {
+                if (asynchronous) {
+                    std::unique_ptr<System::IAsyncResult> action(NetworkSession::BeginFind(
+                        NetworkSessionType::SystemLink, 1, {},
+                        [&](System::IAsyncResult&) { ++callbacks; }, {}));
+                    began = true;
+                    (void)NetworkSession::EndFind(action.get());
+                } else {
+                    (void)NetworkSession::Find(NetworkSessionType::SystemLink, 1, {});
+                }
+            } else {
+                std::unique_ptr<NetworkSession> session;
+                if (asynchronous) {
+                    std::unique_ptr<System::IAsyncResult> action(NetworkSession::BeginCreate(
+                        NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, {},
+                        [&](System::IAsyncResult&) { ++callbacks; }, {}));
+                    began = true;
+                    session.reset(NetworkSession::EndCreate(action.get()));
+                } else {
+                    session.reset(NetworkSession::Create(NetworkSessionType::SystemLink,
+                        std::vector<SignedInGamer*>{&gamer}, 8, 0, {}));
+                }
+            }
+        } catch (const Microsoft::Xna::Framework::GamerServices::NetworkNotAvailableException& error) {
+            typed = true;
+            correctMessage = std::strcmp(error.what(), expected) == 0;
+            if (!correctMessage) std::fprintf(stderr, "unavailable: wrong failure point: %s\n", error.what());
+        } catch (const std::exception& error) {
+            std::fprintf(stderr, "unavailable: wrong exception type: %s\n", error.what());
+        }
+        if (!budget.Restore()) return 2;
+        blocker.Close();
+        if (ENetBackend::GetSessionCountForTesting() != 0) {
+            std::fprintf(stderr, "unavailable: failed operation left a registered session\n");
+            return 2;
+        }
+        // Also proves that activeAction_/activeSession_ no longer block the public API.
+        std::unique_ptr<NetworkSession> retry(NetworkSession::Create(NetworkSessionType::SystemLink,
+            std::vector<SignedInGamer*>{&gamer}, 8, 0, {}));
+        if (!ENetBackend::GetBoundPort(retry.get())) return 2;
+        retry->Dispose();
+        if (!typed || !correctMessage || (asynchronous && (!began || callbacks != 1))) {
+            std::fprintf(stderr, "unavailable: expected NetworkNotAvailableException at %s; began=%d callbacks=%d\n",
+                expected, began, callbacks);
+            return 1;
+        }
+        return 0;
+    }
+
     int RunStartHostingPartialFailure() {
         rlimit originalLimit{};
         if (getrlimit(RLIMIT_NOFILE, &originalLimit) != 0) {
@@ -1194,6 +1329,7 @@ int main(int argc, char** argv) {
     std::string findMode = "limit";
     int hostLocals = 1;
     bool searchFirst = false;
+    std::string failureOperation;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -1209,6 +1345,8 @@ int main(int argc, char** argv) {
             findMode = arg.substr(7);
         } else if (arg == "--search-first") {
             searchFirst = true;
+        } else if (arg.rfind("--failure=", 0) == 0) {
+            failureOperation = arg.substr(10);
         } else if (arg.rfind("--host-locals=", 0) == 0) {
             hostLocals = std::stoi(arg.substr(14));
             if (hostLocals != 1 && hostLocals != 2) return 64;
@@ -1269,6 +1407,9 @@ int main(int argc, char** argv) {
         if (role == "start-hosting-partial-failure") {
             return RunStartHostingPartialFailure();
         }
+        if (role == "unavailable-network") {
+            return RunUnavailableNetwork(failureOperation);
+        }
         if (role == "migration-host") {
             return RunMigrationHost(timeoutSeconds, hostLocals);
         }
@@ -1281,8 +1422,8 @@ int main(int argc, char** argv) {
         }
         std::fprintf(stderr,
                       "Usage: %s --role=host|client|discovery-host|discovery-client|playing-host|playing-client|find-join-client|added-gamer-host|added-gamer-client|guest-host|guest-client|"
-                      "start-hosting-partial-failure|migration-host|migration-survivor|voice-host|voice-client "
-                      "[--port=<n>] [--gamertag=<name>] [--find=limit|list] [--timeout=<seconds>] [--host-locals=1|2] [--search-first]\n",
+                      "start-hosting-partial-failure|unavailable-network|migration-host|migration-survivor|voice-host|voice-client "
+                      "[--port=<n>] [--gamertag=<name>] [--find=limit|list] [--timeout=<seconds>] [--host-locals=1|2] [--search-first] [--failure=<operation>]\n",
                       argv[0]);
         return 64;
     } catch (const std::exception& ex) {

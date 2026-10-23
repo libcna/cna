@@ -31,13 +31,39 @@ by this validation step.
 
 ISSUE-026 fix5c60a2028f0688fa8b728109156bd6921dc4dbe2 is committed and validated below.
 Its permanent matrix/inventory disposition is RESOLVED/FIXED_VALIDATED:156 historical IDs,
-123 final dispositions,33 without. Commit026 closure/evidence and publish/verify normal refs.
-Next add an isolated native witness for018's public exception type, using the existing
-independent-process failure harness and private networking. Preserve cleanup/retry controls.
+123 final dispositions,33 without. Publication VERIFIED: CNA origin/next
+49b0884f0c33d101fda1532717a5ba742547b53e; demos origin/next
+f43caae62c97b7cfd3032eb2d6864915e3011050. Sharp Runtime unchanged2f644cf47.
+Seven native process witnesses are added for018: host/client allocation, discovery allocation,
+Find, private replies, EndCreate and EndFind. They exhaust only their own child's descriptors,
+retain exact socket headroom, restore resources and prove public Create recovery. The separate
+bind role reproduces the original61190 conflict when run alone in the private namespace.
+Native witness build passes. Red baseline0PASS/7FAIL at the expected failure points; original
+exclusive-bind role also fails the type check while recovery succeeds. Candidate changes only
+ENet initialization/host/client/discovery acquisition failures to NetworkNotAvailableException,
+and refuses private search socket failure instead of silently using the shared reply port.
+Build passes without diagnostics. Bind reproduction PASS; all558 native network tests PASS
+in48.369s, original551 statuses unchanged. CApi NetSmoke/GeneratedRoutesSmoke/BoundaryDetail
+all PASS0.11s. Original external demo still FAILS on both renderers when61190 is occupied,
+using hash-verified preceding026 consumer binaries and their own RUNPATH. This preserves the
+external red witness before consumer rebuild. Only its stale comment is updated, not the oracle.
+Reports repair-net-errors-*; evidence demos docs/repair-evidence/net/NETWORK_FAILURE_TYPES.md.
+Consumer rebuild PASS without diagnostics;275 artifacts frozen. Original negative-path SOFTWARE
+now SKIPPED/exit77 with the exact existing no-network diagnostic. First driver stopped on77;
+v2 preserves that evidence and explicitly checks expected77/status/message before continuing.
+V2 validation PASS: original forced-unavailable case reports exact SKIPPED/exit77 on both
+renderers; all24 ordinary C++/C network scenarios PASS on SOFTWARE and all24 PASS on GLES.
+Every preceding026 ordinary status/marker/check count/message/assertion multiplicity is unchanged.
+Catalog719 identical, zero problems; all275 hashes match. Freeze released; no active scope.
+Next commit only018 production/tests and this handoff, close matrix/inventory with its SHA,
+then publish/verify. No new full719/aggregate native/visual/sanitizer/platform/service claim.
+Read-only next group:017/077/078 achievement semantics. Genuine XNA collections are read-only
+(all mutators throw NotSupportedException) and missing keys use Dictionary/KeyNotFoundException;
+do not fix077 merely by changing IsReadOnly to false. No next-group source/test change yet.
 XNA XML and NetworkSessionErrorHandler distinguish unavailable network from communication
 failure; do not translate every arbitrary runtime_error or infer one subtype for all ENet errors.
-Existing public Begin/End timing must remain unchanged. No018 source/test change or new runtime
-reproduction yet. No pending permission; preserve foreign content/graphics/audio work and113.
+Existing public Begin/End timing is protected by the new tests. No018 closure yet. No pending
+permission; preserve foreign content/graphics/audio work and113.
 
 #### Completed ISSUE-026 validation
 
