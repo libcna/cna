@@ -145,11 +145,9 @@ namespace Microsoft::Xna::Framework::Storage
 #elif defined(__ANDROID__)
         // Android does not define HOME and its working directory is not writable. Ask the
         // System-layer storage policy for the current package's private files directory, then
-        // retain StorageDevice's normal per-game identity beneath it. Clear the host override
-        // first so changing SetAppNameEXT from one game identity to another cannot nest the new
-        // root below the old game.
-        SharpRuntime::Storage::StoragePaths::SetIsolatedStorageRootOverride({});
-        root = SharpRuntime::Storage::StoragePaths::GetIsolatedStorageRoot().parent_path() / app;
+        // retain StorageDevice's normal per-game identity beneath it. Read the unmodified
+        // platform default without creating it or invoking our own lazy override recursively.
+        root = SharpRuntime::Storage::StoragePaths::GetDefaultIsolatedStorageRootPath().parent_path() / app;
 #else
         const fs::path appComponent = CNA::Internal::PathFromUtf8(app);
         if (const std::optional<std::string> xdg = EnvironmentVariableUtf8("XDG_DATA_HOME"); xdg)
@@ -373,12 +371,25 @@ namespace Microsoft::Xna::Framework::Storage
 
     void StorageDevice::SetAppNameEXT(const std::string& appName)
     {
+        // The host policy is startup configuration. Do not leave a callback into this module
+        // registered when it is unloaded; Sharp Runtime is a dependency and outlives this guard.
+        struct ResolverLifetime
+        {
+            ~ResolverLifetime()
+            {
+                SharpRuntime::Storage::StoragePaths::SetIsolatedStorageRootResolver({});
+            }
+        };
+        static ResolverLifetime lifetime;
+
         appName_               = appName;
         storageRootInitialized_ = false; // force re-evaluation next access
         storageRoot_.clear();
 
-        SharpRuntime::Storage::StoragePaths::SetIsolatedStorageRootOverride(
-            CNA::Internal::PathFromUtf8(EnsureStorageRoot()) / ".cna_isolated_storage");
+        SharpRuntime::Storage::StoragePaths::SetIsolatedStorageRootResolver([]
+        {
+            return CNA::Internal::PathFromUtf8(EnsureStorageRoot()) / ".cna_isolated_storage";
+        });
     }
 
     std::string StorageDevice::GetStorageRootEXT()

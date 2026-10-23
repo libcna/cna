@@ -27,7 +27,52 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: museum B13 tray-capability contract (2026-10-23)
+### Current task: museum B11 deferred storage root (2026-10-23)
+
+Baseline CNA/origin `d7ed7592d8cf50f3d3ff33a391839c2744aeebac`, Sharp Runtime
+`1dc8785b35284b5cf50f3aec361703bfaf090b72`. B13 publication was verified by ls-remote.
+Confirmed eager call in SetAppNameEXT, including the isolated-storage override. Candidate
+registers a lazy Sharp Runtime host policy; both CNA and System.IO-first access retain the
+same per-game root. Android now asks the lower layer for its unmodified default path
+without clearing/re-entering the override. A local lifetime guard unregisters the callback
+before CNA unloads. Startup configuration remains explicitly nonconcurrent.
+
+Dependency commit `31c7c08f1987a284ce1b84bf1c779ce236a6e1c6` adds the lazy policy/default-path
+APIs, native tests and `docs/MuseumLazyStoragePolicy.md`. Published first, push76123 and
+ls-remote verified; Sharp Runtime worktree clean. CNA callers require that dependency.
+Sharp baseline build clean; initial test attempt lacked XNA fixture environment (five skips,
+not accepted). With existing authentic fixtures and private original Yacht SOAP server:
+full18,201/18,201,42executables,0failure/0skip; Storage6/6; IO.IsolatedStorage63/63.
+Module boundary audit44modules/109edges unchanged and PASS. Actual StoragePaths.cpp plus
+its six tests also pass ASan/UBSan/LSan, no suppressions, in existing Sharp build-probe
+(compile99201,6/6). This is not whole-library or CNA instrumentation. No
+Windows/Android/browser runtime pass is claimed for this batch.
+
+CNA baseline34tests:29PASS/5FAIL. All five failures belong to inherited untracked
+StorageContainerPathErrorsTests.cpp; do not stage, remove, suppress or overwrite that work.
+New five lazy-root regressions all FAIL before the production change and all PASS after.
+After39tests:34PASS/5sameFAIL, no previous outcome changed. Initial new test compilation
+had three ignored-nodiscard warnings; corrected explicit void casts, repaired build clean.
+Private display for native tests, one compiler, shared cache,6GiB memory cap/no swap.
+
+Owned CNA files: StorageDevice.cpp, StorageDevice.hpp, StorageDeviceLazyRootTests.cpp and
+this handoff only. Existing demos build/linux-full rebuild20190 completed0, clean.
+The old selector demo pinned eager configuration failure; its before report shows the
+expected new timing disagreement. Update preserves its exact disconnected-exception cause
+and serialization checks at GetStorageRootEXT, adding a no-access setter assertion (12->13).
+Corrected demo build42850 clean. SOFTWARE and OPENGLES3 each6PASS/1unchangedISSUE-152FAIL;
+no knownIssue changed or removed. All six SDL boundary/configure audits pass, budgets
+unchanged; native XML comparison preserves all34 previous outcomes and adds5PASS.
+
+This checkpoint is the commit containing this entry, based on d7ed7592d. Next: publish
+CNA, commit only the matching selector demo and dedicated evidence note in cna-demos,
+then address remaining StorageContainer argument/IO error mappings. Genuine existing
+StoragePathErrorsOracle.cs reference has29/29PASS against the XNA4 GAC assembly; its
+inherited untracked native test remains untouched/uncommitted. Do not mistake this
+subfinding for closure of all museum storage findings or any historical CNA-DEMOS ID.
+Evidence prefix: demos build/linux-full/reports/repair-museum-storage-*.
+
+### Previous checkpoint: museum B13 tray-capability contract (2026-10-23)
 
 B14 native flag repair is published as
 `aff773b3bd99a02154d0ace2543c9c65bd32f7f8` (push75043, remote verified).

@@ -172,6 +172,10 @@ namespace Microsoft::Xna::Framework::Storage
          * @brief Sets the application name used to build the storage root directory.
          *
          * Call once at startup (e.g. in Game constructor) before accessing storage.
+         * This only configures the identity; it does not resolve or create a directory.
+         * CNA and Sharp Runtime isolated storage resolve the same per-application root on
+         * first access. An unavailable root is reported by that access, not by this setter.
+         * Changing the name concurrently with storage access is not supported.
          *
          * @param appName Application name.
          */
