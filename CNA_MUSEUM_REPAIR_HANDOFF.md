@@ -27,7 +27,41 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: publish025 closure, then WaveBank028 (2026-10-23)
+### Current task: WaveBank028 retained-file repair (2026-10-23)
+
+025 publication VERIFIED: CNA origin/next79c56330faa5de25c813188ceee1b3482c530bf0,
+demos origin/nexte842f7a4414d78e6f78f58ce66c3378ecb21dba3 (fresh ls-remote checks).
+028 baseline on this tree: CnaAudioTests775 registered =771PASS/4SKIP,8.638s. The four
+skips are the existing empty/misaligned/zero-buffer/invalid-channels SoundEffect cases;
+do not report775PASS. Current constructor witness again has9FAIL/5PASS; lazy path8 checks
+has2FAIL/6PASS, retained file6 checks has2FAIL/4PASS. Reports repair-wavebank-probes-before-v2;
+the first standalone link missed TitleLocation (not a product result), corrected by including
+the already-built runtime TitleLocation object with the canonical audio static dependency closure.
+Four permanent StreamingWaveBankFileTest regressions fail before code changes (0.003s).
+Candidate retains the std::ifstream used to parse metadata until disposal, protected by the
+existing xactImplMutex_ for reads/disposal, and preserves lazy audio/non-resident wave data.
+An internal parser overload accepts the same open stream; existing filename overload remains.
+This is a scoped lifetime sub-fix, NOT closure of028: constructor cwd/header/exception errors
+still need repair. Offset/packetSize semantics and Windows share-mode runtime coverage are not
+claimed. Do not replace 64-bit file positions with Sharp Stream's current int32 Position/Length
+without handling that limitation; do not add a second independently-opened data handle.
+Validation COMPLETE for the lifetime sub-fix: full audio779=775PASS/4sameSKIP8.669s,
+all775 prior outcomes preserved plus4PASS. Original lazy8/retained6 witnesses now allPASS;
+constructor14 retains the exact9FAIL/5PASS. ASan/UBSan/leaks42PASS0.063s, six instrumented
+translation units (parser, WaveBank, AudioEngine, SoundEffect, SoundEffectInstance, native fixture),
+other dependencies uninstrumented; no findings or changed frozen inputs. Five native C audio
+controlsPASS; full consumer buildPASS. No compiler warnings in these builds. SOFTWARE32 and
+OPENGLES3 32 each30PASS/1same114FAIL/1manual microphoneNOTRUN; exact status/check-count/marker/
+message/assertion multiplicity parity. Fifteen registered XACT/catalog CTestsPASS13.65s.
+Catalog719 unchanged;275 final consumer artifact hashes verified after all gates; freeze released.
+Evidence demos docs/repair-evidence/content/WAVEBANK_RETAINED_FILE.md and repair-wavebank-* logs.
+Owned changes ready to commit: WaveBank.cpp/.hpp, XactTypes.hpp, XactParser.cpp, WaveBankTests.cpp
+and this handoff. Preserve all foreign SoundEffect/Song/content/113 changes. No028 final closure.
+Next: commit/publish this root-cause repair and evidence, then repair constructor semantics with
+the unchanged genuine14-case preflight oracle. A managed FileStream preflight can read the first
+five bytes to check length>4/magic without querying int32 Length or replacing the retained 64-bit
+native data stream. Preserve FileNotFound/ArgumentNull ordering, absolute diagnostic filename,
+case-insensitive CNA file resolution, and distinguish invalid magic from failed native metadata.
 
 085 publication VERIFIED: CNA origin/next b6d5ca097f2cd2982cc797690227659b73c829cf,
 demos origin/next90d98d66e2daecb412ffd77a9d74128559d8ecd9. Source420a4572a is included.

@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <iosfwd>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -153,12 +154,12 @@ namespace CNA::Internal::Audio
          * @brief Header/metadata segments of the file (everything except the wave-data
          * segment). When @ref streaming is false, this holds the entire file, and entry audio
          * is sliced directly out of it. When true, entry audio must instead be read lazily
-         * from @ref sourcePath (see WaveBank's streaming constructor).
+         * from the stream retained by WaveBank's streaming constructor.
          */
         std::vector<uint8_t>     fileData;
         /** @brief True if this bank was parsed via ParseXwbStreamingHeader (see @ref fileData). */
         bool                     streaming = false;
-        /** @brief Source file path; only meaningful when @ref streaming is true. */
+        /** @brief Source file path for diagnostics; not the identity of a retained open stream. */
         std::string              sourcePath;
     };
 
@@ -403,6 +404,18 @@ namespace CNA::Internal::Audio
      * @throws std::runtime_error if @p path cannot be opened or the header is truncated/invalid.
      */
     XwbData ParseXwbStreamingHeader(const std::string& path);
+
+    /**
+     * @brief Parses header/metadata from an already-open, seekable binary stream.
+     *
+     * The caller retains ownership and must keep this same stream for lazy wave-data reads;
+     * resolving its filename again could select a different file.
+     * @param source Open stream positioned by this parser from its beginning.
+     * @param path Source name for diagnostics.
+     * @return Parsed wave bank data with XwbData::streaming set to true.
+     * @throws std::runtime_error if the header is truncated or invalid.
+     */
+    XwbData ParseXwbStreamingHeader(std::istream& source, const std::string& path);
 
     /**
      * @brief Parses a .XSB sound bank file.

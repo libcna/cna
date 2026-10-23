@@ -56,6 +56,33 @@ using Microsoft::Xna::Framework::Audio::WaveBankTestAccess;
 
 namespace
 {
+    class StreamingWaveBankFileTest : public ::testing::Test
+    {
+    protected:
+        std::filesystem::path originalWorking_;
+        std::filesystem::path directory_;
+
+        void SetUp() override
+        {
+            originalWorking_ = std::filesystem::current_path();
+            directory_ = CnaAudioTest::FixtureRoot() /
+                ::testing::UnitTest::GetInstance()->current_test_info()->name();
+            ASSERT_TRUE(std::filesystem::create_directory(directory_));
+        }
+
+        void TearDown() override
+        {
+            std::error_code error;
+            std::filesystem::current_path(originalWorking_, error);
+            EXPECT_FALSE(error);
+            std::filesystem::remove_all(directory_, error);
+            EXPECT_FALSE(error);
+        }
+    };
+}
+
+namespace
+{
     void AppendU8(std::vector<uint8_t>& buf, uint8_t v) { buf.push_back(v); }
 
     void AppendU16(std::vector<uint8_t>& buf, uint16_t v)
@@ -972,6 +999,81 @@ TEST(WaveBankTest, NonStreamingGetSoundEffectRejectsEntryLengthExceedingRealFile
 
     EXPECT_EQ(WaveBankTestAccess::GetSoundEffect(nonStreamingWb, 0), nullptr);
 }
+
+// ISSUE-028: construction selects a file, not a path to resolve again for every wave.
+// No catch-and-skip: the same PCM fixture must decode before and after the path change.
+TEST_F(StreamingWaveBankFileTest, RelativeFileSurvivesWorkingDirectoryChange)
+{
+    auto& engine = SharedEngine();
+    const auto original = directory_ / "original";
+    const auto other = directory_ / "other";
+    ASSERT_TRUE(std::filesystem::create_directory(original));
+    ASSERT_TRUE(std::filesystem::create_directory(other));
+    std::filesystem::copy_file(MultiEntryXwbFixturePath(), original / "waves.xwb");
+    std::filesystem::current_path(original);
+    WaveBank bank(&engine, "waves.xwb", 0, 16);
+    ASSERT_TRUE(bank.getIsPreparedProperty());
+    const auto resident = WaveBankTestAccess::ResidentFileBytes(bank);
+    const SoundEffect* first = WaveBankTestAccess::GetSoundEffect(bank, 0);
+    ASSERT_NE(first, nullptr);
+    const auto firstDuration = first->getDurationProperty();
+    std::filesystem::current_path(other);
+    const SoundEffect* second = WaveBankTestAccess::GetSoundEffect(bank, 1);
+    ASSERT_NE(second, nullptr);
+    EXPECT_GT(second->getDurationProperty(), firstDuration);
+    EXPECT_EQ(WaveBankTestAccess::GetSoundEffect(bank, 0), first);
+    EXPECT_EQ(WaveBankTestAccess::ResidentFileBytes(bank), resident);
+    EXPECT_LT(resident, std::filesystem::file_size(original / "waves.xwb"));
+}
+
+TEST_F(StreamingWaveBankFileTest, RelativeFileIgnoresDecoyInNewWorkingDirectory)
+{
+    auto& engine = SharedEngine();
+    const auto original = directory_ / "original";
+    const auto other = directory_ / "other";
+    ASSERT_TRUE(std::filesystem::create_directory(original));
+    ASSERT_TRUE(std::filesystem::create_directory(other));
+    std::filesystem::copy_file(MultiEntryXwbFixturePath(), original / "waves.xwb");
+    std::ofstream(other / "waves.xwb") << "not the selected wave bank";
+    std::filesystem::current_path(original);
+    WaveBank bank(&engine, "waves.xwb", 0, 16);
+    ASSERT_TRUE(bank.getIsPreparedProperty());
+    std::filesystem::current_path(other);
+    ASSERT_NE(WaveBankTestAccess::GetSoundEffect(bank, 1), nullptr);
+}
+
+#if !defined(_WIN32)
+// POSIX permits renaming/unlinking open files; Windows sharing may refuse the mutation.
+TEST_F(StreamingWaveBankFileTest, AbsoluteFileSurvivesRenameAndReplacement)
+{
+    const auto original = directory_ / "waves.xwb";
+    std::filesystem::copy_file(MultiEntryXwbFixturePath(), original);
+    WaveBank bank(&SharedEngine(), original.string(), 0, 16);
+    ASSERT_TRUE(bank.getIsPreparedProperty());
+    const SoundEffect* first = WaveBankTestAccess::GetSoundEffect(bank, 0);
+    ASSERT_NE(first, nullptr);
+    const auto firstDuration = first->getDurationProperty();
+    std::filesystem::rename(original, directory_ / "retained.xwb");
+    std::ofstream(original) << "not the selected wave bank";
+    const SoundEffect* second = WaveBankTestAccess::GetSoundEffect(bank, 1);
+    ASSERT_NE(second, nullptr);
+    EXPECT_GT(second->getDurationProperty(), firstDuration);
+}
+
+TEST_F(StreamingWaveBankFileTest, AbsoluteFileSurvivesUnlinkUntilDisposal)
+{
+    const auto original = directory_ / "waves.xwb";
+    std::filesystem::copy_file(MultiEntryXwbFixturePath(), original);
+    WaveBank bank(&SharedEngine(), original.string(), 0, 16);
+    ASSERT_TRUE(bank.getIsPreparedProperty());
+    ASSERT_TRUE(std::filesystem::remove(original));
+    ASSERT_NE(WaveBankTestAccess::GetSoundEffect(bank, 1), nullptr);
+    bank.Dispose();
+    EXPECT_FALSE(bank.getIsPreparedProperty());
+    EXPECT_EQ(WaveBankTestAccess::GetSoundEffect(bank, 0), nullptr);
+    EXPECT_NO_THROW(bank.Dispose());
+}
+#endif
 
 // ===================== IsDisposed / IsPrepared =====================
 

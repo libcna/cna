@@ -40,6 +40,9 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Constructs a WaveBank for streaming from a .XWB file.
          *
+         * The opened file is retained until disposal; later wave reads do not resolve
+         * its filename again. Only header/metadata bytes are loaded up front.
+         *
          * @param audioEngine                The audio engine that owns this bank.
          * @param streamingWaveBankFilename  Path to the streaming .XWB WaveBank file.
          * @param offset                     Byte offset into the file where the wave data begins.

@@ -818,6 +818,14 @@ namespace CNA::Internal::Audio
         if (!f.is_open())
             throw std::runtime_error("XWB: cannot open file for streaming");
 
+        return ParseXwbStreamingHeader(f, path);
+    }
+
+    XwbData ParseXwbStreamingHeader(std::istream& f, const std::string& path)
+    {
+        f.clear();
+        f.seekg(0);
+
         // Large enough to safely cover magic + version + optional headerVersion + the fixed
         // 5-entry segment table (at most 4+4+4+40 = 52 bytes) without knowing the version yet.
         std::vector<uint8_t> preamble(64);
@@ -833,7 +841,7 @@ namespace CNA::Internal::Audio
 
         // Segments 0-3 (bank data, entry metadata, seek tables, entry names) must be resident
         // for ParseXwb to build entries/names; segment 4 (wave data) is by far the largest part
-        // of a real .xwb and is read lazily, per entry, from `path` in WaveBank::GetSoundEffect.
+        // of a real .xwb and is read lazily from the retained stream in WaveBank::GetSoundEffect.
         uint64_t prefixLen = 0;
         for (int i = 0; i < 4; ++i)
             prefixLen = std::max<uint64_t>(prefixLen, static_cast<uint64_t>(segOffset[i]) + segLength[i]);

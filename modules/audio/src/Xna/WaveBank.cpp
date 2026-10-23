@@ -27,6 +27,9 @@ namespace Microsoft::Xna::Framework::Audio
     struct WaveBank::XactWaveBankImpl
     {
         CNA::Internal::Audio::XwbData data;
+        // Keep the exact file used for metadata, even if its name or the cwd changes.
+        // Access and destruction use xactImplMutex_ along with the cache below.
+        std::unique_ptr<std::ifstream> streamingSource;
 
         // Per-entry SoundEffect cache (optional: created on first request). Concurrency (both
         // against other GetSoundEffect() calls and against Dispose()) is guarded by the owning
@@ -35,8 +38,10 @@ namespace Microsoft::Xna::Framework::Audio
         // pimpl's own lifetime could never do (see WaveBank.hpp's xactImplMutex_ comment).
         std::vector<std::optional<SoundEffect>> cache;
 
-        explicit XactWaveBankImpl(CNA::Internal::Audio::XwbData d)
+        explicit XactWaveBankImpl(CNA::Internal::Audio::XwbData d,
+                                 std::unique_ptr<std::ifstream> source = {})
             : data(std::move(d))
+            , streamingSource(std::move(source))
             , cache(data.entries.size())
         {}
     };
@@ -149,11 +154,15 @@ namespace Microsoft::Xna::Framework::Audio
         try
         {
             const std::string resolvedFilename = CNA::Internal::ResolveExistingXnaPath(filename);
-            auto xwb = CNA::Internal::Audio::ParseXwbStreamingHeader(resolvedFilename);
+            auto source = std::make_unique<std::ifstream>(
+                CNA::Internal::PathFromUtf8(resolvedFilename), std::ios::binary);
+            if (!source->is_open())
+                throw std::runtime_error("XWB: cannot open file for streaming");
+            auto xwb = CNA::Internal::Audio::ParseXwbStreamingHeader(*source, resolvedFilename);
             CNA::Internal::Audio::LogAudio(CNA::LogLevel::DEBUG,
                 "[WaveBank] Loaded XWB (streaming): ", filename, " bank=\"", xwb.bankName,
                 "\" entries=", xwb.entries.size());
-            xactImpl_ = std::make_unique<XactWaveBankImpl>(std::move(xwb));
+            xactImpl_ = std::make_unique<XactWaveBankImpl>(std::move(xwb), std::move(source));
             engine_->RegisterWaveBank(this);
         }
         catch (const std::exception& ex)
@@ -240,17 +249,8 @@ namespace Microsoft::Xna::Framework::Audio
         {
             // Lazy per-entry disk read: xactImpl_->data.fileData only holds the header/metadata
             // segments (see ParseXwbStreamingHeader), not wave audio.
-            const std::optional<std::filesystem::path> nativeSource =
-                CNA::Internal::TryPathFromUtf8(xactImpl_->data.sourcePath);
-            std::ifstream sf;
-            if (nativeSource) { sf.open(*nativeSource, std::ios::binary); }
-            if (!sf.is_open())
-            {
-                CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
-                    "[WaveBank] Cannot reopen streaming source for wave ", waveIndex, ": ",
-                    xactImpl_->data.sourcePath);
-                return nullptr;
-            }
+            auto& sf = *xactImpl_->streamingSource;
+            sf.clear();
 
             // IN-9: dataOffset/dataLength come straight from the parsed .xwb header and are
             // never range-checked for the streaming path (unlike the non-streaming path below,
