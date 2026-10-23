@@ -80,6 +80,8 @@
 #include <optional>
 #include <fstream>
 #include <unordered_map>
+#include <unordered_set>
+#include <functional>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -1901,6 +1903,12 @@ namespace Microsoft::Xna::Framework::Content
                 boneRawPtrs[static_cast<std::size_t>(parent < 0 ? 0 : parent)]->AddChild(boneRawPtrs[i]);
             }
             std::vector<Graphics::SkinningData*> groupSkinningData(groups.size(), nullptr);
+            // CNA-DEMOS-ISSUE-094/095: each extractor below sees one carrier, so the Model's
+            // animation losses are reported once every carrier is known -- the joint palettes or
+            // scene-node clips here, the morph weight tracks while the meshes are built.
+            AnimationReportEXT modelAnimationReport;
+            std::function<bool(const cgltf_animation_channel&)> retainedByClips;
+            std::unordered_set<const cgltf_animation_channel*> retainedWeightChannels;
             if (hasSkin)
             {
                 for (std::size_t gi = 0; gi < groups.size(); ++gi)
@@ -1933,12 +1941,11 @@ namespace Microsoft::Xna::Framework::Content
                     AnimationReportEXT animReport;
                     const std::vector<ClipOut> clips =
                         ExtractClips(data, skeleton, 1.0f, warnings, &animReport);
-                    AppendGltfAnimationReportEXT(importReport, animReport);
+                    AccumulateGltfAnimationReportEXT(modelAnimationReport, animReport);
                     // These were gathered and then dropped on the floor before GLTF-315: a
                     // channel a skinned import could not place said nothing at all on this path,
                     // which is the same silence D6 was made of.
                     for (const std::string& warning : warnings) { CNA::Logger::Warn(warning); }
-                    LogAnimationReport(path, animReport);
                     for (const ClipOut& clip : clips)
                     {
                         Graphics::AnimationClipEXT outClip;
@@ -1987,6 +1994,16 @@ namespace Microsoft::Xna::Framework::Content
                 {
                     if (candidate.has_value()) { retainedSkeletons.push_back(&*candidate); }
                 }
+                // A transform channel is kept when any palette maps its target joint.
+                retainedByClips = [retainedSkeletons](const cgltf_animation_channel& channel)
+                {
+                    return std::any_of(
+                        retainedSkeletons.begin(), retainedSkeletons.end(),
+                        [&channel](const SkeletonResult* skeleton)
+                        {
+                            return skeleton->nodeToNewIndex.contains(channel.target_node);
+                        });
+                };
                 for (const ClipOut& clip : sceneNodeClips)
                 {
                     const std::size_t droppedTrackCount = CountGltfRigidAnimationDropsEXT(
@@ -2011,9 +2028,13 @@ namespace Microsoft::Xna::Framework::Content
                 AnimationReportEXT animReport;
                 const std::vector<ClipOut> rigidClips =
                     ExtractSceneNodeClips(data, sceneGraph, 1.0f, clipWarnings, &animReport);
-                AppendGltfAnimationReportEXT(importReport, animReport);
+                AccumulateGltfAnimationReportEXT(modelAnimationReport, animReport);
                 for (const std::string& warning : clipWarnings) { CNA::Logger::Warn(warning); }
-                LogAnimationReport(path, animReport);
+                // A transform channel is kept when its target is a scene node.
+                retainedByClips = [&sceneGraph](const cgltf_animation_channel& channel)
+                {
+                    return sceneGraph.indexOfNode.contains(channel.target_node);
+                };
                 if (!rigidClips.empty())
                 {
                     auto animations = std::make_unique<Graphics::ModelAnimationsEXT>();
@@ -2754,8 +2775,11 @@ namespace Microsoft::Xna::Framework::Content
                                 "rest-pose tangent basis, so normal mapping lights it with the "
                                 "undeformed one (GLTF-279/GLTF-291).");
                         }
-                        if (auto weightTrack = ExtractMorphWeightTrack(data, mesh, targetCount))
+                        const cgltf_animation_channel* weightChannel = nullptr;
+                        if (auto weightTrack =
+                                ExtractMorphWeightTrack(data, mesh, targetCount, &weightChannel))
                         {
+                            retainedWeightChannels.insert(weightChannel);
                             morph->WeightTrack.Keys.reserve(weightTrack->keys.size());
                             for (const MorphWeightKeyframeOut& k : weightTrack->keys)
                             {
@@ -2855,9 +2879,11 @@ namespace Microsoft::Xna::Framework::Content
                                 }
                                 morph->Weights =
                                     GetMeshDefaultWeights(mesh, targetCount, instance.node);
-                                if (auto weightTrack =
-                                        ExtractMorphWeightTrack(data, mesh, targetCount))
+                                const cgltf_animation_channel* weightChannel = nullptr;
+                                if (auto weightTrack = ExtractMorphWeightTrack(
+                                        data, mesh, targetCount, &weightChannel))
                                 {
+                                    retainedWeightChannels.insert(weightChannel);
                                     for (const MorphWeightKeyframeOut& k : weightTrack->keys)
                                     {
                                         Graphics::MorphWeightKeyframeEXT key;
@@ -3083,6 +3109,28 @@ namespace Microsoft::Xna::Framework::Content
                 }
                 model.setCamerasEXTProperty(std::move(cameras));
             }
+
+            // Every carrier is known now: transform channels live in the clips above, weights
+            // channels in the morph tracks the meshes kept.
+            ReconcileGltfAnimationLossesEXT(
+                data,
+                [&](const cgltf_animation_channel& channel)
+                {
+                    switch (channel.target_path)
+                    {
+                        case cgltf_animation_path_type_translation:
+                        case cgltf_animation_path_type_rotation:
+                        case cgltf_animation_path_type_scale:
+                            return retainedByClips(channel);
+                        case cgltf_animation_path_type_weights:
+                            return retainedWeightChannels.contains(&channel);
+                        default:
+                            return false;
+                    }
+                },
+                modelAnimationReport);
+            AppendGltfAnimationReportEXT(importReport, modelAnimationReport);
+            LogAnimationReport(path, modelAnimationReport);
             model.setGltfImportReportEXTProperty(std::move(importReport));
             return model;
         }

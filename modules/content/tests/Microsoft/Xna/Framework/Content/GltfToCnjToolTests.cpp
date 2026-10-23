@@ -3373,7 +3373,10 @@ TEST(GltfToCnjToolTest, StructuredImportDiagnosticsSurviveBothLoadPaths)
 
     struct Case { const char* fixture; const char* code; std::size_t minimumCount; };
     const Case cases[] = {
-        {"anim-weights-path", "animation-paths-unsupported", 1u},
+        // A target outside the default scene: no carrier keeps it. (anim-weights-path used to
+        // stand here, but its weights channel is kept by the part's morph track, so reporting it
+        // lost was CNA-DEMOS-ISSUE-094's false loss.)
+        {"anim-out-of-scene-target", "animation-targets-unavailable", 1u},
         {"lights-over-budget", "lights-dropped", 2u},
         {"mat-unimplemented-extensions", "ignored-extension", 3u},
     };

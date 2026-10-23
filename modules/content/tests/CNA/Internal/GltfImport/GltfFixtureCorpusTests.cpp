@@ -1800,7 +1800,12 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     // all equal, and the L5 packer deliberately refuses to derive generated tangents for a
     // primitive that authors UVs, so the corpus could not state its expected bytes; what the test
     // asserts is only that the fallback is a unit vector perpendicular to the normal.
-    constexpr int kCeiling = 282;
+    //
+    // 282 -> 283 is CNA-DEMOS-ISSUE-095: GltfAnimationReportReconciliationTests' two-skin document,
+    // a **loader-machinery probe** of how the Model's import report reconciles channels across
+    // joint palettes. Its geometry and motion are trivial; what it states is report accounting,
+    // which no corpus asset's expected file describes.
+    constexpr int kCeiling = 283;
 
     int found = 0;
     std::map<std::string, int> perFile;

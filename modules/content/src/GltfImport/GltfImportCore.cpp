@@ -1558,6 +1558,55 @@ namespace CNA::Internal::GltfImport
             "value at that instant.", NonNegativeSizeEXT(source.duplicateInputTimeCount));
     }
 
+    void AccumulateGltfAnimationReportEXT(AnimationReportEXT& destination,
+                                          const AnimationReportEXT& source)
+    {
+        destination.animationCount = std::max(destination.animationCount, source.animationCount);
+        destination.clipCount += source.clipCount;
+        destination.emptyAnimationCount += source.emptyAnimationCount;
+        destination.channelCount = std::max(destination.channelCount, source.channelCount);
+        destination.skippedOutOfSceneChannels += source.skippedOutOfSceneChannels;
+        destination.skippedUnsupportedPathChannels += source.skippedUnsupportedPathChannels;
+        destination.trackCount += source.trackCount;
+        destination.resampledTrackCount += source.resampledTrackCount;
+        destination.duplicateInputTimeCount += source.duplicateInputTimeCount;
+        destination.longestClipDuration =
+            std::max(destination.longestClipDuration, source.longestClipDuration);
+    }
+
+    void ReconcileGltfAnimationLossesEXT(
+        const cgltf_data* data,
+        const std::function<bool(const cgltf_animation_channel&)>& retained,
+        AnimationReportEXT& report)
+    {
+        report.emptyAnimationCount = 0;
+        report.skippedOutOfSceneChannels = 0;
+        report.skippedUnsupportedPathChannels = 0;
+        if (data == nullptr) { return; }
+        for (cgltf_size a = 0; a < data->animations_count; ++a)
+        {
+            const cgltf_animation& animation = data->animations[a];
+            bool retainsKeys = false;
+            for (cgltf_size c = 0; c < animation.channels_count; ++c)
+            {
+                const cgltf_animation_channel& channel = animation.channels[c];
+                if (retained(channel))
+                {
+                    retainsKeys = retainsKeys || (channel.sampler != nullptr &&
+                                                  channel.sampler->input != nullptr &&
+                                                  channel.sampler->input->count > 0);
+                    continue;
+                }
+                const bool transform = channel.target_path == cgltf_animation_path_type_translation
+                    || channel.target_path == cgltf_animation_path_type_rotation
+                    || channel.target_path == cgltf_animation_path_type_scale;
+                ++(transform ? report.skippedOutOfSceneChannels
+                             : report.skippedUnsupportedPathChannels);
+            }
+            if (!retainsKeys) { ++report.emptyAnimationCount; }
+        }
+    }
+
     void AppendGltfRigidAnimationDropEXT(GltfImportReportEXT& destination,
                                          const std::string& clipName,
                                          std::size_t droppedTrackCount)
@@ -5374,8 +5423,9 @@ namespace CNA::Internal::GltfImport
         return weights;
     }
 
-    std::optional<MorphWeightTrackOut> ExtractMorphWeightTrack(const cgltf_data* data, const cgltf_mesh* mesh,
-                                                                std::size_t targetCount)
+    std::optional<MorphWeightTrackOut> ExtractMorphWeightTrack(
+        const cgltf_data* data, const cgltf_mesh* mesh, std::size_t targetCount,
+        const cgltf_animation_channel** retainedChannel)
     {
         if (targetCount == 0) { return std::nullopt; }
 
@@ -5454,6 +5504,7 @@ namespace CNA::Internal::GltfImport
 
                     track.keys.push_back(std::move(key));
                 }
+                if (retainedChannel != nullptr) { *retainedChannel = &ch; }
                 return track;
             }
         }

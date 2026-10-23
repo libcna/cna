@@ -52,6 +52,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 
 #include "GltfToCnjEntry.hpp"
 #include <unordered_map>
@@ -445,6 +446,9 @@ namespace
     {
         const bool hasSkin = group.skin != nullptr;
         GltfImportReportEXT importReport;
+        // CNA-DEMOS-ISSUE-094: the weights channels a written morph track keeps, so the animation
+        // report below does not call them lost.
+        std::unordered_set<const cgltf_animation_channel*> retainedWeightChannels;
         AppendGltfValidationWarningsEXT(importReport, validationWarnings);
         AppendGltfNodeGraphReportEXT(
             importReport, BuildNodeGraphReportEXT(sceneGraph, std::vector<MeshGroup>{group}));
@@ -544,7 +548,10 @@ namespace
                     // This converter emits one entry per placement, so using the mesh alone made
                     // two instances with distinct default poses round-trip as the same pose.
                     morphWeights = GetMeshDefaultWeights(mesh, targetCount, instance.node);
-                    morphWeightTrack = ExtractMorphWeightTrack(data, mesh, targetCount);
+                    const cgltf_animation_channel* weightChannel = nullptr;
+                    morphWeightTrack =
+                        ExtractMorphWeightTrack(data, mesh, targetCount, &weightChannel);
+                    if (morphWeightTrack) { retainedWeightChannels.insert(weightChannel); }
                     AppendGltfMorphReportEXT(
                         importReport, BuildMorphReportEXT(meshOut, morphWeights),
                         partName, meshOut.usePbr);
@@ -901,8 +908,13 @@ namespace
                             variantMesh.morphPositionDeltas.size();
                         variantEntry.morphWeights =
                             GetMeshDefaultWeights(mesh, targetCount, instance.node);
+                        const cgltf_animation_channel* weightChannel = nullptr;
                         variantEntry.morphWeightTrack =
-                            ExtractMorphWeightTrack(data, mesh, targetCount);
+                            ExtractMorphWeightTrack(data, mesh, targetCount, &weightChannel);
+                        if (variantEntry.morphWeightTrack)
+                        {
+                            retainedWeightChannels.insert(weightChannel);
+                        }
                         // plans/plan_gltf.md GLTF-461, per variant: a variant chooses its own layout, so
                         // whether its normals are generated is its own MeshOut's answer.
                         variantEntry.morphFlatNormals = variantMesh.morphedFlatNormalsEXT;
@@ -982,6 +994,7 @@ namespace
             return cnjFile;
         };
 
+        AnimationReportEXT modelAnimationReport;
         if (hasSkin)
         {
             AnimationReportEXT animationReport;
@@ -990,7 +1003,7 @@ namespace
             {
                 clipEntries.push_back({clip.name, writeClip(clip)});
             }
-            AppendGltfAnimationReportEXT(importReport, animationReport);
+            AccumulateGltfAnimationReportEXT(modelAnimationReport, animationReport);
         }
 
         // plans/plan_gltf.md GLTF-293: rigid (non-joint) node animation. Before this, a channel targeting
@@ -1011,7 +1024,28 @@ namespace
             ExtractSceneNodeClips(
                 data, sceneGraph, unitScale, warnings, &sceneAnimationReport);
         if (hasSkin) { sceneAnimationReport.clipCount = 0; }
-        AppendGltfAnimationReportEXT(importReport, sceneAnimationReport);
+        AccumulateGltfAnimationReportEXT(modelAnimationReport, sceneAnimationReport);
+        // A channel is lost only when nothing written keeps it: the skin's palette (or, without a
+        // skin, the scene-node clips) for a transform path, a morph track for weights.
+        ReconcileGltfAnimationLossesEXT(
+            data,
+            [&](const cgltf_animation_channel& channel)
+            {
+                switch (channel.target_path)
+                {
+                    case cgltf_animation_path_type_translation:
+                    case cgltf_animation_path_type_rotation:
+                    case cgltf_animation_path_type_scale:
+                        return hasSkin ? skeleton.nodeToNewIndex.contains(channel.target_node)
+                                       : sceneGraph.indexOfNode.contains(channel.target_node);
+                    case cgltf_animation_path_type_weights:
+                        return retainedWeightChannels.contains(&channel);
+                    default:
+                        return false;
+                }
+            },
+            modelAnimationReport);
+        AppendGltfAnimationReportEXT(importReport, modelAnimationReport);
         for (const ClipOut& clip : sceneNodeClips)
         {
             // Model::Tag holds one object, and a skinned model already uses it for SkinningData.

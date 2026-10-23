@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -1390,6 +1391,28 @@ namespace CNA::Internal::GltfImport
         Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
         const AnimationReportEXT& source);
 
+    /** @brief Adds one carrier's clip, track and sampling counts to a Model-level report. */
+    void AccumulateGltfAnimationReportEXT(AnimationReportEXT& destination,
+                                          const AnimationReportEXT& source);
+
+    /**
+     * @brief Replaces a Model-level report's loss counts with the ones the returned Model has.
+     *
+     * Each extractor sees one carrier: a joint palette skips another palette's joints, and the
+     * scene-node path skips a `weights` channel a morph track keeps. A channel is lost only when
+     * no carrier retained it (CNA-DEMOS-ISSUE-094/095), so the empty-animation, unavailable-target
+     * and unsupported-path counts are recomputed from the source channels; an animation is empty
+     * when it retains no channel with keys.
+     *
+     * @param data The parsed glTF file.
+     * @param retained Whether the returned Model carries a channel.
+     * @param report The summed per-carrier report; its loss counts are replaced.
+     */
+    void ReconcileGltfAnimationLossesEXT(
+        const cgltf_data* data,
+        const std::function<bool(const cgltf_animation_channel&)>& retained,
+        AnimationReportEXT& report);
+
     /**
      * @brief Reports scene-node animation tracks that a skinned Model cannot retain in its Tag.
      * @param destination The public report to append to.
@@ -2194,8 +2217,10 @@ namespace CNA::Internal::GltfImport
      * @param data The parsed glTF file.
      * @param mesh The glTF mesh to find a weight animation channel for.
      * @param targetCount The primitive's own morph target count.
+     * @param retainedChannel Receives the channel the track was read from, when not null.
      * @return The extracted track, or std::nullopt if the mesh has no weight animation channel.
      */
-    std::optional<MorphWeightTrackOut> ExtractMorphWeightTrack(const cgltf_data* data, const cgltf_mesh* mesh,
-                                                                std::size_t targetCount);
+    std::optional<MorphWeightTrackOut> ExtractMorphWeightTrack(
+        const cgltf_data* data, const cgltf_mesh* mesh, std::size_t targetCount,
+        const cgltf_animation_channel** retainedChannel = nullptr);
 }
