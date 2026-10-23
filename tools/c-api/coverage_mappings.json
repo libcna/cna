@@ -6075,17 +6075,15 @@
     },
     {
       "id": "content-manager-path-helpers",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::(?:BuildAssetPath|NormalizeKey|RegisterBuiltinLoaders)$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::RegisterBuiltinLoaders$",
       "kinds": [
         "method"
       ],
-      "mapping": "`cna_content_manager_get_asset_path_size`/`_copy_asset_path`, `cna_content_manager_get_normalized_key_size`/`_copy_normalized_key` and `cna_content_manager_register_builtin_loaders`. These three members are `public` only as a side effect of the `DEF_PROP` property macro leaving `public:` in effect; they are mapped because they are genuinely callable and deterministic, not because the C API needs them",
+      "mapping": "`cna_content_manager_register_builtin_loaders` maps the public loader-registration extension. The asset-path and normalized-key C helpers retain their existing contracts through the internal `ContentManagerAccess` adapter; `BuildAssetPath` and `NormalizeKey` are private C++ implementation details and are not public declarations in this inventory",
       "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036B1",
       "approved_symbols": [
-        "CPP-3584ABDADCBC",
-        "CPP-D566C7C011F6",
         "CPP-DFCD9210ACAD"
       ]
     },
@@ -6323,21 +6321,6 @@
       "task": "CBIND-036B2",
       "approved_symbols": [
         "CPP-18CC816F236C"
-      ]
-    },
-    {
-      "id": "content-reader-detail-traits",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::Detail::IsDisposableSharedPtr(?:<.*>)?$",
-      "kinds": [
-        "struct"
-      ],
-      "mapping": "No C mapping: a compile-time trait the C++ reader templates dispatch on. It declares no runtime operation and has no value representation",
-      "tests": "Doxygen declaration inventory; no callable native operation exists",
-      "status": "not-applicable",
-      "task": "CBIND-036B2",
-      "approved_symbols": [
-        "CPP-2BFF02F2062A",
-        "CPP-4EDC13684D0F"
       ]
     },
     {
@@ -13770,9 +13753,9 @@
       "tests": "`HapticsSmoke.c` covers the three open routes and the refusals",
       "status": "not-applicable",
       "task": "CBIND-047",
-      "signature_regex": "^\\(\\)(=default)?$",
+      "signature_regex": "^\\(\\) noexcept$",
       "approved_symbols": [
-        "CPP-BAA022EF223A"
+        "CPP-53709B9BFBB0"
       ]
     },
     {
@@ -14602,20 +14585,6 @@
       "approved_symbols": [
         "CPP-34743F275105",
         "CPP-77634E9D81C6"
-      ]
-    },
-    {
-      "id": "content-manager-resolve-existing-asset-path",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::ResolveExistingAssetPath$",
-      "kinds": [
-        "method"
-      ],
-      "mapping": "No C mapping: a private implementation helper. `ContentManager` declares `private:` and then uses a property macro, after which Doxygen reports the following members as public; this one is the loader's own search for which extension of an asset exists on disk. What a caller can ask -- the path an asset name builds to -- is `cna_content_manager_get_asset_path_size`/`_copy_asset_path`.",
-      "tests": "Doxygen declaration inventory; the operation has no caller outside the loader",
-      "status": "not-applicable",
-      "task": "CBIND-083",
-      "approved_symbols": [
-        "CPP-47B2645A163C"
       ]
     },
     {
@@ -16594,6 +16563,21 @@
       "approved_symbols": [
         "CPP-1A03DC2F402C",
         "CPP-AC90364C4B52"
+      ]
+    },
+    {
+      "id": "effect-stock-parameter-construction",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Effect::(?:AddStockParameterInternal|AddStockMatrixArrayInternal)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No direct C mapping: these protected construction helpers build reflected parameter metadata and shared matrix-array element views for stock-effect subclasses. C cannot derive from Effect or construct its parameter collections. The observable result remains accessible through the stock-effect create routes, cna_effect_get_parameters and the cna_effect_parameter_* routes; SkinnedEffect bone matrices also have their existing get/set routes. These helpers do not introduce a separate public operation.",
+      "tests": "Doxygen declaration inventory and exact approval pins; StockParameterContractTests.cpp covers reflected getter contracts and shared bone element views, while EffectParameterSmoke.c and SkinnedEffectSmoke.c cover the public C parameter and bone routes",
+      "status": "not-applicable",
+      "task": "CBIND-080",
+      "approved_symbols": [
+        "CPP-1C3FE0AD8884",
+        "CPP-CF1791960EF7"
       ]
     },
     {

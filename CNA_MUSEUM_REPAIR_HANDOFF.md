@@ -27,15 +27,47 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: ISSUE-019 closure publication; coverage audit follow-up (2026-10-23)
+### Current task: finish C API audit checkpoint, then ISSUE-150 (2026-10-23)
+
+ISSUE-019 publication is VERIFIED: origin/next CNA70a7a4ef9f01faf071cbda6d3868de75ba5d56ba,
+demosfe283d03b2054cbc8ef766358d0a1644609c78e8. Normal fast-forward pushes only; all owned019
+source/evidence committed, no foreign changes included. Its runtime fix is f9747ea4964c4aa65cda1d5fa437ec40ab89911a.
+The C API inventory repair is validated on the isolated published source snapshot under demos
+build-probe/cna-capi-audit-9c068f632 (with the current Game.hpp brief), and separately on the shared
+worktree. No runtime or ABI change. Provenance: 974c1ac08 changed the empty HapticDevice signature
+to `() noexcept`; b0b0207e6 made three ContentManager helpers private while preserving the C routes
+through ContentManagerAccess; 3d254dfa7 removed IsDisposableSharedPtr; d650554a8 added two protected
+stock-parameter construction helpers whose observable results have existing C parameter/bone routes.
+The mapping now pins the exact constructor, removes three private helper pins and the two deleted
+trait pins, and explicitly dispositions just the two protected construction methods. No broad pin
+approval, public operation suppression or completed-task reopening was used.
+
+Clean source: 467 headers / 8104 symbols, 7009 implemented / 15 partial / 626 planned / 454 N/A.
+Shared worktree: 8113 symbols, 7009 implemented / 15 partial / 635 planned / 454 N/A; the extra
+declarations belong to inherited work, not this commit. The clean/shared mapping differs ONLY in
+the inherited sound-effect-move-operations pins. Stage the clean source's four generated/mapping
+files via the reviewed patch; keep the combined shared documents in the worktree. The independently
+confirmed obsolete trait-rule deletion overlaps an inherited hunk but needs no uncommitted source.
+Original inherited documents are preserved under demos build-probe/capi-inherited-docs-before-regeneration.
+
+Validation: existing scope-model suite 33/33; all five registered shared CTest gates pass in16.34s
+(CoverageMatrix, CoverageScopeModel, Limitations, DocExportCounts, ReleaseGate). Clean release gate
+and coverage checks pass while correctly retaining NOT READY and the626 planned bindings. Initial
+scope-fixture run32PASS/oneERROR lacked the archived cmake/Tests/ModuleProbes.cmake; adding that
+published input made33/33, with both logs retained. Reports are demos build/linux-full/reports/
+repair-capi-*. No C++ rebuild, graphics run or sanitizer run is claimed for this mapping/doc batch.
+Last complete runtime/renderer checkpoint remains ISSUE-019 below; six external residuals unchanged.
+Next: commit/publish this audit only, then resolve ISSUE-150's independently reproduced five-symbol
+facade link failure. No150 source change yet; preserve all content ownership and113 work.
+
+### Completed ISSUE-019 checkpoint
 
 CNA runtime repair `f9747ea4964c4aa65cda1d5fa437ec40ab89911a` is committed. Demos closure
 `fe283d03b2054cbc8ef766358d0a1644609c78e8` is committed; Sharp remains
 `2f644cf4761123275426247b4d582e3392b4a181`. Status-only CNA commit follows this runtime revision.
 ISSUE-019 is RESOLVED/FIXED_VALIDATED, matrix156 IDs/118 final dispositions/38 without.
 Original demo assertions remain intact. Only its knownIssue marker was removed.
-Next publish the CNA status update and demos closure by ordinary fast-forward pushes, verify
-remote refs, then continue the separate C API coverage inventory audit described below.
+Both next refs are published and verified above; continue the separate coverage audit.
 No merges, force pushes, tags, or edits to museum/cna-engine/cna-extended.
 
 Validation is complete. Native runtime244PASS/4 unchanged SKIP of248; all seven new reset
