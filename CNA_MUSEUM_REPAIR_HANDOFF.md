@@ -27,7 +27,69 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: museum B11 directory deletion errors (2026-10-23)
+### Current task: CNA-DEMOS-ISSUE-152 FileShare lower-layer baseline (2026-10-23)
+
+Published repair checkpoints, all remote SHAs verified:
+- CNA lazy root `fffa552ad4b4567c772f2f293302b8b103a5b16f`;
+- CNA empty arguments/patterns `17c66a9d3541511881ff8fc9f8f9aaf82b5f326a`;
+- CNA deletion errors/file preservation `ac6be8f03ea3b0f37d73c8ac7c7ad1cfbc505cd1`;
+- Sharp Runtime lazy policy `31c7c08f1987a284ce1b84bf1c779ce236a6e1c6`;
+- demos lazy-contract evidence `0fbe936047059b5bac75eefc6e8c1a3630503aed`.
+No consumer/museum source or pin was changed. Museum owns external revalidation/closure.
+Native storage46/46 and the renderer/C API evidence below are the last finished checkpoint;
+they are NOT a full CNA suite pass or campaign completion. Historical156 IDs /40 pending
+dispositions are unchanged by these museum-only batches.
+
+ISSUE-152 is now active engineering, not awaiting policy approval. Owner chose native .NET
+behavior per platform on2026-10-20: Windows144-pair matrix119refused/25allowed, Linux
+.NET8 matrix63refused/81allowed; exclusive None must refuse conflicts on both. Permanent
+reference and detailed differences: demos docs/repair-evidence/storage/README.md §Measured
+FileShare platform split, FileSharePlatformOracle.cs, FileShareEdgesOracle.cs,
+StorageContractsOracle.cs. Do not use the local .NET11 preview source as unqualified XNA
+evidence; compare it with those actual Framework4/.NET8 measurements.
+
+New owned **uncommitted** Sharp file:
+`modules/io/tests/System/IO/FileStreamSharingTests.cpp`. No Sharp production edit yet.
+Its three pre-fix regressions are intentionally red: missing four-argument constructor,
+and destructive write-only Open/OpenOrCreate. Native IO build44674 clean; full IO run52801:
+**730run /727PASS /3FAIL**, all failures are the new tests. Prior full Sharp gate at31c7c08f
+was18,201/18,201,42executables,0skips. Do not commit the red test file alone under Sharp's
+zero-failure commit policy, and do not remove/weaken it. Evidence prefix:
+demos build/linux-full/reports/repair-fileshare-current-before*.
+
+Current source has std::fstream as its handle and exposes no share-taking constructor;
+CNA OpenFile discards fileShare. GCC14.2/C++23 has no fstream native-handle feature macro.
+The write-only truncation comes from std::ios::out without in/app; adding in would demand
+read permission and is not a correct write-only repair. Locking a second handle is not a
+correct Windows fix because it conflicts with the stream's own handle. A localized native
+open/owned-handle backend in FileStream is therefore under consideration, not implemented.
+Keep buffering, short-read/EOF/seek behavior, constructor exception cleanup and write errors
+correct; avoid unbuffered per-byte syscalls in content loading. Lock BEFORE truncation.
+Use the same owned handle for live length/resize, not reopening the path. Preserve ownership
+traits explicitly if replacing fstream, whose noncopyability currently provides them.
+
+Fresh layout measurement (existing build-probe,1job,Werror) at31c7c08f:
+Linux x86_64 FileStream sizeof576/align8/copy0/move0; Stream sizeof8/align8. Historical
+Win64 compile-only size536/align8 is in demos README; it is not a new Windows runtime pass.
+Any layout change must satisfy Sharp SA-3: before/after pins, migration/full-consumer-rebuild
+note, no unsupported signature/noexcept change, full green gate. Retain current signatures;
+the new overload is additive. No native backend layout has been chosen or changed yet.
+
+Exact next task: design the smallest single-handle native FileStream backend, expand tests
+for the measured144-pair policy, aliases/cross-process exclusion, pre-truncation refusal,
+failed-constructor fd cleanup and EOF controls, then implement and run the full Sharp gate.
+Also wire File.Create and CNA CreateFile/OpenFile defaults: FileStream's short constructors
+default Read sharing, but File.Open/CNA short OpenFile and File.Create are exclusive; the
+2arg Append path chooses Write. Preserve that distinction. Review Emscripten/Windows paths,
+cross-build where practical, document unavailable runtime coverage. Publish dependency first,
+rebuild consumers after any layout change, then remove ISSUE-152 only on real demo PASS.
+
+No compiler/test/helper remains active at this checkpoint. Single compiler, shared cache,
+6GiB cap, existing build dirs only. The disposable layout executable was removed after
+transcribing its measurement. Other inherited CNA/demos work remains untouched; Sharp's
+only dirty path is the owned new regression file above. No goal was created or changed.
+
+### Previous checkpoint: museum B11 directory deletion errors (2026-10-23)
 
 Previous argument/pattern repair is published as
 `17c66a9d3541511881ff8fc9f8f9aaf82b5f326a` (push82218, remote verified).
