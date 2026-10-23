@@ -55,9 +55,9 @@ OPENGLES3 32 each30PASS/1same114FAIL/1manual microphoneNOTRUN; exact status/chec
 message/assertion multiplicity parity. Fifteen registered XACT/catalog CTestsPASS13.65s.
 Catalog719 unchanged;275 final consumer artifact hashes verified after all gates; freeze released.
 Evidence demos docs/repair-evidence/content/WAVEBANK_RETAINED_FILE.md and repair-wavebank-* logs.
-Owned changes ready to commit: WaveBank.cpp/.hpp, XactTypes.hpp, XactParser.cpp, WaveBankTests.cpp
-and this handoff. Preserve all foreign SoundEffect/Song/content/113 changes. No028 final closure.
-Next: commit/publish this root-cause repair and evidence, then repair constructor semantics with
+Source repair committed:3c67874ba54492d0d10258f0742824c1bb5bcec9. Only028 matrix/handoff and
+demos028 inventory/evidence remain for this checkpoint; preserve all foreign edits. No028 closure.
+Next: publish this root-cause repair and evidence, then repair constructor semantics with
 the unchanged genuine14-case preflight oracle. A managed FileStream preflight can read the first
 five bytes to check length>4/magic without querying int32 Length or replacing the retained 64-bit
 native data stream. Preserve FileNotFound/ArgumentNull ordering, absolute diagnostic filename,
