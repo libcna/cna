@@ -27,7 +27,46 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: CNA-DEMOS-ISSUE-152 native handle repair and consumer validation (2026-10-23)
+### Current checkpoint: ISSUE-152 validated on Linux; ISSUE-010 deletion next (2026-10-23)
+
+Published CNA next `169470ee7550471844d01a0789dd5e25770544b6`, Sharp next
+`f51bf9acf8374088a425024b40ef1c7b697c5ba5`; demos baseline HEAD
+`0fbe936047059b5bac75eefc6e8c1a3630503aed`. FileShare status/marker evidence is published as
+demos `0086bc424e50a023c79698a3107c2e1d7dd0aa41`, separately from the next repair.
+Permanent152 disposition is FIXED_PLATFORM_VALIDATION_PENDING:
+Linux validated, Windows product runtime pending; strict cross-compilation is not a runtime pass.
+Sharp's two commits c6984ecef/f51bf9acf and CNA21b4cd64c/169470ee7 are already published.
+
+Final152 regression: both complete719-ID sweeps finished, SOFTWARE643PASS/25FAIL/48SKIP/3NOTRUN,
+OPENGLES3685PASS/24FAIL/7SKIP/3NOTRUN; no added failing assertions or PASS-to-FAIL against the
+preceding repair-sprite-binding-full checkpoint. Storage alone changes only152, retaining8checks.
+All6 visuals pixel-exact;16 tool tests pass;275 binary hashes unchanged after all runs.
+Serial CTest735 registered/732enabled completes695.99s:678PASS,48SKIP,6FAIL,3disabled.
+Global gate remains RED: unmarked c_api.content.content_manager and
+c_api.graphics.resource_lifecycle assertions; stale knownIssue unexpected passes for
+content.content_manager.read_asset_ownership/several_managers/unload_disposes and
+graphics.occlusion_query.visible_pixels. Preserve these, including the inherited uncommitted
+ownership/occlusion changes. Compared with Complete1128, resource_lifecycle is still an
+independent historical PASS-to-FAIL regression. No full CNA corpus pass is claimed here.
+Full details: demos docs/repair-evidence/storage/FILE_SHARE.md and repair-fileshare-* reports.
+Campaign census after152:156 historical IDs,117 final dispositions/39 without, plus DC-R1/DC-R2.
+
+Next task already started without modifying frozen demo binaries: genuine XNA
+StorageOperationsOracle.cs passes12/12 filesystem exception/preservation controls. New lower-layer
+FileDeletionTests.cpp baseline1PASS/4FAIL exposes wrong directory exception, ignored missing
+parent, NUL-prefix deletion and directory-symlink refusal. Candidate File.cpp uses file-only
+unlink/DeleteFileW, preserving directories and translating native errors. Initial full IO748/749:
+only the old Delete_OnDirectory_ThrowsIOException expectation disagreed. Actual .NET8 oracle7/7
+and genuine XNA confirm UnauthorizedAccessException; that test is corrected, not suppressed.
+Sharp full gate completed (session63637):18223/18223 across42 executables,zero failures/skips;
+warning-free incremental build. No010 production commit or closure yet.
+Owned next-batch files: Sharp File.cpp, IOStreamTests.cpp, new FileDeletionTests.cpp; demos
+new StorageOperationsOracle.cs and FileDeletionOracle.cs. Preserve all other dirt. After full
+Sharp validation, publish the lower layer, add failing CNA DeleteFile preservation regressions,
+forward through File::Delete, validate native/storage/C API on both renderers, and continue
+CreateDirectory/enumeration errors. ISSUE-010 as a whole also includes content behavior.
+
+### Previous checkpoint: CNA-DEMOS-ISSUE-152 native handle repair and consumer validation (2026-10-23)
 
 The CNA facade/native tests are published as
 `21b4cd64cd122353431dafb5793a19ac568956fd` (normal push83014, ls-remote verified).
