@@ -222,8 +222,10 @@ namespace Microsoft::Xna::Framework::Content
         std::vector<std::uint8_t> cnbBytes;
         if (TryReadAssetBytes(cnbCandidate, cnbBytes))
         {
-            return std::move(*LoadCnbAsset<std::shared_ptr<Audio::SoundEffect>>(
-                std::move(cnbBytes), cnbCandidate, assetName));
+            auto result = LoadCnbAsset<std::shared_ptr<Audio::SoundEffect>>(
+                std::move(cnbBytes), cnbCandidate, assetName);
+            RecordLoadedAsset(result);
+            return std::move(*result);
         }
         if (assetName.size() > 4 && assetName.compare(assetName.size() - 4, 4, ".cnb") == 0)
         {
@@ -231,8 +233,10 @@ namespace Microsoft::Xna::Framework::Content
             std::vector<std::uint8_t> literalBytes;
             if (TryReadAssetBytes(literalCnb, literalBytes))
             {
-                return std::move(*LoadCnbAsset<std::shared_ptr<Audio::SoundEffect>>(
-                    std::move(literalBytes), literalCnb, assetName));
+                auto result = LoadCnbAsset<std::shared_ptr<Audio::SoundEffect>>(
+                    std::move(literalBytes), literalCnb, assetName);
+                RecordLoadedAsset(result);
+                return std::move(*result);
             }
         }
 
@@ -252,6 +256,8 @@ namespace Microsoft::Xna::Framework::Content
         LooseFileContentTypeReader<Audio::SoundEffect>& reader = **readerPtr;
         const std::string resolvedPath = ResolveAssetPath(assetName, reader);
 
-        return reader.Read(resolvedPath, *this);
+        auto result = reader.Read(resolvedPath, *this);
+        RecordLoadedAsset(result);
+        return result;
     }
 }

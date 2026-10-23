@@ -64,8 +64,17 @@ The preserved native result can still be Color when the native content policy de
 decompresses a source format for a backend that cannot use its stored representation. That is a
 native reader/backend decision, not a C-layer conversion.
 
-`cna_content_manager_unload` clears the manager's native asset cache. Destroy performs
-the same native disposal and invalidates only the manager handle.
+`cna_content_manager_unload` disposes recorded native assets and clears the cache.
+Destroy performs the same native disposal and releases the manager handle. Loaded
+Effects and a loaded Model's effects, buffers and content-owned textures follow
+XNA/C++ ownership: retained C handles remain inspectable and require cleanup, but
+applying a disposed Effect or drawing its Model returns `CNA_RESULT_INVALID_STATE`.
+Independently transferred Texture2D, TextureCube, SpriteFont and SoundEffect handles
+retain the lifetime described below.
+
+This corrects the former blanket promise that every loaded C resource remained
+usable. The owner approved XNA/C++ Effect/Model disposal semantics on 2026-10-23
+while reviewing CNA-DEMOS-ISSUE-011. No C ABI signature or handle layout changes.
 
 ## Failures and unavailable types
 

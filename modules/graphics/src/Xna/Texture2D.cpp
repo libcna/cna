@@ -513,12 +513,14 @@ namespace Microsoft::Xna::Framework::Graphics
         , cpuPixels_(other.cpuPixels_)
         , extraMipLevels_(other.extraMipLevels_)
         , gpuOnlyContent_(other.gpuOnlyContent_)
+        , contentOwnership_(this, other.contentOwnership_)
     {
         // GraphicsResource copies are normally unregistered because state-object aliases opt into
         // a single shared identity. Texture copies instead own independent C++ wrappers around a
         // shared native resource. Every live wrapper must be disposed before the renderer dies;
         // ContentManager and SpriteFont routinely let such a copy outlive the original wrapper.
-        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+        isDisposed_ = contentOwnership_.IsDisposed();
+        if (!isDisposed_ && graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
             graphicsDevice_->AddResourceReference(this);
     }
 
@@ -535,7 +537,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 incomingDevice != nullptr && !other.graphicsDeviceLifetime_.expired();
             const bool keepRegistration =
                 previousDeviceAlive && !isDisposed_ && incomingDeviceAlive &&
-                previousDevice == incomingDevice;
+                previousDevice == incomingDevice && !other.contentOwnership_.IsDisposed();
 
             const auto contextLease =
                 previousDeviceAlive ? LeaseRendererContext(previousDevice) : nullptr;
@@ -552,8 +554,10 @@ namespace Microsoft::Xna::Framework::Graphics
             cpuPixels_ = other.cpuPixels_;
             extraMipLevels_ = other.extraMipLevels_;
             gpuOnlyContent_ = other.gpuOnlyContent_;
+            contentOwnership_ = other.contentOwnership_;
+            isDisposed_ = contentOwnership_.IsDisposed();
 
-            if (incomingDeviceAlive && !keepRegistration)
+            if (!isDisposed_ && incomingDeviceAlive && !keepRegistration)
                 incomingDevice->AddResourceReference(this);
         }
         return *this;
@@ -568,6 +572,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , cpuPixels_(std::move(other.cpuPixels_))
         , extraMipLevels_(std::move(other.extraMipLevels_))
         , gpuOnlyContent_(other.gpuOnlyContent_)
+        , contentOwnership_(this, std::move(other.contentOwnership_))
     {
         if (spriteIdentity_)
             *spriteIdentity_ = this;
@@ -600,6 +605,7 @@ namespace Microsoft::Xna::Framework::Graphics
             cpuPixels_ = std::move(other.cpuPixels_);
             extraMipLevels_ = std::move(other.extraMipLevels_);
             gpuOnlyContent_ = other.gpuOnlyContent_;
+            contentOwnership_ = std::move(other.contentOwnership_);
             if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
                 graphicsDevice_->TransferMovedTexture(&other, this);
             other.width = 0;
@@ -611,12 +617,28 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::Dispose(bool disposing)
     {
+        if (disposing && contentOwnership_.DisposeRepresentative()) return;
         const auto contextLease = TryLeaseRendererContext();
         // DX12-0023: a RenderTarget2D destroyed while bound is detached first, while its backend exists.
         if (!isDisposed_ && graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
             graphicsDevice_->DetachDestroyedRenderTarget(this);
         renderer_.reset();
+        if (disposing) contentOwnership_.MarkDisposed();
         Texture::Dispose(disposing);
+    }
+
+    std::shared_ptr<System::IDisposable> Texture2D::GetContentDisposalRecord() const
+    {
+        if (auto record = contentOwnership_.Record()) return record;
+        EnableSharedContentMetadata();
+        auto representative = std::make_shared<Texture2D>(*this);
+        return contentOwnership_.Capture(representative, representative->contentOwnership_);
+    }
+
+    void Texture2D::DetachContentOwnership() const
+    {
+        DetachSharedContentMetadata();
+        contentOwnership_.Detach();
     }
 
     // -----------------------------------------------------------------------

@@ -138,8 +138,10 @@ namespace Microsoft::Xna::Framework::Graphics
         , size_(other.size_)
         , renderer_(other.renderer_)
         , cpuPixels_(other.cpuPixels_)
+        , contentOwnership_(this, other.contentOwnership_)
     {
-        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+        isDisposed_ = contentOwnership_.IsDisposed();
+        if (!isDisposed_ && graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
             graphicsDevice_->AddResourceReference(this);
     }
 
@@ -155,7 +157,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 incomingDevice != nullptr && !other.graphicsDeviceLifetime_.expired();
             const bool keepRegistration =
                 previousDeviceAlive && !isDisposed_ && incomingDeviceAlive &&
-                previousDevice == incomingDevice;
+                previousDevice == incomingDevice && !other.contentOwnership_.IsDisposed();
 
             const auto contextLease =
                 previousDeviceAlive ? LeaseRendererContext(previousDevice) : nullptr;
@@ -169,8 +171,10 @@ namespace Microsoft::Xna::Framework::Graphics
             size_ = other.size_;
             renderer_ = other.renderer_;
             cpuPixels_ = other.cpuPixels_;
+            contentOwnership_ = other.contentOwnership_;
+            isDisposed_ = contentOwnership_.IsDisposed();
 
-            if (incomingDeviceAlive && !keepRegistration)
+            if (!isDisposed_ && incomingDeviceAlive && !keepRegistration)
                 incomingDevice->AddResourceReference(this);
         }
         return *this;
@@ -181,6 +185,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , size_(other.size_)
         , renderer_(std::move(other.renderer_))
         , cpuPixels_(std::move(other.cpuPixels_))
+        , contentOwnership_(this, std::move(other.contentOwnership_))
     {
         if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
             graphicsDevice_->TransferMovedTexture(&other, this);
@@ -202,6 +207,7 @@ namespace Microsoft::Xna::Framework::Graphics
             size_ = other.size_;
             renderer_ = std::move(other.renderer_);
             cpuPixels_ = std::move(other.cpuPixels_);
+            contentOwnership_ = std::move(other.contentOwnership_);
             if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
                 graphicsDevice_->TransferMovedTexture(&other, this);
             other.size_ = 0;
@@ -281,12 +287,28 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void TextureCube::Dispose(bool disposing)
     {
+        if (disposing && contentOwnership_.DisposeRepresentative()) return;
         const auto contextLease = TryLeaseRendererContext();
         // DX12-0023: a RenderTargetCube destroyed while bound is detached first, while its backend exists.
         if (!isDisposed_ && graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
             graphicsDevice_->DetachDestroyedRenderTarget(this);
         renderer_.reset();
+        if (disposing) contentOwnership_.MarkDisposed();
         Texture::Dispose(disposing);
+    }
+
+    std::shared_ptr<System::IDisposable> TextureCube::GetContentDisposalRecord() const
+    {
+        if (auto record = contentOwnership_.Record()) return record;
+        EnableSharedContentMetadata();
+        auto representative = std::make_shared<TextureCube>(*this);
+        return contentOwnership_.Capture(representative, representative->contentOwnership_);
+    }
+
+    void TextureCube::DetachContentOwnership() const
+    {
+        DetachSharedContentMetadata();
+        contentOwnership_.Detach();
     }
 
     int TextureCube::getSizeProperty() const { return size_; }

@@ -54,7 +54,43 @@ namespace Microsoft::Xna::Framework::Media
 
     Song::~Song()
     {
+        contentOwnership_.Detach();
         Dispose();
+    }
+
+    Song::Song(const Song& other)
+        : System::Object(other), album_(other.album_), artist_(other.artist_), genre_(other.genre_),
+          trackNumber_(other.trackNumber_), rating_(other.rating_), isRated_(other.isRated_),
+          name_(other.name_), duration_(other.duration_), playCount_(other.playCount_),
+          isDisposed_(other.isDisposed_), handle_(other.handle_),
+          contentOwnership_(this, other.contentOwnership_) { }
+
+    Song& Song::operator=(const Song& other)
+    {
+        if (this != &other)
+        {
+            System::Object::operator=(other);
+            album_ = other.album_;
+            artist_ = other.artist_;
+            genre_ = other.genre_;
+            trackNumber_ = other.trackNumber_;
+            rating_ = other.rating_;
+            isRated_ = other.isRated_;
+            name_ = other.name_;
+            duration_ = other.duration_;
+            playCount_ = other.playCount_;
+            isDisposed_ = other.isDisposed_;
+            handle_ = other.handle_;
+            contentOwnership_ = other.contentOwnership_;
+        }
+        return *this;
+    }
+
+    std::shared_ptr<System::IDisposable> Song::GetContentDisposalRecord() const
+    {
+        if (auto record = contentOwnership_.Record()) return record;
+        auto representative = std::make_shared<Song>(*this);
+        return contentOwnership_.Capture(representative, representative->contentOwnership_);
     }
 
     const std::string& Song::getNameProperty() const
@@ -124,7 +160,9 @@ namespace Microsoft::Xna::Framework::Media
 
     void Song::Dispose()
     {
+        if (contentOwnership_.DisposeRepresentative()) return;
         isDisposed_ = true;
+        contentOwnership_.MarkDisposed();
     }
 
     bool Song::Equals(const Song* song) const

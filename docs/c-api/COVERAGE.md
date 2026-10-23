@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **466 headers**, **8093 symbols**, **7009 implemented**, **15 partial**, **626 planned**, **443 not applicable**. Explicitly excluded headers: **403**.
+Snapshot: **466 headers**, **8103 symbols**, **7018 implemented**, **15 partial**, **620 planned**, **450 not applicable**. Explicitly excluded headers: **405**.
 
 ## Out of runtime C API scope
 
@@ -31,11 +31,11 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/renderers/**` | 56 | renderer implementations are hidden behind `IGraphicsRenderer` by project policy; a C caller selects a renderer by identity (`CNA_GraphicsRendererType`) and never names an implementation |
 | `modules/audio` internal/detail paths | 11 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/content` internal/detail paths | 48 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/core` internal/detail paths | 10 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/core` internal/detail paths | 11 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices` internal/detail paths | 13 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/devices-ext` internal/detail paths | 1 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/gamer-services` internal/detail paths | 16 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/graphics` internal/detail paths | 38 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/graphics` internal/detail paths | 39 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/graphics-ext` internal/detail paths | 2 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/input` internal/detail paths | 5 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/media` internal/detail paths | 12 | implementation detail: a path segment is `Internal` or `Detail` |
@@ -44,7 +44,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `51ab0fe326f28c676eec87abe5d9f47fb8b38039e3dff20ee8f5db15d4137104`.
+Full inventory SHA-256: `22ac6a7c8578a25d8fcbb5390a9a769c0d696c0d8df759995b98bab43ec86e34`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -63,17 +63,17 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 
 | Module | Headers | Symbols | Implemented | Partial | Planned | N/A |
 |---|---:|---:|---:|---:|---:|---:|
-| `audio` | 22 | 321 | 217 | 0 | 10 | 94 |
-| `content` | 41 | 797 | 561 | 10 | 203 | 23 |
+| `audio` | 22 | 322 | 217 | 0 | 10 | 95 |
+| `content` | 41 | 798 | 561 | 10 | 203 | 24 |
 | `core` | 15 | 128 | 122 | 0 | 0 | 6 |
 | `devices` | 20 | 217 | 187 | 0 | 2 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
-| `gamer-services` | 52 | 690 | 618 | 0 | 27 | 45 |
-| `graphics` | 141 | 2915 | 2583 | 0 | 253 | 79 |
+| `gamer-services` | 52 | 691 | 618 | 0 | 28 | 45 |
+| `graphics` | 141 | 2919 | 2592 | 0 | 246 | 81 |
 | `graphics-ext` | 11 | 106 | 68 | 0 | 36 | 2 |
 | `input` | 51 | 897 | 836 | 0 | 32 | 29 |
 | `math` | 24 | 954 | 927 | 0 | 26 | 1 |
-| `media` | 24 | 339 | 285 | 0 | 2 | 52 |
+| `media` | 24 | 342 | 285 | 0 | 2 | 55 |
 | `net` | 23 | 290 | 258 | 1 | 14 | 17 |
 | `runtime` | 22 | 311 | 226 | 4 | 19 | 62 |
 | `storage` | 3 | 44 | 42 | 0 | 2 | 0 |

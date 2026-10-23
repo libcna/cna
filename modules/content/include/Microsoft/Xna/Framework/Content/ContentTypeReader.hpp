@@ -13,6 +13,7 @@
 #include "System/IDisposable.hpp"
 #include "System/Type.hpp"
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/ContentOwnership.hpp"
 #include "CNA/Internal/Xnb/SerializedReferenceType.hpp"
 
 namespace Microsoft::Xna::Framework::Content
@@ -23,14 +24,17 @@ namespace Microsoft::Xna::Framework::Content
     namespace detail
     {
         template <typename T>
-        std::shared_ptr<System::IDisposable> DisposableReference(const T&)
+        std::shared_ptr<System::IDisposable> DisposableReference(const T& value)
         {
-            return {};
+            return CNA::Internal::ContentOwnershipAccess::Record(value);
         }
 
         template <typename T>
         std::shared_ptr<System::IDisposable> DisposableReference(const std::shared_ptr<T>& value)
         {
+            if (value)
+                if (auto record = CNA::Internal::ContentOwnershipAccess::Record(*value))
+                    return record;
             if constexpr (std::is_convertible_v<T*, System::IDisposable*>)
                 return std::static_pointer_cast<System::IDisposable>(value);
             else if constexpr (std::is_polymorphic_v<T> && !std::is_const_v<T>)

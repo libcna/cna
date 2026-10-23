@@ -63,7 +63,48 @@ static int validate_generic_routes(const CNA_EffectHandle effect)
     return ok;
 }
 
-static int validate_loaded_model(const CNA_Handle graphics_device)
+static int validate_model_disposal(
+    CNA_Handle* manager, const CNA_ModelMeshPartHandle part,
+    const CNA_ModelMeshHandle mesh, const CNA_EffectHandle effect, const int destroy)
+{
+    CNA_VertexBufferHandle vertices = CNA_INVALID_HANDLE;
+    CNA_IndexBufferHandle indices = CNA_INVALID_HANDLE;
+    CNA_Bool has_vertices = CNA_FALSE, has_indices = CNA_FALSE;
+    if (!CNA_TEST_STAGE(cna_model_mesh_part_get_vertex_buffer(part, &has_vertices, &vertices) ==
+            CNA_RESULT_SUCCESS && has_vertices == CNA_TRUE) ||
+        !CNA_TEST_STAGE(cna_model_mesh_part_get_index_buffer(part, &has_indices, &indices) ==
+            CNA_RESULT_SUCCESS && has_indices == CNA_TRUE) ||
+        !CNA_TEST_STAGE(cna_effect_apply(effect) == CNA_RESULT_SUCCESS)) {
+        return 0;
+    }
+    const CNA_Handle resources[] = {effect, vertices, indices};
+    for (unsigned int i = 0; i < 3U; ++i) {
+        CNA_Bool disposed = CNA_TRUE;
+        if (!CNA_TEST_STAGE(cna_graphics_resource_get_is_disposed(resources[i], &disposed) ==
+                CNA_RESULT_SUCCESS && disposed == CNA_FALSE)) return 0;
+    }
+    if (destroy) {
+        if (!CNA_TEST_STAGE(cna_content_manager_destroy(*manager) == CNA_RESULT_SUCCESS)) return 0;
+        *manager = CNA_INVALID_HANDLE;
+    } else if (!CNA_TEST_STAGE(cna_content_manager_unload(*manager) == CNA_RESULT_SUCCESS)) {
+        return 0;
+    }
+    for (unsigned int i = 0; i < 3U; ++i) {
+        CNA_Bool disposed = CNA_FALSE;
+        if (!CNA_TEST_STAGE(cna_graphics_resource_get_is_disposed(resources[i], &disposed) ==
+                CNA_RESULT_SUCCESS && disposed == CNA_TRUE)) return 0;
+    }
+    char exception_type[128] = {0};
+    uint64_t copied = 0U;
+    return CNA_TEST_STAGE(cna_effect_apply(effect) == CNA_RESULT_INVALID_STATE) &&
+        CNA_TEST_STAGE(cna_error_copy_last_exception_type_ext(
+            exception_type, sizeof(exception_type) - 1U, &copied) == CNA_RESULT_SUCCESS) &&
+        CNA_TEST_STAGE(copied < sizeof(exception_type) &&
+            strcmp(exception_type, "System.ObjectDisposedException") == 0) &&
+        CNA_TEST_STAGE(cna_model_mesh_draw(mesh) == CNA_RESULT_INVALID_STATE);
+}
+
+static int validate_loaded_model(const CNA_Handle graphics_device, const int disposal)
 {
     const CNA_ContentManagerCreateInfo create_info = {
         sizeof(CNA_ContentManagerCreateInfo), UINT32_C(1), view(ContentRoot), 0U
@@ -90,6 +131,10 @@ static int validate_loaded_model(const CNA_Handle graphics_device)
             CNA_RESULT_SUCCESS) &&
         CNA_TEST_STAGE(has_effect == CNA_TRUE) &&
         validate_generic_routes(effect);
+    /* Separate fresh models test direct Destroy as well as Unload, so the latter
+       cannot hide a missing disposal in the former. Keep the original route audit. */
+    const int lifetime_ok = !ok || disposal == 0 ? ok :
+        validate_model_disposal(&manager, part, mesh, effect, disposal == 2);
     const int torn_down =
         (part == CNA_INVALID_HANDLE ||
             CNA_TEST_STAGE(cna_model_mesh_part_destroy(part) == CNA_RESULT_SUCCESS)) &&
@@ -101,7 +146,7 @@ static int validate_loaded_model(const CNA_Handle graphics_device)
             CNA_TEST_STAGE(cna_model_mesh_collection_destroy(meshes) == CNA_RESULT_SUCCESS)) &&
         (manager == CNA_INVALID_HANDLE ||
             CNA_TEST_STAGE(cna_content_manager_destroy(manager) == CNA_RESULT_SUCCESS));
-    return ok && torn_down;
+    return ok && lifetime_ok && torn_down;
 }
 
 static CNA_Result on_load(
@@ -121,7 +166,10 @@ static CNA_Result on_load(
         return CNA_RESULT_INVALID_STATE;
     }
     /* A device without 3D has no models to load; that is its answer, not this route's. */
-    state->validated = three_d == CNA_TRUE ? validate_loaded_model(device) : 2;
+    state->validated = three_d == CNA_TRUE
+        ? validate_loaded_model(device, 0) && validate_loaded_model(device, 1) &&
+          validate_loaded_model(device, 2)
+        : 2;
     return CNA_RESULT_SUCCESS;
 }
 

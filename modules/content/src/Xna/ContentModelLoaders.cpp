@@ -87,6 +87,18 @@
 
 namespace Microsoft::Xna::Framework::Content
 {
+    namespace detail
+    {
+        struct ModelResourceRecorder
+        {
+            template<class T>
+            static void Record(ContentManager& manager, const T& resource)
+            {
+                manager.RecordLoadedAsset(resource);
+            }
+        };
+    }
+
     namespace
     {
         using namespace detail;
@@ -730,8 +742,10 @@ namespace Microsoft::Xna::Framework::Content
         // (the .cnj JSON path) or ReadGltfModel() (CNB-70/71, Phase 13D's runtime glTF path) --
         // hoisted out of ModelTypeReader::Read() so both readers share one definition.
         struct ModelResources {
-            std::vector<std::unique_ptr<Graphics::VertexBuffer>>  vbs;
-            std::vector<std::unique_ptr<Graphics::IndexBuffer>>   ibs;
+            // The model and manager retain the same objects. Completed child reads
+            // remain disposable even if a later part of the model fails to load.
+            std::vector<std::shared_ptr<Graphics::VertexBuffer>>  vbs;
+            std::vector<std::shared_ptr<Graphics::IndexBuffer>>   ibs;
             std::vector<std::unique_ptr<Graphics::ModelBone>>     boneOwners;
             std::vector<std::unique_ptr<Graphics::ModelMesh>>     meshOwners;
             std::vector<std::unique_ptr<Graphics::ModelMeshPart>> partOwners;
@@ -822,11 +836,13 @@ namespace Microsoft::Xna::Framework::Content
          * are CNAEXT and define their own white identity.
          *
          * @param device The device the model's resources live on.
+         * @param cm     Owns disposal of the generated texture.
          * @param effect The part's effect; left alone unless it is a SkinnedEffect with no texture.
          * @param res    Owns the texture.
          */
         void ApplyGltfWhiteBaseColorTextureEXT(
-            Graphics::GraphicsDevice& device, Graphics::Effect& effect, ModelResources& res)
+            Graphics::GraphicsDevice& device, ContentManager& cm,
+            Graphics::Effect& effect, ModelResources& res)
         {
             auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(&effect);
             if (skinnedFx == nullptr || skinnedFx->getTextureProperty() != nullptr)
@@ -835,6 +851,7 @@ namespace Microsoft::Xna::Framework::Content
             {
                 auto white = std::make_unique<Graphics::Texture2D>(Graphics::Texture2D::CreateFromPixels(
                     device, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255}));
+                detail::ModelResourceRecorder::Record(cm, *white);
                 res.gltfWhiteBaseColorTexture = white.get();
                 res.textureOwners.push_back(std::move(white));
             }
@@ -894,8 +911,8 @@ namespace Microsoft::Xna::Framework::Content
         // match VertexBuffer's own compact skinned layout, so SetDataRaw() copies them straight
         // through with no C++ struct reinterpretation at all, avoiding the vtable-inflation risk
         // by construction rather than by careful offset arithmetic.
-        std::unique_ptr<Graphics::VertexBuffer> BuildVertexBufferFromRawBytes(
-            Graphics::GraphicsDevice& device, int stride, int numVertices,
+        std::shared_ptr<Graphics::VertexBuffer> BuildVertexBufferFromRawBytes(
+            Graphics::GraphicsDevice& device, ContentManager& cm, int stride, int numVertices,
             const std::vector<std::uint8_t>& vertBytes)
         {
             // plans/plan_gltf.md GLTF-159. A stride is enough to choose one of the importer's packing
@@ -949,7 +966,7 @@ namespace Microsoft::Xna::Framework::Content
             // implicitly deleted (its `Color Color` member has no zero-arg constructor) -- build
             // each vector via reserve()+emplace_back() rather than a sized constructor, so none
             // of the 4 struct-backed branches below ever needs default-construction.
-            auto vb = std::make_unique<Graphics::VertexBuffer>(
+            auto vb = std::make_shared<Graphics::VertexBuffer>(
                 device, declaration, numVertices, Graphics::BufferUsage::None);
             if (stride == 16) {
                 std::vector<Graphics::VertexPositionColor> verts;
@@ -1026,6 +1043,7 @@ namespace Microsoft::Xna::Framework::Content
                     "vertex buffer would have been left empty." +
                     " Refusing rather than returning an empty vertex buffer (GLTF-157).");
             }
+            detail::ModelResourceRecorder::Record(cm, vb);
             return vb;
         }
 
@@ -1073,13 +1091,14 @@ namespace Microsoft::Xna::Framework::Content
         struct BuiltModelPartEXT
         {
             std::unique_ptr<Graphics::ModelMeshPart> part;
-            std::unique_ptr<Graphics::VertexBuffer> vertexBuffer;
-            std::unique_ptr<Graphics::IndexBuffer> indexBuffer;
+            std::shared_ptr<Graphics::VertexBuffer> vertexBuffer;
+            std::shared_ptr<Graphics::IndexBuffer> indexBuffer;
             int vertexCount = 0;
             int indexCount = 0;
         };
 
         BuiltModelPartEXT BuildModelMeshPartGeometryEXT(Graphics::GraphicsDevice& device,
+                                                        ContentManager& cm,
                                                         const ModelPartGeometryEXT& geometry)
         {
             BuiltModelPartEXT built;
@@ -1092,10 +1111,10 @@ namespace Microsoft::Xna::Framework::Content
                                       : static_cast<int>(sizeof(std::uint16_t));
             built.indexCount = static_cast<int>(geometry.indexBytes->size()) / indexSize;
 
-            built.vertexBuffer = BuildVertexBufferFromRawBytes(device, geometry.stride,
+            built.vertexBuffer = BuildVertexBufferFromRawBytes(device, cm, geometry.stride,
                                                                 built.vertexCount,
                                                                 *geometry.vertexBytes);
-            built.indexBuffer = std::make_unique<Graphics::IndexBuffer>(
+            built.indexBuffer = std::make_shared<Graphics::IndexBuffer>(
                 device,
                 geometry.use32BitIndices ? Graphics::IndexElementSize::ThirtyTwoBits
                                          : Graphics::IndexElementSize::SixteenBits,
@@ -1112,6 +1131,8 @@ namespace Microsoft::Xna::Framework::Content
                     IndicesFromBytes<std::uint16_t>(*geometry.indexBytes, built.indexCount);
                 built.indexBuffer->SetData(indices.data(), built.indexCount);
             }
+
+            detail::ModelResourceRecorder::Record(cm, built.indexBuffer);
 
             const int primitiveCount =
                 geometry.primitiveCountOverride >= 0
@@ -1593,9 +1614,11 @@ namespace Microsoft::Xna::Framework::Content
                 }
                 if (appliesGltfMaterialPolicy)
                 {
-                    ApplyGltfWhiteBaseColorTextureEXT(device, *fx, res);
+                    ApplyGltfWhiteBaseColorTextureEXT(device, cm, *fx, res);
                 }
 
+            if (customEffectAssetName.empty())
+                detail::ModelResourceRecorder::Record(cm, fx);
             return fx;
         }
 
@@ -2037,6 +2060,7 @@ namespace Microsoft::Xna::Framework::Content
                                              static_cast<std::int32_t>(extracted->bytes.size()));
                 auto tex = std::make_unique<Graphics::Texture2D>(
                     Graphics::Texture2D::FromStream(device, ms));
+                detail::ModelResourceRecorder::Record(cm, *tex);
                 Graphics::Texture2D* texPtr = tex.get();
                 res->textureOwners.push_back(std::move(tex));
                 textureCache[image] = texPtr;
@@ -2063,6 +2087,7 @@ namespace Microsoft::Xna::Framework::Content
                                              static_cast<std::int32_t>(toLoad.bytes.size()));
                 auto tex = std::make_unique<Graphics::Texture2D>(
                     Graphics::Texture2D::FromStream(device, ms));
+                detail::ModelResourceRecorder::Record(cm, *tex);
                 Graphics::Texture2D* texPtr = tex.get();
                 res->textureOwners.push_back(std::move(tex));
                 remappedOcclusionCache[image] = texPtr;
@@ -2267,8 +2292,9 @@ namespace Microsoft::Xna::Framework::Content
 
                 if (!ApplyUnlitMaterialEXT(*fx, meshOut))
                     ApplyPunctualLightsEXT(*fx, punctualLights);
-                ApplyGltfWhiteBaseColorTextureEXT(device, *fx, *res);
+                ApplyGltfWhiteBaseColorTextureEXT(device, cm, *fx, *res);
 
+                detail::ModelResourceRecorder::Record(cm, fx);
                 Graphics::Effect* result = fx.get();
                 effectCache.emplace(effectKey, result);
                 res->effectOwners.push_back(std::move(fx));
@@ -2349,10 +2375,10 @@ namespace Microsoft::Xna::Framework::Content
                     geometry.use32BitIndices = meshOut.use32BitIndices;
                     geometry.topology = meshOut.topology;
 
-                    BuiltModelPartEXT built = BuildModelMeshPartGeometryEXT(device, geometry);
+                    BuiltModelPartEXT built = BuildModelMeshPartGeometryEXT(device, cm, geometry);
                     std::unique_ptr<Graphics::ModelMeshPart> part = std::move(built.part);
-                    std::unique_ptr<Graphics::VertexBuffer> vb = std::move(built.vertexBuffer);
-                    std::unique_ptr<Graphics::IndexBuffer> ib = std::move(built.indexBuffer);
+                    std::shared_ptr<Graphics::VertexBuffer> vb = std::move(built.vertexBuffer);
+                    std::shared_ptr<Graphics::IndexBuffer> ib = std::move(built.indexBuffer);
                     const int numVertices = built.vertexCount;
                     // plans/plan_gltf.md GLTF-073: the topology travels to the draw rather than being
                     // assumed there.
@@ -2861,7 +2887,7 @@ namespace Microsoft::Xna::Framework::Content
                                       variantMesh.stride
                                 : 0;
                             auto variantVb = BuildVertexBufferFromRawBytes(
-                                device, variantMesh.stride, variantNumVertices,
+                                device, cm, variantMesh.stride, variantNumVertices,
                                 variantVertexBytes);
 
                             CNA::Internal::Graphics::ModelMaterialVariantPartStateEXT state;
@@ -3490,11 +3516,11 @@ namespace Microsoft::Xna::Framework::Content
                             geometry.topology = topology;
 
                             BuiltModelPartEXT built =
-                                BuildModelMeshPartGeometryEXT(device, geometry);
+                                BuildModelMeshPartGeometryEXT(device, cm, geometry);
                             std::unique_ptr<Graphics::ModelMeshPart> part = std::move(built.part);
-                            std::unique_ptr<Graphics::VertexBuffer> vb =
+                            std::shared_ptr<Graphics::VertexBuffer> vb =
                                 std::move(built.vertexBuffer);
-                            std::unique_ptr<Graphics::IndexBuffer> ib =
+                            std::shared_ptr<Graphics::IndexBuffer> ib =
                                 std::move(built.indexBuffer);
 
                             ApplyPartSamplerStatesEXT(*part, material);
@@ -4105,10 +4131,10 @@ namespace Microsoft::Xna::Framework::Content
                         source.primitiveTopology);
                 geometry.primitiveCountOverride = static_cast<int>(source.primitiveCount);
 
-                BuiltModelPartEXT built = BuildModelMeshPartGeometryEXT(device, geometry);
+                BuiltModelPartEXT built = BuildModelMeshPartGeometryEXT(device, cm, geometry);
                 std::unique_ptr<Graphics::ModelMeshPart> part = std::move(built.part);
-                std::unique_ptr<Graphics::VertexBuffer> vb = std::move(built.vertexBuffer);
-                std::unique_ptr<Graphics::IndexBuffer> ib = std::move(built.indexBuffer);
+                std::shared_ptr<Graphics::VertexBuffer> vb = std::move(built.vertexBuffer);
+                std::shared_ptr<Graphics::IndexBuffer> ib = std::move(built.indexBuffer);
                 const int vertexCount = built.vertexCount;
 
                 // Through the converted MaterialOut rather than the raw CNB sampler records, so
@@ -4409,12 +4435,13 @@ namespace Microsoft::Xna::Framework::Content
             vertexBuffers.reserve(data.vertexBuffers.size());
             for (const Cnb::CnbModelV2VertexBuffer& source : data.vertexBuffers)
             {
-                auto buffer = std::make_unique<Graphics::VertexBuffer>(
+                auto buffer = std::make_shared<Graphics::VertexBuffer>(
                     device, declarations[source.declaration],
                     static_cast<int>(source.vertexCount), Graphics::BufferUsage::None);
                 buffer->SetDataRaw(
                     source.bytes.data(), static_cast<int>(source.vertexCount),
                     declarations[source.declaration].getVertexStrideProperty());
+                detail::ModelResourceRecorder::Record(cm, buffer);
                 vertexBuffers.push_back(buffer.get());
                 resources->vbs.push_back(std::move(buffer));
             }
@@ -4423,7 +4450,7 @@ namespace Microsoft::Xna::Framework::Content
             indexBuffers.reserve(data.indexBuffers.size());
             for (const Cnb::CnbModelV2IndexBuffer& source : data.indexBuffers)
             {
-                auto buffer = std::make_unique<Graphics::IndexBuffer>(
+                auto buffer = std::make_shared<Graphics::IndexBuffer>(
                     device,
                     source.indexElementSize == 4u
                         ? Graphics::IndexElementSize::ThirtyTwoBits
@@ -4443,6 +4470,7 @@ namespace Microsoft::Xna::Framework::Content
                                                         static_cast<int>(source.indexCount));
                     buffer->SetData(values.data(), static_cast<int>(values.size()));
                 }
+                detail::ModelResourceRecorder::Record(cm, buffer);
                 indexBuffers.push_back(buffer.get());
                 resources->ibs.push_back(std::move(buffer));
             }
@@ -4576,6 +4604,7 @@ namespace Microsoft::Xna::Framework::Content
                         break;
                     }
                 }
+                detail::ModelResourceRecorder::Record(cm, effect);
                 effects.push_back(effect.get());
                 resources->effectOwners.push_back(std::move(effect));
             }

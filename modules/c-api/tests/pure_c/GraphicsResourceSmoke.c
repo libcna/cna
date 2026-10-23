@@ -35,19 +35,19 @@ typedef struct LifecycleState {
 static void on_disposing(const CNA_Handle resource, void* const context)
 {
     DisposingState* const state = (DisposingState*)context;
-    CNA_Bool disposed = CNA_TRUE;
+    CNA_Bool disposed = CNA_FALSE;
     state->callback_valid = resource == state->expected_resource &&
         cna_graphics_resource_get_is_disposed(resource, &disposed) == CNA_RESULT_SUCCESS &&
-        disposed == CNA_FALSE;
+        disposed == CNA_TRUE;
     ++state->count;
 }
 
 static void on_texture_disposing(const CNA_Handle resource, void* const context)
 {
     LifecycleState* const state = (LifecycleState*)context;
-    CNA_Bool disposed = CNA_TRUE;
+    CNA_Bool disposed = CNA_FALSE;
     if (cna_graphics_resource_get_is_disposed(resource, &disposed) == CNA_RESULT_SUCCESS &&
-        disposed == CNA_FALSE) {
+        disposed == CNA_TRUE) {
         ++state->disposing_count;
     }
 }

@@ -2669,6 +2669,10 @@ CNA_C_API CNA_Result cna_skinning_data_set_skeleton_root_name_ext(
  *
  * The asset is cached by name exactly as every other load is, so a second call re-publishes handles
  * over the same underlying model rather than re-reading the file.
+ * Unloading or destroying its ContentManager disposes the model's loaded effects, buffers and
+ * content-owned textures, matching XNA/C++. A retained model can still be inspected, but drawing
+ * it or applying its disposed effects returns `CNA_RESULT_INVALID_STATE`. The model handle and
+ * collection views still require their ordinary cleanup; unload does not release C handles.
  *
  * **Source formats.** The asset name carries no extension and the content manager resolves it, so
  * this one route opens all three of CNA's model formats: `.xnb`, `.cnb`, and **`.gltf`/`.glb`

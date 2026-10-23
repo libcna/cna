@@ -23,7 +23,12 @@ namespace Microsoft::Xna::Framework::Graphics
     class GraphicsResource : public System::Object, public System::IDisposable
     {
     public:
-        /** @brief Raised when this resource is disposed. */
+        /**
+         * @brief Raised after this resource publishes its disposed state.
+         *
+         * Event handlers observe getIsDisposedProperty() == true. Reentrant disposal does not
+         * raise the event again, including when an earlier handler propagates an exception.
+         */
         System::EventHandler<System::EventArgs> Disposing;
 
         /** @brief Destroys the GraphicsResource and releases renderer resources. */
@@ -69,7 +74,8 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         explicit GraphicsResource(GraphicsDevice* device = nullptr);
 
-        // Copy: carries identity (device/name/tag) but NOT isDisposed_ or event handlers.
+        // Copy: carries device/name/tag (including opt-in content metadata sharing),
+        // but NOT isDisposed_ or event handlers.
         // Each copy starts undisposed with its own fresh Disposing subscriber list.
         /** @brief Copy-constructs a GraphicsResource, carrying device/name/tag but resetting disposal state. */
         GraphicsResource(const GraphicsResource& other);
@@ -90,6 +96,16 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param other Source wrapper whose resource identity is retained.
          */
         void ShareResourceIdentityWith(const GraphicsResource& other);
+
+        /**
+         * @brief Makes subsequent content-resource copies share Name and Tag only.
+         *
+         * Explicit disposal, events and device registration remain per wrapper.
+         */
+        void EnableSharedContentMetadata() const;
+
+        /** @brief Gives an independently owned content wrapper its own metadata snapshot. */
+        void DetachSharedContentMetadata() const;
 
         /**
          * @brief Rebinds a shared resource identity to a graphics device.
@@ -164,6 +180,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     private:
         struct SharedIdentity;
+        struct SharedMetadata;
 
         [[nodiscard]] std::shared_ptr<SharedIdentity> EnsureSharedIdentity() const;
         void DetachSharedIdentity();
@@ -176,12 +193,14 @@ namespace Microsoft::Xna::Framework::Graphics
         std::weak_ptr<void> graphicsDeviceLifetime_;
         std::string name_;
         System::Object* tag_ = nullptr;
-        bool isDisposed_ = false;
+        // A device or content owner can invalidate a const C++ resource handle.
+        mutable bool isDisposed_ = false;
 #if defined(CNA_DIAGNOSTICS_LEVEL) && CNA_DIAGNOSTICS_LEVEL >= 1
-        CNA::Diagnostics::ResourceHandle diagnosticResource_;
+        mutable CNA::Diagnostics::ResourceHandle diagnosticResource_;
 #endif
 
     private:
         mutable std::shared_ptr<SharedIdentity> sharedIdentity_;
+        mutable std::shared_ptr<SharedMetadata> sharedMetadata_;
     };
 }

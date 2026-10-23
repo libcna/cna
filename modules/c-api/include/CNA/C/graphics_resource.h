@@ -16,7 +16,7 @@ typedef uint64_t CNA_GraphicsResourceTag;
 typedef CNA_Handle CNA_GraphicsResourceEventRegistrationHandle;
 
 /**
- * @brief Receives synchronous notification immediately before explicit resource disposal.
+ * @brief Receives synchronous notification after explicit disposal publishes IsDisposed.
  *
  * @param resource Resource handle supplied when the callback was registered.
  * @param context Caller-owned context supplied at registration.

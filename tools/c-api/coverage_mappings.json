@@ -818,7 +818,7 @@
     },
     {
       "id": "texture-and-texture2d-complete-contract",
-      "qualified_name_regex": "^(?!.*::(?:AsTextureCubeEXT|AsTexture3DEXT)$).*",
+      "qualified_name_regex": "^(?!.*::(?:AsTextureCubeEXT|AsTexture3DEXT|ContentOwnershipAccess)$).*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Texture(?:2D)?\\.hpp$",
       "kinds": [
         "class",
@@ -986,7 +986,7 @@
     },
     {
       "id": "texture3d-and-texturecube-complete-contract",
-      "qualified_name_regex": "^(?!.*::(?:AsTextureCubeEXT|AsTexture3DEXT)$).*",
+      "qualified_name_regex": "^(?!.*::(?:AsTextureCubeEXT|AsTexture3DEXT|ContentOwnershipAccess)$).*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Texture(?:3D|Cube)\\.hpp$",
       "kinds": [
         "class",
@@ -5256,8 +5256,8 @@
         "operator",
         "field"
       ],
-      "mapping": "generic validated graphics-resource handle operations for callback-scoped device identity, disposal state/event/lifetime, exact UTF-8 Name/ToString count-copy and a fixed 64-bit C-owned opaque tag; protected construction/copy/move and storage remain encapsulated by concrete owned resource handles",
-      "tests": "every generic entry point, standalone and device-owned resources, disposal callbacks, repeated/typed destruction, UTF-8/capacity atomicity, C tag reset, wrong-kind/stale/wrong-thread handles and callback-scoped device expiry in strict-C `GraphicsResourceSmoke.c`, registry unit tests and C/C++ ABI assertions",
+      "mapping": "generic validated graphics-resource handle operations for callback-scoped device identity, disposal state/event/lifetime, exact UTF-8 Name/ToString count-copy and a fixed 64-bit C-owned opaque tag; protected construction/copy/move and storage remain encapsulated by concrete owned resource handles. The protected content-metadata sharing/detachment hooks have no independent C operation: they implement the documented metadata and transfer semantics of content-created texture handles",
+      "tests": "every generic entry point, standalone and device-owned resources, disposal callbacks (including published IsDisposed state), repeated/typed destruction, UTF-8/capacity atomicity, C tag reset, wrong-kind/stale/wrong-thread handles and callback-scoped device expiry in strict-C `GraphicsResourceSmoke.c`; content-created metadata sharing and detached transferred handles in `ContentModelEffectSmoke.c` and the native content ownership tests; registry unit tests and C/C++ ABI assertions",
       "status": "implemented",
       "task": "CBIND-035C3",
       "approved_symbols": [
@@ -5265,19 +5265,28 @@
         "CPP-27CCC43BF4DE",
         "CPP-2C93FEEE5C6D",
         "CPP-345BD4873F44",
+        "CPP-380DA7BBA607",
+        "CPP-39187EB98476",
         "CPP-3E71DDE5C8FC",
         "CPP-40D2694DA656",
+        "CPP-43334E0F2DE7",
         "CPP-44B43CBF7E86",
         "CPP-45ED69D9D91A",
+        "CPP-490898DD920B",
         "CPP-4A9E503CDA23",
         "CPP-5F2D77BC5E3D",
         "CPP-6331FC331EFE",
         "CPP-6FF642C5401E",
         "CPP-8C5256E633C2",
         "CPP-9EE5D32A5342",
+        "CPP-D213319A79D7",
         "CPP-D40975B67501",
+        "CPP-E461F1AC434B",
         "CPP-E6CDF5E38DAF",
+        "CPP-EB8F933D1FFD",
         "CPP-EBDF6A7345A3",
+        "CPP-F0EA984804C8",
+        "CPP-F4766A0F1FCB",
         "CPP-F4D9FA95F0A6",
         "CPP-F9E77F457D97"
       ]
@@ -5476,15 +5485,16 @@
     },
     {
       "id": "content-manager-builtin-content-friend",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::BuiltinContent$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::(?:BuiltinContent|ModelResourceRecorder)$",
       "kinds": [
         "method"
       ],
-      "mapping": "No C mapping: a friendship declaration granting ContentManager's per-type built-in reader registration (detail::BuiltinContent) access to the manager's reader table, not a callable public member",
-      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "mapping": "No C mapping: friendship declarations granting ContentManager's per-type built-in reader registration and model child-resource recorder access to private manager state, not callable public members",
+      "tests": "Doxygen declaration inventory; native model ownership tests and strict-C `ContentModelEffectSmoke.c` exercise the observable child-resource recording contract; no callable friendship operation exists",
       "status": "not-applicable",
       "task": "CBIND-127",
       "approved_symbols": [
+        "CPP-478B7BC111BA",
         "CPP-F95BF29C7616"
       ]
     },
@@ -9477,8 +9487,26 @@
       ]
     },
     {
+      "id": "song-copy-semantics",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Song::(?:Song|operator=)$",
+      "signature_regex": "^\\(const Song &other\\)$",
+      "kinds": [
+        "constructor",
+        "operator"
+      ],
+      "mapping": "No separate C mapping: these are C++ value-copy operations on movable values. C names songs with stable opaque handles; collection and queue routes retain or duplicate the represented song as their documented ownership contract requires, so copying a C handle variable is not a second native Song assignment operation",
+      "tests": "strict-C `MediaSmoke.c` covers independent handles, collection retention and path-based equality; Doxygen declaration inventory proves there is no callable C++-copy operation to expose",
+      "status": "not-applicable",
+      "task": "CBIND-037C2",
+      "approved_symbols": [
+        "CPP-499A10E1ECAD",
+        "CPP-EAFC35542F4E"
+      ]
+    },
+    {
       "id": "song",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Song(::(Song|~Song|getNameProperty|getDurationProperty|setDurationProperty|getIsProtectedProperty|getIsRatedProperty|getPlayCountProperty|setPlayCountProperty|getRatingProperty|getTrackNumberProperty|getIsDisposedProperty|Dispose|Equals|GetHashCode|ToString|getHandle|FromUri|GetTypeName|operator==|operator!=))?$",
+      "signature_regex": "^(?!\\(const Song &other\\)$).*$",
       "kinds": [
         "class",
         "constructor",
@@ -9517,29 +9545,31 @@
     },
     {
       "id": "song-friend-media-library",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Song::MediaLibrary$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Song::(?:MediaLibrary|ContentOwnershipAccess)$",
       "kinds": [
         "method"
       ],
-      "mapping": "No C mapping: this is a friendship declaration that lets the canonical media library populate a song's album, artist and genre back-pointers, not a callable public member",
-      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "mapping": "No C mapping: these friendship declarations let the canonical media library populate a song's album, artist and genre back-pointers and let the internal content owner observe its disposal record. Neither declaration is a callable public member",
+      "tests": "Doxygen declaration inventory; native Song/content ownership tests cover the observable lifetime contract; no callable friendship operation exists",
       "status": "not-applicable",
       "task": "CBIND-037C2",
       "approved_symbols": [
+        "CPP-91260AC911DF",
         "CPP-CAD049B9139C"
       ]
     },
     {
       "id": "sound-effect-friend-xnb-reader",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffect::SoundEffectReader$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffect::(?:SoundEffectReader|ContentOwnershipAccess)$",
       "kinds": [
         "method"
       ],
-      "mapping": "No C mapping: this is a friendship declaration that lets the XNB SoundEffect reader construct with the content sample-rate range XNA's content reader uses, not a callable public member",
-      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "mapping": "No C mapping: these friendship declarations let the XNB reader construct with XNA's content sample-rate range and let the internal content owner observe the sound's disposal record. Neither declaration is a callable public member",
+      "tests": "Doxygen declaration inventory; native and strict-C content ownership tests cover the observable SoundEffect lifetime contract; no callable friendship operation exists",
       "status": "not-applicable",
       "task": "CBIND-146",
       "approved_symbols": [
+        "CPP-99674C04F568",
         "CPP-F4DFB59FD5BB"
       ]
     },
@@ -11897,9 +11927,9 @@
       "task": "CBIND-037F1",
       "approved_symbols": [
         "CPP-1A4AC3FB7B7B",
-        "CPP-2646628D6D91",
         "CPP-4C9C69D6688D",
-        "CPP-69D8C13F9A4B"
+        "CPP-57743BD68FD1",
+        "CPP-BC0E945EB845"
       ]
     },
     {
@@ -16525,16 +16555,18 @@
     },
     {
       "id": "graphics-test-peer-friendship",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:Effect::CompiledEffectTestAccess|GraphicsDevice::GraphicsDevicePlatformWindowTestPeer)$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:Effect::CompiledEffectTestAccess|GraphicsDevice::GraphicsDevicePlatformWindowTestPeer|Texture(?:2D|Cube)::ContentOwnershipAccess)$",
       "kinds": [
         "method"
       ],
-      "mapping": "No C mapping: a friendship declaration, not a member. Each names a `CNA::Internal`/`CNA::TestSupport` peer that the graphics tests use to reach private state; Doxygen reports the `friend` line as a member with an empty signature. There is no callable behaviour here for any caller, C or C++, so there is nothing to bind.",
-      "tests": "Doxygen declaration inventory; the friendship grants access to the C++ test peers and declares no operation",
+      "mapping": "No C mapping: friendship declarations, not members. They name `CNA::Internal`/`CNA::TestSupport` peers used either by graphics tests or by the content owner to observe a texture disposal record; Doxygen reports each `friend` line as a member with an empty signature. There is no callable behaviour here for any caller, C or C++, so there is nothing to bind.",
+      "tests": "Doxygen declaration inventory; native texture ownership tests and strict-C `ContentModelEffectSmoke.c` cover the observable content lifetime contract; the friendships themselves declare no operation",
       "status": "not-applicable",
       "task": "CBIND-126",
       "approved_symbols": [
         "CPP-1A03DC2F402C",
+        "CPP-32BF5978FB06",
+        "CPP-88D8F2C6FD1E",
         "CPP-AC90364C4B52"
       ]
     },

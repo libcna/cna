@@ -108,6 +108,14 @@ namespace Microsoft::Xna::Framework::Content
 
     ContentReader::~ContentReader() = default;
 
+    void ContentReader::RecordDisposableObject(std::shared_ptr<System::IDisposable> disposable)
+    {
+        if (recordDisposableObject_)
+            recordDisposableObject_(std::move(disposable));
+        else if (contentManager_)
+            contentManager_->RecordDisposableObject(std::move(disposable));
+    }
+
     Matrix ContentReader::ReadMatrix()
     {
         Matrix result;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/content.h"
+#include "CNA/Internal/ContentOwnership.hpp"
 #include "CnaCApiAudioDetail.hpp"
 #include "CnaCApiContentDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
@@ -251,6 +252,8 @@ namespace {
 
     try {
         Texture2D loaded = contentManager->value->Load<Texture2D>(assetNameCopy);
+        // C resource handles are independent game children, not content-owned aliases.
+        CNA::Internal::ContentOwnershipAccess::Detach(loaded);
         return CNA::C::Detail::CreateOwnedTexture2D(
             std::make_shared<Texture2D>(std::move(loaded)),
             contentManager->parentGame,
@@ -339,6 +342,7 @@ namespace {
 
     try {
         SoundEffect loaded = contentManager->value->Load<SoundEffect>(assetNameCopy);
+        CNA::Internal::ContentOwnershipAccess::Detach(loaded);
         return CNA::C::Detail::CreateOwnedSoundEffect(
             std::make_shared<SoundEffect>(std::move(loaded)),
             contentManager->parentGame,
@@ -383,6 +387,7 @@ namespace {
 
     try {
         TextureCube loaded = contentManager->value->Load<TextureCube>(assetNameCopy);
+        CNA::Internal::ContentOwnershipAccess::Detach(loaded);
         return CNA::C::Detail::CreateOwnedTextureCube(
             std::make_shared<TextureCube>(std::move(loaded)),
             contentManager->parentGame,
@@ -449,6 +454,7 @@ namespace {
     // and every route that retains one -- this ABI's own font resource included -- speaks in
     // Texture2D handles. The copy shares the underlying renderer resource, which is why the
     // font's retention count below is what keeps a caller from disposing it early.
+    CNA::Internal::ContentOwnershipAccess::Detach(font->getTextureEXT());
     if (const CNA_Result result = CNA::C::Detail::CreateOwnedTexture2D(
             std::make_shared<Texture2D>(font->getTextureEXT()),
             contentManager->parentGame,

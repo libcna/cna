@@ -40,6 +40,12 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsResource* canonical = nullptr;
     };
 
+    struct GraphicsResource::SharedMetadata
+    {
+        std::string name;
+        System::Object* tag = nullptr;
+    };
+
     GraphicsResource::GraphicsResource(GraphicsDevice* device)
         : graphicsDevice_(device)
         , graphicsDeviceLifetime_(device != nullptr
@@ -68,6 +74,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , name_(other.getNameProperty())
         , tag_(other.getTagProperty())
         , isDisposed_(false)
+        , sharedMetadata_(other.sharedMetadata_)
         // Disposing handlers deliberately not copied: each object owns its lifecycle
     {
 #if CNA_DIAGNOSTICS_LEVEL >= 1
@@ -88,6 +95,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 : other.graphicsDeviceLifetime_;
             name_ = other.getNameProperty();
             tag_ = other.getTagProperty();
+            sharedMetadata_ = other.sharedMetadata_;
             isDisposed_ = false;
             // No diagnostic registration is made here. Every caller of this operator (BlendState,
             // DepthStencilState, RasterizerState, SamplerState, VertexDeclaration) follows it with
@@ -111,6 +119,7 @@ namespace Microsoft::Xna::Framework::Graphics
 #if CNA_DIAGNOSTICS_LEVEL >= 1
         , diagnosticResource_(std::move(other.diagnosticResource_))
 #endif
+        , sharedMetadata_(std::move(other.sharedMetadata_))
     {
         if (other.sharedIdentity_)
         {
@@ -141,6 +150,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (this != &other)
         {
+            sharedMetadata_ = std::move(other.sharedMetadata_);
             if (other.sharedIdentity_)
             {
                 const std::scoped_lock lock(IdentityMutex());
@@ -235,10 +245,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
     std::string GraphicsResource::getNameProperty() const
     {
-        if (!sharedIdentity_)
+        if (!sharedIdentity_ && !sharedMetadata_)
             return name_;
         const std::scoped_lock lock(IdentityMutex());
-        return sharedIdentity_->name;
+        return sharedIdentity_ ? sharedIdentity_->name : sharedMetadata_->name;
     }
 
     void GraphicsResource::setNameProperty(const std::string& value)
@@ -250,6 +260,11 @@ namespace Microsoft::Xna::Framework::Graphics
             for (GraphicsResource* alias : sharedIdentity_->aliases)
                 alias->name_ = value;
         }
+        else if (sharedMetadata_)
+        {
+            const std::scoped_lock lock(IdentityMutex());
+            sharedMetadata_->name = value;
+        }
         else
         {
             name_ = value;
@@ -258,10 +273,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
     System::Object* GraphicsResource::getTagProperty() const
     {
-        if (!sharedIdentity_)
+        if (!sharedIdentity_ && !sharedMetadata_)
             return tag_;
         const std::scoped_lock lock(IdentityMutex());
-        return sharedIdentity_->tag;
+        return sharedIdentity_ ? sharedIdentity_->tag : sharedMetadata_->tag;
     }
 
     void GraphicsResource::setTagProperty(System::Object* value)
@@ -273,10 +288,30 @@ namespace Microsoft::Xna::Framework::Graphics
             for (GraphicsResource* alias : sharedIdentity_->aliases)
                 alias->tag_ = value;
         }
+        else if (sharedMetadata_)
+        {
+            const std::scoped_lock lock(IdentityMutex());
+            sharedMetadata_->tag = value;
+        }
         else
         {
             tag_ = value;
         }
+    }
+
+    void GraphicsResource::EnableSharedContentMetadata() const
+    {
+        const std::scoped_lock lock(IdentityMutex());
+        if (!sharedMetadata_)
+            sharedMetadata_ = std::make_shared<SharedMetadata>(
+                SharedMetadata{getNameProperty(), getTagProperty()});
+    }
+
+    void GraphicsResource::DetachSharedContentMetadata() const
+    {
+        const std::scoped_lock lock(IdentityMutex());
+        if (sharedMetadata_)
+            sharedMetadata_ = std::make_shared<SharedMetadata>(*sharedMetadata_);
     }
 
     void GraphicsResource::Dispose()
@@ -328,19 +363,31 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             return;
         }
-        if (disposing)
-        {
-            Disposing.Raise(this, System::EventArgs::Empty);
-        }
-        if (graphicsDevice_ && !graphicsDeviceLifetime_.expired())
-        {
-            graphicsDevice_->OnResourceDestroyed(name_, tag_);
-            graphicsDevice_->RemoveResourceReference(this);
-        }
+        // XNA GraphicsResource.Dispose IL publishes IsDisposed before invoking Disposing.
+        // Reentry and a throwing subscriber must not repeat the disposal event.
         isDisposed_ = true;
 #if CNA_DIAGNOSTICS_LEVEL >= 1
         diagnosticResource_.Reset();
 #endif
+        const auto retireDeviceReference = [this]
+        {
+            if (graphicsDevice_ && !graphicsDeviceLifetime_.expired())
+                graphicsDevice_->RemoveResourceReference(this);
+        };
+        try
+        {
+            if (disposing)
+                Disposing.Raise(this, System::EventArgs::Empty);
+            if (graphicsDevice_ && !graphicsDeviceLifetime_.expired())
+                graphicsDevice_->OnResourceDestroyed(getNameProperty(), getTagProperty());
+        }
+        catch (...)
+        {
+            // The destructor now observes disposed state, so it cannot retire this later.
+            retireDeviceReference();
+            throw;
+        }
+        retireDeviceReference();
     }
 
 #if CNA_DIAGNOSTICS_LEVEL >= 1
@@ -361,8 +408,8 @@ namespace Microsoft::Xna::Framework::Graphics
         auto identity = std::make_shared<SharedIdentity>();
         identity->graphicsDevice = graphicsDevice_;
         identity->graphicsDeviceLifetime = graphicsDeviceLifetime_;
-        identity->name = name_;
-        identity->tag = tag_;
+        identity->name = getNameProperty();
+        identity->tag = getTagProperty();
         identity->isDisposed = isDisposed_;
         identity->aliases.push_back(const_cast<GraphicsResource*>(this));
         identity->canonical = const_cast<GraphicsResource*>(this);

@@ -1262,6 +1262,10 @@ CNA_C_API CNA_Result cna_effect_create_compiled(
  * `.xnb` Effect asset, a `.cnj` descriptor naming one of the stock effects, and a `.cnj` descriptor
  * carrying custom shader source. What comes back is an ordinary effect handle -- parameters,
  * techniques, passes and `cna_effect_apply` all behave as they do for an effect built by hand.
+ * The ContentManager owns native disposal: unloading or destroying it disposes the loaded
+ * Effect, matching XNA/C++. Applying that Effect then returns `CNA_RESULT_INVALID_STATE`
+ * with `System.ObjectDisposedException`; the C handle must still be released with
+ * `cna_effect_destroy`.
  *
  * Which of the three an asset is decides which failures are possible, so branch on the result
  * rather than on the file name: only the compiled shape depends on the compiled-effect capability,

@@ -47,6 +47,9 @@ namespace CNA::Internal::Xnb
                 .GetMaxTextureDimension());
         XnbSpriteFontData decoded = DecodeSpriteFontXnbData(input, maximumDimension);
         Texture2D texture = CreateTexture2DFromXnbData(input, decoded.atlas);
+        // Canonical decoding bypasses ReadObject<Texture2D>, but the atlas is
+        // still a newly materialized disposable belonging to this read.
+        input.RecordDisposable(texture);
 
         return SpriteFont(
             texture, decoded.glyphs, decoded.cropping, decoded.characters,

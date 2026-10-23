@@ -10,6 +10,7 @@
 #include <type_traits>
 #include <vector>
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/ContentOwnership.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -53,7 +54,7 @@ namespace CNA::Internal::Graphics
 namespace Microsoft::Xna::Framework::Graphics
 {
     /** @brief Represents a cube map texture (six faces of equal size). */
-    class TextureCube : public Texture
+    class TextureCube : public Texture, public CNA::Internal::ContentOwnedResource
     {
     public:
         using Texture::Dispose;
@@ -73,6 +74,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Copy-constructs a value wrapper that shares the underlying texture resource.
+         *
+         * Content-acquired copies also share Name and Tag. Explicit disposal stays
+         * per wrapper; ContentManager unload disposes every tracked copy.
          *
          * @param other Texture wrapper whose resource is shared.
          */
@@ -719,6 +723,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     private:
         friend class EnvironmentMapEffect;
+        friend struct CNA::Internal::ContentOwnershipAccess;
+        [[nodiscard]] std::shared_ptr<System::IDisposable> GetContentDisposalRecord() const override;
+        void DetachContentOwnership() const;
         void ValidateCopyPreludeEXT(
             const char* api, bool setting, int level, const void* data,
             int startIndex, int elementCount) const;
@@ -740,12 +747,13 @@ namespace Microsoft::Xna::Framework::Graphics
         int size_;
         // Shared ownership gives C++ value wrappers the reference-resource behavior used by CNA's
         // Texture2D mapping and lets effect renderers observe cube lifetime through weak_ptr.
-        std::shared_ptr<CNA::Internal::Renderers::ITextureCubeRenderer> renderer_;
+        mutable std::shared_ptr<CNA::Internal::Renderers::ITextureCubeRenderer> renderer_;
         /// Level-0-only CPU-side pixel shadow, one per face, lazily created on first SetData()
         /// at level 0 and shared with the renderer via ITextureCubeRenderer::ShareCpuPixels() for
         /// GL-style context-loss restoration (mirrors Texture2D::cpuPixels_'s own level-0-only
         /// scope -- higher mip levels are not restored from any CPU shadow, matching how
         /// Texture2D's own context recovery re-derives them via mipmap generation instead).
         std::array<std::shared_ptr<std::vector<uint8_t>>, 6> cpuPixels_;
+        mutable CNA::Internal::ContentOwnershipLink contentOwnership_{this};
     };
 }

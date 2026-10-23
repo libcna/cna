@@ -38,7 +38,8 @@ the validated handle registry; it deliberately does not expose or mutate the nat
 Explicit disposal keeps the C handle alive so callers may query `is_disposed`; repeated disposal
 is a successful no-op. Typed destroy operations dispose before releasing their handle. A disposing
 subscription owns a separate registration handle and invokes its caller-owned function/context
-synchronously before native disposal state changes. Unsubscription remains valid after the
+synchronously after native `IsDisposed` becomes true, matching XNA/C++.
+This corrects the former C timing contract (owner approval, 2026-10-23); no ABI changes. Unsubscription remains valid after the
 resource itself is destroyed. Resource operations and subscriptions retain the creation-thread
 rule.
 

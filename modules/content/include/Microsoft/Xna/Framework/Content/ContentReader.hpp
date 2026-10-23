@@ -24,6 +24,7 @@
 namespace CNA::Internal::Xnb
 {
     class XnbCanonicalReaderAccess;
+    class SpriteFontReader;
 }
 
 namespace CNA::Internal::Renderers
@@ -476,6 +477,7 @@ namespace Microsoft::Xna::Framework::Content
 
         /** @cond */
         friend class CNA::Internal::Xnb::XnbCanonicalReaderAccess;
+        friend class CNA::Internal::Xnb::SpriteFontReader;
         /** @endcond */
 
         void InitializeCanonicalTypeReadersEXT();
@@ -619,15 +621,12 @@ namespace Microsoft::Xna::Framework::Content
         {
             if (auto disposable = detail::DisposableReference(result))
             {
-                if (recordDisposableObject_)
-                {
-                    recordDisposableObject_(std::move(disposable));
-                }
-                // Falling back to contentManager_->RecordDisposable(...) is deferred to Phase B2
-                // (XNB-17B), which is when ContentManager gains that tracking mechanism at all.
+                RecordDisposableObject(std::move(disposable));
             }
-            // Bare value carriers are not transferred into shared ownership here.
+            // Value resource carriers supply a stable concrete disposal representative.
         }
+
+        void RecordDisposableObject(std::shared_ptr<System::IDisposable> disposable);
 
         ContentManager* contentManager_;
         std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>

@@ -46,6 +46,7 @@ namespace CNA::Internal
 
 namespace Microsoft::Xna::Framework::Content
 {
+    namespace detail { struct ModelResourceRecorder; }
     using log = CNA::Logger;
 
     /**
@@ -94,6 +95,8 @@ namespace Microsoft::Xna::Framework::Content
         };
 
         std::unordered_map<AssetCacheKey, std::any, AssetCacheKeyHash> loadedAssets_;
+        std::vector<std::shared_ptr<System::IDisposable>> disposableAssets_;
+        std::size_t disposableAssetsVersion_ = 0;
         std::unordered_map<std::type_index, std::any> typeReaders_;
 
         // plans/plan_cnj.md CNB-24: per-C++-type table of named .cnj loaders, keyed first by the
@@ -145,6 +148,13 @@ namespace Microsoft::Xna::Framework::Content
             const std::vector<std::uint8_t>& bytes, const std::string& xnbPath);
 
         friend class ContentReader;
+        void RecordDisposableObject(std::shared_ptr<System::IDisposable> disposable);
+        template<class T>
+        void RecordLoadedAsset(const T& asset)
+        {
+            if (auto disposable = detail::DisposableReference(asset))
+                RecordDisposableObject(std::move(disposable));
+        }
         [[nodiscard]] std::any LoadUntypedXnbReference(const std::string& assetName);
         [[nodiscard]] std::any LoadXnbAssetUntyped(
             const std::vector<std::uint8_t>& bytes,
@@ -154,6 +164,7 @@ namespace Microsoft::Xna::Framework::Content
     private:
         template <typename T>
         friend struct detail::BuiltinContent;
+        friend struct detail::ModelResourceRecorder;
         /// The route by which a built-in content family installs its `.cnb` loader:
         /// CnbLoaderRegistry::RegisterBuiltIn() is private to ContentManager (CNBF-122).
         static void RegisterBuiltinCnbLoader(std::uint32_t assetTypeId,
@@ -326,7 +337,13 @@ namespace Microsoft::Xna::Framework::Content
          */
         [[nodiscard]] Graphics::GraphicsDevice& getGraphicsDeviceInternal() const;
 
-        /** @brief Unloads all cached assets and frees the associated resources. */
+        /**
+         * @brief Disposes recorded assets in read order and clears the asset cache.
+         *
+         * The first disposal exception propagates; remaining records and the cache are
+         * still cleared, so a later unload does not retry those objects.
+         * @throws System::ObjectDisposedException if this manager has been disposed.
+         */
         void Unload();
 
         /**
@@ -547,13 +564,14 @@ namespace Microsoft::Xna::Framework::Content
          * @param assetName Relative file path inside the content root (with or without extension).
          * @return Loaded asset instance.
          * @throws ContentLoadException if the asset cannot be loaded.
+         * @throws System::ObjectDisposedException if this manager has been disposed.
          */
         template <typename T>
         [[nodiscard]] T Load(const std::string& assetName)
         {
             if (disposed_)
             {
-                throw std::runtime_error("ContentManager has been disposed.");
+                throw System::ObjectDisposedException("ContentManager");
             }
 
             const std::string key = NormalizeKey(assetName);
@@ -619,6 +637,7 @@ namespace Microsoft::Xna::Framework::Content
             if (TryReadAssetBytes(cnbCandidate, cnbBytes))
             {
                 T result = LoadCnbAsset<T>(std::move(cnbBytes), cnbCandidate, assetName);
+                RecordLoadedAsset(result);
                 loadedAssets_[cacheKey] = result;
                 return result;
             }
@@ -634,6 +653,7 @@ namespace Microsoft::Xna::Framework::Content
                 if (TryReadAssetBytes(literalCnb, literalBytes))
                 {
                     T result = LoadCnbAsset<T>(std::move(literalBytes), literalCnb, assetName);
+                    RecordLoadedAsset(result);
                     loadedAssets_[cacheKey] = result;
                     return result;
                 }
@@ -677,6 +697,7 @@ namespace Microsoft::Xna::Framework::Content
                         "ContentManager: could not load asset '" + assetName + "'.", exception);
                 }
             }();
+            RecordLoadedAsset(result);
             loadedAssets_[cacheKey] = result;
             return result;
         }

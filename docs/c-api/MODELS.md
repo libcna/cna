@@ -1,5 +1,11 @@
 # C Model and Animation Contract
 
+Content-loaded models retain inspectable C handles after their manager is unloaded or
+destroyed, but their materialized effects, buffers and textures are disposed with the
+manager, matching XNA/C++. Drawing such a mesh returns `CNA_RESULT_INVALID_STATE`.
+Handle retention protects object storage; it does not extend native resource usability.
+This corrects the former independent-lifetime promise with owner approval on 2026-10-23.
+
 ## Model bones and collections
 
 `CNA_ModelBoneHandle` owns a stable model-bone node. Default creation preserves an empty name,

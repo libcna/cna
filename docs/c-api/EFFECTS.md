@@ -1,5 +1,10 @@
 # C Effect Metadata Contract
 
+Content-loaded effects remain owned by their ContentManager: Unload or Destroy disposes
+them, matching XNA/C++. Their C handles remain available for cleanup and metadata queries;
+Apply returns `CNA_RESULT_INVALID_STATE` with `System.ObjectDisposedException`. This
+corrects the former independent-lifetime promise with owner approval on 2026-10-23.
+
 ## Identities
 
 `effects.h` exposes the native `EffectParameterClass` and `EffectParameterType` ordinals as

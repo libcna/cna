@@ -4,6 +4,7 @@
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/ContentOwnership.hpp"
 #include "System/Uri.hpp"
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
@@ -21,7 +22,8 @@ namespace Microsoft::Xna::Framework::Media
     class MediaLibrary;
 
     /** @brief Represents a song that can be played through MediaPlayer. */
-    class Song final : public System::Object, public System::IDisposable
+    class Song final : public System::Object, public System::IDisposable,
+                       public CNA::Internal::ContentOwnedResource
     {
     public:
         /**
@@ -43,6 +45,11 @@ namespace Microsoft::Xna::Framework::Media
 
         /** @brief Destroys the song and releases any associated resources. */
         CNAEXT ~Song() override;
+
+        /** @brief Copies a song value and its content ownership. @param other Source song. */
+        CNAEXT Song(const Song& other);
+        /** @brief Copies a song value and its content ownership. @param other Source song. @return This song. */
+        CNAEXT Song& operator=(const Song& other);
 
         /**
          * @brief Gets the display name of this song.
@@ -251,6 +258,8 @@ namespace Microsoft::Xna::Framework::Media
         CNAEXT friend class MediaLibrary;
 
     private:
+        friend struct CNA::Internal::ContentOwnershipAccess;
+        [[nodiscard]] std::shared_ptr<System::IDisposable> GetContentDisposalRecord() const override;
         // Non-owning back-pointers into the MediaLibrary that produced this song; null for any
         // song not created by a library scan. The library outlives the songs it owns, so these do
         // not dangle in normal use -- the same non-owning-pointer contract Album::songs_ already
@@ -271,7 +280,8 @@ namespace Microsoft::Xna::Framework::Media
         std::string name_;
         System::TimeSpan duration_;
         SharpRuntime::intcs playCount_;
-        bool isDisposed_;
+        mutable bool isDisposed_;
         std::string handle_;
+        mutable CNA::Internal::ContentOwnershipLink contentOwnership_{this};
     };
 }

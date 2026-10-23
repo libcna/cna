@@ -186,9 +186,11 @@ namespace Microsoft::Xna::Framework::Content
             [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
                const std::string& assetName) -> std::any
             {
-                return std::any(BuildSpriteFontFromCnbEXT(
+                auto font = BuildSpriteFontFromCnbEXT(
                     CNA::Content::Cnb::DecodeSpriteFontFromCnb(document), contentManager,
-                    assetName));
+                    assetName);
+                contentManager.RecordLoadedAsset(font.getTextureEXT());
+                return std::any(std::move(font));
             });
     }
 

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/ContentOwnership.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -47,7 +48,7 @@ namespace Microsoft::Xna::Framework::Graphics
     using namespace CNA::Internal::Renderers;
 
     /** @brief Represents a 2D texture. Mirrors XNA 4.0 Texture2D. */
-    class Texture2D : public Texture
+    class Texture2D : public Texture, public CNA::Internal::ContentOwnedResource
     {
     public:
         using Texture::Dispose;
@@ -100,6 +101,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * gives the writing handle a texture of its own and leaves the other with the pixels it
          * had, so a ContentManager's cached texture is not changed through a loaded copy
          *. A SetData of a rectangle updates the shared texture in place.
+         * Content-acquired copies share Name and Tag, while explicit Dispose remains
+         * per wrapper. Unloading their ContentManager disposes all tracked copies.
          *
          * @param other Texture wrapper whose resource is shared.
          */
@@ -737,7 +740,10 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] bool HasRenderer() const { return renderer_ != nullptr; }
 
     private:
-        std::shared_ptr<ITextureRenderer> renderer_;
+        friend struct CNA::Internal::ContentOwnershipAccess;
+        [[nodiscard]] std::shared_ptr<System::IDisposable> GetContentDisposalRecord() const override;
+        void DetachContentOwnership() const;
+        mutable std::shared_ptr<ITextureRenderer> renderer_;
         // Allocated only when submitted to SpriteBatch. Copies have independent public
         // identities; moves transfer this identity and destruction invalidates it.
         mutable std::shared_ptr<Texture2D*> spriteIdentity_;
@@ -760,6 +766,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /// clears this flag again: a cache hit is an ordinary content texture whose CPU shadow is
         /// authoritative and whose shared renderer must never be written through.
         bool gpuOnlyContent_ = false;
+        mutable CNA::Internal::ContentOwnershipLink contentOwnership_{this};
 
         /// Frees cpuPixels_ (level 0 only; extraMipLevels_ stay) when context recovery is disabled.
         void MaybeFreeCpuPixels();

@@ -90,7 +90,7 @@ TEST(CnbSharedModelBuilderTest, TheSharedBuilderIsTheOneEveryModelFrontEndCalls)
     if (source.empty()) { GTEST_SKIP() << "ContentModelLoaders.cpp not found (run from source root)"; }
 
     EXPECT_EQ(CountOccurrences(source, "BuiltModelPartEXT BuildModelMeshPartGeometryEXT("), 1u);
-    EXPECT_EQ(CountOccurrences(source, "BuildModelMeshPartGeometryEXT(device, geometry)"), 3u)
+    EXPECT_EQ(CountOccurrences(source, "BuildModelMeshPartGeometryEXT(device, cm, geometry)"), 3u)
         << "expected exactly three callers: the runtime glTF reader, the .cnj reader and the "
            ".cnb decoder";
     EXPECT_EQ(CountOccurrences(source, "ApplyPartSamplerStatesEXT(*part,"), 3u)

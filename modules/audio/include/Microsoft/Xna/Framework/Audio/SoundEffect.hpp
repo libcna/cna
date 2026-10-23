@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/ContentOwnership.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "System/IDisposable.hpp"
@@ -23,14 +24,18 @@ namespace CNA::Internal::Xnb
 namespace Microsoft::Xna::Framework::Audio
 {
     /** @brief Represents a loaded sound effect asset. */
-    class SoundEffect final : public System::Object, public System::IDisposable
+    class SoundEffect final : public System::Object, public System::IDisposable,
+                              public CNA::Internal::ContentOwnedResource
     {
         friend class SoundEffectInstance;
         CNAEXT friend struct SoundEffectTestAccess;
 
     private:
+        friend struct CNA::Internal::ContentOwnershipAccess;
+        [[nodiscard]] std::shared_ptr<System::IDisposable> GetContentDisposalRecord() const override;
+        void DetachContentOwnership() const;
         class Impl;
-        std::shared_ptr<Impl> impl_;
+        mutable std::shared_ptr<Impl> impl_;
 
         static float MasterVolume_;
         static float DistanceScale_;
@@ -38,9 +43,10 @@ namespace Microsoft::Xna::Framework::Audio
         static float SpeedOfSound_;
 
         std::string name_;
-        bool isDisposed_ = false;
+        mutable bool isDisposed_ = false;
         SharpRuntime::uintcs loopStart_ = 0;
         SharpRuntime::uintcs loopLength_ = 0;
+        mutable CNA::Internal::ContentOwnershipLink contentOwnership_{this};
 
         [[nodiscard]] void* getNativeAudioHandle() const;
 
@@ -145,10 +151,10 @@ namespace Microsoft::Xna::Framework::Audio
         SoundEffect& operator=(const SoundEffect&) = delete;
 
         /** @brief Move-constructs a SoundEffect, transferring ownership of the underlying resource. */
-        SoundEffect(SoundEffect&&) noexcept = default;
+        SoundEffect(SoundEffect&& other) noexcept;
 
         /** @brief Move-assigns a SoundEffect, transferring ownership of the underlying resource. */
-        SoundEffect& operator=(SoundEffect&&) noexcept = default;
+        SoundEffect& operator=(SoundEffect&& other) noexcept;
 
         // --- Properties ---
 

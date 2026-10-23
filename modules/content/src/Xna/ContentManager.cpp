@@ -240,13 +240,22 @@ namespace Microsoft::Xna::Framework::Content
     {
         if (!disposed_)
         {
-            // XNA unloads the cached assets only for an explicit disposal, and drops both tables
-            // either way; Unload() is what clears them here.
-            if (disposing)
+            try
             {
-                Unload();
+                if (disposing)
+                    Unload();
+            }
+            catch (...)
+            {
+                loadedAssets_.clear();
+                disposableAssets_.clear();
+                ++disposableAssetsVersion_;
+                disposed_ = true;
+                throw;
             }
             loadedAssets_.clear();
+            disposableAssets_.clear();
+            ++disposableAssetsVersion_;
             disposed_ = true;
         }
     }
@@ -344,9 +353,43 @@ namespace Microsoft::Xna::Framework::Content
             bytes.data(), static_cast<SharpRuntime::intcs>(bytes.size()), false);
     }
 
+    void ContentManager::RecordDisposableObject(std::shared_ptr<System::IDisposable> disposable)
+    {
+        // XNA 4.0 ContentManager.RecordDisposableObject appends each materialization,
+        // including repeated references. Its Unload finally block clears even after failure.
+        disposableAssets_.push_back(std::move(disposable));
+        ++disposableAssetsVersion_;
+    }
+
     void ContentManager::Unload()
     {
+        if (disposed_)
+            throw System::ObjectDisposedException("ContentManager");
+        try
+        {
+            const auto version = disposableAssetsVersion_;
+            const auto count = disposableAssets_.size();
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                // User disposal may load more content. Keep this object alive without
+                // retaining a vector iterator across that callback, and match List's
+                // invalidated-enumerator exception instead of accessing stale storage.
+                auto disposable = disposableAssets_[i];
+                disposable->Dispose();
+                if (version != disposableAssetsVersion_)
+                    throw System::InvalidOperationException("Content disposal records changed during Unload.");
+            }
+        }
+        catch (...)
+        {
+            loadedAssets_.clear();
+            disposableAssets_.clear();
+            ++disposableAssetsVersion_;
+            throw;
+        }
         loadedAssets_.clear();
+        disposableAssets_.clear();
+        ++disposableAssetsVersion_;
     }
 
     // ---------------------------------------------------------------------------

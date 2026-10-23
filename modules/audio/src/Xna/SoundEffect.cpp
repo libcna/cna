@@ -12,12 +12,14 @@
 #include <cstring>
 #include <istream>
 #include <vector>
+#include <utility>
 
 #include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #ifdef SOUND_ENABLED
 #include "CNA/Internal/Audio/MixerEngine.hpp"
@@ -417,6 +419,50 @@ namespace Microsoft::Xna::Framework::Audio
 
     SoundEffect::~SoundEffect() = default;
 
+    SoundEffect::SoundEffect(SoundEffect&& other) noexcept
+        : System::Object(std::move(other)), impl_(std::move(other.impl_)),
+          name_(std::move(other.name_)), isDisposed_(other.isDisposed_),
+          loopStart_(other.loopStart_), loopLength_(other.loopLength_),
+          contentOwnership_(this, std::move(other.contentOwnership_)) { }
+
+    SoundEffect& SoundEffect::operator=(SoundEffect&& other) noexcept
+    {
+        if (this != &other)
+        {
+            System::Object::operator=(std::move(other));
+            impl_ = std::move(other.impl_);
+            name_ = std::move(other.name_);
+            isDisposed_ = other.isDisposed_;
+            loopStart_ = other.loopStart_;
+            loopLength_ = other.loopLength_;
+            contentOwnership_ = std::move(other.contentOwnership_);
+        }
+        return *this;
+    }
+
+    std::shared_ptr<System::IDisposable> SoundEffect::GetContentDisposalRecord() const
+    {
+        if (auto record = contentOwnership_.Record()) return record;
+        auto representative = std::shared_ptr<SoundEffect>(new SoundEffect(impl_, name_));
+        representative->loopStart_ = loopStart_;
+        representative->loopLength_ = loopLength_;
+        representative->isDisposed_ = isDisposed_;
+        return contentOwnership_.Capture(representative, representative->contentOwnership_);
+    }
+
+    void SoundEffect::DetachContentOwnership() const
+    {
+        if (!contentOwnership_.Record()) return;
+        auto representative = contentOwnership_.ReleaseExclusiveOwnership();
+        if (!representative)
+            throw System::InvalidOperationException("The sound has another content-owned wrapper.");
+        // C receives this unique, uncached sound owner. Drop the manager's retained
+        // payload without cascading disposal into instances subsequently owned by C.
+        auto* sound = static_cast<SoundEffect*>(representative.get());
+        sound->impl_.reset();
+        sound->isDisposed_ = true;
+    }
+
     // --- properties ---
 
     System::TimeSpan SoundEffect::getDurationProperty() const
@@ -656,6 +702,7 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffect::Dispose()
     {
+        if (contentOwnership_.DisposeRepresentative()) return;
         if (!isDisposed_)
         {
             if (impl_)
@@ -671,6 +718,7 @@ namespace Microsoft::Xna::Framework::Audio
             }
             impl_.reset();
             isDisposed_ = true;
+            contentOwnership_.MarkDisposed();
         }
     }
 

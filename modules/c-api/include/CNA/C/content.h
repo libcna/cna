@@ -93,8 +93,11 @@ CNA_C_API CNA_Result cna_content_manager_set_root_directory(
  * @param content_manager Owned content-manager handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
  *
- * Independently owned C resource handles returned by earlier load calls remain valid and must
- * still be destroyed explicitly.
+ * Loaded Effects and a loaded Model's effects, buffers and content-owned textures are disposed,
+ * matching XNA/C++. Their C handles remain allocated for inspection and cleanup; applying an
+ * Effect or drawing the Model returns `CNA_RESULT_INVALID_STATE`. Independently transferred
+ * Texture2D, TextureCube, SpriteFont and SoundEffect handles remain usable and must still be
+ * destroyed explicitly.
  */
 CNA_C_API CNA_Result cna_content_manager_unload(CNA_Handle content_manager);
 
@@ -625,7 +628,10 @@ CNA_C_API CNA_Result cna_content_manager_copy_xnb_reader_usage_name(
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure. A second destroy
  * returns `CNA_RESULT_INVALID_HANDLE`.
  *
- * Independently owned resource handles returned by the manager are not destroyed by this call.
+ * Resource handles returned by the manager are not released by this call. Loaded Effects and
+ * Model resources are disposed just as by @ref cna_content_manager_unload; their handles still
+ * require explicit cleanup. Independently transferred texture, font and sound handles remain
+ * usable.
  * A **borrowed** manager — the one a game owns, reached with `cna_game_get_content_manager_ext` —
  * is refused with `CNA_RESULT_INVALID_STATE`: it is released with its game.
  */
