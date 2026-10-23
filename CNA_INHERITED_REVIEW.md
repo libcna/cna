@@ -75,31 +75,49 @@ details: demos `docs/repair-evidence/graphics/OCCLUSION_REPAIR_REVIEW.md` and
 `repair-inherited-occlusion-external-v3-*` reports. Final marker/issue closure
 follows the product commit and a focused unmarked rerun.
 
-## Remaining review work
+## Review completion
 
-Owner decision received during this review: loaded C Effect/Model lifetime must
-match XNA/C++, with explicit C documentation and test corrections. The old
-independent-effect/model contract is superseded; do not introduce deep cloning
-or suppress native disposal to preserve it. Independently transferred texture,
-font and sound handles were not part of that question. Preserve their existing
-contract and regression checks.
+The inherited ownership and disposal work is accepted in CNA `39ef8ea2f` and
+`65e69cc5e`. ISSUE-011 and ISSUE-082 now have final dispositions; the matrix is
+156 historical IDs / 133 final dispositions / 23 pending. ISSUE-010 remains open,
+but its ContentManager post-Dispose subcase is repaired and the obsolete demo
+marker is removed. The independent StorageContainer constructor/filesystem audit
+is deliberately left for the successor.
 
-The owner also answered the two ISSUE-082 questions: C callback timing must
-match XNA/C++, and SpriteBatch behavior after Dispose must also match XNA
-(do not retain the former blanket ObjectDisposedException guards as an
-intentional extension). The existing genuine 13-case managed accounting oracle
-does not cover native Draw/End. A fresh-process real-device observation fixture
-`SpriteBatchDisposedGpuObservation.cs` is prepared to resolve those paths before
-implementation. Preparation alone is not runtime evidence.
+Native validation passes: Core119; Content2057 PASS/4 unchanged SKIP;
+Graphics3051 PASS/115 unchanged SKIP; Media355; Audio775 PASS/4 SKIP. Selected
+SpriteBatch/event regressions pass52 cases on each of SOFTWARE, OPENGLES3,
+OPENGL33, WEBGPU, SDL_GPU and FNA3D. The first asset-dependent module driver used
+the wrong working directory; its Content102/Media234 setup failures are retained,
+and unchanged binaries pass from the source directory required by UnitTests.cmake.
 
-- ISSUE-113: runtime c303d3ad9 committed and closure validated; obsolete marker
-  removed, inventory resolved, five catalog/query CTests PASS.
-- ISSUE-011: finish reviewing resource ownership and metadata changes; implement
-  the owner's C Effect/Model contract decision with exact disposal diagnostics.
-- GraphicsResource event ordering: validate and commit separately from content
-  metadata where possible.
-- Input reference-only evidence committed in demos f148654 (70 genuine XNA checks).
-  Regenerate affected C API inventories after remaining repairs.
-- Reconcile inherited chronological handoffs, then prepare the final English
-  `handoff.md` for Opus 5.5 xhigh, commit and push. Ordinary remaining campaign
-  issues belong in that handoff; do not claim they were all fixed.
+Integrated ownership sanitizers pass62/62 with actual affected implementation
+and129 Sharp Runtime translation units instrumented. SpriteBatch/event ASan,
+UBSan, float-cast-overflow and leak validation passes106/106. The first event
+sanitizer audit had an overly strict repeated-warning multiplicity assumption;
+the v2 driver proves the exact prior/new diagnostic multiset and no source drift.
+
+The final external consumer rebuild completes191 PASS / one unchanged capability
+SKIP. Ten intended rows change FAIL-to-PASS: C content manager on two renderers,
+SpriteBatch begin/end on four and C resource lifecycle on four. Independent C
+cube/sound transfer lifetime passes SOFTWARE and OPENGLES3; six exact visual
+references pass. Frozen source/artifact hashes are unchanged. Peak memory is
+4,301,119,488 bytes with high-limit throttling only and zero max/OOM events.
+
+Genuine XNA post-Dispose observation ran in six fresh Wine/DXVK processes. Four
+reference processes crash at EffectParameter.SetValue for deferred/native-effect
+paths; two Immediate cases complete. CNA preserves measured pair/queue/accounting
+semantics but refuses at the safe SpriteEffect boundary instead of reproducing a
+use-after-free. These are observations, not six passing XNA tests.
+
+C API coverage was regenerated after explicit review. The nine declarations
+introduced by this ownership work have audited mappings; the existing broad
+GraphicsResource rule also now explicitly owns seven previously planned protected
+implementation declarations. Current inventory:8103 symbols,7018 implemented,
+15 partial,620 planned,450 not applicable. Coverage, limitations and release-gate
+checks all pass; the release gate remains honestly not ready because620 unrelated
+planned symbols remain.
+
+No validation job remains active. Final marker/catalog closure, the English root
+handoff and normal pushes are the only work after this document. The ordinary
+remaining campaign belongs to the successor and is not claimed complete here.
