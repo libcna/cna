@@ -391,12 +391,16 @@
       ],
       "subsystem": "network/gamer-services",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Required ENet/discovery socket acquisition failures escape as std::runtime_error; private reply socket failure silently falls back to unreliable shared-port discovery instead of reporting network unavailability.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "494e24d09de742b639d46cc5982a363e338c610d",
+      "validation": [
+        "Genuine XNA XML and NetworkSessionErrorHandler distinguish unavailable networking from communication failure. Seven process-local descriptor-budget regressions FAIL before repair; the original exclusive61190 bind reproducer also fails its type check. Candidate throws NetworkNotAvailableException at required ENet/discovery acquisition failure and refuses missing private reply sockets. Existing diagnostics, public Begin/End timing and recovery are preserved.",
+        "Builds PASS without diagnostics. Complete native558/558PASS (48.369s), all551 preceding outcomes unchanged; bind reproduction PASS and3 C boundary/net controls PASS0.11s. Original forced-unavailable demo FAILED/exit1 on both renderer selections using hash-verified old consumers, then follows its unchanged SKIPPED/exit77 contract after repair with exact no-network diagnostic.",
+        "All24 ordinary C++/C network scenarios PASS on SOFTWARE and all24 PASS on OPENGLES3; preceding026 statuses/markers/check counts/messages/assertion multiplicities unchanged. Catalog719 identical/zero problems; all275 artifact hashes match. No oracle or runtime marker changes; only stale demo comment updated. Initial driver stopped on documented77; preserved evidence and exact-status validation resumed correctly. No new full719/native aggregate/visual/sanitizer/other-platform/service claim. Evidence: demos docs/repair-evidence/net/NETWORK_FAILURE_TYPES.md."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-019",

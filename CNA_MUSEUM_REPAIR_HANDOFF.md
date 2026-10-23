@@ -27,7 +27,22 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: ISSUE-018 network failure exceptions (2026-10-23)
+### Current task: achievement contracts017/077/078 (2026-10-23)
+
+ISSUE-018 fix494e24d09de742b639d46cc5982a363e338c610d is committed and validated below.
+Its permanent disposition is RESOLVED/FIXED_VALIDATED:156 historical IDs,124 final dispositions,
+32 without. Commit018 matrix/evidence closure, run final catalog checks, publish/verify refs.
+Next verify genuine XNA achievement collection mutation/missing-key behavior before touching
+the implementation: decompiled XNA uses a read-only IList and Dictionary key lookup; current
+CNA follows FNA's permissive mutators and IndexOutOfRangeException. The C property/documentation
+disagrees with successful mutation, and the C missing-key route promises INVALID_ARGUMENT.
+Investigate the documented C extension boundary rather than changing IsReadOnly to false blindly.
+017's source constructor still sets EarnedOnline=true; review all offline/online materialization
+paths before changing that default. No achievement code, test or oracle has changed yet.
+No active build/test scope, no pending permission. Preserve foreign changes, especially113 and
+content/audio ownership. Last full checkpoint remains075;026/018 are narrower network checkpoints.
+
+#### Completed ISSUE-018 validation
 
 ISSUE-026 fix5c60a2028f0688fa8b728109156bd6921dc4dbe2 is committed and validated below.
 Its permanent matrix/inventory disposition is RESOLVED/FIXED_VALIDATED:156 historical IDs,
