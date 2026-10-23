@@ -24,6 +24,9 @@ single spaces, starting with a letter; names are unique ignoring case). A local 
 description stored with the profile, returned by `AvatarDescription.BeginGetFromGamer`). It plays
 Local and SystemLink sessions, and its achievements and leaderboards use the local store; service
 Guide panes and PlayerMatch/Ranked refuse it. `ShowSignIn(paneCount, true)` requires the service.
+Offline leaderboard Rating assignments persist immediately. A LocalWithLeaderboards game's
+EndGame transition also saves subsequent column changes before GameEnded, including changes
+through retained streams. Unchanged cached rows are not written over another writer's updates.
 Profiles are stored in `CNA_GAMER_SERVICES_PROFILES_DIR/profiles.json`, else
 `$XDG_DATA_HOME/cna/gamer-services/profiles.json` or `$HOME/.local/share/cna/gamer-services/profiles.json`
 (`%LOCALAPPDATA%\CNA\gamer-services` on Windows); writes are atomic and serialized between

@@ -441,6 +441,11 @@ namespace CNA::Internal::GamerServices
         return result;
     }
 
+    std::string SnapshotLeaderboardColumnsEXT(const PropertyDictionary& columns)
+    {
+        return ColumnsToJson(columns).dump();
+    }
+
     void SaveLeaderboardEntryEXT(
         const std::string& leaderboardFileKey,
         const PersistedLeaderboardEntry& entry,

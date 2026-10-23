@@ -145,6 +145,15 @@ namespace CNA::Internal::GamerServices
     std::vector<PersistedLeaderboardEntry> LoadLeaderboardEntriesEXT(const std::string& leaderboardFileKey);
 
     /**
+     * @brief Captures the canonical persisted contents of a row's columns, including stream bytes.
+     *
+     * @param columns Columns to snapshot without changing their stream positions.
+     * @return Owned serialized contents for detecting changes since a successful load or write.
+     */
+    std::string SnapshotLeaderboardColumnsEXT(
+        const Microsoft::Xna::Framework::GamerServices::PropertyDictionary& columns);
+
+    /**
      * @brief Records (or updates) one gamer's entry on the given leaderboard and immediately
      * replaces its local store after checked write, flush and close.
      * Successful return provides OS-cache persistence, without a power-loss guarantee.

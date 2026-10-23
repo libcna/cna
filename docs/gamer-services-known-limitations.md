@@ -517,6 +517,9 @@ claim about how Xbox LIVE decided.
   leaderboards; `IsSignedInToLive` false; no guests; `Gamer.GetFromGamertag` and its Begin/End
   throw `NotSupportedException` (no directory to search); service Guide pages and PlayerMatch/Ranked
   refuse, as on a console without LIVE.
+- **Local persistence:** Rating writes save immediately; LocalWithLeaderboards EndGame also
+  saves later column and stream changes before GameEnded. Merely opening a cached writer entry
+  does not create or overwrite a stored row.
 - **Reason:** there is nothing to ask.
 - **Observable impact:** as on an offline console.
 - **Porting impact:** minor.

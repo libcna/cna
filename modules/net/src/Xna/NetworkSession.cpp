@@ -700,6 +700,18 @@ namespace Microsoft::Xna::Framework::Net
                         }
                         leaderboardTransitionPending_=false;
                     }
+                    if (sessionState_ == NetworkSessionState::Playing &&
+                        sessionType_ == NetworkSessionType::LocalWithLeaderboards)
+                    {
+                        // Offline columns may have changed after the last Rating write,
+                        // including through a retained stream or mutable dictionary value.
+                        for (auto* gamer : localGamers_)
+                        {
+                            gamer->leaderboardWriter_.FlushOfflineWrites();
+                            if (auto* signedIn = gamer->getSignedInGamerProperty())
+                                signedIn->leaderboardWriter_.FlushOfflineWrites();
+                        }
+                    }
                     // Every machine clears readiness when a game ends, so the lobby starts over.
                     if (sessionState_ == NetworkSessionState::Playing) ClearReadyInternal();
                     sessionState_ = evt.State;

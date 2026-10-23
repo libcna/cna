@@ -25,7 +25,8 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @brief Gets the leaderboard entry identified by the given leaderboard identity.
          *
          * Service identities keep mutable writes in memory. Explicit offline factory objects
-         * retain local fixture persistence. The returned entry is owned by this writer and
+         * retain immediate Rating persistence; LocalWithLeaderboards also saves subsequent
+         * column changes when EndGame is processed, before GameEnded. The returned entry is owned by this writer and
          * remains valid until its gamer is destroyed.
          *
          * @param leaderboardId The leaderboard to query.
@@ -41,10 +42,14 @@ namespace Microsoft::Xna::Framework::GamerServices
         void BeginServiceGameplay();
         void EndServiceGameplay();
         void BindServiceEntry(const std::string& fileKey,LeaderboardEntry& entry);
+        void FlushOfflineWrites();
         std::vector<CNA::Internal::GamerServices::ServiceLeaderboardWrite> CollectServiceWrites() const;
 
         Gamer* owner_ = nullptr;
         std::map<std::string, LeaderboardEntry> entriesByLeaderboardKeyEXT_;
+        // Canonical bytes, not shallow dictionaries: a retained stream/reference can change
+        // without calling a setter. Unchanged cached rows must not overwrite another writer.
+        std::map<std::string, std::string> persistedColumns_;
         std::map<std::string,LeaderboardIdentity> identities_;
         std::shared_ptr<WriteScope> writeScope_;
     };

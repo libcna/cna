@@ -61,6 +61,10 @@ namespace Microsoft::Xna::Framework::GamerServices
         CNA::Internal::GamerServices::LoadLeaderboardEntryColumnsEXT(
             fileKey, owner_->getGamertagProperty(), entry.getColumnsProperty()
         );
+        auto [snapshot, snapshotInserted] = persistedColumns_.insert_or_assign(fileKey,
+            CNA::Internal::GamerServices::SnapshotLeaderboardColumnsEXT(entry.getColumnsProperty()));
+        (void)snapshotInserted;
+        std::string* persistedColumns = &snapshot->second;
 
         auto [inserted, didInsert] = entriesByLeaderboardKeyEXT_.emplace(fileKey, std::move(entry));
         (void) didInsert; // always true here - the find() above already ruled out an existing entry
@@ -69,14 +73,27 @@ namespace Microsoft::Xna::Framework::GamerServices
         // Explicit offline fixtures retain their legacy persistence hook; service writers
         // instead collect drafts for the session EndGame transaction.
         Gamer* owner = owner_;
-        result->SetOnRatingChangedHookEXT([result, fileKey, owner]() {
+        result->SetOnRatingChangedHookEXT([result, fileKey, owner, persistedColumns]() {
+            auto contents = CNA::Internal::GamerServices::SnapshotLeaderboardColumnsEXT(result->getColumnsProperty());
             CNA::Internal::GamerServices::PersistedLeaderboardEntry record;
             record.Gamertag = owner->getGamertagProperty();
             record.Rating = result->getRatingProperty();
             CNA::Internal::GamerServices::SaveLeaderboardEntryEXT(fileKey, record, &result->getColumnsProperty());
+            // Do not advance the baseline on a failed write, or allocate after persistence.
+            persistedColumns->swap(contents);
         });
 
         return result;
+    }
+    void LeaderboardWriter::FlushOfflineWrites()
+    {
+        if (!owner_->serviceUserId_.empty()) return;
+        for (auto& [key, entry] : entriesByLeaderboardKeyEXT_)
+        {
+            if (CNA::Internal::GamerServices::SnapshotLeaderboardColumnsEXT(entry.getColumnsProperty()) !=
+                persistedColumns_.at(key))
+                entry.setRatingProperty(entry.getRatingProperty());
+        }
     }
     void LeaderboardWriter::BindServiceEntry(const std::string& key,LeaderboardEntry& entry) {
         const std::weak_ptr<WriteScope> weak=writeScope_;
