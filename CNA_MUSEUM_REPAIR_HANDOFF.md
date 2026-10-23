@@ -38,6 +38,11 @@ Commit and normally push completed work, then finish the requested handoff and s
 goal is to be created; the owner cleared the goal. No sub-agents have been requested.
 
 028 constructor validation COMPLETE, ready for coherent source commit and permanent closure:
+Source constructor repair is now committed783fe5739bbf968aae71983269115e4b29a3a016.
+Permanent028 status is RESOLVED/FIXED_VALIDATED:156 historical IDs,130 final dispositions,
+26 without; DC-R1/DC-R2 are additional findings outside that historical count. Lifetime source
+3c67874ba remains included. Closure/evidence checkpoint awaits normal publication, then inherited
+work review begins under the owner's new authorization above.
 native integration51PASS0.540s (15 pre-fix failures repaired,36 passes preserved), native audio
 779=775PASS/4sameSKIP8.821s (one documented corrupt-file XNA expectation/name correction).
 Targeted ASan/UBSan/leaks62PASS0.119s across ten TUs incl. FileStream/Path and constructor fixture;
