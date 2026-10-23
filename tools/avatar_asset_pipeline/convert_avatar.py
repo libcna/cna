@@ -202,9 +202,20 @@ def convert_body(body_path, out_dir):
     write_skeleton_bin(out_dir / "skeleton.bin", parent_indices, bind_pose_local, inverse_bind_global)
 
     parts = []
+    used_names = set()
     for mesh_i, mesh in enumerate(gltf.meshes):
         for prim_i, prim in enumerate(mesh.primitives):
-            part_name = mesh.name or f"part{mesh_i}_{prim_i}"
+            # Every primitive is a part with files of its own. Named after its mesh alone, the
+            # primitives of a mesh with several (one per material) wrote over each other's files.
+            if mesh.name and len(mesh.primitives) == 1:
+                part_name = mesh.name
+            else:
+                part_name = f"{mesh.name or f'part{mesh_i}'}_{prim_i}"
+            base_name, suffix = part_name, 1
+            while part_name in used_names:
+                part_name = f"{base_name}_{suffix}"
+                suffix += 1
+            used_names.add(part_name)
             verts_path = out_dir / f"{part_name}.verts.bin"
             idx_path = out_dir / f"{part_name}.idx.bin"
             _write_skinned_vertex_buffer(gltf, blob, prim, verts_path, joint_index_remap)
