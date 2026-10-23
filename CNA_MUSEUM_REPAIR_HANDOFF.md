@@ -43,8 +43,8 @@ outputs are still cleared. No ABI/generator/numeric-index/copy/ownership/factory
 Native/C docs and the old FNA-based tests explicitly adopt genuine XNA. Both C collection and
 C++ award demos needed these reference-backed oracle corrections, with all old controls retained.
 
-Before: native728=710PASS/18newFAIL93.759s, original C demo29/30 on both renderers. After:
-full native728PASS75.355s, six C gamer/boundary testsPASS0.19s, complete consumer buildsPASS.
+Before: native728=709PASS/18newFAIL/1unchangedSKIP93.759s, original C demo29/30 on both renderers. After:
+full native727PASS/1unchangedSKIP75.355s, six C gamer/boundary testsPASS0.19s, complete consumer buildsPASS.
 Existing nodiscard warnings only (30 before/17 after in unchanged test files); consumer no warnings.
 First C run had one incorrect new scalar-output assumption and three unbuilt executables;
 corrected test/docs and built missing targets, then all six passed. No production output-policy
@@ -64,13 +64,26 @@ browser/online-service/platform claim. Full cross-subsystem checkpoint stays075 
 Evidence: demos docs/repair-evidence/gamer/ACHIEVEMENTS_PREFLIGHT.md and
 AchievementCollectionXnaOracle.cs; ignored reports repair-achievements-*. Artifact freeze released.
 
-Exact next task: commit the owned permanent-disposition updates and demos evidence, publish
-normal fast-forwards and verify remote refs. Then continue017: Achievement ctor
+Publication VERIFIED: CNA origin/next f3ac0166b4e79f855b28df156e5cb0d4319e74b8,
+demos origin/next46b16ee3398e83cddbc981222c62e7e200592319. Normal pushes only.
+Current next task017: four new native regressions added for synthetic values, offline catalog,
+offline store without catalog, and service award state. Runtime and old expectations unchanged.
+Witness build passed; all four *EarnedOnline* witnesses FAIL before repair in0.002s.
+Candidate now defaults synthetic/offline values to false and marks only earned service records true.
+Public docs state the synthetic default. Corrected one old native and one C synthetic-fixture
+assumption; added C assertions for persisted offline provenance. No storage/ABI changes.
+After-build passed. Full native732=731PASS/1unchanged rendererSKIP (78.538s), all728 prior
+outcomes retained and4newPASS; six C gamer controlsPASS0.20s. Corrected the earlier077/078
+reporting count:727PASS/1SKIP, not728PASS; same pre-existing no-3D upload fixture skip.
+Consumer build scope cna-achievement-origin-consumer-build/session20621 is running, one compiler.
+Next original award14 checks on SOFTWARE/OPENGLES3, then remove017 marker only after passing.
+Preserve077/078 and compare surrounding gamer results. Evidence demos EARNED_ONLINE.md.
+Achievement ctor
 sets EarnedOnline=true, including unearned/synthetic/offline values. Three materialization paths
 need provenance review. Offline store contains key/ticks, not an online flag (historical issue
 sentence is wrong); service awards are authenticated calls. Genuine Windows XNA getter is a Pro
 feature stub, so no runtime online/offline XNA-value claim. Preserve foreign113/content/audio work.
-No pending approval; no active build or test. Neither repository is globally clean because foreign
+No pending approval. Neither repository is globally clean because foreign
 changes remain. No downstream engine/extended/museum edits.
 
 #### Completed ISSUE-018 validation
