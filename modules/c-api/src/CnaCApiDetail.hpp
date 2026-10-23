@@ -35,6 +35,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/InvalidCastException.hpp"
 #include "System/IO/IOException.hpp"
+#include "System/UnauthorizedAccessException.hpp"
 #include "System/NotImplementedException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -457,6 +458,8 @@ template<typename TCallable>
     } catch (const std::filesystem::filesystem_error& exception) {
         return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
     } catch (const System::IO::IOException& exception) {
+        return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+    } catch (const System::UnauthorizedAccessException& exception) {
         return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
     } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
         return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());

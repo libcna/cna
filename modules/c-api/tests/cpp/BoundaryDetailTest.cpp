@@ -11,6 +11,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 #include "System/InvalidCastException.hpp"
+#include "System/UnauthorizedAccessException.hpp"
 
 #include <cstdint>
 #include <cstdlib>
@@ -336,6 +337,13 @@ int main()
         }) != CNA_RESULT_INVALID_STATE ||
         !HasLastError(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, "guide is up")) {
         return 25;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw System::UnauthorizedAccessException("file access denied");
+        }) != CNA_RESULT_IO ||
+        !HasLastError(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, "file access denied")) {
+        return 31;
     }
 
     return 0;

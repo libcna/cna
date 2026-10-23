@@ -223,11 +223,13 @@
       ],
       "subsystem": "storage/runtime",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Several independent storage facade paths bypass typed System.IO semantics: File.Delete can remove directories, CreateDirectory accepts an existing file, enumeration leaks filesystem errors. Sharp File.Delete also had wrong directory/missing-parent exceptions and NUL-prefix deletion. The disposed ContentManager guard is a separate remaining ownership-batch concern.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "2026-10-23 partial deletion repair: genuine XNA StorageOperationsOracle12/12 and actual .NET8 FileDeletionOracle7/7. Sharp native new tests1PASS/4FAIL before,5PASS after; older wrong IOException expectation corrected to reference UnauthorizedAccessException with preservation assertion retained. Published Sharp d051307b3316903a692846acf78200d74339bbef: warning-free full18223/18223/42 executables,zero skips; strict MinGW/Emscripten checks and boundaries44/109 pass. Actual Windows-targeted product16/16 under Win64 Wine, not native Windows. CNA before50/52, after52/52; C barrier beforeexit31, after0. Both renderer storage7/7 and C storage2/2, strict C17 actual ABI smoke, catalog and6 exact visuals pass. Full consumer build clean,275 artifact hashes frozen; complete v2 sweeps719 IDs each: SOFTWARE643/25/48/3, OPENGLES3685/24/7/3, exact prior statuses/markers/failing-assertion multisets unchanged; only directory checks7->11 allPASS. Final serial CTest726.18s:678PASS/48SKIP/6FAIL/3disabled, exact FileShare checkpoint ID/status match;275 hashes unchanged after all runs. Global gate remains RED with inherited six residual failures. First unmatched-audio partial run retained/stopped, not accepted. No full010 closure; CreateDirectory/enumeration/content cases remain. See demos storage/FILE_DELETION.md and CNA_MUSEUM_REPAIR_HANDOFF.md."
+      ],
       "final_disposition": null
     },
     {

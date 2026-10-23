@@ -111,6 +111,7 @@ exactly once.
 |---|---|
 | `StorageDeviceNotConnectedException` | `CNA_RESULT_INVALID_STATE` / `CNA_ERROR_CATEGORY_STATE` |
 | `System::IO::IOException` and subclasses, `std::filesystem::filesystem_error` | `CNA_RESULT_IO` / `CNA_ERROR_CATEGORY_IO` |
+| `System::UnauthorizedAccessException` (including DeleteFile on a directory) | `CNA_RESULT_IO` / `CNA_ERROR_CATEGORY_IO` |
 | `System::ArgumentException`, empty relative paths, unknown identities | `CNA_RESULT_INVALID_ARGUMENT` |
 | `System::NotSupportedException` (unwritable or unreadable stream) | `CNA_RESULT_NOT_SUPPORTED` |
 | `System::ObjectDisposedException` | `CNA_RESULT_INVALID_STATE` |

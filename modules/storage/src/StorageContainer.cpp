@@ -7,6 +7,7 @@
 #include "CNA/Internal/PathContainment.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 #include "System/IO/FileStream.hpp"
+#include "System/IO/File.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -248,7 +249,7 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (file.empty())
             throw System::ArgumentNullException("file");
-        fs::remove(ResolveNativePath(file));
+        System::IO::File::Delete(ResolvePath(file));
     }
 
     std::vector<std::string> StorageContainer::GetFileNames() const

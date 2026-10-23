@@ -310,6 +310,14 @@ static int validate_directories(const CNA_StorageContainerHandle container)
         copied != UINT64_C(6)) {
         return 0;
     }
+    /* File deletion must refuse directories without destroying the existing entry. */
+    if (cna_storage_container_delete_file(container, view("levels")) != CNA_RESULT_IO ||
+        cna_storage_container_directory_exists(container, view("levels"), &exists) !=
+            CNA_RESULT_SUCCESS || exists != CNA_TRUE ||
+        cna_storage_container_delete_file(container, view("missing-parent/file")) != CNA_RESULT_IO ||
+        cna_storage_container_delete_file(container, view("missing-file")) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
     if (cna_storage_container_delete_directory(container, view("levels")) !=
         CNA_RESULT_SUCCESS) {
         return 0;

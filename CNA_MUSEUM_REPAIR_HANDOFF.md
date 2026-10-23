@@ -27,7 +27,60 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current checkpoint: ISSUE-152 validated on Linux; ISSUE-010 deletion next (2026-10-23)
+### Current task: ISSUE-010 file deletion validated; directory semantics next (2026-10-23)
+
+ISSUE-152 disposition/handoff checkpoint is published in CNA `8c162e142af498c5db22f14fe9f3eba2b9a938ed`
+and demos `0086bc424e50a023c79698a3107c2e1d7dd0aa41`. Three completed FileShare probe binaries
+(sanitizer, Framework sharing executable, strict C smoke) were removed per disk policy;
+sources/logs remain and are rebuildable. The full152 binary freeze was verified and released.
+
+Sharp File.Delete repair `d051307b3316903a692846acf78200d74339bbef` is published, full gate
+18223/18223/42 executables,zero skips/failures. Strict MinGW/Emscripten checks and boundaries44/109
+pass. CNA new DeleteFile tests reproduce50PASS/2FAIL before forwarding;52/52 after. C shared
+exception barrier regression reproduces exit31 for UnauthorizedAccessException falling through
+to INTERNAL; after mapping it to IO the same boundary test exits0. C StorageSmoke and the demo
+gain directory preservation/missing parent/missing leaf assertions; original assertions remain.
+No010 closure. Genuine XNA12/12 and actual .NET8 7/7 references are in the demos evidence sources.
+
+Follow-up emulated Windows product validation: actual File/FileStream and existing tests compile
+strictly with MinGW C++23/-O1 and pass16/16 under Win64 Wine, including144 share pairs and4 deletion
+cases. First -O0 type_info duplicate-symbol linker failure retained, no source/oracle workaround.
+Sharp docs-only checkpoint4c7c69bd731b53bbb2fd87cb0f8da233278eb67d records reproduction.
+Native Windows/CNA facade and browser runtime remain pending; do not equate Wine with those.
+
+Build session19270 finished warning-free (469 planned/466 printed steps). Both renderer-labelled
+storage7/7 and C storage2/2 pass; directory demo7 ->11checks, other focused outcomes unchanged.
+Strict C17/Werror StorageSmoke against rebuilt C ABI passes. Catalog719/zero problems,6 exact
+visuals and all6 unchanged-budget platform audits pass; C API routes3197/57, coverage3205/3205
+and8 prose counts pass. All275 demo/CNA/C API binaries are now frozen by
+repair-storage-filedelete-full-artifacts.sha256. Do not rebuild them during runtime sweeps.
+Both complete sweeps14464 finished, prefix repair-storage-filedelete-full-v2, explicitly
+SDL_AUDIO_DRIVER=dummy (matches CMake baseline). Each719 IDs: SW643/25/48/3,GLES685/24/7/3.
+Exact comparison with repair-fileshare-full: statuses/markers/failing-assertion multisets unchanged
+(51SW/50GLES); only directory checks7 ->11, all passing. All275 hashes verified unchanged.
+First attempt73692 omitted dummy audio and had no-device skips/failures, including VideoPlayer
+child abort; preserve its partial full-parts/SOFTWARE logs. Identified shell863182/private scope
+stopped, exit143; old queued GLES never started. This is unmatched-environment evidence, not
+an accepted regression checkpoint or a hidden knownIssue. All275 hashes still match; no source
+edit/rebuild/retry of an assertion was used to correct the environment. No-audio paths need
+separate triage. Full serial CTest94083 finished726.18s:735 registered/732enabled,
+678PASS/48SKIP/6FAIL/3disabled. Exact ID/status comparison with repair-fileshare-ctest has zero
+differences, including every failure and skip. All275 hashes verified after completion;
+the binary freeze is released. Reports repair-storage-filedelete-ctest.*. A daemon restart
+interrupted the earlier launch before any scope/process/log existed; only one run executed.
+The global gate stays RED with the six residuals listed below. No full native CNA corpus,
+native Windows/browser runtime or new sanitizer pass is claimed.
+This checkpoint commits only the six owned CNA source/test/documentation files, the ISSUE-010
+matrix hunk and this handoff. Demos publication follows: directories.cpp, storage/README.md,
+FILE_DELETION.md, FILE_SHARE.md, FileDeletionOracle.cs, StorageOperationsOracle.cs and the own010
+inventory progress hunk. Everything else remains inherited dirt, including
+StorageContainerPathErrorsTests.cpp and the ISSUE-113 matrix/inventory hunks.
+Do not stage it. Detailed evidence: demos docs/repair-evidence/storage/FILE_DELETION.md.
+Exact next task: publish this coherent CNA/demos deletion checkpoint, then reproduce and repair
+CreateDirectory(existing file/file parent) and missing-root enumeration using the already
+validated genuine XNA12-check oracle. ISSUE-010 remains CONFIRMED_OPEN; no markers are removed.
+
+### Previous checkpoint: ISSUE-152 validated on Linux; ISSUE-010 deletion next (2026-10-23)
 
 Published CNA next `169470ee7550471844d01a0789dd5e25770544b6`, Sharp next
 `f51bf9acf8374088a425024b40ef1c7b697c5ba5`; demos baseline HEAD

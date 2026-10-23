@@ -26,6 +26,7 @@
 #include "System/ObjectDisposedException.hpp"
 #include "System/IO/IOException.hpp"
 #include "System/IO/DirectoryNotFoundException.hpp"
+#include "System/UnauthorizedAccessException.hpp"
 
 using Microsoft::Xna::Framework::Storage::StorageDevice;
 
@@ -390,6 +391,34 @@ TEST_F(StorageDeviceDeleteContainerTest, TwoArgumentAppendUsesWriteOnlyAndPreser
     EXPECT_EQ(read->getLengthProperty(), 2);
     EXPECT_EQ(read->ReadByte(), 42);
     EXPECT_EQ(read->ReadByte(), 43);
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, DeleteFilePreservesDirectoriesAndTheirContents)
+{
+    auto container = OpenContainer("FileDeletion");
+    container->CreateDirectory("directory");
+    EXPECT_THROW(container->DeleteFile("directory"), System::UnauthorizedAccessException);
+    EXPECT_TRUE(container->DirectoryExists("directory"));
+    // Recreate only if the defective implementation deleted the first fixture.
+    // The preservation assertion above must still fail in that case.
+    container->CreateDirectory("directory");
+    auto marker = container->CreateFile("directory/sentinel");
+    marker->WriteByte(42);
+    marker->Close();
+    EXPECT_THROW(container->DeleteFile("directory"), System::UnauthorizedAccessException);
+    EXPECT_TRUE(container->FileExists("directory/sentinel"));
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, DeleteFileDistinguishesMissingParentAndMissingLeaf)
+{
+    auto container = OpenContainer("FileDeletion");
+    EXPECT_THROW(container->DeleteFile("absent/file"), System::IO::DirectoryNotFoundException);
+    EXPECT_NO_THROW(container->DeleteFile("absent-file"));
+    auto file = container->CreateFile("real-file");
+    file->WriteByte(42);
+    file->Close();
+    EXPECT_NO_THROW(container->DeleteFile("real-file"));
+    EXPECT_FALSE(container->FileExists("real-file"));
 }
 
 // ---------------------------------------------------------------------------
