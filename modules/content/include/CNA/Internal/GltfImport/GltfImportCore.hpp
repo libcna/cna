@@ -1798,6 +1798,9 @@ namespace CNA::Internal::GltfImport
      * @param data The parsed glTF file.
      * @param scene The graph `BuildSceneGraph` produced for the same file, used to resolve each
      * instance's own node index and world transform.
+     * Only a file with no scenes at all falls back to importing every mesh at the identity root;
+     * a selected scene that places no mesh yields no groups (CNA-DEMOS-ISSUE-092).
+     *
      * @return One `MeshGroup` per distinct skin (plus one for unskinned meshes, if any exist).
      */
     std::vector<MeshGroup> CollectMeshGroups(const cgltf_data* data, const SceneGraphOut& scene);

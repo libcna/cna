@@ -185,6 +185,25 @@ TEST(GltfSceneSelection, AFileWithNoScenesAtAllStillImportsItsMeshes)
     if (!primitives.empty()) { EXPECT_TRUE(primitives[0].extracted) << primitives[0].error; }
 }
 
+TEST(GltfSceneSelection, AnEmptySelectedSceneDoesNotFallBackToAnotherScenesMeshes)
+{
+    // CNA-DEMOS-ISSUE-092. The fallback above is for a file with no scenes. A file that has scenes
+    // and selects an empty one has no geometry to import; the mesh scene 1 places is that scene's,
+    // and importing it at the identity root fabricated a placement the author never made.
+    Parsed parsed;
+    ASSERT_TRUE(Parse(parsed, std::string(R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [] }, { "nodes": [0] } ],
+  "nodes": [ { "name": "ExcludedNode", "mesh": 0 } ],)GLTF") + kMeshTail + "}"));
+
+    const SceneGraphOut scene = BuildSceneGraph(parsed.data);
+    EXPECT_FALSE(HasNodeNamed(scene, "ExcludedNode"));
+    EXPECT_TRUE(CollectMeshGroups(parsed.data, scene).empty())
+        << "an unselected scene's mesh was imported because the selected scene is empty";
+    EXPECT_TRUE(CnaTest::GltfOracle::ExtractSceneMeshesEXT(*parsed.data).empty());
+}
+
 TEST(GltfSceneSelection, ExclusionIsBySceneReachabilityNotByMeshUsage)
 {
     // The distinction that makes GLTF-135 and GLTF-143 consistent rather than contradictory: what

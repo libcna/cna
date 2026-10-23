@@ -1805,7 +1805,10 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     // a **loader-machinery probe** of how the Model's import report reconciles channels across
     // joint palettes. Its geometry and motion are trivial; what it states is report accounting,
     // which no corpus asset's expected file describes.
-    constexpr int kCeiling = 283;
+    //
+    // 283 -> 284 is CNA-DEMOS-ISSUE-092: GltfSceneSelectionTests' empty-selected-scene document, a
+    // **negative one-off** -- it states that nothing is imported, which no corpus asset can.
+    constexpr int kCeiling = 284;
 
     int found = 0;
     std::map<std::string, int> perFile;

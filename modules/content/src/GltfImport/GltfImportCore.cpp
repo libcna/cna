@@ -4461,10 +4461,12 @@ namespace CNA::Internal::GltfImport
             }
         }
 
-        // Fallback for files where meshes exist but no scene node references them (unusual but
-        // not invalid) -- treat every mesh in the file as one unskinned group placed at the
-        // identity root, matching this library's original node-graph-independent behavior.
-        if (groups.empty())
+        // Fallback for a file with no scenes at all (unusual but not invalid) -- treat every mesh
+        // in the file as one unskinned group placed at the identity root, matching this library's
+        // original node-graph-independent behavior. A file that has scenes imports only what its
+        // selected scene reaches, even when that is nothing (GLTF-143): a mesh another scene
+        // places is not this scene's geometry (CNA-DEMOS-ISSUE-092).
+        if (groups.empty() && data->scenes_count == 0)
         {
             MeshGroup g;
             for (cgltf_size i = 0; i < data->meshes_count; ++i)
