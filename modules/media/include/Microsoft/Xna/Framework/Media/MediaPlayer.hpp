@@ -141,6 +141,7 @@ namespace Microsoft::Xna::Framework::Media
          * @brief Clears the queue, enqueues the given song, and starts playback.
          *
          * @param song Song to play.
+         * @throws System::InvalidOperationException The song is disposed; the queue is unchanged.
          */
         static void Play(Song* song);
 

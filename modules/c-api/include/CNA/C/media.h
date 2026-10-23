@@ -440,8 +440,8 @@ CNA_C_API CNA_Result cna_song_get_is_disposed(CNA_SongHandle song, CNA_Bool* out
  * @param song Song handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * The canonical disposal only marks the song disposed; every other member keeps answering
- * afterwards, and disposing twice is a successful no-op. Release the handle with
+ * As in XNA, every member but `cna_song_get_is_disposed` then answers
+ * `CNA_RESULT_INVALID_STATE`, and disposing twice is a successful no-op. Release the handle with
  * `cna_song_destroy`.
  */
 CNA_C_API CNA_Result cna_song_dispose(CNA_SongHandle song);
@@ -577,9 +577,9 @@ CNA_C_API CNA_Result cna_song_collection_get_is_disposed(
  * @param collection Collection handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * Canonical disposal **empties the collection**: afterwards its count is zero and every index is
- * out of range. The songs themselves are untouched — the collection never owned them. Disposing
- * twice is a successful no-op.
+ * As in XNA, its count and every index then answer `CNA_RESULT_INVALID_STATE`. The songs
+ * themselves are untouched — the collection never owned them. Disposing twice is a successful
+ * no-op.
  */
 CNA_C_API CNA_Result cna_song_collection_dispose(CNA_SongCollectionHandle collection);
 

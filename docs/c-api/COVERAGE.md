@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **466 headers**, **8105 symbols**, **7019 implemented**, **15 partial**, **621 planned**, **450 not applicable**. Explicitly excluded headers: **405**.
+Snapshot: **466 headers**, **8105 symbols**, **7019 implemented**, **15 partial**, **621 planned**, **450 not applicable**. Explicitly excluded headers: **406**.
 
 ## Out of runtime C API scope
 
@@ -38,13 +38,13 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/graphics` internal/detail paths | 39 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/graphics-ext` internal/detail paths | 2 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/input` internal/detail paths | 5 | implementation detail: a path segment is `Internal` or `Detail` |
-| `modules/media` internal/detail paths | 12 | implementation detail: a path segment is `Internal` or `Detail` |
+| `modules/media` internal/detail paths | 13 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/net` internal/detail paths | 7 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/runtime` internal/detail paths | 2 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `8d465f4096ffcedd4415c3c946ccd3f613761814dcd6d44f42699d13553344ee`.
+Full inventory SHA-256: `49ea9f04d4bf65cd4c7f1316175313ddfff6b3ced9a52d6884f4afb8cd239f81`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:

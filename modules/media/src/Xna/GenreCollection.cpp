@@ -4,7 +4,7 @@
 namespace Microsoft::Xna::Framework::Media
 {
     GenreCollection::GenreCollection(std::vector<Genre*> genres)
-        : base_(std::move(genres))
+        : base_(std::move(genres), "GenreCollection")
     {
     }
 

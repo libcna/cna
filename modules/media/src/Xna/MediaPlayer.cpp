@@ -10,6 +10,7 @@
 
 #include "CNA/Internal/Media/VisualizationCapture.hpp"
 #include "CNA/Internal/Media/VisualizationFFT.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #ifdef SOUND_ENABLED
 #include "CNA/Internal/Audio/MixerEngine.hpp"
@@ -308,6 +309,13 @@ namespace Microsoft::Xna::Framework::Media
 
     void MediaPlayer::Play(Song* song)
     {
+        if (song != nullptr && song->getIsDisposedProperty())
+        {
+            // XNA's queue refuses a song whose handle Dispose released, before the queue changes.
+            throw System::InvalidOperationException(
+                "Song playback failed. Please verify that the song is not DRM protected. "
+                "DRM protected songs are not supported for creator games.");
+        }
         Song* previousSong = queue_.getCountProperty() > 0 ? queue_[0] : nullptr;
 
         // The input may belong to the old queue; keep it alive through LoadSong and PlaySong.
@@ -494,7 +502,7 @@ namespace Microsoft::Xna::Framework::Media
         {
             return;
         }
-        queue_.Add(new Song(song->getHandle(), song->getNameProperty()));
+        queue_.Add(new Song(song->getHandle(), song->name_));
     }
 
     void MediaPlayer::NextSong(SharpRuntime::intcs direction)
@@ -611,7 +619,7 @@ namespace Microsoft::Xna::Framework::Media
             return;
         }
 
-        song->setPlayCountProperty(song->getPlayCountProperty() + 1);
+        ++song->playCount_;
 #endif
 
         TimerReset();

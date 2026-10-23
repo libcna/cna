@@ -57,8 +57,8 @@ the source object cannot be constructed from outside the library.
 A `CNA_SongHandle` is owned by whoever created it, and **several handles may share one song**:
 releasing one handle never destroys a song that another handle — or a collection — still holds.
 `cna_song_dispose` and `cna_song_destroy` are the canonical disposal-versus-release split the mouse
-cursor and haptic device already use; disposal only marks the song, and every other member keeps
-answering afterwards.
+cursor and haptic device already use; as in XNA, a disposed song refuses every member but
+`cna_song_get_is_disposed` with `CNA_RESULT_INVALID_STATE` (CNA-DEMOS-ISSUE-098).
 
 Three canonical behaviors are preserved rather than tidied up, and two of them will surprise a
 reader of the C++ header:
@@ -89,9 +89,9 @@ after building a collection would otherwise be left with dangling elements; here
 keeps the songs alive, and `cna_song_collection_get_at` hands back a new handle sharing the same
 song rather than a copy.
 
-Canonical disposal **empties** the collection: afterwards its count is zero and every index is out
-of range. The songs themselves are untouched, because the collection never owned them. Disposing
-twice is a successful no-op; releasing the handle twice is not.
+After canonical disposal the count and every index are refused with `CNA_RESULT_INVALID_STATE`, as
+XNA's collections refuse them. The songs themselves are untouched, because the collection never
+owned them. Disposing twice is a successful no-op; releasing the handle twice is not.
 
 The canonical iterator pair and its two type aliases have no C counterpart and are recorded as
 not-applicable — C reads the collection through the count and the indexer, the same decision the
@@ -134,8 +134,10 @@ limitation. Both refuse an album without art with `CNA_RESULT_INVALID_STATE`; ch
 `cna_album_get_has_art` first.
 
 The four entity collections share one C shape because the four canonical types are structurally
-identical. Canonical disposal empties a collection — count zero, every index refused — while its
-elements keep answering, since a collection never owned them. Their iterators and type aliases are
+identical. A disposed collection refuses its count and every index with `CNA_RESULT_INVALID_STATE`,
+while its elements keep answering, since a collection never owned them. A disposed entity or
+library likewise refuses every member but its IsDisposed query; disposing the library leaves the
+collection and entity handles taken from it working. Their iterators and type aliases are
 recorded as not-applicable, like every other collection in this ABI.
 
 ## Pictures

@@ -259,6 +259,9 @@ namespace Microsoft::Xna::Framework::Media
 
     private:
         friend struct CNA::Internal::ContentOwnershipAccess;
+        // MediaPlayer copies a song into its queue and counts its plays; neither may be refused
+        // by the disposed guards on the public getters.
+        friend class MediaPlayer;
         [[nodiscard]] std::shared_ptr<System::IDisposable> GetContentDisposalRecord() const override;
         // Non-owning back-pointers into the MediaLibrary that produced this song; null for any
         // song not created by a library scan. The library outlives the songs it owns, so these do

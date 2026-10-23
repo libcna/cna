@@ -94,8 +94,9 @@ CNA_C_API CNA_Result cna_media_library_get_is_disposed(
  * @param library Owned library handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * Canonical disposal only sets a flag: the catalog stays readable and every handle into it keeps
- * working. Disposing twice is a successful no-op.
+ * As in XNA, every library member but `cna_media_library_get_is_disposed` then answers
+ * `CNA_RESULT_INVALID_STATE`, while collection and entity handles taken before keep working.
+ * Disposing twice is a successful no-op.
  */
 CNA_C_API CNA_Result cna_media_library_dispose(CNA_MediaLibraryHandle library);
 
@@ -280,8 +281,9 @@ CNA_C_API CNA_Result cna_album_get_is_disposed(CNA_AlbumHandle album, CNA_Bool* 
  * @param album Borrowed album handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * The canonical disposal only sets a flag — an album is a view into the library's data and owns nothing
- * of its own — so every other member keeps answering and disposing twice is a successful no-op.
+ * An album is a view into the library's data and owns nothing of its own; as in XNA,
+ * every other member but its IsDisposed query then answers `CNA_RESULT_INVALID_STATE`, and
+ * disposing twice is a successful no-op.
  */
 CNA_C_API CNA_Result cna_album_dispose(CNA_AlbumHandle album);
 
@@ -384,9 +386,9 @@ CNA_C_API CNA_Result cna_album_collection_get_is_disposed(
  * @param collection Borrowed collection handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * Canonical disposal **empties** the collection, so afterwards its count is zero and every index is
- * out of range. Its elements are untouched, and disposing a collection the library still owns
- * empties it for every other reader too.
+ * As in XNA, its count and every index then answer `CNA_RESULT_INVALID_STATE`. Its elements are
+ * untouched, and disposing a collection the library still owns disposes it for every other
+ * reader too.
  */
 CNA_C_API CNA_Result cna_album_collection_dispose(CNA_AlbumCollectionHandle collection);
 
@@ -469,8 +471,9 @@ CNA_C_API CNA_Result cna_artist_get_is_disposed(CNA_ArtistHandle artist, CNA_Boo
  * @param artist Borrowed artist handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * The canonical disposal only sets a flag — an artist is a view into the library's data and owns nothing
- * of its own — so every other member keeps answering and disposing twice is a successful no-op.
+ * An artist is a view into the library's data and owns nothing of its own; as in XNA,
+ * every other member but its IsDisposed query then answers `CNA_RESULT_INVALID_STATE`, and
+ * disposing twice is a successful no-op.
  */
 CNA_C_API CNA_Result cna_artist_dispose(CNA_ArtistHandle artist);
 
@@ -573,9 +576,9 @@ CNA_C_API CNA_Result cna_artist_collection_get_is_disposed(
  * @param collection Borrowed collection handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * Canonical disposal **empties** the collection, so afterwards its count is zero and every index is
- * out of range. Its elements are untouched, and disposing a collection the library still owns
- * empties it for every other reader too.
+ * As in XNA, its count and every index then answer `CNA_RESULT_INVALID_STATE`. Its elements are
+ * untouched, and disposing a collection the library still owns disposes it for every other
+ * reader too.
  */
 CNA_C_API CNA_Result cna_artist_collection_dispose(CNA_ArtistCollectionHandle collection);
 
@@ -658,8 +661,9 @@ CNA_C_API CNA_Result cna_genre_get_is_disposed(CNA_GenreHandle genre, CNA_Bool* 
  * @param genre Borrowed genre handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * The canonical disposal only sets a flag — a genre is a view into the library's data and owns nothing
- * of its own — so every other member keeps answering and disposing twice is a successful no-op.
+ * A genre is a view into the library's data and owns nothing of its own; as in XNA,
+ * every other member but its IsDisposed query then answers `CNA_RESULT_INVALID_STATE`, and
+ * disposing twice is a successful no-op.
  */
 CNA_C_API CNA_Result cna_genre_dispose(CNA_GenreHandle genre);
 
@@ -762,9 +766,9 @@ CNA_C_API CNA_Result cna_genre_collection_get_is_disposed(
  * @param collection Borrowed collection handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * Canonical disposal **empties** the collection, so afterwards its count is zero and every index is
- * out of range. Its elements are untouched, and disposing a collection the library still owns
- * empties it for every other reader too.
+ * As in XNA, its count and every index then answer `CNA_RESULT_INVALID_STATE`. Its elements are
+ * untouched, and disposing a collection the library still owns disposes it for every other
+ * reader too.
  */
 CNA_C_API CNA_Result cna_genre_collection_dispose(CNA_GenreCollectionHandle collection);
 
@@ -847,8 +851,9 @@ CNA_C_API CNA_Result cna_playlist_get_is_disposed(CNA_PlaylistHandle playlist, C
  * @param playlist Borrowed playlist handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * The canonical disposal only sets a flag — a playlist is a view into the library's data and owns nothing
- * of its own — so every other member keeps answering and disposing twice is a successful no-op.
+ * A playlist is a view into the library's data and owns nothing of its own; as in XNA,
+ * every other member but its IsDisposed query then answers `CNA_RESULT_INVALID_STATE`, and
+ * disposing twice is a successful no-op.
  */
 CNA_C_API CNA_Result cna_playlist_dispose(CNA_PlaylistHandle playlist);
 
@@ -951,9 +956,9 @@ CNA_C_API CNA_Result cna_playlist_collection_get_is_disposed(
  * @param collection Borrowed collection handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * Canonical disposal **empties** the collection, so afterwards its count is zero and every index is
- * out of range. Its elements are untouched, and disposing a collection the library still owns
- * empties it for every other reader too.
+ * As in XNA, its count and every index then answer `CNA_RESULT_INVALID_STATE`. Its elements are
+ * untouched, and disposing a collection the library still owns disposes it for every other
+ * reader too.
  */
 CNA_C_API CNA_Result cna_playlist_collection_dispose(CNA_PlaylistCollectionHandle collection);
 
@@ -1438,8 +1443,8 @@ CNA_C_API CNA_Result cna_picture_get_is_disposed(
  * @param picture Borrowed picture handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * The canonical disposal only sets a flag, so every other member keeps answering and disposing
- * twice is a successful no-op.
+ * As in XNA, every other member but its IsDisposed query then answers
+ * `CNA_RESULT_INVALID_STATE`, and disposing twice is a successful no-op.
  */
 CNA_C_API CNA_Result cna_picture_dispose(CNA_PictureHandle picture);
 
@@ -1586,6 +1591,9 @@ CNA_C_API CNA_Result cna_picture_album_get_is_disposed(
  *
  * @param album Borrowed picture album handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * As in XNA, every other member but its IsDisposed query then answers
+ * `CNA_RESULT_INVALID_STATE`, and disposing twice is a successful no-op.
  */
 CNA_C_API CNA_Result cna_picture_album_dispose(CNA_PictureAlbumHandle album);
 
@@ -1791,7 +1799,8 @@ CNA_C_API CNA_Result cna_picture_collection_get_is_disposed(
  * @param collection Borrowed collection handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * Canonical disposal **empties** the collection while its pictures keep answering.
+ * As in XNA, its count and every index then answer `CNA_RESULT_INVALID_STATE`, while its
+ * pictures keep answering.
  */
 CNA_C_API CNA_Result cna_picture_collection_dispose(CNA_PictureCollectionHandle collection);
 
@@ -1871,6 +1880,9 @@ CNA_C_API CNA_Result cna_picture_album_collection_get_is_disposed(
  *
  * @param collection Borrowed collection handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * As in XNA, its count and every index then answer `CNA_RESULT_INVALID_STATE`, while its albums
+ * keep answering.
  */
 CNA_C_API CNA_Result cna_picture_album_collection_dispose(
     CNA_PictureAlbumCollectionHandle collection);

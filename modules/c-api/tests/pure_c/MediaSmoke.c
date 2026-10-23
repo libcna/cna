@@ -376,11 +376,11 @@ static int validate_song_family(const CNA_Handle game, const SongFixture* const 
         return 0;
     }
 
-    /* Disposal only marks the song; every other member keeps answering, and it is idempotent. */
+    /* Disposal is idempotent and, as in XNA, refuses every member but IsDisposed. */
     if (cna_song_dispose(song) != CNA_RESULT_SUCCESS ||
         cna_song_dispose(song) != CNA_RESULT_SUCCESS ||
         cna_song_get_is_disposed(song, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
-        cna_song_get_play_count(song, &number) != CNA_RESULT_SUCCESS || number != 42) {
+        cna_song_get_play_count(song, &number) != CNA_RESULT_INVALID_STATE) {
         return 0;
     }
 
@@ -438,15 +438,14 @@ static int validate_song_family(const CNA_Handle game, const SongFixture* const 
             strcmp(text, "Microsoft.Xna.Framework.Media.SongCollection") != 0) {
             return 0;
         }
-        /* Canonical disposal empties the collection, so every index becomes out of range -- but
-           the songs themselves survive, because the collection never owned them. */
+        /* Canonical disposal refuses the count and every index, as XNA's does -- but the songs
+           themselves survive, because the collection never owned them. */
         if (cna_song_collection_dispose(collection) != CNA_RESULT_SUCCESS ||
             cna_song_collection_dispose(collection) != CNA_RESULT_SUCCESS ||
             cna_song_collection_get_is_disposed(collection, &flag) != CNA_RESULT_SUCCESS ||
             flag != CNA_TRUE ||
-            cna_song_collection_get_count(collection, &count) != CNA_RESULT_SUCCESS ||
-            count != 0 ||
-            cna_song_collection_get_at(collection, 0, &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_song_collection_get_count(collection, &count) != CNA_RESULT_INVALID_STATE ||
+            cna_song_collection_get_at(collection, 0, &rejected) != CNA_RESULT_INVALID_STATE ||
             cna_song_get_is_disposed(borrowed, &flag) != CNA_RESULT_SUCCESS) {
             return 0;
         }

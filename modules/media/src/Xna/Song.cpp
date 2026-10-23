@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "CNA/Internal/PathUtf8.hpp"
+#include "CNA/Internal/Media/MediaObjectDisposal.hpp"
 #include "CNA/Internal/TitlePath.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -16,6 +17,8 @@
 
 namespace Microsoft::Xna::Framework::Media
 {
+    using CNA::Internal::Media::ThrowIfDisposed;
+
     Song::Song(std::string fileName, std::string name)
         : name_(std::move(name)),
           duration_(System::TimeSpan::Zero),
@@ -95,26 +98,31 @@ namespace Microsoft::Xna::Framework::Media
 
     const std::string& Song::getNameProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Song");
         return name_;
     }
 
     Album* Song::getAlbumProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Song");
         return album_;
     }
 
     Artist* Song::getArtistProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Song");
         return artist_;
     }
 
     Genre* Song::getGenreProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Song");
         return genre_;
     }
 
     System::TimeSpan Song::getDurationProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Song");
         return duration_;
     }
 
@@ -125,16 +133,19 @@ namespace Microsoft::Xna::Framework::Media
 
     bool Song::getIsProtectedProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Song");
         return false;
     }
 
     bool Song::getIsRatedProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Song");
         return isRated_;
     }
 
     SharpRuntime::intcs Song::getPlayCountProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Song");
         return playCount_;
     }
 
@@ -145,11 +156,13 @@ namespace Microsoft::Xna::Framework::Media
 
     SharpRuntime::intcs Song::getRatingProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Song");
         return rating_;
     }
 
     SharpRuntime::intcs Song::getTrackNumberProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Song");
         return trackNumber_;
     }
 
@@ -167,27 +180,28 @@ namespace Microsoft::Xna::Framework::Media
 
     bool Song::Equals(const Song* song) const
     {
-        return song != nullptr && handle_ == song->handle_;
+        ThrowIfDisposed(isDisposed_, "Song");
+        // A disposed Song has released its handle, so it equals only itself, as in XNA.
+        return song == this || (song != nullptr && !song->isDisposed_ && handle_ == song->handle_);
     }
 
     bool Song::Equals(const System::Object* obj) const
     {
+        ThrowIfDisposed(isDisposed_, "Song");
         return Equals(dynamic_cast<const Song*>(obj));
     }
 
     int Song::GetHashCode() const
     {
+        ThrowIfDisposed(isDisposed_, "Song");
         return static_cast<int>(std::hash<std::string>{}(handle_));
     }
 
     std::string Song::ToString() const
     {
-        // The XNA reference documents only "Returns a String representation of the Song" without
-        // specifying the string. Returning the name matches what Album/Artist/Genre/Playlist in
-        // this same namespace already do (each returns its own name_), so Song follows the
-        // established convention rather than inventing a different format -- plans/plan_media.md
-        // MEDIA-176. This is a documented inference from sibling types, NOT a behavior verified
-        // against a decompiled XNA binary.
+        ThrowIfDisposed(isDisposed_, "Song");
+        // XNA's Song.ToString returns Name after its disposal check (Microsoft.Xna.Framework.Media
+        // .Song in the decompiled Windows assembly), as Album/Artist/Genre/Playlist do.
         return name_;
     }
 
@@ -352,7 +366,8 @@ namespace Microsoft::Xna::Framework::Media
 
     bool operator==(const Song& song1, const Song& song2)
     {
-        return song1.Equals(&song2);
+        // object.Equals(first, second): the same object is equal without asking it anything.
+        return &song1 == &song2 || song1.Equals(&song2);
     }
 
     bool operator!=(const Song& song1, const Song& song2)

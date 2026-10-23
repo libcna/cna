@@ -3,6 +3,7 @@
 
 #include <vector>
 
+#include "CNA/Internal/Media/MediaObjectDisposal.hpp"
 #include "CNA/Internal/Media/ThumbnailGenerator.hpp"
 #include "System/IO/MemoryStream.hpp"
 
@@ -13,6 +14,8 @@
 
 namespace Microsoft::Xna::Framework::Media
 {
+    using CNA::Internal::Media::ThrowIfDisposed;
+
     Picture::Picture(std::string name, PictureAlbum* album, SharpRuntime::intcs width,
                       SharpRuntime::intcs height, std::chrono::system_clock::time_point date,
                       std::string path)
@@ -30,16 +33,19 @@ namespace Microsoft::Xna::Framework::Media
 
     PictureAlbum* Picture::getAlbumProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Picture");
         return album_;
     }
 
     std::chrono::system_clock::time_point Picture::getDateProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Picture");
         return date_;
     }
 
     SharpRuntime::intcs Picture::getHeightProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Picture");
         return height_;
     }
 
@@ -50,21 +56,25 @@ namespace Microsoft::Xna::Framework::Media
 
     std::string Picture::getNameProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Picture");
         return name_;
     }
 
     SharpRuntime::intcs Picture::getWidthProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Picture");
         return width_;
     }
 
     System::IO::Stream* Picture::GetImage()
     {
+        ThrowIfDisposed(isDisposed_, "Picture");
         return new System::IO::FileStream(path_);
     }
 
     System::IO::Stream* Picture::GetThumbnail()
     {
+        ThrowIfDisposed(isDisposed_, "Picture");
         // Same fix as Album::GetThumbnail -- this was a synonym for GetImage() returning the
         // full-size picture, sharing one downscaler rather than duplicating it (MEDIA-210).
         std::vector<uint8_t> png;
@@ -78,21 +88,26 @@ namespace Microsoft::Xna::Framework::Media
 
     bool Picture::Equals(const Picture* other) const
     {
-        return other != nullptr && path_ == other->path_;
+        ThrowIfDisposed(isDisposed_, "Picture");
+        // A disposed Picture has released its handle, so it equals only itself, as in XNA.
+        return other == this || (other != nullptr && !other->isDisposed_ && path_ == other->path_);
     }
 
     bool Picture::Equals(const System::Object* obj) const
     {
+        ThrowIfDisposed(isDisposed_, "Picture");
         return Equals(dynamic_cast<const Picture*>(obj));
     }
 
     int Picture::GetHashCode() const
     {
+        ThrowIfDisposed(isDisposed_, "Picture");
         return static_cast<int>(std::hash<std::string>{}(path_));
     }
 
     std::string Picture::ToString() const
     {
+        ThrowIfDisposed(isDisposed_, "Picture");
         return name_;
     }
 
@@ -104,7 +119,8 @@ namespace Microsoft::Xna::Framework::Media
 
     bool operator==(const Picture& lhs, const Picture& rhs)
     {
-        return lhs.Equals(&rhs);
+        // object.Equals(first, second): the same object is equal without asking it anything.
+        return &lhs == &rhs || lhs.Equals(&rhs);
     }
 
     bool operator!=(const Picture& lhs, const Picture& rhs)

@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/SongCollection.hpp"
 
+#include "CNA/Internal/Media/MediaObjectDisposal.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Xna::Framework::Media
 {
+    using CNA::Internal::Media::ThrowIfDisposed;
+
     SongCollection::SongCollection(std::vector<Song*> songs)
         : innerList_(std::move(songs)),
           isDisposed_(false)
@@ -17,6 +20,7 @@ namespace Microsoft::Xna::Framework::Media
         // indexer -- SongCollection.cs). Matches the majority project precedent (BoundingBox/
         // VertexBuffer/NetworkSessionProperties), not TouchCollection's std::out_of_range
         // outlier -- see plans/plan_media.md Section 2 item 7.
+        ThrowIfDisposed(isDisposed_, "SongCollection");
         if (index < 0 || index >= getCountProperty())
         {
             throw System::ArgumentOutOfRangeException("index");
@@ -27,6 +31,7 @@ namespace Microsoft::Xna::Framework::Media
 
     SharpRuntime::intcs SongCollection::getCountProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "SongCollection");
         return static_cast<SharpRuntime::intcs>(innerList_.size());
     }
 
@@ -43,21 +48,25 @@ namespace Microsoft::Xna::Framework::Media
 
     SongCollection::iterator SongCollection::begin()
     {
+        ThrowIfDisposed(isDisposed_, "SongCollection");
         return innerList_.begin();
     }
 
     SongCollection::iterator SongCollection::end()
     {
+        ThrowIfDisposed(isDisposed_, "SongCollection");
         return innerList_.end();
     }
 
     SongCollection::const_iterator SongCollection::begin() const
     {
+        ThrowIfDisposed(isDisposed_, "SongCollection");
         return innerList_.begin();
     }
 
     SongCollection::const_iterator SongCollection::end() const
     {
+        ThrowIfDisposed(isDisposed_, "SongCollection");
         return innerList_.end();
     }
 

@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include "Microsoft/Xna/Framework/Media/MediaPlayer.hpp"
 #include "System/Environment.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <chrono>
 #include <thread>
@@ -113,6 +114,37 @@ TEST_F(MediaPlayerTest, PlayEnqueuesADuplicateNotTheOriginalInstance)
 
     original.setPlayCountProperty(42);
     EXPECT_NE(queued->getPlayCountProperty(), 42);
+}
+
+// CNA-DEMOS-ISSUE-098 follow-up: XNA's MediaQueue.Play refuses a song whose handle Dispose
+// released with InvalidOperationException (SongPlaybackFailed), before the queue changes.
+TEST_F(MediaPlayerTest, PlayRefusesADisposedSongWithoutTouchingTheQueue)
+{
+    Song current(kFixtureA, "Sunrise");
+    MediaPlayer::Play(&current);
+    Song* queued = MediaPlayer::getQueueProperty().getActiveSongProperty();
+    ASSERT_NE(queued, nullptr);
+
+    Song disposed(kFixtureB, "Twilight");
+    disposed.Dispose();
+    EXPECT_THROW(MediaPlayer::Play(&disposed), System::InvalidOperationException);
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongProperty(), queued);
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getCountProperty(), 1);
+}
+
+// A song taken from a collection can be disposed while the collection keeps it; playing the
+// collection enqueues live copies and still counts nothing against the disposed original.
+TEST_F(MediaPlayerTest, PlayingACollectionCopiesADisposedMemberIntoTheQueue)
+{
+    Song first(kFixtureA, "Sunrise");
+    Song second(kFixtureB, "Twilight");
+    SongCollection songs({&first, &second});
+    first.Dispose();
+
+    EXPECT_NO_THROW(MediaPlayer::Play(songs, 0));
+    ASSERT_EQ(MediaPlayer::getQueueProperty().getCountProperty(), 2);
+    EXPECT_FALSE(MediaPlayer::getQueueProperty()[0]->getIsDisposedProperty());
+    EXPECT_EQ(MediaPlayer::getQueueProperty()[0]->getNameProperty(), "Sunrise");
 }
 
 TEST_F(MediaPlayerTest, GameHasControlIsAlwaysTrue)

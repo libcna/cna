@@ -603,22 +603,22 @@ static int validate_picture_family(const CNA_Handle game, const CNA_MediaLibrary
         }
     }
 
-    /* Disposal marks a picture and empties a collection, and every index is then refused. */
+    /* Disposal is idempotent and, as in XNA, refuses every member but IsDisposed. */
     if (cna_picture_dispose(picture) != CNA_RESULT_SUCCESS ||
         cna_picture_dispose(picture) != CNA_RESULT_SUCCESS ||
         cna_picture_get_is_disposed(picture, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
-        cna_picture_get_name_size(picture, &bytes) != CNA_RESULT_SUCCESS) {
+        cna_picture_get_name_size(picture, &bytes) != CNA_RESULT_INVALID_STATE) {
         return 0;
     }
     if (cna_picture_album_dispose(root) != CNA_RESULT_SUCCESS ||
         cna_picture_album_get_is_disposed(root, &flag) != CNA_RESULT_SUCCESS ||
         flag != CNA_TRUE ||
         cna_picture_collection_dispose(pictures) != CNA_RESULT_SUCCESS ||
-        cna_picture_collection_get_count(pictures, &count) != CNA_RESULT_SUCCESS || count != 0 ||
-        cna_picture_collection_get_at(pictures, 0, &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_picture_collection_get_count(pictures, &count) != CNA_RESULT_INVALID_STATE ||
+        cna_picture_collection_get_at(pictures, 0, &rejected) != CNA_RESULT_INVALID_STATE ||
         cna_picture_album_collection_dispose(child_albums) != CNA_RESULT_SUCCESS ||
-        cna_picture_album_collection_get_count(child_albums, &count) != CNA_RESULT_SUCCESS ||
-        count != 0) {
+        cna_picture_album_collection_get_count(child_albums, &count) !=
+            CNA_RESULT_INVALID_STATE) {
         return 0;
     }
 
@@ -737,8 +737,8 @@ static int validate_genre_and_artist_reach(
         }
     }
 
-    /* Disposal is idempotent and observable on every entity kind, and an emptied collection
-       still answers its count as zero rather than refusing. */
+    /* Disposal is idempotent and observable on every entity kind, and a disposed collection
+       refuses its count and indexer, as XNA's do. */
     if (cna_genre_get_is_disposed(genre, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
         cna_genre_collection_get_is_disposed(genres, &flag) != CNA_RESULT_SUCCESS ||
         flag != CNA_FALSE ||
@@ -746,11 +746,11 @@ static int validate_genre_and_artist_reach(
         cna_genre_collection_dispose(genres) != CNA_RESULT_SUCCESS ||
         cna_genre_collection_get_is_disposed(genres, &flag) != CNA_RESULT_SUCCESS ||
         flag != CNA_TRUE ||
-        cna_genre_collection_get_count(genres, &count) != CNA_RESULT_SUCCESS || count != 0 ||
-        cna_genre_collection_get_at(genres, 0, &same_genre) != CNA_RESULT_INVALID_ARGUMENT) {
+        cna_genre_collection_get_count(genres, &count) != CNA_RESULT_INVALID_STATE ||
+        cna_genre_collection_get_at(genres, 0, &same_genre) != CNA_RESULT_INVALID_STATE) {
         return 0;
     }
-    /* The genre handle taken before the collection was emptied still answers -- the collection
+    /* The genre handle taken before the collection was disposed still answers -- the collection
        never owned it, the same rule the artist handle already proves below. The artist is only
        *observed* here: disposing it is left to the caller, because the graph test still reads its
        name after emptying the artist collection. */
@@ -787,7 +787,7 @@ static int validate_collection_disposal_and_playlists(
         cna_album_collection_dispose(albums) != CNA_RESULT_SUCCESS ||
         cna_album_collection_get_is_disposed(albums, &flag) != CNA_RESULT_SUCCESS ||
         flag != CNA_TRUE ||
-        cna_album_collection_get_count(albums, &count) != CNA_RESULT_SUCCESS || count != 0) {
+        cna_album_collection_get_count(albums, &count) != CNA_RESULT_INVALID_STATE) {
         return 0;
     }
     /* An already-empty collection disposes exactly as a populated one does. */
@@ -796,8 +796,7 @@ static int validate_collection_disposal_and_playlists(
         cna_playlist_collection_dispose(playlists) != CNA_RESULT_SUCCESS ||
         cna_playlist_collection_get_is_disposed(playlists, &flag) != CNA_RESULT_SUCCESS ||
         flag != CNA_TRUE ||
-        cna_playlist_collection_get_count(playlists, &count) != CNA_RESULT_SUCCESS ||
-        count != 0) {
+        cna_playlist_collection_get_count(playlists, &count) != CNA_RESULT_INVALID_STATE) {
         return 0;
     }
 
@@ -915,7 +914,7 @@ static int validate_library_graph(const CNA_Handle game)
 
     /* CBIND-065: everything the graph walk above reached around -- type names, the genre and
        artist edges, entity equality and the disposal observability -- while every one of those
-       routes was recorded implemented. Run before the disposals below, which empty the
+       routes was recorded implemented. Run before the disposals below, which dispose the
        collections these need. */
     {
         CNA_GenreHandle first_genre = CNA_INVALID_HANDLE;
@@ -926,21 +925,22 @@ static int validate_library_graph(const CNA_Handle game)
         }
     }
 
-    /* Disposal marks the entity and empties a collection, exactly as the canonical types do. */
+    /* Disposal marks the entity and refuses its members and a collection's count and indexer,
+       exactly as the canonical types do. */
     if (cna_album_dispose(album) != CNA_RESULT_SUCCESS ||
         cna_album_dispose(album) != CNA_RESULT_SUCCESS ||
         cna_album_get_is_disposed(album, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
-        cna_album_get_name_size(album, &bytes) != CNA_RESULT_SUCCESS) {
+        cna_album_get_name_size(album, &bytes) != CNA_RESULT_INVALID_STATE) {
         return 0;
     }
     if (cna_artist_collection_dispose(artists) != CNA_RESULT_SUCCESS ||
         cna_artist_collection_get_is_disposed(artists, &flag) != CNA_RESULT_SUCCESS ||
         flag != CNA_TRUE ||
-        cna_artist_collection_get_count(artists, &count) != CNA_RESULT_SUCCESS || count != 0 ||
-        cna_artist_collection_get_at(artists, 0, &rejected) != CNA_RESULT_INVALID_ARGUMENT) {
+        cna_artist_collection_get_count(artists, &count) != CNA_RESULT_INVALID_STATE ||
+        cna_artist_collection_get_at(artists, 0, &rejected) != CNA_RESULT_INVALID_STATE) {
         return 0;
     }
-    /* The artist handle taken before the collection was emptied still answers: the collection
+    /* The artist handle taken before the collection was disposed still answers: the collection
        never owned it. */
     memset(text, 0, sizeof(text));
     if (cna_artist_get_name_size(artist, &bytes) != CNA_RESULT_SUCCESS ||
@@ -951,7 +951,7 @@ static int validate_library_graph(const CNA_Handle game)
     }
 
     /* CBIND-065: the collection disposal surface and the playlist family. Placed after the
-       artist-name check for the same reason -- these empty the album collection. */
+       artist-name check for the same reason -- these dispose the album collection. */
     if (!validate_collection_disposal_and_playlists(albums, playlists)) {
         return 0;
     }
@@ -971,7 +971,7 @@ static int validate_library_graph(const CNA_Handle game)
     /* Releasing the library handle first is safe: the entity handles keep the library alive. */
     if (cna_media_library_destroy(library) != CNA_RESULT_SUCCESS ||
         cna_media_library_destroy(library) != CNA_RESULT_INVALID_HANDLE ||
-        cna_album_get_name_size(album, &bytes) != CNA_RESULT_SUCCESS ||
+        cna_album_get_is_disposed(album, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
         cna_song_get_name_size(song, &bytes) != CNA_RESULT_SUCCESS) {
         return 0;
     }
@@ -999,8 +999,7 @@ static int validate_library_graph(const CNA_Handle game)
         cna_media_library_dispose(from_source) != CNA_RESULT_SUCCESS ||
         cna_media_library_get_is_disposed(from_source, &flag) != CNA_RESULT_SUCCESS ||
         flag != CNA_TRUE ||
-        cna_media_library_get_songs(from_source, &songs) != CNA_RESULT_SUCCESS ||
-        cna_song_collection_destroy(songs) != CNA_RESULT_SUCCESS ||
+        cna_media_library_get_songs(from_source, &songs) != CNA_RESULT_INVALID_STATE ||
         cna_media_library_destroy(from_source) != CNA_RESULT_SUCCESS) {
         return 0;
     }

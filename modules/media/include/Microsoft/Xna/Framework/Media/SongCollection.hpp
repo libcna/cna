@@ -50,7 +50,10 @@ namespace Microsoft::Xna::Framework::Media
          */
         [[nodiscard]] bool getIsDisposedProperty() const;
 
-        /** @brief Clears the collection and marks it disposed. */
+        /**
+         * @brief Disposes the collection; Count, the indexer and enumeration then throw
+         * ObjectDisposedException.
+         */
         void Dispose() override;
 
         /** @brief Returns an iterator to the first song. */

@@ -4,7 +4,7 @@
 namespace Microsoft::Xna::Framework::Media
 {
     AlbumCollection::AlbumCollection(std::vector<Album*> albums)
-        : base_(std::move(albums))
+        : base_(std::move(albums), "AlbumCollection")
     {
     }
 

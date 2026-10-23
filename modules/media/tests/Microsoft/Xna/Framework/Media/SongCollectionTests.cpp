@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Media/SongCollection.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
 using Microsoft::Xna::Framework::Media::Song;
@@ -42,13 +43,18 @@ TEST(SongCollectionTest, IndexerReturnsCorrectSongWithinBounds)
     EXPECT_EQ(collection[1]->getNameProperty(), "Second");
 }
 
-TEST(SongCollectionTest, DisposeClearsAndMarksDisposed)
+// CNA-DEMOS-ISSUE-098: XNA's SongCollection checks disposal before Count, the indexer and
+// GetEnumerator; the songs themselves stay live.
+TEST(SongCollectionTest, DisposeMarksDisposedAndRefusesCountAndIndexer)
 {
     Song a(kRealFixture);
     SongCollection collection({&a});
     collection.Dispose();
     EXPECT_TRUE(collection.getIsDisposedProperty());
-    EXPECT_EQ(collection.getCountProperty(), 0);
+    EXPECT_THROW((void)collection.getCountProperty(), System::ObjectDisposedException);
+    EXPECT_THROW((void)collection[0], System::ObjectDisposedException);
+    EXPECT_THROW((void)collection.begin(), System::ObjectDisposedException);
+    EXPECT_FALSE(a.getIsDisposedProperty());
 }
 
 TEST(SongCollectionTest, IterationVisitsEverySong)

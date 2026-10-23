@@ -4,7 +4,7 @@
 namespace Microsoft::Xna::Framework::Media
 {
     PictureCollection::PictureCollection(std::vector<Picture*> pictures)
-        : base_(std::move(pictures))
+        : base_(std::move(pictures), "PictureCollection")
     {
     }
 

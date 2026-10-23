@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/Genre.hpp"
+#include "CNA/Internal/Media/MediaObjectDisposal.hpp"
 
 #include <functional>
 #include <utility>
 
 namespace Microsoft::Xna::Framework::Media
 {
+    using CNA::Internal::Media::ThrowIfDisposed;
+
     Genre::Genre(std::string name, AlbumCollection* albums, SongCollection* songs)
         : name_(std::move(name)), albums_(albums), songs_(songs)
     {
@@ -21,6 +24,7 @@ namespace Microsoft::Xna::Framework::Media
 
     AlbumCollection* Genre::getAlbumsProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Genre");
         return albums_;
     }
 
@@ -31,31 +35,38 @@ namespace Microsoft::Xna::Framework::Media
 
     std::string Genre::getNameProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Genre");
         return name_;
     }
 
     SongCollection* Genre::getSongsProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Genre");
         return songs_;
     }
 
     bool Genre::Equals(const Genre* other) const
     {
-        return other != nullptr && name_ == other->name_;
+        ThrowIfDisposed(isDisposed_, "Genre");
+        // A disposed Genre has released its handle, so it equals only itself, as in XNA.
+        return other == this || (other != nullptr && !other->isDisposed_ && name_ == other->name_);
     }
 
     bool Genre::Equals(const System::Object* obj) const
     {
+        ThrowIfDisposed(isDisposed_, "Genre");
         return Equals(dynamic_cast<const Genre*>(obj));
     }
 
     int Genre::GetHashCode() const
     {
+        ThrowIfDisposed(isDisposed_, "Genre");
         return static_cast<int>(std::hash<std::string>{}(name_));
     }
 
     std::string Genre::ToString() const
     {
+        ThrowIfDisposed(isDisposed_, "Genre");
         return name_;
     }
 
@@ -67,7 +78,8 @@ namespace Microsoft::Xna::Framework::Media
 
     bool operator==(const Genre& lhs, const Genre& rhs)
     {
-        return lhs.Equals(&rhs);
+        // object.Equals(first, second): the same object is equal without asking it anything.
+        return &lhs == &rhs || lhs.Equals(&rhs);
     }
 
     bool operator!=(const Genre& lhs, const Genre& rhs)

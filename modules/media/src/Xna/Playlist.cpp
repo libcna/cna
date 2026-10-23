@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/Playlist.hpp"
+#include "CNA/Internal/Media/MediaObjectDisposal.hpp"
 
 #include <functional>
 #include <utility>
 
 namespace Microsoft::Xna::Framework::Media
 {
+    using CNA::Internal::Media::ThrowIfDisposed;
+
     Playlist::Playlist(std::string name, SongCollection* songs, System::TimeSpan duration)
         : name_(std::move(name)), songs_(songs), duration_(duration)
     {
@@ -20,6 +23,7 @@ namespace Microsoft::Xna::Framework::Media
 
     System::TimeSpan Playlist::getDurationProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Playlist");
         return duration_;
     }
 
@@ -30,31 +34,38 @@ namespace Microsoft::Xna::Framework::Media
 
     std::string Playlist::getNameProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Playlist");
         return name_;
     }
 
     SongCollection* Playlist::getSongsProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "Playlist");
         return songs_;
     }
 
     bool Playlist::Equals(const Playlist* other) const
     {
-        return other != nullptr && name_ == other->name_;
+        ThrowIfDisposed(isDisposed_, "Playlist");
+        // A disposed Playlist has released its handle, so it equals only itself, as in XNA.
+        return other == this || (other != nullptr && !other->isDisposed_ && name_ == other->name_);
     }
 
     bool Playlist::Equals(const System::Object* obj) const
     {
+        ThrowIfDisposed(isDisposed_, "Playlist");
         return Equals(dynamic_cast<const Playlist*>(obj));
     }
 
     int Playlist::GetHashCode() const
     {
+        ThrowIfDisposed(isDisposed_, "Playlist");
         return static_cast<int>(std::hash<std::string>{}(name_));
     }
 
     std::string Playlist::ToString() const
     {
+        ThrowIfDisposed(isDisposed_, "Playlist");
         return name_;
     }
 
@@ -71,7 +82,8 @@ namespace Microsoft::Xna::Framework::Media
     // project-wide convention rather than reintroducing null-handling a reference can't express.
     bool operator==(const Playlist& lhs, const Playlist& rhs)
     {
-        return lhs.Equals(&rhs);
+        // object.Equals(first, second): the same object is equal without asking it anything.
+        return &lhs == &rhs || lhs.Equals(&rhs);
     }
 
     bool operator!=(const Playlist& lhs, const Playlist& rhs)

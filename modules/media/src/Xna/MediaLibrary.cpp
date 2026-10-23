@@ -13,6 +13,7 @@
 #include "CNA/Internal/Media/AudioTagParser.hpp"
 #include "CNA/Internal/Media/MediaLibraryIndex.hpp"
 #include "CNA/Internal/Media/MediaLibraryPaths.hpp"
+#include "CNA/Internal/Media/MediaObjectDisposal.hpp"
 #include "CNA/Internal/Media/PictureLibraryIndex.hpp"
 #include "CNA/Internal/Media/PlaylistParser.hpp"
 #include "CNA/Internal/Media/SavedPictureStore.hpp"
@@ -22,6 +23,8 @@
 
 namespace Microsoft::Xna::Framework::Media
 {
+    using CNA::Internal::Media::ThrowIfDisposed;
+
     namespace
     {
         // Looks for a cover-art image in the same directory as `songPath`, matching the common
@@ -431,16 +434,19 @@ namespace Microsoft::Xna::Framework::Media
 
     AlbumCollection* MediaLibrary::getAlbumsProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "MediaLibrary");
         return albumsCollection_.get();
     }
 
     ArtistCollection* MediaLibrary::getArtistsProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "MediaLibrary");
         return artistsCollection_.get();
     }
 
     GenreCollection* MediaLibrary::getGenresProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "MediaLibrary");
         return genresCollection_.get();
     }
 
@@ -451,36 +457,43 @@ namespace Microsoft::Xna::Framework::Media
 
     MediaSource* MediaLibrary::getMediaSourceProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "MediaLibrary");
         return mediaSource_.get();
     }
 
     PictureCollection* MediaLibrary::getPicturesProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "MediaLibrary");
         return picturesCollection_.get();
     }
 
     PlaylistCollection* MediaLibrary::getPlaylistsProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "MediaLibrary");
         return playlistsCollection_.get();
     }
 
     PictureAlbum* MediaLibrary::getRootPictureAlbumProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "MediaLibrary");
         return rootPictureAlbum_;
     }
 
     PictureCollection* MediaLibrary::getSavedPicturesProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "MediaLibrary");
         return savedPicturesCollection_.get();
     }
 
     SongCollection* MediaLibrary::getSongsProperty() const
     {
+        ThrowIfDisposed(isDisposed_, "MediaLibrary");
         return songsCollection_.get();
     }
 
     Picture* MediaLibrary::GetPictureFromToken(std::string token)
     {
+        ThrowIfDisposed(isDisposed_, "MediaLibrary");
         // No real OS media-library token system exists to reference -- a Picture's own resolved
         // file path (Picture::getTokenEXT()) is used as its token, a simple, real, stable
         // identifier (plans/plan_media.md MEDIA-62; no FNA logic to port here, see plan §0).
@@ -568,9 +581,9 @@ namespace Microsoft::Xna::Framework::Media
         // PictureAlbumCollection, so base_ (the underlying MediaCollectionBase<PictureAlbum>) is
         // directly reachable for the runtime append the read-only public API doesn't expose (same
         // pattern SavePicture() itself already uses for PictureCollection below).
-        if (rootPictureAlbum_->getAlbumsProperty() != nullptr)
+        if (rootPictureAlbum_->childAlbums_ != nullptr)
         {
-            rootPictureAlbum_->getAlbumsProperty()->base_.Add(raw);
+            rootPictureAlbum_->childAlbums_->base_.Add(raw);
         }
 
         savedPicturesAlbum_ = raw;
@@ -579,6 +592,7 @@ namespace Microsoft::Xna::Framework::Media
 
     Picture* MediaLibrary::SavePicture(std::string name, const std::vector<uint8_t>& imageBuffer)
     {
+        ThrowIfDisposed(isDisposed_, "MediaLibrary");
         std::string savedPath = CNA::Internal::Media::SavedPictureStore::SavePicture(
             pictureRoot_, name, imageBuffer);
         if (savedPath.empty())
@@ -609,9 +623,9 @@ namespace Microsoft::Xna::Framework::Media
         // directly reachable here for the runtime append the read-only public API doesn't expose.
         picturesCollection_->base_.Add(raw);
         savedPicturesCollection_->base_.Add(raw);
-        if (parentAlbum != nullptr && parentAlbum->getPicturesProperty() != nullptr)
+        if (parentAlbum != nullptr && parentAlbum->pictures_ != nullptr)
         {
-            parentAlbum->getPicturesProperty()->base_.Add(raw);
+            parentAlbum->pictures_->base_.Add(raw);
         }
 
         return raw;
@@ -619,6 +633,7 @@ namespace Microsoft::Xna::Framework::Media
 
     Picture* MediaLibrary::SavePicture(std::string name, System::IO::Stream* source)
     {
+        ThrowIfDisposed(isDisposed_, "MediaLibrary");
         if (source == nullptr)
         {
             throw System::ArgumentNullException("source");

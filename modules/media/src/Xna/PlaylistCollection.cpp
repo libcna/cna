@@ -4,7 +4,7 @@
 namespace Microsoft::Xna::Framework::Media
 {
     PlaylistCollection::PlaylistCollection(std::vector<Playlist*> playlists)
-        : base_(std::move(playlists))
+        : base_(std::move(playlists), "PlaylistCollection")
     {
     }
 

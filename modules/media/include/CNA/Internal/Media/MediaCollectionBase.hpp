@@ -3,6 +3,7 @@
 
 #include <vector>
 
+#include "CNA/Internal/Media/MediaObjectDisposal.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
@@ -18,11 +19,14 @@ namespace CNA::Internal::Media
     class MediaCollectionBase
     {
     public:
-        MediaCollectionBase() = default;
-        explicit MediaCollectionBase(std::vector<T*> items) : items_(std::move(items)) {}
+        /// typeName is the public collection's own name, which a disposed refusal reports.
+        MediaCollectionBase(std::vector<T*> items, const char* typeName)
+            : items_(std::move(items)), typeName_(typeName) {}
 
+        /// Count, the indexer and enumeration are refused once disposed, as XNA's are.
         [[nodiscard]] SharpRuntime::intcs Count() const
         {
+            ThrowIfDisposed(isDisposed_, typeName_);
             return static_cast<SharpRuntime::intcs>(items_.size());
         }
 
@@ -36,6 +40,7 @@ namespace CNA::Internal::Media
 
         [[nodiscard]] T* At(SharpRuntime::intcs index) const
         {
+            ThrowIfDisposed(isDisposed_, typeName_);
             if (index < 0 || index >= Count())
             {
                 throw System::ArgumentOutOfRangeException("index");
@@ -51,13 +56,22 @@ namespace CNA::Internal::Media
         using iterator = typename std::vector<T*>::iterator;
         using const_iterator = typename std::vector<T*>::const_iterator;
 
-        iterator begin() { return items_.begin(); }
-        iterator end() { return items_.end(); }
-        [[nodiscard]] const_iterator begin() const { return items_.begin(); }
-        [[nodiscard]] const_iterator end() const { return items_.end(); }
+        iterator begin() { ThrowIfDisposed(isDisposed_, typeName_); return items_.begin(); }
+        iterator end() { ThrowIfDisposed(isDisposed_, typeName_); return items_.end(); }
+        [[nodiscard]] const_iterator begin() const
+        {
+            ThrowIfDisposed(isDisposed_, typeName_);
+            return items_.begin();
+        }
+        [[nodiscard]] const_iterator end() const
+        {
+            ThrowIfDisposed(isDisposed_, typeName_);
+            return items_.end();
+        }
 
     private:
         std::vector<T*> items_;
+        const char* typeName_;
         bool isDisposed_ = false;
     };
 }
