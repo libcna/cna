@@ -613,6 +613,10 @@ CNA_Result cna_accelerometer_get_state(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         *out_state = static_cast<CNA_SensorState>(object->value->getStateProperty());
         return CNA_RESULT_SUCCESS;
     });
@@ -624,6 +628,10 @@ CNA_Result cna_accelerometer_start(
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<SensorResource<Accelerometer>> object{};
         if (const CNA_Result routeResult = BorrowSensor<Accelerometer>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -641,6 +649,10 @@ CNA_Result cna_accelerometer_stop(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         object->value->Stop();
         return CNA_RESULT_SUCCESS;
     });
@@ -655,7 +667,11 @@ CNA_Result cna_accelerometer_dispose(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        object->value->Dispose();
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        DisposeSensor(*object);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -670,6 +686,10 @@ CNA_Result cna_accelerometer_get_is_data_valid(
         }
         std::shared_ptr<SensorResource<Accelerometer>> object{};
         if (const CNA_Result routeResult = BorrowSensor<Accelerometer>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -691,6 +711,10 @@ CNA_Result cna_accelerometer_get_time_between_updates_ticks(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         *out_ticks = static_cast<int64_t>(object->value->getTimeBetweenUpdatesProperty().getTicksProperty());
         return CNA_RESULT_SUCCESS;
     });
@@ -703,6 +727,10 @@ CNA_Result cna_accelerometer_set_time_between_updates_ticks(
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<SensorResource<Accelerometer>> object{};
         if (const CNA_Result routeResult = BorrowSensor<Accelerometer>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -720,6 +748,10 @@ CNA_Result cna_accelerometer_inject_synthetic_update_ext(
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<SensorResource<Accelerometer>> object{};
         if (const CNA_Result routeResult = BorrowSensor<Accelerometer>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -827,6 +859,10 @@ CNA_Result cna_accelerometer_get_type_name_size(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
     });
 }
@@ -844,6 +880,10 @@ CNA_Result cna_accelerometer_copy_type_name(
         }
         std::shared_ptr<SensorResource<Accelerometer>> object{};
         if (const CNA_Result routeResult = BorrowSensor<Accelerometer>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -877,6 +917,10 @@ CNA_Result cna_accelerometer_get_current_value(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         *out_reading = MapAccelerometerReadingValue(object->value->getCurrentValueProperty());
         return CNA_RESULT_SUCCESS;
     });
@@ -895,6 +939,10 @@ CNA_Result cna_gyroscope_get_state(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         *out_state = static_cast<CNA_SensorState>(object->value->getStateProperty());
         return CNA_RESULT_SUCCESS;
     });
@@ -906,6 +954,10 @@ CNA_Result cna_gyroscope_start(
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<SensorResource<Gyroscope>> object{};
         if (const CNA_Result routeResult = BorrowSensor<Gyroscope>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -923,6 +975,10 @@ CNA_Result cna_gyroscope_stop(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         object->value->Stop();
         return CNA_RESULT_SUCCESS;
     });
@@ -937,7 +993,11 @@ CNA_Result cna_gyroscope_dispose(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        object->value->Dispose();
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        DisposeSensor(*object);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -952,6 +1012,10 @@ CNA_Result cna_gyroscope_get_is_data_valid(
         }
         std::shared_ptr<SensorResource<Gyroscope>> object{};
         if (const CNA_Result routeResult = BorrowSensor<Gyroscope>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -973,6 +1037,10 @@ CNA_Result cna_gyroscope_get_time_between_updates_ticks(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         *out_ticks = static_cast<int64_t>(object->value->getTimeBetweenUpdatesProperty().getTicksProperty());
         return CNA_RESULT_SUCCESS;
     });
@@ -985,6 +1053,10 @@ CNA_Result cna_gyroscope_set_time_between_updates_ticks(
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<SensorResource<Gyroscope>> object{};
         if (const CNA_Result routeResult = BorrowSensor<Gyroscope>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -1002,6 +1074,10 @@ CNA_Result cna_gyroscope_inject_synthetic_update_ext(
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<SensorResource<Gyroscope>> object{};
         if (const CNA_Result routeResult = BorrowSensor<Gyroscope>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -1109,6 +1185,10 @@ CNA_Result cna_gyroscope_get_type_name_size(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_bytes);
     });
 }
@@ -1126,6 +1206,10 @@ CNA_Result cna_gyroscope_copy_type_name(
         }
         std::shared_ptr<SensorResource<Gyroscope>> object{};
         if (const CNA_Result routeResult = BorrowSensor<Gyroscope>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -1156,6 +1240,10 @@ CNA_Result cna_gyroscope_get_current_value(
         }
         std::shared_ptr<SensorResource<Gyroscope>> object{};
         if (const CNA_Result routeResult = BorrowSensor<Gyroscope>(sensor, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireLiveSensor(*object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

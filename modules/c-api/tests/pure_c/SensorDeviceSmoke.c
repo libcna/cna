@@ -201,6 +201,21 @@ static int validate_accelerometer(const CNA_Handle game)
         cna_accelerometer_stop(sensor) != CNA_RESULT_INVALID_STATE) {
         return 0;
     }
+    /* So does every other route but destroy, as cna_accelerometer_dispose documents: a retained
+       handle exposes neither the last reading nor any other state (CNA-DEMOS-ISSUE-062). */
+    {
+        uint64_t size = 0;
+        if (cna_accelerometer_get_current_value(sensor, &reading) != CNA_RESULT_INVALID_STATE ||
+            cna_accelerometer_get_state(sensor, &state) != CNA_RESULT_INVALID_STATE ||
+            cna_accelerometer_get_is_data_valid(sensor, &flag) != CNA_RESULT_INVALID_STATE ||
+            cna_accelerometer_get_time_between_updates_ticks(sensor, &ticks) !=
+                CNA_RESULT_INVALID_STATE ||
+            cna_accelerometer_set_time_between_updates_ticks(sensor, INT64_C(200000)) !=
+                CNA_RESULT_INVALID_STATE ||
+            cna_accelerometer_get_type_name_size(sensor, &size) != CNA_RESULT_INVALID_STATE) {
+            return 0;
+        }
+    }
 
     return cna_accelerometer_destroy(sensor) == CNA_RESULT_SUCCESS &&
         cna_accelerometer_destroy(sensor) == CNA_RESULT_INVALID_HANDLE &&
@@ -328,6 +343,19 @@ static int validate_gyroscope(const CNA_Handle game)
         cna_gyroscope_start(sensor) != CNA_RESULT_INVALID_STATE ||
         cna_gyroscope_stop(sensor) != CNA_RESULT_INVALID_STATE) {
         return 0;
+    }
+    {
+        uint64_t size = 0;
+        if (cna_gyroscope_get_current_value(sensor, &reading) != CNA_RESULT_INVALID_STATE ||
+            cna_gyroscope_get_state(sensor, &state) != CNA_RESULT_INVALID_STATE ||
+            cna_gyroscope_get_is_data_valid(sensor, &flag) != CNA_RESULT_INVALID_STATE ||
+            cna_gyroscope_get_time_between_updates_ticks(sensor, &ticks) !=
+                CNA_RESULT_INVALID_STATE ||
+            cna_gyroscope_set_time_between_updates_ticks(sensor, INT64_C(200000)) !=
+                CNA_RESULT_INVALID_STATE ||
+            cna_gyroscope_get_type_name_size(sensor, &size) != CNA_RESULT_INVALID_STATE) {
+            return 0;
+        }
     }
     return cna_gyroscope_destroy(sensor) == CNA_RESULT_SUCCESS &&
         cna_gyroscope_destroy(sensor) == CNA_RESULT_INVALID_HANDLE;

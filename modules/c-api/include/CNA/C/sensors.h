@@ -793,9 +793,9 @@ CNA_C_API CNA_Result cna_accelerometer_stop(CNA_AccelerometerHandle sensor);
  * Disposal stops acquisition and releases the platform subsystem hold. **Disposing twice is
  * refused** with `CNA_RESULT_INVALID_STATE`, unlike most disposables in this ABI — the canonical
  * sensor treats a second disposal as use-after-disposal rather than a no-op, and that is reported
- * rather than smoothed over. Every other route reports the same failure afterwards, which is how a
- * caller observes the disposed state: the canonical disposal flag is protected, so there is no
- * query route for it.
+ * rather than smoothed over. Every other route but destroy and the `*_for_tests_ext` hooks reports
+ * the same failure afterwards, which is how a caller observes the disposed state: the canonical
+ * disposal flag is protected, so there is no query route for it.
  */
 CNA_C_API CNA_Result cna_accelerometer_dispose(CNA_AccelerometerHandle sensor);
 
@@ -809,7 +809,8 @@ CNA_C_API CNA_Result cna_accelerometer_dispose(CNA_AccelerometerHandle sensor);
  *
  * **An unsupported sensor refuses this call** with `CNA_RESULT_INVALID_STATE` rather than
  * answering a default, because the canonical property throws there: check
- * `cna_accelerometer_get_is_supported` first. A supported sensor that has produced nothing yet
+ * `cna_accelerometer_get_is_supported` first. A disposed sensor refuses it the same way rather than
+ * repeat its last reading. A supported sensor that has produced nothing yet
  * answers the canonical default reading, which `cna_accelerometer_get_is_data_valid` tells apart
  * from a real measurement.
  */
@@ -1150,9 +1151,9 @@ CNA_C_API CNA_Result cna_gyroscope_stop(CNA_GyroscopeHandle sensor);
  * Disposal stops acquisition and releases the platform subsystem hold. **Disposing twice is
  * refused** with `CNA_RESULT_INVALID_STATE`, unlike most disposables in this ABI — the canonical
  * sensor treats a second disposal as use-after-disposal rather than a no-op, and that is reported
- * rather than smoothed over. Every other route reports the same failure afterwards, which is how a
- * caller observes the disposed state: the canonical disposal flag is protected, so there is no
- * query route for it.
+ * rather than smoothed over. Every other route but destroy and the `*_for_tests_ext` hooks reports
+ * the same failure afterwards, which is how a caller observes the disposed state: the canonical
+ * disposal flag is protected, so there is no query route for it.
  */
 CNA_C_API CNA_Result cna_gyroscope_dispose(CNA_GyroscopeHandle sensor);
 
@@ -1166,7 +1167,8 @@ CNA_C_API CNA_Result cna_gyroscope_dispose(CNA_GyroscopeHandle sensor);
  *
  * **An unsupported sensor refuses this call** with `CNA_RESULT_INVALID_STATE` rather than
  * answering a default, because the canonical property throws there: check
- * `cna_gyroscope_get_is_supported` first. A supported sensor that has produced nothing yet answers
+ * `cna_gyroscope_get_is_supported` first. A disposed sensor refuses it the same way rather than
+ * repeat its last reading. A supported sensor that has produced nothing yet answers
  * the canonical default reading, which `cna_gyroscope_get_is_data_valid` tells apart from a real
  * measurement.
  */

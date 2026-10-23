@@ -74,46 +74,46 @@ lookup = "BorrowSensor<Accelerometer>"
 object = "std::shared_ptr<SensorResource<Accelerometer>>"
 
 [accelerometer.routes]
-cna_accelerometer_get_state = { get = "object->value->getStateProperty()" }
-cna_accelerometer_start = { call = "object->value->Start()" }
-cna_accelerometer_stop = { call = "object->value->Stop()" }
-cna_accelerometer_dispose = { call = "object->value->Dispose()" }
-cna_accelerometer_get_is_data_valid = { get = "object->value->getIsDataValidProperty()" }
-cna_accelerometer_get_time_between_updates_ticks = { get = "object->value->getTimeBetweenUpdatesProperty().getTicksProperty()" }
-cna_accelerometer_set_time_between_updates_ticks = { call = "object->value->setTimeBetweenUpdatesProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))" }
-cna_accelerometer_inject_synthetic_update_ext = { call = "object->value->InjectSyntheticSensorUpdate(x, y, z)" }
+cna_accelerometer_get_state = { get = "object->value->getStateProperty()", require = "RequireLiveSensor(*object)" }
+cna_accelerometer_start = { call = "object->value->Start()", require = "RequireLiveSensor(*object)" }
+cna_accelerometer_stop = { call = "object->value->Stop()", require = "RequireLiveSensor(*object)" }
+cna_accelerometer_dispose = { call = "DisposeSensor(*object)", require = "RequireLiveSensor(*object)" }
+cna_accelerometer_get_is_data_valid = { get = "object->value->getIsDataValidProperty()", require = "RequireLiveSensor(*object)" }
+cna_accelerometer_get_time_between_updates_ticks = { get = "object->value->getTimeBetweenUpdatesProperty().getTicksProperty()", require = "RequireLiveSensor(*object)" }
+cna_accelerometer_set_time_between_updates_ticks = { call = "object->value->setTimeBetweenUpdatesProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))", require = "RequireLiveSensor(*object)" }
+cna_accelerometer_inject_synthetic_update_ext = { call = "object->value->InjectSyntheticSensorUpdate(x, y, z)", require = "RequireLiveSensor(*object)" }
 cna_accelerometer_set_started_for_tests_ext = { call = "object->value->SetStartedForTesting(started)" }
 cna_accelerometer_set_supported_for_tests_ext = { call = "object->value->SetSupportedForTesting(supported)" }
 cna_accelerometer_get_subsystem_held_for_tests_ext = { get = "object->value->GetSubsystemHeldForTesting()" }
 cna_accelerometer_register_started_instance_for_tests_ext = { call = "Accelerometer::RegisterStartedInstanceForTesting(*object->value)" }
 cna_accelerometer_unregister_started_instance_for_tests_ext = { call = "Accelerometer::UnregisterStartedInstanceForTesting(*object->value)" }
-cna_accelerometer_get_type_name_size = { size = "object->value->GetTypeName()" }
-cna_accelerometer_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_accelerometer_get_type_name_size = { size = "object->value->GetTypeName()", require = "RequireLiveSensor(*object)" }
+cna_accelerometer_copy_type_name = { copy = "object->value->GetTypeName()", require = "RequireLiveSensor(*object)" }
 cna_accelerometer_destroy = { release = true }
-cna_accelerometer_get_current_value = { get = "MapAccelerometerReadingValue(object->value->getCurrentValueProperty())" }
+cna_accelerometer_get_current_value = { get = "MapAccelerometerReadingValue(object->value->getCurrentValueProperty())", require = "RequireLiveSensor(*object)" }
 
 [gyroscope]
 lookup = "BorrowSensor<Gyroscope>"
 object = "std::shared_ptr<SensorResource<Gyroscope>>"
 
 [gyroscope.routes]
-cna_gyroscope_get_state = { get = "object->value->getStateProperty()" }
-cna_gyroscope_start = { call = "object->value->Start()" }
-cna_gyroscope_stop = { call = "object->value->Stop()" }
-cna_gyroscope_dispose = { call = "object->value->Dispose()" }
-cna_gyroscope_get_is_data_valid = { get = "object->value->getIsDataValidProperty()" }
-cna_gyroscope_get_time_between_updates_ticks = { get = "object->value->getTimeBetweenUpdatesProperty().getTicksProperty()" }
-cna_gyroscope_set_time_between_updates_ticks = { call = "object->value->setTimeBetweenUpdatesProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))" }
-cna_gyroscope_inject_synthetic_update_ext = { call = "object->value->InjectSyntheticSensorUpdate(x, y, z)" }
+cna_gyroscope_get_state = { get = "object->value->getStateProperty()", require = "RequireLiveSensor(*object)" }
+cna_gyroscope_start = { call = "object->value->Start()", require = "RequireLiveSensor(*object)" }
+cna_gyroscope_stop = { call = "object->value->Stop()", require = "RequireLiveSensor(*object)" }
+cna_gyroscope_dispose = { call = "DisposeSensor(*object)", require = "RequireLiveSensor(*object)" }
+cna_gyroscope_get_is_data_valid = { get = "object->value->getIsDataValidProperty()", require = "RequireLiveSensor(*object)" }
+cna_gyroscope_get_time_between_updates_ticks = { get = "object->value->getTimeBetweenUpdatesProperty().getTicksProperty()", require = "RequireLiveSensor(*object)" }
+cna_gyroscope_set_time_between_updates_ticks = { call = "object->value->setTimeBetweenUpdatesProperty(System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)))", require = "RequireLiveSensor(*object)" }
+cna_gyroscope_inject_synthetic_update_ext = { call = "object->value->InjectSyntheticSensorUpdate(x, y, z)", require = "RequireLiveSensor(*object)" }
 cna_gyroscope_set_started_for_tests_ext = { call = "object->value->SetStartedForTesting(started)" }
 cna_gyroscope_set_supported_for_tests_ext = { call = "object->value->SetSupportedForTesting(supported)" }
 cna_gyroscope_get_subsystem_held_for_tests_ext = { get = "object->value->GetSubsystemHeldForTesting()" }
 cna_gyroscope_register_started_instance_for_tests_ext = { call = "Gyroscope::RegisterStartedInstanceForTesting(*object->value)" }
 cna_gyroscope_unregister_started_instance_for_tests_ext = { call = "Gyroscope::UnregisterStartedInstanceForTesting(*object->value)" }
-cna_gyroscope_get_type_name_size = { size = "object->value->GetTypeName()" }
-cna_gyroscope_copy_type_name = { copy = "object->value->GetTypeName()" }
+cna_gyroscope_get_type_name_size = { size = "object->value->GetTypeName()", require = "RequireLiveSensor(*object)" }
+cna_gyroscope_copy_type_name = { copy = "object->value->GetTypeName()", require = "RequireLiveSensor(*object)" }
 cna_gyroscope_destroy = { release = true }
-cna_gyroscope_get_current_value = { get = "MapGyroscopeReadingValue(object->value->getCurrentValueProperty())" }
+cna_gyroscope_get_current_value = { get = "MapGyroscopeReadingValue(object->value->getCurrentValueProperty())", require = "RequireLiveSensor(*object)" }
 
 [accelerometer_reading_event_args]
 lookup = "ToAccelerometerReadingEventArgs"

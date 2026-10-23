@@ -227,6 +227,10 @@ struct SensorResource final {
     // backend object, so an injection route can still answer "nothing is installed" after the
     // backend itself has been replaced or destroyed.
     std::shared_ptr<void> testBackend;
+
+    // Set by this ABI's dispose route. The canonical class keeps its own disposal flag protected,
+    // and the accelerometer and gyroscope document that every later route refuses the handle.
+    bool disposed = false;
 };
 
 template<typename TSensor>
@@ -313,6 +317,38 @@ template<typename TSensor>
     std::shared_ptr<SensorResource<TSensor>>* const outSensor)
 {
     return LookupHandle(handle, SensorKind<TSensor>::Kind, outSensor);
+}
+
+// For the accelerometer and gyroscope, whose dispose routes promise that every other route then
+// fails with INVALID_STATE; the canonical getters themselves keep answering (CNA-DEMOS-ISSUE-062).
+// Destroy and the test hooks still reach a disposed sensor.
+template<typename TSensor>
+[[nodiscard]] CNA_Result RequireLiveSensor(const SensorResource<TSensor>& sensor)
+{
+    return sensor.disposed ? InvalidState("The sensor has been disposed.") : CNA_RESULT_SUCCESS;
+}
+
+template<typename TSensor>
+[[nodiscard]] CNA_Result BorrowLiveSensor(
+    const CNA_Handle handle,
+    std::shared_ptr<SensorResource<TSensor>>* const outSensor)
+{
+    if (const CNA_Result result = BorrowSensor<TSensor>(handle, outSensor);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireLiveSensor(**outSensor); result != CNA_RESULT_SUCCESS) {
+        outSensor->reset();
+        return result;
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+template<typename TSensor>
+void DisposeSensor(SensorResource<TSensor>& sensor)
+{
+    sensor.value->Dispose();
+    sensor.disposed = true;
 }
 
 template<typename TSensor>
@@ -611,7 +647,7 @@ template<typename TSensor>
         return InvalidArgument("The sensor reading callback is null.");
     }
     std::shared_ptr<SensorResource<Accelerometer>> resource;
-    if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+    if (const CNA_Result result = BorrowLiveSensor<Accelerometer>(sensor, &resource);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -687,7 +723,7 @@ template<typename TSensor>
         return InvalidArgument("The sensor reading callback is null.");
     }
     std::shared_ptr<SensorResource<Gyroscope>> resource;
-    if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+    if (const CNA_Result result = BorrowLiveSensor<Gyroscope>(sensor, &resource);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -1009,7 +1045,7 @@ template<typename TSensor>
         return InvalidArgument("The sensor reading callback is null.");
     }
     std::shared_ptr<SensorResource<Accelerometer>> resource;
-    if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+    if (const CNA_Result result = BorrowLiveSensor<Accelerometer>(sensor, &resource);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
