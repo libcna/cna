@@ -134,6 +134,17 @@ namespace Microsoft::Xna::Framework::Graphics
                     + std::to_string(skinningData_->InverseBindPose.size()) + ")",
                 "skinningData");
         }
+        // SkeletonRootPrefix is the one optional parallel array: empty reads as all identity, but a
+        // nonempty array of any other length is as malformed as the required ones above.
+        const std::size_t prefixSize = skinningData_->SkeletonRootPrefix.size();
+        if (prefixSize != 0 && prefixSize != static_cast<std::size_t>(boneCount))
+        {
+            throw System::ArgumentException(
+                "AnimationPlayer's SkinningData SkeletonRootPrefix must be empty or hold BoneCount ("
+                    + std::to_string(boneCount) + ") entries; it holds " + std::to_string(prefixSize),
+                "skinningData");
+        }
+        const bool hasPrefix = prefixSize != 0;
 
         boneTransforms_ = skinningData_->BindPose;
         if (currentClip_ != nullptr)
@@ -168,8 +179,6 @@ namespace Microsoft::Xna::Framework::Graphics
             // the scene ancestry above the joint set and the skinned mesh node's cancellation live
             // (see SkinningData::SkeletonRootPrefix). An empty array reads as all-identity, so a
             // skeleton built without that context behaves exactly as before.
-            const bool hasPrefix =
-                skinningData_->SkeletonRootPrefix.size() == static_cast<std::size_t>(boneCount);
             worldTransforms_[static_cast<std::size_t>(i)] = parent < 0
                 ? (hasPrefix ? boneTransforms_[static_cast<std::size_t>(i)] *
                                    skinningData_->SkeletonRootPrefix[static_cast<std::size_t>(i)]

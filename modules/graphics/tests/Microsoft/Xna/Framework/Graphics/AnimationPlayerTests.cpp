@@ -171,3 +171,43 @@ TEST(AnimationPlayerTest, DefaultConstructedSkinningDataHasNoBones)
     EXPECT_TRUE(data.SkeletonHierarchy.empty());
     EXPECT_TRUE(data.AnimationClips.empty());
 }
+
+// CNA-DEMOS-ISSUE-096: SkeletonRootPrefix is empty (all identity) or holds BoneCount entries; any
+// other size is refused like the other parallel skeleton arrays, at construction and at every
+// later recomputation, instead of silently reading as all identity.
+TEST(AnimationPlayerTest, CompleteAndEmptyRootPrefixesPlaceTheRoot)
+{
+    auto data = MakeTwoBoneSkinningData();
+    data.SkeletonRootPrefix = {Matrix::CreateTranslation(Vector3(4, 0, 0)), Matrix::getIdentityProperty()};
+    AnimationPlayer prefixed(data);
+    EXPECT_NEAR(prefixed.GetWorldTransforms()[0].getTranslationProperty().X, 4.0f, 1e-4f);
+    EXPECT_NEAR(prefixed.GetWorldTransforms()[1].getTranslationProperty().X, 4.0f, 1e-4f);
+
+    data.SkeletonRootPrefix.clear();
+    AnimationPlayer identity(data);
+    EXPECT_NEAR(identity.GetWorldTransforms()[0].getTranslationProperty().X, 0.0f, 1e-4f);
+}
+
+TEST(AnimationPlayerTest, PartialRootPrefixThrowsAtConstruction)
+{
+    auto data = MakeTwoBoneSkinningData();
+    data.SkeletonRootPrefix = {Matrix::CreateTranslation(Vector3(4, 0, 0))};
+    EXPECT_THROW(AnimationPlayer player(data), System::ArgumentException);
+
+    data.SkeletonRootPrefix.assign(3, Matrix::getIdentityProperty());
+    EXPECT_THROW(AnimationPlayer player(data), System::ArgumentException);
+}
+
+TEST(AnimationPlayerTest, PartialRootPrefixThrowsWhenTheBorrowedDataChanges)
+{
+    auto data = MakeTwoBoneSkinningData();
+    AnimationPlayer player(data);
+    player.StartClip(data.AnimationClips["Move"]);
+
+    data.SkeletonRootPrefix = {Matrix::CreateTranslation(Vector3(4, 0, 0))};
+    EXPECT_THROW(player.Update(System::TimeSpan::FromSeconds(0.5), true, false),
+                 System::ArgumentException);
+
+    data.SkeletonRootPrefix.clear();
+    EXPECT_NO_THROW(player.Update(System::TimeSpan::FromSeconds(0.5), true, false));
+}

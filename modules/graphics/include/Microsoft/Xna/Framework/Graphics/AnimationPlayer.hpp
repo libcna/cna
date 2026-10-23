@@ -69,7 +69,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * but its placement is not applied to the skinned draw: no inverse mesh-node transform is
          * stored in this prefix. Keeping ancestry separate from @ref BindPose lets an animated root
          * joint replace only its own local transform. Legacy/custom SkinningData carriers may
-         * supply different root context. May be left empty, which is read as all-identity.
+         * supply different root context. May be left empty, which is read as all-identity;
+         * otherwise it holds exactly @ref BoneCount entries, and AnimationPlayer throws
+         * System::ArgumentException for any other length, as it does for the required arrays.
          */
         std::vector<Matrix> SkeletonRootPrefix;
         /**
