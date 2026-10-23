@@ -1362,11 +1362,15 @@ arriving here found no open list at all.
   linux-aarch64 wgpu-native packages. Hashes pinned, Linux x86_64 verified; the other three need
   hardware this machine does not have.
 
-One gap a reader will look for here is real but is **not** WebGPU's, and no WebGPU row should be
-opened for it:
-
-* `plans/plan_fx.md` **`FX-109`** — vertex-stage sampler support is absent from the shared
-  renderer/device surface. A compiled pass that samples in the vertex stage is refused by name.
+The historical `FX-109` vertex-sampler refusal is superseded by the museum B8 repair.
+Compiled HiDef draws capture `VertexTextures` and `VertexSamplerStates` independently of pixel
+slots, after pass application, and retain the sampled resources until submission. Ordinary
+`Texture2D` Single/Vector4 storage is supported; point sampling uses non-filtering bind-group
+layouts without requiring `Float32Filterable`. Filtering float32 compiled samplers requires that
+optional feature and otherwise throws `NotSupportedException`. Float cubes remain refused because
+their transfer path has not been generalized. The browser shader translation maps TEXLDL's
+explicit level to WGSL `textureSampleLevel`; unsupported image-operand combinations still refuse.
+See `CNA_MUSEUM_REPAIR_HANDOFF.md` for measured runtime coverage, not a blanket platform claim.
 
 (Per-target `multiSampleCount` on `RenderTarget2D` and `RenderTargetCube` was on this list until
 `WEBGPU-165`; see *Per-target MultiSampleCount* above.)

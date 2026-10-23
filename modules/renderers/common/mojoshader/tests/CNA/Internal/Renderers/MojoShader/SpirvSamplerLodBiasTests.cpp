@@ -674,6 +674,23 @@ TEST(MojoShaderSpirvSamplerLodBiasTest, TheTranslatorSpellsEachImageOperandCaseD
                        "approximated";
                 EXPECT_NE(refused.error.find("image operands"), std::string::npos)
                     << refused.error;
+
+                // The same Lod operand is valid with the explicit-sampling opcode (TEXLDL).
+                for (std::size_t i = 5; i < lodded.size();)
+                {
+                    const std::uint32_t length = lodded[i] >> 16;
+                    if (length == 0) break;
+                    if ((lodded[i] & 0xFFFFu) == kOpImageSampleImplicitLod && length == 7 &&
+                        lodded[i + 5] == 0x2u)
+                    {
+                        lodded[i] = (length << 16) | 88u; // OpImageSampleExplicitLod
+                        break;
+                    }
+                    i += length;
+                }
+                const auto explicitSample = TranslateSpirvToWgsl(lodded.data(), lodded.size());
+                ASSERT_TRUE(explicitSample.error.empty()) << explicitSample.error;
+                EXPECT_NE(explicitSample.wgsl.find("textureSampleLevel("), std::string::npos);
                 checked = true;
             }
             MOJOSHADER_effectEndPass(effect);

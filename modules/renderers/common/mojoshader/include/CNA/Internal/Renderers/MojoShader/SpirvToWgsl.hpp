@@ -28,6 +28,9 @@
 // This file therefore implements a real SPIR-V module parser and typed IR over that subset, and
 // REFUSES BY NAME anything outside it. It is deliberately not extended "just in case": an opcode
 // nobody can produce is an opcode nobody can test.
+// Museum B8 adds OpImageSampleExplicitLod with exactly a Lod operand, produced by the genuine
+// vertex-texture-device-slots-xna4 fixture. It becomes textureSampleLevel; Grad/Offset and invalid
+// implicit/explicit operand combinations remain outside the supported subset.
 //
 // THE ONE STRUCTURAL DIFFERENCE BETWEEN THE TWO LANGUAGES
 //

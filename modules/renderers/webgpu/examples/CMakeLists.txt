@@ -1187,9 +1187,11 @@ if(EMSCRIPTEN AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU"
     if(CNA_WEBGPU_COMPILED_EFFECTS)
         cna_webgpu_effect_page(cna_webgpu_compiled_effect_page
                                webgpu_browser_compiled_effect_test.cpp)
-        # The synthetic fixture builders are header-only and build their bytecode in code, so this
-        # page needs no preloaded asset -- which is what keeps it drivable by the same harness as
-        # every other page here.
+        # Most fixtures are synthetic; the HiDef vertex-texture check also uses the genuine
+        # compiler-produced fixture shared with the native renderer regression.
+        target_link_options(cna_webgpu_compiled_effect_page PRIVATE
+            "--preload-file"
+            "${CNA_SOURCE_DIR}/tests/fixtures/compiled-effects/vertex-texture-device-slots-xna4.fxb@/vertex-texture-device-slots-xna4.fxb")
         target_include_directories(cna_webgpu_compiled_effect_page PRIVATE
             "${CNA_SOURCE_DIR}/tests/support")
         # Same reason cna_webgpu_coverage_page needs it: this page includes the renderer's own

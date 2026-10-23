@@ -5787,6 +5787,8 @@ namespace CNA::Internal::Renderers::WebGPU
                 std::uint32_t samplerBinding = 0;
                 WebGPUSampledTextureEXT texture;
                 WGPUSampler sampler = nullptr;
+                /// Point samplers use an unfilterable-float layout without optional device features.
+                bool filtering = true;
                 /// WEBGPU-208: the D3D9 register this pair came from, which is the index its LOD
                 /// bias occupies in the injected uniform block.
                 std::uint32_t slot = 0;
@@ -5810,6 +5812,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::vector<std::uint8_t> vertexUniforms;  ///< the pass's vertex register file, by value
             std::vector<std::uint8_t> pixelUniforms;   ///< the pass's pixel register file, by value
             std::vector<SamplerBinding> pixelSamplers;
+            std::vector<SamplerBinding> vertexSamplers;
             /// WEBGPU-208: the pixel stage's LOD-bias uniform block, one float4 per D3D9 sampler
             /// register with the bias in `.x`. Empty when the pass samples nothing.
             std::vector<std::uint8_t> pixelLodBias;

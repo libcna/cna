@@ -73,7 +73,10 @@
 
 #include <array>
 #include <cstdio>
+#include <fstream>
+#include <iterator>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -146,6 +149,7 @@ class WebGpuBrowserCompiledEffectTest : public Game
     int width_ = 0;
     int height_ = 0;
     Color pass0Pixel_{0, 0, 0, 0};
+    std::vector<Color> vertexClampPixels_;
 
     void check(bool ok, const std::string& label)
     {
@@ -243,10 +247,63 @@ class WebGpuBrowserCompiledEffectTest : public Game
         parameters["Tint"]->SetValue(tint);
     }
 
+    std::vector<Color> DrawVertexTextureGraph(GraphicsDevice& device, SurfaceFormat format, bool wrap)
+    {
+        std::ifstream input("/vertex-texture-device-slots-xna4.fxb", std::ios::binary);
+        if (!input) throw std::runtime_error("missing genuine vertex texture fixture");
+        const std::vector<std::uint8_t> bytes{
+            std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+        Effect effect(device, bytes);
+        effect.getParametersProperty()["Amount"]->SetValue(0.42f);
+        Texture2D heights(device, 4, 1, false, format);
+        if (format == SurfaceFormat::Single)
+        {
+            const float data[] = {0.08f, 0.94f, 0.22f, 0.78f};
+            heights.SetData(data, 4);
+        }
+        else
+        {
+            const Vector4 data[] = {Vector4(0.08f, 0, 0, 1), Vector4(0.94f, 0, 0, 1),
+                                    Vector4(0.22f, 0, 0, 1), Vector4(0.78f, 0, 0, 1)};
+            heights.SetData(data, 4);
+        }
+        std::vector<QuadVertexUV> vertices;
+        constexpr int bars = 24;
+        for (int i = 0; i < bars; ++i)
+        {
+            const float x0 = -0.9f + 1.8f * static_cast<float>(i) / bars;
+            const float x1 = -0.9f + 1.8f * static_cast<float>(i + 1) / bars;
+            const float u = -0.25f + 1.5f * (static_cast<float>(i) + 0.5f) / bars;
+            const QuadVertexUV a{x0, 0, 0, u, 0}, b{x1, 0, 0, u, 0};
+            const QuadVertexUV c{x1, 0, 0, u, 1}, d{x0, 0, 0, u, 1};
+            vertices.insert(vertices.end(), {a, b, c, a, c, d});
+        }
+        // Same pixel oracle and resolution as the native vertex-texture regression. Offscreen
+        // readback keeps the canvas surface lifetime independent of Asyncify's browser yield.
+        RenderTarget2D target(device, 800, 480);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        ResetState(device);
+        effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
+        device.getVertexTexturesProperty()(2, &heights);
+        device.getVertexSamplerStatesProperty()[2] =
+            wrap ? SamplerState::PointWrap : SamplerState::PointClamp;
+        device.getSamplerStatesProperty()[2] = SamplerState::PointClamp;
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices.data(), 0,
+                                  static_cast<int>(vertices.size() / 3), PositionUvDeclaration());
+        heights.Dispose();
+        effect.Dispose();
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        std::vector<Color> pixels(800 * 480);
+        target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        return pixels;
+    }
+
 public:
     WebGpuBrowserCompiledEffectTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(256);
         gdm_->setPreferredBackBufferHeightProperty(256);
     }
@@ -538,6 +595,32 @@ public:
                 const Color biased = sampleWithBias(1.0f);
                 check(Near(biased.getGProperty(), 255) && Near(biased.getRProperty(), 0),
                       "a compiled Effect's MipMapLevelOfDetailBias of +1 selects the next level");
+                break;
+            }
+            case 12:
+            case 13:
+            case 14:
+            case 15:
+            {
+                const bool wrap = (step_ % 2) != 0;
+                const auto format = step_ < 14 ? SurfaceFormat::Vector4 : SurfaceFormat::Single;
+                const auto pixels = DrawVertexTextureGraph(device, format, wrap);
+                int lit = 0;
+                for (const auto& pixel : pixels)
+                    lit += pixel.getRProperty() > 8 || pixel.getGProperty() > 8 ||
+                           pixel.getBProperty() > 8;
+                const std::string label = step_ < 14 ? "Vector4" : "Single";
+                check(lit > 1000, label + " vertex texture draws geometry with " +
+                                 (wrap ? "PointWrap" : "PointClamp"));
+                if (!wrap) vertexClampPixels_ = pixels;
+                else
+                {
+                    int different = 0;
+                    for (std::size_t i = 0; i < pixels.size(); ++i)
+                        different += pixels[i].getPackedValueProperty() !=
+                                     vertexClampPixels_[i].getPackedValueProperty();
+                    check(different > 1000, label + " vertex sampler changes the graph after Apply");
+                }
                 break;
             }
             default:

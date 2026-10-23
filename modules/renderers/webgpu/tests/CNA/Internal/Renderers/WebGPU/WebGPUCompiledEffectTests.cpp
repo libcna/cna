@@ -746,6 +746,44 @@ TEST(WebGPUCompiledEffectWgslTest, TranslationIsDeterministicAndNamesItsEntryPoi
 
 // --- the acceptance ladder, each rung a shared contract re-run through WGSL ----------------------
 
+TEST(WebGPUCompiledEffectDrawTest, VertexVector4TextureAndSamplerReachTheDraw)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectVertexTextureContract(device, SurfaceFormat::Vector4);
+}
+
+TEST(WebGPUCompiledEffectDrawTest, VertexSingleTextureAndSamplerReachTheDraw)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectVertexTextureContract(device, SurfaceFormat::Single);
+}
+
+TEST(WebGPUCompiledEffectDrawTest, VertexTextureAndEffectOutliveTheirDeferredDraw)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectVertexTextureContract(device, SurfaceFormat::Vector4, true);
+}
+
+TEST(WebGPUCompiledEffectDrawTest, PointVertexTexturesDoNotRequireFloat32Filterable)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    auto* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the WebGPU renderer";
+    renderer->DebugForceFloat32FeaturesAbsentEXT(true);
+    CNA::TestSupport::RunCompiledEffectVertexTextureContract(device, SurfaceFormat::Single);
+    CNA::TestSupport::RunCompiledEffectVertexTextureContract(device, SurfaceFormat::Vector4);
+}
+
 #define CNA_WEBGPU_WGSL_ROUTE_TEST(name, call)                                                   \
     TEST(WebGPUCompiledEffectWgslDrawTest, name)                                                 \
     {                                                                                            \
@@ -807,6 +845,16 @@ CNA_WEBGPU_WGSL_ROUTE_TEST(SharedManyDrawsContract,
                            CNA::TestSupport::RunCompiledEffectManyDrawsContract(device))
 CNA_WEBGPU_WGSL_ROUTE_TEST(SharedTruncationContract,
                            CNA::TestSupport::RunCompiledEffectTruncationContract(device))
+
+CNA_WEBGPU_WGSL_ROUTE_TEST(VertexVector4TextureAndSamplerReachTheDraw,
+                           CNA::TestSupport::RunCompiledEffectVertexTextureContract(
+                               device, SurfaceFormat::Vector4))
+CNA_WEBGPU_WGSL_ROUTE_TEST(VertexSingleTextureAndSamplerReachTheDraw,
+                           CNA::TestSupport::RunCompiledEffectVertexTextureContract(
+                               device, SurfaceFormat::Single))
+CNA_WEBGPU_WGSL_ROUTE_TEST(VertexTextureAndEffectOutliveTheirDeferredDraw,
+                           CNA::TestSupport::RunCompiledEffectVertexTextureContract(
+                               device, SurfaceFormat::Vector4, true))
 
 #undef CNA_WEBGPU_WGSL_ROUTE_TEST
 

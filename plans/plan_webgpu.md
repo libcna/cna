@@ -35,7 +35,15 @@ that only external-platform work remains.
   Chrome passes the same20 with optional tier1 features enabled and absent, no validation errors.
   Existing rigid/skinned/instanced PBR examples and helper ASan/UBSan checks pass. Details and
   residual FNA3D SDLGPU missing-tangent refusal are in CNA_MUSEUM_REPAIR_HANDOFF.md.
-- Vertex texture fetch/float storage and surface-free device creation remain open museum findings.
+- Vertex texture fetch/float storage (museum B8, 2026-10-23): the four missing pieces were the
+  ordinary Single/Vector4 format verdict, explicit vertex-sampler refusal, empty group0 bindings
+  and the WGSL translator's missing TEXLDL. Native tests now pass through both SPIR-V and WGSL,
+  preserving all57 prior outcomes and adding7 passing geometry/lifetime/policy checks. Point sampling
+  uses non-filtering layouts; layout and pipeline caches include their filterability. Native
+  WebGPU77 tests:76PASS/1unchangedSKIP; actual Chrome page19/19PASS, no validation errors.
+  See the repair handoff for evidence and platform limits. The historic
+  FX-109 claim that no shared vertex-slot route exists is obsolete.
+- Surface-free device creation remains an open museum finding.
 
 ## Historical row summary (2026-09-09)
 

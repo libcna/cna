@@ -27,7 +27,59 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current checkpoint: SDL_GPU HiDef vertex-texture repair validated (2026-10-23)
+### Current task: WebGPU HiDef vertex-texture repair (2026-10-23)
+
+SDL_GPU batch below is committed and published as
+`079dfc55eef2c2cbf62efbb99f3dcd154281e39f`; normal push97006 and ls-remote verified.
+WebGPU has four independent missing links: the Single/Vector4 ordinary-2D format
+verdict, explicit vertex-sampler refusal, absent group0 capture/layout/binding, and
+the browser WGSL translator refusing OpImageSampleExplicitLod (TEXLDL).
+Six new native/WGSL-route pixel tests use the shared SDL_GPU/FNA oracle and
+deferred-disposal case. Test build94724 completed0; webgpu-new-before-v1 records
+all6FAIL before repair. The implementation now captures/binds both stages, makes
+point samplers explicitly non-filtering (including layout/pipeline/cache identity),
+accepts Single/Vector4 ordinary2D storage but preserves the float-cube refusal,
+and translates explicit Lod to textureSampleLevel while still rejecting an invalid
+Lod operand on implicit sampling. Native build86824 passed; run70138 passed62/63
+with the identical existing cube/volume skip. The separate MojoShader sampler-bias
+unit suite passes2/2, including both the new valid and preserved invalid operand case.
+
+Browser example now adds the same Single/Vector4 clamp/wrap graph checks and
+deferred disposal, using the genuine preloaded fixture and offscreen800x480 targets.
+It requests HiDef explicitly. Its CMake target preloads only that972-byte fixture.
+Wasm configure12590 passed, enabling only CNA_WEBGPU_COMPILED_EFFECTS in the existing
+tree; every configure audit passes. Browser build54840 completed0 (scope
+cna-vertex-browser-build,471steps,one compiler,6GiB cap,shared ccache).
+Private-display Chrome runtime85908 completed0, explicitly19/19PASS, no uncaptured
+or validation errors,120frames and clean teardown. The harness's teardown-only
+success check was supplemented by checking the exact page count and every assertion.
+Evidence: repair-museum-vertex-texture-browser-{configure,build,runtime}-v1.log.
+Native broader run52515 passed75/76, same1SKIP,
+with no uncaptured/validation error. XML comparison preserves all57 earlier WebGPU
+outcomes; the first6new cases pass. Final native build49547 completed0. Final WebGPU
+run78443 passes76/77, same1SKIP, including the new
+PointVertexTexturesDoNotRequireFloat32Filterable test. The existing
+DebugForceFloat32FeaturesAbsentEXT seam tests CNA policy, not a real feature-less adapter.
+SDL_GPU cross-control27611 passes80/81, same shadercrossSKIP. An initial combined
+invocation11957 incorrectly selected default OPENGLES3 for renderer-specific tests;
+it failed and is retained as combined-final-v1, not counted as product validation.
+Corrected separate runs explicitly select WEBGPU and SDL_GPU, without source changes.
+The standalone WebGPU-format CTest regex selected no tests in this multi-renderer
+configuration: that invocation is NOT coverage. Rebuilt public Graphics test run20957
+supplies replacement format/readback validation:25tests,23PASS/2existing capabilitySKIP
+(public-formats-final-v1 XML/log). All five platform boundary gates and diff checks pass.
+No full CNA corpus, new sanitizer run,
+real Windows or Apple result is claimed for this batch. WebGPU edits belong to the
+commit containing this entry, based on079dfc55e; SDL_GPU079dfc55e is already published.
+Next: audit the deferred volume lifetime observation below and FNA3D Single refusal.
+
+Follow-up audit observation, not a claimed runtime reproduction: the compiled
+Texture3D resolver still returns SampledView without a lease even though the volume
+renderer already offers SampledEXT with ownership. The new B8 regressions exercise
+Texture2D. Reproduce deferred volume disposal before fixing that separate lifetime
+path; do not describe the B8 tests as full Texture3D lifetime coverage.
+
+### Previous checkpoint: SDL_GPU HiDef vertex-texture repair validated (2026-10-23)
 
 Avatar lifetime repair is published and remote-verified as
 `2b39eb9341791b711008205d0d70f89bb9e4e799`. Sharp Runtime remains1dc8785b,

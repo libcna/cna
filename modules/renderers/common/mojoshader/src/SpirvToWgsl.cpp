@@ -119,9 +119,9 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
             DecorationOffset = 35,
         };
 
-        /// WEBGPU-208: the single image-operand mask this subset accepts. `SpirvSamplerLodBias`
-        /// is the only thing that puts one on a sample, and Bias is the only one it uses.
+        // Implicit samples accept the injected sampler bias; TEXLDL uses an explicit level.
         constexpr std::uint32_t kImageOperandsBias = 0x1u;
+        constexpr std::uint32_t kImageOperandsLod = 0x2u;
 
         enum StorageClass : std::uint32_t
         {
@@ -1141,9 +1141,8 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                             ValueExpression(instruction.operand(3))};
                         resultType_[instruction.operand(1)] = instruction.operand(0);
                         return;
-                    case OpImageSampleImplicitLod: EmitImageSample(instruction); return;
                     case OpImageSampleExplicitLod:
-                        Refuse("OpImageSampleExplicitLod is outside the compiled-effect subset");
+                    case OpImageSampleImplicitLod: EmitImageSample(instruction); return;
                     case OpVectorShuffle: EmitVectorShuffle(instruction); return;
                     case OpCompositeConstruct: EmitCompositeConstruct(instruction); return;
                     case OpCompositeExtract: EmitCompositeExtract(instruction); return;
@@ -1235,24 +1234,24 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                 const std::uint32_t sampledId = instruction.operand(2);
                 const std::uint32_t coordinateId = instruction.operand(3);
 
-                // WEBGPU-208: exactly ONE image operand is in this subset -- Bias, which
-                // `SpirvSamplerLodBias` injects so `SamplerState.MipMapLevelOfDetailBias` reaches
-                // a compiled effect's sampling. Everything else still refuses by name: this is not
-                // general image-operand support, and Lod/Grad/Offset/ConstOffset would each change
-                // the sampling semantic rather than shift the level the same sample computes.
+                // Implicit samples may carry Bias; TEXLDL carries an explicit Lod. Keep their
+                // opcodes and operand masks paired, and continue refusing unsupported combinations.
+                const bool explicitLod = instruction.opcode == OpImageSampleExplicitLod;
                 std::string bias;
+                if (explicitLod && instruction.length <= 5)
+                    Refuse("an explicit image sample without its Lod operand");
                 if (instruction.length > 5)
                 {
                     const std::uint32_t mask = instruction.operand(4);
-                    if (mask != kImageOperandsBias)
+                    if (mask != (explicitLod ? kImageOperandsLod : kImageOperandsBias))
                     {
-                        Refuse("image operands other than Bias (lod, grad, offset) are outside the "
-                               "compiled-effect subset");
+                        Refuse("image operands must be Bias for implicit sampling or Lod for "
+                               "explicit sampling; grad/offset combinations are unsupported");
                     }
                     if (instruction.length < 7)
-                        Refuse("an image sample whose Bias operand carries no value");
+                        Refuse("an image sample whose Bias/Lod operand carries no value");
                     if (instruction.length > 7)
-                        Refuse("an image sample carrying more image operands than Bias");
+                        Refuse("an image sample carrying more image operands than Bias/Lod");
                     bias = ValueExpression(instruction.operand(5));
                 }
 
@@ -1267,6 +1266,15 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                 const std::uint32_t needed = CoordinateComponents(image);
                 const std::string coordinate =
                     Narrow(ValueExpression(coordinateId), TypeIdOfValue(coordinateId), needed);
+                if (explicitLod)
+                {
+                    if (image.dim == 0)
+                        Refuse("explicit mip selection for a 1D texture is outside this subset");
+                    Define(resultId, instruction.operand(0),
+                           "textureSampleLevel(" + pair->second.first + ", " + pair->second.second +
+                               ", " + coordinate + ", " + bias + ")");
+                    return;
+                }
                 if (bias.empty())
                 {
                     Define(resultId, instruction.operand(0),

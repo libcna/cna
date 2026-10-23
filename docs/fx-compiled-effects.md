@@ -284,8 +284,10 @@ HiDef vertex textures are not a universal limitation: FNA3D, EasyGL and SDL_GPU 
 `VertexTextures`/`VertexSamplerStates` collections to compiled draws. SDL_GPU captures independent
 vertex-stage textures and sampler descriptions when a draw is issued, including changes after
 `EffectPass.Apply()`, and retains the sampled resources through deferred submission. Single and
-Vector4 textures have pixel regression coverage. WebGPU's compiled vertex-sampler path remains
-unsupported pending its separate repair. A **compiled-Effect-specific** limitation is one
+Vector4 textures have pixel regression coverage. WebGPU also captures vertex bindings and uses
+non-filtering layouts for point-sampled float32 textures; its native and WGSL routes share the
+same pixel oracle. Exact platform/runtime validation is recorded in the museum repair handoff.
+A **compiled-Effect-specific** limitation is one
 the renderer supports elsewhere but this draw route cannot preserve. `plans/plan_fx.md` section
 10.5 is the authoritative per-renderer table. In particular, cube sampling is no longer a
 limitation: FNA3D, SDL_GPU and EasyGL all pass the compiled cube-sampler contract.

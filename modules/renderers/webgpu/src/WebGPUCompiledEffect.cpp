@@ -763,16 +763,6 @@ namespace CNA::Internal::Renderers::WebGPU
         for (int i = 0; i < pixelData->sampler_count && !linked.pixelHasUniforms; ++i)
             linked.pixelHasUniforms = pixelData->samplers[i].texbem != 0;
 
-        // plans/plan_fx.md FX-109: no CNA renderer routes GraphicsDevice.VertexTextures to a
-        // backend, and this one has no vertex-stage sampler binding either. Refuse by name rather
-        // than draw with an unbound group.
-        if (!linked.vertexSamplers.empty())
-        {
-            throw System::NotSupportedException(
-                "CNA WebGPU: this compiled effect's VERTEX shader samples a texture, which no CNA "
-                "renderer routes today (plans/plan_fx.md FX-109).");
-        }
-
         std::uint64_t key = HashWords(
             reinterpret_cast<const std::uint32_t*>(&linked.vertexModule), 2);
         key ^= HashWords(reinterpret_cast<const std::uint32_t*>(&linked.pixelModule), 2) * 31ull;

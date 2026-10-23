@@ -10930,12 +10930,24 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // only in whether they carry one must not share a pipeline layout. The bias VALUES are not
         // in the key -- they are uniform data, and a new float must never build a new pipeline.
         key = key * 31u + (command.linked.pixelHasLodBias ? 1u : 0u);
+        key = key * 31u + command.linked.vertexSamplers.size();
+        for (const auto& sampler : command.linked.vertexSamplers)
+        {
+            key = key * 1099511628211ull ^ sampler.textureBinding;
+            key = key * 1099511628211ull ^ sampler.samplerBinding;
+            key = key * 1099511628211ull ^ static_cast<std::uint64_t>(sampler.viewDimension);
+        }
+        key = key * 31u + command.linked.pixelSamplers.size();
         for (const auto& sampler : command.linked.pixelSamplers)
         {
             key = key * 1099511628211ull ^ sampler.textureBinding;
             key = key * 1099511628211ull ^ sampler.samplerBinding;
             key = key * 1099511628211ull ^ static_cast<std::uint64_t>(sampler.viewDimension);
         }
+        for (const auto& sampler : command.vertexSamplers)
+            key = key * 31u + static_cast<std::uint64_t>(sampler.filtering);
+        for (const auto& sampler : command.pixelSamplers)
+            key = key * 31u + static_cast<std::uint64_t>(sampler.filtering);
         if (const auto it = compiledEffectLayouts_.find(key); it != compiledEffectLayouts_.end())
             return it->second;
 
@@ -10958,31 +10970,42 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             return wgpuDeviceCreateBindGroupLayout(device_, &descriptor);
         };
 
-        // Group 0 -- vertex-stage samplers. Always empty: LinkAndGetShadersEXT refuses a pass that
-        // declares one (plans/plan_fx.md FX-109), so reaching here means there are none.
-        WGPUBindGroupLayoutDescriptor emptyDescriptor{};
-        emptyDescriptor.label = StringView("CNA WebGPU compiled Effect group0 (vertex samplers)");
-        layouts.groups[0] = wgpuDeviceCreateBindGroupLayout(device_, &emptyDescriptor);
+        const auto textureEntries = [](WGPUShaderStage stage, const auto& reflected,
+                                       const auto& captured) {
+            std::vector<WGPUBindGroupLayoutEntry> entries;
+            entries.reserve(reflected.size() * 2u);
+            for (std::size_t i = 0; i < reflected.size(); ++i)
+            {
+                WGPUBindGroupLayoutEntry textureEntry{};
+                textureEntry.binding = reflected[i].textureBinding;
+                textureEntry.visibility = stage;
+                textureEntry.texture.sampleType = captured[i].filtering
+                    ? WGPUTextureSampleType_Float : WGPUTextureSampleType_UnfilterableFloat;
+                textureEntry.texture.viewDimension = reflected[i].viewDimension;
+                entries.push_back(textureEntry);
+                WGPUBindGroupLayoutEntry samplerEntry{};
+                samplerEntry.binding = reflected[i].samplerBinding;
+                samplerEntry.visibility = stage;
+                samplerEntry.sampler.type = captured[i].filtering
+                    ? WGPUSamplerBindingType_Filtering : WGPUSamplerBindingType_NonFiltering;
+                entries.push_back(samplerEntry);
+            }
+            return entries;
+        };
+        const auto vertexEntries = textureEntries(WGPUShaderStage_Vertex,
+                                                  command.linked.vertexSamplers,
+                                                  command.vertexSamplers);
+        WGPUBindGroupLayoutDescriptor vertexDescriptor{};
+        vertexDescriptor.label = StringView("CNA WebGPU compiled Effect group0 (vertex samplers)");
+        vertexDescriptor.entryCount = vertexEntries.size();
+        vertexDescriptor.entries = vertexEntries.data();
+        layouts.groups[0] = wgpuDeviceCreateBindGroupLayout(device_, &vertexDescriptor);
         layouts.groups[1] = makeUniformGroup(WGPUShaderStage_Vertex,
                                              command.linked.vertexHasUniforms,
                                              "CNA WebGPU compiled Effect group1 (vertex uniforms)");
 
-        std::vector<WGPUBindGroupLayoutEntry> pixelEntries;
-        pixelEntries.reserve(command.linked.pixelSamplers.size() * 2u);
-        for (const auto& sampler : command.linked.pixelSamplers)
-        {
-            WGPUBindGroupLayoutEntry textureEntry{};
-            textureEntry.binding = sampler.textureBinding;
-            textureEntry.visibility = WGPUShaderStage_Fragment;
-            textureEntry.texture.sampleType = WGPUTextureSampleType_Float;
-            textureEntry.texture.viewDimension = sampler.viewDimension;
-            pixelEntries.push_back(textureEntry);
-            WGPUBindGroupLayoutEntry samplerEntry{};
-            samplerEntry.binding = sampler.samplerBinding;
-            samplerEntry.visibility = WGPUShaderStage_Fragment;
-            samplerEntry.sampler.type = WGPUSamplerBindingType_Filtering;
-            pixelEntries.push_back(samplerEntry);
-        }
+        auto pixelEntries = textureEntries(WGPUShaderStage_Fragment,
+                                           command.linked.pixelSamplers, command.pixelSamplers);
         if (command.linked.pixelHasLodBias)
         {
             // WEBGPU-208. Group 2 rather than a fifth group: core WebGPU guarantees only four, and
@@ -11126,64 +11149,96 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             }
         }
 
-        // Each sampler slot the pass bound, resolved to a keep-alive view and a native sampler
-        // NOW, while the public texture is unambiguously alive.
-        for (const auto& sampler : command.linked.pixelSamplers)
-        {
-            Microsoft::Xna::Framework::Graphics::Texture* texture = nullptr;
-            Microsoft::Xna::Framework::Graphics::SamplerState state;
-            bool assigned = false;
-            runtime->GetBoundSamplerEXT(sampler.slot, /*vertexStage=*/false, texture, state,
-                                        &assigned);
-            // Apply() publishes the pass's textures to the device slots, and a texture the game
-            // sets on a device slot afterwards is the one XNA samples, so a filled device slot
-            // takes precedence over the texture the effect captured (as on DIRECTX9).
-            if (params.compiledDeviceTextures != nullptr &&
-                sampler.slot < static_cast<std::uint32_t>(
-                                   Microsoft::Xna::Framework::Graphics::
-                                       TextureCollection::MaxTextures) &&
-                (*params.compiledDeviceTextures)[static_cast<int>(sampler.slot)] != nullptr)
+        // Capture both stages now; public slots may change or their wrappers may be disposed
+        // before the deferred draw is submitted.
+        const auto captureSamplers = [&](bool vertexStage,
+                                         const std::vector<WebGPUCompiledSamplerBindingEXT>& reflectedSamplers,
+                                         std::vector<CompiledEffectDrawCommand::SamplerBinding>& bindings) {
+            for (const auto& sampler : reflectedSamplers)
             {
-                texture = (*params.compiledDeviceTextures)[static_cast<int>(sampler.slot)];
+                Microsoft::Xna::Framework::Graphics::Texture* texture = nullptr;
+                Microsoft::Xna::Framework::Graphics::SamplerState state;
+                bool assigned = false;
+                runtime->GetBoundSamplerEXT(sampler.slot, vertexStage, texture, state,
+                                            &assigned);
+                // Apply() publishes the pass's textures to the device slots, and a texture the game
+                // sets on a device slot afterwards is the one XNA samples, so a filled device slot
+                // takes precedence over the texture the effect captured (as on DIRECTX9).
+                if (vertexStage)
+                {
+                    if (params.compiledDeviceVertexTextures != nullptr &&
+                        params.compiledDeviceVertexSamplerStates != nullptr &&
+                        sampler.slot < static_cast<std::uint32_t>(
+                            params.compiledDeviceVertexSamplerStates->ActiveSamplerCount()))
+                    {
+                        texture = (*params.compiledDeviceVertexTextures)[static_cast<int>(sampler.slot)];
+                        state = (*params.compiledDeviceVertexSamplerStates)[static_cast<int>(sampler.slot)];
+                    }
+                }
+                else
+                {
+                    if (params.compiledDeviceTextures != nullptr &&
+                        sampler.slot < static_cast<std::uint32_t>(
+                                           Microsoft::Xna::Framework::Graphics::
+                                               TextureCollection::MaxTextures) &&
+                        (*params.compiledDeviceTextures)[static_cast<int>(sampler.slot)] != nullptr)
+                    {
+                        texture = (*params.compiledDeviceTextures)[static_cast<int>(sampler.slot)];
+                    }
+                    if (!assigned && params.compiledDeviceSamplerStates != nullptr &&
+                        sampler.slot < static_cast<std::uint32_t>(SamplerStateCollection::MaxSamplers))
+                    {
+                        state = (*params.compiledDeviceSamplerStates)[static_cast<int>(sampler.slot)];
+                    }
+                }
+                CompiledEffectDrawCommand::SamplerBinding binding;
+                binding.textureBinding = sampler.textureBinding;
+                binding.samplerBinding = sampler.samplerBinding;
+                binding.texture = ResolveCompiledEffectTextureEXT(texture);
+                if (!vertexStage && spriteTextureOverride != nullptr && sampler.slot == 0)
+                {
+                    // WEBGPU-170: XNA's SpriteBatch assigns the run's texture to
+                    // GraphicsDevice.Textures[0] AFTER applying the pass, so for slot 0 the sprite's
+                    // own texture WINS over whatever the effect assigned to that sampler -- it is an
+                    // override, not a fallback. That is what lets Microsoft's SpriteEffects sample
+                    // hand a pixel shader the sprite it was given, and it is the difference the
+                    // shared suite's texture-slot section measures.
+                    binding.texture = *spriteTextureOverride;
+                }
+                if (!binding.texture)
+                    binding.texture = ResolveSamplable(pbrDefaultWhiteTexture_.get());
+                binding.filtering =
+                    state.getFilterProperty() != Microsoft::Xna::Framework::Graphics::TextureFilter::Point;
+                if (texture != nullptr && binding.filtering && !Float32FilterableEXT())
+                {
+                    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+                    const auto format = texture->getFormatProperty();
+                    if (format == SurfaceFormat::Single || format == SurfaceFormat::Vector2 ||
+                        format == SurfaceFormat::Vector4)
+                        throw System::NotSupportedException(
+                            "CNA WebGPU: filtering a 32-bit float compiled-effect texture requires "
+                            "Float32Filterable; use a Point sampler on this device.");
+                }
+                binding.sampler = GetOrCreateSlotSampler(
+                    static_cast<int>(state.getFilterProperty()),
+                    static_cast<int>(state.getAddressUProperty()),
+                    static_cast<int>(state.getAddressVProperty()),
+                    static_cast<int>(state.getAddressWProperty()),
+                    state.getMaxMipLevelProperty(), state.getMaxAnisotropyProperty(),
+                    "compiledEffect");
+                // WEBGPU-208: the sixth SamplerState field, and the only one no WGPUSamplerDescriptor
+                // can hold. Captured BY VALUE with the rest of the pass state, because this draw is
+                // replayed at Present(): a later Apply(), a later effect or another draw must not be
+                // able to change what this one samples. Clamped to WGSL's own sample-bias range, the
+                // same clamp ApplySamplerMipState makes for the stock routes.
+                binding.slot = sampler.slot;
+                binding.lodBias =
+                    std::clamp(state.getMipMapLevelOfDetailBiasProperty(), -15.99f, 15.99f);
+                bindings.push_back(std::move(binding));
             }
-            if (!assigned && params.compiledDeviceSamplerStates != nullptr &&
-                sampler.slot < static_cast<std::uint32_t>(SamplerStateCollection::MaxSamplers))
-            {
-                state = (*params.compiledDeviceSamplerStates)[static_cast<int>(sampler.slot)];
-            }
-            CompiledEffectDrawCommand::SamplerBinding binding;
-            binding.textureBinding = sampler.textureBinding;
-            binding.samplerBinding = sampler.samplerBinding;
-            binding.texture = ResolveCompiledEffectTextureEXT(texture);
-            if (spriteTextureOverride != nullptr && sampler.slot == 0)
-            {
-                // WEBGPU-170: XNA's SpriteBatch assigns the run's texture to
-                // GraphicsDevice.Textures[0] AFTER applying the pass, so for slot 0 the sprite's
-                // own texture WINS over whatever the effect assigned to that sampler -- it is an
-                // override, not a fallback. That is what lets Microsoft's SpriteEffects sample
-                // hand a pixel shader the sprite it was given, and it is the difference the
-                // shared suite's texture-slot section measures.
-                binding.texture = *spriteTextureOverride;
-            }
-            if (!binding.texture)
-                binding.texture = ResolveSamplable(pbrDefaultWhiteTexture_.get());
-            binding.sampler = GetOrCreateSlotSampler(
-                static_cast<int>(state.getFilterProperty()),
-                static_cast<int>(state.getAddressUProperty()),
-                static_cast<int>(state.getAddressVProperty()),
-                static_cast<int>(state.getAddressWProperty()),
-                state.getMaxMipLevelProperty(), state.getMaxAnisotropyProperty(),
-                "compiledEffect");
-            // WEBGPU-208: the sixth SamplerState field, and the only one no WGPUSamplerDescriptor
-            // can hold. Captured BY VALUE with the rest of the pass state, because this draw is
-            // replayed at Present(): a later Apply(), a later effect or another draw must not be
-            // able to change what this one samples. Clamped to WGSL's own sample-bias range, the
-            // same clamp ApplySamplerMipState makes for the stock routes.
-            binding.slot = sampler.slot;
-            binding.lodBias =
-                std::clamp(state.getMipMapLevelOfDetailBiasProperty(), -15.99f, 15.99f);
-            command.pixelSamplers.push_back(binding);
-        }
+        };
+        captureSamplers(false, command.linked.pixelSamplers, command.pixelSamplers);
+        captureSamplers(true, command.linked.vertexSamplers, command.vertexSamplers);
 
         // WEBGPU-208: pack the captured biases into the block the injected SPIR-V reads. std140
         // gives an array element a 16-byte stride, so each register owns a float4 whose .x is its
@@ -11297,6 +11352,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // here: they live in the uniform buffers, so two draws of the same pass with different
         // parameters share one pipeline.
         std::uint64_t key = mix(0, command.linked.pipelineKey);
+        // Filterability is part of the resource layout, even when the shader pair is unchanged.
+        key = mix(key, reinterpret_cast<std::uintptr_t>(layouts.pipelineLayout));
         key = mix(key, destination.sampleCount);
         key = mix(key, static_cast<std::uint64_t>(colorAttachmentCount));
         for (int c = 0; c < colorAttachmentCount; ++c)
@@ -11429,14 +11486,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         std::array<WGPUBindGroup, 4> bindGroups{};
         std::array<std::array<std::uint32_t, 1>, 4> dynamicOffsets{};
         std::array<std::uint32_t, 4> dynamicCounts{};
-        {
-            WGPUBindGroupDescriptor descriptor{};
-            descriptor.label = StringView("CNA WebGPU compiled Effect group0");
-            descriptor.layout = layouts.groups[0];
-            BindingCacheKeyEXT key;
-            key.layout = layouts.groups[0];
-            bindGroups[0] = AcquireCachedBindGroupEXT(key, {}, descriptor);
-        }
         const auto uniformGroup = [&](std::size_t group, bool present,
                                       const std::vector<std::uint8_t>& bytes, const char* label) {
             WGPUBindGroupDescriptor descriptor{};
@@ -11472,17 +11521,17 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         uniformGroup(3, command.linked.pixelHasUniforms, command.pixelUniforms,
                      "CNA WebGPU compiled Effect group3");
 
-        {
-            std::vector<WGPUBindGroupEntry> pixelEntries;
-            pixelEntries.reserve(command.pixelSamplers.size() * 2u + 1u);
+        const auto textureGroup = [&](std::size_t group, const auto& samplers, bool hasLodBias) {
+            std::vector<WGPUBindGroupEntry> samplerEntries;
+            samplerEntries.reserve(samplers.size() * 2u + 1u);
             BindingCacheKeyEXT key;
-            key.layout = layouts.groups[2];
+            key.layout = layouts.groups[group];
             // Keyed by entry position: the layout fixes which binding each position is.
-            bool keyable = command.pixelSamplers.size() * 2u <= key.handles.size() &&
-                           command.pixelSamplers.size() <= BindingCacheEntryEXT{}.keepAlive.size();
+            bool keyable = samplers.size() * 2u <= key.handles.size() &&
+                           samplers.size() <= BindingCacheEntryEXT{}.keepAlive.size();
             std::vector<const WebGPUSampledTextureEXT*> textures;
-            textures.reserve(command.pixelSamplers.size());
-            for (const auto& binding : command.pixelSamplers)
+            textures.reserve(samplers.size());
+            for (const auto& binding : samplers)
             {
                 WGPUBindGroupEntry textureEntry{};
                 textureEntry.binding = binding.textureBinding;
@@ -11492,14 +11541,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 samplerEntry.sampler = binding.sampler;
                 if (keyable)
                 {
-                    key.handles[pixelEntries.size()] = textureEntry.textureView;
-                    key.handles[pixelEntries.size() + 1] = samplerEntry.sampler;
+                    key.handles[samplerEntries.size()] = textureEntry.textureView;
+                    key.handles[samplerEntries.size() + 1] = samplerEntry.sampler;
                 }
-                pixelEntries.push_back(textureEntry);
-                pixelEntries.push_back(samplerEntry);
+                samplerEntries.push_back(textureEntry);
+                samplerEntries.push_back(samplerEntry);
                 textures.push_back(&binding.texture);
             }
-            if (command.linked.pixelHasLodBias)
+            if (hasLodBias)
             {
                 // WEBGPU-208: ordinary uniform data. A changed bias rewrites these bytes; it never
                 // touches the pipeline -- or, now, the group.
@@ -11515,26 +11564,29 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 biasEntry.binding = kWebGPUCompiledEffectLodBiasBinding;
                 biasEntry.buffer = slice.buffer;
                 biasEntry.size = size;
-                pixelEntries.push_back(biasEntry);
+                samplerEntries.push_back(biasEntry);
                 key.arenaChunk = slice.chunk;
-                dynamicOffsets[2][0] = slice.offset;
-                dynamicCounts[2] = 1;
+                dynamicOffsets[group][0] = slice.offset;
+                dynamicCounts[group] = 1;
             }
             WGPUBindGroupDescriptor descriptor{};
-            descriptor.label = StringView("CNA WebGPU compiled Effect group2");
-            descriptor.layout = layouts.groups[2];
-            descriptor.entryCount = pixelEntries.size();
-            descriptor.entries = pixelEntries.data();
+            descriptor.label = StringView(group == 0 ? "CNA WebGPU compiled Effect group0"
+                                                     : "CNA WebGPU compiled Effect group2");
+            descriptor.layout = layouts.groups[group];
+            descriptor.entryCount = samplerEntries.size();
+            descriptor.entries = samplerEntries.data();
             if (keyable)
             {
-                bindGroups[2] = AcquireCachedBindGroupEXT(key, textures, descriptor);
+                bindGroups[group] = AcquireCachedBindGroupEXT(key, textures, descriptor);
             }
             else
             {
-                bindGroups[2] = CreateBindGroupEXT(&descriptor);
-                pendingBindGroupReleases_.push_back(bindGroups[2]);
+                bindGroups[group] = CreateBindGroupEXT(&descriptor);
+                pendingBindGroupReleases_.push_back(bindGroups[group]);
             }
-        }
+        };
+        textureGroup(0, command.vertexSamplers, false);
+        textureGroup(2, command.pixelSamplers, command.linked.pixelHasLodBias);
 
         ApplyDrawViewport(pass, command.viewport);
         ApplyDrawScissor(pass, command.scissor);
@@ -12115,6 +12167,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             // AM4-187: stored natively as `rgba16float` (ClassifyWebGPUTextureFormat).
             if (requested == SurfaceFormat::HalfVector4 || requested == SurfaceFormat::HdrBlendable)
                 return RendererFormatVerdict::Supported;
+            if (requested == SurfaceFormat::Single || requested == SurfaceFormat::Vector4)
+                return RendererFormatVerdict::Supported;
         }
         return RendererFormatVerdict::Defer;
     }
@@ -12161,7 +12215,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         {
             using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
             const auto requested = static_cast<SurfaceFormat>(surfaceFormat);
-            if (requested == SurfaceFormat::HalfVector4 || requested == SurfaceFormat::HdrBlendable)
+            if (requested == SurfaceFormat::HalfVector4 || requested == SurfaceFormat::HdrBlendable ||
+                requested == SurfaceFormat::Single || requested == SurfaceFormat::Vector4)
                 return RendererFormatVerdict::Defer;
         }
         return ClassifySurfaceFormatEXT(surfaceFormat);
