@@ -9,9 +9,14 @@
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "CNA/Internal/CaseInsensitivePath.hpp"
 #include "TitleContentBytes.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/IO/FileStream.hpp"
+#include "System/IO/Path.hpp"
 
 #include <algorithm>
+#include <array>
 #include <exception>
 #include <fstream>
 #include <memory>
@@ -61,6 +66,30 @@ namespace Microsoft::Xna::Framework::Audio
 
     namespace
     {
+        std::string CheckedWaveBankPath(const std::string& filename)
+        {
+            const auto path = CNA::Internal::ResolveExistingXnaPath(System::IO::Path::GetFullPath(
+                CNA::Internal::NormalizeXnaPathSeparators(filename)));
+            System::IO::FileStream file(path, System::IO::FileMode::Open,
+                                       System::IO::FileAccess::Read, System::IO::FileShare::Read);
+            // XNA requires length > 4 and WBND magic before native resource creation.
+            // Reading five bytes establishes that boundary without narrowing a large
+            // file's length to Sharp Stream's current int32 Length property.
+            std::array<SharpRuntime::bytecs, 5> header{};
+            SharpRuntime::intcs read = 0;
+            while (read < static_cast<SharpRuntime::intcs>(header.size()))
+            {
+                const auto count = file.Read(header.data(), read,
+                    static_cast<SharpRuntime::intcs>(header.size()) - read);
+                if (count == 0) break;
+                read += count;
+            }
+            if (read != 5 || header[0] != 'W' || header[1] != 'B' ||
+                header[2] != 'N' || header[3] != 'D')
+                throw System::ArgumentException("Invalid wave bank content header.");
+            return path;
+        }
+
         std::vector<uint8_t> BuildPcmWav(
             const uint8_t* audioData, uint32_t audioLen,
             uint16_t channels, uint32_t sampleRate, uint8_t bitsPerSample)
@@ -100,7 +129,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (nonStreamingWaveBankFilename.empty())
             throw System::ArgumentNullException("nonStreamingWaveBankFilename");
 
-        Init(nonStreamingWaveBankFilename);
+        Init(CheckedWaveBankPath(nonStreamingWaveBankFilename));
     }
 
     WaveBank::WaveBank(AudioEngine* audioEngine,
@@ -118,18 +147,13 @@ namespace Microsoft::Xna::Framework::Audio
         if (streamingWaveBankFilename.empty())
             throw System::ArgumentNullException("streamingWaveBankFilename");
 
-        InitStreaming(streamingWaveBankFilename);
+        InitStreaming(CheckedWaveBankPath(streamingWaveBankFilename));
     }
 
     void WaveBank::Init(const std::string& filename)
     {
-        // FNA's non-streaming WaveBank ctor reads filename via TitleContainer.ReadToPointer,
-        // which throws FileNotFoundException on a missing file before ever reaching FACT
-        // (WaveBank.cs) -- match that here (P9-HARDWARE-003). Corrupt-but-existing content stays
-        // a silent stub below: FNA never checks FACTAudioEngine_CreateInMemoryWaveBank's return
-        // code either. The streaming ctor (InitStreaming) is unaffected: FNA's streaming path
-        // never goes through TitleContainer at all, it opens the file with the native
-        // FAudio_fopen instead, so a missing streaming file doesn't throw in FNA either.
+        // Both constructors supply a validated absolute cwd-based path. Unlike FNA's
+        // unchecked native return, XNA refuses a resource whose metadata cannot be loaded.
         std::vector<uint8_t> raw =
             CNA::Internal::Audio::ReadTitleContentBytes(filename);
 
@@ -142,10 +166,10 @@ namespace Microsoft::Xna::Framework::Audio
             xactImpl_ = std::make_unique<XactWaveBankImpl>(std::move(xwb));
             engine_->RegisterWaveBank(this);
         }
-        catch (const std::exception& ex)
+        catch (const std::runtime_error&)
         {
-            CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
-                "[WaveBank] XWB parse error (", filename, "): ", ex.what());
+            throw System::InvalidOperationException("Could not create wave bank.",
+                                                    std::current_exception());
         }
     }
 
@@ -165,10 +189,10 @@ namespace Microsoft::Xna::Framework::Audio
             xactImpl_ = std::make_unique<XactWaveBankImpl>(std::move(xwb), std::move(source));
             engine_->RegisterWaveBank(this);
         }
-        catch (const std::exception& ex)
+        catch (const std::runtime_error&)
         {
-            CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
-                "[WaveBank] XWB streaming parse error (", filename, "): ", ex.what());
+            throw System::InvalidOperationException("Could not create streaming wave bank.",
+                                                    std::current_exception());
         }
     }
 

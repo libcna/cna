@@ -616,22 +616,40 @@ int main(void)
         const CNA_Result streamed =
             cna_wave_bank_create_streaming(engine, view(WaveBankPath), 0, 64U, &streaming);
         CNA_Handle absent = UINT64_C(9);
-        /* CBIND-065, and this is the finding rather than the coverage. The header promised "the
-           same answers as cna_wave_bank_create", and it is not so: the streaming constructor never
-           reads through the title container, so a missing file yields a live, empty bank and
-           SUCCESS where the non-streaming twin answers IO. That is FNA's own streaming behaviour
-           reproduced, not a failure lost -- see WaveBank.cpp Init's note. The header now says so;
-           this pins it, so the day the canonical side changes, this test says so instead of
-           nobody noticing. */
+        /* ISSUE-028: genuine XNA validates both constructors before native creation. The
+           former FNA-based empty-bank expectation was incorrect; failure is atomic here. */
+        const CNA_Result missing_status = cna_wave_bank_create_streaming(
+            engine, view("cna_c_api_xact_missing.xwb"), 0, 64U, &absent);
         if (status == 0 &&
-            (cna_wave_bank_create_streaming(
-                 engine, view("cna_c_api_xact_missing.xwb"), 0, 64U, &absent) !=
-                 CNA_RESULT_SUCCESS ||
-             absent == CNA_INVALID_HANDLE ||
-             cna_wave_bank_destroy(absent) != CNA_RESULT_SUCCESS ||
+            (missing_status != CNA_RESULT_IO ||
+             absent != CNA_INVALID_HANDLE ||
              cna_wave_bank_create_streaming(engine, view(WaveBankPath), 0, 64U, 0) !=
                  CNA_RESULT_INVALID_ARGUMENT)) {
             status = CNA_TEST_FAIL(30);
+        }
+        if (absent != CNA_INVALID_HANDLE) {
+            (void)cna_wave_bank_destroy(absent);
+        }
+        /* The XGS fixture exists but has the wrong magic for a WaveBank. */
+        if (status == 0) {
+            rejected = UINT64_C(9);
+            if (cna_wave_bank_create(engine, view(SettingsPath), &rejected) !=
+                    CNA_RESULT_INVALID_ARGUMENT || rejected != CNA_INVALID_HANDLE) {
+                status = CNA_TEST_FAIL(33);
+            }
+            if (rejected != CNA_INVALID_HANDLE) {
+                (void)cna_wave_bank_destroy(rejected);
+            }
+        }
+        if (status == 0) {
+            rejected = UINT64_C(9);
+            if (cna_wave_bank_create_streaming(engine, view(SettingsPath), 0, 64U, &rejected) !=
+                    CNA_RESULT_INVALID_ARGUMENT || rejected != CNA_INVALID_HANDLE) {
+                status = CNA_TEST_FAIL(34);
+            }
+            if (rejected != CNA_INVALID_HANDLE) {
+                (void)cna_wave_bank_destroy(rejected);
+            }
         }
         if (status == 0 && streamed == CNA_RESULT_SUCCESS) {
             if (cna_wave_bank_destroy(streaming) != CNA_RESULT_SUCCESS) {

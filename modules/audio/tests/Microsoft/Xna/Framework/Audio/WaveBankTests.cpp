@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/Environment.hpp"
 #include "System/EventArgs.hpp"
@@ -1097,16 +1098,13 @@ TEST(WaveBankTest, ConstructorResolvesXnaCaseInsensitiveBankPath)
     EXPECT_TRUE(bank.getIsPreparedProperty());
 }
 
-// XA-13: a file that EXISTS but isn't a valid .xwb (bad magic/garbage) must behave the same as
-// a missing one -- construction doesn't throw, the bank just stays unprepared. (XA-9 decided to
-// keep this "silent stub" behavior rather than throw; this locks in that decision explicitly, on
-// the "exists but corrupt" path specifically, which the file-missing test above cannot cover.)
-TEST(WaveBankTest, IsPreparedFalseForExistingButCorruptFile)
+// ISSUE-028: genuine XNA's CheckWaveBankHeader rejects bad magic with ArgumentException.
+// This replaces XA-13's incorrect FNA-based unprepared-stub expectation.
+TEST(WaveBankTest, ConstructorRejectsExistingButCorruptFile)
 {
     const auto corrupt = WriteFixture("cna_wavebank_test", "corrupt.xwb",
                                        {'n', 'o', 't', ' ', 'a', ' ', 'w', 'a', 'v', 'e', 'b', 'a', 'n', 'k'});
-    WaveBank wb(&SharedEngine(), corrupt);
-    EXPECT_FALSE(wb.getIsPreparedProperty());
+    EXPECT_THROW(WaveBank wb(&SharedEngine(), corrupt), System::ArgumentException);
 }
 
 TEST(WaveBankTest, IsDisposedFalseInitiallyAndTrueAfterDispose)

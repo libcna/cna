@@ -22,9 +22,9 @@ namespace CNA::Internal::Audio
         CNA::Platform::IPlatformFileSystem* fileSystem =
             CNA::Platform::GetCurrentPlatform().GetFileSystem();
 #if !defined(__ANDROID__)
-        // XNA's AudioEngine, WaveBank and SoundBank open their file through TitleContainer, so a
-        // relative name is under TitleLocation.Path, not the working directory (FNA reads it with
-        // TitleContainer.ReadToPointer too). A game started from anywhere else -- Finder, another
+        // CNA's AudioEngine and SoundBank use title-relative lookup here. WaveBank supplies an
+        // already validated absolute cwd-based path, as required by its XNA constructor contract.
+        // A game started from anywhere else -- Finder, another
         // shell directory -- drew all of its ContentManager content and found none of its XACT
         // files, and played silently (AM4-321). The working directory stays the fallback, as it
         // is for ContentManager's root. Android keeps SDL's packaged-asset namespace.

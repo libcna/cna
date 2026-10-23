@@ -31,9 +31,14 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Constructs a WaveBank by loading a non-streaming .XWB file.
          *
          * @param audioEngine                  The audio engine that owns this bank.
-         * @param nonStreamingWaveBankFilename Path to the .XWB WaveBank file.
+         * @param nonStreamingWaveBankFilename Path to the .XWB file, relative to the process
+         *                                    working directory when not absolute.
          * @throws System::ArgumentNullException if @p audioEngine is null or
          *         @p nonStreamingWaveBankFilename is empty.
+         * @throws System::IO::IOException if the file cannot be opened/read (including
+         *         FileNotFoundException for a missing file).
+         * @throws System::ArgumentException if the content header is invalid.
+         * @throws System::InvalidOperationException if bank metadata cannot be loaded.
          */
         WaveBank(AudioEngine* audioEngine, const std::string& nonStreamingWaveBankFilename);
 
@@ -44,11 +49,18 @@ namespace Microsoft::Xna::Framework::Audio
          * its filename again. Only header/metadata bytes are loaded up front.
          *
          * @param audioEngine                The audio engine that owns this bank.
-         * @param streamingWaveBankFilename  Path to the streaming .XWB WaveBank file.
-         * @param offset                     Byte offset into the file where the wave data begins.
-         * @param packetSize                 Size of streaming packets.
+         * @param streamingWaveBankFilename  Path to the streaming .XWB file, relative to the
+         *                                   process working directory when not absolute.
+         * @param offset                     Compatibility argument; CNA's file streaming path
+         *                                   currently ignores it and opens the bank at byte zero.
+         * @param packetSize                 Compatibility argument; CNA currently reads each
+         *                                   requested entry rather than scheduling sector packets.
          * @throws System::ArgumentNullException if @p audioEngine is null or
          *         @p streamingWaveBankFilename is empty.
+         * @throws System::IO::IOException if the file cannot be opened/read (including
+         *         FileNotFoundException for a missing file).
+         * @throws System::ArgumentException if the content header is invalid.
+         * @throws System::InvalidOperationException if bank metadata cannot be loaded.
          */
         WaveBank(AudioEngine* audioEngine,
                  const std::string& streamingWaveBankFilename,

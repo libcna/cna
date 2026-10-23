@@ -29,6 +29,58 @@ by this validation step.
 
 ### Current task: WaveBank028 retained-file repair (2026-10-23)
 
+LATEST OWNER INSTRUCTION (2026-10-23): finish WaveBank, then REVIEW ALL pre-existing
+uncommitted changes before producing the final English handoff.md for a fresh-context
+Opus5.5 xhigh agent. The owner explicitly authorized correcting shortcomings and committing
+appropriate inherited changes. Earlier "preserve foreign work" notes remain historical:
+do not discard/bulk-stage it, but it is now in scope for reviewed, validated subsystem commits.
+Commit and normally push completed work, then finish the requested handoff and stop. No new
+goal is to be created; the owner cleared the goal. No sub-agents have been requested.
+
+028 constructor validation COMPLETE, ready for coherent source commit and permanent closure:
+native integration51PASS0.540s (15 pre-fix failures repaired,36 passes preserved), native audio
+779=775PASS/4sameSKIP8.821s (one documented corrupt-file XNA expectation/name correction).
+Targeted ASan/UBSan/leaks62PASS0.119s across ten TUs incl. FileStream/Path and constructor fixture;
+other dependencies uninstrumented, no findings/hash drift. Original external14/8/6 witnesses
+allPASS unchanged. Five native C controlsPASS1.47s; final full consumer build no warnings.
+Both renderer32 audio/C scenarios retain30PASS/1same114FAIL/1manualNOTRUN. All15 registered
+XACT/catalog CTestsPASS26.93s. First CTest caught the missing-file fixture's missing parent from
+the build cwd; corrected its path to the existing asset directory, not its exception oracle.
+Comparison had two harness assumptions corrected: quiet C++ labels absent; standalone C parent
+JSON count stays0, so child logs prove the five new checks and preservation of old checks.
+Final exact comparison passes; catalog719 unchanged;275 final artifact hashes verify; generated
+3197 routes/57 files current. Reports/evidence WAVEBANK_CONSTRUCTORS.md retain all earlier failures.
+No new full campaign/native aggregate/visual/physical-audio/Windows/browser claim. Full checkpoint075.
+Next: commit constructor fix and028 closure/evidence, then snapshot/review inherited changes by
+subsystem (content ownership, graphics113, audio/media disposal, storage010, associated C/docs).
+Do not prepare the final Opus handoff or stop until that requested review/fix/commit step is done.
+
+Lifetime checkpoint publication VERIFIED: CNA04099802bbce32098cfd86004e265ab9c7f69ec9,
+demos1aa8afef3c6a97dcce5906614449976306e95e03. Source3c67874ba is included.
+Constructor follow-up in progress: original14-case witness promoted unchanged to cross-module
+tests/WaveBankConstructorContractTests.cpp (TitleLocation is a runtime API, not an audio dependency).
+Full integration before45=36PASS/9FAIL0.332s. Added six empty/four-byte/truncated-metadata
+source-backed boundaries; before-v2 integration51=36PASS/15FAIL0.368s. Genuine runtime oracle
+remains14 checks; six new native controls are source-backed, not claimed measured in Windows.
+Corrected C XactSmoke missing-streaming contract fails before repair with code30. The old C header
+explicitly followed FNA's empty-bank result; genuine XNA preflight disproves that expectation.
+Candidate resolves both constructors through Path.GetFullPath + existing CNA case-insensitive
+lookup and checks five bytes using read-only FileStream; this preserves missing-file exception
+type/full filename and tests length>4 without querying Sharp's int32 Length. Retained native
+stream still handles 64-bit positions. Parser failures now throw InvalidOperationException.
+Current integration51/51PASS0.540s; native full audio running. Native/C docs corrected; old native
+corrupt-stub assertion replaced by precise ArgumentException, with historical provenance.
+Demos now name valid WaveBank assets via explicit TitleLocation absolute paths so CTest's cwd
+does not select a different file; no harness cwd change. Bank-lifetime's two stub expectations
+corrected to precise XNA exceptions; all other assertions preserved. C bank demo adds atomic
+missing-streaming and two invalid-header checks, C cue/bank demos resolve their explicit assets.
+No new closure/publication claim: build/full audio, fresh native C, original witnesses, targeted
+sanitizers, SOFTWARE/OPENGLES3 comparison and registered CTests still pending for this follow-up.
+Owned uncommitted: WaveBank.cpp/.hpp, TitleContentBytes.cpp(comment only), WaveBankTests.cpp,
+xact.h, XactSmoke.c, new cross-module fixture, this handoff; demos11 XACT/C source files.
+Next: complete constructor validation, audit documented oracle deltas, then record028 final
+disposition only if all actionable constructor/lifetime defects pass. Preserve all foreign work.
+
 025 publication VERIFIED: CNA origin/next79c56330faa5de25c813188ceee1b3482c530bf0,
 demos origin/nexte842f7a4414d78e6f78f58ce66c3378ecb21dba3 (fresh ls-remote checks).
 028 baseline on this tree: CnaAudioTests775 registered =771PASS/4SKIP,8.638s. The four

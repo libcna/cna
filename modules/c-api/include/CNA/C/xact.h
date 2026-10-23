@@ -469,14 +469,15 @@ CNA_C_API CNA_Result cna_audio_category_get_hash_code(CNA_Handle category, int32
 /* ---- WaveBank ---- */
 
 /**
- * @brief Opens a fully resident wave bank.
+ * @brief Opens a fully resident wave bank, resolving relative paths from the working directory.
  *
  * @param engine Owned engine handle.
  * @param filename Path to the `.xwb` file, borrowed for the duration of the call.
  * @param out_wave_bank Receives an owned wave-bank handle, or `CNA_INVALID_HANDLE` on failure.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` for a missing or unreadable file,
- *         `CNA_RESULT_INVALID_ARGUMENT` for a malformed file or bad arguments, or a documented
- *         handle/thread/native failure.
+ *         `CNA_RESULT_INVALID_ARGUMENT` for an invalid content header or bad arguments,
+ *         `CNA_RESULT_INVALID_STATE` if bank metadata cannot be loaded, or a documented
+ *         handle/thread failure.
  *
  * The bank registers itself with the engine under the name recorded inside the file, which is how a
  * sound bank later resolves it. Two banks are not required to have distinct names.
@@ -487,33 +488,24 @@ CNA_C_API CNA_Result cna_wave_bank_create(
     CNA_Handle* out_wave_bank);
 
 /**
- * @brief Opens a streaming wave bank.
+ * @brief Opens a streaming wave bank, resolving relative paths from the working directory.
  *
  * @param engine Owned engine handle.
  * @param filename Path to the `.xwb` file, borrowed for the duration of the call.
- * @param offset Byte offset of the bank inside the file.
- * @param packet_size Streaming packet size in sectors.
+ * @param offset Compatibility argument; the CNA file path currently opens at byte zero.
+ * @param packet_size Compatibility argument; CNA currently reads complete entries on demand.
  * @param out_wave_bank Receives an owned wave-bank handle, or `CNA_INVALID_HANDLE` on failure.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output or a path that is
- *         not valid UTF-8, or a documented handle/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` for a missing or unreadable file,
+ *         `CNA_RESULT_INVALID_ARGUMENT` for an invalid content header or bad arguments,
+ *         `CNA_RESULT_INVALID_STATE` if bank metadata cannot be loaded, or a documented
+ *         handle/thread failure.
  *
- * **This does *not* answer the same way as `cna_wave_bank_create`, and the difference is
- * deliberate rather than an oversight.** That one reports a missing file as `CNA_RESULT_IO`,
- * because the canonical non-streaming constructor reads it the way XNA does -- through the title
- * container, which throws when the file is absent. The streaming constructor never goes through
- * the title container at all; it hands the path to the native audio layer, exactly as FNA's
- * streaming path does, and a missing file does not throw there either. So this route answers
- * `CNA_RESULT_SUCCESS` and hands back a live but **empty** wave bank for a file that does not
- * exist, and that is FNA's behaviour reproduced rather than a failure lost.
+ * Both constructors validate the file before publishing a handle, matching XNA. The streaming
+ * bank retains its opened file until disposal; later entry reads do not resolve its name again.
  *
- * The practical consequence is the same either way: **do not read success here as "the file was
- * there"**. Ask the bank whether it has content. The same applies to a file that exists but is
- * malformed, in *both* constructors -- a parse failure leaves an empty bank rather than raising,
- * because the canonical path never checks the native return code.
- *
- * This header claimed the two answered alike until `CBIND-065`, which found it by writing the
- * first test that called this route. `XactSmoke.c` now pins the behaviour, so a canonical change
- * becomes visible instead of silent.
+ * Compatibility correction (CNA-DEMOS-ISSUE-028): CBIND-065 documented FNA's unchecked native
+ * result as a successful empty bank. Genuine XNA instead refuses missing/invalid files; callers
+ * now receive the failure above and an invalid output handle. XactSmoke.c protects this boundary.
  */
 CNA_C_API CNA_Result cna_wave_bank_create_streaming(
     CNA_Handle engine,
