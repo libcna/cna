@@ -538,12 +538,21 @@
       ],
       "subsystem": "network/gamer-services",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
-      "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "status": "RESOLVED",
+      "root_cause": "Offline Rating alone saved the row; EndGame never flushed later columns. Compare canonical column contents with the last loaded/successfully saved snapshot and flush changed offline writer aliases before GameEnded, preserving immediate Rating persistence and unchanged stale cached rows.",
+      "related_issues": [
+        "CNA-DEMOS-ISSUE-085"
+      ],
+      "cna_fix_commit": "8a5e5d8aa50c56599ddc8649b738cb2ca4caab15",
+      "validation": [
+        "Six native witnesses before product edits:3FAIL/3PASS0.006s. Missing post-Rating Result, retained scalar/stream contents lost, unchecked final persistence. First run failed only fixture setup maxGamers1; corrected to valid4 and retained that log. Available genuine Windows XNA leaderboard type is a stub; final-row contract and CNA own offline behavior are the reference, no live-service claim.",
+        "Final full native Net565PASS48.580s retains all558 prior018 outcomes and adds7PASS. Seventh LocalNetworkGamer alias test added after initial6-case validation, not claimed separately red. GamerServices737=736PASS/1unchanged declared rendererSKIP75.187s exactly matches085. Seven rebuilt C gamer/net/boundary controlsPASS0.24s; native48 existing nodiscard warnings, no consumer/C compiler warnings.",
+        "Final targeted ASan/UBSan/leaks48PASS0.029s across11 instrumented translation units including NetworkSession, GamerConstruction, store, writer, dictionary, reader, entry, MemoryStream and fixtures/isolation. Other native static/third-party dependencies uninstrumented. No findings or frozen-input changes. First47-pass run retained; v2 adds coverage, no suppression.",
+        "Demo retains all21 assertions but clears its fixture columns and commits Rating before the final column writes, preventing a previous correct row from hiding the bug. Both renderers pass. No025 marker existed or was removed;085 stream/shape assertions remain.",
+        "Final SOFTWARE59 and OPENGLES3 59 each58PASS/1manualNOTRUN. Exact085 gamer/018 net comparison preserves every status/count/marker/message/logged assertion; only deterministic demo setup changes. Catalog719 exactly unchanged and valid; generated3197 routes/57 files current.275 frozen consumer artifacts verify after all gates.",
+        "11 (26.40s) registered focused/catalog CTestsPASS. No new full719/native aggregate/visual/other-platform/live-service claim; last complete cross-subsystem checkpoint remains075 with six residual CTest failures. See demos docs/repair-evidence/gamer/LEADERBOARD_COMMIT.md."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-026",

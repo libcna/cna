@@ -27,7 +27,46 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: offline leaderboard streams085, then write timing025 (2026-10-23)
+### Current task: publish025 closure, then WaveBank028 (2026-10-23)
+
+085 publication VERIFIED: CNA origin/next b6d5ca097f2cd2982cc797690227659b73c829cf,
+demos origin/next90d98d66e2daecb412ffd77a9d74128559d8ecd9. Source420a4572a is included.
+025 native witnesses added in modules/net/tests/CNA/Internal/Net/OfflineLeaderboardCommitTests.cpp;
+first build passed. First run failed setup (maxGamers1 is invalid); corrected fixture to4.
+Before repair:3FAIL/3PASS0.006s, with original missing Result, retained scalar/stream values lost,
+and unchecked final-write failure. Six cases cover rating-before-columns, references/streams
+retained before StartGame, both directions of unchanged cached writer alias, read-without-write,
+and failed final persistence/recovery. Preserve immediate offline Rating fixture writes and avoid
+an unconditional cached-row flush that overwrites another writer's newer data. Investigate a
+canonical local-column snapshot, compared at LocalWithLeaderboards EndGame before GameEnded.
+No callbacks on each stream byte, arbitrary sleeps, service impersonation or changed online rules.
+Candidate implemented: canonical snapshots from local serializer; Rating saves then swaps its
+baseline; EndGame flushes only changed offline rows before GameEnded. No online rule changes.
+Native validation passed: finalNet565/56548.580s (558 prior outcomes plus7PASS), Gamer737=
+736PASS/1sameSKIP75.187s exact085 parity. Seventh control added after initial6-case native run
+protects LocalNetworkGamer's own writer; not claimed as separately red. Seven C controlsPASS0.24s.
+ASan/UBSan/leaks48PASS0.029s, eleven relevant translation units instrumented, other libraries
+uninstrumented, no findings or changed hashes. Initial47-pass sanitizer run retained; v2 adds the
+seventh control. Native48 existing nodiscard warnings; C build no warnings. No suppression.
+Demo now clears its fixture columns and commits Rating before writing all expected values, so
+previous runs cannot hide025. All21 assertions retained, including085 stream/shape checks.
+Complete consumer buildPASS without compiler warnings. Final SOFTWARE59/OPENGLES3 59 each
+58PASS/1manualNOTRUN, exact085 gamer/018 net comparison preserves every outcome/count/marker/
+message/logged assertion. All21 paging assertions pass with Rating now before column writes.
+Eleven focused/catalog CTestsPASS26.40s. All275 frozen artifacts verify after all gates; freeze
+released. Catalog719 exactly unchanged versus085; generated3197 routes current.
+025 source repair8a5e5d8aa50c56599ddc8649b738cb2ca4caab15 committed. Permanent025 status is
+RESOLVED/FIXED_VALIDATED:156 historical IDs,129 final/27 without. No new full719/native aggregate,
+visual, other-platform or live-service claim; last full checkpoint stays075 with six residuals.
+Next: commit closure/evidence and normal fast-forward publish/verify. Then028: reuse the existing
+genuine14-case WaveBank constructor oracle and current retained-file/lazy-path witnesses from
+demos docs/repair-evidence/content/MEDIA_PATH_TRIAGE.md. Current WaveBank source still resolves
+the eager bank through TitleContainer and reopens a streaming filename for each lazy read.
+XNA uses cwd/Path.GetFullPath for both constructors and retains an opened FileStream. Do not
+implement the disproved historical title-root expectation. Verify current reproductions before
+repairing; preserve foreign SoundEffect/Song/content/113 changes. No028 source changes yet.
+Owned uncommitted025 work: matrix block and this handoff; demos paging setup,025 inventory block
+and LEADERBOARD_COMMIT.md. All implementation/tests/docs are in the source commit above.
 
 Latest publication verified: CNA108fc0e46be3024e815f9f83c3636ac100e3ffe7,
 demos1a978376acd795bed3efb3ae2e3cf2b3c75a9a9d.017 closure is published; Sharp unchanged.
@@ -53,14 +92,14 @@ generated3197 routes/57 files current. All275 frozen consumer artifacts verified
 freeze released. Source fix420a4572a721f750978e496c3cc0b3b34e2e26a2 committed.085 is now
 RESOLVED/FIXED_VALIDATED:156 historical IDs,128 final dispositions/28 without. No new full719,
 native aggregate, visual, other-platform or live-service claim. Last full checkpoint stays075.
-Evidence demos LEADERBOARD_STREAMS.md. Next: commit closure/evidence, normal fast-forward push
-and remote verification, then025 native red tests for post-rating scalar/retained stream writes
+Evidence demos LEADERBOARD_STREAMS.md. Closure/evidence are published as recorded above.
+Continue025 native red tests for post-rating scalar/retained stream writes
 at EndGame. Source confirms offline EndGame has no final column flush. Protect unchanged cached
 rows from overwriting another writer and preserve existing immediate Rating fixture persistence.
 025 needs a separate commit-boundary repair, including retained stream/reference writes. Do not
 pretend a pre-mutation callback fixes it. Preserve all foreign content/audio/113 changes.
-Owned uncommitted work:085 matrix block and this handoff; demos paging exact nine-column
-assertions/metadata,085 inventory block and LEADERBOARD_STREAMS.md. No pending approval.
+085 owned work is fully committed/published; only foreign work and the new025 work recorded
+above are uncommitted. No pending approval.
 
 Publication base: CNA2db9a7646bdce9f91c15a53fe23c78db0312745b and demos
 0e33c8aa40cce4ad6034c1430c28510019e8e4a4, both origin/next verified. Sharp unchanged2f644cf47.
