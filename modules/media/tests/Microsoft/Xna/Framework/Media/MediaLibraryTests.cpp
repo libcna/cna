@@ -366,9 +366,9 @@ TEST_F(MediaLibrarySavePictureNoPreexistingRootTest, SavePictureBootstrapsARootA
 
 TEST_F(MediaLibrarySavePictureTest, SavePictureFromStreamProducesTheSameResultAsFromBuffer)
 {
-    auto* stream = new System::IO::FileStream("tests/assets/media/pictures/Vacation/beach.jpg");
+    System::IO::FileStream stream("tests/assets/media/pictures/Vacation/beach.jpg");
     MediaLibrary library;
-    Picture* saved = library.SavePicture("from_stream", stream);
+    Picture* saved = library.SavePicture("from_stream", &stream);
     ASSERT_NE(saved, nullptr);
     EXPECT_EQ(saved->getWidthProperty(), 64);
     EXPECT_EQ(saved->getHeightProperty(), 48);
