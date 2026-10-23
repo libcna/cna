@@ -90,8 +90,8 @@ namespace {
         return true;
     }
 
-    int RunHost(int timeoutSeconds, bool playing = false) {
-        auto gamer = SignedInGamer::CreateInternal("HostPlayer");
+    int RunHost(int timeoutSeconds, bool playing = false, const std::string& name = "HostPlayer") {
+        auto gamer = SignedInGamer::CreateInternal(name);
         NetworkSession* session = NetworkSession::Create(
             NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
         );
@@ -169,8 +169,9 @@ namespace {
         return 0;
     }
 
-    int RunClient(uint16_t port, int timeoutSeconds, bool playing = false) {
-        if (port == 0) {
+    int RunClient(uint16_t port, int timeoutSeconds, bool playing = false,
+                  const std::string& discoveryHost = "", bool searchFirst = false) {
+        if (port == 0 && discoveryHost.empty()) {
             std::fprintf(stderr, "client: --port is required and must be nonzero\n");
             return 64;
         }
@@ -182,11 +183,44 @@ namespace {
         struct RestoreSignedIn {
             ~RestoreSignedIn() { Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({}))); }
         } restore;
-        // The parent supplies discovery metadata; client construction/handshake uses public Join.
-        auto available = AvailableNetworkSession::CreateInternal(1, "HostPlayer", 0, 7,
-            NetworkSessionProperties{}, QualityOfService::CreateInternal(), "127.0.0.1", port,
-            NetworkSessionType::SystemLink);
-        NetworkSession* session = NetworkSession::Join(&available);
+        NetworkSession* session = nullptr;
+        if (discoveryHost.empty()) {
+            // The direct transport control receives its port from the parent.
+            auto available = AvailableNetworkSession::CreateInternal(1, "HostPlayer", 0, 7,
+                NetworkSessionProperties{}, QualityOfService::CreateInternal(), "127.0.0.1", port,
+                NetworkSessionType::SystemLink);
+            session = NetworkSession::Join(&available);
+        } else {
+            if (searchFirst) {
+                const auto initial = NetworkSession::Find(NetworkSessionType::SystemLink, 1, {});
+                for (int i = 0; i < initial.getCountProperty(); ++i) {
+                    if (initial.getItem(i).getHostGamertagProperty() == discoveryHost) {
+                        std::fprintf(stderr, "discovery: host existed before its readiness barrier\n");
+                        return 2;
+                    }
+                }
+                std::printf("SEARCHED\n");
+                std::fflush(stdout);
+                char command[8]{};
+                if (!std::fgets(command, sizeof(command), stdin) || std::strcmp(command, "GO\n") != 0) {
+                    std::fprintf(stderr, "discovery: missing host readiness command\n");
+                    return 2;
+                }
+            }
+            // A single search must find the now-ready host without a client restart or supplied port.
+            const auto found = NetworkSession::Find(NetworkSessionType::SystemLink, 1, {});
+            for (int i = 0; i < found.getCountProperty(); ++i) {
+                auto listing = found.getItem(i);
+                if (listing.getHostGamertagProperty() == discoveryHost) {
+                    session = NetworkSession::Join(&listing);
+                    break;
+                }
+            }
+            if (!session) {
+                std::fprintf(stderr, "discovery: the single search did not find the ready host\n");
+                return 1;
+            }
+        }
         int started = 0;
         if (playing) {
             // XNA's GameStarted add accessor immediately replays Playing to this new handler.
@@ -1159,6 +1193,7 @@ int main(int argc, char** argv) {
     std::string gamertag;
     std::string findMode = "limit";
     int hostLocals = 1;
+    bool searchFirst = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -1172,6 +1207,8 @@ int main(int argc, char** argv) {
             gamertag = arg.substr(11);
         } else if (arg.rfind("--find=", 0) == 0) {
             findMode = arg.substr(7);
+        } else if (arg == "--search-first") {
+            searchFirst = true;
         } else if (arg.rfind("--host-locals=", 0) == 0) {
             hostLocals = std::stoi(arg.substr(14));
             if (hostLocals != 1 && hostLocals != 2) return 64;
@@ -1184,6 +1221,14 @@ int main(int argc, char** argv) {
         }
         if (role == "client") {
             return RunClient(port, timeoutSeconds);
+        }
+        if (role == "discovery-host") {
+            if (gamertag.empty()) return 64;
+            return RunHost(timeoutSeconds, false, gamertag);
+        }
+        if (role == "discovery-client") {
+            if (gamertag.empty()) return 64;
+            return RunClient(0, timeoutSeconds, false, gamertag, searchFirst);
         }
         if (role == "playing-host") {
             return RunHost(timeoutSeconds, true);
@@ -1235,9 +1280,9 @@ int main(int argc, char** argv) {
             return RunMigrationSurvivor(port, gamertag, timeoutSeconds, hostLocals);
         }
         std::fprintf(stderr,
-                      "Usage: %s --role=host|client|playing-host|playing-client|find-join-client|added-gamer-host|added-gamer-client|guest-host|guest-client|"
+                      "Usage: %s --role=host|client|discovery-host|discovery-client|playing-host|playing-client|find-join-client|added-gamer-host|added-gamer-client|guest-host|guest-client|"
                       "start-hosting-partial-failure|migration-host|migration-survivor|voice-host|voice-client "
-                      "[--port=<n>] [--gamertag=<name>] [--find=limit|list] [--timeout=<seconds>] [--host-locals=1|2]\n",
+                      "[--port=<n>] [--gamertag=<name>] [--find=limit|list] [--timeout=<seconds>] [--host-locals=1|2] [--search-first]\n",
                       argv[0]);
         return 64;
     } catch (const std::exception& ex) {

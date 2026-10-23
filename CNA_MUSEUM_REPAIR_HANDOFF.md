@@ -31,10 +31,26 @@ by this validation step.
 
 ISSUE-075 fix40f286237cdbf7bdc05eb0a2ee9c9ee584eb677f is committed and fully validated.
 Matrix075 is RESOLVED/FIXED_VALIDATED; census156 IDs/122 final dispositions/34 without.
-Commit the075 matrix/evidence closure and publish both repositories, verifying remote refs.
-Then implement the native independent-process026 witness described in demos
-docs/repair-evidence/net/DISCOVERY_PREFLIGHT.md, demonstrate the unchanged source's failure,
-and repair its shared reply-socket root cause. No026 code/test change or runtime claim yet.
+Publication VERIFIED: CNA origin/next53806939171df3a7571b5b02e5216f1a33cea3f8 and demos
+origin/next6e85316ad8c5efb72547d209fc2518c98b67d6f3. Sharp Runtime unchanged2f644cf47.
+The native independent-process026 witness is added in TwoProcessLoopbackTest.cpp and
+tools/net/net_two_process_harness.cpp: host-first control, search-first readiness pipe,
+single public Find, join and original payload round trip; no port is supplied to the finder.
+Native red baseline on unchanged production:2PASS/1FAIL; only search-before-host fails, matching
+the historical finding. Both builds pass without diagnostics. Candidate generalizes the existing
+private SearchSocket/reply polling across native platforms, keeping Darwin interface broadcasts
+local. Wire format, search window and policy unchanged. Low-resource fallback remains for018.
+Complete native networking passes551/551 in48.278s; original549 statuses unchanged and exactly
+two passing discovery additions. Reports repair-discovery-native.log/xml/native-exact.log.
+Full consumer rebuild passes without diagnostics; all24 C++/C network demos PASS on SOFTWARE
+and all24 on OPENGLES3, preserving every075 status, marker, check count, message and logged
+assertion multiplicity. Native CApi_NetSmoke/GeneratedRoutesSmoke PASS; catalog719 identical,
+zero validation problems. All275 frozen hashes match after validation; freeze released.
+No active build/test scope. Next commit026 production/test repair and this handoff, close the
+permanent matrix/inventory with its SHA, publish/verify, then reproduce018's unavailable-network
+exception contract. Details: demos docs/repair-evidence/net/DISCOVERY_PREFLIGHT.md.
+No new full719/native aggregate/visual/sanitizer/browser/other-platform/service claim;075 remains
+the latest full checkpoint with six unchanged CTest residuals. No pending approval.
 ISSUE018 contract preflight is also recorded there; keep it separate until reproduced.
 The075 artifact freeze has ended. One compiler/test suite at a time, shared ccache, existing
 trees, private display/network, MemoryHigh4GiB/MemoryMax6GiB/no swap. No pending approval.

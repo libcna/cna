@@ -9,12 +9,9 @@
 // one real NetworkSession can exist per process. This test is the first
 // to prove the same transport works across genuinely separate address spaces.
 //
-// The host's real bound port is handed to the client out-of-band (via a pipe on the host's
-// stdout), not through CNA::Internal::Net::ENetDiscoveryService — two independent processes both
-// binding that service's shared well-known port is fragile on this platform (see the approved
-// Phase 6 plan and ENetDiscoveryService.cpp's own comments on why the loopback-unicast fallback
-// exists in the first place). That mechanism stays validated at the single-process
-// ENetDiscoveryService::FindSessions() level (Task 5.8).
+// The direct transport control hands the host's bound port to the client through stdout.
+// The discovery controls instead use public Find/Join in both process startup orders, without
+// passing a port to the client. Other roles exercise migration, roster changes and voice.
 #include <gtest/gtest.h>
 #include "CNA/Internal/Net/VoiceChat.hpp"
 
@@ -22,6 +19,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstring>
+#include <fcntl.h>
 #include <poll.h>
 #include <spawn.h>
 #include <string>
@@ -41,7 +39,7 @@ namespace {
         int readFd{-1};
     };
 
-    SpawnedProcess SpawnHarness(const std::vector<std::string>& args) {
+    SpawnedProcess SpawnHarness(const std::vector<std::string>& args, int inputFd = -1) {
         int pipeFds[2];
         if (pipe(pipeFds) != 0) {
             ADD_FAILURE() << "pipe() failed: " << strerror(errno);
@@ -53,6 +51,10 @@ namespace {
         posix_spawn_file_actions_adddup2(&actions, pipeFds[1], STDOUT_FILENO);
         posix_spawn_file_actions_adddup2(&actions, pipeFds[1], STDERR_FILENO);
         posix_spawn_file_actions_addclose(&actions, pipeFds[0]);
+        if (inputFd >= 0) {
+            posix_spawn_file_actions_adddup2(&actions, inputFd, STDIN_FILENO);
+            posix_spawn_file_actions_addclose(&actions, inputFd);
+        }
 
         std::vector<std::string> argStorage = args;
         std::vector<char*> argv;
@@ -180,6 +182,77 @@ static void RunHostAndClient(const std::string& hostRole, const std::string& cli
 
 TEST(TwoProcessLoopbackTest, HostAndClientJoinAndExchangeAppDataAcrossRealProcesses) {
     RunHostAndClient("host", "client");
+}
+
+// CNA-DEMOS-ISSUE-026: search replies must reach the same client regardless of which process
+// first bound discovery's shared port. The readiness pipe carries no address or port.
+static void RunDiscoveryInOrder(bool searchFirst) {
+    struct Child {
+        SpawnedProcess process;
+        ~Child() {
+            if (process.pid > 0) {
+                kill(process.pid, SIGKILL);
+                while (waitpid(process.pid, nullptr, 0) < 0 && errno == EINTR) { }
+            }
+            if (process.readFd >= 0) close(process.readFd);
+        }
+        bool Wait(std::chrono::steady_clock::time_point deadline, int* code) {
+            bool finished = WaitWithWatchdog(process.pid, deadline, code);
+            process.pid = -1;
+            return finished;
+        }
+    } host, client;
+    struct InputPipe {
+        int fds[2]{-1, -1};
+        ~InputPipe() { for (int fd : fds) if (fd >= 0) close(fd); }
+    } input;
+    ASSERT_EQ(pipe(input.fds), 0);
+    for (int fd : input.fds) ASSERT_NE(fcntl(fd, F_SETFD, FD_CLOEXEC), -1);
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kOuterWatchdogSeconds);
+    const std::string timeout = "--timeout=" + std::to_string(kHarnessInternalTimeoutSeconds);
+    const std::string name = "--gamertag=Find-" + std::to_string(getpid()) + (searchFirst ? "-late" : "-early");
+    std::vector<std::string> clientArgs{"--role=discovery-client", name, timeout};
+    std::string clientOutput;
+    if (searchFirst) {
+        clientArgs.push_back("--search-first");
+        client.process = SpawnHarness(clientArgs, input.fds[0]);
+        ASSERT_GT(client.process.pid, 0);
+        ASSERT_TRUE(ReadLineWithDeadline(client.process.readFd, deadline, &clientOutput)) << clientOutput;
+        ASSERT_NE(clientOutput.find("SEARCHED\n"), std::string::npos) << clientOutput;
+    }
+
+    host.process = SpawnHarness({"--role=discovery-host", name, timeout});
+    ASSERT_GT(host.process.pid, 0);
+    std::string hostOutput;
+    ASSERT_TRUE(ReadLineWithDeadline(host.process.readFd, deadline, &hostOutput)) << hostOutput;
+    const auto portPos = hostOutput.find("PORT=");
+    ASSERT_NE(portPos, std::string::npos) << hostOutput;
+    ASSERT_GT(std::stoi(hostOutput.substr(portPos + 5)), 0);
+    if (searchFirst) {
+        ASSERT_EQ(write(input.fds[1], "GO\n", 3), 3);
+    } else {
+        client.process = SpawnHarness(clientArgs);
+        ASSERT_GT(client.process.pid, 0);
+    }
+
+    int clientCode = -1, hostCode = -1;
+    const bool clientFinished = client.Wait(deadline, &clientCode);
+    const bool hostFinished = host.Wait(deadline, &hostCode);
+    DrainRemaining(client.process.readFd, &clientOutput);
+    DrainRemaining(host.process.readFd, &hostOutput);
+    EXPECT_TRUE(clientFinished) << clientOutput;
+    EXPECT_TRUE(hostFinished) << hostOutput;
+    EXPECT_EQ(clientCode, 0) << clientOutput;
+    EXPECT_EQ(hostCode, 0) << hostOutput;
+}
+
+TEST(TwoProcessLoopbackTest, DiscoveryFindsHostStartedBeforeSearch) {
+    RunDiscoveryInOrder(false);
+}
+
+TEST(TwoProcessLoopbackTest, DiscoveryFindsHostStartedAfterInitialSearch) {
+    RunDiscoveryInOrder(true);
 }
 
 TEST(TwoProcessLoopbackTest, MuseumJoinInProgressReturnsPlayingAndReplaysGameStartedExactlyOnce) {

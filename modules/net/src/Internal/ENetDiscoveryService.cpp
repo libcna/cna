@@ -252,14 +252,10 @@ namespace CNA::Internal::Net
             // moot there. Android is Linux-kernel-based and expected to match POSIX, but likewise
             // not independently verified here.
             //
-            // Which specific socket actually *receives* a given incoming datagram when multiple
-            // sockets share one port is inherently OS-arbitrary either way (unlike SO_REUSEPORT,
-            // which isn't used here and isn't needed for this client-queries/host-replies model -
-            // there is no per-connection load-balancing to distribute). PollOnce's own dedup logic
-            // just below (see "Dedup by connect port alone") already treats a query/reply
-            // potentially arriving more than once, via more than one local path, as an expected,
-            // handled case rather than an error - the correct mitigation for that arbitrariness,
-            // not a workaround for a bug.
+            // Broadcast queries reach the shared listeners, but unicast delivery to a shared port
+            // depends on the OS and bind order. FindSessions uses a private reply socket so the
+            // host cannot receive its own reply instead of the searching process. Replies to
+            // duplicate broadcast/loopback queries are still deduplicated by connect port.
             enet_socket_set_option(sock, ENET_SOCKOPT_REUSEADDR, 1);
 #if defined(__APPLE__)
             // Darwin keeps BSD's rule: SO_REUSEADDR alone lets a second UDP socket share a port
@@ -505,14 +501,9 @@ namespace CNA::Internal::Net
             CurrentResultsGuard& operator=(const CurrentResultsGuard&) = delete;
         };
 
-#if defined(__APPLE__)
-        // Darwin keeps neither half of the arrangement FindSessions relies on elsewhere. A send to
-        // the limited broadcast address 255.255.255.255 fails with EHOSTUNREACH, so the query never
-        // left the machine; and a unicast datagram for a port several sockets share goes to the
-        // socket that bound it FIRST, so a host on this Mac that bound kDiscoveryPort before the
-        // querier received its own reply. A search therefore sends from a socket of its own, on a
-        // port nobody shares, to every interface's own broadcast address as well, and the replies --
-        // which go back to wherever the query came from -- arrive at that socket alone.
+        // A unicast reply to the shared discovery port can reach another process: Linux selects
+        // the newest binding, while Darwin selects the oldest. A private ephemeral source port
+        // makes replies return to this search regardless of when a local host started.
         class SearchSocket
         {
         public:
@@ -546,6 +537,9 @@ namespace CNA::Internal::Net
             ENetSocket socket_ = ENET_SOCKET_NULL;
         };
 
+#if defined(__APPLE__)
+        // Darwin can refuse the limited broadcast address with EHOSTUNREACH; also query each
+        // active interface's own broadcast address there.
         void SendToEveryInterfaceBroadcast(ENetSocket sock, const std::vector<SharpRuntime::bytecs>& bytes)
         {
             ifaddrs* interfaces = nullptr;
@@ -647,13 +641,11 @@ namespace CNA::Internal::Net
 
         queryStartTime_ = std::chrono::steady_clock::now(); // Task 4.2
 
-#if defined(__APPLE__)
         // See SearchSocket. Should it fail to open, the search falls back to the shared socket.
         const SearchSocket search;
         const ENetSocket replies = search.Get() != ENET_SOCKET_NULL ? search.Get() : sock;
+#if defined(__APPLE__)
         SendToEveryInterfaceBroadcast(replies, bytes);
-#else
-        const ENetSocket replies = sock;
 #endif
 
         ENetAddress broadcastAddress;
@@ -680,7 +672,6 @@ namespace CNA::Internal::Net
                 break;
             }
             auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count();
-#if defined(__APPLE__)
             if (replies != sock)
             {
                 // The shared socket still answers other machines' queries while this one waits.
@@ -688,7 +679,6 @@ namespace CNA::Internal::Net
                 while (PollOnce(sock, 0)) { }
                 continue;
             }
-#endif
             PollOnce(sock, static_cast<uint32_t>(remaining));
         }
 
