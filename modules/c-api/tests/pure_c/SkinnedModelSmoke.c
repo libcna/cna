@@ -286,6 +286,37 @@ static CNA_Result create_index_buffer(
     return cna_index_buffer_create(device, &info, out_buffer);
 }
 
+static int part_color_is(const CNA_SkinnedModelEXTHandle model, const CNA_Vector4 expected)
+{
+    CNA_Vector4 color = {0.0F, 0.0F, 0.0F, 0.0F};
+    return cna_skinned_model_ext_get_part_diffuse_color_at(model, 0U, &color) ==
+            CNA_RESULT_SUCCESS &&
+        nearly_equal(color.x, expected.x) && nearly_equal(color.y, expected.y) &&
+        nearly_equal(color.z, expected.z) && nearly_equal(color.w, expected.w);
+}
+
+/* A part's diffuse colour (ABI 0.50.0) starts white, is refused out of range and round-trips; the
+   replacing part about to be attached carries a colour of its own. */
+static int set_and_check_part_color(
+    const CNA_SkinnedModelEXTHandle model,
+    const CNA_SkinnedModelEXTHandle replacement,
+    const CNA_Vector4 tint,
+    const CNA_Vector4 replacement_tint)
+{
+    const CNA_Vector4 white = {1.0F, 1.0F, 1.0F, 1.0F};
+    CNA_Vector4 color = {0.0F, 0.0F, 0.0F, 0.0F};
+    return part_color_is(model, white) &&
+        cna_skinned_model_ext_get_part_diffuse_color_at(model, 1U, &color) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
+        cna_skinned_model_ext_set_part_diffuse_color_at(model, 1U, tint) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
+        cna_skinned_model_ext_set_part_diffuse_color_at(model, 0U, tint) == CNA_RESULT_SUCCESS &&
+        part_color_is(model, tint) &&
+        cna_skinned_model_ext_set_part_diffuse_color_at(replacement, 0U, replacement_tint) ==
+            CNA_RESULT_SUCCESS &&
+        part_color_is(replacement, replacement_tint);
+}
+
 static int validate_resources(const CNA_Handle device)
 {
     const CNA_Texture2DCreateInfo texture_info = {
@@ -309,6 +340,9 @@ static int validate_resources(const CNA_Handle device)
     uint64_t texture_count = UINT64_MAX;
     uint64_t byte_count = UINT64_MAX;
     char part_name[4];
+    /* A part's diffuse colour (ABI 0.50.0): white when added, then set, kept by attach. */
+    const CNA_Vector4 tint = {0.5F, 0.25F, 1.0F, 0.75F};
+    const CNA_Vector4 replacement_tint = {0.1F, 0.2F, 0.3F, 0.4F};
     const CNA_Result vertex_result = create_vertex_buffer(device, &vertex);
     const CNA_Result index_result = create_index_buffer(device, &index);
 
@@ -355,7 +389,9 @@ static int validate_resources(const CNA_Handle device)
                 other, string_view("Body"), replacement_vertex, replacement_index,
                 replacement_part, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS &&
             cna_model_mesh_part_destroy(replacement_part) == CNA_RESULT_SUCCESS &&
+            set_and_check_part_color(model, other, tint, replacement_tint) &&
             cna_skinned_model_ext_attach_parts(model, other) == CNA_RESULT_SUCCESS &&
+            part_color_is(model, replacement_tint) &&
             cna_skinned_model_ext_get_part_count(other, &part_count) == CNA_RESULT_SUCCESS &&
             part_count == 0U &&
             cna_vertex_buffer_destroy(vertex) == CNA_RESULT_SUCCESS &&

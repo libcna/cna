@@ -1808,6 +1808,35 @@ CNA_C_API CNA_Result cna_skinned_model_ext_copy_part_name_at(
     uint64_t* out_byte_count);
 
 /**
+ * @brief Gets a part's diffuse colour (x, y, z) and alpha (w) at an index.
+ *
+ * The colour multiplies the part's texture when it is drawn with `SkinnedEffect`'s diffuse colour
+ * and alpha; a part starts white. ABI 0.50.0.
+ * @param model Skinned-model handle.
+ * @param part_index Zero-based part index; one outside the part count is
+ * `CNA_RESULT_INVALID_ARGUMENT`.
+ * @param out_color Receives the colour.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_model_ext_get_part_diffuse_color_at(
+    CNA_SkinnedModelEXTHandle model,
+    uint64_t part_index,
+    CNA_Vector4* out_color);
+
+/**
+ * @brief Sets a part's diffuse colour (x, y, z) and alpha (w) at an index. ABI 0.50.0.
+ * @param model Skinned-model handle.
+ * @param part_index Zero-based part index; one outside the part count is
+ * `CNA_RESULT_INVALID_ARGUMENT`.
+ * @param color The colour, copied as given.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_model_ext_set_part_diffuse_color_at(
+    CNA_SkinnedModelEXTHandle model,
+    uint64_t part_index,
+    CNA_Vector4 color);
+
+/**
  * @brief Gets an owned part alias and optional retained texture handle at an index.
  * @param model Skinned-model handle.
  * @param part_index Zero-based part index.

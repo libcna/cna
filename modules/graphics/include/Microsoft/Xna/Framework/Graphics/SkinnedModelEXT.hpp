@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/TimeSpan.hpp"
 
@@ -113,6 +114,12 @@ namespace Microsoft::Xna::Framework::Graphics
             ModelMeshPart* Part = nullptr;
             /** @brief The part's diffuse texture, or nullptr if none was supplied. */
             Texture2D* Texture = nullptr;
+            /**
+             * @brief The part's diffuse colour (XYZ) and alpha (W), which multiply its texture: the
+             * source material's base colour (glTF `baseColorFactor`), white when none was given.
+             * The caller's draw applies it as SkinnedEffect's DiffuseColor and Alpha, beside Texture.
+             */
+            Vector4 DiffuseColor{1.0f, 1.0f, 1.0f, 1.0f};
         };
 
         /** @brief Constructs an empty skinned model with no bones, parts, or clips. */

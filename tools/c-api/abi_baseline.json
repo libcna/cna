@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 12544,
+  "encoded": 12800,
   "major": 0,
-  "minor": 49,
+  "minor": 50,
   "patch": 0,
-  "runtime": 12544
+  "runtime": 12800
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -3498,11 +3498,13 @@
   "cna_skinned_model_ext_get_owned_resource_counts",
   "cna_skinned_model_ext_get_part_at",
   "cna_skinned_model_ext_get_part_count",
+  "cna_skinned_model_ext_get_part_diffuse_color_at",
   "cna_skinned_model_ext_get_part_name_byte_count_at",
   "cna_skinned_model_ext_move_assign",
   "cna_skinned_model_ext_remove_clip",
   "cna_skinned_model_ext_remove_part",
   "cna_skinned_model_ext_set_clip",
+  "cna_skinned_model_ext_set_part_diffuse_color_at",
   "cna_skinned_model_ext_set_skeleton",
   "cna_skinned_pbr_effect_copy_bone_transforms",
   "cna_skinned_pbr_effect_create",
@@ -4075,9 +4077,9 @@
   "CNA_MATH_TWO_PI": 6.2831854820251465
  },
  "integers": {
-  "CNA_ABI_VERSION": 12544,
+  "CNA_ABI_VERSION": 12800,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 49,
+  "CNA_ABI_VERSION_MINOR": 50,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,

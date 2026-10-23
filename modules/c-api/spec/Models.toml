@@ -136,6 +136,8 @@ cna_skinned_model_ext_remove_clip = { call = "object->value->Clips.erase(name)",
 cna_skinned_model_ext_destroy = { release = true }
 cna_skinned_model_ext_get_part_name_byte_count_at = { size = "object->parts[static_cast<std::size_t>(part_index)].name", require = 'InvalidArgumentIf(part_index >= object->parts.size(), "The SkinnedModelEXT part index is outside the valid range.")' }
 cna_skinned_model_ext_copy_part_name_at = { copy = "object->parts[static_cast<std::size_t>(part_index)].name", require = 'InvalidArgumentIf(part_index >= object->parts.size(), "The SkinnedModelEXT part index is outside the valid range.")' }
+cna_skinned_model_ext_get_part_diffuse_color_at = { get = "object->parts[static_cast<std::size_t>(part_index)].diffuseColor", require = 'InvalidArgumentIf(part_index >= object->parts.size(), "The SkinnedModelEXT part index is outside the valid range.")' }
+cna_skinned_model_ext_set_part_diffuse_color_at = { call = "SetSkinnedPartDiffuseColor(*object, part_index, color)", require = 'InvalidArgumentIf(part_index >= object->parts.size(), "The SkinnedModelEXT part index is outside the valid range.")' }
 
 [skinning_data]
 lookup = "GetSkinningData"

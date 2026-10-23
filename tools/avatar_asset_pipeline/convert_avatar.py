@@ -9,14 +9,17 @@ CNA itself at runtime. See README.md.
   python3 convert_avatar.py --body character.glb --out content/character \\
       --clip walk.glb Walk --clip jump.glb Jump
 
-Requires: pygltflib (pip install pygltflib) and Pillow (pip install Pillow) for the neutral
-per-part texture. glTF parsing is done directly via pygltflib.
+Requires: pygltflib (pip install pygltflib) and Pillow (pip install Pillow) for the per-part
+textures. glTF parsing is done directly via pygltflib.
 """
 
 import argparse
+import base64
+import io
 import struct
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
 try:
     import pygltflib
@@ -135,11 +138,56 @@ def write_clip_bin(path, duration_seconds, tracks):
 def _write_placeholder_texture(out_dir, part_name, size=4):
     """Writes a tiny neutral-white RGBA PNG for `part_name` and returns its Path.
 
-    The texture is intentionally white so a per-part tint applied at draw time is the only color
-    signal (texture * tint == tint).
+    Used when the material has no base-colour texture: white leaves the part's diffuseColor as
+    its only colour (texture * diffuseColor == diffuseColor).
     """
     tex_path = out_dir / f"{part_name}.png"
     Image.new("RGBA", (size, size), (255, 255, 255, 255)).save(tex_path)
+    return tex_path
+
+
+def _image_bytes(gltf, blob, image, body_dir):
+    """The encoded bytes of a glTF image: embedded in a bufferView, a data: URI, or a file
+    beside the body."""
+    if image.bufferView is not None:
+        view = gltf.bufferViews[image.bufferView]
+        start = view.byteOffset or 0
+        return blob[start:start + view.byteLength]
+    if image.uri:
+        if image.uri.startswith("data:"):
+            return base64.b64decode(image.uri.split(",", 1)[1])
+        return (body_dir / unquote(image.uri)).read_bytes()
+    return None
+
+
+def _part_material(gltf, blob, prim, body_dir):
+    """(baseColorFactor as [r, g, b, a], encoded baseColorTexture image or None) of a primitive's
+    material, glTF's defaults (white, no texture) when it has none."""
+    factor = [1.0, 1.0, 1.0, 1.0]
+    if prim.material is None:
+        return factor, None
+    pbr = gltf.materials[prim.material].pbrMetallicRoughness
+    if pbr is None:
+        return factor, None
+    if pbr.baseColorFactor is not None:
+        factor = [float(c) for c in pbr.baseColorFactor]
+    if pbr.baseColorTexture is None:
+        return factor, None
+    if pbr.baseColorTexture.texCoord:
+        print(f"warning: baseColorTexture uses TEXCOORD_{pbr.baseColorTexture.texCoord}; "
+              "parts carry TEXCOORD_0 only", file=sys.stderr)
+    source = gltf.textures[pbr.baseColorTexture.index].source
+    if source is None:
+        return factor, None
+    return factor, _image_bytes(gltf, blob, gltf.images[source], body_dir)
+
+
+def _write_part_texture(out_dir, part_name, image):
+    """Writes the part's base-colour texture as an RGBA PNG, or the white placeholder."""
+    if image is None:
+        return _write_placeholder_texture(out_dir, part_name)
+    tex_path = out_dir / f"{part_name}.png"
+    Image.open(io.BytesIO(image)).convert("RGBA").save(tex_path)
     return tex_path
 
 
@@ -220,13 +268,15 @@ def convert_body(body_path, out_dir):
             idx_path = out_dir / f"{part_name}.idx.bin"
             _write_skinned_vertex_buffer(gltf, blob, prim, verts_path, joint_index_remap)
             _write_index_buffer(gltf, blob, prim, idx_path)
-            tex_path = _write_placeholder_texture(out_dir, part_name)
+            diffuse_color, image = _part_material(gltf, blob, prim, Path(body_path).parent)
+            tex_path = _write_part_texture(out_dir, part_name, image)
             parts.append({
                 "name": part_name,
                 "vertices": verts_path.name,
                 "indices": idx_path.name,
                 "vertexStride": 52,
                 "texture": tex_path.name,
+                "diffuseColor": diffuse_color,
             })
 
     manifest = {

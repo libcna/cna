@@ -213,10 +213,11 @@ behavioural fidelity is held by each module's tests.
 **Bindings.** C and C# are the maintained bindings. CNA.NET (`libcna/cna-dotnet` `develop`) admits
 exactly C ABI 0.47.0 and pins one CNA `next` commit (`CNA_UPSTREAM_COMMIT` in its
 `.github/workflows/build.yml`); its CI builds and loads the native library from that commit. CNA
-`next` is ABI 0.49.0: 0.48.0 (the 2026-10-13 renderer retirement) removed four renderer constants,
-and 0.49.0 (2026-10-17) renamed the renderer classification typedefs, constants and eight routes
-from `graphics_backend` to `graphics_renderer`. CNA.NET names none of them and must admit 0.49.0
-before it moves its pin. CNA `main`/`develop` are the v0.1.0 release (ABI 0.46.0), which CNA.NET
+`next` is ABI 0.50.0: 0.48.0 (the 2026-10-13 renderer retirement) removed four renderer constants,
+0.49.0 (2026-10-17) renamed the renderer classification typedefs, constants and eight routes
+from `graphics_backend` to `graphics_renderer`, and 0.50.0 (2026-10-23, galaxy-eggbert UB-002)
+added the two `cna_skinned_model_ext_{get,set}_part_diffuse_color_at` routes. CNA.NET names none
+of them and must admit 0.50.0 before it moves its pin. CNA `main`/`develop` are the v0.1.0 release (ABI 0.46.0), which CNA.NET
 refuses. The archived bindings in `cna-lab` stay pinned to older ABIs and are not maintained.
 
 **Content.** XNB readers (including LZX), CNA's `.cnb`/`.cnj`, direct glTF 2.0 loading, the

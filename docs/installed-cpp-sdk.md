@@ -76,7 +76,7 @@ configuration error.
 ### Version contract
 
 The existing `CNAConfigVersion.cmake` version remains the **C ABI version**
-(currently 0.49.0, SameMajorVersion); it is not silently replaced with the C++
+(currently 0.50.0, SameMajorVersion); it is not silently replaced with the C++
 runtime's 0.1.0. Thus existing `find_package(CNA 0.1 CONFIG)` consumers keep their
 contract. `CNA_RUNTIME_VERSION` exposes the separate runtime version after loading
 the C++ SDK. C++ consumers still require a compatible compiler, standard library,

@@ -4782,6 +4782,27 @@ namespace Microsoft::Xna::Framework::Content
                         texturePath = ResolveManifestRelativeSidecarPath(
                             cm, path, "texture", texFile);
                     }
+                    // The material's base colour (glTF baseColorFactor); white when absent.
+                    Vector4 diffuseColor(1.0f, 1.0f, 1.0f, 1.0f);
+                    const CNA::Internal::JsonValue partJson = CNA::Internal::ParseJson(pg);
+                    if (const CNA::Internal::JsonValue* color = partJson.FindMember("diffuseColor"))
+                    {
+                        std::array<float, 4> rgba{};
+                        const bool valid = color->type == CNA::Internal::JsonType::Array &&
+                            color->arrayValue.size() == rgba.size() &&
+                            std::all_of(color->arrayValue.begin(), color->arrayValue.end(),
+                                [](const CNA::Internal::JsonValue& v)
+                                { return v.IsNumber() && std::isfinite(v.numberValue); });
+                        if (!valid)
+                        {
+                            throw ContentLoadException(
+                                "SkinnedModel part '" + name +
+                                "' diffuseColor must be four finite numbers: " + path);
+                        }
+                        for (std::size_t c = 0; c < rgba.size(); ++c)
+                            rgba[c] = static_cast<float>(color->arrayValue[c].numberValue);
+                        diffuseColor = Vector4(rgba[0], rgba[1], rgba[2], rgba[3]);
+                    }
 
                     const auto vertBytes = ReadBinaryFile(vertPath);
                     const auto idxBytes  = ReadBinaryFile(idxPath);
@@ -4841,6 +4862,7 @@ namespace Microsoft::Xna::Framework::Content
 
                     model->AddPartEXT(name, std::move(vb), std::move(ib), std::move(part),
                                        std::move(texture));
+                    model->Parts.back().DiffuseColor = diffuseColor;
                 }
 
                 // --- Animations ---

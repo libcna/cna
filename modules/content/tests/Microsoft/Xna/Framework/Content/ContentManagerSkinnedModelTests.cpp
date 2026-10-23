@@ -400,3 +400,54 @@ TEST_F(ContentManagerSkinnedModelTest, TextureLoadsFromManifestOutsideContentRoo
     EXPECT_EQ(2, model->Parts[0].Texture->getWidthProperty());
     EXPECT_EQ(2, model->Parts[0].Texture->getHeightProperty());
 }
+
+namespace
+{
+    // One valid part with `field` (a ", \"key\": value" fragment) appended to its object.
+    void WriteManifestWithOnePartField(const std::filesystem::path& root, const std::string& field)
+    {
+        WriteFile(root / "avatar.skinnedmodel.json",
+                  R"({"skeleton": "skeleton.bin", "parts": [{"name": "Test", "vertices": "test.verts.bin", )"
+                  R"("indices": "test.idx.bin", "vertexStride": 52)" + field + "}]}");
+        WriteSkeletonWithBoneCount(root / "skeleton.bin", 0);
+        WriteBytes(root / "test.verts.bin", std::vector<std::uint8_t>(52, 0));
+        WriteBytes(root / "test.idx.bin", std::vector<std::uint8_t>(6, 0));
+    }
+}
+
+// galaxy-eggbert UB-002: the converter carries glTF baseColorFactor as the part's diffuseColor.
+TEST_F(ContentManagerSkinnedModelTest, APartsDiffuseColorComesFromItsManifest)
+{
+    ScratchContentRoot root;
+    WriteManifestWithOnePartField(root.path(), R"(, "diffuseColor": [1, 0.5, 0.25, 0.75])");
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+    const auto model = cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar");
+    ASSERT_EQ(1u, model->Parts.size());
+    EXPECT_EQ(model->Parts[0].DiffuseColor, Microsoft::Xna::Framework::Vector4(1.0f, 0.5f, 0.25f, 0.75f));
+}
+
+TEST_F(ContentManagerSkinnedModelTest, APartWithoutDiffuseColorIsWhite)
+{
+    ScratchContentRoot root;
+    WriteManifestWithOnePartField(root.path(), "");
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+    const auto model = cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar");
+    ASSERT_EQ(1u, model->Parts.size());
+    EXPECT_EQ(model->Parts[0].DiffuseColor, Microsoft::Xna::Framework::Vector4::One);
+}
+
+TEST_F(ContentManagerSkinnedModelTest, AMalformedDiffuseColorThrows)
+{
+    for (const char* field : {R"(, "diffuseColor": [1, 0, 0])", R"(, "diffuseColor": [1, 0, 0, "x"])",
+                              R"(, "diffuseColor": "red")"})
+    {
+        SCOPED_TRACE(field);
+        ScratchContentRoot root;
+        WriteManifestWithOnePartField(root.path(), field);
+        ContentManager cm(nullptr, root.path().string());
+        cm.setGraphicsDevice(gd);
+        EXPECT_THROW(cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar"), ContentLoadException);
+    }
+}

@@ -2365,6 +2365,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_skinned_model_ext_get_part_name_byte_count_at(v_CNA_SkinnedModelEXTHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_get_part_name_byte_count_at", "a null out_byte_count");
     failures += expect(cna_skinned_model_ext_copy_part_name_at(v_CNA_SkinnedModelEXTHandle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_copy_part_name_at", "a null destination with a capacity");
     failures += expect(cna_skinned_model_ext_copy_part_name_at(v_CNA_SkinnedModelEXTHandle, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_copy_part_name_at", "a null out_bytes");
+    failures += expect(cna_skinned_model_ext_get_part_diffuse_color_at(v_CNA_SkinnedModelEXTHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinned_model_ext_get_part_diffuse_color_at", "a null out_color");
     failures += expect(cna_skinning_data_get_type_name_byte_count(v_CNA_SkinningDataHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinning_data_get_type_name_byte_count", "a null out_byte_count");
     failures += expect(cna_skinning_data_copy_type_name(v_CNA_SkinningDataHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_skinning_data_copy_type_name", "a null destination with a capacity");
     failures += expect(cna_skinning_data_copy_type_name(v_CNA_SkinningDataHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_skinning_data_copy_type_name", "a null out_bytes");
@@ -4418,6 +4419,8 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_skinned_model_ext_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_destroy", what);
     failures += expect(cna_skinned_model_ext_get_part_name_byte_count_at(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_get_part_name_byte_count_at", what);
     failures += expect(cna_skinned_model_ext_copy_part_name_at(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_copy_part_name_at", what);
+    failures += expect(cna_skinned_model_ext_get_part_diffuse_color_at(handle, v_uint64_t, &o_CNA_Vector4), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_get_part_diffuse_color_at", what);
+    failures += expect(cna_skinned_model_ext_set_part_diffuse_color_at(handle, v_uint64_t, v_CNA_Vector4), CNA_RESULT_INVALID_HANDLE, "cna_skinned_model_ext_set_part_diffuse_color_at", what);
     failures += expect(cna_skinning_data_get_type_name_byte_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinning_data_get_type_name_byte_count", what);
     failures += expect(cna_skinning_data_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinning_data_copy_type_name", what);
     failures += expect(cna_skinning_data_get_bone_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_skinning_data_get_bone_count", what);
@@ -5259,6 +5262,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 3197 generated routes\n", failures);
+    printf("%d failed checks across 3199 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

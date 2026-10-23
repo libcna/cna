@@ -33,7 +33,10 @@ per-mesh parent-bone hierarchy rather than per-vertex skinning.
 with the project's flat JSON reader:
 
 - `*.skinnedmodel.json`: `{"skeleton": "...", "parts": [{name, vertices, indices, vertexStride,
-  texture}], "animations": [{name, clip}]}` (`vertexStride` defaults to 52).
+  texture, diffuseColor}], "animations": [{name, clip}]}` (`vertexStride` defaults to 52).
+  `diffuseColor` is four numbers, RGB and alpha, defaulting to white; it becomes
+  `PartEXT::DiffuseColor`. The caller's draw applies it as `SkinnedEffect`'s `DiffuseColor` and
+  `Alpha` beside the part's `Texture`, as `skinned_model_attach_part_integration_test.cpp` does.
 - `*.skeleton.bin`: `int32 boneCount`, `int32 parentIndices[boneCount]`,
   `float bindPoseLocal[boneCount*16]`, `float inverseBindPoseGlobal[boneCount*16]` (row-major).
 - `*.clip.bin`: `double durationSeconds`, `int32 trackCount`, then per track

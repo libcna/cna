@@ -158,6 +158,11 @@ removes all same-named destination entries first, and leaves the source with no 
 releases every matching bundle. Indexed part aliases remain owned C handles, while returned
 texture handles remain retained by the model until removal or destruction.
 
+Each sidecar entry also holds its part's `PartEXT::DiffuseColor` (ABI 0.50.0): white when the part
+is added, read and written by index with `cna_skinned_model_ext_get_part_diffuse_color_at` and
+`_set_part_diffuse_color_at`, and carried with the entry through attach, move construction and move
+assignment. The caller's draw applies it as `SkinnedEffect`'s diffuse colour and alpha beside the part's texture.
+
 `SkinnedModelSmoke.c` covers all descriptor layouts, deep copying, skeleton/clip access and
 mutation, exact interpolation/clamp/loop transforms, move construction/assignment, capacity
 atomicity, malformed hierarchy/time/boolean input, attach mismatch and replace-by-name transfer,

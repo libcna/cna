@@ -1311,6 +1311,50 @@ CNA_Result cna_skinned_model_ext_copy_part_name_at(
     });
 }
 
+CNA_Result cna_skinned_model_ext_get_part_diffuse_color_at(
+    const CNA_SkinnedModelEXTHandle model,
+    const uint64_t part_index,
+    CNA_Vector4* const out_color)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_color == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_skinned_model_ext_get_part_diffuse_color_at: out_color is null.");
+        }
+        std::shared_ptr<SkinnedModelResource> object{};
+        if (const CNA_Result routeResult = GetSkinnedModel(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidArgumentIf(part_index >= object->parts.size(), "The SkinnedModelEXT part index is outside the valid range.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_color = CNA::C::Detail::ToC(object->parts[static_cast<std::size_t>(part_index)].diffuseColor);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_set_part_diffuse_color_at(
+    const CNA_SkinnedModelEXTHandle model,
+    const uint64_t part_index,
+    const CNA_Vector4 c_color)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinnedModelResource> object{};
+        if (const CNA_Result routeResult = GetSkinnedModel(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const auto color = CNA::C::Detail::ToNative(c_color);
+        if (const CNA_Result routeResult = InvalidArgumentIf(part_index >= object->parts.size(), "The SkinnedModelEXT part index is outside the valid range.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        SetSkinnedPartDiffuseColor(*object, part_index, color);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_skinning_data_get_type_name_byte_count(
     const CNA_SkinningDataHandle data,
     uint64_t* const out_byte_count)

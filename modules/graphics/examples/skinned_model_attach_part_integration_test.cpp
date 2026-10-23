@@ -137,6 +137,9 @@ protected:
         for (const auto& part : host->Parts)
         {
             effect.setTextureProperty(part.Texture);
+            effect.setDiffuseColorProperty(
+                Vector3(part.DiffuseColor.X, part.DiffuseColor.Y, part.DiffuseColor.Z));
+            effect.setAlphaProperty(part.DiffuseColor.W);
             effect.Apply();
             device.SetVertexBuffer(part.Part->getVertexBufferProperty());
             device.SetIndexBuffer(part.Part->getIndexBufferProperty());

@@ -2,7 +2,18 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.49.0** (2026-10-17). It **renames the renderer classification
+The current experimental ABI is **0.50.0** (2026-10-23). It adds two routes,
+`cna_skinned_model_ext_get_part_diffuse_color_at` and
+`cna_skinned_model_ext_set_part_diffuse_color_at`, for the diffuse colour and alpha a
+`SkinnedModelEXT` part now carries (`PartEXT::DiffuseColor`, the converter's glTF
+`baseColorFactor`; galaxy-eggbert UB-002). A part added through this ABI starts white, and
+attaching, moving or removing parts keeps each part's colour. The library exports 3,207 symbols.
+Purely additive: no existing route, constant, structure field or error rule changes, but a binding
+that requires the new routes needs this minor.
+
+### Previous ABI 0.49.0
+
+The ABI was **0.49.0** (2026-10-17). It **renames the renderer classification
 surface**, which `CBIND-037A` published in 2026-08 under the "graphics backend" vocabulary the
 2026-08 renderer naming normalization had just retired: both classify a `CNA_GraphicsRendererType`,
 so they are renderer classifications. The C++ types behind them were renamed the same way
@@ -28,7 +39,7 @@ Every constant keeps its value (`NATIVE` `0` through `DIAGNOSTIC` `4`, `PRODUCTI
 keeps its category and maturity. No alias of an old name is kept. The change is incompatible in
 source and in binary alike: a binding that names an old typedef or constant no longer compiles,
 and one that calls an old route no longer links or loads, because those eight symbols are no
-longer exported -- eight new ones are, so the library still exports 3,205. Updating a binding is
+longer exported -- eight new ones are, so the export count did not change. Updating a binding is
 a rename with no change in behaviour. Under the `0.x` rule below that takes this minor increment,
 these release notes and an updated baseline.
 
@@ -42,8 +53,8 @@ that named them (`docs/removed-renderers.md`). The values are permanently reserv
 `CNA_GraphicsRendererType` refuses them with `CNA_RESULT_INVALID_ARGUMENT`, and
 `cna_graphics_renderer_set_preferred_by_name_ext` refuses each name with an error that says the
 renderer was retired. `CNA_GRAPHICS_RENDERER_MAXIMUM` stays `43` (`FNA3D`) and the next new
-identity still takes `52`. No route, structure, field, capability bit or exported symbol changes
-(3,205 exports), and no surviving identity is renumbered. What breaks is a binding that names a
+identity still takes `52`. No route, structure, field, capability bit or exported symbol changes,
+and no surviving identity is renumbered. What breaks is a binding that names a
 removed constant; the `0.x` rule below takes this minor increment, these release notes and an
 updated baseline.
 
@@ -69,7 +80,7 @@ compute/storage/timer limits (`MAX_COMPUTE_WORK_GROUP_COUNT_X` `2` through
 stays `31`, the retired feature, limit ordinals and usage bits are permanently reserved and the
 feature/limit query routes refuse them with `CNA_RESULT_INVALID_ARGUMENT`. What breaks is a
 binding that names one of the removed constants, structures or routes (it no longer compiles or
-links); no other route, structure, field or exported symbol changes, and 3,205 exports remain. The
+links); no other route, structure, field or exported symbol changes, nor does the export count. The
 `0.x` rule below takes this minor increment, these release notes and an updated baseline.
 
 ### Previous ABI 0.46.0
@@ -731,7 +742,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,205 exports; build configurations must export the same surface.
+The current baseline records 3,207 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than

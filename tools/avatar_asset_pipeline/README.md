@@ -2,8 +2,8 @@
 
 `convert_avatar.py` converts a skinned glTF 2.0 binary (`.glb`) into the content format
 `ContentManager` loads as `Microsoft::Xna::Framework::Graphics::SkinnedModelEXT`: an
-`.skinnedmodel.json` manifest with a `.skeleton.bin`, per-part vertex/index buffers, a neutral
-per-part texture, and one `.clip.bin` per animation. It is an offline tool, not part of the C++
+`.skinnedmodel.json` manifest with a `.skeleton.bin`, per-part vertex/index buffers and texture,
+and one `.clip.bin` per animation. It is an offline tool, not part of the C++
 build and never run by CNA at runtime.
 
 It has nothing to do with the standard XNA avatar API. `AvatarDescription`, `AvatarAnimation` and
@@ -32,6 +32,15 @@ content produced by this tool.
 
 ## What the conversion guarantees
 
+- **One part per primitive.** A mesh with one primitive names its part after the mesh; a mesh
+  with several (one per material) gets `<mesh>_<index>` parts, and duplicate names get a further
+  suffix, so no part overwrites another's files.
+- **Material colour.** A part's `diffuseColor` is its material's glTF `baseColorFactor` (white
+  without one), and its texture is the material's `baseColorTexture` -- embedded, a `data:` URI or
+  a file beside the body -- written as RGBA PNG, or a white 4x4 placeholder without one.
+  `SkinnedModelEXT::PartEXT::DiffuseColor` carries the colour; the caller's draw applies it as
+  `SkinnedEffect`'s `DiffuseColor` and `Alpha` beside the texture. Only `TEXCOORD_0` is converted.
+
 - **Bone order.** Joints are reordered topologically so every parent precedes its children
   (`ComputeBoneTransformsEXT` relies on `parent[i] < i`); `inverseBindMatrices` and every vertex's
   `JOINTS_0` indices are remapped to the new order (`joint_index_remap`).
@@ -43,3 +52,8 @@ content produced by this tool.
 These were verified against a hand-built synthetic glTF fixture and against generated content
 loaded and rendered through `ContentManager` (`ContentManagerSkinnedModelTests.cpp` covers the
 C++ reader).
+
+## Tests
+
+`python3 test_convert_avatar.py` builds small skinned glTF files in memory and converts them.
+

@@ -81,6 +81,7 @@ using CNA::C::Detail::ValidateVersionedStructure;
 using CNA::C::Detail::VertexBufferResource;
 using Microsoft::Xna::Framework::BoundingSphere;
 using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Vector4;
 using Microsoft::Xna::Framework::Graphics::ModelBone;
 using Microsoft::Xna::Framework::Graphics::ModelBoneCollection;
 using Microsoft::Xna::Framework::Graphics::ModelEffectCollection;
@@ -255,6 +256,7 @@ struct SkinnedPartEntry final {
     std::shared_ptr<PartResource> part;
     CNA_Handle textureHandle = CNA_INVALID_HANDLE;
     std::shared_ptr<Texture2DResource> texture;
+    Vector4 diffuseColor{1.0f, 1.0f, 1.0f, 1.0f};
 
     SkinnedPartEntry() = default;
     SkinnedPartEntry(const SkinnedPartEntry&) = delete;
@@ -264,7 +266,8 @@ struct SkinnedPartEntry final {
         : name(std::move(other.name)),
           part(std::move(other.part)),
           textureHandle(other.textureHandle),
-          texture(std::move(other.texture))
+          texture(std::move(other.texture)),
+          diffuseColor(other.diffuseColor)
     {
         other.textureHandle = CNA_INVALID_HANDLE;
     }
@@ -277,6 +280,7 @@ struct SkinnedPartEntry final {
             part = std::move(other.part);
             textureHandle = other.textureHandle;
             texture = std::move(other.texture);
+            diffuseColor = other.diffuseColor;
             other.textureHandle = CNA_INVALID_HANDLE;
         }
         return *this;
@@ -535,9 +539,19 @@ void RebuildSkinnedParts(SkinnedModelResource& model)
         rebuilt.push_back(SkinnedModelEXT::PartEXT{
             entry.name,
             entry.part == nullptr ? nullptr : entry.part->value.get(),
-            entry.texture == nullptr ? nullptr : entry.texture->value.get()});
+            entry.texture == nullptr ? nullptr : entry.texture->value.get(),
+            entry.diffuseColor});
     }
     model.value->Parts = std::move(rebuilt);
+}
+
+void SetSkinnedPartDiffuseColor(
+    SkinnedModelResource& model,
+    const uint64_t partIndex,
+    const Vector4& color)
+{
+    model.parts[static_cast<std::size_t>(partIndex)].diffuseColor = color;
+    RebuildSkinnedParts(model);
 }
 
 [[nodiscard]] std::vector<std::string> SortedClipNames(
