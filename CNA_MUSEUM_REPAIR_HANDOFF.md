@@ -27,7 +27,18 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: ISSUE-051 completion hooks and first failure (2026-10-23)
+### Current task: ISSUE-075 C packet destination range (2026-10-23)
+
+ISSUE-051 fix9b0f481f554c2961d6bbe15d1d445b045b49a745 and demos closureedc44ee are committed.
+Matrix051 is RESOLVED/FIXED_VALIDATED; census156 IDs/121 final dispositions/35 without.
+Next commit only the051 matrix/handoff closure and publish both repositories, verify remotes,
+then add the075 native sentinel regression before changing LocalNetworkGamerReceiveDataAt.
+Existing NetSmoke only compares payload bytes. Cover prefix/suffix, rejected-buffer preservation,
+and exact-end/zero offsets without changing packet-consumption or sender ownership semantics.
+No075 production/test change yet; preparatory evidence is demos net/PACKET_RECEIVE_RANGE.md.
+Preserve inherited work. No running build/test scope remains after051; freeze is released.
+
+#### Last complete checkpoint and history: ISSUE-051
 
 VALIDATION COMPLETE: full SW719=646PASS/22FAIL/48SKIP/3NOTRUN and
 GLES719=688PASS/21FAIL/7SKIP/3NOTRUN. Each exact comparison changes only051 and removes its eight

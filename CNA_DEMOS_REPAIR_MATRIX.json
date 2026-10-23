@@ -1058,12 +1058,16 @@
       ],
       "subsystem": "c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "CGame routes Exiting and EndRun through the ordinary post-failure suppression guard, violating the C host-frame completion promise. It stores only the callback result, so cleanup failures or unrelated C calls can replace the original diagnostic.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "9b0f481f554c2961d6bbe15d1d445b045b49a745",
+      "validation": [
+        "Fresh full050 sweeps reproduce8 failures out of73 external child assertions on SOFTWARE/OPENGLES3. Corrected native red witness5FAIL/1PASS before production changes; all six adversarial cleanup cases then PASS. Six native lifecycle/dispatch CTests PASS SOFTWARE0.76s and OPENGLES313.16s. Native Game/ABI unchanged; first callback diagnostic survives cleanup failures and unrelated C calls.",
+        "Both strict consumer builds PASS. Original external73 assertions preserve names/order and all PASS on both renderers before051 marker/stale restriction removal. Full SW719=646PASS/22FAIL/48SKIP/3NOTRUN, GLES719=688PASS/21FAIL/7SKIP/3NOTRUN; exact comparison changes only051, removes exactly8 failures per renderer (48->40 SW,47->39 GLES).",
+        "Final serial CTest647.07s:735registered/732enabled,678PASS/48SKIP/6unchangedFAIL/3disabled; per-test status DELTAS[]. All275 artifact hashes match after both sweeps and CTest. No new visual/sanitizer/full native corpus/browser/additional-platform pass claimed. Evidence: demos docs/repair-evidence/lifecycle/HOST_FAILURE_COMPLETION.md."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-052",
