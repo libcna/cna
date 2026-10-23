@@ -306,6 +306,92 @@ TEST_F(StorageDeviceDeleteContainerTest, EmptyUnicodeDirectoryDeletionStillWorks
     EXPECT_FALSE(container->DirectoryExists(name));
 }
 
+// CNA-DEMOS-ISSUE-152. Framework4 StorageContractsOracle pins the facade's exclusive
+// defaults. The explicit sharing matrix uses the owner-approved native .NET platform split.
+#if !defined(__EMSCRIPTEN__) // These checks require native OS sharing, not a browser virtual FS.
+TEST_F(StorageDeviceDeleteContainerTest, FileSharingIsForwardedToTheNativeStream)
+{
+    using namespace System::IO;
+    auto container = OpenContainer("FileSharing");
+    { auto created = container->CreateFile("seed.bin"); created->WriteByte(42); }
+    int refused = 0;
+    for (auto firstAccess : {FileAccess::Read, FileAccess::Write, FileAccess::ReadWrite})
+    for (auto firstShare : {FileShare::None, FileShare::Read, FileShare::Write, FileShare::ReadWrite})
+    for (auto nextAccess : {FileAccess::Read, FileAccess::Write, FileAccess::ReadWrite})
+    for (auto nextShare : {FileShare::None, FileShare::Read, FileShare::Write, FileShare::ReadWrite})
+    {
+        SCOPED_TRACE(::testing::Message() << static_cast<int>(firstAccess) << '/'
+            << static_cast<int>(firstShare) << " -> " << static_cast<int>(nextAccess)
+            << '/' << static_cast<int>(nextShare));
+        auto first = container->OpenFile("seed.bin", FileMode::Open, firstAccess, firstShare);
+        bool denied = false;
+        try { auto next = container->OpenFile("seed.bin", FileMode::Open, nextAccess, nextShare); }
+        catch (const IOException&) { denied = true; }
+#if defined(_WIN32)
+        const bool expected = (static_cast<int>(nextAccess) & ~static_cast<int>(firstShare)) != 0 ||
+                              (static_cast<int>(firstAccess) & ~static_cast<int>(nextShare)) != 0;
+#else
+        const bool expected = firstShare == FileShare::None || nextShare == FileShare::None;
+#endif
+        EXPECT_EQ(denied, expected);
+        if (denied) ++refused;
+    }
+#if defined(_WIN32)
+    EXPECT_EQ(refused, 119);
+#else
+    EXPECT_EQ(refused, 63);
+#endif
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, ShortFileOverloadsAndCreateFileAreExclusive)
+{
+    using namespace System::IO;
+    auto container = OpenContainer("ExclusiveDefaults");
+    {
+        auto created = container->CreateFile("seed.bin");
+        EXPECT_THROW((void)container->OpenFile("seed.bin", FileMode::Open, FileAccess::Read, FileShare::ReadWrite), IOException);
+        created->WriteByte(42);
+    }
+    {
+        auto first = container->OpenFile("seed.bin", FileMode::Open);
+        EXPECT_THROW((void)container->OpenFile("seed.bin", FileMode::Open, FileAccess::Read, FileShare::ReadWrite), IOException);
+    }
+    {
+        auto first = container->OpenFile("seed.bin", FileMode::Open, FileAccess::Read);
+        EXPECT_THROW((void)container->OpenFile("seed.bin", FileMode::Open, FileAccess::Read, FileShare::ReadWrite), IOException);
+    }
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, DeniedSharingDoesNotTruncateStoredData)
+{
+    using namespace System::IO;
+    auto container = OpenContainer("ShareBeforeTruncate");
+    { auto seed = container->CreateFile("seed.bin"); seed->WriteByte(42); }
+    auto owner = container->OpenFile("seed.bin", FileMode::Open, FileAccess::Read, FileShare::None);
+    EXPECT_THROW((void)container->CreateFile("seed.bin"), IOException);
+    EXPECT_THROW((void)container->OpenFile("seed.bin", FileMode::Truncate, FileAccess::Write, FileShare::ReadWrite), IOException);
+    EXPECT_EQ(owner->getLengthProperty(), 1);
+    EXPECT_EQ(owner->ReadByte(), 42);
+}
+#endif
+
+TEST_F(StorageDeviceDeleteContainerTest, TwoArgumentAppendUsesWriteOnlyAndPreservesThePrefix)
+{
+    using namespace System::IO;
+    auto container = OpenContainer("AppendDefaultAccess");
+    { auto seed = container->CreateFile("seed.bin"); seed->WriteByte(42); }
+    auto append = container->OpenFile("seed.bin", FileMode::Append);
+    EXPECT_TRUE(append->getCanWriteProperty());
+    EXPECT_FALSE(append->getCanReadProperty());
+    EXPECT_EQ(append->getPositionProperty(), 1);
+    append->WriteByte(43);
+    append->Close();
+    auto read = container->OpenFile("seed.bin", FileMode::Open, FileAccess::Read);
+    EXPECT_EQ(read->getLengthProperty(), 2);
+    EXPECT_EQ(read->ReadByte(), 42);
+    EXPECT_EQ(read->ReadByte(), 43);
+}
+
 // ---------------------------------------------------------------------------
 // XNA-MISSING-014: StorageDeviceNotConnectedException's serialization constructor.
 //

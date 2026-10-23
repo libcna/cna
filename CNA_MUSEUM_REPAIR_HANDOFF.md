@@ -27,7 +27,60 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: CNA-DEMOS-ISSUE-152 FileShare lower-layer baseline (2026-10-23)
+### Current task: CNA-DEMOS-ISSUE-152 native handle repair and consumer validation (2026-10-23)
+
+The lower-layer repair is published in Sharp Runtime as
+`c6984ecef98aa6a04634e76145763545a90c68fe` (normal push25211, ls-remote verified).
+It uses one native handle, Windows
+CreateFileW sharing/POSIX advisory flock, lock-before-truncate, buffered descriptor adoption,
+non-destructive write-only opens, handle-based length/resize, append boundaries and explicit
+write-error reporting. No second locking handle or pathname reservation table. Short
+FileStream constructors default Read sharing, File.Create uses None. Public signatures remain;
+new four-argument constructor is additive. **Linux FileStream layout576 ->24, align8 unchanged:
+rebuild every consumer, including derived IsolatedStorageFileStream.** Sharp migration note
+`docs/Migration-FileStream-NativeSharing.md` and native before/after/ownership pins document SA-3.
+
+Validation so far:
+- Full Sharp warning-free build, full gate **18,218/18,218**,42 executables,zero skips/failures.
+  Existing actual XNA fixtures and private original Yacht SOAP service; IO744 tests.
+- First native IO run740/741 exposed stale read-ahead after resize. Fixed the implementation,
+  retained that test;741/741 then passed before adding3 more safety tests. No oracle weakened.
+- Actual FileStream.cpp +23 sharing/path/EOF regressions **ASan/UBSan/LSan23/23 PASS**;
+  supporting linked archives are not fully instrumented. Disposable binary still exists at
+  Sharp build-probe/cna-repair-fileshare-sanitizer; remove only it after recording evidence.
+- Final-source MinGW and Emscripten syntax checks, Wall/Wextra/Wpedantic/Werror PASS.
+  No Windows/browser runtime sharing pass is claimed; browser VFS locking stays best-effort.
+- CNA4 added regressions reproduce all4 failures before facade repair (46/50 pass). Forward
+  sharing, exclusive CreateFile/short OpenFile defaults, and Append write-only: **50/50 PASS**.
+  New nodiscard warnings in the test baseline were corrected with void casts; final build clean.
+- All6 CNA platform/SDL/hot-path audits PASS, budgets unchanged. Sharp boundaries44/109 PASS.
+
+Owned Sharp files: FileStream.hpp/.cpp, File.cpp, new FileStreamSharingTests.cpp, migration note.
+Owned CNA files: StorageContainer.hpp/.cpp, StorageDeviceTests.cpp, this handoff. Other dirty
+files, especially the inherited StorageContainerPathErrorsTests.cpp and ownership/occlusion
+work, are untouched and must not be staged. No cna-demos marker/status change yet.
+
+The full demos build/linux-full target rebuild completed warning-free (session41158,
+300 planned steps/297 printed, one compiler,6GiB cap). SOFTWARE and OPENGLES3 storage each
+pass7/7: the original FileShare demo now passes **8/8 unchanged checks**. Exact comparison
+with repair-museum-storage-delete changes only that ID's FAILED ->PASSED and clears its
+exclusive-open failure message; all other statuses/counts/markers/messages are identical.
+Both runs exit1 solely for the stale152 marker's unexpected PASS, not a failed assertion.
+C API storage2/2 PASS on each renderer (35/38 internal child checks, outer checks0 unchanged).
+
+Additional actual .NET8.0.31 oracle covers all16 legal Delete/Inheritable sharing masks:
+2304pairs,2025allowed/279refused,zero native-policy mismatches; append-boundary controls pass.
+Source: demos docs/repair-evidence/storage/FileShareFlagsOracle.cs. Framework4 comparison is
+in progress; do not claim its result until the saved run is complete.
+
+Next: publish this CNA facade/test batch after the already-published dependency, remove the
+now-stale152 marker with assertions unchanged, then finish full corpus/visual/CTest comparisons
+before marking permanent disposition. Stage only owned issue-status hunks in shared dirty
+documents. This commit is NOT a full CNA corpus or full repaired-demo sweep claim.
+Evidence prefix: demos build/linux-full/reports/repair-fileshare-*.
+Campaign remains156 historical IDs/40 pending until the actual issue disposition is updated.
+
+### Previous checkpoint: CNA-DEMOS-ISSUE-152 FileShare lower-layer baseline (2026-10-23)
 
 Published repair checkpoints, all remote SHAs verified:
 - CNA lazy root `fffa552ad4b4567c772f2f293302b8b103a5b16f`;

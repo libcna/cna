@@ -116,7 +116,7 @@ namespace Microsoft::Xna::Framework::Storage
         // ---- File operations ----
 
         /**
-         * @brief Creates or truncates a file and returns a write stream.
+         * @brief Creates or truncates a file and returns an exclusive read/write stream.
          *
          * @param file Relative file path.
          * @return Unique pointer to a writable Stream.
@@ -159,6 +159,7 @@ namespace Microsoft::Xna::Framework::Storage
 
         /**
          * @brief Opens a file stream with the specified file mode.
+         * Uses FileShare::None; access is Write for Append and ReadWrite otherwise.
          *
          * @param file     Relative file path.
          * @param fileMode Mode for opening the file.
@@ -170,6 +171,7 @@ namespace Microsoft::Xna::Framework::Storage
 
         /**
          * @brief Opens a file stream with the specified file mode and access.
+         * Uses FileShare::None.
          *
          * @param file       Relative file path.
          * @param fileMode   Mode for opening the file.
@@ -183,6 +185,9 @@ namespace Microsoft::Xna::Framework::Storage
 
         /**
          * @brief Opens a file stream with the specified file mode, access, and share mode.
+         * Sharing follows native .NET platform semantics: Windows enforces the access/share
+         * masks; POSIX uses advisory exclusive locks for None and shared locks otherwise.
+         * Locking on filesystems that do not support it is best-effort, as in .NET on Unix.
          *
          * @param file       Relative file path.
          * @param fileMode   Mode for opening the file.

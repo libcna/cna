@@ -231,7 +231,8 @@ namespace Microsoft::Xna::Framework::Storage
         if (file.empty())
             throw System::ArgumentNullException("file");
         return std::make_unique<System::IO::FileStream>(
-            ResolvePath(file), System::IO::FileMode::Create);
+            ResolvePath(file), System::IO::FileMode::Create,
+            System::IO::FileAccess::ReadWrite, System::IO::FileShare::None);
     }
 
     bool StorageContainer::FileExists(const std::string& file) const
@@ -282,26 +283,27 @@ namespace Microsoft::Xna::Framework::Storage
         const std::string& file, System::IO::FileMode fileMode)
     {
         return OpenFile(file, fileMode,
-                        System::IO::FileAccess::ReadWrite,
-                        System::IO::FileShare::ReadWrite);
+                        fileMode == System::IO::FileMode::Append
+                            ? System::IO::FileAccess::Write : System::IO::FileAccess::ReadWrite,
+                        System::IO::FileShare::None);
     }
 
     std::unique_ptr<System::IO::Stream> StorageContainer::OpenFile(
         const std::string& file, System::IO::FileMode fileMode,
         System::IO::FileAccess fileAccess)
     {
-        return OpenFile(file, fileMode, fileAccess, System::IO::FileShare::ReadWrite);
+        return OpenFile(file, fileMode, fileAccess, System::IO::FileShare::None);
     }
 
     std::unique_ptr<System::IO::Stream> StorageContainer::OpenFile(
         const std::string& file, System::IO::FileMode fileMode,
-        System::IO::FileAccess fileAccess, System::IO::FileShare /*fileShare*/)
+        System::IO::FileAccess fileAccess, System::IO::FileShare fileShare)
     {
         VerifyNotDisposed(*this);
         if (file.empty())
             throw System::ArgumentNullException("file");
         return std::make_unique<System::IO::FileStream>(
-            ResolvePath(file), fileMode, fileAccess);
+            ResolvePath(file), fileMode, fileAccess, fileShare);
     }
 
 } // namespace Microsoft::Xna::Framework::Storage
