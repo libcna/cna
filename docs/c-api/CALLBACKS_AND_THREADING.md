@@ -19,6 +19,12 @@ copies valid UTF-8 diagnostic bytes before the callback returns, stops the game 
 reports `CNA_RESULT_CALLBACK` to the enclosing C API caller. An invalid, empty or omitted callback
 diagnostic becomes a stable generic callback failure message.
 
+A failed game lifecycle callback stops subsequent ordinary frame callbacks, but the run still
+delivers its completion hooks (`exiting`, then `end_run`) and destruction still delivers
+`unload_content` when content was loaded. A completion hook may itself fail. The game retains
+its first callback diagnostic, so later cleanup failures or unrelated C calls do not replace
+the error returned by the enclosing run, a later terminal host-frame call or destruction.
+
 The owner keeps a callback context valid until the associated registration is successfully removed
 or its source object/runtime has finished destruction. CNA does not take ownership of arbitrary
 context memory. Callback registrations are represented by owned handles, so unregistration and

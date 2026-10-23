@@ -144,8 +144,14 @@ public:
         }
     }
 
-    [[nodiscard]] CNA_Result GetCallbackFailure() const noexcept
+    [[nodiscard]] CNA_Result ReportCallbackFailure() const noexcept
     {
+        if (callbackFailure_ != CNA_RESULT_SUCCESS) {
+            const std::string_view diagnostic = callbackFailureMessage_.empty()
+                ? std::string_view("A C game lifecycle callback failed.")
+                : std::string_view(callbackFailureMessage_);
+            return Fail(CNA_RESULT_CALLBACK, CNA_ERROR_CATEGORY_CALLBACK, diagnostic);
+        }
         return callbackFailure_;
     }
 
@@ -319,7 +325,7 @@ protected:
 
     void EndRun() override
     {
-        Invoke(frameHooks_.end_run, nullptr, frameHooks_.context);
+        Invoke(frameHooks_.end_run, nullptr, frameHooks_.context, true);
         Game::EndRun();
     }
 
@@ -389,7 +395,7 @@ private:
             return;
         }
         hasExited_ = true;
-        Invoke(callbacks_.exiting, nullptr);
+        Invoke(callbacks_.exiting, nullptr, callbacks_.context, true);
     }
 
     void Invoke(
@@ -432,19 +438,18 @@ private:
     // update handler does.
     void RecordCallbackFailure(const CNA_CallbackError& callbackError)
     {
-        std::string diagnostic;
-        if (callbackError.struct_size >= sizeof(CNA_CallbackError) &&
-            callbackError.struct_version == StructureVersion &&
-            CopyStringView(callbackError.message, true, &diagnostic) == CNA_RESULT_SUCCESS &&
-            !diagnostic.empty()) {
-            static_cast<void>(Fail(CNA_RESULT_CALLBACK, CNA_ERROR_CATEGORY_CALLBACK, diagnostic));
-        } else {
-            static_cast<void>(Fail(
-                CNA_RESULT_CALLBACK,
-                CNA_ERROR_CATEGORY_CALLBACK,
-                "A C game lifecycle callback failed."));
+        if (callbackFailure_ != CNA_RESULT_SUCCESS) {
+            return;
+        }
+        // Completion hooks still run after failure. Keep the original error with the game:
+        // cleanup and unrelated C calls can replace the thread-local diagnostic before return.
+        if (callbackError.struct_size < sizeof(CNA_CallbackError) ||
+            callbackError.struct_version != StructureVersion ||
+            CopyStringView(callbackError.message, true, &callbackFailureMessage_) != CNA_RESULT_SUCCESS) {
+            callbackFailureMessage_.clear();
         }
         callbackFailure_ = CNA_RESULT_CALLBACK;
+        static_cast<void>(ReportCallbackFailure());
         Exit();
     }
 
@@ -461,6 +466,7 @@ private:
     CNA_GameFrameHooks frameHooks_{};
     CNA_Handle handle_;
     CNA_Result callbackFailure_;
+    std::string callbackFailureMessage_;
     std::uint32_t callbackDepth_ = 0U;
     bool hasLoadedContent_;
     bool hasExited_;
@@ -765,7 +771,7 @@ namespace {
         return result;
     }
     game->RunOneFrame();
-    return game->GetCallbackFailure();
+    return game->ReportCallbackFailure();
 }
 
 [[nodiscard]] CNA_Result GameRunFrameExt(const CNA_Handle gameHandle, CNA_Bool* const outRunning)
@@ -777,7 +783,7 @@ namespace {
         return result;
     }
     *outRunning = ToCBool(game->RunFrameEXT());
-    return game->GetCallbackFailure();
+    return game->ReportCallbackFailure();
 }
 
 [[nodiscard]] CNA_Result GameRun(const CNA_Handle gameHandle)
@@ -788,7 +794,7 @@ namespace {
         return result;
     }
     game->Run();
-    return game->GetCallbackFailure();
+    return game->ReportCallbackFailure();
 }
 
 [[nodiscard]] CNA_Result GameClear(const CNA_Handle gameHandle, const CNA_Color color)
@@ -848,7 +854,6 @@ namespace {
     // pointer to it; the game is going away now, so it can finally go too.
     CNA::C::Detail::ResetGraphicsDeviceManagerState();
     CNA::C::Detail::ResetGameContentManagerState();
-    const CNA_Result callbackResult = game->GetCallbackFailure();
     RuntimeState& state = GetRuntimeState();
     const CNA_Result releaseResult = state.handles.Release(gameHandle);
     if (releaseResult != CNA_RESULT_SUCCESS) {
@@ -861,7 +866,7 @@ namespace {
         std::lock_guard lock(state.mutex);
         state.hasActiveGame = false;
     }
-    return callbackResult;
+    return game->ReportCallbackFailure();
 }
 
 } // namespace

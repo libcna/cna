@@ -29,6 +29,44 @@ by this validation step.
 
 ### Current task: ISSUE-051 completion hooks and first failure (2026-10-23)
 
+VALIDATION COMPLETE: full SW719=646PASS/22FAIL/48SKIP/3NOTRUN and
+GLES719=688PASS/21FAIL/7SKIP/3NOTRUN. Each exact comparison changes only051 and removes its eight
+failed assertions. Final serial CTest735registered/732enabled=678PASS/48SKIP/6unchangedFAIL/
+3disabled; per-test DELTAS[]. All275 frozen hashes match after both sweeps and CTest; freeze
+released. Next commit051 adapter/test/docs, close matrix/inventory with its SHA, publish/verify,
+then begin075's sentinel regression. No new visual/sanitizer/full native corpus/browser claim.
+
+Publication VERIFIED: CNA origin/nexte2074613f1644cecaacf70a51489d972a4c51382 and demos
+origin/next77346b73ed0969a6a8c9eea34d2493c270c743ce. Sharp Runtime remains2f644cf47.
+Current owned051 files: CnaCApiRuntime.cpp, tests/pure_c/HostDrivenRunSmoke.c,
+docs/c-api/CALLBACKS_AND_THREADING.md and demos lifecycle/HOST_FAILURE_COMPLETION.md.
+The corrected native red witness (before-v3) has5FAIL/1PASS: missing completion and overwritten
+first diagnostics; the first-Unload-only control passes. Earlier test versions forgot to
+zero-terminate the byte-copy buffer, fixed before any production edit; all logs retained.
+Candidate lets Exiting/EndRun use runAfterFailure, stores the first normalized message in CGame
+and republishes it at run/terminal/destroy boundaries. Native Game and ordinary guards unchanged.
+Strict build passes. Six native CTests pass SOFTWARE0.76s and OPENGLES313.16s; all six adversarial
+cleanup cases pass, including refused nested calls and TLS replacement between host calls.
+Full consumer builds26981 and51487 pass without diagnostics. The unchanged external demo passes
+all73 child assertions on both renderers; exact names/order preserved and precisely8 failures
+removed. Marker051 and the stale restriction sentence were removed only afterwards.
+Catalog719 has zero problems and changes only those two051 metadata fields. All275 consumer
+artifacts are frozen in repair-host-cleanup-full-artifacts.sha256. Full SOFTWARE completed719:
+646PASS/22FAIL/48SKIP/3NOTRUN. Exact comparison changes only051,48->40 failed assertions; all275
+hashes match. OPENGLES3 completed719:688PASS/21FAIL/7SKIP/3NOTRUN, only051 changes and47->39
+failed assertions. Exact comparisons pass on both renderers; all275 hashes match after both.
+Serial full CTest scope cna-host-cleanup-full-ctest/session74294 is running, reports
+repair-host-cleanup-ctest.log/xml. Compare per-test status to repair-owner-ctest.xml, expecting
+the same six residuals, then verify all275 hashes before releasing the freeze.
+Do not rebuild or edit executable inputs until the full comparison and hash checks finish.
+No051 closure or publication yet. Use reports repair-host-cleanup-*, bounded one-job builds.
+Read-only next-batch preparation:075's C offset receive copies its entire zero-filled temporary
+back over the caller buffer; canonical ReceiveData and the plain C receive copy only the payload.
+The existing native NetSmoke checks no surrounding sentinels. New preparatory demos evidence
+net/PACKET_RECEIVE_RANGE.md belongs to075, not the051 commit. No075 code/test change yet.
+
+#### Last complete checkpoint: ISSUE-050
+
 ISSUE-050 validation is complete. Full SOFTWARE719=645PASS/23FAIL/48SKIP/3NOTRUN;
 OPENGLES3719=687PASS/22FAIL/7SKIP/3NOTRUN. Only050 changes relative to019; exactly its two failed
 assertions disappear on each renderer. Final serial CTest735registered/732enabled gives
@@ -37,11 +75,9 @@ match after both sweeps and CTest; the freeze is released. No full native corpus
 sanitizer or additional-platform pass is claimed. Native six-test controls pass on both renderers.
 ISSUE-050 repair commit12837955407ec964ebce9752b1fae0b3e47b6b14 and demos closure77346b7 are
 complete. Matrix050 is RESOLVED/FIXED_VALIDATED; census156 IDs/120 final dispositions/36 without.
-Commit the isolated050 matrix/handoff closure, publish both repositories and verify the remotes.
-Then implement051's native adversarial cleanup regression before changing the adapter.
 Preserve all foreign work, especially113, content/audio ownership and the upstream082 record.
 Reports: repair-owner-* in the demos existing linux-full tree. Preparatory051 evidence is a
-separate uncommitted HOST_FAILURE_COMPLETION.md; exclude it from the050 commit.
+separate uncommitted HOST_FAILURE_COMPLETION.md and was excluded from the050 commit.
 
 #### ISSUE-050 investigation and validation history
 

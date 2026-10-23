@@ -15,6 +15,9 @@ typedef struct RunState {
     int updates;
     int exit_after_updates;
     int fail_update;
+    const char* fail_completion;
+    int disturb_cleanup_error;
+    int refused_cleanup_calls;
 } RunState;
 
 static void record(RunState* const state, const char event)
@@ -48,8 +51,37 @@ RECORDING_CALLBACK(on_initialize, 'i')
 RECORDING_CALLBACK(on_load_content, 'l')
 RECORDING_CALLBACK(on_begin_run, 'b')
 RECORDING_CALLBACK(on_draw, 'd')
-RECORDING_CALLBACK(on_exiting, 'x')
-RECORDING_CALLBACK(on_end_run, 'e')
+
+static CNA_Result on_completion(const CNA_Handle game, RunState* const state,
+                                CNA_CallbackError* const out_error, const char event)
+{
+    record(state, event);
+    if (state->disturb_cleanup_error) {
+        CNA_Bool running = CNA_TRUE;
+        if (cna_game_run_frame_ext(game, &running) != CNA_RESULT_INVALID_STATE) {
+            return CNA_RESULT_INTERNAL;
+        }
+        ++state->refused_cleanup_calls;
+    }
+    if (state->fail_completion != NULL && strchr(state->fail_completion, event) != NULL) {
+        out_error->message = view(event == 'x' ? "cleanup exiting failed" :
+                                  event == 'e' ? "cleanup end_run failed" : "cleanup unload failed");
+        return CNA_RESULT_IO;
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+#define COMPLETION_CALLBACK(name, letter) \
+    static CNA_Result name(const CNA_Handle game, const CNA_GameTime* const game_time, \
+                           void* const context, CNA_CallbackError* const out_error) \
+    { \
+        (void)game_time; \
+        return on_completion(game, (RunState*)context, out_error, letter); \
+    }
+
+COMPLETION_CALLBACK(on_exiting, 'x')
+COMPLETION_CALLBACK(on_end_run, 'e')
+COMPLETION_CALLBACK(on_unload, 'z')
 
 static CNA_Result on_update(const CNA_Handle game, const CNA_GameTime* const game_time,
                             void* const context, CNA_CallbackError* const out_error)
@@ -79,6 +111,7 @@ static CNA_Handle create_game(RunState* const state, CNA_GameCallbacks* const ca
     callbacks->struct_size = (uint32_t)sizeof(*callbacks);
     callbacks->struct_version = UINT32_C(1);
     callbacks->load_content = on_load_content;
+    callbacks->unload_content = on_unload;
     callbacks->update = on_update;
     callbacks->draw = on_draw;
     callbacks->exiting = on_exiting;
@@ -104,6 +137,83 @@ static CNA_Handle create_game(RunState* const state, CNA_GameCallbacks* const ca
         return CNA_INVALID_HANDLE;
     }
     return game;
+}
+
+static int has_diagnostic(const char* const expected)
+{
+    CNA_ErrorInfo info;
+    char message[128] = {0};
+    uint64_t needed = 0;
+    uint64_t copied = 0;
+    memset(&info, 0, sizeof(info));
+    info.struct_size = (uint32_t)sizeof(info);
+    info.struct_version = UINT32_C(1);
+    return cna_error_get_last_info(&info) == CNA_RESULT_SUCCESS &&
+        info.result == CNA_RESULT_CALLBACK && info.category == CNA_ERROR_CATEGORY_CALLBACK &&
+        cna_error_get_last_message_size(&needed) == CNA_RESULT_SUCCESS && needed < sizeof(message) &&
+        cna_error_copy_last_message(message, needed, &copied) == CNA_RESULT_SUCCESS &&
+        copied == needed && strcmp(message, expected) == 0;
+}
+
+/* CNA-DEMOS-ISSUE-051: completion still runs after failure, and secondary errors must not
+   replace the game's first diagnostic, including across later terminal/destroy calls. */
+static int check_failure_cleanup(const int fail_update, const char* const fail_completion,
+                                 const int disturb_cleanup_error, const char* const expected)
+{
+    RunState state;
+    CNA_GameCallbacks callbacks;
+    CNA_GameFrameHooks hooks;
+    CNA_Bool running = CNA_TRUE;
+    int passed = 1;
+    const CNA_Result run_expected = fail_update || strchr(fail_completion, 'x') != NULL ||
+        strchr(fail_completion, 'e') != NULL ? CNA_RESULT_CALLBACK : CNA_RESULT_SUCCESS;
+    memset(&state, 0, sizeof(state));
+    state.fail_update = fail_update;
+    state.fail_completion = fail_completion;
+    state.disturb_cleanup_error = disturb_cleanup_error;
+    state.exit_after_updates = 1;
+    const CNA_Handle game = create_game(&state, &callbacks, &hooks);
+    if (game == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    const CNA_Result run_result = cna_game_run_frame_ext(game, &running);
+    const int run_diagnostic = run_expected != CNA_RESULT_CALLBACK || has_diagnostic(expected);
+    if (run_result != run_expected || running != CNA_FALSE || strcmp(state.order, "ilbuxe") != 0 ||
+        !run_diagnostic) {
+        passed = 0;
+    }
+    const int delivered = state.order_length;
+    /* Overwrite the TLS diagnostic between calls. The terminal game's error is its own state. */
+    if (cna_game_set_is_fixed_time_step(game, (CNA_Bool)2) != CNA_RESULT_INVALID_ARGUMENT) {
+        passed = 0;
+    }
+    running = CNA_TRUE;
+    const CNA_Result terminal_result = cna_game_run_frame_ext(game, &running);
+    const int terminal_diagnostic = run_expected != CNA_RESULT_CALLBACK || has_diagnostic(expected);
+    if (terminal_result != run_expected || running != CNA_FALSE ||
+        state.order_length != delivered ||
+        !terminal_diagnostic) {
+        passed = 0;
+    }
+    const CNA_Result destroy_result = cna_game_destroy(game);
+    const int destroy_diagnostic = has_diagnostic(expected);
+    if (destroy_result != CNA_RESULT_CALLBACK || !destroy_diagnostic ||
+        strcmp(state.order, "ilbuxez") != 0 ||
+        state.refused_cleanup_calls != (disturb_cleanup_error ? 3 : 0)) {
+        passed = 0;
+    }
+    int64_t ticks = 0;
+    const CNA_Result stale_result = cna_game_get_target_elapsed_time_ticks(game, &ticks);
+    if (stale_result != CNA_RESULT_INVALID_HANDLE) {
+        passed = 0;
+    }
+    printf("cleanup update=%d failures=%s nested=%d trace=%s results=%u/%u/%u/%u "
+           "diagnostics=%d/%d/%d refused=%d: %s\n", fail_update,
+        fail_completion, disturb_cleanup_error, state.order, (unsigned)run_result,
+        (unsigned)terminal_result, (unsigned)destroy_result, (unsigned)stale_result,
+        run_diagnostic, terminal_diagnostic, destroy_diagnostic, state.refused_cleanup_calls,
+        passed ? "PASS" : "FAIL");
+    return passed;
 }
 
 int main(void)
@@ -161,5 +271,15 @@ int main(void)
     }
     /* The failure stays the game's: destroying it releases the handle and reports it again, as
        cna_game_destroy documents. */
-    return cna_game_destroy(game) == CNA_RESULT_CALLBACK ? 0 : CNA_TEST_FAIL(8);
+    if (cna_game_destroy(game) != CNA_RESULT_CALLBACK) {
+        return CNA_TEST_FAIL(8);
+    }
+    int failed = 0;
+    failed += !check_failure_cleanup(1, "", 0, "host-driven run smoke: update refused");
+    failed += !check_failure_cleanup(1, "xez", 0, "host-driven run smoke: update refused");
+    failed += !check_failure_cleanup(1, "", 1, "host-driven run smoke: update refused");
+    failed += !check_failure_cleanup(0, "xez", 0, "cleanup exiting failed");
+    failed += !check_failure_cleanup(0, "ez", 1, "cleanup end_run failed");
+    failed += !check_failure_cleanup(0, "z", 1, "cleanup unload failed");
+    return failed == 0 ? 0 : CNA_TEST_FAIL(9);
 }
