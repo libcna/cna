@@ -1983,6 +1983,8 @@ namespace CNA::Internal::Renderers
         Unsupported
     };
 
+    class OcclusionQueryIntervals;
+
     class IGraphicsRenderer
     {
     public:
@@ -2480,6 +2482,12 @@ namespace CNA::Internal::Renderers
         /// Creates a renderer occlusion query object. Returns nullptr on
         /// renderers that do not support raster-sample occlusion queries.
         virtual std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() { return nullptr; }
+
+        /**
+         * @brief Creates a logical query whose interval may overlap other queries on this device.
+         * @return An independent query, or null when the native query factory is unsupported.
+         */
+        [[nodiscard]] std::unique_ptr<IOcclusionQueryRenderer> CreateLogicalOcclusionQueryEXT();
         virtual std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) { return nullptr; }
         virtual std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) { return nullptr; }
 
@@ -3252,6 +3260,9 @@ namespace CNA::Internal::Renderers
         }
 
     private:
+        // Logical queries own their interval coordinator; no native resource survives the last
+        // query merely because the device remains alive.
+        std::weak_ptr<OcclusionQueryIntervals> occlusionQueryIntervals_;
         CNA::Unsupported3DGraphicsCallBehavior unsupported3DGraphicsCallBehavior_ =
             CNA::Unsupported3DGraphicsCallBehavior::Throw;
         mutable std::unordered_set<std::string> warnedUnsupported3DCalls_;

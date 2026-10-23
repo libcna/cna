@@ -21,7 +21,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::NotSupportedException(
                 "OcclusionQuery is not supported by the active graphics profile and renderer.");
         }
-        renderer_ = device.GetRenderer().CreateOcclusionQuery();
+        renderer_ = device.GetRenderer().CreateLogicalOcclusionQueryEXT();
         if (!renderer_)
         {
             throw System::NotSupportedException(

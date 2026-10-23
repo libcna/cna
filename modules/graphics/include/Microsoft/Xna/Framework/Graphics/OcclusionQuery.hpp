@@ -44,6 +44,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * On OpenGL ES 3.0 and WebGL 2 this returns 0 (no visible samples) or 1 (any visible
          * samples): their only core occlusion target is the boolean `GL_ANY_SAMPLES_PASSED`.
          * Ask @ref isPixelCountPreciseEXT before dividing this by an area.
+         * Precise counts wrap modulo 2^32 and expose the resulting bits as a signed
+         * 32-bit integer, matching XNA; a large tally can therefore be negative.
          *
          * @return Visible pixel count from the most recently completed query.
          * @throws System::InvalidOperationException if no completed result is available.
@@ -58,6 +60,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * where it can only answer "any" or "none" -- OpenGL ES 3.0 and WebGL 2, whose core query
          * target is boolean. A coverage ratio computed from a boolean count is 1/area, not a
          * fraction, so a game that needs one has to be able to ask which it is holding.
+         * A renderer may select its native query target on the first Begin and conservatively
+         * return false before then. Read this property again alongside the completed result
+         * rather than caching a value obtained before the first Begin.
          *
          * @return true when the pixel count is a genuine per-fragment tally.
          * @throws System::ObjectDisposedException if this query has been disposed.
@@ -66,7 +71,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Begins the occlusion query; all draw calls until End() are counted.
-         * @throws System::InvalidOperationException if a query is already active or the previous
+         * Distinct query objects may have overlapping Begin/End intervals on the same device.
+         * @throws System::InvalidOperationException if this query is already active or the previous
          * result has not yet been observed through IsComplete.
          * @throws System::ObjectDisposedException if this query has been disposed.
          */

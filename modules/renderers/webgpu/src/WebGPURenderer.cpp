@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
+#include "CNA/Internal/Renderers/Common/OcclusionSampleCount.hpp"
 #include "CNA/Internal/Graphics/TextureKind.hpp"
 #include "CNA/Internal/Graphics/PbrVertexStream.hpp"
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
@@ -9342,8 +9343,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                     for (const int extra : q->extraSlots_)
                         if (extra >= 0 && extra < kMaxOcclusionSlots)
                             c += counts[static_cast<std::size_t>(extra)];
-                    q->pixelCount_ = static_cast<int>(std::min<std::uint64_t>(
-                        c, static_cast<std::uint64_t>(std::numeric_limits<int>::max())));
+                    q->pixelCount_ = OcclusionSampleCount(c).Value();
                     q->complete_ = true;
                 }
             }

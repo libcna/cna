@@ -6603,7 +6603,7 @@ namespace CNA::Internal::Renderers::Software
         // defensive native invariant for a different already-active query.
         if (active_ || owner_ == nullptr || !owner_->TryActivateOcclusionQuery(this))
             return;
-        pixelCount_ = 0;
+        pixelCount_ = OcclusionSampleCount();
         complete_ = false;
         active_ = true;
     }

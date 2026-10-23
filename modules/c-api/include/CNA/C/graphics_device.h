@@ -1298,8 +1298,11 @@ CNA_C_API CNA_Result cna_occlusion_query_create(
 /**
  * @brief Begins counting visible pixels; every draw until the matching end is counted.
  *
+ * Distinct query handles may have overlapping intervals; each counts the draws within its
+ * own interval independently.
+ *
  * @param occlusion_query Owned occlusion-query handle.
- * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_STATE` for a nested begin or reuse before a
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_STATE` for a repeated begin on this handle or reuse before a
  * completion observation; `CNA_RESULT_NOT_SUPPORTED` when the profile/backend has no query object;
  * or a documented handle/thread/native failure.
  */
@@ -1354,6 +1357,9 @@ CNA_C_API CNA_Result cna_occlusion_query_get_pixel_count(
  * **A coverage ratio computed from a boolean count is `1/area`, not a fraction**, so a game that
  * needs one has to be able to ask which it is holding rather than dividing and hoping. Ask this
  * before dividing @ref cna_occlusion_query_get_pixel_count by an area.
+ * A renderer may determine its native query target on the first begin and conservatively
+ * report false before then. Read this property alongside the completed result rather than
+ * caching a value obtained before the first begin.
  */
 CNA_C_API CNA_Result cna_occlusion_query_get_is_pixel_count_precise_ext(
     CNA_OcclusionQueryHandle occlusion_query,

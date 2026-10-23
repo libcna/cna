@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/OcclusionSampleCount.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/Renderers/Software/SoftwareFramebufferAllocation.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -1257,9 +1258,9 @@ namespace CNA::Internal::Renderers::Software
         /**
          * @brief Gets the exact number of samples that passed the raster tests.
          *
-         * @return Saturating exact sample count from the latest measurement.
+         * @return Signed 32-bit sample count, wrapping like XNA's native DWORD tally.
          */
-        [[nodiscard]] int PixelCount() const override { return pixelCount_; }
+        [[nodiscard]] int PixelCount() const override { return pixelCount_.Value(); }
 
         /**
          * @brief Adds the set bits in a passing single-sample or 4x MSAA mask.
@@ -1273,15 +1274,12 @@ namespace CNA::Internal::Renderers::Software
                 static_cast<int>((passingSamples >> 1u) & 1u) +
                 static_cast<int>((passingSamples >> 2u) & 1u) +
                 static_cast<int>((passingSamples >> 3u) & 1u);
-            if (pixelCount_ > std::numeric_limits<int>::max() - increment)
-                pixelCount_ = std::numeric_limits<int>::max();
-            else
-                pixelCount_ += increment;
+            pixelCount_.Add(static_cast<std::uint32_t>(increment));
         }
 
     private:
         SoftwareRenderer* owner_ = nullptr;
-        int pixelCount_ = 0;
+        OcclusionSampleCount pixelCount_;
         bool active_ = false;
         bool complete_ = false;
     };
