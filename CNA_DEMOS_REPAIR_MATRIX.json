@@ -1037,12 +1037,16 @@
       ],
       "subsystem": "c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Generated Runtime routes always use the retrying exception barrier, so a foreign-thread handle refusal queues even game-driving, destruction and dispatch-control operations explicitly reserved for the calling owner.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "12837955407ec964ebce9752b1fae0b3e47b6b14",
+      "validation": [
+        "Native baseline at82a93ae97: all7 owner-only operations PASS dispatch off and FAIL dispatch on after cancellation with STATE; existing ordinary-dispatch control PASS. Explicit generator group policy changes exactly7 function-body barrier selections. All14 owner cases and six native CTests PASS on OPENGLES3/SOFTWARE; five generator tests and3205-route coverage check PASS.",
+        "Original external46 assertions preserved on both renderers; exactly2 failures removed before retiring050 marker. Full SW719=645PASS/23FAIL/48SKIP/3NOTRUN; GLES719=687PASS/22FAIL/7SKIP/3NOTRUN. Exact comparison with019 changes only050; failed assertions50->48 SW and49->47 GLES. No new failure or oracle change.",
+        "Final serial CTest652.53s:735 registered/732 enabled,678PASS/48SKIP/6 unchanged FAIL/3disabled, per-test status DELTAS[]. All275 frozen hashes match after completion. No new visual, sanitizer, additional platform or full native corpus claim. Evidence: demos docs/repair-evidence/lifecycle/OWNER_THREAD_DISPATCH.md."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-051",

@@ -27,7 +27,7 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: commit validated ISSUE-050, then repair ISSUE-051 (2026-10-23)
+### Current task: ISSUE-051 completion hooks and first failure (2026-10-23)
 
 ISSUE-050 validation is complete. Full SOFTWARE719=645PASS/23FAIL/48SKIP/3NOTRUN;
 OPENGLES3719=687PASS/22FAIL/7SKIP/3NOTRUN. Only050 changes relative to019; exactly its two failed
@@ -35,9 +35,11 @@ assertions disappear on each renderer. Final serial CTest735registered/732enable
 678PASS/48SKIP/6unchangedFAIL/3disabled; per-test status DELTAS[]. All275 frozen artifact hashes
 match after both sweeps and CTest; the freeze is released. No full native corpus, new visual,
 sanitizer or additional-platform pass is claimed. Native six-test controls pass on both renderers.
-Next commit only050 generator/spec/routes/test/docs, then close050 with that SHA in the matrix
-and demos permanent inventory, publish and verify. Preserve all foreign work, especially113.
+ISSUE-050 repair commit12837955407ec964ebce9752b1fae0b3e47b6b14 and demos closure77346b7 are
+complete. Matrix050 is RESOLVED/FIXED_VALIDATED; census156 IDs/120 final dispositions/36 without.
+Commit the isolated050 matrix/handoff closure, publish both repositories and verify the remotes.
 Then implement051's native adversarial cleanup regression before changing the adapter.
+Preserve all foreign work, especially113, content/audio ownership and the upstream082 record.
 Reports: repair-owner-* in the demos existing linux-full tree. Preparatory051 evidence is a
 separate uncommitted HOST_FAILURE_COMPLETION.md; exclude it from the050 commit.
 
