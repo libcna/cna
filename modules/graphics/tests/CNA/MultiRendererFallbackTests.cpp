@@ -544,4 +544,44 @@ TEST_F(MultiRendererFallbackTest, ACallerSuppliedWindowRefusesACrossKindCandidat
     callerWindow.reset();
 }
 
+TEST_F(MultiRendererFallbackTest, SurfaceFreeWebGpuFailureRecordsAnActionableFallback)
+{
+    namespace Renderers = CNA::Internal::Renderers;
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    if (Renderers::GraphicsRendererRegistry::Find(GraphicsRendererType::WebGPU) == nullptr ||
+        Renderers::GraphicsRendererRegistry::Find(GraphicsRendererType::Software) == nullptr)
+        GTEST_SKIP() << "requires WebGPU and Software in the same build";
+
+    GraphicsRendererSelection::SetFallbackChain(
+        std::vector<GraphicsRendererType>{GraphicsRendererType::Software});
+    GraphicsRendererSelection::SetPreferred(GraphicsRendererType::WebGPU);
+    PresentationParameters parameters;
+    parameters.setBackBufferWidthProperty(16);
+    parameters.setBackBufferHeightProperty(16);
+    // With SDL's actual offscreen driver, exercise its window with no native surface.
+    // Otherwise request a genuinely windowless device, without a simulated init failure.
+    const bool offscreenDriver =
+        System::Environment::GetEnvironmentVariable("SDL_VIDEODRIVER") == "offscreen";
+    SCOPED_TRACE(offscreenDriver ? "SDL offscreen window" : "HeadlessEXT device");
+    parameters.setHeadlessEXTProperty(!offscreenDriver);
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          parameters);
+
+    EXPECT_EQ(device.GetGraphicsRendererType(), GraphicsRendererType::Software);
+    EXPECT_EQ(GraphicsRendererSelection::GetSelected(), GraphicsRendererType::WebGPU);
+    EXPECT_EQ(GraphicsRendererSelection::GetActive(), GraphicsRendererType::Software);
+    const auto history = GraphicsRendererSelection::GetFallbackHistory();
+    ASSERT_EQ(history.size(), 1u);
+    EXPECT_EQ(history.front().type, GraphicsRendererType::WebGPU);
+    EXPECT_EQ(history.front().reason, GraphicsRendererFallbackReason::InitializationFailed);
+    EXPECT_NE(history.front().message.find("window"), std::string::npos);
+
+    device.Clear(Color::CornflowerBlue);
+    const Rectangle centre(8, 8, 1, 1);
+    Color pixel;
+    device.GetBackBufferData(&centre, &pixel, 0, 1);
+    EXPECT_EQ(pixel, Color::CornflowerBlue);
+}
+
 #endif  // CNA_MULTI_RENDERER

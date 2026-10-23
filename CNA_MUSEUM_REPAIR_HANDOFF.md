@@ -27,7 +27,33 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: FNA3D Single-format verdict (2026-10-23)
+### Current task: museum B10 surface-free WebGPU audit (2026-10-23)
+
+FNA3D repair below is published/remote-verified as
+`932b04dec06373588088c034ef87c761aeff0b5b` (push60183).
+B10's preferred surface-free rendering path is not implemented, but its alternative
+explicit fallback ALREADY WORKS. GraphicsDevice::resolveRenderer catches native surface
+failure and records InitializationFailed before trying the opted-in next candidate.
+The museum's Main.cpp explicitly disables automatic fallback when a renderer is named;
+that explains its strict creation failure, not a missing fallback mechanism.
+GetAvailable/IsAvailable already document compiled identities, not runtime support.
+Disposition: INTENTIONALLY_UNSUPPORTED surface-free WebGPU with DOCUMENTATION_DEFECT
+corrected; runtime substitution VERIFIED, no runtime-code change. Museum retains its
+own final entry/revalidation decision; its source/pin are untouched.
+
+New native fallback regression uses no debug failure override and confirms the selected
+WebGPU/activeSoftware identities, exact failure history and CornflowerBlue pixels.
+It passes both actual SDL_VIDEODRIVER=offscreen (missing native window Headless) and
+HeadlessEXT (missing platform window id). Initial test build86419 failed on a span
+initializer; corrected to the existing vector-to-span convention; build10506 passes.
+Evidence: demos build/linux-full/reports/repair-museum-webgpu-offscreen-*.
+Broader renderer-selection regression99918 passes51/51. Docs now state the native surface
+requirement and show opt-in fallback. Only the new regression, WebGPU docs/plan and
+this handoff belong to this batch (commit containing this entry, based on932b04dec).
+No owned process is live. No full-corpus or sanitizer claim.
+Next: inspect museum B14 MessageBox Return/Escape defaults against the platform/FNA contract.
+
+### Previous checkpoint: FNA3D Single-format verdict (2026-10-23)
 
 Volume repair below is published and remote-verified as
 `c105303dc7520df0483f477f43e9545a204cc716` (push23524).

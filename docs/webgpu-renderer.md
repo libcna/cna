@@ -60,6 +60,36 @@ SONAME, copies the runtime beside `cna_demo_2d`, and gives the executable a `$OR
 This enables the executable to use its sibling `libwgpu_native.so` rather than requiring the
 original package location at runtime.
 
+## Native window requirement and explicit fallback
+
+CNA's native WebGPU renderer requires a platform window with a supported native surface.
+`PresentationParameters.HeadlessEXT` and SDL's `offscreen` video driver do not provide one.
+This renderer does not implement a surface-free backbuffer/presentation path. Offscreen
+`RenderTarget2D` rendering on an already-created windowed device is supported and is a
+different operation. `GraphicsRendererSelection.GetAvailable()` / `IsAvailable()` describe
+compiled-in identities, not a guarantee that a device can be created in the current environment.
+
+An application willing to substitute another compiled-in renderer must opt in **before**
+constructing its first device:
+
+```cpp
+const std::vector<CNA::GraphicsRendererType> fallback{
+    CNA::GraphicsRendererType::Software};
+CNA::GraphicsRendererSelection::SetFallbackChain(fallback);
+CNA::GraphicsRendererSelection::SetPreferred(CNA::GraphicsRendererType::WebGPU);
+```
+
+Alternatively, `EnableAutomaticFallback(true)` tries the configured automatic order. A missing
+WebGPU surface is logged and recorded in `GetFallbackHistory()` as `InitializationFailed`,
+including the platform's diagnostic. `GetSelected()` remains WebGPU; `GetActive()` names the
+renderer that actually succeeded. Without fallback, the creation exception propagates and CNA
+does not silently change the renderer. Recovery after a failed construction remains possible.
+
+The native regression `MultiRendererFallbackTest.SurfaceFreeWebGpuFailureRecordsAnActionableFallback`
+checks both a windowless request and, when launched with `SDL_VIDEODRIVER=offscreen`, an actual
+SDL offscreen window. It verifies the failure history and exact SOFTWARE clear/readback pixels.
+This documents existing fallback behavior, not a claim that WebGPU itself rendered without a surface.
+
 ## Web / browser target (Emscripten) — in progress
 
 `WEBGPU` is one renderer identity with two backends, not two renderers. The browser build reuses all

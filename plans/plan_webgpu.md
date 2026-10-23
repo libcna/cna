@@ -43,7 +43,11 @@ that only external-platform work remains.
   WebGPU77 tests:76PASS/1unchangedSKIP; actual Chrome page19/19PASS, no validation errors.
   See the repair handoff for evidence and platform limits. The historic
   FX-109 claim that no shared vertex-slot route exists is obsolete.
-- Surface-free device creation remains an open museum finding.
+- Surface-free device creation is intentionally unsupported. Museum B10's alternative of an
+  explicit fallback already works when enabled: real HeadlessEXT and SDL offscreen tests record
+  WebGPU's InitializationFailed reason and render exact SOFTWARE pixels. The public renderer
+  documentation now distinguishes compiled-in availability, surface-free devices and offscreen
+  targets, and shows the opt-in. No runtime change or silent substitution was required.
 
 ## Historical row summary (2026-09-09)
 
