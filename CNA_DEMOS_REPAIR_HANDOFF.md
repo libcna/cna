@@ -1,13 +1,22 @@
-# Current review checkpoint — 2026-10-23
+# Current repair checkpoint — 2026-10-23
 
-CNA repair `c303d3ad9821ca7ad5cf04490d6f1a0555b2af8c` closes ISSUE-113;
-156 historical IDs / 131 final dispositions / 25 pending. See
-`CNA_INHERITED_REVIEW.md` and demos' `OCCLUSION_REPAIR_REVIEW.md` for accepted
-native, renderer, sanitizer, external132, six visual and five closure CTest gates.
-Owner authorized review/completion of inherited work before final English
-`handoff.md` for Opus 5.5 xhigh, commits and normal pushes. No new goal.
-Next: finish content ownership (011), C contract alignment, and SpriteBatch/event
-semantics (082); then final validation and handoff, not a fresh campaign batch.
+The inherited review is complete. CNA `39ef8ea2f` repairs content/resource
+ownership and GraphicsResource callback ordering; `65e69cc5e` repairs XNA
+SpriteBatch post-Dispose sequencing. ISSUE-011 and ISSUE-082 are
+`RESOLVED/FIXED_VALIDATED`. ISSUE-113 remains closed by `c303d3ad9` / `68471a7a3`.
+The matrix now contains 156 historical IDs / 133 final dispositions / 23 pending,
+plus the separate open DC-R1/DC-R2 findings.
+
+Native module, six-renderer focus, sanitizer 62+106, strict-C, external 191/one
+unchanged SKIP and six exact visual gates pass. The final metadata refresh, serial
+consumer rebuild and eight focused CTests also pass. C API inventory/checks pass at
+8,103 symbols / 620 planned. No active validation job is expected after the final
+closure checkpoint. Exact evidence, caveats, remaining IDs and the successor's next
+task are in root `handoff.md` and `CNA_INHERITED_REVIEW.md`.
+
+Closure bookkeeping commit: `ad65aecf7653aa24daf785424a98689c8b944fbf`.
+cna-demos closure commit: `fb6c6530493289f08a6487b52445adc47e435310`.
+The final handoff commit follows; all should be normally published on `origin/next`.
 Earlier live-process/no-push/preserve-foreign notes below are historical only.
 
 ---

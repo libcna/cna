@@ -4,14 +4,125 @@ This file describes the repository as it is now and is kept true. Until 2026-10-
 and also carried the dated session log of 2026-07 to 2026-10; that log is in Git history
 (`git show 8b5564f1e:NEXT.md`).
 
-**§5 is the one authoritative list of current known bugs and limitations.** No other file keeps a
-live bug list: capability documents (renderer docs, `docs/gltf-limitations.md`,
-`docs/gamer-services-known-limitations.md`, `CHECKLIST.md`'s accepted deviations) describe what a
-subsystem does by design, not what is broken; tests are the executable evidence; the plans under
-`plans/` and Git history keep the measurements and discovery history. When a bug is fixed, delete
-its §5 entry in the same commit.
+## 0. CNA/cna-demos repair campaign handoff — 2026-10-23
 
-Last reconciled against the code and a full test run: **2026-10-14** (`next`).
+This is the current continuation point for a fresh-context agent. The owner asked that the
+inherited work be reviewed, corrected, committed and pushed, then that work stop here for a new
+context. This is not a claim that the overall campaign is complete. No Codex goal is active and no
+validation process should remain live at the published checkpoint.
+
+Repositories and branches:
+
+- CNA: this repository, branch `next`. Product fixes through `65e69cc5e`; campaign closure commit
+  `ad65aecf7653aa24daf785424a98689c8b944fbf` and the final handoff commit containing this
+  section follow it.
+- cna-demos: `../cna-demos`, branch `next`, campaign closure commit
+  `fb6c6530493289f08a6487b52445adc47e435310`; its
+  `docs/CNA_ISSUES.md` is the permanent historical inventory and its assertions remain the oracle.
+- Sharp Runtime: `../sharp-runtime`, clean published `next` at
+  `2f644cf4761123275426247b4d582e3392b4a181`. Do not make an incidental dependency edit.
+- Museum and cna-engine inventories are consumer-owned. Do not edit them from CNA; their agents
+  move pins/findings after published CNA commits are available.
+
+Campaign accounting from `CNA_DEMOS_REPAIR_MATRIX.json`: **156 historical IDs, 133 final
+dispositions, 23 pending**. Final dispositions are 96 `FIXED_VALIDATED`, 23
+`DOCUMENTATION_CORRECTED`, 8 `ALREADY_FIXED`, 3 `FIXED_PLATFORM_VALIDATION_PENDING`, one
+`DEMO_EXPECTATION_BUG`, one `DUPLICATE_ROOT_CAUSE`, and one
+`UNSUPPORTED_CONTRACT_CORRECTED`. The 23 remaining historical IDs, each of which must remain
+visible until resolved, are:
+
+`005`, `006`, `007`, `008`, `010`, `020`, `022`, `023`, `029`, `031`, `062`, `066`, `067`,
+`081`, `091`, `092`, `093`, `094`, `095`, `096`, `098`, `104`, `114`.
+
+Their full titles, classification, reproduction and accumulated evidence are in the matrix and
+`../cna-demos/docs/CNA_ISSUES.md`. `005/006/007/008/022/023/031/062/067/081/091/092/093/094/095/
+096/098/104/114` are `PENDING_VERIFICATION`; `010/020/029/066` are `CONFIRMED_OPEN`. Two
+additional graphics findings outside the historical count remain open: `DC-R1` (SDL_GPU mixed
+cube/2D MRT) and `DC-R2` (SDL_GPU multisample mask), both recorded in the matrix and
+`../cna-demos/docs/repair-evidence/graphics/DEVICE_CONTEXT_EXTERNAL_RESIDUALS.md`.
+
+### Latest accepted work
+
+- `39ef8ea2f` fixes CNA-DEMOS-ISSUE-011 and the real GraphicsResource event defect found while
+  correcting ISSUE-082. ContentManager records/disposes materialized resources in XNA order;
+  nested/model children and failed partial reads are covered; value wrappers have an internal
+  ownership group; content texture Name/Tag metadata shares at the XNA boundary. Loaded C
+  Effect/Model handles follow XNA/C++ lifetime after Unload/Destroy. Transferred C texture/font/
+  sound handles remain independently owned. IsDisposed is published before Disposing and
+  reentrant/throwing handlers remain one-shot.
+- `65e69cc5e` corrects the historical ISSUE-082 oracle using genuine XNA. Dispose preserves an
+  open SpriteBatch pair, queue and device accounting. Immediate End can balance the interval;
+  Immediate Draw observes the disposed DynamicVertexBuffer. CNA refuses at a safe SpriteEffect
+  boundary where genuine XNA crashes rather than reproducing a use-after-free.
+- `c303d3ad9` plus closure `68471a7a3` fix/close ISSUE-113 overlapping occlusion intervals and
+  XNA DWORD wrapping counts. `4dba781c3` preserves the already-repaired ISSUE-010 storage path
+  regression tests. These commits are independent and must remain in `next`.
+
+Validation for the latest lifetime batch:
+
+- Native: Core 119 PASS; Content 2,057 PASS / 4 unchanged SKIP; Graphics 3,051 PASS / 115
+  unchanged SKIP; Media 355 PASS; Audio 775 PASS / 4 unchanged SKIP.
+- Selected SpriteBatch/event tests: 52 PASS on each of SOFTWARE, OPENGLES3, OPENGL33, WEBGPU,
+  SDL_GPU and FNA3D's default SDL_GPU/Vulkan driver.
+- Sanitizers: ownership 62/62 PASS with affected CNA plus 129 Sharp Runtime translation units
+  instrumented; SpriteBatch/event 106/106 PASS under ASan, UBSan, float-cast-overflow and leak
+  detection. Third-party dependencies are not claimed instrumented.
+- Final external consumer checkpoint: 191 PASS / one unchanged capability SKIP. Exactly ten
+  intended rows changed FAIL-to-PASS: C content manager on SOFTWARE/OPENGLES3, SpriteBatch
+  begin/end on four renderers, and C resource lifecycle on four renderers. Six exact visual
+  references pass; frozen sources/artifacts did not drift. Peak memory 4,301,119,488 bytes;
+  `memory.max`, OOM and OOM-kill counters stayed zero.
+- C API coverage: 8,103 symbols = 7,018 implemented, 15 partial, 620 planned and 450 not
+  applicable. Coverage, limitations and release-gate generators/checks pass. The release gate
+  remains honestly not ready because the 620 unrelated planned symbols remain.
+- Final closure verification refreshed CMake/CTest metadata, rebuilt all affected cna-demos
+  consumers serially, and passed the six repaired SOFTWARE scenarios plus both catalog gates
+  (8/8 CTests). Their labels no longer contain `known-issue`.
+- Genuine SpriteBatch reference: six fresh Wine/DXVK processes, not native Windows. Four
+  deferred/native-effect paths crash inside XNA; two Immediate cases complete. Do not report this
+  as six passing tests. See `../cna-demos/docs/repair-evidence/graphics/
+  SPRITE_BATCH_DISPOSAL_REVIEW.md`.
+
+The first native lifetime driver used the build directory for asset-dependent Content/Media
+tests and consequently recorded 102/234 setup failures. The same unchanged binaries pass when
+run from the source directory required by `cmake/UnitTests.cmake`. Those failed logs are retained
+and are not product regressions. The last complete cross-subsystem campaign checkpoint remains
+checkpoint 075 (CNA `40f286237`, closure `538069391`, demos `6e85316`): full 719-ID SOFTWARE
+647 PASS/21 FAIL/48 SKIP/3 NOTRUN, OPENGLES3 689 PASS/20 FAIL/7 SKIP/3 NOTRUN; serial CTest
+678 PASS/48 SKIP/6 FAIL/3 disabled. Later focused checkpoints do not silently replace it.
+
+### Exact next task
+
+Resume CNA-DEMOS-ISSUE-010, not ISSUE-011/082. Reproduce `StorageContainer` construction with an
+unavailable or uncreatable resolved root, compare XNA/.NET exception type/timing, and decide
+whether the root should be resolved lazily at `StorageDevice` or translated at the Sharp Runtime
+filesystem boundary. Then audit the residual storage paths before closing 010. Preserve the
+already-passing ContentManager disposed guard and directory/delete repairs. Validate native
+storage, the unchanged storage demos and strict-C storage boundary on SOFTWARE/OPENGLES3 before
+any marker/status change. The next confirmed-open coherent batch after 010 is ISSUE-020 (compiled
+Song/Video sidecar path), followed by ISSUE-029 or ISSUE-066 according to locality.
+
+Consumer-only work still matters. cna-engine's current `upstream-issues.md` reports UP-001,
+UP-006, UP-018, UP-019 and UP-020 resolved; UP-002 remains an informational documentation request
+about `CNAEXT` on C++ spellings of implicit XNA semantics. The museum's `docs/CNA_FINDINGS.md`
+Open section mixes actionable items with fixes awaiting museum reruns; read each entry's dated
+status before changing CNA. Do not claim UBSan/TSan/hardware/service validation when its required
+tree or hardware is absent.
+
+Build discipline remains: existing build directories only, shared
+`CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv`, at most 8 jobs and preferably one compiler under
+the established 4 GiB high / 6 GiB max / no-swap scope. All GPU/UI tests go through
+`tools/platform/run_gpu_tests_private.sh`. Never weaken a demo/test oracle, and update the matrix,
+permanent issue history and handoff after every accepted batch.
+
+**§5 plus `CNA_DEMOS_REPAIR_MATRIX.json` are the authoritative current defect inventories during
+this campaign.** §5 records the ordinary CNA maintenance list; the matrix additionally records
+every historical cna-demos finding, including pending items that are not yet confirmed defects.
+Capability documents describe supported behavior, tests are executable evidence, and plans/Git
+history preserve measurement history. Do not let an issue disappear from either applicable list.
+
+Repository state last reconciled: **2026-10-23** (`next`). The last genuinely full test run is
+still the older checkpoint identified above; do not upgrade focused evidence into a full claim.
 
 Owner-requested museum repair intake (2026-10-22), focused validation and next task:
 [`CNA_MUSEUM_REPAIR_HANDOFF.md`](CNA_MUSEUM_REPAIR_HANDOFF.md). This is additional

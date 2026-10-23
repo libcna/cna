@@ -1,5 +1,16 @@
 # Museum-discovered CNA repairs
 
+## Current coordination note — 2026-10-23
+
+The CNA/cna-demos inherited review is complete through product commits
+`39ef8ea2f` and `65e69cc5e`; see root `handoff.md` for the exact campaign state.
+This museum document below is chronological and its old "Current task" headings
+are historical. The authoritative consumer disposition remains the museum-owned
+`../museum-simulator/docs/CNA_FINDINGS.md`: its Open section includes both real
+remaining work and fixes whose dated text says museum revalidation is pending.
+Do not edit that inventory from CNA, and do not treat an unrerun sanitizer or
+hardware finding as verified merely because source was inspected.
+
 ## Scope and evidence
 
 Owner-requested intake on 2026-10-22. Permanent external inventory:
