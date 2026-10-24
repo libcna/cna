@@ -3234,10 +3234,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         void ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil) override;
         /** @brief Stores the depth-test enabled flag, read by the 3D draw path's pipeline cache key. */
         void SetDepthTestEnabled(bool enabled) override { depthTestEnabled_ = enabled; }
-        /** @brief Stores the blend-enabled flag directly -- a test-only shortcut separate from the
-         * real `BlendState` object; `ApplyBlendState()` below is the real production path and may
-         * overwrite this same field the next time a `BlendState` is assigned. */
-        void SetBlendEnabled(bool enabled) override { blendEnabled_ = enabled; }
         /** @brief Stores the depth-write enabled flag, read by the 3D draw path's pipeline cache key. */
         void SetDepthWriteEnabled(bool enabled) override { depthWriteEnabled_ = enabled; }
 

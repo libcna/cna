@@ -1534,7 +1534,17 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Enables or disables depth testing. */
         CNAEXT void SetDepthTestEnabled(bool enabled);
-        /** @brief Enables or disables blending. */
+        /**
+         * @brief Enables or disables blending with fixed factors, the same on every renderer.
+         *
+         * Enabling installs `BlendState::NonPremultiplied`'s equation (SourceAlpha and
+         * InverseSourceAlpha with Add, for colour and alpha); disabling installs Opaque's
+         * overwrite. The current BlendState's colour write channels and the multisample mask are
+         * kept. The BlendState property does not change, and the next assignment of a BlendState,
+         * even the current one, replaces this equation (CNA-DEMOS-ISSUE-066).
+         *
+         * @param enabled True to blend non-premultiplied source over the target.
+         */
         CNAEXT void SetBlendEnabled(bool enabled);
         /** @brief Enables or disables depth writes. */
         CNAEXT void SetDepthWriteEnabled(bool enabled);

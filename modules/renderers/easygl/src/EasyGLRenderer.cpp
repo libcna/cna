@@ -10715,14 +10715,6 @@ namespace CNA::Internal::Renderers::EasyGL
         }
     }
 
-    void EasyGLRenderer::SetBlendEnabled(bool enabled)
-    {
-        device.set_blend_enabled(enabled);
-        if (enabled)
-            device.set_blend_func(::easygl::BlendFactor::SrcAlpha,
-                                  ::easygl::BlendFactor::OneMinusSrcAlpha);
-    }
-
     void EasyGLRenderer::SetDepthWriteEnabled(bool enabled)
     {
         depthWriteEnabled_ = enabled;   // what a clear must put back.

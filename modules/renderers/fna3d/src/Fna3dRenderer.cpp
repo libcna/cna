@@ -1076,31 +1076,6 @@ namespace CNA::Internal::Renderers::Fna3d
         ApplyCurrentDepthStencilState();
     }
 
-    void Fna3dRenderer::SetBlendEnabled(bool enabled)
-    {
-        // FNA3D, like XNA, has no standalone "blend enable" -- an opaque BlendState *is* the
-        // disabled state (One/Zero/Add). Enabling restores XNA's AlphaBlend, which is what every
-        // caller of this legacy toggle means by "blending on"; a caller that wants a different
-        // equation goes through ApplyBlendState instead.
-        if (enabled)
-        {
-            blendState_.colorSourceBlend = FNA3D_BLEND_ONE;
-            blendState_.colorDestinationBlend = FNA3D_BLEND_INVERSESOURCEALPHA;
-            blendState_.alphaSourceBlend = FNA3D_BLEND_ONE;
-            blendState_.alphaDestinationBlend = FNA3D_BLEND_INVERSESOURCEALPHA;
-        }
-        else
-        {
-            blendState_.colorSourceBlend = FNA3D_BLEND_ONE;
-            blendState_.colorDestinationBlend = FNA3D_BLEND_ZERO;
-            blendState_.alphaSourceBlend = FNA3D_BLEND_ONE;
-            blendState_.alphaDestinationBlend = FNA3D_BLEND_ZERO;
-        }
-        blendState_.colorBlendFunction = FNA3D_BLENDFUNCTION_ADD;
-        blendState_.alphaBlendFunction = FNA3D_BLENDFUNCTION_ADD;
-        ApplyCurrentBlendState();
-    }
-
     // ---------------------------------------------------------------------------------------
     // Capabilities and diagnostics
     // ---------------------------------------------------------------------------------------

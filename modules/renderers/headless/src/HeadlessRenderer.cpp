@@ -1033,11 +1033,6 @@ namespace CNA::Internal::Renderers::Headless
         state_->stats.depthStencilStateChangeCount++;
         state_->RecordTrace("SetDepthTestEnabled", enabled ? "true" : "false");
     }
-    void HeadlessRenderer::SetBlendEnabled(bool enabled)
-    {
-        state_->stats.blendStateChangeCount++;
-        state_->RecordTrace("SetBlendEnabled", enabled ? "true" : "false");
-    }
     void HeadlessRenderer::SetDepthWriteEnabled(bool enabled)
     {
         state_->stats.depthStencilStateChangeCount++;

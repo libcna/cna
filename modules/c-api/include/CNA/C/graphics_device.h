@@ -1156,7 +1156,12 @@ CNA_C_API CNA_Result cna_graphics_device_set_depth_test_enabled(
     CNA_Bool enabled);
 
 /**
- * @brief Enables or disables blending.
+ * @brief Enables or disables blending with fixed factors, the same on every renderer.
+ *
+ * Enabling installs the NonPremultiplied equation (SourceAlpha and InverseSourceAlpha with Add,
+ * for colour and alpha); disabling installs Opaque's overwrite. The current blend state's colour
+ * write channels and multisample mask are kept, and the next blend-state assignment, even of the
+ * current state, replaces the equation.
  *
  * @param graphics_device Callback-scoped borrowed graphics-device handle.
  * @param enabled `CNA_TRUE` to enable blending.

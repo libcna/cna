@@ -223,7 +223,7 @@ GRAPHICS_EVIDENCE_GROUPS = (
         {
             "Clear", "ClearColorAndDepth", "ClearDepth", "ClearStencil",
             "ClearDepthAndStencil", "ClearColorAndStencil", "ClearColorDepthAndStencil",
-            "SetDepthTestEnabled", "SetBlendEnabled", "SetDepthWriteEnabled",
+            "SetDepthTestEnabled", "SetDepthWriteEnabled",
             "ApplyBlendState", "ApplyDepthStencilState", "ApplyRasterizerState",
             "ApplySamplerState", "ApplySamplerMipState", "ApplySamplerAddressW",
             "SetBlendFactor", "SetReferenceStencil", "SetScissorRect", "SetViewport",

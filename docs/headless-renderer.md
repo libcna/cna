@@ -127,7 +127,7 @@ against these effects, not just a Headless test-coverage note; (2026-07-13) ever
 `Headless_ModeDial`, not just the one representative draw-call-bounds case shown elsewhere; and
 (2026-07-13) `HeadlessTrace`'s call log now covers every draw/clear/resource-creation/`SetData`/
 `Present`/state-change call site (`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/
-`SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled`/`CreateSpriteBatch`/
+`SetDepthTestEnabled`/`SetDepthWriteEnabled`/`CreateSpriteBatch`/
 `CreateOcclusionQuery` were the last untraced ones), verified by a seventh CTest,
 `Headless_TraceDiff`, which also introduces `CompareTraceLogs()`/`FormatTraceLogDiff()` (see
 below) and, while closing it, caught and fixed a real bug: `SetViewport` had never actually been

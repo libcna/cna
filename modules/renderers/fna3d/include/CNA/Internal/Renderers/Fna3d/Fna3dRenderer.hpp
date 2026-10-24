@@ -1353,12 +1353,6 @@ namespace CNA::Internal::Renderers::Fna3d
         void SetDepthTestEnabled(bool enabled) override;
 
         /**
-         * @brief Enables or disables blending.
-         * @param enabled Whether blending is enabled.
-         */
-        void SetBlendEnabled(bool enabled) override;
-
-        /**
          * @brief Enables or disables depth writes.
          * @param enabled Whether depth writes are enabled.
          */

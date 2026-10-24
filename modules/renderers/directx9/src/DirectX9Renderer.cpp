@@ -1002,11 +1002,6 @@ namespace CNA::Internal::Renderers::DirectX9
                                  kUnsafeDepthState, context);
     }
 
-    // Deliberate no-op: a bare "enable blending" has no defined blend factors in XNA -- real blend
-    // configuration always arrives via ApplyBlendState(), which already unconditionally enables
-    // blending (D3DRS_ALPHABLENDENABLE) whenever it's called.
-    void DirectX9Renderer::SetBlendEnabled(bool) {}
-
     void DirectX9Renderer::SetDepthWriteEnabled(bool enabled)
     {
         requestedDepthWriteEnable_ = enabled;

@@ -886,6 +886,5 @@ namespace CNA::Internal::Renderers::Software
     }
 
     void SoftwareRenderer::SetDepthTestEnabled(bool enabled) { depthTestEnabled_ = enabled; }
-    void SoftwareRenderer::SetBlendEnabled(bool) {}
     void SoftwareRenderer::SetDepthWriteEnabled(bool enabled) { depthWriteEnabled_ = enabled; }
 }

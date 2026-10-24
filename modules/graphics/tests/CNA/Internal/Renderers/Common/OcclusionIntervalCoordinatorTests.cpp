@@ -95,7 +95,6 @@ public:
     void ClearColorAndStencil(float, float, float, float, int) override {}
     void ClearColorDepthAndStencil(float, float, float, float, float, int) override {}
     void SetDepthTestEnabled(bool) override {}
-    void SetBlendEnabled(bool) override {}
     void SetDepthWriteEnabled(bool) override {}
     std::unique_ptr<IVertexBufferRenderer> CreateVertexBuffer(int) override { return nullptr; }
     std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int) override { return nullptr; }

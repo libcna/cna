@@ -2898,7 +2898,6 @@ namespace CNA::Internal::Renderers
          *       renderers throw on first 3D usage.
          */
         virtual void SetDepthTestEnabled(bool enabled) = 0;
-        virtual void SetBlendEnabled(bool enabled) = 0;
         virtual void SetDepthWriteEnabled(bool enabled) = 0;
 
         /**

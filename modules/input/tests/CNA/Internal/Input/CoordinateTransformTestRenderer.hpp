@@ -77,7 +77,6 @@ namespace CNA::Internal::Input::Testing {
         void ClearColorAndStencil(float, float, float, float, int) override {}
         void ClearColorDepthAndStencil(float, float, float, float, float, int) override {}
         void SetDepthTestEnabled(bool) override {}
-        void SetBlendEnabled(bool) override {}
         void SetDepthWriteEnabled(bool) override {}
 
         std::unique_ptr<CNA::Internal::Renderers::IVertexBufferRenderer> CreateVertexBuffer(

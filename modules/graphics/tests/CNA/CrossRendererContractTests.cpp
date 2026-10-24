@@ -37,8 +37,11 @@
 #include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -374,6 +377,72 @@ TEST_F(CrossRendererContractTest, SpriteBatchAppliesOrRefusesAColorMatrixEffect)
         ++refused;
     });
     EXPECT_GT(applied + refused, 0);
+}
+
+// CNA-DEMOS-ISSUE-066: GraphicsDevice::SetBlendEnabled installs one equation on every renderer --
+// BlendState::NonPremultiplied's when enabled, Opaque's overwrite when disabled -- and the next
+// BlendState assignment, even of the current object, replaces it again.
+TEST_F(CrossRendererContractTest, SetBlendEnabledInstallsNonPremultipliedBlendingEverywhere)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    int judged = 0;
+    ForEachRenderer([&judged](GraphicsDevice& device, GraphicsRendererType type) {
+        if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD)) { return; }
+        const std::string name{CNA::getGraphicsRendererName(type)};
+        RenderTarget2D target(device, 8, 8);
+        BasicEffect fx(device);
+        fx.setVertexColorEnabledProperty(true);
+        const Color halfRed(255, 0, 0, 128);
+        const VertexPositionColor verts[3] = {{Vector3(-1, -1, 0), halfRed},
+                                              {Vector3(3, -1, 0), halfRed},
+                                              {Vector3(-1, 3, 0), halfRed}};
+        // Draws the covering triangle `draws` times over black after `configure`, and returns the
+        // centre texel, or nothing where the renderer cannot read a target back.
+        const auto run = [&](auto&& configure, int draws) -> std::optional<Color> {
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            configure();
+            for (int i = 0; i < draws; ++i)
+            {
+                for (auto& pass : fx.getCurrentTechniqueProperty()->getPassesProperty()) { pass.Apply(); }
+                device.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 1);
+            }
+            device.SetRenderTarget(nullptr);
+            std::vector<Color> pixels(64);
+            try { target.GetData(pixels.data(), static_cast<int>(pixels.size())); }
+            catch (const std::exception&) { return std::nullopt; }
+            return pixels[8 * 4 + 4];
+        };
+
+        const std::optional<Color> blended = run([&] { device.SetBlendEnabled(true); }, 2);
+        if (!blended) { return; }
+        ++judged;
+        SCOPED_TRACE(name);
+        // Two passes of SourceAlpha/InverseSourceAlpha over opaque black: 1 - 0.5^2 of the source
+        // red, and alpha 0.5 * 0.5 + 0.5 * (0.5 * 0.5 + 0.5 * 1) = 0.625.
+        EXPECT_NEAR(blended->getRProperty(), 191, 3);
+        EXPECT_NEAR(blended->getAProperty(), 159, 3);
+        EXPECT_EQ(device.getBlendStateProperty().getColorDestinationBlendProperty(), Blend::Zero)
+            << "the BlendState property is the caller's object and does not change";
+
+        const std::optional<Color> reassigned = run([&] {
+            device.SetBlendEnabled(true);
+            device.setBlendStateProperty(BlendState::Opaque);
+        }, 2);
+        ASSERT_TRUE(reassigned.has_value());
+        EXPECT_EQ(*reassigned, halfRed) << "assigning the current Opaque state did not replace it";
+
+        const std::optional<Color> disabled = run([&] {
+            device.SetBlendEnabled(true);
+            device.SetBlendEnabled(false);
+        }, 2);
+        ASSERT_TRUE(disabled.has_value());
+        EXPECT_EQ(*disabled, halfRed) << "SetBlendEnabled(false) did not restore overwrite";
+    });
+    EXPECT_GT(judged, 0) << "no renderer in this build could draw and read the result back";
 }
 
 #endif  // CNA_MULTI_RENDERER

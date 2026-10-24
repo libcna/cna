@@ -1656,7 +1656,6 @@ namespace CNA::Internal::Renderers::Software
         void ClearColorAndStencil(float r, float g, float b, float a, int stencil) override;
         void ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil) override;
         void SetDepthTestEnabled(bool enabled) override;
-        void SetBlendEnabled(bool enabled) override;
         void SetDepthWriteEnabled(bool enabled) override;
 
         std::unique_ptr<IVertexBufferRenderer> CreateVertexBuffer(int vertex_capacity) override;

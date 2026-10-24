@@ -8,7 +8,7 @@
 // a plain standalone main(), matching how HEADLESS-5's env-var parsing check needed no game loop
 // either.
 //
-// Check 1 -- ClearDepth/ClearStencil/ClearDepthAndStencil/SetDepthTestEnabled/SetBlendEnabled/
+// Check 1 -- ClearDepth/ClearStencil/ClearDepthAndStencil/SetDepthTestEnabled/
 //   SetDepthWriteEnabled all now appear in FormatTraceLog()'s output after a HeadlessTrace-mode
 //   run (previously only Clear/Present/draws/resource creation/state-blend-depth-rasterizer-
 //   sampler Apply* calls were logged).
@@ -57,7 +57,6 @@ namespace
         renderer.ClearStencil(0);
         renderer.ClearDepthAndStencil(1.0f, 0);
         renderer.SetDepthTestEnabled(true);
-        renderer.SetBlendEnabled(true);
         renderer.SetDepthWriteEnabled(false);
         renderer.Present();
     }
@@ -78,10 +77,9 @@ int main()
               formatted.find("ClearStencil") != std::string::npos &&
               formatted.find("ClearDepthAndStencil") != std::string::npos &&
               formatted.find("SetDepthTestEnabled") != std::string::npos &&
-              formatted.find("SetBlendEnabled") != std::string::npos &&
               formatted.find("SetDepthWriteEnabled") != std::string::npos,
               "HeadlessTrace log now records ClearDepth/ClearStencil/ClearDepthAndStencil/"
-              "SetDepthTestEnabled/SetBlendEnabled/SetDepthWriteEnabled");
+              "SetDepthTestEnabled/SetDepthWriteEnabled");
         Check(formatted.find("CreateSpriteBatch") != std::string::npos &&
               formatted.find("CreateOcclusionQuery") != std::string::npos,
               "HeadlessTrace log now records CreateSpriteBatch/CreateOcclusionQuery");

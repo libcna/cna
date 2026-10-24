@@ -1183,7 +1183,28 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetBlendEnabled(bool enabled)
     {
-        if (renderer_ != nullptr) renderer_->SetBlendEnabled(enabled);
+        if (renderer_ == nullptr) return;
+        // One equation through every renderer's ApplyBlendState, instead of each renderer's own
+        // reading of "blending on" (CNA-DEMOS-ISSUE-066). Like MultiSampleMask, this leaves the
+        // caller's BlendState object alone and makes its next assignment re-apply.
+        CNA::Internal::Renderers::BlendWriteState writeState;
+        writeState.colorWriteChannels[0] =
+            static_cast<int>(blendState_.getColorWriteChannelsProperty());
+        writeState.colorWriteChannels[1] =
+            static_cast<int>(blendState_.getColorWriteChannels1Property());
+        writeState.colorWriteChannels[2] =
+            static_cast<int>(blendState_.getColorWriteChannels2Property());
+        writeState.colorWriteChannels[3] =
+            static_cast<int>(blendState_.getColorWriteChannels3Property());
+        writeState.multiSampleMask = static_cast<unsigned int>(multiSampleMask_);
+        const int source = CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+            static_cast<int>(enabled ? Blend::SourceAlpha : Blend::One));
+        const int destination = CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+            static_cast<int>(enabled ? Blend::InverseSourceAlpha : Blend::Zero));
+        const int add = CNA::Internal::Renderers::NormalizeXnaBlendFunctionOrdinal(
+            static_cast<int>(BlendFunction::Add));
+        renderer_->ApplyBlendState(source, source, destination, destination, add, add, writeState);
+        blendStateDirty_ = true;
     }
 
     void GraphicsDevice::SetDepthWriteEnabled(bool enabled)

@@ -1818,7 +1818,6 @@ namespace CNA::Internal::Renderers::WebGPU
         void ClearColorAndStencil(float r, float g, float b, float a, int stencil) override;
         void ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil) override;
         void SetDepthTestEnabled(bool enabled) override { depthTestEnabled_ = enabled; }
-        void SetBlendEnabled(bool enabled) override { blendEnabled_ = enabled; }
         void SetDepthWriteEnabled(bool enabled) override { depthWriteEnabled_ = enabled; }
         // Depth portion was the original Phase 57/63 vertical slice; WEBGPU-83 (complete) also stores
         // the stencil parameters (dsParams_ below) AND bakes them into every 3D pipeline's

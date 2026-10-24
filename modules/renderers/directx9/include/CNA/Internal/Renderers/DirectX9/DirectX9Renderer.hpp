@@ -272,7 +272,6 @@ namespace CNA::Internal::Renderers::DirectX9
 
         // ---- IGraphicsRenderer: pure virtual, NotYetImplemented until later D3D9 tasks land ----
         void SetDepthTestEnabled(bool enabled) override;
-        void SetBlendEnabled(bool enabled) override;
         void SetDepthWriteEnabled(bool enabled) override;
         /// D9-82: real -- BasicEffect with VertexColorEnabled=true/DiffuseColor=white/fog disabled/
         /// no texture/no lighting (matches every other renderer's own DrawColoredPrimitives scope),
