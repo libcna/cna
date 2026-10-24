@@ -1915,22 +1915,63 @@ namespace CNA::Internal::GltfImport
             return longest;
         }
 
-        /// Resamples one bone's channels onto the union of their key times, filling each missing
-        /// component from the bone's own bind pose.
-        std::optional<TrackOut> BuildTrack(int boneIdx, const BoneChannels& channels,
-                                           const Matrix& bindPoseLocal)
+        /// CNA-DEMOS-ISSUE-031: a clip's keys are played back linearly (KeyframeEXT carries no
+        /// interpolation mode), so a STEP or CUBICSPLINE channel is kept by its samples instead: a
+        /// hold key just before each STEP key, and every CUBICSPLINE interval sampled at least every
+        /// 1/60 s (four samples at the least). Both are evaluated with the channel's own mode.
+        void AddInterpolationSamples(const SampledChannel& ch, std::vector<double>& times)
         {
+            // 10 us, a hundred TimeSpan ticks: TimeSpan::FromSeconds truncates to ticks, so the
+            // hold stays strictly before the key it precedes, and far inside any frame.
+            constexpr double kStepHold = 1e-5;
+            constexpr double kCubicSpacing = 1.0 / 60.0;
+            for (std::size_t k = 0; k + 1 < ch.times.size(); ++k)
+            {
+                const double start = ch.times[k];
+                const double span = ch.times[k + 1] - start;
+                if (ch.stepInterpolation && span > 2.0 * kStepHold)
+                {
+                    times.push_back(ch.times[k + 1] - kStepHold);
+                }
+                else if (ch.cubicSpline && span > 0.0)
+                {
+                    const int pieces =
+                        std::max(4, static_cast<int>(std::ceil(span / kCubicSpacing - 1e-9)));
+                    for (int i = 1; i < pieces; ++i)
+                    {
+                        times.push_back(start + span * static_cast<double>(i) / pieces);
+                    }
+                }
+            }
+        }
+
+        /// Resamples one bone's channels onto the union of their key times, filling each missing
+        /// component from the bone's own bind pose. @p resampled reports whether that union is
+        /// longer than the longest source channel (`GLTF-315`); the interpolation samples above
+        /// are not counted.
+        std::optional<TrackOut> BuildTrack(int boneIdx, const BoneChannels& channels,
+                                           const Matrix& bindPoseLocal, bool& resampled)
+        {
+            const auto sortUnique = [](std::vector<double>& times)
+            {
+                std::sort(times.begin(), times.end());
+                times.erase(std::unique(times.begin(), times.end(),
+                                        [](double x, double y) { return std::fabs(x - y) < 1e-9; }),
+                            times.end());
+            };
             std::vector<double> unionTimes;
             for (const auto* ch : {&channels.translation, &channels.rotation, &channels.scale})
             {
                 if (*ch) { unionTimes.insert(unionTimes.end(), ch->value().times.begin(), ch->value().times.end()); }
             }
             if (unionTimes.empty()) { return std::nullopt; }
-            std::sort(unionTimes.begin(), unionTimes.end());
-            unionTimes.erase(
-                std::unique(unionTimes.begin(), unionTimes.end(),
-                            [](double x, double y) { return std::fabs(x - y) < 1e-9; }),
-                unionTimes.end());
+            sortUnique(unionTimes);
+            resampled = unionTimes.size() > LongestSourceChannel(channels);
+            for (const auto* ch : {&channels.translation, &channels.rotation, &channels.scale})
+            {
+                if (*ch) { AddInterpolationSamples(ch->value(), unionTimes); }
+            }
+            sortUnique(unionTimes);
 
             Vector3 bindScale{1.0f, 1.0f, 1.0f};
             Quaternion bindRotation = Quaternion::Identity;
@@ -2007,9 +2048,10 @@ namespace CNA::Internal::GltfImport
             {
                 const Matrix& bindPose =
                     scene.nodes[static_cast<std::size_t>(boneIdx)].localTransform;
-                if (std::optional<TrackOut> track = BuildTrack(boneIdx, channels, bindPose))
+                bool resampled = false;
+                if (std::optional<TrackOut> track = BuildTrack(boneIdx, channels, bindPose, resampled))
                 {
-                    if (track->keys.size() > LongestSourceChannel(channels)) { ++resampledTracks; }
+                    if (resampled) { ++resampledTracks; }
                     clip.tracks.push_back(std::move(*track));
                 }
             }
@@ -2096,10 +2138,12 @@ namespace CNA::Internal::GltfImport
             for (const auto& [boneIdx, channels] : byBone)
             {
                 // Same resampling as the scene-node path -- shared so the two cannot diverge.
+                bool resampled = false;
                 if (std::optional<TrackOut> track = BuildTrack(
-                        boneIdx, channels, skel.bones[static_cast<std::size_t>(boneIdx)].bindPoseLocal))
+                        boneIdx, channels, skel.bones[static_cast<std::size_t>(boneIdx)].bindPoseLocal,
+                        resampled))
                 {
-                    if (track->keys.size() > LongestSourceChannel(channels)) { ++resampledTracks; }
+                    if (resampled) { ++resampledTracks; }
                     clip.tracks.push_back(std::move(*track));
                 }
             }

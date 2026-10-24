@@ -1437,9 +1437,13 @@ TEST(GltfToCnjToolTest, StepInterpolatedChannelHoldsValueAcrossAForeignResampleT
     const auto& clip = skinningData->AnimationClips.at("StepTest");
     ASSERT_EQ(clip.Tracks.size(), 1u);
 
-    // Union-time resampling must have produced 3 keys (t=0, t=1 -- foreign to the STEP channel,
-    // t=2), not just the STEP channel's own 2 native keys.
-    ASSERT_EQ(clip.Tracks[0].Keys.size(), 3u);
+    // Union-time resampling must have produced the keys t=0, t=1 (foreign to the STEP channel)
+    // and t=2, not just the STEP channel's own 2 native keys, plus the hold key just before t=2
+    // that keeps the step when playback interpolates linearly (CNA-DEMOS-ISSUE-031).
+    ASSERT_EQ(clip.Tracks[0].Keys.size(), 4u);
+    EXPECT_NEAR(clip.Tracks[0].Keys[2].Time.getTotalSecondsProperty(), 2.0, 1e-4);
+    EXPECT_LT(clip.Tracks[0].Keys[2].Time.getTotalSecondsProperty(), 2.0);
+    EXPECT_NEAR(clip.Tracks[0].Keys[2].Translation.X, 0.0f, 1e-4f) << "the hold key must hold";
 
     bool foundForeignTime = false;
     for (const auto& key : clip.Tracks[0].Keys)

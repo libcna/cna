@@ -330,6 +330,70 @@ TEST(GltfAnimationSampling, StepInterpolationHoldsTheEarlierSampleAcrossTheWhole
     }
 }
 
+// --- CNA-DEMOS-ISSUE-031: STEP and CUBICSPLINE survive linear playback -------------------------
+
+namespace
+{
+    /// The X translation KeyframeEXT playback produces at `time`: linear between the bracketing
+    /// keys, which is all a resampled track can carry.
+    float PlayedX(const TrackOut& track, double time)
+    {
+        const std::vector<KeyframeOut>& keys = track.keys;
+        if (time <= keys.front().time) { return keys.front().translation.X; }
+        for (std::size_t i = 0; i + 1 < keys.size(); ++i)
+        {
+            if (time <= keys[i + 1].time)
+            {
+                const double amount = (time - keys[i].time) / (keys[i + 1].time - keys[i].time);
+                return keys[i].translation.X +
+                       static_cast<float>(amount) * (keys[i + 1].translation.X - keys[i].translation.X);
+            }
+        }
+        return keys.back().translation.X;
+    }
+}
+
+TEST(GltfAnimationSampling, AStepChannelStillHoldsWhenItsKeysArePlayedLinearly)
+{
+    Parsed parsed;
+    ASSERT_TRUE(Parse(parsed, AnimatedJointDocument(
+        "STEP", {0.0f, 1.0f, 2.0f},
+        {0.0f, 0.0f, 0.0f,  10.0f, 0.0f, 0.0f,  20.0f, 0.0f, 0.0f})));
+    const std::vector<ClipOut> clips = ClipsOf(parsed);
+    ASSERT_EQ(1u, clips.size());
+    ASSERT_EQ(1u, clips[0].tracks.size());
+    const TrackOut& track = clips[0].tracks[0];
+    for (const auto& [time, expected] : std::vector<std::pair<double, float>>{
+             {0.25, 0.0f}, {0.99, 0.0f}, {1.0, 10.0f}, {1.5, 10.0f}, {1.99, 10.0f}, {2.0, 20.0f}})
+    {
+        SCOPED_TRACE("t = " + std::to_string(time));
+        EXPECT_NEAR(expected, PlayedX(track, time), kTolerance) << "a STEP channel slid";
+    }
+    EXPECT_DOUBLE_EQ(2.0, clips[0].duration);
+}
+
+TEST(GltfAnimationSampling, ACubicSplineChannelStillEasesWhenItsKeysArePlayedLinearly)
+{
+    // Flat tangents from -2 to 0 over one second: the Hermite curve -2 + 2(3s^2 - 2s^3).
+    Parsed parsed;
+    ASSERT_TRUE(Parse(parsed, AnimatedJointDocument(
+        "CUBICSPLINE", {0.0f, 1.0f},
+        {0.0f, 0.0f, 0.0f,  -2.0f, 0.0f, 0.0f,  0.0f, 0.0f, 0.0f,
+         0.0f, 0.0f, 0.0f,   0.0f, 0.0f, 0.0f,  0.0f, 0.0f, 0.0f})));
+    const std::vector<ClipOut> clips = ClipsOf(parsed);
+    ASSERT_EQ(1u, clips.size());
+    ASSERT_EQ(1u, clips[0].tracks.size());
+    const TrackOut& track = clips[0].tracks[0];
+    for (double time = 0.0; time <= 1.0; time += 0.03125)
+    {
+        const double s = time;
+        const double eased = -2.0 + 2.0 * (3.0 * s * s - 2.0 * s * s * s);
+        SCOPED_TRACE("t = " + std::to_string(time));
+        EXPECT_NEAR(eased, PlayedX(track, time), 0.002) << "a CUBICSPLINE channel lost its curve";
+    }
+    EXPECT_NEAR(-1.6875f, PlayedX(track, 0.25), 0.002);
+}
+
 // --- GLTF-304: an unanimated component falls back to the bind pose -------------------------------
 
 TEST(GltfAnimationSampling, AComponentWithNoChannelKeepsItsBindPoseValueRatherThanZero)

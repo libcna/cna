@@ -910,14 +910,15 @@ TEST(GltfRigidAnimation, PosingTheModelRotatesTheAnimatedNodesBone)
     EXPECT_NEAR(0.70710678f, halfway.Y, 1e-4f);
 }
 
-TEST(GltfRigidAnimation, CubicSplineUnionBakeHasAMeasuredPlaybackError)
+TEST(GltfRigidAnimation, CubicSplinePlaybackFollowsTheSourceCurve)
 {
-    // GLTF-297. Extraction evaluates CUBICSPLINE exactly at the union of a node's T/R/S channel
-    // times, but AnimationClipEXT carries neither interpolation modes nor tangents. Playback then
-    // linearly interpolates those baked values. anim-cubicspline has zero tangents, hence the
-    // source X curve is 10 * smoothstep(t); a scale key at t=.5 forces baked translation keys at
-    // 0, .5 and 1. Those three points are collinear, so runtime playback is 10*t. The midpoint
-    // cannot expose the loss; the quarter point and the analytic maximum do.
+    // GLTF-297 measured what baking CUBICSPLINE onto only the union of a node's T/R/S channel
+    // times costs: AnimationClipEXT carries neither interpolation modes nor tangents and playback
+    // is linear, so anim-cubicspline's zero-tangent 0->10 smoothstep, with union keys at 0, .5 and
+    // 1, replayed as the line 10t -- the manifest's "linearWouldBe" and "resamplingError".
+    // CNA-DEMOS-ISSUE-031: extraction now also samples every CUBICSPLINE interval at least every
+    // 1/60 s. For this curve |f''| <= 60, so linear playback stays within 60 h^2 / 8 = 0.0021 of
+    // it, and t = .25 is itself a sample.
     using Microsoft::Xna::Framework::Graphics::ApplyClipToBonesEXT;
     using Microsoft::Xna::Framework::Graphics::ModelAnimationsEXT;
 
@@ -946,27 +947,21 @@ TEST(GltfRigidAnimation, CubicSplineUnionBakeHasAMeasuredPlaybackError)
 
     ApplyClipToBonesEXT(model, clip, System::TimeSpan::FromSeconds(quarterTime));
     const double actualQuarter = model.getBonesProperty()[bone]->getTransformProperty().M41;
-    EXPECT_NEAR(bakedLinear[0], actualQuarter, 1e-6)
-        << "runtime unexpectedly preserved the source spline; revisit GLTF-297's decision";
-    const double quarterError = std::abs(actualQuarter - hermite[0]);
-    EXPECT_NEAR(NumberOr(error, "quarterPointAbsolute", -1.0), quarterError, 1e-6);
-    EXPECT_NEAR(NumberOr(error, "quarterPointPercentOfValueSpan", -1.0),
-                100.0 * quarterError / 10.0, 1e-6);
+    EXPECT_NEAR(hermite[0], actualQuarter, 1e-4) << "playback left the source spline";
+    EXPECT_NEAR(NumberOr(error, "quarterPointAbsolute", -1.0),
+                std::abs(bakedLinear[0] - hermite[0]), 1e-6)
+        << "the manifest's union-only bake is the comparison this test improves on";
 
-    // For e(t) = 10 * (t - 3t^2 + 2t^3), e'(t)=0 first at (3-sqrt(3))/6 and
-    // |e|max = 10*sqrt(3)/18. This is a bound for THIS fixture, not for arbitrary tangents.
+    // e(t) = 10 * (t - 3t^2 + 2t^3) was the union-only bake's error, largest at (3-sqrt(3))/6.
     const double maximumTime = (3.0 - std::sqrt(3.0)) / 6.0;
     const double sourceAtMaximum =
         10.0 * (3.0 * maximumTime * maximumTime
                 - 2.0 * maximumTime * maximumTime * maximumTime);
     ApplyClipToBonesEXT(model, clip, System::TimeSpan::FromSeconds(maximumTime));
     const double actualAtMaximum = model.getBonesProperty()[bone]->getTransformProperty().M41;
-    EXPECT_NEAR(10.0 * maximumTime, actualAtMaximum, 1e-6);
-    const double maximumError = std::abs(actualAtMaximum - sourceAtMaximum);
-    EXPECT_NEAR(NumberOr(error, "maximumAbsoluteOnThisCurve", -1.0), maximumError, 1e-6);
-    EXPECT_NEAR(NumberOr(error, "maximumPercentOfValueSpan", -1.0),
-                100.0 * maximumError / 10.0, 1e-5)
-        << "the runtime matrix stores floats while the manifest carries the analytic double";
+    EXPECT_NEAR(sourceAtMaximum, actualAtMaximum, 0.0025);
+    EXPECT_LT(std::abs(actualAtMaximum - sourceAtMaximum),
+              NumberOr(error, "maximumAbsoluteOnThisCurve", -1.0) / 100.0);
     EXPECT_EQ(CNA::Internal::JsonType::Null, Member(error, "universalPercentBound").type)
         << "arbitrary authored tangents can overshoot their endpoint span, so no finite global "
            "percentage bound may be claimed";
