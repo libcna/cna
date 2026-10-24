@@ -131,12 +131,13 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "CNA's Color, like every packed vector, is a 16-byte polymorphic object rather than XNA's 4-byte value, and the VertexDeclaration-driven user draws took const void*, so an XNA-style vertex holding a Color reached them and was read at the wrong stride.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "2df868a13",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at 2df868a13: deleted template overloads refuse, at compile time, a non-stock vertex type that is not trivially copyable (IsUnreadableUserVertexTypeEXT) in DrawUserPrimitives and both DrawUserIndexedPrimitives declaration overloads; the packed-uint32 form keeps working and VertexBuffer::SetData already refused such types. UserVertexTypeRefusal static_asserts; graphics 3,058. custom_vertex pins the refusal at compile time (demos 16ba54c). The 16-byte Color itself is unchanged, so the restriction remains documented. Complete checkpoint (batch 9, 2026-10-24; demos tree rebuilt from CNA 30afa280b): 719-ID SOFTWARE 669 PASS/2 FAIL/45 SKIP/3 NOTRUN and OPENGLES3 707/2/7/3, the two failures being content.model.pipeline_contract and content.xnb.output_pipeline pinning the old component identities, corrected in demos dcc3811 and passing on both; otherwise only FAIL-to-PASS and SKIP-to-PASS rows against batch 8. Serial CTest 735 registered/732 enabled, 687 PASS/45 SKIP/0 FAIL/3 disabled (954.26 s). Reports ../cna-demos/build/linux-full/reports/repair-batch9-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-006",
@@ -149,12 +150,13 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "CNA reported many per-renderer facts through RendererFeature but none for the sampler LOD bias (ignored on GL ES) or for PbrEffect/SkinnedPbrEffect shading (an unlit fallback on SOFTWARE and HEADLESS), so programs had to test renderer names.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "c6dec91fb",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at c6dec91fb: RendererFeature::SamplerLevelOfDetailBias, PbrEffectShading and SkinnedPbrEffectShading (C ABI 0.50.0 constants), each checked against what every compiled-in renderer actually draws by CrossRendererContractTest; doing so fixed FNA3D's SpriteBatch, which dropped the batch's bias, max mip level, anisotropy and W address, and corrected the stale headers that called SOFTWARE's PBR and WebGPU's skinned PBR a fallback; graphics 3,062, FNA3D 114, SDL_GPU 80, all 132 CApi tests. The mip-bias and PBR demos ask the features instead of renderer names, so the PBR demos now run and pass on SOFTWARE (demos c08db9d). Complete checkpoint (batch 9, 2026-10-24; demos tree rebuilt from CNA 30afa280b): 719-ID SOFTWARE 669 PASS/2 FAIL/45 SKIP/3 NOTRUN and OPENGLES3 707/2/7/3, the two failures being content.model.pipeline_contract and content.xnb.output_pipeline pinning the old component identities, corrected in demos dcc3811 and passing on both; otherwise only FAIL-to-PASS and SKIP-to-PASS rows against batch 8. Serial CTest 735 registered/732 enabled, 687 PASS/45 SKIP/0 FAIL/3 disabled (954.26 s). Reports ../cna-demos/build/linux-full/reports/repair-batch9-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-007",
@@ -166,12 +168,13 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "ColorMatrixEffect is a fixed CPU transform only SOFTWARE implements; GPU renderers stored it as the custom sprite effect and drew with the stock sprite shader, untransformed and without an error.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "8f08a82cc",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at 8f08a82cc: IGraphicsRenderer::SupportsColorMatrixSpriteEffectEXT (SOFTWARE true) and SpriteBatch::Begin throws NotSupportedException elsewhere before publishing any state; the C route maps it to CNA_RESULT_NOT_SUPPORTED. CrossRendererContractTest covers all eight compiled-in renderers; graphics 3,058. sepia_and_invert now asks Begin and skips only on a refusal, holding any accepting renderer to its pixel checks (demos 16ba54c). Complete checkpoint (batch 9, 2026-10-24; demos tree rebuilt from CNA 30afa280b): 719-ID SOFTWARE 669 PASS/2 FAIL/45 SKIP/3 NOTRUN and OPENGLES3 707/2/7/3, the two failures being content.model.pipeline_contract and content.xnb.output_pipeline pinning the old component identities, corrected in demos dcc3811 and passing on both; otherwise only FAIL-to-PASS and SKIP-to-PASS rows against batch 8. Serial CTest 735 registered/732 enabled, 687 PASS/45 SKIP/0 FAIL/3 disabled (954.26 s). Reports ../cna-demos/build/linux-full/reports/repair-batch9-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-008",
@@ -183,12 +186,13 @@
       ],
       "subsystem": "build/core",
       "classification": "DEPENDENCY_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "SharpRuntime/Prop.hpp defines YES, NO, nothing, getter1 and other ordinary words as global macros, and ContentManager.hpp, Viewport.hpp and seven sensor reading headers included it.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "ec2d8b692",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at ec2d8b692: those headers spell out the generated members with the same signatures and no longer include Prop.hpp; two header-hygiene tests #error if any macro leaks and use the words as identifiers; content 2,072, devices 474, graphics 3,058. Complete checkpoint (batch 9, 2026-10-24; demos tree rebuilt from CNA 30afa280b): 719-ID SOFTWARE 669 PASS/2 FAIL/45 SKIP/3 NOTRUN and OPENGLES3 707/2/7/3, the two failures being content.model.pipeline_contract and content.xnb.output_pipeline pinning the old component identities, corrected in demos dcc3811 and passing on both; otherwise only FAIL-to-PASS and SKIP-to-PASS rows against batch 8. Serial CTest 735 registered/732 enabled, 687 PASS/45 SKIP/0 FAIL/3 disabled (954.26 s). Reports ../cna-demos/build/linux-full/reports/repair-batch9-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-009",
@@ -483,12 +487,13 @@
       ],
       "subsystem": "model/gltf",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "The glTF importer writes each material image into the build's temporary intermediate directory and ModelProcessor turned them into Texture2D children only with generateChildAssets=true, so a default build referenced a file the build deleted.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "cd1f5ef0a",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at cd1f5ef0a on the owner's choice of XNA's behaviour: referenced extracted images are always Texture2D children named under the Model, generateChildAssets governs only extra Models and clips, and the XNB Model writer emits the textures as XNB Texture2D assets; three tests that pinned the dangling reference were corrected; content 2,074, pipeline 562, CnaXnbModelCorpusSweep. 30afa280b bumps the importer, processor and writer versions so existing content builds recompile (the demos tree had kept 2026-10-20 outputs). textured_gltf now requires the compiled model's 64x64 texture and its marker is removed (demos c08db9d); content.model.pipeline_contract and content.xnb.output_pipeline pin the new identities and the XNB Model writer's Texture2D schema (dcc3811). Complete checkpoint (batch 9, 2026-10-24; demos tree rebuilt from CNA 30afa280b): 719-ID SOFTWARE 669 PASS/2 FAIL/45 SKIP/3 NOTRUN and OPENGLES3 707/2/7/3, the two failures being content.model.pipeline_contract and content.xnb.output_pipeline pinning the old component identities, corrected in demos dcc3811 and passing on both; otherwise only FAIL-to-PASS and SKIP-to-PASS rows against batch 8. Serial CTest 735 registered/732 enabled, 687 PASS/45 SKIP/0 FAIL/3 disabled (954.26 s). Reports ../cna-demos/build/linux-full/reports/repair-batch9-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-023",
@@ -500,12 +505,13 @@
       ],
       "subsystem": "model/gltf",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "CnbModelData and the Model CNJ had no camera data, so the pipeline dropped the scene's glTF cameras that the run-time import exposes as ModelCameraEXT.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "1beef880d",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at 1beef880d: gltf_to_cnj writes the cameras (nine significant digits), the CNJ reader and an optional MCAM CNB chunk carry them, and the .cnj and .cnb loaders build ModelCameraEXT through the same helper as the run-time import; the XNB writer names them as not written. The five camera fixtures compile to, and the tool's .cnj loads with, cameras identical to the run-time import's; C ABI 0.50.0 camera routes (CnbModelSmoke); content 2,081, pipeline 562, all 132 CApi tests; writer version bumped in 30afa280b. gltf_cameras requires the compiled cameras to equal the loose ones and its marker is removed (demos c08db9d). Complete checkpoint (batch 9, 2026-10-24; demos tree rebuilt from CNA 30afa280b): 719-ID SOFTWARE 669 PASS/2 FAIL/45 SKIP/3 NOTRUN and OPENGLES3 707/2/7/3, the two failures being content.model.pipeline_contract and content.xnb.output_pipeline pinning the old component identities, corrected in demos dcc3811 and passing on both; otherwise only FAIL-to-PASS and SKIP-to-PASS rows against batch 8. Serial CTest 735 registered/732 enabled, 687 PASS/45 SKIP/0 FAIL/3 disabled (954.26 s). Reports ../cna-demos/build/linux-full/reports/repair-batch9-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-024",
@@ -676,12 +682,13 @@
       ],
       "subsystem": "model/gltf",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "GltfImportCore resampled each bone onto the union of its channel key times only, while KeyframeEXT has no interpolation mode and plays linearly, so STEP channels slid and CUBICSPLINE ones lost their curve (GLTF-297 had measured and accepted the loss).",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "a9d378c06",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at a9d378c06: extraction adds a hold key 10 us before each STEP key and samples every CUBICSPLINE interval at least every 1/60 s (four at the least); resampledTrackCount still counts only the source union. Two tests that pinned the loss (the GLTF-297 measurement and a STEP key count) now require the repaired shape; content 2,076, pipeline 562; importer version bumped in 30afa280b. clip_interpolation's STEP and CUBICSPLINE checks pass through both carriers and its marker is removed (demos c08db9d). Complete checkpoint (batch 9, 2026-10-24; demos tree rebuilt from CNA 30afa280b): 719-ID SOFTWARE 669 PASS/2 FAIL/45 SKIP/3 NOTRUN and OPENGLES3 707/2/7/3, the two failures being content.model.pipeline_contract and content.xnb.output_pipeline pinning the old component identities, corrected in demos dcc3811 and passing on both; otherwise only FAIL-to-PASS and SKIP-to-PASS rows against batch 8. Serial CTest 735 registered/732 enabled, 687 PASS/45 SKIP/0 FAIL/3 disabled (954.26 s). Reports ../cna-demos/build/linux-full/reports/repair-batch9-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-032",
@@ -1391,13 +1398,13 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": "SOFTWARE/DirectX9 blend toggle no-op; other families disagree on enabling factors; public extension contract underspecified.",
-      "current_validation": "2026-10-22 original C draw_routes fails on SOFTWARE and SDL_GPU at accumulated-red assertion,255 instead of185..195; GLES/GL33 pass. SDL failure remains unexpected/unmarked. Owner asked whether enabling installs SourceAlpha/InverseSourceAlpha/Add or preserves factors; no answer presumed. No runtime repair, contract rewrite or closure.027 continues independently. See repair-blend-range-before-v7/after reports and BLEND_STATE_RANGE_TRIAGE.md.",
+      "status": "RESOLVED",
+      "root_cause": "GraphicsDevice::SetBlendEnabled forwarded to a per-renderer toggle each family read differently: SOFTWARE and DirectX9 ignored it, EasyGL installed SourceAlpha/InverseSourceAlpha, FNA3D premultiplied factors, SDL_GPU/WebGPU kept the current ones.",
+      "current_validation": "2026-10-24 accepted at 34be9272b on the owner's choice of non-premultiplied blending: SetBlendEnabled applies BlendState::NonPremultiplied's equation (Opaque's when disabling) through every renderer's ApplyBlendState, keeping the write channels and mask, and dirties the blend state so the next BlendState assignment replaces it; the per-renderer method is removed. CrossRendererContractTest: OPENGLES3, OPENGL33, WEBGPU, SDL_GPU, FNA3D and SOFTWARE all give red 191 / alpha 159 for two half-alpha passes, and re-assigning Opaque or disabling restores overwrite; DirectX9 compiled in the MinGW tree only. c_api.graphics.draw_routes passes on SOFTWARE with its marker removed (demos c08db9d). Complete checkpoint (batch 9, 2026-10-24; demos tree rebuilt from CNA 30afa280b): 719-ID SOFTWARE 669 PASS/2 FAIL/45 SKIP/3 NOTRUN and OPENGLES3 707/2/7/3, the two failures being content.model.pipeline_contract and content.xnb.output_pipeline pinning the old component identities, corrected in demos dcc3811 and passing on both; otherwise only FAIL-to-PASS and SKIP-to-PASS rows against batch 8. Serial CTest 735 registered/732 enabled, 687 PASS/45 SKIP/0 FAIL/3 disabled (954.26 s). Reports ../cna-demos/build/linux-full/reports/repair-batch9-closure-{full,ctest}*.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "34be9272b",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-067",
@@ -1409,12 +1416,13 @@
       ],
       "subsystem": "c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "The C display-colour-space routes accepted native ordinals 0..2 but the public header defined no identity names for them.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "f1f1edae9",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-24 accepted at f1f1edae9: graphics_device.h restores CNA_DisplayColorSpace with CNA_DISPLAY_COLOR_SPACE_SRGB/SCRGB/HDR10 and the three routes use it (ABI 0.50.0, unpublished); GraphicsExtSmoke checks sRGB and refuses HDR10+1; all 132 CApi tests. c_api.graphics.device_capabilities uses the public names and passes 24 checks on SOFTWARE, OPENGLES3, OPENGL33, SDL_GPU and HEADLESS (demos 16ba54c). Complete checkpoint (batch 9, 2026-10-24; demos tree rebuilt from CNA 30afa280b): 719-ID SOFTWARE 669 PASS/2 FAIL/45 SKIP/3 NOTRUN and OPENGLES3 707/2/7/3, the two failures being content.model.pipeline_contract and content.xnb.output_pipeline pinning the old component identities, corrected in demos dcc3811 and passing on both; otherwise only FAIL-to-PASS and SKIP-to-PASS rows against batch 8. Serial CTest 735 registered/732 enabled, 687 PASS/45 SKIP/0 FAIL/3 disabled (954.26 s). Reports ../cna-demos/build/linux-full/reports/repair-batch9-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-068",

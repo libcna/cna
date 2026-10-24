@@ -7,81 +7,72 @@ and also carried the dated session log of 2026-07 to 2026-10; that log is in Git
 ## 0. CNA/cna-demos repair campaign handoff — 2026-10-24
 
 This is the current continuation point for a fresh-context agent. It is not a claim that the
-overall campaign is complete. Work since the last push (2026-10-23 evening) is committed locally
-and **not pushed**; push only on the owner's word, Sharp Runtime before CNA.
+overall campaign is complete. Push only on the owner's word, Sharp Runtime before CNA before
+cna-demos.
 
 Repositories and branches:
 
-- CNA: this repository, branch `next`. Published through `15d5d6f3d`; 23+ local commits since
-  then (`git log origin/next..next`): the ISSUE-010, 020, 029, 062 repairs and closures, the
-  storage dangling-symlink escape (`a24c75b2e`), galaxy-eggbert UB-001/UB-002 (`6068c1ec4`,
-  `41944dd8d`, C ABI 0.50.0), the buffer C smokes (`1fb593d9e`), and batch 8 below:
-  `45f704c04` (098), `b98629c89` (096), `78d6433c7` (091), `eb9653bf2` (093), `ab0ab883c`
-  (094/095), `5f136988a` (092), `718e428fe` (104), `6102058bb` (114), `da6c5c120` (081),
-  `f1f1edae9` (067's C names, ABI 0.50.0), `07b3c935d` (SDL budget) and the batch 8 closure.
-- cna-demos: `../cna-demos`, branch `next`. Published through `92ee315`; 12+ local commits: the
-  evidence, marker and corrected-check commits for the same issues, and their closures. Its
+- CNA: this repository, branch `next`. `origin/next` was pushed through `c6dec91fb` on 2026-10-24
+  at 10:28 (a push from this clone that the repair session did not run); local since then:
+  `30afa280b` (glTF Model pipeline component versions) and the batch 9 closure commit.
+- cna-demos: `../cna-demos`, branch `next`. Published through `92ee315`; every later commit is
+  local: the evidence, marker and corrected-check commits of batches 3-9 and their closures. Its
   `docs/CNA_ISSUES.md` is the permanent historical inventory and its assertions remain the oracle.
-- Sharp Runtime: `../sharp-runtime`, branch `next`, is fully published (`530e217f`, which CNA's
-  container construction repair needs, and `2b8d8588` are on `origin/next`). Do not make an
-  incidental dependency edit.
+- Sharp Runtime: `../sharp-runtime`, branch `next`, fully published. Do not make an incidental
+  dependency edit.
 - Museum and cna-engine inventories are consumer-owned. Do not edit them from CNA; their agents
   move pins/findings after published CNA commits are available.
 
-Campaign accounting from `CNA_DEMOS_REPAIR_MATRIX.json`: **156 historical IDs, 147 final
-dispositions, 9 pending**. Final dispositions are 110 `FIXED_VALIDATED`, 23
-`DOCUMENTATION_CORRECTED`, 8 `ALREADY_FIXED`, 3 `FIXED_PLATFORM_VALIDATION_PENDING`, one
-`DEMO_EXPECTATION_BUG`, one `DUPLICATE_ROOT_CAUSE`, and one
-`UNSUPPORTED_CONTRACT_CORRECTED`. The 9 remaining historical IDs, each of which must remain
-visible until resolved, are:
-
-`005`, `006`, `007`, `008`, `022`, `023`, `031`, `066`, `067`.
-
-Their full titles, classification, reproduction and accumulated evidence are in the matrix and
-`../cna-demos/docs/CNA_ISSUES.md`. All but `066` are `PENDING_VERIFICATION`; `066` is
-`CONFIRMED_OPEN`. Two additional graphics findings outside the historical count remain open:
-`DC-R1` (SDL_GPU mixed cube/2D MRT) and `DC-R2` (SDL_GPU multisample mask), both recorded in the
-matrix and `../cna-demos/docs/repair-evidence/graphics/DEVICE_CONTEXT_EXTERNAL_RESIDUALS.md`.
+Campaign accounting from `CNA_DEMOS_REPAIR_MATRIX.json`: **156 historical IDs, 156 final
+dispositions**: 119 `FIXED_VALIDATED`, 23 `DOCUMENTATION_CORRECTED`, 8 `ALREADY_FIXED`, 3
+`FIXED_PLATFORM_VALIDATION_PENDING` (003 SpriteBatch Textures[0], 101 video URI resolution, 152
+StorageContainer FileShare: each needs a native Windows/XNA run this machine cannot do), one
+`DEMO_EXPECTATION_BUG`, one `DUPLICATE_ROOT_CAUSE` and one `UNSUPPORTED_CONTRACT_CORRECTED`. Two
+graphics findings outside the historical count remain open: `DC-R1` (SDL_GPU refuses a cube face in
+a multi-target set; `c_api.graphics.render_target_bindings` asserts it) and `DC-R2` (SDL_GPU
+ignores BlendState/GraphicsDevice sample masks; `graphics.render_target.multisampling`), recorded
+in the matrix and `../cna-demos/docs/repair-evidence/graphics/DEVICE_CONTEXT_EXTERNAL_RESIDUALS.md`.
+No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
-- Batch 8 closed (`FIXED_VALIDATED`, 2026-10-24, not pushed): 098 (disposed media library
-  objects refuse their members as XNA's do), 096 (partial skeleton root prefix refused), 091
-  (C image-based light texture kinds), 093 (undefined glTF interpolation refused), 094/095 (the
-  glTF animation report counts a channel lost only when no carrier keeps it), 092 (empty selected
-  scene imports nothing), 104 (STUB/HEADLESS WarnAndStub Texture3D null object), 114
-  (Stop(false) plays a bounded loop's tail) and 081 (a new ModelMesh's Effects come from its
-  parts). Each commit names its tests; the matrix rows carry the validation. Demos that asserted
-  a defect itself (the C media demos, `node_animation`, `c_api.graphics.model_meshes`, two
-  defect-shape checks) were corrected to the repaired shape, never loosened.
-- ISSUE-020, 029 and 062 closed (2026-10-23); ISSUE-010 closed (2026-10-23); galaxy-eggbert
-  UB-002 (`41944dd8d`, full support, C ABI 0.50.0). Evidence pages are named in their matrix rows.
+- Batch 9 closed (`FIXED_VALIDATED`, 2026-10-24): 005 (a vertex holding CNA's 16-byte Color is a
+  compile error in the raw user draws), 007 (SpriteBatch refuses a ColorMatrixEffect where the
+  renderer does not apply it), 008 (no Prop.hpp macros from CNA's public headers), 067 (C colour
+  space names), 066 (owner: SetBlendEnabled installs non-premultiplied blending on every
+  renderer), 022 (owner: a glTF's extracted textures are always Texture2D children, CNB and
+  XNB), 031 (STEP hold keys and CUBICSPLINE samples survive linear clip playback), 023 (glTF
+  cameras in the Model CNJ and an optional MCAM CNB chunk) and 006 (RendererFeature
+  SamplerLevelOfDetailBias, PbrEffectShading, SkinnedPbrEffectShading, each checked against
+  every renderer's pixels; this fixed FNA3D's SpriteBatch dropping the batch's mip state and
+  corrected headers that called SOFTWARE's PBR a fallback). `30afa280b` bumps the glTF Model
+  pipeline component versions so existing content builds recompile. C ABI 0.50.0 (unpublished)
+  carries the camera routes and feature constants; 3,212 exports.
+- galaxy-eggbert UB-003 (`f8e2b8cc6`): the avatar converter writes XNA's clockwise front faces;
+  galaxy-eggbert re-verified it.
+- Batch 8 (081, 091-096, 098, 104, 114) and ISSUE-010/020/029/062 closed earlier on 2026-10-23/24.
 
-The last complete cross-subsystem checkpoint is batch 8 (2026-10-24, demos tree rebuilt from CNA
-`da6c5c120` plus the demo corrections): full 719-ID SOFTWARE 664 PASS/4 FAIL/48 SKIP/3 NOTRUN,
-OPENGLES3 706 PASS/3 FAIL/7 SKIP/3 NOTRUN; serial CTest 735 registered/732 enabled, 684 PASS/48
-SKIP/**0 FAIL**/3 disabled (790.22 s). Against the 020/029/062 checkpoint only FAIL-to-PASS rows
-changed, plus `node_animation`'s intended extra check. The remaining sweep failures are rows whose
-`knownIssue` markers name still-open findings. Reports:
-`../cna-demos/build/linux-full/reports/repair-batch8-closure-{full,ctest}*`.
+The last complete cross-subsystem checkpoint is batch 9 (2026-10-24, demos tree rebuilt from CNA
+`30afa280b`): full 719-ID SOFTWARE 669 PASS/2 FAIL/45 SKIP/3 NOTRUN, OPENGLES3 707 PASS/2 FAIL/7
+SKIP/3 NOTRUN; the two failures on each were `content.model.pipeline_contract` and
+`content.xnb.output_pipeline` pinning the old identities, corrected in demos `dcc3811` and passing
+on both renderers. Against batch 8 only FAIL-to-PASS and SKIP-to-PASS rows changed otherwise.
+Serial CTest: 735 registered/732 enabled, 687 PASS/45 SKIP/**0 FAIL**/3 disabled (954.26 s). Reports:
+`../cna-demos/build/linux-full/reports/repair-batch9-closure-{full,ctest}*`.
 
 Native suites must run through the private runner with `SDL_AUDIO_DRIVER=dummy` (and from the
 source directory for Content/Media): without it SDL's ALSA device reports "Host is down" and the
 SoundEffect/video-audio tests fail or abort for environmental reasons. In `cmake-build-multi`
-the SDL_GPU/FNA3D compiled-effect tests need `CNA_GRAPHICS_RENDERER=SDL_GPU`/`FNA3D`.
+the SDL_GPU/FNA3D compiled-effect tests need `CNA_GRAPHICS_RENDERER=SDL_GPU`/`FNA3D`. A change to
+what a content importer, processor or writer produces must bump its identity version, or
+incremental builds keep stale outputs.
 
 ### Exact next task
 
-ISSUE-005 (deleted raw user-draw overloads for vertex types that are not trivially copyable),
-007 (`SpriteBatch::Begin` refuses `ColorMatrixEffect` with `NotSupportedException` where the
-renderer does not apply it; `IGraphicsRenderer::SupportsColorMatrixSpriteEffectEXT`) and 008
-(no `SharpRuntime/Prop.hpp` macros from CNA public headers) are implemented in the working tree
-and pass their suites; commit each, then rebuild the demos tree, run `sepia_and_invert`,
-`custom_vertex` and `c_api.graphics.device_capabilities` (067), and close all four on a complete
-checkpoint. ISSUE-022 (the default pipeline loses a glTF's extracted textures) needs the owner's
-choice of output policy; 023 (CNB has no cameras), 031 (interpolation not carried) and 006 (no
-LOD-bias capability query) follow.
-ISSUE-066 waits for the owner's answer on what enabling blending installs.
+DC-R1 and DC-R2 need a contract decision (implement mixed cube/2D sets and exact sample masks in
+SDL_GPU, or report and refuse what SDL_GPU cannot do and narrow the demos' renderer scope); ask
+the owner. Then the consumer intake below and, when a Windows/XNA host exists, the three
+platform validations.
 
 Consumer-only work still matters. cna-engine's current `upstream-issues.md` reports UP-001,
 UP-006, UP-018, UP-019 and UP-020 resolved; UP-002 remains an informational documentation request
