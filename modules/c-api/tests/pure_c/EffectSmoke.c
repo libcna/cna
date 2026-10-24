@@ -724,6 +724,36 @@ static int validate_failures(const CNA_Handle device)
                 device, (CNA_StringView){(const char*)bad_utf8, 1U},
                 string_view("x"), &effect) == CNA_RESULT_ENCODING &&
             effect == CNA_INVALID_HANDLE);
+    {
+        /* CNA_SHADER_DIALECT_SPIRV's payload is binary: a whole module (here just the five-word
+           header) is copied byte for byte, NULs included, on every renderer, while a view that
+           only starts with the magic number is still text and its NUL bytes refuse it. Whether a
+           renderer can run the module is cna_shader_effect_is_valid's answer, not this one. */
+        const uint32_t module[5] = {UINT32_C(0x07230203), UINT32_C(0x00010000), 0U, 1U, 0U};
+        const CNA_StringView module_view = {(const char*)module, (uint64_t)sizeof(module)};
+        uint32_t copied[5] = {0U, 0U, 0U, 0U, 0U};
+        uint64_t bytes = 0U;
+        REQUIRE(cna_shader_effect_create(device, module_view, module_view, &effect) ==
+                    CNA_RESULT_SUCCESS &&
+                effect != CNA_INVALID_HANDLE);
+        REQUIRE(cna_effect_get_vertex_source_byte_count(effect, &bytes) == CNA_RESULT_SUCCESS &&
+                bytes == sizeof(module) &&
+                cna_effect_copy_fragment_source(
+                    effect, (char*)copied, (uint64_t)sizeof(copied), &bytes) ==
+                    CNA_RESULT_SUCCESS &&
+                bytes == sizeof(module) && memcmp(copied, module, sizeof(module)) == 0);
+        REQUIRE(cna_effect_destroy(effect) == CNA_RESULT_SUCCESS);
+        effect = UINT64_MAX;
+        REQUIRE(cna_shader_effect_create(
+                    device, (CNA_StringView){(const char*)module, (uint64_t)sizeof(module) - 2U},
+                    string_view("x"), &effect) == CNA_RESULT_ENCODING &&
+                effect == CNA_INVALID_HANDLE);
+        effect = UINT64_MAX;
+        REQUIRE(cna_shader_effect_create(
+                    device, (CNA_StringView){(const char*)module, 16U},
+                    string_view("x"), &effect) == CNA_RESULT_ENCODING &&
+                effect == CNA_INVALID_HANDLE);
+    }
     REQUIRE(cna_curve_create(&wrong_kind) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_effect_clone(wrong_kind, &effect) == CNA_RESULT_INVALID_HANDLE &&
             effect == CNA_INVALID_HANDLE);

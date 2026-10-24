@@ -2025,6 +2025,38 @@ namespace {
     }
 }
 
+// CNA_SHADER_DIALECT_SPIRV makes a ShaderEffect's two views compiled modules, which carry NUL
+// bytes and are not UTF-8; reading them as text refused the only payload SDL_GPU documents. A
+// view is a module when it is whole 32-bit words, holds at least the five-word header and starts
+// with the SPIR-V magic number in host byte order. Everything else is still source text.
+[[nodiscard]] bool IsSpirvModuleView(const CNA_StringView view) noexcept
+{
+    constexpr std::uint32_t kSpirvMagic = 0x07230203U;
+    constexpr uint64_t kSpirvHeaderBytes = 5U * sizeof(std::uint32_t);
+    if (view.data == nullptr || view.byte_length < kSpirvHeaderBytes ||
+        view.byte_length % sizeof(std::uint32_t) != 0U) {
+        return false;
+    }
+    std::uint32_t magic = 0U;
+    std::memcpy(&magic, view.data, sizeof(magic));
+    return magic == kSpirvMagic;
+}
+
+[[nodiscard]] CNA_Result ReadShaderSource(
+    const CNA_StringView view,
+    const std::string_view message,
+    std::string* const outSource)
+{
+    if (IsSpirvModuleView(view)) {
+        if (view.byte_length > outSource->max_size()) {
+            return Overflow("The ShaderEffect SPIR-V module is larger than this process can hold.");
+        }
+        outSource->assign(view.data, static_cast<std::size_t>(view.byte_length));
+        return CNA_RESULT_SUCCESS;
+    }
+    return ReadText(view, message, outSource, EmbeddedNul::Refused);
+}
+
 [[nodiscard]] CNA_Result ShaderEffectCreate(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_StringView vertexSource,
@@ -2033,15 +2065,14 @@ namespace {
 {
     std::string vertex;
     std::string fragment;
-    if (const CNA_Result result = ReadText(
-            vertexSource, "The ShaderEffect vertex source is not valid UTF-8 text.", &vertex,
-            EmbeddedNul::Refused);
+    if (const CNA_Result result = ReadShaderSource(
+            vertexSource, "The ShaderEffect vertex source is not valid UTF-8 text.", &vertex);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    if (const CNA_Result result = ReadText(
+    if (const CNA_Result result = ReadShaderSource(
             fragmentSource, "The ShaderEffect fragment source is not valid UTF-8 text.",
-            &fragment, EmbeddedNul::Refused);
+            &fragment);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }

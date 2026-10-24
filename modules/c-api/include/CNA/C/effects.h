@@ -1284,12 +1284,20 @@ CNA_C_API CNA_Result cna_content_manager_load_effect(
  * @brief Creates a source-based ShaderEffect.
  *
  * @param graphics_device Borrowed graphics-device handle from an active game callback.
- * @param vertex_source UTF-8 vertex-shader source copied by the call.
- * @param fragment_source UTF-8 fragment-shader source copied by the call.
+ * @param vertex_source UTF-8 vertex-shader source, or a compiled SPIR-V module, copied by the
+ *        call.
+ * @param fragment_source UTF-8 fragment-shader source, or a compiled SPIR-V module, copied by
+ *        the call.
  * @param out_effect Receives the owned effect handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when both sources are empty or the
- *         output is null, `CNA_RESULT_ENCODING` for source that is not valid UTF-8, or a documented
- *         handle/thread failure.
+ *         output is null, `CNA_RESULT_ENCODING` for source that is neither valid UTF-8 nor a SPIR-V
+ *         module, or a documented handle/thread failure.
+ *
+ * Which payload a renderer runs is @ref cna_graphics_device_get_shader_dialect_ext's answer. Under
+ * `CNA_SHADER_DIALECT_SPIRV` each view is one whole module in host byte order: its byte length is
+ * a multiple of four, at least the five-word header, and its first word is the SPIR-V magic number
+ * `0x07230203`. A view of that shape is copied byte for byte, NUL bytes included; every other view
+ * is read as UTF-8 text without embedded NUL bytes.
  *
  * **Success means the effect object exists, not that the source compiled.** Read the failure list
  * above literally: a shader the renderer rejects is not on it. Whether a renderer compiles at
@@ -1482,24 +1490,24 @@ CNA_C_API CNA_Result cna_effect_get_is_compiled_ext(
     CNA_EffectHandle effect,
     CNA_Bool* out_is_compiled);
 
-/** @brief Gets the exact UTF-8 vertex-source byte count. */
+/** @brief Gets the exact byte count of the vertex source (UTF-8 text or a SPIR-V module). */
 CNA_C_API CNA_Result cna_effect_get_vertex_source_byte_count(
     CNA_EffectHandle effect,
     uint64_t* out_byte_count);
 
-/** @brief Copies the UTF-8 vertex source without a terminator. */
+/** @brief Copies the vertex source (UTF-8 text or a SPIR-V module) without a terminator. */
 CNA_C_API CNA_Result cna_effect_copy_vertex_source(
     CNA_EffectHandle effect,
     char* destination,
     uint64_t capacity,
     uint64_t* out_byte_count);
 
-/** @brief Gets the exact UTF-8 fragment-source byte count. */
+/** @brief Gets the exact byte count of the fragment source (UTF-8 text or a SPIR-V module). */
 CNA_C_API CNA_Result cna_effect_get_fragment_source_byte_count(
     CNA_EffectHandle effect,
     uint64_t* out_byte_count);
 
-/** @brief Copies the UTF-8 fragment source without a terminator. */
+/** @brief Copies the fragment source (UTF-8 text or a SPIR-V module) without a terminator. */
 CNA_C_API CNA_Result cna_effect_copy_fragment_source(
     CNA_EffectHandle effect,
     char* destination,

@@ -136,9 +136,11 @@ with `CNA_ERROR_CATEGORY_STATE` and the exact `System.InvalidOperationException`
 Selecting its owning technique again makes the pass applicable; the refusal does not dispose it.
 
 Type names and vertex/fragment shader sources use exact count/copy operations. Compiled bytecode is
-never reinterpreted as source: `cna_shader_effect_create` takes GLSL/SPIR-V/WGSL **source**
-text and `cna_effect_create_compiled` takes Effect Framework **binaries**, and neither accepts the
-other's input. Ask `cna_graphics_device_get_shader_dialect_ext` which dialect the active renderer
+never reinterpreted as source: `cna_shader_effect_create` takes a renderer's shader payload --
+GLSL or WGSL text, or under `CNA_SHADER_DIALECT_SPIRV` a whole SPIR-V module per stage, copied byte
+for byte when its length is a multiple of four, at least the five-word header, and its first word is
+the magic number -- and `cna_effect_create_compiled` takes Effect Framework **binaries**, and
+neither accepts the other's input. Ask `cna_graphics_device_get_shader_dialect_ext` which dialect the active renderer
 wants rather than inferring one from the renderer identity -- that inference is wrong in a build
 carrying several renderers and meaningless for a renderer that picks its native API per process.
 Where the dialect has no loose uniforms, which is every SPIR-V target,
