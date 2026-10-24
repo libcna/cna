@@ -29,6 +29,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
      * `Name` (the logical asset name), `Importer`, `Processor`, `ProcessorParameters` (or a
      * `ProcessorParameters_<Name>` metadata per parameter, as XNA's project system writes them)
      * and `Link`.
+     *
+     * Link `CNA::ContentCompiler` (`cna_content_compiler`) to use it, not `cna_content_pipeline`
+     * alone: the task runs `RunContentCompiler`, which that library defines and which brings this
+     * module with it.
      */
     class BuildContent final : public ContentTask
     {

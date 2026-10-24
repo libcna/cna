@@ -39,6 +39,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
      * An `<ItemGroup>` or `<PropertyGroup>` carrying a `Condition` is read only when the condition
      * is one this reader can decide; anything else is refused by name rather than guessed at,
      * because silently dropping a conditional item group would silently drop assets.
+     *
+     * Link `CNA::ContentCompiler` (`cna_content_compiler`) to use it, not `cna_content_pipeline`
+     * alone: building the task it reads into runs `RunContentCompiler`, which that library defines
+     * and which brings this module with it.
      */
     class ContentProject
     {

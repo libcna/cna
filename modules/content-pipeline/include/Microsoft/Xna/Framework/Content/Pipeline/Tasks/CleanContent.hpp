@@ -15,6 +15,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
      * Only files a valid output manifest proves the pipeline owns are removed, which is the
      * canonical cleaner's own rule and the safe reading of what "clean the output directory"
      * should mean. A directory with no manifest is left alone rather than emptied.
+     *
+     * Link `CNA::ContentCompiler` (`cna_content_compiler`) to use it, not `cna_content_pipeline`
+     * alone: the task runs `RunContentCompiler`, which that library defines and which brings this
+     * module with it.
      */
     class CleanContent final : public ContentTask
     {
@@ -151,6 +155,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
      * The task an incremental project uses to know what a clean would remove and what an installer
      * would deploy, without running a build. It reads the output manifest a previous
      * `BuildContent` wrote and nothing else, so it is cheap and never rebuilds anything.
+     *
+     * Link `CNA::ContentCompiler` (`cna_content_compiler`) to use it, not `cna_content_pipeline`
+     * alone: it is defined beside `CleanContent`, whose `RunContentCompiler` call that library
+     * defines, and that library brings this module with it.
      */
     class GetLastOutputs final : public ContentTask
     {
