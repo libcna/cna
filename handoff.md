@@ -14,7 +14,8 @@ Repositories and branches:
 
 - CNA: this repository, branch `next`. `origin/next` was pushed through `c6dec91fb` on 2026-10-24
   at 10:28 (a push from this clone that the repair session did not run); local since then:
-  `30afa280b` (glTF Model pipeline component versions) and the batch 9 closure commit.
+  `30afa280b` (glTF Model pipeline component versions), the batch 9 closure `6c8b042c4`,
+  `51fb39d5a` (DC-R1), `c7f6c68e5` (DC-R2), `9ef292993` (DC-R3) and the DC-R closure commit.
 - cna-demos: `../cna-demos`, branch `next`. Published through `92ee315`; every later commit is
   local: the evidence, marker and corrected-check commits of batches 3-9 and their closures. Its
   `docs/CNA_ISSUES.md` is the permanent historical inventory and its assertions remain the oracle.
@@ -27,15 +28,25 @@ Campaign accounting from `CNA_DEMOS_REPAIR_MATRIX.json`: **156 historical IDs, 1
 dispositions**: 119 `FIXED_VALIDATED`, 23 `DOCUMENTATION_CORRECTED`, 8 `ALREADY_FIXED`, 3
 `FIXED_PLATFORM_VALIDATION_PENDING` (003 SpriteBatch Textures[0], 101 video URI resolution, 152
 StorageContainer FileShare: each needs a native Windows/XNA run this machine cannot do), one
-`DEMO_EXPECTATION_BUG`, one `DUPLICATE_ROOT_CAUSE` and one `UNSUPPORTED_CONTRACT_CORRECTED`. Two
-graphics findings outside the historical count remain open: `DC-R1` (SDL_GPU refuses a cube face in
-a multi-target set; `c_api.graphics.render_target_bindings` asserts it) and `DC-R2` (SDL_GPU
-ignores BlendState/GraphicsDevice sample masks; `graphics.render_target.multisampling`), recorded
-in the matrix and `../cna-demos/docs/repair-evidence/graphics/DEVICE_CONTEXT_EXTERNAL_RESIDUALS.md`.
-No demo carries a `knownIssue` marker any more.
+`DEMO_EXPECTATION_BUG`, one `DUPLICATE_ROOT_CAUSE` and one `UNSUPPORTED_CONTRACT_CORRECTED`. The
+three graphics findings outside the historical count are resolved and recorded in the matrix:
+`DC-R1` `FIXED_VALIDATED` and `DC-R2` `UNSUPPORTED_CONTRACT_CORRECTED` on the owner's decisions,
+and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- DC-R1 (`51fb39d5a`, owner: implement): SDL_GPU binds a RenderTargetCube face in any slot of a
+  target set. DC-R2 (`c7f6c68e5`, owner: all-or-none exact, refuse others): SDL_GPU applies a
+  MultiSampleMask keeping every sample or none and refuses any other, and
+  `RendererFeature::MultiSampleMask` (35, C ABI 0.50.0) reports each renderer's mask support,
+  checked against a 4x probe. `cube_mrt_binding` passes M1-M4 on SDL_GPU. Serial cna-demos CTest
+  after both (demos tree rebuilt from CNA `c7f6c68e5`): 732 enabled, 687 PASS/45 SKIP/0 FAIL/3
+  disabled (870.97 s), the batch 9 outcome; reports
+  `../cna-demos/build/linux-full/reports/repair-dcr-closure-ctest.*`.
+- DC-R3 (`9ef292993`): `cna_shader_effect_create` copies a whole SPIR-V module byte for byte
+  instead of refusing it as non-UTF-8 text, so a C caller can give SDL_GPU (dialect SPIRV) a custom
+  effect it runs. Found when `c_api.graphics.shader_effect_state`, which had used a GLSL
+  placeholder there, was given a SPIR-V pair (demos `77444d7`); it passes 17/17 on SDL_GPU.
 - Batch 9 closed (`FIXED_VALIDATED`, 2026-10-24): 005 (a vertex holding CNA's 16-byte Color is a
   compile error in the raw user draws), 007 (SpriteBatch refuses a ColorMatrixEffect where the
   renderer does not apply it), 008 (no Prop.hpp macros from CNA's public headers), 067 (C colour
@@ -69,10 +80,11 @@ incremental builds keep stale outputs.
 
 ### Exact next task
 
-DC-R1 and DC-R2 need a contract decision (implement mixed cube/2D sets and exact sample masks in
-SDL_GPU, or report and refuse what SDL_GPU cannot do and narrow the demos' renderer scope); ask
-the owner. Then the consumer intake below and, when a Windows/XNA host exists, the three
-platform validations.
+The consumer intake below and, when a Windows/XNA host exists, the three platform validations.
+Untriaged observation: in `cmake-build-multi`, `cna_c_api_effect_smoke` run with
+`CNA_GRAPHICS_RENDERER=WEBGPU` fails its stage 3 at `EffectSmoke.c` "cube replaces the Texture2D
+on sampler 1", on an effect whose GLSL text WebGPU rejects (STUB fails the same stage creating
+textures, an expected STUB artefact). The registered test runs under the tree's HEADLESS default.
 
 Consumer-only work still matters. cna-engine's current `upstream-issues.md` reports UP-001,
 UP-006, UP-018, UP-019 and UP-020 resolved; UP-002 remains an informational documentation request
@@ -288,10 +300,10 @@ Behaviour CNA does not own, measured and reported rather than worked around.
     the fold; its back buffer keeps a 3, 5 or 7 sample request unrounded while its render targets
     round it down; `GraphicsDeviceManager`'s default `Depth24` request is not applied in
     `graphics_adapter_query`. FNA3D's driver owns those answers.
-  - SDL_GPU and DIRECTX9: cube faces in a multi-render-target set are refused with
+  - WEBGPU and DIRECTX9: cube faces in a multi-render-target set are refused with
     `System::NotSupportedException` while `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4
     and the plural cube-face `RenderTargetSemantics` cases skip on that refusal); HEADLESS accepts
-    them. A capability boundary.
+    them. A capability boundary. SDL_GPU binds them since `51fb39d5a` (DC-R1).
 - **`DIRECTX9` under Wine with DXVK 2.6.0: `DirectX9_CompiledEffects` hangs or aborts in DXVK's
   device teardown; DXVK 3.1.1 does not** (measured 2026-10-17, `cmake-build-mingw`, Release,
   `CNA_DIRECTX9_COMPILED_EFFECTS=ON`). Its 31 gtests were run 30 times on each version in one Wine

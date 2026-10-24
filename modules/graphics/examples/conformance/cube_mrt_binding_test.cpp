@@ -201,7 +201,7 @@ class CubeMrtBindingTest final : public Game
     }
 
     /// Runs one rendering leg; an exception is that leg's FAIL, not the end of the program. A
-    /// set the renderer refuses by name (NotSupportedException -- SDL_GPU and DIRECTX9 bind no
+    /// set the renderer refuses by name (NotSupportedException -- WEBGPU and DIRECTX9 bind no
     /// cube face among several targets) is a missing capability, so a [SKIP], as the header says.
     template <typename Fn>
     void Leg(const char* name, Fn&& fn)

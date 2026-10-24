@@ -9,21 +9,39 @@
   "additional_validation_findings": [
     {
       "id": "DC-R1",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "demo": "c_api.graphics.render_target_bindings",
       "renderer": "SDL_GPU",
       "finding": "Four of25 checks fail because mixed cube/2D MRT is explicitly unsupported. Existing source/plan boundary; audit public C contract and demo renderer scope before disposition.",
       "evidence": "../cna-demos/docs/repair-evidence/graphics/DEVICE_CONTEXT_EXTERNAL_RESIDUALS.md",
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "owner_decision": "2026-10-24: implement mixed cube/2D target sets in SDL_GPU.",
+      "cna_fix_commit": "51fb39d5a",
+      "closure_evidence": "SDL_GPU binds a RenderTargetCube face in any slot of a target set (one layer of a colour target, multisampled faces resolving into their layer, mips regenerated). c_api.graphics.render_target_bindings passes its 25 checks on SDL_GPU, SOFTWARE, OPENGLES3 and OPENGL33. The three plural cube-face RenderTargetSemantics tests that skipped on SDL_GPU pass, and the new PluralCubeFaceSetsAcceptDrawsInEitherOrder passes on SDL_GPU, OPENGLES3, OPENGL33, FNA3D and SOFTWARE. cna_conformance_cube_mrt_binding (cmake-build-multi) passes all 16 R/M checks on SDL_GPU (M1-M4 skipped on the refusal before) and FNA3D; WEBGPU still refuses a cube face in a set, so its M1-M4 skip by name. SdlGpu renderer tests 80, graphics 3,063. SDL_GPU sweep of the graphics and c_api categories: 342 PASS, 20 SKIP, 1 FAIL (c_api.graphics.shader_effect_state, a separate demo-scope defect). Serial cna-demos CTest after both (demos tree rebuilt from CNA `c7f6c68e5`): 732 enabled, 687 PASS/45 SKIP/0 FAIL/3 disabled (870.97 s), the batch 9 outcome; reports `../cna-demos/build/linux-full/reports/repair-dcr-closure-ctest.*`."
     },
     {
       "id": "DC-R2",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "demo": "graphics.render_target.multisampling",
       "renderer": "SDL_GPU",
       "finding": "Two of6 checks fail because BlendState/GraphicsDevice masks are ignored. Existing documented SDL limitation; audit contract, capability reporting and demo scope, without zero-mask hacks or silent skips.",
       "evidence": "../cna-demos/docs/repair-evidence/graphics/DEVICE_CONTEXT_EXTERNAL_RESIDUALS.md",
-      "final_disposition": null
+      "final_disposition": "UNSUPPORTED_CONTRACT_CORRECTED",
+      "owner_decision": "2026-10-24: apply a mask keeping every sample or none exactly, refuse every other mask on SDL_GPU.",
+      "cna_fix_commit": "c7f6c68e5",
+      "closure_evidence": "SDL 3.5 reserves the sample mask. SDL_GPU now draws normally for a mask keeping every sample, drops a draw whose mask keeps none on a multisampled target (exact: such a draw writes no colour, depth, stencil or occlusion sample), and throws NotSupportedException for any other mask instead of ignoring it. RendererFeature::MultiSampleMask (35, C CNA_RENDERER_FEATURE_MULTI_SAMPLE_MASK) reports Restricted on SDL_GPU; Supported on EasyGL with glSampleMaski, WEBGPU, SOFTWARE and DIRECTX9; FNA3D Supported only on its OpenGL driver. CrossRendererContractTest requires each answer to match a 4x probe under all, none and one-sample masks. graphics.render_target.multisampling passes on SDL_GPU (mask 0 now leaves one grey level, not five), SOFTWARE, OPENGLES3 and OPENGL33; graphics 3,064, SdlGpu 80, FNA3D 114, all 132 CApi tests; DIRECTX9 compiles in cmake-build-mingw. Serial cna-demos CTest after both (demos tree rebuilt from CNA `c7f6c68e5`): 732 enabled, 687 PASS/45 SKIP/0 FAIL/3 disabled (870.97 s), the batch 9 outcome; reports `../cna-demos/build/linux-full/reports/repair-dcr-closure-ctest.*`."
+    },
+    {
+      "id": "DC-R3",
+      "status": "RESOLVED",
+      "demo": "c_api.graphics.shader_effect_state",
+      "renderer": "SDL_GPU",
+      "finding": "Found in the DC-R SDL_GPU validation sweep: two of 17 checks failed. The demo created its effect from a GLSL placeholder under SDL_GPU's SPIR-V dialect (DEMO_EXPECTATION_BUG); once it supplied SPIR-V, cna_shader_effect_create refused the modules as non-UTF-8 text although graphics.h documents SPIR-V byte views for that dialect (CODE_DEFECT: no C caller could give SDL_GPU a runnable custom effect).",
+      "evidence": "../cna-demos/docs/repair-evidence/graphics/DEVICE_CONTEXT_EXTERNAL_RESIDUALS.md",
+      "cna_fix_commit": "9ef292993",
+      "demos_fix_commit": "77444d7",
+      "final_disposition": "FIXED_VALIDATED",
+      "closure_evidence": "cna_shader_effect_create copies a whole SPIR-V module (word-aligned, at least the five-word header, magic number first) byte for byte and still validates every other view as UTF-8. The demo supplies shaderc Vulkan 1.0 modules for a minimal pair and passes 17/17 on SDL_GPU, SOFTWARE, OPENGLES3, OPENGL33, HEADLESS and STUB; the c_api category passes 176 with 1 skip on SDL_GPU (175/1/1 before) and 177/177 on SOFTWARE and OPENGLES3. CApi 132/132; EffectSmoke's new module checks pass under HEADLESS, SOFTWARE, OPENGLES3, OPENGL33, SDL_GPU and FNA3D; all C API derived-artifact gates current, 3,212 exports."
     }
   ],
   "issues": [
