@@ -1631,19 +1631,58 @@ CNA_C_API CNA_Result cna_shader_effect_set_uniform_vector2_array(
     const CNA_Vector2* values,
     uint64_t count);
 
-/** @brief Binds a Texture2D-compatible handle to a shader sampler unit. */
+/**
+ * @brief Binds a Texture2D-compatible handle to a shader sampler unit.
+ *
+ * A sampler kind the active renderer's effect cannot bind is refused with
+ * `CNA_RESULT_NOT_SUPPORTED` and leaves the unit's binding and texture retention as they were: on
+ * WEBGPU an effect following the WEBGPU-76 WGSL contract has no cube or volume sampler, which only
+ * the descriptor contract declares.
+ *
+ * @param effect ShaderEffect handle.
+ * @param unit Sampler unit, zero or greater.
+ * @param texture Texture handle owned by the effect's game.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a negative unit,
+ *         `CNA_RESULT_NOT_SUPPORTED` as above, or a documented handle/ownership failure.
+ */
 CNA_C_API CNA_Result cna_shader_effect_set_texture2d(
     CNA_EffectHandle effect,
     int32_t unit,
     CNA_Handle texture);
 
-/** @brief Binds a TextureCube-compatible handle to a shader sampler unit. */
+/**
+ * @brief Binds a TextureCube-compatible handle to a shader sampler unit.
+ *
+ * A sampler kind the active renderer's effect cannot bind is refused with
+ * `CNA_RESULT_NOT_SUPPORTED` and leaves the unit's binding and texture retention as they were: on
+ * WEBGPU an effect following the WEBGPU-76 WGSL contract has no cube or volume sampler, which only
+ * the descriptor contract declares.
+ *
+ * @param effect ShaderEffect handle.
+ * @param unit Sampler unit, zero or greater.
+ * @param texture Texture handle owned by the effect's game.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a negative unit,
+ *         `CNA_RESULT_NOT_SUPPORTED` as above, or a documented handle/ownership failure.
+ */
 CNA_C_API CNA_Result cna_shader_effect_set_texture_cube(
     CNA_EffectHandle effect,
     int32_t unit,
     CNA_Handle texture);
 
-/** @brief Binds a Texture3D handle to a shader sampler unit. */
+/**
+ * @brief Binds a Texture3D handle to a shader sampler unit.
+ *
+ * A sampler kind the active renderer's effect cannot bind is refused with
+ * `CNA_RESULT_NOT_SUPPORTED` and leaves the unit's binding and texture retention as they were: on
+ * WEBGPU an effect following the WEBGPU-76 WGSL contract has no cube or volume sampler, which only
+ * the descriptor contract declares.
+ *
+ * @param effect ShaderEffect handle.
+ * @param unit Sampler unit, zero or greater.
+ * @param texture Texture handle owned by the effect's game.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a negative unit,
+ *         `CNA_RESULT_NOT_SUPPORTED` as above, or a documented handle/ownership failure.
+ */
 CNA_C_API CNA_Result cna_shader_effect_set_texture3d(
     CNA_EffectHandle effect,
     int32_t unit,

@@ -107,10 +107,13 @@ under incremental builds), 9 (`XmlSerializer` for Color and Rectangle needs prop
 sharp-runtime's XmlMember, and the element order measured against genuine XNA under Wine) and 16's
 move of the task sources (a design choice). Then, when a Windows/XNA host exists, the three
 platform validations.
-Untriaged observation: in `cmake-build-multi`, `cna_c_api_effect_smoke` run with
-`CNA_GRAPHICS_RENDERER=WEBGPU` fails its stage 3 at `EffectSmoke.c` "cube replaces the Texture2D
-on sampler 1", on an effect whose GLSL text WebGPU rejects (STUB fails the same stage creating
-textures, an expected STUB artefact). The registered test runs under the tree's HEADLESS default.
+Triaged, not a defect: in `cmake-build-multi`, `cna_c_api_effect_smoke` run with
+`CNA_GRAPHICS_RENDERER=WEBGPU` fails its stage 3 because a WEBGPU effect on the WEBGPU-76 WGSL
+contract has no cube sampler and refuses one with `NotSupportedException`
+(`WebGPUDescriptorEffect.cpp` `BindTextureCube`), which the C route reports as
+`CNA_RESULT_NOT_SUPPORTED`; the test, registered under the tree's HEADLESS default, assumes cube
+binding. `effects.h` now documents that refusal on the three texture-binding routes. STUB fails
+the same stage creating textures, an expected STUB artefact.
 
 Consumer-only work still matters. cna-engine's `upstream-issues.md` reports UP-001, UP-006, UP-018,
 UP-019 and UP-020 resolved; its UP-002 (CNAEXT on C++ spellings of implicit XNA semantics) is
