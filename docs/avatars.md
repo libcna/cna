@@ -254,7 +254,8 @@ the visual language):
   where the beard grows) named by materials and stored once;
 - `face_features.png`, an atlas of every eye, eyebrow, mouth and makeup tile at 128 pixels per
   tile; `animations.glb` with the 31 presets as glTF cubic-spline rotation curves;
-- `catalog.json`, listing every file (359 in all, 46.0 MB) with its SHA-256. Compiled in, the
+- `catalog.json`, listing the other 358 files with their sizes and SHA-256 (359 files, 46.0 MB in
+  all). Compiled in, the
   files are deflated (`cna_embed_binary_files ... COMPRESS`) to a 22.3 MB library
   (`cna_gamerservices_avatar_catalog`), inflated once when first used; only programs that use
   avatars link the catalog. (Revision 2 was 32.9 MB, 14.1 MB deflated, revision 3 45.2 and 21.6 MB:
@@ -288,8 +289,9 @@ shadow, blush, jewellery, gloves), and optionally the strength and the sharpness
 highlight (`cnaSpecular`, `cnaShininess`: SkinnedEffect's specular colour scale and specular power;
 an asset without them draws as before). The reader refuses anything outside that contract: external
 URIs, other rigs, non-identity bind rotations, out-of-range indices or weights, and oversized data.
-Revision 2 needs contract level 2 (`CatalogReaderLevel`): the kinds, styles, rules and material
-extras above. Every renderer draws it with the same two paths it already had (opaque parts, then
+Since revision 2 the catalog needs contract level 2 (`CatalogReaderLevel`, the manifest's
+`"reader"`): the kinds, styles, rules and material extras above. Every renderer draws it with the
+same two paths it already had (opaque parts, then
 translucent decals); nothing in the catalog is renderer-specific.
 The catalog recipe's dot products, lengths, distances and normalization retain
 binary32 rounding at each intermediate (including normalization's reciprocal).
@@ -356,7 +358,8 @@ sends a projection onto the newest catalog the client has, marked as such, and l
 avatar unchanged. A client that reads fewer description formats than the stored avatar uses (a CNA
 build from before format 3) receives a canonical copy without what it cannot read: an item only
 format 3 names becomes its slot's lowest older item, and eyebrows, ears, accessories and makeup are
-left out. A manifest larger than one service message (revisions 2 and 3's are) is named by
+left out. A manifest larger than one service message (every revision's since 2: revision 4's is
+189 KB, the message limit 64 KiB) is named by
 `avatars.catalog` and read by hash from the file route. Games see an
 ordinary description either way, and `AvatarDescription.Changed` follows the stored avatar's
 revision, so installing a catalog or receiving a projection is never a change.

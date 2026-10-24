@@ -683,19 +683,23 @@ been run.
 ### 33. `AvatarRenderer` on other renderers
 
 - **Status:** not independently validated.
-- **CNA now:** on 2026-10-15 the full avatar review of catalog v3 revision 2 (521 frames: views,
-  hands, feet, every face control, every hairstyle from the front and from behind, every garment,
-  headwear, facial-hair style, ear shape, accessory and makeup style, key frames of every
-  animation, every expression) ran on OpenGL 3.3, OpenGL ES 3, SOFTWARE, SDL_GPU (Vulkan), WebGPU
-  and FNA3D (its SDL_GPU Vulkan driver) from one multi-renderer build, and on DIRECTX9 (Wine with
-  DXVK) and SDL_GPU's Direct3D 12 backend (Wine with vkd3d-proton) from the MinGW Windows build,
-  each confirmed by its log, all frames rendered. Against OpenGL 3.3 (`avatar_review.py compare`)
-  the worst mean absolute pixel difference is 0.09/255 (WebGPU) and the worst silhouette overlap
-  0.9988 (DIRECTX9); OpenGL ES 3 is identical. The avatar, editor and Guide gtests pass on each of
-  the six Linux renderers, and the Windows build's gamer-services suite passes under Wine. The XNA
-  AvatarShadows sample ran on OpenGL ES 3 (Mesa software) on 2026-09-30, not re-run for revision 2.
-  HEADLESS runs the API tests. Not measured: SDL_GPU's Metal backend (no macOS host), and DIRECTX9
-  and Direct3D 12 on native Windows drivers rather than their Vulkan translations.
+- **CNA now:** at catalog v3 revision 4, on 2026-10-24 at `ba707082e`
+  (`plans/plan_avatar_acceptance.md` AVA-01), the full avatar review (982 frames: views, hands, feet,
+  every face control at both ends, every hairstyle from the front and from behind, every garment,
+  headwear, facial-hair style, ear shape, accessory and makeup style, portraits, face presets,
+  builds, key frames of every animation, every expression) rendered on OpenGL 3.3, OpenGL ES 3,
+  SOFTWARE, SDL_GPU (Vulkan), WebGPU and FNA3D (its SDL_GPU Vulkan driver) from one multi-renderer
+  build through the private GPU runner, each confirmed by its log, all frames rendered. Against
+  OpenGL 3.3 (`avatar_review.py compare`) the worst mean absolute pixel difference is 0.09/255
+  (WebGPU) and the worst silhouette overlap 0.9992 (SOFTWARE); OpenGL ES 3 is identical. The Gamer
+  Services gtests (737 then) passed on all eight renderers compiled in except two on STUB, fixed
+  in AVA-02. Through Windows translation layers, not native drivers: revision 4's 258-frame review
+  rendered on DIRECTX9 (Wine with DXVK) and on SDL_GPU's Direct3D 12 backend (Wine with
+  vkd3d-proton) from the MinGW build on 2026-10-16, and the Windows build's gamer-services suite
+  passed under Wine at revision 2 on 2026-10-15. The XNA AvatarShadows sample ran on OpenGL ES 3
+  (Mesa software) on 2026-09-30, not re-run since. HEADLESS runs the API tests. Pending external
+  qualification, not simulated here: SDL_GPU's Metal backend on macOS, and DIRECTX9, FNA3D and
+  SDL_GPU's Direct3D 12 backend on native Windows drivers.
 - **Reason:** Metal and native Windows drivers need another host.
 - **Observable impact:** unknown on those; none found on the ones measured.
 - **Porting impact:** none known.
@@ -811,10 +815,13 @@ per-user models. A server catalog pack is only the update path for a catalog a c
 ### 41. Visual fidelity of catalog v3
 
 - **Status:** implementation differs by design (art direction).
-- **CNA now:** original assets in a stylized, friendly Xbox 360-era style (revision 2: adult
-  proportions of about 4.7 heads, a sculpted head, fitted clothes, decal faces and makeup). Known
-  deficiencies: no baked occlusion (40); garments are fitted surfaces with hems, cuffs, pockets and
-  quilting but no modelled folds; hair is shaped clumps and shells, so curls, coils and twists read
+- **CNA now:** original assets in a stylized, friendly Xbox 360-era style (revision 4: adult
+  proportions of about 4.8 heads female and 4.9 male, a sculpted head with lids, lips and brows in
+  relief, decal eyes, brows and makeup painted on the head's own facets, fitted clothes). Known
+  deficiencies: no baked occlusion (40); garments carry soft low-frequency folds in their surface
+  (hanging folds and gathers 3-8 mm deep, folds at cuffs, elbows and knees) with hems, cuffs,
+  pockets and quilting, but no fine creases and no normal-mapped detail (`SkinnedEffect` has no
+  normal map); hair is shaped clumps and shells, so curls, coils and twists read
   as a stylized mass rather than strands; earrings hang from the ear anchor moved by the ear
   controls, not refitted to each of the six ear shapes; rings are legible only in the editor's
   Hands view; makeup does not follow the eye expressions, except eyeliner, which has closed-eye
@@ -829,7 +836,7 @@ per-user models. A server catalog pack is only the update path for a catalog a c
 - **CNA now:** description formats 1, 2 and 3 exist (format 2 adds facial hair and face shape,
   format 3 eyebrows, ears, accessories, makeup, colours, proportions and more face shape); every
   description uses the lowest format that says it. Catalog v3 is the baseline and the only catalog
-  shipped, at revision 2, pinned by hash tests; the development catalogs 1 and 2 are not supported. A description is always drawn
+  shipped, at revision 4, pinned by hash tests; the development catalogs 1 and 2 are not supported. A description is always drawn
   from exactly the catalog version it names, and same-named files of different versions are told
   apart by size and SHA-256. Edges:
   - a description naming catalog 1 or 2 is not a CNA description (height 0, female body type, a

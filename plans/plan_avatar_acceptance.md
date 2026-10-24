@@ -14,9 +14,9 @@ Task ids `AVA-*`; one task, one commit.
 |---|---|---|
 | AVA-01 | Reproducible baseline on the current HEAD | done |
 | AVA-02 | The two STUB failures the baseline found | done |
-| AVA-03 | Documentation drift (revision, sizes, folds, proportions) | open |
-| AVA-04 | One Avatar v3 acceptance command | open |
-| AVA-05 | Visual regression: checked-in manifest and goldens, legacy script retired | open |
+| AVA-03 | Documentation drift (revision, sizes, folds, proportions) | done |
+| AVA-04 | Visual regression: checked-in manifest and goldens, legacy script retired | open |
+| AVA-05 | One Avatar v3 acceptance command | open |
 | AVA-06 | Earrings fitted to every ear shape | open |
 | AVA-07 | Planted-foot drift across bodies, heights and proportions | open |
 | AVA-08 | Deep-crouch clothing show-through | open |
@@ -82,3 +82,27 @@ Presets without root motion do not drift.
 
 Result: `CnaGamerServicesTests` 739 tests -- STUB 736 passed and 3 skipped (the upload test and
 the two 3D draw tests), OPENGLES3 738 passed and 1 skipped; nothing failed.
+
+## AVA-03 documentation drift
+
+Checked against `catalog.json` (catalog v3 revision 4, reader 2: 143 items, 22 feature items, 24
+face styles, 59 presets, 10 outfits, 359 files and 45,959,118 bytes with the manifest), the built
+`libcna_gamerservices_avatar_catalog.a` (22,324,016 bytes), the generator and `avatar_audit.py`:
+
+- `gamer-services-known-limitations.md` 41 described revision 2 (4.7 heads) as the current art and
+  said garments have no modelled folds; the garments carry low-frequency folds in their surface
+  (`garments.py` `Folds`, `hang_folds`, `sleeve_folds`, trouser folds), without fine creases or
+  normal maps. 42 said the catalog ships at revision 2. 33 described the 2026-10-15 revision 2
+  review as the current renderer evidence; it now gives AVA-01's revision 4 review on six Linux
+  renderers, the 2026-10-16 Wine/DXVK and Wine/vkd3d-proton renders as translation-layer results,
+  and native Windows and macOS as pending external qualification.
+- `link-size-architecture.md` gave the embedded catalog as ~13 MB (revision 1's); it is 22.3 MB
+  deflated. The 30 MB of 2026-10-12, measured with the development catalogs, stays as history.
+- The CMake comment's "~30 MB, a third of that compiled in" no longer held (46 MB, about half);
+  it now names no figure and points at `docs/avatars.md`.
+- `avatars.md`: the manifest lists 358 files (359 with itself); contract level 2 is what every
+  revision since 2 needs, stated as such; revision 4's manifest, 189 KB, is the one over the
+  64 KiB message limit now, not "revisions 2 and 3's".
+
+Revision 2 and 3 statements that describe their own time (the art direction's revision sections,
+the format rules for what revision 2 added, compatibility with builds from before revision 2) stay.

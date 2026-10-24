@@ -52,9 +52,9 @@ endif()
 # catalogs and are not supported. A future catalog is added by generating its directory and
 # appending its version here; every catalog in the list stays compiled in once released.
 #
-# Link boundary (docs/link-size-architecture.md): the catalog is ~30 MB of GLB and PNG data,
-# compiled in deflated (about a third of that; inflated file by file as an avatar needs it), so it
-# is a library of its own whose one symbol, embeddedCatalogFiles(), only the avatar catalog code
+# Link boundary (docs/link-size-architecture.md): the catalog is tens of megabytes of GLB and PNG
+# data (docs/avatars.md has the current size), compiled in deflated and inflated file by file as an
+# avatar needs it, so it is a library of its own whose one symbol, embeddedCatalogFiles(), only the avatar catalog code
 # (src/Internal/Avatars/AvatarCatalog.cpp) references. A program reaches it by drawing or editing
 # avatars -- AvatarDescription, AvatarRenderer, or the system Guide GamerServicesDispatcher installs
 # -- never through Guide.IsTrialMode, a message box or the service client.

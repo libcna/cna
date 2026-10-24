@@ -96,7 +96,8 @@ with a portrait lens, every face preset, every build) and with `random` sheets o
 
 ## Catalog v3 revision 4 (2026-10-16): refinement
 
-Revision 4 keeps every entry and refines what still read as procedural:
+Revision 4 keeps every entry and refines what still read as procedural (the bodies' proportions
+are revision 3's: `avatar_audit.py` measured the same on 2026-10-24):
 
 | Area | Rule |
 |---|---|
