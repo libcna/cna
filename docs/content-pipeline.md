@@ -478,8 +478,15 @@ placements by skin, with one additional static group where applicable. One group
 
 The default pipeline policy remains one primary Model. A single-group animated glTF succeeds and
 keeps every clip embedded in Model schema 1; the standalone authoring clip documents are not
-published. This path is byte-identical to the established direct glTF producer. A multi-group file
-is refused unless its asset config explicitly sets:
+published. Every image the model's materials use -- external, buffer-view or data-URI PNG/JPEG --
+is always decoded headlessly through the shared image front end, processed into native Texture2D
+data and written as a Texture2D child named under the configured logical Model name
+(`Models/car_tex0.png` for `Models/car`), and the Model's XREFs name those children, as XNA's
+ModelProcessor builds each material texture as an asset of its own. The extracted file exists only
+in the build's temporary intermediate directory, so a reference to it could never load
+(CNA-DEMOS-ISSUE-022). The XNB Model writer writes the same children as XNB Texture2D assets.
+Apart from those references the primary Model is byte-identical to the direct glTF producer's. A
+multi-group file is refused unless its asset config explicitly sets:
 
 ```json
 {
@@ -490,12 +497,10 @@ is refused unless its asset config explicitly sets:
 ```
 
 With that option, the lexicographically first canonical Model document becomes the primary logical
-asset and the remaining groups become named Model children. Generated standalone clips become
-AnimationClip children. Extracted external, buffer-view, and data-URI PNG/JPEG images are decoded
-headlessly through the shared image front end, processed into native Texture2D data, and written as
-Texture2D children. Their Model XREFs are remapped from temporary source-stem names to children
-under the configured logical Model name. All child values still use the existing schema-1 typed
-encoders; neither Model nor any other frozen schema changes.
+asset and the remaining groups become named Model children, whose texture XREFs name the same
+Texture2D children. Generated standalone clips become AnimationClip children. The XNB Model writer
+has no form for these Model and AnimationClip children and refuses them. All child values still use
+the existing schema-1 typed encoders; neither Model nor any other frozen schema changes.
 
 Generated names must retain the converter's source-stem prefix and pass ordinary logical-name
 containment. Colliding skin or animation names after filename sanitization are rejected before a

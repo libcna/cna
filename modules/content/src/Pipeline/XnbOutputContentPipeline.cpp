@@ -433,16 +433,51 @@ namespace CNA::Content::Pipeline
 
             [[nodiscard]] std::string InputType() const override { return ProcessedModelType; }
 
+            /** @brief The Model plus the Texture2D children a glTF's extracted images become. */
+            [[nodiscard]] std::vector<ContentWriterSchemaIdentity>
+            OutputSchemaIdentities() const override
+            {
+                std::vector<ContentWriterSchemaIdentity> identities =
+                    XnbPipelineWriter::OutputSchemaIdentities();
+                ContentWriterSchemaIdentity texture = identities.front();
+                texture.assetTypeId = static_cast<std::uint32_t>(XnbOutputAssetId::Texture2D);
+                texture.assetTypeName = XnbOutputAssetTypeName(XnbOutputAssetId::Texture2D);
+                // Ordered by asset type id, and Texture2D's precedes Model's.
+                identities.insert(identities.begin(), std::move(texture));
+                return identities;
+            }
+
             [[nodiscard]] ContentWriteResult Write(
                 const ContentValue& input, const std::string& logicalName) const override
             {
                 const ProcessedModelBundle& bundle = input.Get<ProcessedModelBundle>();
-                if (!bundle.children.empty())
+                // A texture extracted from a glTF is always a child (CNA-DEMOS-ISSUE-022). It is
+                // written as the Texture2D the model's external reference names, as XNA builds a
+                // material's texture; generated Model and clip children have no XNB form here.
+                std::vector<ContentAdditionalWriteOutput> textures;
+                for (const ProcessedModelChild& child : bundle.children)
                 {
-                    throw XnbWriteException(
-                        "'" + logicalName + "': the XNB Model writer cannot emit generated child "
-                        "assets. Build with 'generateChildAssets' disabled, or build the child "
-                        "assets as their own sources.");
+                    const auto* texture = std::get_if<Cnb::CnbTextureData>(&child.value);
+                    if (texture == nullptr)
+                    {
+                        throw XnbWriteException(
+                            "'" + logicalName + "': the XNB Model writer cannot emit generated "
+                            "Model or AnimationClip children. Build with 'generateChildAssets' "
+                            "disabled, or build the child assets as their own sources.");
+                    }
+                    Xnb::XnbAssetWriteResult written = Xnb::WriteXnbAssetWithIdentity(
+                        Xnb::XnbTexture2DContent{ConvertCnbTextureToXnb(
+                            *texture, Xnb::XnbTextureKind::Texture2D, Options(),
+                            child.logicalName)},
+                        Options(), child.logicalName);
+                    ContentAdditionalWriteOutput output;
+                    output.logicalName = child.logicalName;
+                    output.bytes = std::move(written.bytes);
+                    output.assetTypeId = static_cast<std::uint32_t>(XnbOutputAssetId::Texture2D);
+                    output.assetTypeName = XnbOutputAssetTypeName(XnbOutputAssetId::Texture2D);
+                    output.assetSchemaVersion = Xnb::XnbContainerVersionByte(Options().version);
+                    output.rootReaderName = std::move(written.rootReaderName);
+                    textures.push_back(std::move(output));
                 }
                 std::vector<std::string> warnings;
                 // An XNA-shaped model is already the graph this writer writes; converting it to
@@ -469,6 +504,7 @@ namespace CNA::Content::Pipeline
                 ContentWriteResult result =
                     MakeResult(Xnb::WriteXnbAssetWithIdentity(model, Options(), logicalName));
                 result.warnings = std::move(warnings);
+                result.additionalOutputs = std::move(textures);
                 return result;
             }
 

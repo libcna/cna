@@ -23,8 +23,12 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 
 namespace Pipeline = CNA::Content::Pipeline;
 namespace Cnb = CNA::Content::Cnb;
@@ -309,7 +313,10 @@ TEST(ModelContentPipelineTest, CollidingSanitizedSkinNamesAreRejectedBeforeAnyMo
     }
 }
 
-TEST(ModelContentPipelineTest, GeneratedTextureChildrenAreCompiledAndReferencesAreRemapped)
+// CNA-DEMOS-ISSUE-022: an extracted image exists only in the build's intermediate directory, so
+// it is a Texture2D child whether or not generateChildAssets is set, as XNA's ModelProcessor builds
+// every material texture. The default build used to reference the lost file instead.
+TEST(ModelContentPipelineTest, ExtractedTexturesAreAlwaysCompiledChildrenWithRemappedReferences)
 {
     for (const char* fixtureName : {"gltf-external-image.gltf", "gltf-data-uri-image.gltf"})
     {
@@ -322,7 +329,11 @@ TEST(ModelContentPipelineTest, GeneratedTextureChildrenAreCompiledAndReferencesA
             BuildModel(fixture, "Models/car", true);
         ASSERT_FALSE(baseline.runtimeReferences.empty()) << fixtureName;
         ASSERT_FALSE(generated.runtimeReferences.empty()) << fixtureName;
+        ASSERT_EQ(baseline.output.additionalOutputs.size(), 1u) << fixtureName;
         ASSERT_EQ(generated.output.additionalOutputs.size(), 1u) << fixtureName;
+        EXPECT_EQ(baseline.output.bytes, generated.output.bytes) << fixtureName;
+        EXPECT_EQ(baseline.output.additionalOutputs.front().bytes,
+                  generated.output.additionalOutputs.front().bytes) << fixtureName;
         const Pipeline::ContentAdditionalWriteOutput& texture =
             generated.output.additionalOutputs.front();
         EXPECT_EQ(texture.logicalName, "Models/car_tex0.png") << fixtureName;
@@ -331,7 +342,7 @@ TEST(ModelContentPipelineTest, GeneratedTextureChildrenAreCompiledAndReferencesA
                   texture.logicalName) << fixtureName;
         EXPECT_EQ(generated.runtimeReferences.front().expectedAssetTypeId,
                   Cnb::CnbAssetTypeId::Texture2D) << fixtureName;
-        EXPECT_NE(baseline.runtimeReferences.front().logicalName,
+        EXPECT_EQ(baseline.runtimeReferences.front().logicalName,
                   generated.runtimeReferences.front().logicalName) << fixtureName;
 
         const Cnb::CnbDocument textureDocument =
@@ -363,8 +374,8 @@ TEST(ModelContentPipelineTest, ReportsSourceDependenciesSeparatelyFromRuntimeXre
 
     ASSERT_EQ(result.runtimeReferences.size(), 1u);
     EXPECT_EQ(result.runtimeReferences[0].logicalName,
-              "gltf-external-image_tex0.png");
-    EXPECT_EQ(result.runtimeReferences[0].expectedAssetTypeId, 0u);
+              "Models/gltf-external-image_tex0.png");
+    EXPECT_EQ(result.runtimeReferences[0].expectedAssetTypeId, Cnb::CnbAssetTypeId::Texture2D);
     EXPECT_NE(result.dependencies[1].identity, result.runtimeReferences[0].logicalName);
 }
 
@@ -442,7 +453,7 @@ TEST(ModelContentPipelineTest, PreservesUnicodeNativePathsThroughGltfAndItsSidec
               dependencyNames.end());
 
     ASSERT_EQ(first.runtimeReferences.size(), 1u);
-    EXPECT_EQ(first.runtimeReferences[0].logicalName, "žluťoučký_模型_tex0.png");
+    EXPECT_EQ(first.runtimeReferences[0].logicalName, "Models/unicode_tex0.png");
     const Cnb::CnbDocument document =
         Cnb::CnbDocument::Parse(first.output.bytes, "unicode model.cnb");
     const Cnb::CnbModelData decoded = Cnb::DecodeModelFromCnb(document);
@@ -468,6 +479,39 @@ TEST(ModelContentPipelineTest, ResultLoadsThroughContentManagerWhenTheRendererSu
     content.setGraphicsDevice(device);
     const Model model = content.Load<Model>("Models/asset");
     EXPECT_GT(model.getMeshesProperty().getCountProperty(), 0);
+}
+
+TEST(ModelContentPipelineTest, ATexturedModelBuiltWithDefaultsLoadsWithItsTexture)
+{
+    const std::filesystem::path fixture = FindFixture("gltf-data-uri-image.gltf");
+    if (fixture.empty()) { GTEST_SKIP() << "glTF fixture not found"; }
+    const Pipeline::ContentBuildResult result = BuildModel(fixture, "Models/crate");
+    ASSERT_EQ(result.output.additionalOutputs.size(), 1u);
+
+    GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+    {
+        GTEST_SKIP() << "configured renderer has no 3D pipeline";
+    }
+
+    // Exactly what a content build publishes: the Model and its texture child beside it.
+    ScratchDirectory scratch("textured_runtime");
+    WriteBytes(scratch.Path() / "Models" / "crate.cnb", result.output.bytes);
+    const Pipeline::ContentAdditionalWriteOutput& texture = result.output.additionalOutputs.front();
+    WriteBytes(scratch.Path() / CNA::Internal::ContentPathFromUtf8(texture.logicalName + ".cnb"),
+               texture.bytes);
+    ContentManager content(nullptr, scratch.Path().string());
+    content.setGraphicsDevice(device);
+    const Model model = content.Load<Model>("Models/crate");
+    ASSERT_GT(model.getMeshesProperty().getCountProperty(), 0);
+    using Microsoft::Xna::Framework::Graphics::BasicEffect;
+    using Microsoft::Xna::Framework::Graphics::PbrEffect;
+    const auto* effect = model.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getEffectProperty();
+    const Microsoft::Xna::Framework::Graphics::Texture2D* bound = nullptr;
+    if (const auto* basic = dynamic_cast<const BasicEffect*>(effect)) { bound = basic->getTextureProperty(); }
+    else if (const auto* pbr = dynamic_cast<const PbrEffect*>(effect)) { bound = pbr->getTextureProperty(); }
+    ASSERT_NE(bound, nullptr) << "the part's effect carries no base-colour texture";
+    EXPECT_EQ(bound->getWidthProperty(), 16);
 }
 
 TEST(ModelContentPipelineTest, RejectsParametersAtTheProcessorBoundary)

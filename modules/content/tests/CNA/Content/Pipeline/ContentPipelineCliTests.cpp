@@ -1255,7 +1255,8 @@ TEST(ContentPipelineCliTest, GltfGeneratedChildrenAreAtomicOwnedAndWorkerDetermi
         contracted / "Models" / "anim-two-clips_Clip1.cnb"));
     EXPECT_FALSE(std::filesystem::exists(
         contracted / "Models" / "anim-two-clips_Walk.cnb"));
-    EXPECT_FALSE(std::filesystem::exists(
+    // An extracted texture is a child under either setting (CNA-DEMOS-ISSUE-022).
+    EXPECT_TRUE(std::filesystem::is_regular_file(
         contracted / "Models" / "gltf-data-uri-image_tex0.png.cnb"));
     EXPECT_TRUE(std::filesystem::is_regular_file(
         contracted / "Models" / "skin-plus-static-mesh_static.cnb"));

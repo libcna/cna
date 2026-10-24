@@ -1040,6 +1040,32 @@ TEST(XnbModelSourceRouteTest, APbrMaterialIsDowngradedAndTheLossIsNamed)
     EXPECT_TRUE(logged);
 }
 
+// CNA-DEMOS-ISSUE-022: the image a glTF carries is written as the Texture2D the model's external
+// reference names, relative to the model as XNA spells it, instead of naming a file the build lost.
+TEST(XnbModelSourceRouteTest, AnExtractedTextureIsWrittenAsTheTexture2DItsModelReferences)
+{
+    ScratchDirectory scratch("gltf_texture");
+    CopyGltfFixture(scratch, "gltf-data-uri-image.glb");
+
+    Pipeline::ContentBuildResult result;
+    const Xnb::XnbCanonicalAsset asset =
+        BuildGltfModel(scratch, "gltf-data-uri-image.glb", result);
+    ASSERT_EQ(result.output.additionalOutputs.size(), 1u);
+    const Pipeline::ContentAdditionalWriteOutput& texture =
+        result.output.additionalOutputs.front();
+    EXPECT_EQ(texture.logicalName, "models/asset_tex0.png");
+    EXPECT_EQ(texture.rootReaderName, "Microsoft.Xna.Framework.Content.Texture2DReader");
+    const std::filesystem::path texturePath = scratch.Path() / "asset_tex0.png.xnb";
+    WriteBytes(texturePath, texture.bytes);
+    const Xnb::XnbCanonicalAsset decodedTexture = Xnb::DecodeXnbCanonicalAsset(texturePath);
+    EXPECT_EQ(decodedTexture.rootReader, "Microsoft.Xna.Framework.Content.Texture2DReader");
+
+    const auto& model = std::get<Xnb::XnbModelData>(asset.value);
+    ASSERT_EQ(model.sharedResources.size(), 3u);
+    const auto& effect = std::get<Xnb::XnbBasicEffectData>(model.sharedResources[2].value);
+    EXPECT_EQ(effect.textureReference, "asset_tex0.png");
+}
+
 TEST(XnbModelSourceRouteTest, ASkinnedModelStatesThatItsSkeletonIsNotWritten)
 {
     ScratchDirectory scratch("gltf_skin");

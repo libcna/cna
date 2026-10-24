@@ -412,7 +412,6 @@ namespace CNA::Content::Pipeline
         }
 
         std::vector<std::pair<std::string, Cnb::CnbModelData>> additionalModels;
-        std::set<std::string> generatedTextureLogicalNames;
         if (generateChildren)
         {
             for (const std::filesystem::path& document : imported.additionalModelDocuments)
@@ -423,61 +422,65 @@ namespace CNA::Content::Pipeline
                     GeneratedLogicalName(imported, document, context.LogicalName(), false),
                     std::move(processed.model));
             }
+        }
 
-            std::map<std::string, std::string> generatedTextureNames;
-            for (const std::filesystem::path& texture : imported.generatedTextureFiles)
+        // Every image the converter extracted is built as a Texture2D child, as XNA's
+        // ModelProcessor builds each material texture as an asset of its own. This does not wait
+        // for 'generateChildAssets': the extracted file exists only in this build's intermediate
+        // directory, so a reference left pointing at it could never load (CNA-DEMOS-ISSUE-022).
+        std::set<std::string> generatedTextureLogicalNames;
+        std::map<std::string, std::string> generatedTextureNames;
+        for (const std::filesystem::path& texture : imported.generatedTextureFiles)
+        {
+            const CNA::Internal::ContainedNativePathResult contained =
+                CNA::Internal::ValidateContainedNativePath(imported.intermediateRoot, texture);
+            std::error_code error;
+            const std::filesystem::file_status status =
+                std::filesystem::symlink_status(texture, error);
+            if (!contained.ok || error || std::filesystem::is_symlink(status) ||
+                !std::filesystem::is_regular_file(status))
             {
-                const CNA::Internal::ContainedNativePathResult contained =
-                    CNA::Internal::ValidateContainedNativePath(imported.intermediateRoot,
-                                                               texture);
-                std::error_code error;
-                const std::filesystem::file_status status =
-                    std::filesystem::symlink_status(texture, error);
-                if (!contained.ok || error || std::filesystem::is_symlink(status) ||
-                    !std::filesystem::is_regular_file(status))
-                {
-                    throw ContentLoadException(
-                        "generated glTF texture is missing, symlinked, or outside its "
-                        "intermediate root: " +
-                        CNA::Internal::ContentPathToUtf8(texture) + ".");
-                }
-                const std::string oldName =
-                    CNA::Internal::ContentPathToUtf8(texture.filename());
-                generatedTextureNames.emplace(
-                    oldName, GeneratedLogicalName(imported, texture,
-                                                  context.LogicalName(), true));
+                throw ContentLoadException(
+                    "generated glTF texture is missing, symlinked, or outside its "
+                    "intermediate root: " +
+                    CNA::Internal::ContentPathToUtf8(texture) + ".");
             }
+            const std::string oldName = CNA::Internal::ContentPathToUtf8(texture.filename());
+            generatedTextureNames.emplace(
+                oldName,
+                GeneratedLogicalName(imported, texture, context.LogicalName(), true));
+        }
 
-            std::set<std::string> referencedGeneratedTextures;
-            const auto remap = [&](std::string& reference)
-            {
-                const auto found = generatedTextureNames.find(reference);
-                if (found == generatedTextureNames.end()) { return; }
-                referencedGeneratedTextures.insert(found->first);
-                reference = found->second;
-            };
-            VisitTextureReferences(std::get<Cnb::CnbModelData>(*bundle.primary), remap);
+        std::set<std::string> referencedGeneratedTextures;
+        const auto remap = [&](std::string& reference)
+        {
+            const auto found = generatedTextureNames.find(reference);
+            if (found == generatedTextureNames.end()) { return; }
+            referencedGeneratedTextures.insert(found->first);
+            reference = found->second;
+        };
+        VisitTextureReferences(std::get<Cnb::CnbModelData>(*bundle.primary), remap);
+        for (auto& [logicalName, model] : additionalModels)
+        {
+            static_cast<void>(logicalName);
+            VisitTextureReferences(model, remap);
+        }
+
+        for (const std::filesystem::path& texture : imported.generatedTextureFiles)
+        {
+            const std::string oldName = CNA::Internal::ContentPathToUtf8(texture.filename());
+            if (!referencedGeneratedTextures.contains(oldName)) { continue; }
+            generatedTextureLogicalNames.insert(generatedTextureNames.at(oldName));
+            bundle.children.push_back(
+                {generatedTextureNames.at(oldName),
+                 BuildCnbTexture2DData(DecodeImportedImage(texture))});
+        }
+
+        if (generateChildren)
+        {
             for (auto& [logicalName, model] : additionalModels)
             {
-                static_cast<void>(logicalName);
-                VisitTextureReferences(model, remap);
-            }
-
-            for (const std::filesystem::path& texture : imported.generatedTextureFiles)
-            {
-                const std::string oldName =
-                    CNA::Internal::ContentPathToUtf8(texture.filename());
-                if (!referencedGeneratedTextures.contains(oldName)) { continue; }
-                generatedTextureLogicalNames.insert(generatedTextureNames.at(oldName));
-                bundle.children.push_back(
-                    {generatedTextureNames.at(oldName),
-                     BuildCnbTexture2DData(DecodeImportedImage(texture))});
-            }
-
-            for (auto& [logicalName, model] : additionalModels)
-            {
-                AddModelRuntimeReferences(model, context,
-                                          &generatedTextureLogicalNames);
+                AddModelRuntimeReferences(model, context, &generatedTextureLogicalNames);
                 bundle.children.push_back({std::move(logicalName), std::move(model)});
             }
             for (const std::filesystem::path& animation : imported.animationDocuments)
