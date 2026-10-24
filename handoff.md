@@ -33,6 +33,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- The final cna-demos handoff audit (2026-10-24) reconciled the repair matrix's third
+  platform-pending row: ISSUE-152 now uses the same
+  `RESOLVED_PENDING_PLATFORM_VALIDATION` status and structured `PENDING_NATIVE_WINDOWS`
+  requirement as ISSUE-003 and ISSUE-101. No product source changed. A fresh cna-demos validation
+  against this CNA tree passed all 732 enabled CTests (687 PASS, 45 declared SKIP; three manual
+  tests disabled), and the complete 719-ID sweeps were SOFTWARE 671/0/45/3 and OPENGLES3
+  709/0/7/3. The only remaining campaign actions are the three native-Windows checks and the
+  consumer-owned museum reruns described under "Exact next task".
 - Consumer intake, museum `docs/CNA_FINDINGS.md` Open section (2026-10-24): every entry was checked
   against HEAD; most were already fixed and await museum reruns (the list and evidence are at the
   top of `CNA_MUSEUM_REPAIR_HANDOFF.md`). Fixed here: MouseState/GamePadState text as XNA's IL

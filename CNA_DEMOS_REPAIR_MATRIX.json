@@ -3248,7 +3248,7 @@
       ],
       "subsystem": "storage/runtime",
       "classification": "CODE_DEFECT",
-      "status": "RESOLVED",
+      "status": "RESOLVED_PENDING_PLATFORM_VALIDATION",
       "root_cause": "StorageContainer discards explicit FileShare; Sharp Runtime lacks the corresponding constructor. Shorter container overloads also use wrong defaults: genuine exclusive sharing and write-only Append differ from direct FileStream default read sharing.",
       "related_issues": [],
       "cna_fix_commit": "21b4cd64cd122353431dafb5793a19ac568956fd",
@@ -3258,7 +3258,12 @@
         "Additional genuine .NET4 sharing edges15/15: pre-truncation Create/Truncate refusal, normalized aliases, independent child process before/after Close, failed-constructor release. Direct unchanged Sharp Runtime write-only Open/OpenOrCreate probe4/4FAIL: out-only fstream implicitly truncates existing contents. Same four genuine preservation checks pass. Sharing must be checked before destructive opening; process-local reservations alone do not prove cross-process parity. Evidence docs/repair-evidence/storage/FileShareEdgesOracle.cs,FileStreamWriteOnlyProbe.cpp,README.md. No dependency production edits.",
         "Expanded all16 legal share masks: genuine Framework4 Windows/Wine2304 pairs400allowed1904refused; .NET8.0.31 Linux2304 pairs2025allowed279refused; zero policy mismatches/append failures. Native IO744 includes alias/kernel/process exclusion, pre-truncation preservation, EOF/resize/write failures. First candidate stale-read-ahead regression fixed without relaxing assertion. C17/Werror actual C ABI smoke passes; audits unchanged. Historical Complete1128 SW555/113,GLES594/115; c_api.graphics.resource_lifecycle remains an independent historical PASS-to-FAIL regression, not accepted by this closure. No browser native-locking claim."
       ],
-      "final_disposition": "FIXED_PLATFORM_VALIDATION_PENDING"
+      "final_disposition": "FIXED_PLATFORM_VALIDATION_PENDING",
+      "platform_validation": {
+        "status": "PENDING_NATIVE_WINDOWS",
+        "requirement": "Run the StorageContainer FileShare policy regressions on native Windows against the repaired CNA and Sharp Runtime implementations. Linux native-kernel coverage and the Windows XNA reference oracle are complete, but no Windows product-runtime execution is claimed.",
+        "evidence": "../cna-demos/docs/repair-evidence/storage/FILE_SHARE.md"
+      }
     },
     {
       "id": "CNA-DEMOS-ISSUE-153",
