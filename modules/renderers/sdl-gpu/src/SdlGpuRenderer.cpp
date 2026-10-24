@@ -3277,6 +3277,94 @@ namespace CNA::Internal::Renderers::SdlGpu
                 out.store_op = SDL_GPU_STOREOP_STORE;
             }
         }
+
+        // The cube-face counterpart, shared by RenderToTargetCubeFace's primary and a face that is
+        // a further attachment of a mixed SetRenderTargets set (CNA-DEMOS DC-R1). Same segment-owned
+        // load rule. A face never cycles: cycling would wipe the whole persistent six-layer cube,
+        // and a per-face multisample texture holds this face's own samples, which a pass may load.
+        void FillCubeFaceColorTargetInfo(SDL_GPUColorTargetInfo& out,
+                                         const SdlGpuRenderTargetCubeState& cube, int face,
+                                         bool segmentClearsColor, SDL_FColor segmentClearColor,
+                                         bool colorLoadedLater)
+        {
+            const std::size_t faceSlot = static_cast<std::size_t>(face);
+            SDL_GPUTexture* const faceMsaa = cube.msaaTextures[faceSlot];
+            if (faceMsaa != nullptr)
+            {
+                // This face's own single-layer multisample texture, resolved at the pass end into
+                // the face's layer of the single-sample cube.
+                out.texture = faceMsaa;
+                out.layer_or_depth_plane = 0;
+                out.resolve_texture = cube.cubeTexture;
+                out.resolve_layer = static_cast<Uint32>(face);
+                out.store_op = (cube.preserveContents || colorLoadedLater)
+                                   ? SDL_GPU_STOREOP_RESOLVE_AND_STORE
+                                   : SDL_GPU_STOREOP_RESOLVE;
+            }
+            else
+            {
+                out.texture = cube.cubeTexture;
+                out.layer_or_depth_plane = static_cast<Uint32>(face);
+                out.store_op = SDL_GPU_STOREOP_STORE;
+            }
+            out.clear_color = segmentClearsColor ? segmentClearColor : cube.clearColor[faceSlot];
+            out.load_op = (segmentClearsColor || cube.clearColorPending[faceSlot])
+                              ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+            out.cycle = false;
+        }
+    }
+
+    SDL_GPUTextureFormat SdlGpuRenderer::ExtraColorAttachment::ColorFormat() const
+    {
+        return rt != nullptr ? rt->colorFormat : cube->colorFormat;
+    }
+
+    void SdlGpuRenderer::FillExtraColorTargets(std::vector<SDL_GPUColorTargetInfo>& colorTargets,
+                                               const PassSegment& segment, bool colorLoadedLater)
+    {
+        for (std::size_t i = 0; i < segment.extraAttachments.size(); ++i)
+        {
+            const ExtraColorAttachment& extra = segment.extraAttachments[i];
+            if (extra.rt != nullptr)
+                FillColorTargetInfo(colorTargets[i + 1], *extra.rt, segment.clearColorRequested,
+                                    segment.clearColor, colorLoadedLater);
+            else
+                FillCubeFaceColorTargetInfo(colorTargets[i + 1], *extra.cube, extra.face,
+                                            segment.clearColorRequested, segment.clearColor,
+                                            colorLoadedLater);
+            activeColorTargetFormats_[i + 1] = extra.ColorFormat();
+        }
+    }
+
+    void SdlGpuRenderer::FinishExtraColorTargets(SDL_GPUCommandBuffer* cmd, const PassSegment& segment)
+    {
+        for (const ExtraColorAttachment& extra : segment.extraAttachments)
+        {
+            if (extra.rt != nullptr)
+            {
+                extra.rt->clearColorPending = false;
+                extra.rt->clearDepthPending = false;
+                extra.rt->clearStencilPending = false;
+                if (!extra.rt->definedMipLevels.empty())
+                    extra.rt->definedMipLevels[0] = true;
+                if (extra.rt->mipMap && extra.rt->levelCount > 1)
+                {
+                    GenerateRenderTargetMipChain(device_, cmd, extra.rt->colorTexture,
+                                                 extra.rt->colorFormat, extra.rt->width,
+                                                 extra.rt->height, extra.rt->levelCount,
+                                                 pendingTextureReleases_);
+                    std::fill(extra.rt->definedMipLevels.begin(),
+                              extra.rt->definedMipLevels.end(), true);
+                }
+                continue;
+            }
+            // Only the colour aspect of a cube face takes part in another target's pass; its own
+            // depth and stencil keep their first-use state.
+            if (extra.cube->mipMap && extra.cube->levelCount > 1)
+                GenerateCubeRenderTargetMipChain(cmd, extra.cube->cubeTexture, extra.cube->size,
+                                                 extra.cube->levelCount, extra.face);
+            extra.cube->clearColorPending[static_cast<std::size_t>(extra.face)] = false;
+        }
     }
 
     bool SdlGpuRenderer::SegmentOwesFirstUseClear(const PassSegment& segment)
@@ -3285,15 +3373,23 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             const int face = segment.face;
             if (face < 0 || face >= 6) return false;
-            return segment.cube->clearColorPending[face] || segment.cube->clearDepthPending[face] ||
-                   segment.cube->clearStencilPending[face];
+            if (segment.cube->clearColorPending[face] || segment.cube->clearDepthPending[face] ||
+                segment.cube->clearStencilPending[face])
+                return true;
         }
-        if (segment.rt == nullptr) return false;
-        if (segment.rt->clearColorPending || segment.rt->clearDepthPending ||
-            segment.rt->clearStencilPending)
-            return true;
-        for (const auto& extra : segment.extraAttachments)
-            if (extra->clearColorPending) return true;
+        else
+        {
+            if (segment.rt == nullptr) return false;
+            if (segment.rt->clearColorPending || segment.rt->clearDepthPending ||
+                segment.rt->clearStencilPending)
+                return true;
+        }
+        for (const ExtraColorAttachment& extra : segment.extraAttachments)
+        {
+            if (extra.rt != nullptr ? extra.rt->clearColorPending
+                                    : extra.cube->clearColorPending[static_cast<std::size_t>(extra.face)])
+                return true;
+        }
         return false;
     }
 
@@ -3552,14 +3648,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::vector<SDL_GPUColorTargetInfo> colorTargets(1 + segment.extraAttachments.size());
         FillColorTargetInfo(colorTargets[0], *target, segment.clearColorRequested, segment.clearColor,
                             colorLoadedLater);
-        for (std::size_t i = 0; i < segment.extraAttachments.size(); ++i)
-            FillColorTargetInfo(colorTargets[i + 1], *segment.extraAttachments[i],
-                                segment.clearColorRequested, segment.clearColor, colorLoadedLater);
         const int colorTargetCount = static_cast<int>(colorTargets.size());
         activeColorTargetFormats_.fill(SDL_GPU_TEXTUREFORMAT_INVALID);
         activeColorTargetFormats_[0] = target->colorFormat;
-        for (std::size_t i = 0; i < segment.extraAttachments.size(); ++i)
-            activeColorTargetFormats_[i + 1] = segment.extraAttachments[i]->colorFormat;
+        FillExtraColorTargets(colorTargets, segment, colorLoadedLater);
 
         SDL_GPUDepthStencilTargetInfo depthStencilTarget{};
         const bool hasDepth = target->depthTexture != nullptr;
@@ -3610,14 +3702,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         target->clearStencilPending = false;
         if (!target->definedMipLevels.empty())
             target->definedMipLevels[0] = true;
-        for (const auto& extra : segment.extraAttachments)
-        {
-            extra->clearColorPending = false;
-            extra->clearDepthPending = false;
-            extra->clearStencilPending = false;
-            if (!extra->definedMipLevels.empty())
-                extra->definedMipLevels[0] = true;
-        }
 
         // Regenerate through clamped per-level GPU blits outside the pass. This
         // matches FNA3D's OPENGL_ResolveTarget semantics (the chain is regenerated once this
@@ -3631,16 +3715,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                          pendingTextureReleases_);
             std::fill(target->definedMipLevels.begin(), target->definedMipLevels.end(), true);
         }
-        for (const auto& extra : segment.extraAttachments)
-        {
-            if (extra->mipMap && extra->levelCount > 1)
-            {
-                GenerateRenderTargetMipChain(device_, cmd, extra->colorTexture, extra->colorFormat,
-                                             extra->width, extra->height, extra->levelCount,
-                                             pendingTextureReleases_);
-                std::fill(extra->definedMipLevels.begin(), extra->definedMipLevels.end(), true);
-            }
-        }
+        FinishExtraColorTargets(cmd, segment);
     }
 
     void SdlGpuRenderer::RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd,
@@ -3652,67 +3727,16 @@ namespace CNA::Internal::Renderers::SdlGpu
         activeColorTargetFormats_.fill(SDL_GPU_TEXTUREFORMAT_INVALID);
         activeColorTargetFormats_[0] = cube->colorFormat;
 
-        const std::size_t faceSlot = static_cast<std::size_t>(face);
-        SDL_GPUTexture* const faceMsaa = cube->msaaTextures[faceSlot];
-        const bool cubeMsaa = faceMsaa != nullptr;
-
-        SDL_GPUColorTargetInfo colorTarget{};
-        if (cubeMsaa)
-        {
-            // THIS face's own single-layer multisample texture -- there are six now,
-            // so layer_or_depth_plane is 0 on a texture that belongs to exactly one face, not 0 on
-            // one shared by all six.
-            colorTarget.texture = faceMsaa;
-            colorTarget.layer_or_depth_plane = 0;
-        }
-        else
-        {
-            colorTarget.texture = cube->cubeTexture;
-            colorTarget.layer_or_depth_plane = static_cast<Uint32>(face);
-        }
-        colorTarget.clear_color = segment.clearColorRequested ? segment.clearColor
-                                                              : cube->clearColor[face];
-        // LOAD is what makes a cube face preserve its contents across bind cycles.
-        // The multisampled path can finally use it. It used to be forced to CLEAR,
-        // because the ONE shared scratch texture held another face's samples and therefore had to
-        // be cycled -- and SDL_gpu forbids cycling together with LOAD out loud ('Cannot cycle color
-        // target when load op is LOAD!'), which is exactly what a PreserveContents cube reached the
-        // second time a multisampled face was bound with no Clear() in between. With one texture
-        // per face there is nothing to cycle and nothing stale to load, so both legs now ask the
-        // same question: an explicit Clear() in this cycle wins, otherwise this face's own first-use
-        // flag, otherwise LOAD.
-        colorTarget.load_op =
-            (segment.clearColorRequested || cube->clearColorPending[face])
-                ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
-        // Never cycle. cubeTexture must NEVER cycle (whether as the direct target
-        // below or as resolve_texture) -- cycling wipes the ENTIRE persistent 6-layer resource,
-        // including every other face already written this frame -- and a per-face multisample
-        // texture must not either, since its previous contents are that same face's own samples,
-        // which is precisely what this pass may be about to load.
-        colorTarget.cycle = false;
-        if (cubeMsaa)
-        {
-            // Automatic render-pass-end resolve -- SDL_gpu has no multisampled cube texture type,
-            // so this face's MSAA color target resolves directly into that face's layer of the real
-            // (single-sample, 6-layer) cube texture.
-            // RESOLVE_AND_STORE on a preserving target -- plain RESOLVE explicitly
-            // leaves the multisample contents undefined, which is the store half of the same defect
-            // the shared texture was the allocation half of. A discarding target keeps plain
-            // RESOLVE: the shared layer clears it on every bind, so its samples are never loaded.
-            colorTarget.resolve_texture = cube->cubeTexture;
-            colorTarget.resolve_layer = static_cast<Uint32>(face);
-            // `colorLoadedLater` extends the same rule to a DISCARDING cube whose
-            // face this frame splits into several passes -- the later pass loads these samples, so
-            // leaving them undefined would be the same defect on a target that merely happens not
-            // to preserve across bind cycles.
-            colorTarget.store_op = (cube->preserveContents || colorLoadedLater)
-                                       ? SDL_GPU_STOREOP_RESOLVE_AND_STORE
-                                       : SDL_GPU_STOREOP_RESOLVE;
-        }
-        else
-        {
-            colorTarget.store_op = SDL_GPU_STOREOP_STORE;
-        }
+        // LOAD is what makes a cube face preserve its contents across bind cycles, now on the
+        // multisampled path too: each face owns its multisample texture, so there is nothing to
+        // cycle and nothing stale to load (see FillCubeFaceColorTargetInfo). A face that opens a
+        // mixed SetRenderTargets set carries that set's further attachments (CNA-DEMOS DC-R1).
+        std::vector<SDL_GPUColorTargetInfo> colorTargets(1 + segment.extraAttachments.size());
+        FillCubeFaceColorTargetInfo(colorTargets[0], *cube, face, segment.clearColorRequested,
+                                    segment.clearColor, colorLoadedLater);
+        FillExtraColorTargets(colorTargets, segment, colorLoadedLater);
+        const int colorTargetCount = static_cast<int>(colorTargets.size());
+        const SDL_GPUColorTargetInfo& colorTarget = colorTargets[0];
 
         SDL_GPUDepthStencilTargetInfo depthStencilTarget{};
         const bool hasDepth = cube->depthTexture != nullptr;
@@ -3735,7 +3759,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                 ? SDL_GPU_STOREOP_STORE : SDL_GPU_STOREOP_DONT_CARE;
         }
 
-        SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, hasDepth ? &depthStencilTarget : nullptr);
+        SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(
+            cmd, colorTargets.data(), static_cast<Uint32>(colorTargetCount),
+            hasDepth ? &depthStencilTarget : nullptr);
         RenderPassOwner passOwner(pass);
         TracePassSegment(nativePassIndex_++, segment,
                          colorTarget.load_op == SDL_GPU_LOADOP_CLEAR ? "clear" : "load",
@@ -3752,8 +3778,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Scissor applied per draw in RenderQueuedDraws (see the swapchain pass note).
         const DrawTarget dt{nullptr, cube.get(), face};
         RenderQueuedDraws(pass, cmd, dt, cube->colorFormat, cube->sampleCount,
-                          hasDepth ? cube->depthFormat : SDL_GPU_TEXTUREFORMAT_INVALID, 1,
-                          segment.id);
+                          hasDepth ? cube->depthFormat : SDL_GPU_TEXTUREFORMAT_INVALID,
+                          colorTargetCount, segment.id);
         passOwner.End();
 
         // The pass end has either stored this face directly or resolved its own
@@ -3769,6 +3795,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         cube->clearColorPending[face] = false;
         cube->clearDepthPending[face] = false;
         cube->clearStencilPending[face] = false;
+        FinishExtraColorTargets(cmd, segment);
     }
 
     SdlGpuRenderer::PassSegment* SdlGpuRenderer::CurrentSegment()
@@ -5027,30 +5054,26 @@ namespace CNA::Internal::Renderers::SdlGpu
             SetRenderTarget2D(nullptr);
             return;
         }
-        if (count == 1 && renderTargets[0].IsRenderTargetCubeFace())
-        {
-            SetRenderTargetCubeFace(
-                renderTargets[0].GetRenderTargetCube(),
-                renderTargets[0].GetCubeFace());
-            return;
-        }
-        for (int i = 0; i < count; ++i)
-            if (renderTargets[i].IsRenderTargetCubeFace())
-                throw System::NotSupportedException(
-                    "SdlGpuRenderer::SetRenderTargets: cube faces in a multi-target "
-                    "set are not implemented by this CNA renderer.");
-
         // Stock shaders declare only output 0, as on the sibling renderers. A source ShaderEffect
         // or ordinary compiled XNA Effect may declare outputs 1..3 and then writes all `count`
         // targets in this one real pass. Pipeline descriptions use every attachment's native
-        // format (SDLGPU-75), so mixed-format sets are genuine rather than slot-0 aliases.
-        SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+        // format (SDLGPU-75), so mixed-format sets are genuine rather than slot-0 aliases. A cube
+        // face may take any slot (CNA-DEMOS DC-R1): it is one layer of a colour target, which
+        // SDL_gpu binds beside 2D targets of the same size and sample count.
+        if (renderTargets[0].IsRenderTargetCubeFace())
+            SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),
+                                    renderTargets[0].GetCubeFace());
+        else
+            SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
         for (int i = 1; i < count; ++i)
         {
-            auto* extra = static_cast<SdlGpuRenderTargetRenderer*>(
-                renderTargets[i].GetRenderTarget2D());
             // An extra attachment of the segment the primary bind just opened.
-            extra->AttachToCurrentSegment();
+            if (renderTargets[i].IsRenderTargetCubeFace())
+                static_cast<SdlGpuRenderTargetCubeRenderer*>(renderTargets[i].GetRenderTargetCube())
+                    ->AttachFaceToCurrentSegment(renderTargets[i].GetCubeFace());
+            else
+                static_cast<SdlGpuRenderTargetRenderer*>(renderTargets[i].GetRenderTarget2D())
+                    ->AttachToCurrentSegment();
         }
     }
 
@@ -5547,7 +5570,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             {
                 colorTargetCount = 1 + static_cast<int>(segment->extraAttachments.size());
                 for (std::size_t i = 0; i < segment->extraAttachments.size(); ++i)
-                    colorFormats[i + 1] = segment->extraAttachments[i]->colorFormat;
+                    colorFormats[i + 1] = segment->extraAttachments[i].ColorFormat();
             }
         }
         else if (currentRenderTargetCube_ != nullptr)
@@ -5558,6 +5581,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             sampleCount = state->sampleCount;
             depthStencilFormat =
                 state->depthTexture != nullptr ? state->depthFormat : SDL_GPU_TEXTUREFORMAT_INVALID;
+            if (PassSegment* segment = CurrentSegment())
+            {
+                colorTargetCount = 1 + static_cast<int>(segment->extraAttachments.size());
+                for (std::size_t i = 0; i < segment->extraAttachments.size(); ++i)
+                    colorFormats[i + 1] = segment->extraAttachments[i].ColorFormat();
+            }
         }
         else
         {
@@ -5968,7 +5997,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 {
                     colorTargetCount = 1 + static_cast<int>(segment->extraAttachments.size());
                     for (std::size_t i = 0; i < segment->extraAttachments.size(); ++i)
-                        colorFormats[i + 1] = segment->extraAttachments[i]->colorFormat;
+                        colorFormats[i + 1] = segment->extraAttachments[i].ColorFormat();
                 }
             }
             else if (currentRenderTargetCube_ != nullptr)
@@ -5979,6 +6008,12 @@ namespace CNA::Internal::Renderers::SdlGpu
                 sampleCount = state->sampleCount;
                 depthStencilFormat = state->depthTexture != nullptr
                     ? state->depthFormat : SDL_GPU_TEXTUREFORMAT_INVALID;
+                if (PassSegment* segment = CurrentSegment())
+                {
+                    colorTargetCount = 1 + static_cast<int>(segment->extraAttachments.size());
+                    for (std::size_t i = 0; i < segment->extraAttachments.size(); ++i)
+                        colorFormats[i + 1] = segment->extraAttachments[i].ColorFormat();
+                }
             }
             else
             {
@@ -12403,7 +12438,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     void SdlGpuRenderTargetRenderer::AttachToCurrentSegment()
     {
         if (SdlGpuRenderer::PassSegment* segment = owner_->CurrentSegment())
-            segment->extraAttachments.push_back(state_);
+            segment->extraAttachments.push_back({state_, nullptr, -1});
         owner_->framePending_ = true;
     }
 
@@ -12736,6 +12771,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         // A new logical pass per bind, so face A -> face B -> face A is three
         // passes. The FACE rides on the segment, so a rebind of the SAME face is a boundary too.
         owner_->BeginCubeFaceSegment(state_, face);
+    }
+
+    void SdlGpuRenderTargetCubeRenderer::AttachFaceToCurrentSegment(int face)
+    {
+        if (SdlGpuRenderer::PassSegment* segment = owner_->CurrentSegment())
+            segment->extraAttachments.push_back({nullptr, state_, face});
+        owner_->framePending_ = true;
     }
 
     void SdlGpuRenderTargetCubeRenderer::UnbindAsRenderTarget()

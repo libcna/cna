@@ -921,6 +921,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] int GetSize() const override { return state_->size; }
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
+        /**
+         * @brief Adds one face as a further colour attachment of the segment the primary bind
+         *        of a `SetRenderTargets` set just opened (CNA-DEMOS DC-R1). CNAEXT — internal use.
+         * @param face Cube face index, zero through five.
+         */
+        CNAEXT void AttachFaceToCurrentSegment(int face);
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
         [[nodiscard]] int GetAppliedDepthStencilFormatEXT(
             int /*requestedDepthStencilFormat*/) const override
@@ -1776,6 +1782,22 @@ namespace CNA::Internal::Renderers::SdlGpu
          * `passSegments_` in exactly the order the cycles were opened -- so replay is public order
          * by construction, with no sort and no per-draw allocation.
          */
+        /**
+         * @brief One colour attachment after the first of a `SetRenderTargets` set: a
+         *        RenderTarget2D, or one face of a RenderTargetCube (CNA-DEMOS DC-R1).
+         */
+        struct ExtraColorAttachment
+        {
+            /** @brief The 2D target, or null for a cube face. */
+            std::shared_ptr<SdlGpuRenderTarget2DState> rt;
+            /** @brief The cube target, or null for a 2D target. */
+            std::shared_ptr<SdlGpuRenderTargetCubeState> cube;
+            /** @brief The cube face, or -1 for a 2D target. */
+            int face = -1;
+            /** @brief The attachment's native colour format. @return The format. */
+            [[nodiscard]] SDL_GPUTextureFormat ColorFormat() const;
+        };
+
         struct PassSegment
         {
             std::uint64_t id = 0;
@@ -1789,8 +1811,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::shared_ptr<SdlGpuRenderTarget2DState> rt;
             std::shared_ptr<SdlGpuRenderTargetCubeState> cube;
             int face = -1;
-            /// SDLGPU-37 real MRT: `rts[1..]` of the `SetRenderTargets` call that opened THIS cycle.
-            std::vector<std::shared_ptr<SdlGpuRenderTarget2DState>> extraAttachments;
+            /// SDLGPU-37 real MRT: `rts[1..]` of the `SetRenderTargets` call that opened THIS cycle,
+            /// 2D targets and cube faces alike.
+            std::vector<ExtraColorAttachment> extraAttachments;
             /// An explicit GraphicsDevice.Clear() issued while this cycle was bound. Within one
             /// segment the last Clear() still wins, because SDL_gpu delivers the colour through the
             /// pass load op and a pass has exactly one, which is why a Clear() that
@@ -4291,6 +4314,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Once per bind cycle of that face, not once per distinct (cube, face).
         void RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd, const PassSegment& segment,
                                     bool colorLoadedLater);
+        // CNA-DEMOS DC-R1: fills colour targets 1.. of a pass from the segment's further
+        // attachments, 2D targets and cube faces alike, and records their formats.
+        void FillExtraColorTargets(std::vector<SDL_GPUColorTargetInfo>& colorTargets,
+                                   const PassSegment& segment, bool colorLoadedLater);
+        // ...and marks them defined and regenerates their mip chains once the pass has ended.
+        void FinishExtraColorTargets(SDL_GPUCommandBuffer* cmd, const PassSegment& segment);
         // Opens a new logical render-pass segment for whatever was just bound, and
         // makes it the segment every subsequent Queue*Draw()/QueueSprite()/Clear() belongs to.
         // Called from EVERY bind site, including a rebind of the target that is already current --

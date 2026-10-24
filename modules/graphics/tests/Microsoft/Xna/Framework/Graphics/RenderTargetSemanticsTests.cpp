@@ -30,6 +30,11 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
@@ -403,6 +408,58 @@ TEST(RenderTargetSemantics, PluralTargetsAcceptCubeFacesInEitherSlot)
         EXPECT_EQ(firstPixel.getPackedValueProperty(), red.getPackedValueProperty());
         firstPixel = FirstTexel(first, CubeMapFace::NegativeZ);
         EXPECT_EQ(firstPixel.getPackedValueProperty(), green.getPackedValueProperty());
+    }
+    catch (const System::NotSupportedException& e)
+    {
+        GTEST_SKIP() << "this renderer refuses a cube face in a plural binding or its "
+                        "read-back: " << e.what();
+    }
+}
+
+// CNA-DEMOS DC-R1: a draw into a set whose first or second attachment is a cube face reaches the
+// first attachment, through a pipeline built for both colour formats.
+TEST(RenderTargetSemantics, PluralCubeFaceSetsAcceptDrawsInEitherOrder)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    PresentationParameters parameters;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          parameters);
+    if (!device.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets) ||
+        !device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "this renderer binds one render target at a time or draws no 3D";
+    try
+    {
+        RenderTarget2D flat(device, kSize, kSize, false, SurfaceFormat::Color,
+                            DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+        RenderTargetCube cube(device, kSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                              RenderTargetUsage::PreserveContents);
+        BasicEffect effect(device);
+        effect.setVertexColorEnabledProperty(true);
+        const Color red(219, 31, 47, 255);
+        const VertexPositionColor quad[6] = {
+            {Vector3(-1, -1, 0), red}, {Vector3(1, -1, 0), red}, {Vector3(1, 1, 0), red},
+            {Vector3(-1, -1, 0), red}, {Vector3(1, 1, 0), red}, {Vector3(-1, 1, 0), red}};
+        const auto draw = [&] {
+            device.Clear(Color::Black);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setBlendStateProperty(BlendState::Opaque);
+            for (auto& pass : effect.getCurrentTechniqueProperty()->getPassesProperty()) { pass.Apply(); }
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            device.SetRenderTargets({});
+        };
+
+        device.SetRenderTargets({RenderTargetBinding(&cube, CubeMapFace::NegativeY),
+                                 RenderTargetBinding(&flat)});
+        draw();
+        EXPECT_EQ(FirstTexel(cube, CubeMapFace::NegativeY).getPackedValueProperty(),
+                  red.getPackedValueProperty()) << "a cube face first in the set";
+
+        device.SetRenderTargets({RenderTargetBinding(&flat),
+                                 RenderTargetBinding(&cube, CubeMapFace::PositiveZ)});
+        draw();
+        EXPECT_EQ(FirstTexel(flat).getPackedValueProperty(), red.getPackedValueProperty())
+            << "a 2D target first, a cube face second";
     }
     catch (const System::NotSupportedException& e)
     {
