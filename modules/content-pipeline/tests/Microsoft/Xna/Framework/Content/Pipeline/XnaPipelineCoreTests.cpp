@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -873,6 +874,110 @@ namespace
             return input->text;
         }
     };
+
+    /// Builds nested/shared.greet through GreetingProcessor with one Tone and returns the nested
+    /// asset's filename, so a project can have several assets nest-build one source.
+    class SharedNestingProcessor : public Xna::ContentProcessor<GreetingContent, std::string>
+    {
+    protected:
+        static std::string Nest(const std::shared_ptr<GreetingContent>& input,
+                                Xna::ContentProcessorContext& context, const std::string& tone)
+        {
+            Xna::ExternalReference<GreetingContent> shared("nested/shared.greet", input->getIdentityProperty());
+            Xna::OpaqueDataDictionary parameters;
+            parameters.SetValue<std::string>("Tone", tone);
+            return context.BuildAsset<GreetingContent, std::string>(shared, "GreetingProcessor", parameters)
+                .getFilenameProperty();
+        }
+    };
+
+    class LoudNestingProcessor final : public SharedNestingProcessor
+    {
+    public:
+        std::string Process(const std::shared_ptr<GreetingContent>& input, Xna::ContentProcessorContext& context) override
+        {
+            return Nest(input, context, "Loud");
+        }
+    };
+
+    class PlainNestingProcessor final : public SharedNestingProcessor
+    {
+    public:
+        std::string Process(const std::shared_ptr<GreetingContent>& input, Xna::ContentProcessorContext& context) override
+        {
+            return Nest(input, context, "Plain");
+        }
+    };
+
+    std::string ReadText(const std::filesystem::path& file)
+    {
+        std::ifstream stream(file, std::ios::binary);
+        return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+    }
+
+    // Museum Pipeline Workshop item 1, across assets: XNA's BuildCoordinator chooses a generated
+    // nested name against every build item, in build order. a and c nest-build shared.greet
+    // loudly and b plainly, so a and c share nested/shared_0 (one asset) and b is
+    // nested/shared_1. CNA prepares nodes concurrently and resolves the clash in node order, so
+    // the answer is the same with one worker or several, and when b alone is rebuilt.
+    TEST(XnaPipelineBridge, GeneratedNestedNamesAreUniqueAcrossTheBuildInNodeOrder)
+    {
+        const auto factory = [](const Canon::ContentCompilerOptions&)
+        {
+            auto registry = std::make_shared<Canon::ContentPipelineRegistry>();
+            Canon::RegisterXnaImporter<GreetingImporter>(*registry, "GreetingImporter",
+                                                         Xna::ContentImporterAttribute(".greet"));
+            Canon::RegisterXnaProcessor<GreetingProcessor>(*registry, "GreetingProcessor",
+                                                           Xna::ContentProcessorAttribute{});
+            Canon::RegisterXnaProcessor<LoudNestingProcessor>(*registry, "LoudNestingProcessor",
+                                                              Xna::ContentProcessorAttribute{});
+            Canon::RegisterXnaProcessor<PlainNestingProcessor>(*registry, "PlainNestingProcessor",
+                                                               Xna::ContentProcessorAttribute{});
+            registry->RegisterWriter(std::make_shared<StringBytesWriter>());
+            return registry;
+        };
+        for (const char* workers : {"1", "2"})
+        {
+            SCOPED_TRACE(std::string("workers ") + workers);
+            const std::filesystem::path root = MakeTempRoot(std::string("buildnames") + workers);
+            std::filesystem::create_directories(root / "src" / "nested");
+            WriteFixture(root / "src" / "a.greet", "a\n");
+            WriteFixture(root / "src" / "b.greet", "b\n");
+            WriteFixture(root / "src" / "c.greet", "c\n");
+            WriteFixture(root / "src" / "nested" / "shared.greet", "shared\n");
+            WriteFixture(root / "names.json",
+                         R"({"format": "CNA.ContentPipeline.Config", "version": 1, "assets": {)"
+                         R"("a.greet": {"importer": "GreetingImporter", "processor": "LoudNestingProcessor"},)"
+                         R"("b.greet": {"importer": "GreetingImporter", "processor": "PlainNestingProcessor"},)"
+                         R"("c.greet": {"importer": "GreetingImporter", "processor": "LoudNestingProcessor"}}})");
+            const std::filesystem::path out = root / "out";
+            const auto build = [&]
+            {
+                return Canon::RunContentCompiler(
+                    {"build", (root / "src").string(), "-o", out.string(), "--format", "xnb",
+                     "--config", (root / "names.json").string(), "--only-configured-assets",
+                     "--workers", workers},
+                    factory);
+            };
+            ASSERT_EQ(build(), 0);
+            EXPECT_NE(ReadText(out / "a.xnb").find("nested/shared_0.xnb"), std::string::npos) << ReadText(out / "a.xnb");
+            EXPECT_NE(ReadText(out / "b.xnb").find("nested/shared_1.xnb"), std::string::npos) << ReadText(out / "b.xnb");
+            EXPECT_NE(ReadText(out / "c.xnb").find("nested/shared_0.xnb"), std::string::npos) << ReadText(out / "c.xnb");
+            const std::string loud = ReadText(out / "nested" / "shared_0.xnb");
+            const std::string plain = ReadText(out / "nested" / "shared_1.xnb");
+            EXPECT_FALSE(loud.empty());
+            EXPECT_FALSE(plain.empty());
+            EXPECT_NE(loud, plain);
+
+            // b alone changes and is rebuilt: it keeps its name rather than taking a's.
+            WriteFixture(root / "src" / "b.greet", "b again\n");
+            ASSERT_EQ(build(), 0);
+            EXPECT_NE(ReadText(out / "b.xnb").find("nested/shared_1.xnb"), std::string::npos) << ReadText(out / "b.xnb");
+            EXPECT_EQ(ReadText(out / "nested" / "shared_0.xnb"), loud);
+            EXPECT_EQ(ReadText(out / "nested" / "shared_1.xnb"), plain);
+            std::filesystem::remove_all(root);
+        }
+    }
 
     TEST(XnaPipelineBridge, BuildAssetAndBuildAndLoadAssetRunNestedBuildsOnTheCanonicalGraph)
     {

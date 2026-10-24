@@ -36,6 +36,9 @@ Fixed in this pass:
 | No capability query for render-target readback (owner: add one) | `e357bc4c4` | RendererFeature::RenderTargetReadback (36); graphics 3,066, same 115 skips |
 | C API: presentation_parameters_init is not XNA's default (owner: match XNA) | `e460e0ed6` | full multi-tree CTest 12,542/12,563, the rest accounted for |
 | Pipeline 2 (TextureProcessor alias type; owner: XNA content type) | `671d8478e` | content pipeline 567 + 1 skip |
+| Pipeline 9 (XmlSerializer for Color, Rectangle, Point) | `bbed8c61e`, Sharp Runtime `f990d074` | genuine XNA under Wine: `../cna-demos/docs/repair-evidence/content/XmlColorRectangleOracle.cs` |
+| Pipeline 1 (nested names unique across the build; owner: build-wide like XNA) | `98aa655f2` and the coordinator commit after it | one asset's contexts share names; two nodes are resolved in node order with 1 or 2 workers and incrementally |
+| Pipeline 16, source half (owner: the documentation is enough) | none | the task sources stay in `modules/content-pipeline` |
 
 Already fixed before this pass, not changed: the TSan pending-pan teardown race. `594d7d328`
 (MUSEUM-AUDIO-002, 2026-10-22) registers an `atexit` handler on the first sound that stops and
@@ -43,13 +46,7 @@ joins the audio thread before the static drain runs, on both mixers. Taking the 
 static destructor would be wrong now: `MixerLock` calls `GetMixer()`, which would create a mixer
 during exit. A TSan rerun is what remains.
 
-Still open: pipeline 1 (nested build names; XNA chooses them unique across the whole build, CNA per
-bridge context, and `Convert` makes a fresh context; sharing them needs build-wide state in the
-canonical request and contexts, and a deterministic answer under incremental builds), pipeline 9
-(XmlSerializer for Color and Rectangle: `Color` has only properties and `Rectangle` a settable
-`Location`, which sharp-runtime's XmlMember cannot express yet, and the element order should be
-measured against genuine XNA under Wine first), pipeline 16's move of the task sources (a design
-choice). Needs the museum or hardware: the D3D9 failed Reset (Wine only), the Float16 Android
+Every Pipeline Workshop item is answered. Needs the museum or hardware: the D3D9 failed Reset (Wine only), the Float16 Android
 readback, the FNA3D SDL_GPU sampler crash (one clean GPU run), the gs-avatar heap corruption (not
 reproduced), and every sanitizer item (UBSan, TSan) above.
 

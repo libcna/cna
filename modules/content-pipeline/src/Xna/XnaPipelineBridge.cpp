@@ -881,7 +881,11 @@ namespace CNA::Content::Pipeline
             {
                 const std::string derived = DeriveAssetName(authored, context_->SourceRoot());
                 std::size_t index = 0;
-                while (names.keyByName.count(derived + "_" + std::to_string(index)) != 0) { ++index; }
+                while (names.keyByName.contains(derived + "_" + std::to_string(index)) ||
+                       names.reserved.contains(derived + "_" + std::to_string(index)))
+                {
+                    ++index;
+                }
                 logicalName = derived + "_" + std::to_string(index);
                 names.nameByKey.emplace(key, logicalName);
             }

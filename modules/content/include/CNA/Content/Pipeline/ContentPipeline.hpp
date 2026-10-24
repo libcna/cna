@@ -1040,6 +1040,8 @@ namespace CNA::Content::Pipeline
             std::map<std::string, std::string> nameByKey;
             /** @brief The nested build key each taken logical name belongs to. */
             std::map<std::string, std::string> keyByName;
+            /** @brief Names other assets of the build hold, which a generated name skips. */
+            std::set<std::string> reserved;
         };
 
         /**
@@ -1590,6 +1592,16 @@ namespace CNA::Content::Pipeline
          * name, which is what happened before this existed.
          */
         std::shared_ptr<const std::vector<ContentBuildSibling>> siblings;
+
+        /**
+         * @brief Logical names this build's generated nested names must not take.
+         *
+         * XNA chooses a generated nested name (`stub_N`) against every build item of the build.
+         * The coordinator builds nodes concurrently, so it resolves a name two nodes generated for
+         * different assets afterwards, in node order: the later node is built again with the name
+         * reserved here and takes the next free index. Not inherited by nested builds.
+         */
+        std::set<std::string> reservedNestedNames;
     };
 
     /** @brief Complete observable result of one in-memory content build. */
@@ -1645,6 +1657,12 @@ namespace CNA::Content::Pipeline
          * a result manually, leave this unset to use parameters as the requested configuration.
          */
         std::optional<ContentProcessorParameters> requestedParameters;
+
+        /**
+         * @brief The nested asset names this build generated (`stub_N`), as opposed to names a
+         *        processor gave explicitly; only these can be chosen again.
+         */
+        std::vector<std::string> generatedNestedNames;
     };
 
     /** @brief Result of ContentPipeline::ImportAndProcess(): a processed value that was not written. */

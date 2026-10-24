@@ -1776,9 +1776,11 @@ namespace
     class OutputReservationConflict final : public std::runtime_error
     {
     public:
-        OutputReservationConflict(std::string message, std::string existingOwner)
+        OutputReservationConflict(std::string message, std::string existingOwner,
+                                  std::string contestedName = {})
             : std::runtime_error(std::move(message)),
-              existingOwner_(std::move(existingOwner))
+              existingOwner_(std::move(existingOwner)),
+              contestedName_(std::move(contestedName))
         {
         }
 
@@ -1787,8 +1789,15 @@ namespace
             return existingOwner_;
         }
 
+        /** @brief The logical name two nodes own for different assets; empty for a path conflict. */
+        [[nodiscard]] const std::string& ContestedName() const noexcept
+        {
+            return contestedName_;
+        }
+
     private:
         std::string existingOwner_;
+        std::string contestedName_;
     };
 
     /**
@@ -1836,7 +1845,7 @@ namespace
                         "content build nodes '" + logical->second + "' and '" + owner +
                             "' both own output logical name '" + output.logicalName +
                             "', and the two are not the same asset.",
-                        logical->second);
+                        logical->second, output.logicalName);
                 }
                 // The same asset under the same name: one of the two publishes it and the other
                 // refers to it, which is what XNA's own build does.
@@ -1972,6 +1981,12 @@ namespace
 
         /** @brief Diagnostics the pipeline emitted while this node was built. */
         std::vector<Pipeline::ContentLogMessage> messages;
+
+        /** @brief Names this node's generated nested names must avoid, chosen when outputs are reserved. */
+        std::set<std::string> reservedNestedNames;
+
+        /** @brief The nested names this node generated, which it may choose again; unknown when reused. */
+        std::set<std::string> generatedNestedNames;
     };
 
     struct BuildNodeOutcome
@@ -2215,17 +2230,19 @@ namespace
         const Pipeline::ContentSourceRootCapabilities& externalSourceRoots,
         const std::filesystem::path& stagingRoot, const std::set<std::string>& plannedNodes,
         const Pipeline::ContentBuildEnvironment& environment,
-        const std::shared_ptr<const std::vector<Pipeline::ContentBuildSibling>>& siblings)
+        const std::shared_ptr<const std::vector<Pipeline::ContentBuildSibling>>& siblings,
+        const std::set<std::string>& reservedNestedNames = {}, const bool allowReuse = true)
     {
         BuildNodePlan plan;
         plan.item = &item;
+        plan.reservedNestedNames = reservedNestedNames;
         try
         {
             const Pipeline::ContentBuildManifestEntry* previous =
                 previousManifest.Find(item.logicalName);
             const Pipeline::ContentBuildManifestEntry* previousForReason =
                 FindPreviousEntryForReason(previousManifest, item);
-            if (previous != nullptr &&
+            if (allowReuse && previous != nullptr &&
                 IsPreviousGraphCurrent(*previous, registry, item, sourceRoot, outputRoot,
                                        externalSourceRoots))
             {
@@ -2246,8 +2263,11 @@ namespace
             request.parameters = item.parameters;
             request.environment = environment;
             request.siblings = siblings;
+            request.reservedNestedNames = reservedNestedNames;
             Pipeline::ContentBuildResult result = pipeline.Build(request);
             plan.messages = result.messages;
+            plan.generatedNestedNames.insert(result.generatedNestedNames.begin(),
+                                             result.generatedNestedNames.end());
 
             plan.manifest = Pipeline::MakeContentBuildManifestEntry(
                 result, sourceRoot, outputRoot, item.output, externalSourceRoots);
@@ -2374,6 +2394,7 @@ namespace
             request.parameters = item.parameters;
             request.environment = environment;
             request.siblings = siblings;
+            request.reservedNestedNames = plan.reservedNestedNames;
             Pipeline::ContentBuildResult result = pipeline.Build(request);
             outcome.manifest = Pipeline::MakeContentBuildManifestEntry(
                 result, sourceRoot, outputRoot, item.output, externalSourceRoots);
@@ -2920,37 +2941,94 @@ namespace
         {
             plansByNode.emplace(plans[index].item->logicalName, index);
         }
+        // XNA's BuildCoordinator.ChooseOutputFilename picks a generated nested name (stub_N)
+        // against every build item, so a second asset built from one source under other
+        // processing is stub_1. Nodes are prepared concurrently, each choosing its names alone,
+        // so two can generate one name for different assets; that is resolved here in node order,
+        // the order XNA builds its items in: the later node is prepared again from source with the
+        // name reserved and takes the next free index, whatever the worker count (museum Pipeline
+        // Workshop item 1). A name a processor gave explicitly, and a path conflict, are still
+        // refused. A reused node does not know which of its names were generated, so it is first
+        // prepared from source.
         for (std::size_t index = 0u; index < plans.size(); ++index)
         {
-            if (!plans[index].failure.empty() || !plans[index].hasManifest) { continue; }
-            try
+            for (;;)
             {
-                ReserveOutputs(plans[index].manifest, plans[index].item->logicalName,
-                               outputRoot, logicalOwners, pathOwners, claimedOutputs);
-            }
-            catch (const OutputReservationConflict& error)
-            {
-                plans[index].failure = Pipeline::ContentPipelineError(
-                    plans[index].item->source, plans[index].item->logicalName,
-                    Pipeline::ContentPipelineStage::Graph, "CNA.ContentBuildGraph",
-                    error.what()).what();
-                const auto existing = plansByNode.find(error.ExistingOwner());
-                if (existing != plansByNode.end() &&
-                    plans[existing->second].failure.empty())
+                if (!plans[index].failure.empty() || !plans[index].hasManifest) { break; }
+                try
                 {
-                    BuildNodePlan& conflicting = plans[existing->second];
-                    conflicting.failure = Pipeline::ContentPipelineError(
-                        conflicting.item->source, conflicting.item->logicalName,
+                    ReserveOutputs(plans[index].manifest, plans[index].item->logicalName,
+                                   outputRoot, logicalOwners, pathOwners, claimedOutputs);
+                    break;
+                }
+                catch (const OutputReservationConflict& error)
+                {
+                    BuildNodePlan& plan = plans[index];
+                    const std::string& contested = error.ContestedName();
+                    if (!contested.empty() && contested != plan.item->logicalName &&
+                        !plan.reservedNestedNames.contains(contested) &&
+                        (!plan.prepared || plan.generatedNestedNames.contains(contested)))
+                    {
+                        std::set<std::string> reserved = plan.reservedNestedNames;
+                        if (plan.prepared) { reserved.insert(contested); }
+                        // Claims this attempt made before the conflict belong to no owner yet.
+                        for (const Pipeline::ContentBuildManifestOutput& output : plan.manifest.outputs)
+                        {
+                            if (!logicalOwners.contains(output.logicalName))
+                            {
+                                claimedOutputs.erase(output.logicalName);
+                            }
+                        }
+                        plans[index] = PrepareBuildNode(
+                            builds[index], index, pipeline, *registry, previousManifest,
+                            loadedManifest.state, sourceRoot, outputRoot, externalSourceRoots,
+                            staging->Path(), plannedNodes, buildEnvironment, siblings, reserved,
+                            false);
+                        continue;
+                    }
+                    plan.failure = Pipeline::ContentPipelineError(
+                        plan.item->source, plan.item->logicalName,
                         Pipeline::ContentPipelineStage::Graph, "CNA.ContentBuildGraph",
                         error.what()).what();
+                    const auto existing = plansByNode.find(error.ExistingOwner());
+                    if (existing != plansByNode.end() &&
+                        plans[existing->second].failure.empty())
+                    {
+                        BuildNodePlan& conflicting = plans[existing->second];
+                        conflicting.failure = Pipeline::ContentPipelineError(
+                            conflicting.item->source, conflicting.item->logicalName,
+                            Pipeline::ContentPipelineStage::Graph, "CNA.ContentBuildGraph",
+                            error.what()).what();
+                    }
+                    break;
+                }
+                catch (const std::exception& error)
+                {
+                    plans[index].failure = Pipeline::ContentPipelineError(
+                        plans[index].item->source, plans[index].item->logicalName,
+                        Pipeline::ContentPipelineStage::Graph, "CNA.ContentBuildGraph",
+                        error.what()).what();
+                    break;
                 }
             }
-            catch (const std::exception& error)
+        }
+        // A reused node can still be rebuilt in the execute phase, when a node it depends on
+        // changed. That build chooses its generated names again, so it must avoid every name
+        // another node owns -- except the ones this node already shares with it.
+        for (BuildNodePlan& plan : plans)
+        {
+            if (plan.prepared || !plan.failure.empty() || !plan.hasManifest) { continue; }
+            std::set<std::string> own;
+            for (const Pipeline::ContentBuildManifestOutput& output : plan.manifest.outputs)
             {
-                plans[index].failure = Pipeline::ContentPipelineError(
-                    plans[index].item->source, plans[index].item->logicalName,
-                    Pipeline::ContentPipelineStage::Graph, "CNA.ContentBuildGraph",
-                    error.what()).what();
+                own.insert(output.logicalName);
+            }
+            for (const auto& [name, owner] : logicalOwners)
+            {
+                if (owner != plan.item->logicalName && !own.contains(name))
+                {
+                    plan.reservedNestedNames.insert(name);
+                }
             }
         }
 

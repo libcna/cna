@@ -20,8 +20,8 @@ Repositories and branches:
 - cna-demos: `../cna-demos`, branch `next`. Published through `92ee315`; every later commit is
   local: the evidence, marker and corrected-check commits of batches 3-9 and their closures. Its
   `docs/CNA_ISSUES.md` is the permanent historical inventory and its assertions remain the oracle.
-- Sharp Runtime: `../sharp-runtime`, branch `next`, fully published. Do not make an incidental
-  dependency edit.
+- Sharp Runtime: `../sharp-runtime`, branch `next`. Published except `f990d074` (XmlSerializer
+  property members, which CNA `bbed8c61e` needs). Do not make an incidental dependency edit.
 - Museum and cna-engine inventories are consumer-owned. Do not edit them from CNA; their agents
   move pins/findings after published CNA commits are available.
 
@@ -47,7 +47,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   `CreateWindowedEXT`, `e460e0ed6`) and XNA's TextureImporter/TextureProcessor answering an
   XNA-typed `BuildAndLoadAsset<TextureContent, TextureContent>` (`671d8478e`). Found on the way:
   `17cd5d3c3` (EasyGL drew a colourless PBR record black since `bb6a2f44e`) and `b747faca2` (the
-  input gate's filter picked up a media test). The pending-pan TSan race was already fixed by
+  input gate's filter picked up a media test). Then the three items that needed design: XNA's
+  `XmlSerializer` text for Color, Rectangle and Point (`bbed8c61e`, Sharp Runtime `f990d074` adds
+  property members and document-order reads; oracle `../cna-demos/docs/repair-evidence/content/
+  XmlColorRectangleOracle.cs`), and generated nested names chosen against the whole build:
+  `98aa655f2` shares one asset's names with the contexts `Convert` creates, and the coordinator
+  commit after it resolves two nodes that generated one name for different assets in node order,
+  rebuilding the later node with the name reserved, whatever the worker count and under
+  incremental builds. The pending-pan TSan race was already fixed by
   `594d7d328`. Checkpoint after all of it: full cmake-build-multi CTest 12,542 of 12,563 (the 21
   others are the multi-tree compiled-effect and audio-driver artefacts, which pass with their
   renderer, and the faults fixed above); demos tree rebuilt from CNA `17cd5d3c3` plus the texture
@@ -100,13 +107,13 @@ incremental builds keep stale outputs.
 
 ### Exact next task
 
-Remaining museum items, none of them a quick fidelity fix: Pipeline Workshop 1 (XNA names nested
-outputs uniquely across the whole build; CNA's set is per bridge context and `Convert` starts a
-fresh one, so sharing it needs build-wide state in the canonical request and a deterministic answer
-under incremental builds), 9 (`XmlSerializer` for Color and Rectangle needs property members in
-sharp-runtime's XmlMember, and the element order measured against genuine XNA under Wine) and 16's
-move of the task sources (a design choice). Then, when a Windows/XNA host exists, the three
-platform validations.
+The museum Pipeline Workshop items are all answered: 1 (build-wide nested names, `98aa655f2` and
+the coordinator commit after it), 9 (`bbed8c61e` on Sharp Runtime `f990d074`, measured against
+genuine XNA, demos `9598b43`) and 16 (owner: the documentation half is enough; the task sources
+stay in `modules/content-pipeline`). What remains needs a host this machine does not have: the
+three Windows/XNA platform validations (003, 101, 152) and the museum's own reruns of the entries
+listed at the top of `CNA_MUSEUM_REPAIR_HANDOFF.md`. Sharp Runtime `f990d074` is local, so the push
+order matters when the owner asks for one.
 Triaged, not a defect: in `cmake-build-multi`, `cna_c_api_effect_smoke` run with
 `CNA_GRAPHICS_RENDERER=WEBGPU` fails its stage 3 because a WEBGPU effect on the WEBGPU-76 WGSL
 contract has no cube sampler and refuses one with `NotSupportedException`
@@ -272,9 +279,11 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
-- `SDL_GPU` ignores `BlendState.MultiSampleMask`: the pinned SDL (3.4.0 headers) reserves
-  `SDL_GPUMultisampleState::sample_mask`/`enable_mask`, so the mask reaches the renderer and is
-  deliberately not applied; `ColorWriteChannels` is honoured.
+- `SDL_GPU` applies `BlendState.MultiSampleMask` on a multisampled target only when it keeps every
+  sample or none: the pinned SDL reserves `SDL_GPUMultisampleState::sample_mask`/`enable_mask`, so
+  a mask of none drops the draw and any partial mask throws `System::NotSupportedException`
+  (DC-R2, owner decision, `c7f6c68e5`). `RendererFeature::MultiSampleMask` reports each renderer's
+  answer; `ColorWriteChannels` is honoured.
 
 - Native `SurfaceFormat::Alpha8` render-target storage is unavailable on every renderer:
   `GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Alpha8)` is false, and a

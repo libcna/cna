@@ -1325,6 +1325,7 @@ namespace CNA::Content::Pipeline
         ContentProcessorParameters effectiveParameters;
         std::vector<ContentAdditionalWriteOutput> nestedOutputs;
         std::vector<ContentWriterSchemaIdentity> nestedWriterSchemas;
+        std::vector<std::string> generatedNestedNames;
     };
 
     ContentPipeline::StagedBuild ContentPipeline::RunImportAndProcess(
@@ -1469,6 +1470,7 @@ namespace CNA::Content::Pipeline
                                             externalSourceRoots, dependencies, logger,
                                             request.outputFormat, request.environment, this,
                                             request.siblings);
+            context.NestedNames().reserved = request.reservedNestedNames;
             stage.processed = stage.processor->Process(stage.imported, context);
             if (stage.processed.Empty())
             {
@@ -1482,6 +1484,11 @@ namespace CNA::Content::Pipeline
             }
             stage.nestedOutputs = std::move(context.nestedOutputs_);
             stage.nestedWriterSchemas = std::move(context.nestedWriterSchemas_);
+            for (const auto& [key, name] : context.NestedNames().nameByKey)
+            {
+                (void)key;
+                stage.generatedNestedNames.push_back(name);
+            }
         }
         catch (...)
         {
@@ -1669,6 +1676,7 @@ namespace CNA::Content::Pipeline
         result.writerSchemas = std::move(writerSchemas);
         result.parameters = std::move(stage.effectiveParameters);
         result.requestedParameters = request.parameters;
+        result.generatedNestedNames = std::move(stage.generatedNestedNames);
         result.dependencies = dependencies.Dependencies();
         result.runtimeReferences = dependencies.RuntimeReferences();
         result.deploymentFiles = dependencies.DeploymentFiles();
