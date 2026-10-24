@@ -129,13 +129,14 @@ namespace CNA::Content::Cnb
      *
      * A **pure-data** RIFF/WAVE parser. CNA's runtime WAV path decodes through the mixer engine,
      * which needs an audio device; a content compiler cannot have one, so this reads the container
-     * directly. It is deliberately narrow rather than a second general decoder: it accepts the
-     * uncompressed PCM formats that convert to CNB's `Pcm16` **exactly**, and refuses everything
-     * else by name instead of resampling or truncating someone's audio silently.
+     * directly. It is deliberately narrow rather than a second general decoder: it reads the
+     * uncompressed formats a recording tool writes and refuses everything else by name instead of
+     * guessing a codec's parameters.
      *
-     * Accepted: 16-bit PCM (stored as-is) and 8-bit unsigned PCM (widened exactly). Refused, by
-     * name: 24-bit, 32-bit, IEEE float, ADPCM and any other tag — each of those would be a lossy
-     * or lossy-adjacent conversion, which is an authoring decision rather than a compiler's.
+     * Accepted: 8-bit unsigned PCM (stored as `Pcm8`, unchanged), 16-bit PCM (stored as `Pcm16`,
+     * unchanged), and 24-bit PCM, 32-bit PCM and 32-bit IEEE float, each narrowed to `Pcm16` with
+     * round-to-nearest and saturation, because no CNB schema stores those widths. Refused, by
+     * name: other PCM widths, 64-bit float, ADPCM and every other compressed tag.
      * `WAVE_FORMAT_EXTENSIBLE` is unwrapped only for a genuine `KSDATAFORMAT_SUBTYPE_*` GUID,
      * all sixteen bytes of it, so an unrelated GUID that merely begins with `01 00` is refused
      * rather than read as PCM.
@@ -164,9 +165,9 @@ namespace CNA::Content::Cnb
     /**
      * @brief Parses WAV bytes into source-oriented PCM without choosing CNB output policy.
      *
-     * This is the same bounded RIFF parser used by DecodeWavAsCnbSoundEffect(). It preserves
-     * whether samples were unsigned 8-bit or signed 16-bit so a Content Processor, rather than
-     * the importer, owns conversion to CNB's runtime-oriented Pcm16 representation.
+     * This is the same bounded RIFF parser used by DecodeWavAsCnbSoundEffect(). It preserves the
+     * source encoding (unsigned 8-bit, signed 16, 24 or 32-bit, or 32-bit float) so a Content
+     * Processor, rather than the importer, owns conversion to CNB's sample formats.
      *
      * @param wavBytes Complete WAV file bytes.
      * @param origin Text naming the source in diagnostics.
@@ -177,12 +178,6 @@ namespace CNA::Content::Cnb
     [[nodiscard]] CNA::Content::Import::ImportedSound DecodeWavAsImportedSound(
         std::span<const std::uint8_t> wavBytes, const std::string& origin);
 
-    /**
-     * @brief Converts validated imported PCM into the canonical SoundEffect codec DTO.
-     *
-     * @param imported Source-oriented PCM from DecodeWavAsImportedSound().
-     * @return Runtime-oriented Pcm16 SoundEffect data.
-     */
     /**
      * @brief What a sound whose source declares no loop gets as its loop region.
      *
@@ -204,6 +199,17 @@ namespace CNA::Content::Cnb
         WholeSoundWhenUnset,
     };
 
+    /**
+     * @brief Converts validated imported PCM into the canonical SoundEffect codec DTO.
+     *
+     * Unsigned 8-bit samples stay `Pcm8` and signed 16-bit samples stay `Pcm16`, byte for byte;
+     * 24-bit, 32-bit and float samples are narrowed to `Pcm16` with round-to-nearest and
+     * saturation.
+     *
+     * @param imported Source-oriented PCM from DecodeWavAsImportedSound().
+     * @param loopPolicy What a source that declares no loop gets as its loop region.
+     * @return The SoundEffect data, `Pcm8` or `Pcm16`.
+     */
     [[nodiscard]] CnbSoundEffectData ProcessImportedSoundEffect(
         const CNA::Content::Import::ImportedSound& imported,
         SoundEffectLoopPolicy loopPolicy = SoundEffectLoopPolicy::AsAuthored);
