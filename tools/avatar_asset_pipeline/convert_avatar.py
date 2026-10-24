@@ -421,10 +421,21 @@ def _write_skinned_vertex_buffer(gltf, blob, prim, out_path, joint_index_remap):
 
 
 def _write_index_buffer(gltf, blob, prim, out_path):
-    indices = read_accessor(gltf, blob, prim.indices)
+    """Writes the primitive's triangle list with XNA's clockwise front faces.
+
+    glTF front faces are counter-clockwise, which XNA's default
+    RasterizerState.CullCounterClockwise culls, so each triangle's last two corners are swapped
+    (galaxy-eggbert UB-003). CNA's glTF Model importer keeps glTF's order instead and leaves the
+    choice to the draw (docs/gltf-conventions.md); this converter produces XNA-side content.
+    """
+    if prim.mode not in (None, pygltflib.TRIANGLES):
+        raise ValueError(f"primitive mode {prim.mode} is not a triangle list")
+    indices = [i for (i,) in read_accessor(gltf, blob, prim.indices)]
+    if len(indices) % 3:
+        raise ValueError(f"{len(indices)} indices do not form whole triangles")
     with open(out_path, "wb") as f:
-        for (i,) in indices:
-            f.write(struct.pack("<H", i))
+        for a, b, c in zip(indices[0::3], indices[1::3], indices[2::3]):
+            f.write(struct.pack("<3H", a, c, b))
 
 
 def _write_json(path, data):

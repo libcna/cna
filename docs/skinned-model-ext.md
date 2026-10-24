@@ -49,6 +49,10 @@ inconsistent with a file's length are rejected with `ContentLoadException`
 (`ContentManagerSkinnedModelTests.cpp`).
 
 `tools/avatar_asset_pipeline/convert_avatar.py` converts a skinned glTF binary into this format.
+Part index buffers are triangle lists with clockwise front faces, as XNA content is, so the
+default `CullCounterClockwise` keeps a part's outside; the converter reverses glTF's
+counter-clockwise triangles (galaxy-eggbert UB-003). CNA's glTF `Model` importer keeps glTF's order
+instead (`gltf-conventions.md`).
 
 ## Renderer support
 

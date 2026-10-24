@@ -48,6 +48,9 @@ content produced by this tool.
   cannot disagree with them. glTF's column-major matrices and CNA's row-major ones are
   byte-identical for the same transform, so no transpose is applied.
 - **Part names** come from each mesh's name.
+- **Winding.** Every triangle is written clockwise, XNA's front face, so a part drawn under the
+  default `RasterizerState::CullCounterClockwise` shows its outside; glTF's front faces are
+  counter-clockwise. Only triangle-list primitives are converted.
 
 These were verified against a hand-built synthetic glTF fixture and against generated content
 loaded and rendered through `ContentManager` (`ContentManagerSkinnedModelTests.cpp` covers the

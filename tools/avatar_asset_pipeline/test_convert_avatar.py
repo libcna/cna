@@ -121,6 +121,12 @@ class ConvertBodyTest(unittest.TestCase):
             self.assertEqual(face.size, (2, 2))
             self.assertEqual(face.convert("RGBA").getpixel((1, 1)), (10, 20, 30, 255))
 
+    # galaxy-eggbert UB-003: glTF's counter-clockwise front faces become XNA's clockwise ones, so
+    # the default CullCounterClockwise keeps the outside of a converted part.
+    def test_triangles_are_written_clockwise(self):
+        out, parts = self.convert([("BLUPI", [3])])
+        self.assertEqual(struct.unpack("<3H", (out / parts[0]["indices"]).read_bytes()), (0, 2, 1))
+
 
 if __name__ == "__main__":
     unittest.main()
