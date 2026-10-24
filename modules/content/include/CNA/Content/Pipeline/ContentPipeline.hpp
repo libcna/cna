@@ -1027,6 +1027,35 @@ namespace CNA::Content::Pipeline
         [[nodiscard]] const std::shared_ptr<const std::vector<ContentBuildSibling>>&
         SiblingsShared() const noexcept;
 
+        /**
+         * @brief The names one asset's nested builds have taken, by build key and by name.
+         *
+         * Every context one asset's processing creates shares one set -- XNA's `Convert` runs its
+         * processor in a context of its own -- so a generated nested name is chosen against all
+         * of them, as XNA's BuildCoordinator chooses `stub_N` against every build item it holds.
+         */
+        struct NestedBuildNames
+        {
+            /** @brief The logical name each nested build key received. */
+            std::map<std::string, std::string> nameByKey;
+            /** @brief The nested build key each taken logical name belongs to. */
+            std::map<std::string, std::string> keyByName;
+        };
+
+        /**
+         * @brief Gets this asset's nested build names.
+         *
+         * @return The set shared with every context this asset's processing created.
+         */
+        [[nodiscard]] NestedBuildNames& NestedNames() noexcept;
+
+        /**
+         * @brief Joins @p parent's nested build names, for a context created inside its processing.
+         *
+         * @param parent The context whose processor created this one.
+         */
+        void ShareNestedNames(const ContentProcessorContext& parent);
+
     private:
         friend class ContentPipeline;
         std::filesystem::path sourceRoot_;
@@ -1043,6 +1072,7 @@ namespace CNA::Content::Pipeline
         std::shared_ptr<const std::vector<ContentBuildSibling>> siblings_;
         std::vector<ContentAdditionalWriteOutput> nestedOutputs_;
         std::vector<ContentWriterSchemaIdentity> nestedWriterSchemas_;
+        std::shared_ptr<NestedBuildNames> nestedNames_ = std::make_shared<NestedBuildNames>();
     };
 
     /**

@@ -19,7 +19,9 @@
 #include "CNA/Content/Pipeline/ContentCompiler.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnaPipelineBridge.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MaterialContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MipmapChain.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ChildCollection.hpp"
@@ -689,6 +691,16 @@ namespace
         return std::string(reinterpret_cast<const char*>(bytes), sizeof(bytes));
     }
 
+    // A 4x4 24-bit grey BMP; DXT, MaterialProcessor's default texture format, needs multiples of four.
+    std::string FourByFourBmp()
+    {
+        std::string bytes = {'B', 'M', 102, 0, 0, 0, 0, 0, 0, 0, 54, 0, 0, 0,
+                             40, 0, 0, 0, 4, 0, 0, 0, 4, 0, 0, 0, 1, 0, 24, 0, 0, 0, 0, 0, 48, 0, 0, 0,
+                             0x13, 0x0B, 0, 0, 0x13, 0x0B, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        bytes.append(48, static_cast<char>(0x80));
+        return bytes;
+    }
+
     // Museum Pipeline Workshop item 2: an XNA-typed BuildAndLoadAsset<TextureContent,
     // TextureContent> through "TextureProcessor" reads back XNA's TextureContent, built by XNA's
     // TextureImporter and TextureProcessor. The registry's TextureProcessor is the canonical route
@@ -738,6 +750,58 @@ namespace
             if (dependency.identity.find("tile.bmp") != std::string::npos) { recorded = true; }
         }
         EXPECT_TRUE(recorded);
+        std::filesystem::remove_all(root);
+    }
+
+    // Museum Pipeline Workshop item 1: XNA's BuildCoordinator chooses a generated nested name
+    // against every build item. A MaterialProcessor reached through Convert, which runs in a
+    // context of its own, built plaque.bmp as plaque_0, and the processor that called it then
+    // took plaque_0 again for other parameters; the node refused the collision. One asset's
+    // contexts now share their names, so the second build is plaque_1, as in XNA.
+    TEST(XnaPipelineBridge, AConvertedProcessorAndItsCallerChooseNestedNamesTogether)
+    {
+        const std::filesystem::path root = MakeTempRoot("nestednames");
+        WriteFixture(root / "plaque.bmp", FourByFourBmp());
+        WriteFixture(root / "outer.greet", "outer\n");
+        auto registry = std::make_shared<Canon::ContentPipelineRegistry>();
+        Canon::RegisterBuiltInContentPipeline(*registry, {});
+        Canon::ContentPipeline pipeline(registry);
+        Canon::ContentSourceRootCapabilities roots;
+        Canon::ContentDependencyCollector dependencies;
+        RecordingLogger logger;
+        Canon::ContentProcessorParameters none;
+        Canon::ContentProcessorContext canonical(root, root / "outer.greet", "outer", "Outer", none, roots,
+                                                 dependencies, logger, Canon::ContentOutputFormat::Cnb, {},
+                                                 &pipeline);
+        Canon::XnaBridgeProcessorContext context(canonical);
+
+        // An ExternalReference names its file absolutely, as XNA's importers write it.
+        const std::string plaque = (root / "plaque.bmp").string();
+        auto material = std::make_shared<Xna::Graphics::BasicMaterialContent>();
+        material->setTextureProperty(std::make_shared<Xna::ExternalReference<Xna::Graphics::TextureContent>>(plaque));
+        const std::shared_ptr<Xna::Graphics::MaterialContent> result =
+            context.Convert<Xna::Graphics::MaterialContent, Xna::Graphics::MaterialContent>(
+                material, "MaterialProcessor");
+        ASSERT_NE(result, nullptr);
+        auto& converted = result->getTexturesProperty();
+        std::shared_ptr<Xna::ExternalReference<Xna::Graphics::TextureContent>> built;
+        ASSERT_TRUE(converted.TryGetValue("Texture", built));
+        ASSERT_NE(built, nullptr);
+        EXPECT_NE(built->getFilenameProperty().find("plaque_0"), std::string::npos) << built->getFilenameProperty();
+
+        Xna::OpaqueDataDictionary other;
+        other.SetValue<bool>("GenerateMipmaps", false);
+        other.SetValue<bool>("PremultiplyAlpha", false);
+        const Xna::ExternalReference<Xna::Graphics::TextureContent> second =
+            context.BuildAsset<Xna::Graphics::TextureContent, Xna::Graphics::TextureContent>(
+                Xna::ExternalReference<Xna::Graphics::TextureContent>(plaque), "TextureProcessor", other);
+        EXPECT_NE(second.getFilenameProperty().find("plaque_1"), std::string::npos) << second.getFilenameProperty();
+
+        // The same request again is the same build item and keeps its name.
+        const Xna::ExternalReference<Xna::Graphics::TextureContent> again =
+            context.BuildAsset<Xna::Graphics::TextureContent, Xna::Graphics::TextureContent>(
+                Xna::ExternalReference<Xna::Graphics::TextureContent>(plaque), "TextureProcessor", other);
+        EXPECT_EQ(again.getFilenameProperty(), second.getFilenameProperty());
         std::filesystem::remove_all(root);
     }
 

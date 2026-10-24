@@ -835,6 +835,16 @@ namespace CNA::Content::Pipeline
         nestedOutputs_.push_back(std::move(output));
     }
 
+    ContentProcessorContext::NestedBuildNames& ContentProcessorContext::NestedNames() noexcept
+    {
+        return *nestedNames_;
+    }
+
+    void ContentProcessorContext::ShareNestedNames(const ContentProcessorContext& parent)
+    {
+        nestedNames_ = parent.nestedNames_;
+    }
+
     const std::vector<ContentAdditionalWriteOutput>& ContentProcessorContext::NestedOutputs() const noexcept
     {
         return nestedOutputs_;

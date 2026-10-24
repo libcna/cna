@@ -258,6 +258,7 @@ namespace CNA::Content::Pipeline
                     canonical->Identity().name, translated, context.ExternalSourceRoots(),
                     context.Dependencies(), context.Logger(), context.OutputFormat(),
                     context.Environment(), pipeline, context.SiblingsShared());
+                nested.ShareNestedNames(context);
                 return canonical->Process(input, nested);
             }
 
