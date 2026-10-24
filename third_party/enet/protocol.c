@@ -611,11 +611,11 @@ enet_protocol_handle_send_fragment (ENetHost * host, ENetPeer * peer, const ENet
          return -1;
     }
     
-    if ((startCommand -> fragments [fragmentNumber / 32] & (1 << (fragmentNumber % 32))) == 0)
+    if ((startCommand -> fragments [fragmentNumber / 32] & (1u << (fragmentNumber % 32))) == 0)
     {
        -- startCommand -> fragmentsRemaining;
 
-       startCommand -> fragments [fragmentNumber / 32] |= (1 << (fragmentNumber % 32));
+       startCommand -> fragments [fragmentNumber / 32] |= (1u << (fragmentNumber % 32));
 
        if (fragmentOffset + fragmentLength > startCommand -> packet -> dataLength)
          fragmentLength = startCommand -> packet -> dataLength - fragmentOffset;
@@ -729,11 +729,11 @@ enet_protocol_handle_send_unreliable_fragment (ENetHost * host, ENetPeer * peer,
          return -1;
     }
 
-    if ((startCommand -> fragments [fragmentNumber / 32] & (1 << (fragmentNumber % 32))) == 0)
+    if ((startCommand -> fragments [fragmentNumber / 32] & (1u << (fragmentNumber % 32))) == 0)
     {
        -- startCommand -> fragmentsRemaining;
 
-       startCommand -> fragments [fragmentNumber / 32] |= (1 << (fragmentNumber % 32));
+       startCommand -> fragments [fragmentNumber / 32] |= (1u << (fragmentNumber % 32));
 
        if (fragmentOffset + fragmentLength > startCommand -> packet -> dataLength)
          fragmentLength = startCommand -> packet -> dataLength - fragmentOffset;
