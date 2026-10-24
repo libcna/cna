@@ -314,6 +314,23 @@ own. `tools/avatar_builder/avatar_review.py` renders review sheets (views, faces
 headwear, facial hair, accessories, makeup, animations, expressions) through the real renderer
 (`cna_avatar_review`) and a CPU preview.
 
+**Visual regression.** `tools/avatar_builder/regression/` keeps 35 views of eight described
+avatars and of three `CreateRandom` avatars from a fixed seed (`cna_avatar_review --random 3 --seed
+2026`): both body types, short and tall, slim and broad, compact and long-limbed, light and dark
+skin, eight face presets, short, long, curly and tied hair, facial hair, glasses and sunglasses,
+headwear (over long hair too), eye, lip and blush makeup, earrings on three ear shapes, a watch, a
+ring, gloves, outfits and open shoes -- from the front, three-quarter, side and back, and as head,
+profile, ear, hand, feet and waist close-ups; standing, waving, celebrating, checking a hand,
+looking round, clapping and in the deepest crouch, and one expression. `manifest.json` is a
+`cna_avatar_review` job list (descriptions as bytes, cameras resolved) and `golden/` its renders on
+SOFTWARE, the canonical renderer. `GamerServices_AvatarVisualRegression` (labels `avatar`,
+`visual`) draws them with the build's default renderer and compares each with its golden: SOFTWARE
+strictly, every other renderer within the differences measured between renderers (`TOLERANCES` in
+`avatar_visual_regression.py`), writing golden/render/difference sheets for what fails. It fails as
+well when a view is missing or the manifest stops covering the list above. After an intentional
+art change, regenerate with `avatar_visual_regression.py manifest` if items or framing moved, then
+`update` on SOFTWARE, and look at every golden that changed before committing it.
+
 **Adding content.** New art is code in `tools/avatar_builder/` (`hair.py`, `garments.py`,
 `accessories.py`, `face.py`, `catalog.py`). A new entry takes the next free id of its kind's
 range, a label, random weights per body and `"format": 3`; regenerate with

@@ -60,6 +60,23 @@ each garment, shoe, hat, glove and hairstyle how much skin pokes out through it 
 content tests (`AvatarCatalogContentTests`) check the rest: sound geometry, every reference, and every
 model skinned through every animation preset.
 
+## Visual regression
+
+`avatar_visual_regression.py` keeps a small, checked-in regression set: `regression/manifest.json`
+(35 views of representative avatars, generated from `AVATARS` and `VIEWS` in the script) and
+`regression/golden/` (their renders on SOFTWARE). `check` draws the manifest with `cna_avatar_review`
+and compares every view with its golden within the renderer's tolerance; `update` captures goldens
+(SOFTWARE only); `manifest` regenerates the job list. Run `check` and `update` on a private display:
+
+```
+P=cmake-build-multi/cna_avatar_review
+tools/platform/run_gpu_tests_private.sh --exec python3 tools/avatar_builder/avatar_visual_regression.py check --program $P --renderer SDL_GPU
+```
+
+It replaces `scripts/avatar_visual_regression_check.py`, which took three `demo_avatar` screenshots
+with `xvfb-run` rather than the private GPU runner and compared fixed pixel boxes recorded for the
+catalog of 2026-07.
+
 ## Review
 
 `avatar_review.py` renders one deterministic job list two ways, so art changes are judged on the

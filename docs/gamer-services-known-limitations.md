@@ -691,7 +691,9 @@ been run.
   SOFTWARE, SDL_GPU (Vulkan), WebGPU and FNA3D (its SDL_GPU Vulkan driver) from one multi-renderer
   build through the private GPU runner, each confirmed by its log, all frames rendered. Against
   OpenGL 3.3 (`avatar_review.py compare`) the worst mean absolute pixel difference is 0.09/255
-  (WebGPU) and the worst silhouette overlap 0.9992 (SOFTWARE); OpenGL ES 3 is identical. The Gamer
+  (WebGPU) and the worst silhouette overlap 0.9992 (SOFTWARE); OpenGL ES 3 is identical. The
+  checked-in visual regression (35 views, `GamerServices_AvatarVisualRegression`, AVA-04) passes on
+  those six and on Mesa llvmpipe against goldens captured on SOFTWARE. The Gamer
   Services gtests (737 then) passed on all eight renderers compiled in except two on STUB, fixed
   in AVA-02. Through Windows translation layers, not native drivers: revision 4's 258-frame review
   rendered on DIRECTX9 (Wine with DXVK) and on SDL_GPU's Direct3D 12 backend (Wine with

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // cna_avatar_review JOBS.json OUTDIR
 // cna_avatar_review --random COUNT     (prints COUNT AvatarDescription::CreateRandom() descriptions as hex)
+// cna_avatar_review --random COUNT --seed SEED   (the same generator from a fixed seed: repeatable)
 //
 // Renders every job of an avatar review list (tools/avatar_builder/avatar_review.py) through the
 // standard XNA avatar API -- AvatarDescription, AvatarAnimation, AvatarRenderer -- into
@@ -8,6 +9,7 @@
 // Each frame is drawn at twice the job size and box-filtered down. Run it on a private display
 // (tools/platform/wayland_test_server.sh or the private GPU runner), never on the desktop.
 
+#include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -28,6 +30,7 @@
 #include <fstream>
 #include <map>
 #include <memory>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -205,14 +208,20 @@ namespace
 
 int main(int argc, char** argv)
 {
-    if (argc == 3 && std::string(argv[1]) == "--random")
+    const bool seeded = argc == 5 && std::string(argv[1]) == "--random" && std::string(argv[3]) == "--seed";
+    if ((argc == 3 && std::string(argv[1]) == "--random") || seeded)
     {
-        // The random avatars games get, for review sheets of them.
+        // The random avatars games get, for review sheets of them. With a seed, CreateRandom's own
+        // generator runs from a fixed state, so the visual regression manifest can name them.
+        namespace Avatars = CNA::Internal::GamerServices::Avatars;
+        std::mt19937 random(seeded ? static_cast<std::mt19937::result_type>(std::strtoul(argv[4], nullptr, 10)) : 0u);
         const int count = std::atoi(argv[2]);
         for (int i = 0; i < count; ++i)
         {
+            const auto bytes = seeded ? Avatars::encode(Avatars::randomDescriptor(std::nullopt, random))
+                                      : AvatarDescription::CreateRandom().getDescriptionProperty();
             std::string hex;
-            for (const auto byte : AvatarDescription::CreateRandom().getDescriptionProperty())
+            for (const auto byte : bytes)
             {
                 char digits[3];
                 std::snprintf(digits, sizeof(digits), "%02x", static_cast<unsigned>(byte));
@@ -224,7 +233,7 @@ int main(int argc, char** argv)
     }
     if (argc != 3)
     {
-        std::fprintf(stderr, "usage: cna_avatar_review JOBS.json OUTDIR | cna_avatar_review --random COUNT\n");
+        std::fprintf(stderr, "usage: cna_avatar_review JOBS.json OUTDIR | cna_avatar_review --random COUNT [--seed SEED]\n");
         return 2;
     }
     std::ifstream in(argv[1]);

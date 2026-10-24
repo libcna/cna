@@ -358,6 +358,19 @@ if(CNA_BUILD_EXAMPLES AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN
         cna_copy_sdl_runtime(cna_avatar_review)
         cna_copy_sdl_runtime(cna_guide_review)
     endif()
+    # plans/plan_avatar_acceptance.md AVA-04: the checked-in avatar visual regression
+    # (tools/avatar_builder/regression) drawn by cna_avatar_review with this build's default renderer
+    # and compared with goldens captured on SOFTWARE, within that renderer's tolerance. Needs Python 3
+    # with Pillow and a display (the private GPU runner); a cross build would need its emulator.
+    if(CNA_BUILD_TESTS AND NOT CMAKE_CROSSCOMPILING)
+        find_package(Python3 QUIET COMPONENTS Interpreter)
+        if(Python3_Interpreter_FOUND)
+            cna_register_renderer_test(NAME GamerServices_AvatarVisualRegression
+                COMMAND "${Python3_EXECUTABLE}" "${CNA_SOURCE_DIR}/tools/avatar_builder/avatar_visual_regression.py" check
+                        --program "$<TARGET_FILE:cna_avatar_review>" --out "${CMAKE_CURRENT_BINARY_DIR}/avatar-visual-regression"
+                TIMEOUT 600 LABELS "avatar;visual" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+        endif()
+    endif()
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

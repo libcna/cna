@@ -15,7 +15,7 @@ Task ids `AVA-*`; one task, one commit.
 | AVA-01 | Reproducible baseline on the current HEAD | done |
 | AVA-02 | The two STUB failures the baseline found | done |
 | AVA-03 | Documentation drift (revision, sizes, folds, proportions) | done |
-| AVA-04 | Visual regression: checked-in manifest and goldens, legacy script retired | open |
+| AVA-04 | Visual regression: checked-in manifest and goldens, legacy script retired | done |
 | AVA-05 | One Avatar v3 acceptance command | open |
 | AVA-06 | Earrings fitted to every ear shape | open |
 | AVA-07 | Planted-foot drift across bodies, heights and proportions | open |
@@ -106,3 +106,28 @@ face styles, 59 presets, 10 outfits, 359 files and 45,959,118 bytes with the man
 
 Revision 2 and 3 statements that describe their own time (the art direction's revision sections,
 the format rules for what revision 2 added, compatibility with builds from before revision 2) stay.
+
+## AVA-04 visual regression
+
+`avatar_review.py` already drew deterministic job lists through `cna_avatar_review` and compared
+renderers, but nothing kept a reference: `scripts/avatar_visual_regression_check.py`, three
+`demo_avatar` screenshots under `xvfb-run` measured in fixed pixel boxes of the 2026-07 catalog, was
+the only gate. It is removed. `tools/avatar_builder/avatar_visual_regression.py` builds on the review
+tools instead:
+
+- `regression/manifest.json`: 35 jobs generated from readable specs (eight described avatars, three
+  `CreateRandom` avatars from `cna_avatar_review --random 3 --seed 2026`, new here), covering the
+  representative matrix of the original brief and stating what each job covers; `check` fails if
+  the manifest stops covering it, if a job is missing or if `cna_avatar_review` fails. Regenerating
+  it is byte-identical. Job names say what they show, so adding one renames no golden.
+- `regression/golden/`: their renders on SOFTWARE, 256 px, 1.0 MB in all.
+- Tolerances from measurement, against SOFTWARE's goldens: OPENGLES3, OPENGL33, SDL_GPU, FNA3D and
+  Mesa llvmpipe (`LIBGL_ALWAYS_SOFTWARE=1`) within mean 0.081/255, worst 8x8 block 1, silhouette
+  0.9985, area 0; WEBGPU differs in skinned shading on posed frames (block up to 21, mean 0.49) and
+  has its own. Injected changes -- a hoop, ring or watch removed, a stud for a hoop, a round ear for a
+  long-lobed one, other glasses or shoes, 2 cm of height, a 20-level hair or 10-level top colour
+  change, the hat removed -- fail on every renderer; removing a thin eyeliner fails only on SOFTWARE.
+  A wrong golden fails with report.json and a golden/render/difference sheet.
+- `GamerServices_AvatarVisualRegression` (labels `avatar`, `visual`) runs `check` with a build's
+  default renderer; it passes in `cmake-build-multi` (OPENGLES3) through the private runner, and
+  `check --renderer` passes on all six drawing renderers.
