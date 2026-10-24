@@ -20,8 +20,8 @@ lookup = "ValidateGamePadState"
 cna_gamepad_state_set_packet_number_ext = { call = "state->packet_number = packet_number" }
 # The canonical hash mixes only the button set and the packet number.
 cna_gamepad_state_get_hash_code = { get = "static_cast<unsigned>(NativeButtons(state->pressed_buttons).GetHashCode()) ^ (static_cast<unsigned>(state->packet_number) * 31U)" }
-cna_gamepad_state_get_string_size = { size = "GamePadState().ToString()" }
-cna_gamepad_state_copy_string = { copy = "GamePadState().ToString()" }
+cna_gamepad_state_get_string_size = { size = "GamePadStateText(*state)" }
+cna_gamepad_state_copy_string = { copy = "GamePadStateText(*state)" }
 cna_gamepad_state_get_buttons = { get = "state->pressed_buttons" }
 cna_gamepad_state_get_dpad = { get = "state->pressed_buttons & DPadMask" }
 cna_gamepad_state_get_thumb_sticks = { get = "CNA_GamePadThumbSticks{state->analog.left_thumb_stick, state->analog.right_thumb_stick}" }

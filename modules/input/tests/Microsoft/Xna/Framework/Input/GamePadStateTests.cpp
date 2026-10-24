@@ -261,11 +261,15 @@ TEST(GamePadStateTest, GetHashCodeMatchesButtonsHashXorPacketFormula)
     EXPECT_EQ(state.GetHashCode(), sameAsState.GetHashCode());
 }
 
-TEST(GamePadStateTest, ToStringReturnsFullyQualifiedTypeNameRegardlessOfState)
+// XNA 4.0's IL overrides ToString with "{IsConnected:<bool>}" and reports no other field; FNA
+// returned the type name.
+TEST(GamePadStateTest, ToStringReportsOnlyTheConnectionInXnaFormat)
 {
     const GamePadState disconnected;
     const GamePadState connected(Vector2::Zero, Vector2::Zero, 0.0f, 0.0f, {Buttons::A});
+    const GamePadState otherConnected(Vector2::One, Vector2::Zero, 1.0f, 0.0f, {Buttons::B});
 
-    EXPECT_EQ(disconnected.ToString(), "Microsoft.Xna.Framework.Input.GamePadState");
-    EXPECT_EQ(connected.ToString(), "Microsoft.Xna.Framework.Input.GamePadState");
+    EXPECT_EQ(disconnected.ToString(), "{IsConnected:False}");
+    EXPECT_EQ(connected.ToString(), "{IsConnected:True}");
+    EXPECT_EQ(otherConnected.ToString(), "{IsConnected:True}");
 }

@@ -217,7 +217,7 @@ TEST(MouseStateTest, ToStringFormatsNoneWhenNoButtonsPressed)
     const MouseState state(1, 2, 3, ButtonState::Released, ButtonState::Released,
                             ButtonState::Released, ButtonState::Released, ButtonState::Released);
 
-    EXPECT_EQ(state.ToString(), "[MouseState X=1, Y=2, Buttons=None, Wheel=3]");
+    EXPECT_EQ(state.ToString(), "{X:1 Y:2 Buttons:None Wheel:3}");
 }
 
 TEST(MouseStateTest, ToStringFormatsMultiplePressedButtonsInLeftRightMiddleXButton1XButton2Order)
@@ -226,7 +226,17 @@ TEST(MouseStateTest, ToStringFormatsMultiplePressedButtonsInLeftRightMiddleXButt
     const MouseState state(0, 0, 0, ButtonState::Pressed, ButtonState::Released,
                             ButtonState::Released, ButtonState::Released, ButtonState::Pressed);
 
-    EXPECT_EQ(state.ToString(), "[MouseState X=0, Y=0, Buttons=Left XButton2, Wheel=0]");
+    EXPECT_EQ(state.ToString(), "{X:0 Y:0 Buttons:Left XButton2 Wheel:0}");
+}
+
+TEST(MouseStateTest, ToStringUsesXnaFormatWithNegativeValuesAndEveryButton)
+{
+    // XNA 4.0's IL: "{{X:{0} Y:{1} Buttons:{2} Wheel:{3}}}", buttons in Left, Right, Middle,
+    // XButton1, XButton2 order.
+    const MouseState state(-12, -34, -240, ButtonState::Pressed, ButtonState::Pressed,
+                            ButtonState::Pressed, ButtonState::Pressed, ButtonState::Pressed);
+
+    EXPECT_EQ(state.ToString(), "{X:-12 Y:-34 Buttons:Left Right Middle XButton1 XButton2 Wheel:-240}");
 }
 
 // ===========================================================================

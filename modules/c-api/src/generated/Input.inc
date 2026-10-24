@@ -184,7 +184,7 @@ CNA_Result cna_gamepad_state_get_string_size(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return CNA::C::Detail::ReportTextSize(GamePadState().ToString(), out_bytes);
+        return CNA::C::Detail::ReportTextSize(GamePadStateText(*state), out_bytes);
     });
 }
 
@@ -203,7 +203,7 @@ CNA_Result cna_gamepad_state_copy_string(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return CNA::C::Detail::CopyText(GamePadState().ToString(), destination, capacity, out_bytes);
+        return CNA::C::Detail::CopyText(GamePadStateText(*state), destination, capacity, out_bytes);
     });
 }
 

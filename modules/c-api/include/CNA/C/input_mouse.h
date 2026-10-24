@@ -141,9 +141,9 @@ CNA_C_API CNA_Result cna_mouse_state_get_string_size(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, or
  *         `CNA_RESULT_INVALID_ARGUMENT`. No partial value is written.
  *
- * Unlike the gamepad and keyboard snapshots, this type **does** override its string conversion:
- * the text reports the position, the pressed buttons by name — or `None` — and the vertical wheel,
- * and it does not mention the horizontal wheel.
+ * The text is XNA's `{X:<x> Y:<y> Buttons:<buttons> Wheel:<wheel>}`: the pressed buttons by
+ * name in Left, Right, Middle, XButton1, XButton2 order, space-separated, or `None`, and the
+ * vertical wheel. It does not mention the horizontal wheel.
  */
 CNA_C_API CNA_Result cna_mouse_state_copy_string(
     const CNA_MouseState* state,

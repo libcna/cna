@@ -1314,6 +1314,16 @@ constexpr CNA_MouseButtonFlags MouseButtonMask = CNA_MOUSE_BUTTON_LEFT | CNA_MOU
     return snapshot;
 }
 
+// GamePadState.ToString reports the connection alone, and XNA's public constructors all make a
+// connected state, so these two native states stand for every snapshot's text.
+[[nodiscard]] std::string GamePadStateText(const CNA_GamePadState& state)
+{
+    return (state.is_connected == CNA_TRUE
+                ? GamePadState(GamePadThumbSticks(), GamePadTriggers(), GamePadButtons(), GamePadDPad())
+                : GamePadState())
+        .ToString();
+}
+
 [[nodiscard]] MouseState NativeMouseState(const CNA_MouseState& state)
 {
     return MouseState(

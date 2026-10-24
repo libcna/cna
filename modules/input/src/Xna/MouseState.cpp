@@ -95,10 +95,12 @@ namespace Microsoft::Xna::Framework::Input
         if (xButton1_     == ButtonState::Pressed) append("XButton1");
         if (xButton2_     == ButtonState::Pressed) append("XButton2");
         if (buttons.empty()) buttons = "None";
-        return "[MouseState X=" + std::to_string(x_) +
-               ", Y=" + std::to_string(y_) +
-               ", Buttons=" + buttons +
-               ", Wheel=" + std::to_string(scrollWheelValue_) + "]";
+        // XNA 4.0's MouseState.ToString IL formats "{{X:{0} Y:{1} Buttons:{2} Wheel:{3}}}"; FNA's
+        // own bracketed text is not what a game ported from XNA reads back.
+        return "{X:" + std::to_string(x_) +
+               " Y:" + std::to_string(y_) +
+               " Buttons:" + buttons +
+               " Wheel:" + std::to_string(scrollWheelValue_) + "}";
     }
 
     bool operator==(const MouseState& left, const MouseState& right)

@@ -612,20 +612,28 @@ static int validate_pure_state_value_helpers(void)
         return 0;
     }
 
-    /* The canonical type does not override its string conversion, so the text is the fixed
-       fully-qualified type name and never reflects a field value. */
+    /* XNA's GamePadState.ToString reports the connection and nothing else: "{IsConnected:True}"
+       for this connected snapshot whatever its buttons and sticks, "{IsConnected:False}" for a
+       fresh one. */
     memset(text, 0, sizeof(text));
     if (cna_gamepad_state_get_string_size(&state, &bytes) != CNA_RESULT_SUCCESS ||
-        bytes != (uint64_t)strlen("Microsoft.Xna.Framework.Input.GamePadState") ||
+        bytes != (uint64_t)strlen("{IsConnected:True}") ||
         cna_gamepad_state_copy_string(&state, text, (uint64_t)sizeof(text), &bytes) !=
             CNA_RESULT_SUCCESS ||
-        strcmp(text, "Microsoft.Xna.Framework.Input.GamePadState") != 0) {
+        strcmp(text, "{IsConnected:True}") != 0) {
+        return 0;
+    }
+    memset(text, 0, sizeof(text));
+    if (cna_gamepad_state_init(&other) != CNA_RESULT_SUCCESS ||
+        cna_gamepad_state_copy_string(&other, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        strcmp(text, "{IsConnected:False}") != 0) {
         return 0;
     }
     memset(text, 0, sizeof(text));
     return cna_gamepad_state_copy_string(&state, text, UINT64_C(2), &bytes) ==
             CNA_RESULT_BUFFER_TOO_SMALL &&
-        bytes == (uint64_t)strlen("Microsoft.Xna.Framework.Input.GamePadState") &&
+        bytes == (uint64_t)strlen("{IsConnected:True}") &&
         text[0] == '\0' &&
         cna_gamepad_state_get_string_size(0, &bytes) == CNA_RESULT_INVALID_ARGUMENT &&
         cna_gamepad_state_copy_string(&state, text, UINT64_C(64), 0) ==
@@ -796,7 +804,8 @@ static int validate_pure_mouse_value_helpers(void)
         return 0;
     }
 
-    /* Unlike the gamepad and keyboard snapshots, this one really does describe its fields. */
+    /* XNA's "{X:.. Y:.. Buttons:.. Wheel:..}" text; unlike the keyboard snapshot's, it describes
+       the fields. */
     memset(text, 0, sizeof(text));
     if (cna_mouse_state_init_from_values(
             3, 4, 120, CNA_MOUSE_BUTTON_LEFT | CNA_MOUSE_BUTTON_RIGHT, &state) !=
@@ -804,14 +813,14 @@ static int validate_pure_mouse_value_helpers(void)
         cna_mouse_state_get_string_size(&state, &bytes) != CNA_RESULT_SUCCESS ||
         cna_mouse_state_copy_string(&state, text, (uint64_t)sizeof(text), &bytes) !=
             CNA_RESULT_SUCCESS ||
-        strcmp(text, "[MouseState X=3, Y=4, Buttons=Left Right, Wheel=120]") != 0) {
+        strcmp(text, "{X:3 Y:4 Buttons:Left Right Wheel:120}") != 0) {
         return 0;
     }
     memset(text, 0, sizeof(text));
     if (cna_mouse_state_init(&state) != CNA_RESULT_SUCCESS ||
         cna_mouse_state_copy_string(&state, text, (uint64_t)sizeof(text), &bytes) !=
             CNA_RESULT_SUCCESS ||
-        strcmp(text, "[MouseState X=0, Y=0, Buttons=None, Wheel=0]") != 0) {
+        strcmp(text, "{X:0 Y:0 Buttons:None Wheel:0}") != 0) {
         return 0;
     }
     memset(text, 0, sizeof(text));

@@ -112,10 +112,9 @@ namespace Microsoft::Xna::Framework::Input
 
     std::string GamePadState::ToString() const
     {
-        // FNA's GamePadState.ToString() is `return base.ToString();`; GamePadState never
-        // overrides ToString, so ValueType's default applies — the fully-qualified type
-        // name, regardless of field values.
-        return "Microsoft.Xna.Framework.Input.GamePadState";
+        // XNA 4.0's GamePadState.ToString IL overrides ValueType's and formats
+        // "{{IsConnected:{0}}}" with the Boolean's "True"/"False"; FNA leaves the type name.
+        return isConnected_ ? "{IsConnected:True}" : "{IsConnected:False}";
     }
 
     bool operator==(const GamePadState& left, const GamePadState& right)

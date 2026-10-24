@@ -707,8 +707,8 @@ CNA_C_API CNA_Result cna_gamepad_state_get_string_size(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, or
  *         `CNA_RESULT_INVALID_ARGUMENT`. No partial value is written.
  *
- * The canonical type does not override its string conversion, so the text is the fixed
- * fully-qualified type name and never reflects any field value.
+ * The text is XNA's: `{IsConnected:True}` or `{IsConnected:False}`. It reports the connection
+ * and no other field.
  */
 CNA_C_API CNA_Result cna_gamepad_state_copy_string(
     const CNA_GamePadState* state,
