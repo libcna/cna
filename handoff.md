@@ -8,20 +8,16 @@ and also carried the dated session log of 2026-07 to 2026-10; that log is in Git
 
 This is the current continuation point for a fresh-context agent. It is not a claim that the
 overall campaign is complete. Push only on the owner's word, Sharp Runtime before CNA before
-cna-demos.
+cna-demos; the 2026-10-24 work is published.
 
 Repositories and branches:
 
-- CNA: this repository, branch `next`. `origin/next` was pushed through `c6dec91fb` on 2026-10-24
-  at 10:28 (a push from this clone that the repair session did not run); local since then:
-  `30afa280b` (glTF Model pipeline component versions), the batch 9 closure `6c8b042c4`,
-  `51fb39d5a` (DC-R1), `c7f6c68e5` (DC-R2), `9ef292993` (DC-R3), the DC-R closure `c21f57aec`, the
-  consumer intake commits listed under "Latest accepted work", and the texture-upload ordering fixes
-  `d9b513ee0` and `96577db26`.
-- cna-demos: `../cna-demos`, branch `next`. Published through `92ee315`; every later commit is
-  local: the evidence, marker and corrected-check commits of batches 3-9 and their closures. Its
-  `docs/CNA_ISSUES.md` is the permanent historical inventory and its assertions remain the oracle.
-- Sharp Runtime: `../sharp-runtime`, branch `next`. Published except `f990d074` (XmlSerializer
+- CNA: this repository, branch `next`, published through the commit recording this (2026-10-24,
+  pushed on the owner's word together with Sharp Runtime and cna-demos).
+- cna-demos: `../cna-demos`, branch `next`, published through the same push (`dd0f284` and the
+  commit recording it). Its `docs/CNA_ISSUES.md` is the permanent historical inventory and its
+  assertions remain the oracle.
+- Sharp Runtime: `../sharp-runtime`, branch `next`, published through `f990d074` (XmlSerializer
   property members, which CNA `bbed8c61e` needs). Do not make an incidental dependency edit.
 - Museum and cna-engine inventories are consumer-owned. Do not edit them from CNA; their agents
   move pins/findings after published CNA commits are available.
@@ -91,7 +87,7 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   SamplerLevelOfDetailBias, PbrEffectShading, SkinnedPbrEffectShading, each checked against
   every renderer's pixels; this fixed FNA3D's SpriteBatch dropping the batch's mip state and
   corrected headers that called SOFTWARE's PBR a fallback). `30afa280b` bumps the glTF Model
-  pipeline component versions so existing content builds recompile. C ABI 0.50.0 (unpublished)
+  pipeline component versions so existing content builds recompile. C ABI 0.50.0 (published 2026-10-24)
   carries the camera routes and feature constants; 3,212 exports.
 - galaxy-eggbert UB-003 (`f8e2b8cc6`): the avatar converter writes XNA's clockwise front faces;
   galaxy-eggbert re-verified it.
@@ -129,8 +125,8 @@ The museum Pipeline Workshop items are all answered: 1 (build-wide nested names,
 genuine XNA, demos `9598b43`) and 16 (owner: the documentation half is enough; the task sources
 stay in `modules/content-pipeline`). What remains needs a host this machine does not have: the
 three Windows/XNA platform validations (003, 101, 152) and the museum's own reruns of the entries
-listed at the top of `CNA_MUSEUM_REPAIR_HANDOFF.md`. Sharp Runtime `f990d074` is local, so the push
-order matters when the owner asks for one.
+listed at the top of `CNA_MUSEUM_REPAIR_HANDOFF.md`, which can start now that everything is
+published.
 Triaged, not a defect: in `cmake-build-multi`, `cna_c_api_effect_smoke` run with
 `CNA_GRAPHICS_RENDERER=WEBGPU` fails its stage 3 because a WEBGPU effect on the WEBGPU-76 WGSL
 contract has no cube sampler and refuses one with `NotSupportedException`
