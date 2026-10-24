@@ -13,7 +13,10 @@
 #include <string>
 #include <vector>
 
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Point.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -21,7 +24,10 @@
 #include "System/IO/File.hpp"
 #include "System/Xml/Serialization/XmlSerializer.hpp"
 
+using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Point;
+using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Vector4;
@@ -103,6 +109,50 @@ TEST(XnaMathXmlSerializationTest, TheVectorTypesUseTheirOwnComponentNames)
     const std::string four = XmlSerializer<Vector4>{}.Serialize(Vector4(1.0f, 2.0f, 3.0f, 4.0f));
     EXPECT_NE(four.find("<W>4</W>"), std::string::npos) << four;
     EXPECT_EQ(XmlSerializer<Vector4>{}.Deserialize(four), Vector4(1.0f, 2.0f, 3.0f, 4.0f));
+}
+
+// Museum Pipeline Workshop item 9: XmlSerializer<Color> and <Rectangle> did not compile. The
+// expected text is genuine XNA 4.0's, measured under Framework4/Wine
+// (../cna-demos/docs/repair-evidence/content/XmlColorRectangleOracle.cs): properties after
+// fields, in declaration order, and reading in document order, so a later element overwrites
+// state an earlier one set.
+TEST(XnaMathXmlSerializationTest, ColorRectangleAndPointMatchXnasXmlSerializer)
+{
+    const std::string color = XmlSerializer<Color>{}.Serialize(Color(10, 20, 30, 40));
+    EXPECT_NE(color.find("<R>10</R><G>20</G><B>30</B><A>40</A>"
+                         "<PackedValue>673059850</PackedValue>"),
+              std::string::npos)
+        << color;
+    EXPECT_EQ(XmlSerializer<Color>{}.Deserialize(color), Color(10, 20, 30, 40));
+
+    const std::string rectangle = XmlSerializer<Rectangle>{}.Serialize(Rectangle(1, 2, 3, 4));
+    EXPECT_NE(rectangle.find("<X>1</X><Y>2</Y><Width>3</Width><Height>4</Height>"
+                             "<Location><X>1</X><Y>2</Y></Location>"),
+              std::string::npos)
+        << rectangle;
+    EXPECT_EQ(XmlSerializer<Rectangle>{}.Deserialize(rectangle), Rectangle(1, 2, 3, 4));
+
+    const std::string point = XmlSerializer<Point>{}.Serialize(Point(5, 6));
+    EXPECT_NE(point.find("<Point"), std::string::npos) << point;
+    EXPECT_NE(point.find("<X>5</X><Y>6</Y>"), std::string::npos) << point;
+}
+
+TEST(XnaMathXmlSerializationTest, ColorAndRectangleReadTheirElementsInDocumentOrder)
+{
+    // Each answer is what genuine XNA's XmlSerializer read from the same document.
+    const Color partial = XmlSerializer<Color>{}.Deserialize("<Color><R>7</R><G>8</G></Color>");
+    EXPECT_EQ(partial, Color(7, 8, 0, 0));
+    EXPECT_EQ(partial.getPackedValueProperty(), 2055u);
+    const Color packedLast = XmlSerializer<Color>{}.Deserialize(
+        "<Color><R>1</R><G>2</G><B>3</B><A>4</A><PackedValue>4278190335</PackedValue></Color>");
+    EXPECT_EQ(packedLast, Color(255, 0, 0, 255));
+    const Rectangle located = XmlSerializer<Rectangle>{}.Deserialize(
+        "<Rectangle><X>1</X><Y>2</Y><Width>3</Width><Height>4</Height>"
+        "<Location><X>9</X><Y>8</Y></Location></Rectangle>");
+    EXPECT_EQ(located, Rectangle(9, 8, 3, 4));
+    const Rectangle partialRectangle =
+        XmlSerializer<Rectangle>{}.Deserialize("<Rectangle><Width>3</Width></Rectangle>");
+    EXPECT_EQ(partialRectangle, Rectangle(0, 0, 3, 0));
 }
 
 // The document ShipGame loads for every level spawn point, unmodified.

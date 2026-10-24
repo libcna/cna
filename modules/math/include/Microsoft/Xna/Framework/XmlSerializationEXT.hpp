@@ -27,8 +27,11 @@
 #include <tuple>
 
 #include "CNA/CNAHelper.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Point.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -100,5 +103,60 @@ namespace Microsoft::Xna::Framework
             MakeMember("M33", &Matrix::M33), MakeMember("M34", &Matrix::M34),
             MakeMember("M41", &Matrix::M41), MakeMember("M42", &Matrix::M42),
             MakeMember("M43", &Matrix::M43), MakeMember("M44", &Matrix::M44));
+    }
+
+    /** @brief CNAEXT: root element name XmlSerializer uses for a top-level Point. */
+    CNAEXT constexpr const char* SharpXmlRootName(const Point*) { return "Point"; }
+
+    /** @brief CNAEXT: Point's serialized members, its two public fields. */
+    CNAEXT constexpr auto SharpXmlMembers(const Point*)
+    {
+        using ::System::Xml::Serialization::detail::MakeMember;
+        return std::make_tuple(MakeMember("X", &Point::X), MakeMember("Y", &Point::Y));
+    }
+
+    /** @brief CNAEXT: root element name XmlSerializer uses for a top-level Rectangle. */
+    CNAEXT constexpr const char* SharpXmlRootName(const Rectangle*) { return "Rectangle"; }
+
+    /**
+     * @brief CNAEXT: Rectangle's serialized members: its four public fields, then `Location`.
+     *
+     * `Location` is XNA's one settable property here (Left, Center and the rest are read-only),
+     * so XmlSerializer writes it after the fields, as a nested Point; measured against genuine
+     * XNA 4.0 under Framework4/Wine, `Rectangle(1, 2, 3, 4)` is `<X>1</X><Y>2</Y><Width>3</Width>
+     * <Height>4</Height><Location><X>1</X><Y>2</Y></Location>`, and a later `Location` overrides
+     * the X and Y read before it.
+     */
+    CNAEXT constexpr auto SharpXmlMembers(const Rectangle*)
+    {
+        using ::System::Xml::Serialization::detail::MakeMember;
+        using ::System::Xml::Serialization::detail::MakeProperty;
+        return std::make_tuple(MakeMember("X", &Rectangle::X), MakeMember("Y", &Rectangle::Y),
+                               MakeMember("Width", &Rectangle::Width),
+                               MakeMember("Height", &Rectangle::Height),
+                               MakeProperty("Location", &Rectangle::getLocationProperty,
+                                            &Rectangle::setLocationProperty));
+    }
+
+    /** @brief CNAEXT: root element name XmlSerializer uses for a top-level Color. */
+    CNAEXT constexpr const char* SharpXmlRootName(const Color*) { return "Color"; }
+
+    /**
+     * @brief CNAEXT: Color's serialized members, its five read/write properties in XNA's order.
+     *
+     * Color has no public field, so XmlSerializer writes its properties: measured against genuine
+     * XNA 4.0 under Framework4/Wine, `Color(10, 20, 30, 40)` is `<R>10</R><G>20</G><B>30</B>
+     * <A>40</A><PackedValue>673059850</PackedValue>`. Reading follows the document, so a
+     * `PackedValue` after the channels replaces them.
+     */
+    CNAEXT constexpr auto SharpXmlMembers(const Color*)
+    {
+        using ::System::Xml::Serialization::detail::MakeProperty;
+        return std::make_tuple(MakeProperty("R", &Color::getRProperty, &Color::setRProperty),
+                               MakeProperty("G", &Color::getGProperty, &Color::setGProperty),
+                               MakeProperty("B", &Color::getBProperty, &Color::setBProperty),
+                               MakeProperty("A", &Color::getAProperty, &Color::setAProperty),
+                               MakeProperty("PackedValue", &Color::getPackedValueProperty,
+                                            &Color::setPackedValueProperty));
     }
 }
