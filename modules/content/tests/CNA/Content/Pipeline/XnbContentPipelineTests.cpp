@@ -1061,9 +1061,9 @@ TEST(XnbContentPipelineTest, LosslessModelSubsetProducesCanonicalNativeModel)
     EXPECT_EQ(first.importer,
               (Pipeline::ContentComponentIdentity{"CNA.XnbImporter", "3"}));
     EXPECT_EQ(first.processor,
-              (Pipeline::ContentComponentIdentity{"CNA.ModelProcessor", "3"}));
+              (Pipeline::ContentComponentIdentity{"CNA.ModelProcessor", "4"}));
     EXPECT_EQ(first.writer,
-              (Pipeline::ContentComponentIdentity{"CNA.ModelContentWriter", "3"}));
+              (Pipeline::ContentComponentIdentity{"CNA.ModelContentWriter", "4"}));
     EXPECT_EQ(first.output.assetSchemaVersion, Cnb::CnbModelSchemaVersion);
     EXPECT_EQ(ParseOutput(first).AssetSchemaVersion(), Cnb::CnbModelSchemaVersion);
     EXPECT_EQ(first.output.bytes, expectedBytes);

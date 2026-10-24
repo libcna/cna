@@ -239,7 +239,7 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity GltfImporter::Identity() const
     {
-        return {kGltfImporterName, "2"};
+        return {kGltfImporterName, "3"};
     }
 
     std::vector<std::string> GltfImporter::SourceExtensions() const
@@ -328,7 +328,7 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity ModelProcessor::Identity() const
     {
-        return {kModelProcessorName, "3"};
+        return {kModelProcessorName, "4"};
     }
 
     std::string ModelProcessor::InputType() const
@@ -519,7 +519,7 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity ModelContentWriter::Identity() const
     {
-        return {kModelWriterName, "3"};
+        return {kModelWriterName, "4"};
     }
 
     std::vector<ContentWriterSchemaIdentity>

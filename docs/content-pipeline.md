@@ -390,7 +390,7 @@ canonical type name, and loader through `ContentManager::RegisterCnbLoaderEXT<T>
 | `.wav` | `CNA.WavImporter/1` | `ImportedSound` | `CNA.SoundEffectProcessor/1` | `CNA.SoundEffectContentWriter/1` |
 | `.mp3`, `.ogg`, `.oga`, `.qoa`, `.flac`, `.opus`, `.aac`, `.wma` | `CNA.SongImporter/2` | `ImportedSongSource` | `CNA.SongProcessor/2` | `CNA.SongContentWriter/1` |
 | `.mp4`, `.ogv`, `.webm`, `.mkv`, `.avi`, `.mov` | `CNA.VideoImporter/2` | `ImportedVideoSource` | `CNA.VideoProcessor/2` | `CNA.VideoContentWriter/1` |
-| `.gltf`, `.glb` | `CNA.GltfImporter/2` | `ImportedModelDocument` | `CNA.ModelProcessor/3` | `CNA.ModelContentWriter/3` |
+| `.gltf`, `.glb` | `CNA.GltfImporter/3` | `ImportedModelDocument` | `CNA.ModelProcessor/4` | `CNA.ModelContentWriter/4` |
 | `.cnj` Texture2D | `CNA.CnjImporter/1` | `ImportedImage` | same texture processor | same Texture2D writer |
 | `.cnj` SoundEffect | `CNA.CnjImporter/1` | `ImportedSound` | same sound processor | same SoundEffect writer |
 | `.cnj` Model | `CNA.CnjImporter/1` | `ImportedModelDocument` | same Model processor | same Model writer |
