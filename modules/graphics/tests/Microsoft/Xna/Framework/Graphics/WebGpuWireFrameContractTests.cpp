@@ -294,7 +294,7 @@ TEST(WebGpuWireFrameContract, CapabilityQueryAnswersForWireFrame)
     // (several render targets, occlusion queries, volume textures) are HiDef features.
     GraphicsDevice gd(Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
                       Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
-                      Microsoft::Xna::Framework::Graphics::PresentationParameters());
+                      Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(800, 480));
     EXPECT_NO_THROW({ (void)gd.SupportsCapability(GraphicsCapability::WireFrame); });
     const bool reported = gd.SupportsCapability(GraphicsCapability::WireFrame);
     std::cout << "[WEBGPU-153] SupportsCapability(WireFrame) == "
@@ -933,7 +933,7 @@ TEST(WebGpuWireFrameContract, EveryPublicDrawRouteWireframesAndAcceptsSolid)
         // plans/plan_apple_m4.md AM4-177: HiDef, which the instanced route needs.
         GraphicsDevice gd(Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
                           Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
-                          Microsoft::Xna::Framework::Graphics::PresentationParameters());
+                          Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(800, 480));
 
         // Solid first: this leg is the proof that the route exists and reaches the GPU at all.
         const RouteRun solid = RunRoute(gd, FillMode::Solid, *route);
@@ -956,7 +956,7 @@ TEST(WebGpuWireFrameContract, EveryPublicDrawRouteWireframesAndAcceptsSolid)
         GraphicsDevice wireDevice(
             Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
             Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
-            Microsoft::Xna::Framework::Graphics::PresentationParameters());
+            Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(800, 480));
         const RouteRun wire = RunRoute(wireDevice, FillMode::WireFrame, *route);
         PrintRun((std::string(route->Name()) + " wireframe").c_str(), wire);
         ASSERT_TRUE(wire.accepted)

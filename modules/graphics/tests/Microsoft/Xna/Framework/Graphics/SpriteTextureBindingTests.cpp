@@ -29,7 +29,7 @@ class SpriteTextureBindingTest : public testing::Test
 {
 protected:
     GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(),
-                          GraphicsProfile::HiDef, PresentationParameters{}};
+                          GraphicsProfile::HiDef, PresentationParameters::CreateWindowedEXT(800, 480)};
     Texture2D first{device, 1, 1};
     Texture2D second{device, 1, 1};
     SpriteBatch batch{device};

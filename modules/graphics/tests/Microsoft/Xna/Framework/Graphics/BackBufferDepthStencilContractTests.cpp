@@ -50,7 +50,7 @@ namespace
 {
     PresentationParameters BackbufferParameters(DepthFormat depthFormat, int samples = 0)
     {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         parameters.setBackBufferWidthProperty(16);
         parameters.setBackBufferHeightProperty(16);
         parameters.setDepthStencilFormatProperty(depthFormat);

@@ -100,7 +100,7 @@ class CnjTexture3DTest : public ::testing::Test
 {
 protected:
     GraphicsDevice gd{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                      PresentationParameters()};
+                      PresentationParameters::CreateWindowedEXT(800, 480)};
 };
 
 // Texture3D is a documented, renderer-dependent capability -- Headless has no

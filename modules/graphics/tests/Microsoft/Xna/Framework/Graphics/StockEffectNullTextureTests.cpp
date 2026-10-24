@@ -75,7 +75,7 @@ namespace
             if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, WebGPU, SdlGpu))
                 GTEST_SKIP() << "needs a stock-effect raster path whose missing slots are pinned";
 
-            PresentationParameters parameters;
+            PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
             parameters.setBackBufferWidthProperty(kSize);
             parameters.setBackBufferHeightProperty(kSize);
             parameters.setDepthStencilFormatProperty(DepthFormat::None);

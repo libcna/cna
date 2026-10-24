@@ -46,8 +46,10 @@ static CNA_Result on_draw(
         state->failure_result = result;
         return result;
     }
+    /* XNA's defaults describe a 0x0 full-screen back buffer; this device is a small window. */
     parameters.back_buffer_width = 64;
     parameters.back_buffer_height = 64;
+    parameters.is_full_screen = CNA_FALSE;
     /* The clear below asks for depth and stencil, so the device has to be created with them.
        cna_presentation_parameters_init defaults to DepthFormat::None, and SOFTWARE-333 stopped
        masking a clear of an attachment that does not exist -- Microsoft XNA reports

@@ -1994,7 +1994,7 @@ namespace
         namespace Fx = CNA::TestSupport::EffectFormat;
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-            PresentationParameters());
+            PresentationParameters::CreateWindowedEXT(800, 480));
         CNA::TestSupport::SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
         options.includeSampler = true;
@@ -2057,7 +2057,7 @@ namespace
         namespace Fx = CNA::TestSupport::EffectFormat;
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-            PresentationParameters());
+            PresentationParameters::CreateWindowedEXT(800, 480));
         CNA::TestSupport::SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
         options.includeSampler = true;
@@ -2118,7 +2118,7 @@ namespace
         namespace Fx = CNA::TestSupport::EffectFormat;
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-            PresentationParameters());
+            PresentationParameters::CreateWindowedEXT(800, 480));
         CNA::TestSupport::SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
         options.includeSampler = true;
@@ -2184,7 +2184,7 @@ namespace
         namespace Fx = CNA::TestSupport::EffectFormat;
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-            PresentationParameters());
+            PresentationParameters::CreateWindowedEXT(800, 480));
         CNA::TestSupport::SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
         options.includeSampler = true;
@@ -5534,7 +5534,7 @@ namespace
         namespace Fx = CNA::TestSupport::EffectFormat;
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-            PresentationParameters());
+            PresentationParameters::CreateWindowedEXT(800, 480));
         TextureCube cube(device, 1, false, SurfaceFormat::Color);
         for (int face = 0; face < 6; ++face)
         {
@@ -5608,7 +5608,7 @@ namespace
         namespace Fx = CNA::TestSupport::EffectFormat;
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-            PresentationParameters());
+            PresentationParameters::CreateWindowedEXT(800, 480));
         CNA::TestSupport::SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
         options.includeSampler = true;
@@ -6665,7 +6665,7 @@ namespace
         namespace Fx = CNA::TestSupport::EffectFormat;
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-            PresentationParameters());
+            PresentationParameters::CreateWindowedEXT(800, 480));
         CNA::TestSupport::SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
         options.includeSampler = true;
@@ -6757,7 +6757,7 @@ namespace
         namespace Fx = CNA::TestSupport::EffectFormat;
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-            PresentationParameters());
+            PresentationParameters::CreateWindowedEXT(800, 480));
         CNA::TestSupport::SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
         options.includeSampler = true;
@@ -6992,7 +6992,7 @@ namespace
 
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-            PresentationParameters());
+            PresentationParameters::CreateWindowedEXT(800, 480));
         const auto makeEffect = [&](Operation operation, SyntheticSamplerKind samplerKind,
                                     bool samplesTexture)
         {
@@ -7114,7 +7114,7 @@ namespace
 
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-            PresentationParameters());
+            PresentationParameters::CreateWindowedEXT(800, 480));
         Texture2D texture(device, 8, 8, true, SurfaceFormat::Color);
         std::vector<Color> texels(64, Color::Red);
         for (int y = 0; y < 4; ++y)
@@ -7299,7 +7299,7 @@ namespace
         constexpr int slot = 2;
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-            PresentationParameters());
+            PresentationParameters::CreateWindowedEXT(800, 480));
         const std::vector<CNA::TestSupport::SyntheticSamplerState> states = {
             {Fx::SampMagFilter, Fx::FilterPoint},
             {Fx::SampMinFilter, Fx::FilterPoint},
@@ -7454,7 +7454,7 @@ namespace
         constexpr int slot = 1;
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-            PresentationParameters());
+            PresentationParameters::CreateWindowedEXT(800, 480));
         const auto states = [](std::uint32_t addressW)
         {
             return std::vector<CNA::TestSupport::SyntheticSamplerState>{
@@ -7570,7 +7570,7 @@ namespace
 
         GraphicsDevice textureDevice(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-            PresentationParameters());
+            PresentationParameters::CreateWindowedEXT(800, 480));
         struct SamplingVertex
         {
             float position[4];
@@ -8208,7 +8208,7 @@ namespace
         constexpr int size = 8;
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-            PresentationParameters());
+            PresentationParameters::CreateWindowedEXT(800, 480));
         const auto setProjection = [](Effect& effect)
         {
             effect.getParametersProperty()["Transform"]->SetValue(

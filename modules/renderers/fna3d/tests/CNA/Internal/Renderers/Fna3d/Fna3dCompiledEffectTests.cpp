@@ -774,7 +774,7 @@ TEST(Fna3dCompiledEffectDrawTest, SharedEffectSwitchingContract)
 TEST(Fna3dCompiledEffectTest, SharedBackendConformanceContract)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectContract(device);
@@ -1061,7 +1061,7 @@ TEST(Fna3dCompiledEffectTest, SyntheticBlendFactorStateMatchesFnaByteOrderingInP
     using namespace Microsoft::Xna::Framework::Graphics;
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     Effect shader(device, LoadStockEffect("BasicEffect.fxb"));
@@ -1322,7 +1322,7 @@ TEST(Fna3dCompiledEffectTest, CompiledEffectSurvivesDeviceReset)
     using namespace Microsoft::Xna::Framework::Graphics;
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     Effect effect(device, LoadStockEffect("BasicEffect.fxb"));
@@ -1530,7 +1530,7 @@ TEST(Fna3dCompiledEffectTest, ContentManagerLoadsXnbEffectAndRendersIt)
     using namespace Microsoft::Xna::Framework::Graphics;
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     BuiltInReaderScope readers;
@@ -1616,7 +1616,7 @@ TEST(Fna3dCompiledEffectTest, CompiledBasicEffectRendersThroughDrawUserPrimitive
     using namespace Microsoft::Xna::Framework::Graphics;
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
 
@@ -1661,7 +1661,7 @@ TEST(Fna3dCompiledEffectTest, CompiledSpriteEffectRendersThroughDrawUserPrimitiv
     using namespace Microsoft::Xna::Framework::Graphics;
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     Effect effect(device, LoadStockEffect("SpriteEffect.fxb"));
@@ -1699,7 +1699,7 @@ TEST(Fna3dCompiledEffectTest, SingleVertexTextureAndSamplerReachTheDraw)
 {
     using namespace Microsoft::Xna::Framework::Graphics;
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     CNA::TestSupport::RunCompiledEffectVertexTextureContract(device, SurfaceFormat::Single);
 }
 
@@ -1708,7 +1708,7 @@ TEST(Fna3dCompiledEffectTest, SingleTexturePreservesFloatValuesAcrossMipAndRegio
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     Texture2D texture(device, 4, 4, true, SurfaceFormat::Single);
     ASSERT_EQ(texture.getFormatProperty(), SurfaceFormat::Single);
     ASSERT_EQ(texture.getLevelCountProperty(), 3);
@@ -1737,7 +1737,7 @@ TEST(Fna3dCompiledEffectTest, SingleCubePreservesFloatValuesAcrossFacesAndMips)
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     TextureCube texture(device, 4, true, SurfaceFormat::Single);
     for (int face = 0; face < 6; ++face)
         for (int level = 0; level < 3; ++level)
@@ -1763,7 +1763,7 @@ TEST(Fna3dCompiledEffectTest, VertexTextureAndSamplerDeviceCollectionsReachTheDr
     using namespace Microsoft::Xna::Framework::Graphics;
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
 
@@ -1847,7 +1847,7 @@ TEST(Fna3dCompiledEffectTest, SpriteBatchExecutesCompiledEffectAndOverridesTextu
     using namespace Microsoft::Xna::Framework::Graphics;
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
 
@@ -2000,7 +2000,7 @@ TEST(Fna3dCompiledEffectDrawTest, SharedDeviceTextureSlotAfterApplyContract)
 TEST(Fna3dCompiledEffectDrawTest, SharedMrtWriteMaskContract)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectMrtWriteMaskContract(device);
@@ -2035,7 +2035,7 @@ TEST(Fna3dCompiledEffectDrawTest, SharedLodBiasPerDrawContract)
 TEST(Fna3dCompiledEffectDrawTest, SharedAddressWContract)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectAddressWContract(device);

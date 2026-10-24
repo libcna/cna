@@ -346,7 +346,7 @@ namespace
         Microsoft::Xna::Framework::Graphics::GraphicsDevice device{
             Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
             Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
-            Microsoft::Xna::Framework::Graphics::PresentationParameters{}};
+            Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(800, 480)};
 
         // plans/plan_runtimerenderer.md RTR-P9-5: this whole file used to sit behind
         // `#ifdef CNA_RENDERER_SDL_GPU`, so on every other renderer its 27 tests did not exist and

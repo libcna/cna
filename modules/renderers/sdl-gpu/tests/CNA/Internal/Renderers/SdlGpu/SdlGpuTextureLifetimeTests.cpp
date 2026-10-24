@@ -27,7 +27,7 @@ TEST_P(SdlGpuTextureLifetimeTest, NativeAllocationIsReleasedBeforeAnEscapedRende
     std::function<bool()> nativeAllocationIsLive;
     std::function<void()> checkAttachments;
     {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                               parameters);
         if (kind == "Texture2D")
@@ -110,7 +110,7 @@ INSTANTIATE_TEST_SUITE_P(SdlGpuResources, SdlGpuTextureLifetimeTest,
 TEST(SdlGpuTextureLifetime, FailedConstructionLeavesNoRegisteredState)
 {
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::SdlGpu);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
     auto &renderer = dynamic_cast<SdlGpuRenderer &>(device.GetRenderer());
     CNA::Internal::Renderers::ImageData invalidImage;

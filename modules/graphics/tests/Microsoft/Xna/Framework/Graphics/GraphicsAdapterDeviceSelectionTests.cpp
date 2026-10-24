@@ -210,7 +210,7 @@ TEST_F(GraphicsAdapterDeviceSelectionTest, WithBothFlagsClearADeviceIsCreatedAsB
     });
     EXPECT_NO_THROW({
         GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                             PresentationParameters{});
+                             PresentationParameters::CreateWindowedEXT(800, 480));
         EXPECT_FALSE(device.getIsDisposedProperty());
     });
 }

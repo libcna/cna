@@ -1029,7 +1029,7 @@ class HiDefFormatConstructionTest : public ::testing::Test
 {
 protected:
     GraphicsDevice gd{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                      PresentationParameters()};
+                      PresentationParameters::CreateWindowedEXT(800, 480)};
 
     void ExpectConstructionMatchesRenderer(SurfaceFormat format)
     {
@@ -2488,7 +2488,7 @@ TEST_F(SaveAsPngTest, ResolvedRenderTargetSavesItsLivePixels)
 TEST_F(SaveAsPngTest, ConvertsEverySupportedClassicSurfaceFormatToRgba)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     struct Case
     {
         SurfaceFormat format;
@@ -2547,7 +2547,7 @@ TEST_F(SaveAsPngTest, ConvertsEverySupportedClassicSurfaceFormatToRgba)
 TEST_F(SaveAsPngTest, DecompressesEveryClassicDxtFormatBeforeEncoding)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     const std::array<std::pair<SurfaceFormat, std::vector<std::uint8_t>>, 3> cases{{
         {SurfaceFormat::Dxt1, {0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0}},
         {SurfaceFormat::Dxt3, {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,

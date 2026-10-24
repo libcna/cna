@@ -147,7 +147,7 @@ TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
         // (SDLGPU-132) -- and a default device's back buffer has none, as in XNA, whose
         // PresentationParameters.DepthStencilFormat defaults to None. Ask both ways.
         EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
-        Microsoft::Xna::Framework::Graphics::PresentationParameters parameters;
+        Microsoft::Xna::Framework::Graphics::PresentationParameters parameters = Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(800, 480);
         parameters.setDepthStencilFormatProperty(
             Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
         GraphicsDevice withDepth(
@@ -249,7 +249,7 @@ TEST(GraphicsDeviceCapabilityTest, SupportsOcclusionQuery)
         Microsoft::Xna::Framework::Graphics::GraphicsDevice hiDef(
             Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
             Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
-            Microsoft::Xna::Framework::Graphics::PresentationParameters());
+            Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(800, 480));
         bool constructed = false;
         try
         {

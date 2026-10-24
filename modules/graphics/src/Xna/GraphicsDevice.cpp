@@ -421,11 +421,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
     }
 
+    // XNA's PresentationParameters() describes a 0x0 full-screen back buffer, so this
+    // convenience states GraphicsDeviceManager's default windowed 800x480 itself.
     GraphicsDevice::GraphicsDevice()
         : GraphicsDevice(
             GraphicsAdapter::getDefaultAdapterProperty(),
             GraphicsProfile::Reach,
-            PresentationParameters()
+            PresentationParameters::CreateWindowedEXT(800, 480)
         )
     {
     }

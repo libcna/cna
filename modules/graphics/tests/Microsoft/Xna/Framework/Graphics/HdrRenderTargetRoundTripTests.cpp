@@ -283,7 +283,7 @@ TEST(HdrRenderTargetRoundTripTest, EveryClassicFloatLayoutKeepsItsDeclaredChanne
 TEST(HdrRenderTargetRoundTripTest, HdrBlendableRasterAndAdditiveBlendRemainInTheFloatDomain)
 {
     GraphicsDevice gd(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                      PresentationParameters());
+                      PresentationParameters::CreateWindowedEXT(800, 480));
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
         GTEST_SKIP() << "this renderer/driver has no blendable RGBA16F render targets";
 
@@ -516,7 +516,7 @@ TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetTransfersItsTypedTexels)
 TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetSamplesWithoutAnRgba8Intermediate)
 {
     GraphicsDevice gd(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                      PresentationParameters());
+                      PresentationParameters::CreateWindowedEXT(800, 480));
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
         GTEST_SKIP() << "this renderer/driver has no RGBA16F render targets";
 

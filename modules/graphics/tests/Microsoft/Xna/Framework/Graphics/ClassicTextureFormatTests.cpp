@@ -405,7 +405,7 @@ namespace
 TEST(ClassicTextureFormat, EveryPromotedFormatPreservesFullPartialAndMipBytesExactly)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
 
     VerifyExactTransfers<NormalizedByte2>(device, SurfaceFormat::NormalizedByte2, [](int i) {
         return NormalizedByte2((i % 5 - 2) * 0.25f, (i % 7 - 3) * 0.2f);
@@ -464,7 +464,7 @@ TEST(ClassicTextureFormat, EveryPromotedFormatPreservesFullPartialAndMipBytesExa
 TEST(ClassicTextureFormat, PointSamplingExpandsChannelsAndPreservesDeclaredRanges)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
 
     VerifySpriteSample(device, SurfaceFormat::NormalizedByte2,
                        NormalizedByte2(0.5f, 0.25f), 129, 64, 255, 255);
@@ -524,7 +524,7 @@ TEST(ClassicTextureFormat, PointSamplingExpandsChannelsAndPreservesDeclaredRange
 TEST(ClassicTextureFormat, HalfVector4PhysicalLinearCapabilityDoesNotBypassXnaRestriction)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (device.GetRenderer().ClassifySurfaceFormatEXT(
             static_cast<int>(SurfaceFormat::HalfVector4)) != RendererFormatVerdict::Supported)
         GTEST_SKIP() << "the active renderer has no physical HalfVector4 texture path";
@@ -573,7 +573,7 @@ TEST(ClassicTextureFormat, HalfVector4PhysicalLinearCapabilityDoesNotBypassXnaRe
 TEST(ClassicTextureFormat, DxtCubeBlocksFeedThePublicEnvironmentMapSampler)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CanReadRenderTargetsBack(device))
         GTEST_SKIP() << "this renderer cannot read a render target back";
     if (!device.GetRenderer().IsCompressedCubeTransferFormatEXT(
@@ -598,7 +598,7 @@ TEST(ClassicTextureFormat, DxtCubeBlocksFeedThePublicEnvironmentMapSampler)
 TEST(ClassicTextureFormat, DxtAlphaBlocksSampleTheirOwnEncoding)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     for (const SurfaceFormat format : {SurfaceFormat::Dxt3, SurfaceFormat::Dxt5})
         if (!device.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format)))
             GTEST_SKIP() << "this renderer has no compressed Texture2D transfer route";
@@ -644,7 +644,7 @@ TEST(ClassicTextureFormat, DxtAlphaBlocksSampleTheirOwnEncoding)
 TEST(ClassicTextureFormat, NormalizedIntegerCubeFormatsPreserveExactTransfers)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
 
     VerifyExactCubeTransfers<Bgr565>(device, SurfaceFormat::Bgr565, [](int index) {
         return Bgr565((index % 11) / 10.0f, (index % 7) / 6.0f,
@@ -677,7 +677,7 @@ TEST(ClassicTextureFormat, NormalizedIntegerCubeFormatsPreserveExactTransfers)
 TEST(ClassicTextureFormat, NormalizedIntegerCubeFormatsFeedEnvironmentMapSampling)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CanReadRenderTargetsBack(device))
         GTEST_SKIP() << "this renderer cannot read a render target back";
 
@@ -700,7 +700,7 @@ TEST(ClassicTextureFormat, NormalizedIntegerCubeFormatsFeedEnvironmentMapSamplin
 TEST(ClassicTextureFormat, FloatCubeFormatsPreserveExactTransfers)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
 
     VerifyExactCubeTransfers<float>(device, SurfaceFormat::Single, [](int index) {
         return static_cast<float>(index - 8) * 0.375f;
@@ -738,7 +738,7 @@ TEST(ClassicTextureFormat, FloatCubeFormatsPreserveExactTransfers)
 TEST(ClassicTextureFormat, FloatCubeFormatsPreserveHdrEnvironmentMapSampling)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CanReadRenderTargetsBack(device))
         GTEST_SKIP() << "this renderer cannot read a render target back";
 
@@ -767,7 +767,7 @@ TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaim
         GTEST_SKIP() << "the audited cube capability belongs to Software and EasyGL";
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     const SurfaceFormat unfinishedFormats[] = {
         SurfaceFormat::NormalizedByte2,
         SurfaceFormat::NormalizedByte4,
@@ -819,7 +819,7 @@ TEST(ClassicTextureFormat, HiDefVolumeFormatsHaveAnExplicitCompleteRendererContr
         GTEST_SKIP() << "the audited volume capability belongs to Software and EasyGL";
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!device.SupportsCapability(CNA::GraphicsCapability::Texture3D))
         GTEST_SKIP() << "this renderer does not support Texture3D";
 
@@ -854,7 +854,7 @@ TEST(ClassicTextureFormat, HiDefVolumeFormatsHaveAnExplicitCompleteRendererContr
 TEST(ClassicTextureFormat, NormalizedIntegerVolumeFormatsPreserveExactTransfers)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!device.SupportsCapability(CNA::GraphicsCapability::Texture3D))
         GTEST_SKIP() << "this renderer does not support Texture3D";
 
@@ -889,7 +889,7 @@ TEST(ClassicTextureFormat, NormalizedIntegerVolumeFormatsPreserveExactTransfers)
 TEST(ClassicTextureFormat, FloatVolumeFormatsPreserveExactTransfers)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!device.SupportsCapability(CNA::GraphicsCapability::Texture3D))
         GTEST_SKIP() << "this renderer does not support Texture3D";
 
@@ -929,7 +929,7 @@ TEST(ClassicTextureFormat, FloatVolumeFormatsPreserveExactTransfers)
 TEST(ClassicTextureFormat, VolumeGenericTransfersUseTotalByteSize)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!device.SupportsCapability(CNA::GraphicsCapability::Texture3D))
         GTEST_SKIP() << "this renderer does not support Texture3D";
     if (device.GetRenderer().ClassifyTexture3DFormatEXT(

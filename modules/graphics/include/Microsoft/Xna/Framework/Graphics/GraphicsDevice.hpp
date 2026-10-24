@@ -143,7 +143,10 @@ namespace Microsoft::Xna::Framework::Graphics
         System::EventHandler<ResourceDestroyedEventArgs> ResourceDestroyed;
 
         // --- Constructors ---
-        /** @brief Initializes a GraphicsDevice with no window (headless mode). */
+        /**
+         * @brief Initializes a Reach GraphicsDevice on the default adapter with an 800x480
+         *        windowed back buffer, GraphicsDeviceManager's default size.
+         */
         CNAEXT GraphicsDevice();
 
         /**

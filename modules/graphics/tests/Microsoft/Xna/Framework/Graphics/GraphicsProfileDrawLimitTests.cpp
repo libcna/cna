@@ -49,7 +49,7 @@ namespace
     public:
         explicit BoundTriangle(GraphicsProfile profile)
             : device(GraphicsAdapter::getDefaultAdapterProperty(), profile,
-                     PresentationParameters{}),
+                     PresentationParameters::CreateWindowedEXT(800, 480)),
               vertices(device, VertexPositionColor::getVertexDeclarationStatic(), 3,
                        BufferUsage::None),
               indices(device, IndexElementSize::SixteenBits, 3, BufferUsage::None),
@@ -82,7 +82,7 @@ namespace
         // after the profile gate as the cheap acceptance oracle; actually asking the CPU renderer
         // to assemble up to one million undefined primitives would add no conformance evidence.
         GraphicsDevice device(
-            GraphicsAdapter::getDefaultAdapterProperty(), profile, PresentationParameters{});
+            GraphicsAdapter::getDefaultAdapterProperty(), profile, PresentationParameters::CreateWindowedEXT(800, 480));
 
         EXPECT_THROW(
             device.DrawPrimitives(PrimitiveType::TriangleStrip, 0, maximum),

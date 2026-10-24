@@ -142,7 +142,7 @@ TEST_F(Texture2DContentTypeReaderTest,
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters()};
+                          PresentationParameters::CreateWindowedEXT(800, 480)};
     constexpr std::array<SurfaceFormat, 17> formats{{
         SurfaceFormat::Color,
         SurfaceFormat::Bgr565,
@@ -193,7 +193,7 @@ TEST_F(Texture2DContentTypeReaderTest,
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters()};
+                          PresentationParameters::CreateWindowedEXT(800, 480)};
     constexpr std::array<SurfaceFormat, 3> formats{{
         SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5,
     }};
@@ -220,7 +220,7 @@ TEST_F(Texture2DContentTypeReaderTest,
 TEST_F(Texture2DContentTypeReaderTest, CompressedContentKeptCompressedHoldsNoLevelZeroCpuShadow)
 {
     GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters()};
+                          PresentationParameters::CreateWindowedEXT(800, 480)};
     int loaded = 0;
     for (const SurfaceFormat format : {SurfaceFormat::Dxt1, SurfaceFormat::Dxt3,
                                        SurfaceFormat::Dxt5})

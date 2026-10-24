@@ -74,7 +74,7 @@ namespace
 
     GraphicsDevice MakeDevice()
     {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         parameters.setBackBufferWidthProperty(kSize);
         parameters.setBackBufferHeightProperty(kSize);
         parameters.setDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);

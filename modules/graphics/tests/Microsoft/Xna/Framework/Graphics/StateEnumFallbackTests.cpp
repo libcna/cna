@@ -46,7 +46,7 @@ namespace
 {
     PresentationParameters SmallBackBuffer(const DepthFormat depthFormat = DepthFormat::None)
     {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         parameters.setBackBufferWidthProperty(8);
         parameters.setBackBufferHeightProperty(8);
         parameters.setDepthStencilFormatProperty(depthFormat);

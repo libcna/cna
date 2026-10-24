@@ -79,7 +79,7 @@ namespace
 
         try
         {
-            PresentationParameters parameters;
+            PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
             parameters.setBackBufferWidthProperty(32);
             parameters.setBackBufferHeightProperty(24);
             parameters.setPresentationIntervalProperty(PresentInterval::Immediate);

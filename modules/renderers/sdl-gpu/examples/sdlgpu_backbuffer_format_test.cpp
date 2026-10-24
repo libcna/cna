@@ -91,7 +91,7 @@ int main()
 {
     try
     {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         parameters.setBackBufferWidthProperty(kSize);
         parameters.setBackBufferHeightProperty(kSize);
         parameters.setBackBufferFormatProperty(SurfaceFormat::Color);

@@ -61,7 +61,7 @@ namespace
 
     GraphicsDevice MakeDevice(GraphicsProfile profile)
     {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         return GraphicsDevice(
             GraphicsAdapter::getDefaultAdapterProperty(), profile, parameters);
     }

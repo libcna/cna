@@ -36,7 +36,7 @@ TEST(GraphicsDeviceInformationTest, SetGetGraphicsProfile)
 TEST(GraphicsDeviceInformationTest, SetGetPresentationParameters)
 {
     GraphicsDeviceInformation gdi;
-    PresentationParameters pp;
+    PresentationParameters pp = PresentationParameters::CreateWindowedEXT(800, 480);
     pp.setBackBufferWidthProperty(1920);
     pp.setBackBufferHeightProperty(1080);
     gdi.setPresentationParametersProperty(pp);

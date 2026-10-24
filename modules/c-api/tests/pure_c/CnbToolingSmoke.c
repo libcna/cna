@@ -810,6 +810,9 @@ int main(void)
        external references through. A caller-created device supplies it without a game. */
     CNA_PresentationParameters parameters;
     if (cna_presentation_parameters_init(&parameters) != CNA_RESULT_SUCCESS) { return 5; }
+    parameters.back_buffer_width = 64;
+    parameters.back_buffer_height = 64;
+    parameters.is_full_screen = CNA_FALSE;
     CNA_Handle device = CNA_INVALID_HANDLE;
     if (cna_graphics_device_create(0U, CNA_GRAPHICS_PROFILE_REACH, &parameters, &device) !=
         CNA_RESULT_SUCCESS) {

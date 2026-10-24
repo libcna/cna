@@ -98,7 +98,7 @@ namespace
     protected:
         GenericUserArrayDrawTest()
             : device_(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                      PresentationParameters{})
+                      PresentationParameters::CreateWindowedEXT(800, 480))
         {
         }
 

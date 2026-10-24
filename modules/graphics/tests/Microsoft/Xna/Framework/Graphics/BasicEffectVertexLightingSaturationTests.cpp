@@ -83,7 +83,7 @@ namespace
         static Color Draw(bool vertexColour)
         {
             GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                                  PresentationParameters());
+                                  PresentationParameters::CreateWindowedEXT(800, 480));
             if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD)) return Color::Transparent;
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
@@ -150,7 +150,7 @@ namespace
         static bool Renders3D()
         {
             GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                                  PresentationParameters());
+                                  PresentationParameters::CreateWindowedEXT(800, 480));
             return device.SupportsCapability(CNA::GraphicsCapability::ThreeD) &&
                    !CNA_RENDERER_IS(CNA::Testing::Renderers::Headless);
         }

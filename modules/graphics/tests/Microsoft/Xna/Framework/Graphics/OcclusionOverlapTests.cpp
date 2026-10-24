@@ -55,7 +55,7 @@ protected:
     int Expected(int triangles) const { return triangles == 0 ? 0 : precise ? unitCount * triangles : 1; }
     void SetUp() override
     {
-        PresentationParameters pp;
+        PresentationParameters pp = PresentationParameters::CreateWindowedEXT(800, 480);
         pp.setBackBufferWidthProperty(64);
         pp.setBackBufferHeightProperty(64);
         pp.setDepthStencilFormatProperty(DepthFormat::None);

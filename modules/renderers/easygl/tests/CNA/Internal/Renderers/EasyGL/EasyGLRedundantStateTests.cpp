@@ -73,7 +73,7 @@ namespace
 
             device = std::make_unique<GraphicsDevice>(
                 GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                PresentationParameters());
+                PresentationParameters::CreateWindowedEXT(800, 480));
             // CnaTests links its own static copy of meta-gl, apart from the renderer's inside
             // libcna.so (VKPAR-0017), and meta-gl terminates on a call through a table nobody
             // initialised -- which is how three of these tests aborted on Linux, as FX-144 found in

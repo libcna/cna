@@ -43,7 +43,7 @@ class BlendCompiledSourceRangeTest : public testing::TestWithParam<TargetPair>
 {
 protected:
     GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(),
-                          GraphicsProfile::HiDef, PresentationParameters{}};
+                          GraphicsProfile::HiDef, PresentationParameters::CreateWindowedEXT(800, 480)};
     template<class Pixel>
     Pixel Read(RenderTarget2D& target)
     {

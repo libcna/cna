@@ -58,7 +58,7 @@ int main()
 {
     try
     {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         parameters.setBackBufferWidthProperty(64);
         parameters.setBackBufferHeightProperty(64);
         GraphicsDevice device(

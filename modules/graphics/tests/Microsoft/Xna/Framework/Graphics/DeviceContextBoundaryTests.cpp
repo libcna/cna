@@ -23,7 +23,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 std::unique_ptr<GraphicsDevice> MakeDevice()
 {
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     parameters.setBackBufferWidthProperty(64);
     parameters.setBackBufferHeightProperty(64);
     parameters.setDepthStencilFormatProperty(DepthFormat::None);

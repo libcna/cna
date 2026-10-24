@@ -268,13 +268,15 @@ static CNA_Result validate_display(CNA_Handle graphics_device)
     CNA_PresentationParameters parameters;
     CNA_PresentationParameters clone;
     CNA_Rectangle bounds;
+    /* XNA's PresentationParameters() sets only IsFullScreen; the back buffer is 0x0. */
     if (cna_presentation_parameters_init(&parameters) != CNA_RESULT_SUCCESS ||
-        parameters.back_buffer_width != 800 || parameters.back_buffer_height != 480 ||
+        parameters.back_buffer_width != 0 || parameters.back_buffer_height != 0 ||
+        parameters.is_full_screen != CNA_TRUE ||
         parameters.back_buffer_format != CNA_SURFACE_FORMAT_COLOR ||
         cna_presentation_parameters_clone(&parameters, &clone) != CNA_RESULT_SUCCESS ||
         memcmp(&parameters, &clone, sizeof(parameters)) != 0 ||
         cna_presentation_parameters_get_bounds(&parameters, &bounds) != CNA_RESULT_SUCCESS ||
-        bounds.x != 0 || bounds.y != 0 || bounds.width != 800 || bounds.height != 480) {
+        bounds.x != 0 || bounds.y != 0 || bounds.width != 0 || bounds.height != 0) {
         return CNA_RESULT_INVALID_STATE;
     }
 

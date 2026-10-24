@@ -29,7 +29,7 @@ protected:
     // Backbuffer readback requires HiDef, as in the existing rasterization suite.
     static GraphicsDevice MakeDevice()
     {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         parameters.setBackBufferWidthProperty(256);
         parameters.setBackBufferHeightProperty(256);
         return GraphicsDevice(GraphicsAdapter::getDefaultAdapterProperty(),

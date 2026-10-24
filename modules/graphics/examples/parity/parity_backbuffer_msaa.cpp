@@ -131,7 +131,7 @@ int main(int argc, char** argv)
 
     const bool resetSequence = argc > 1 && std::strcmp(argv[1], "--reset") == 0;
 
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     parameters.setBackBufferWidthProperty(kSize);
     parameters.setBackBufferHeightProperty(kSize);
     parameters.setMultiSampleCountProperty(4);

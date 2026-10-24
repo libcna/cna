@@ -54,7 +54,7 @@ int main()
     // HiDef, because Reach refuses OcclusionQuery for every renderer before capability is even
     // consulted; the subject here is the SDL_GPU capability answer, which only HiDef reaches.
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     auto& renderer = dynamic_cast<SdlGpuRenderer&>(device.GetRenderer());
 
     Check(!device.SupportsCapability(GraphicsCapability::OcclusionQuery),

@@ -67,7 +67,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 TEST(GraphicsProfileResourceCeilingTest, ReachRejectsOversizedTexturesVolumeTexturesAndMrt)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
 
@@ -88,7 +88,7 @@ TEST(GraphicsProfileResourceCeilingTest, ReachRejectsOversizedTexturesVolumeText
 TEST(GraphicsProfileResourceCeilingTest, HiDefPermitsVolumeAndMrtButEnforcesItsOwnLimits)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
 
@@ -112,7 +112,7 @@ TEST(GraphicsProfileResourceCeilingTest, HiDefPermitsVolumeAndMrtButEnforcesItsO
 TEST(GraphicsProfileResourceCeilingTest, MrtRejectsTwoFacesOfTheSameCubeResource)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
     RenderTargetCube cube(device, 4, false, SurfaceFormat::Color, DepthFormat::None, 0,
@@ -130,7 +130,7 @@ TEST(GraphicsProfileResourceCeilingTest, MrtRejectsTwoFacesOfTheSameCubeResource
 TEST(GraphicsProfileResourceCeilingTest, MrtRejectsDifferentPixelSizes)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
     RenderTarget2D color(device, 4, 4, false, SurfaceFormat::Color, DepthFormat::None);
@@ -145,7 +145,7 @@ TEST(GraphicsProfileResourceCeilingTest, MrtRejectsDifferentPixelSizes)
 TEST(GraphicsProfileResourceCeilingTest, MrtPermitsDifferentFormatsWithTheSamePixelSize)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
     RenderTarget2D color(device, 4, 4, false, SurfaceFormat::Color, DepthFormat::None);
@@ -160,7 +160,7 @@ TEST(GraphicsProfileResourceCeilingTest, MrtPermitsDifferentFormatsWithTheSamePi
 TEST(GraphicsProfileResourceCeilingTest, RenderTarget2DMustBelongToTheReceivingDevice)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice receiving(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
     GraphicsDevice owner(
@@ -178,7 +178,7 @@ TEST(GraphicsProfileResourceCeilingTest, RenderTarget2DMustBelongToTheReceivingD
 TEST(GraphicsProfileResourceCeilingTest, RenderTargetCubeMustBelongToTheReceivingDevice)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice receiving(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
     GraphicsDevice owner(
@@ -195,7 +195,7 @@ TEST(GraphicsProfileResourceCeilingTest, RenderTargetCubeMustBelongToTheReceivin
 TEST(GraphicsProfileResourceCeilingTest, Texture2DEnforcesTheSharedMaximumAspectRatio)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
 
@@ -210,7 +210,7 @@ TEST(GraphicsProfileResourceCeilingTest, Texture2DEnforcesTheSharedMaximumAspect
 TEST(GraphicsProfileResourceCeilingTest, BackBufferReadbackIsHiDefOnly)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     parameters.setBackBufferWidthProperty(2);
     parameters.setBackBufferHeightProperty(2);
     {
@@ -234,7 +234,7 @@ TEST(GraphicsProfileResourceCeilingTest, BackBufferReadbackIsHiDefOnly)
 TEST(GraphicsProfileResourceCeilingTest, ReachAllowsOnlyConditionalNpotTexture2DResources)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     {
         GraphicsDevice reach(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
@@ -256,7 +256,7 @@ TEST(GraphicsProfileResourceCeilingTest, ReachAllowsOnlyConditionalNpotTexture2D
 TEST(GraphicsProfileResourceCeilingTest, CubePowerOfTwoAndDxtAlignmentFollowXnaProfiles)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     {
         GraphicsDevice reach(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
@@ -275,7 +275,7 @@ TEST(GraphicsProfileResourceCeilingTest, CubePowerOfTwoAndDxtAlignmentFollowXnaP
 TEST(GraphicsProfileResourceCeilingTest, RenderTargetsKeepSizeLimitsButAllowNpotMipmaps)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     {
         GraphicsDevice reach(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
@@ -306,7 +306,7 @@ TEST(GraphicsProfileResourceCeilingTest, RenderTargetsKeepSizeLimitsButAllowNpot
 TEST(GraphicsProfileResourceCeilingTest, RenderTargetsSubstituteProfileUnsupportedPreferredFormats)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     {
         GraphicsDevice reach(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
@@ -333,7 +333,7 @@ TEST(GraphicsProfileResourceCeilingTest, RenderTargetsSubstituteProfileUnsupport
 TEST(GraphicsProfileResourceCeilingTest, VertexBuffersRespectTheSharedSixtyFourMiBMinusOneLimit)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
     const VertexDeclaration declaration(4, {
@@ -354,7 +354,7 @@ TEST(GraphicsProfileResourceCeilingTest, VertexBuffersRespectTheSharedSixtyFourM
 TEST(GraphicsProfileResourceCeilingTest, IndexBuffersRespectTheSharedSixtyFourMiBMinusOneLimit)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
     constexpr int largestSixteenBitIndexCount = 33'554'431;
@@ -378,7 +378,7 @@ TEST(GraphicsProfileResourceCeilingTest, IndexBuffersRespectTheSharedSixtyFourMi
 TEST(GraphicsProfileResourceCeilingTest, ThirtyTwoBitIndicesAreHiDefOnly)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice reach(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
     GraphicsDevice hiDef(
@@ -397,7 +397,7 @@ TEST(GraphicsProfileResourceCeilingTest, ThirtyTwoBitIndicesAreHiDefOnly)
 TEST(GraphicsProfileResourceCeilingTest, IndexElementSizeEnumConstructorCanonicalizesNonSixteenValues)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice reach(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
     GraphicsDevice hiDef(

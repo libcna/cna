@@ -54,7 +54,7 @@ namespace
 
     GraphicsDevice MakeDevice(const DepthFormat depthFormat = DepthFormat::None)
     {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         parameters.setBackBufferWidthProperty(kSize);
         parameters.setBackBufferHeightProperty(kSize);
         parameters.setDepthStencilFormatProperty(depthFormat);

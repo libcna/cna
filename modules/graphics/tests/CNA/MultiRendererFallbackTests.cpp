@@ -479,7 +479,7 @@ TEST_F(MultiRendererFallbackTest, ACallerSuppliedWindowRefusesACrossKindCandidat
     ASSERT_NE(nullptr, callerWindow);
     const std::uintptr_t callerHandle = callerWindow->GetWindowHandle();
 
-    Microsoft::Xna::Framework::Graphics::PresentationParameters parameters;
+    Microsoft::Xna::Framework::Graphics::PresentationParameters parameters = Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(800, 480);
     // IntPtr is a member alias of PresentationParameters (std::uintptr_t), not a namespace-level
     // type -- spelling it Microsoft::Xna::Framework::IntPtr does not compile.
     parameters.setDeviceWindowHandleProperty(callerHandle);
@@ -556,7 +556,7 @@ TEST_F(MultiRendererFallbackTest, SurfaceFreeWebGpuFailureRecordsAnActionableFal
     GraphicsRendererSelection::SetFallbackChain(
         std::vector<GraphicsRendererType>{GraphicsRendererType::Software});
     GraphicsRendererSelection::SetPreferred(GraphicsRendererType::WebGPU);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     parameters.setBackBufferWidthProperty(16);
     parameters.setBackBufferHeightProperty(16);
     // With SDL's actual offscreen driver, exercise its window with no native surface.

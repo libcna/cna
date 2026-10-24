@@ -272,7 +272,7 @@ TEST(WebGPUCompiledEffectTest, SharedBackendConformanceContract)
     // asserts it (its render-state section uses separate alpha blending), and under the default
     // Reach device that assertion was the only thing this test ever ran.
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectContract(device);
@@ -476,7 +476,7 @@ TEST(WebGPUCompiledEffectDrawTest, AddressWSelectsADifferentVolumeSliceForEachMo
     // WMG-0028: a default GraphicsDevice is Reach, and Reach has no volume textures at all.
     GraphicsDevice device(Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
                           Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
-                          Microsoft::Xna::Framework::Graphics::PresentationParameters{});
+                          Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectAddressWContract(device);
@@ -544,7 +544,7 @@ TEST(WebGPUCompiledEffectDrawTest, SharedMrtWriteMaskContract)
 {
     GraphicsDevice device(Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
                           Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
-                          Microsoft::Xna::Framework::Graphics::PresentationParameters{});
+                          Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectMrtWriteMaskContract(device);
@@ -749,7 +749,7 @@ TEST(WebGPUCompiledEffectWgslTest, TranslationIsDeterministicAndNamesItsEntryPoi
 TEST(WebGPUCompiledEffectDrawTest, VertexVector4TextureAndSamplerReachTheDraw)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectVertexTextureContract(device, SurfaceFormat::Vector4);
@@ -758,7 +758,7 @@ TEST(WebGPUCompiledEffectDrawTest, VertexVector4TextureAndSamplerReachTheDraw)
 TEST(WebGPUCompiledEffectDrawTest, VertexSingleTextureAndSamplerReachTheDraw)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectVertexTextureContract(device, SurfaceFormat::Single);
@@ -767,7 +767,7 @@ TEST(WebGPUCompiledEffectDrawTest, VertexSingleTextureAndSamplerReachTheDraw)
 TEST(WebGPUCompiledEffectDrawTest, VertexTextureAndEffectOutliveTheirDeferredDraw)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectVertexTextureContract(device, SurfaceFormat::Vector4, true);
@@ -776,7 +776,7 @@ TEST(WebGPUCompiledEffectDrawTest, VertexTextureAndEffectOutliveTheirDeferredDra
 TEST(WebGPUCompiledEffectDrawTest, PointVertexTexturesDoNotRequireFloat32Filterable)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     auto* renderer = RendererOf(device);
     if (renderer == nullptr) GTEST_SKIP() << "this build did not select the WebGPU renderer";
     renderer->DebugForceFloat32FeaturesAbsentEXT(true);
@@ -790,7 +790,7 @@ TEST_P(WebGPUCompiledEffectVolumeLifetimeTest, VolumeTextureOutlivesItsDeferredD
 {
     using namespace CNA::TestSupport;
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     auto* renderer = RendererOf(device);
     if (renderer == nullptr) GTEST_SKIP() << "this build did not select the WebGPU renderer";
     std::unique_ptr<WgslRouteScope> wgsl;
@@ -834,7 +834,7 @@ INSTANTIATE_TEST_SUITE_P(WebGPUShaderRoutes, WebGPUCompiledEffectVolumeLifetimeT
     {                                                                                            \
         /* HiDef: the shared backend contract asserts it; see SharedBackendConformanceContract. */ \
         GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(),                      \
-                              GraphicsProfile::HiDef, PresentationParameters());                \
+                              GraphicsProfile::HiDef, PresentationParameters::CreateWindowedEXT(800, 480));                \
         if (!CNA::TestSupport::SupportsCompiledEffects(device))                                  \
             GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";  \
         WgslRouteScope wgsl(device);                                                             \

@@ -211,7 +211,7 @@ TEST(CnbTextureContentManagerTest, ATexture3DCnbLoadsAsASharedPointerWithItsDept
     // SOFTWARE-274: XNA volume textures are HiDef-only. The old default-Reach fixture happened
     // to pass only while CNA's Texture3D constructor failed to enforce that profile boundary.
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(device);
     if (!device.SupportsCapability(CNA::GraphicsCapability::Texture3D))

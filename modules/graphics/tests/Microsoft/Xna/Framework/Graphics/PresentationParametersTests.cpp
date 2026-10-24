@@ -25,16 +25,17 @@ TEST(PresentationParametersTest, DefaultBackBufferFormat)
     EXPECT_EQ(pp.getBackBufferFormatProperty(), SurfaceFormat::Color);
 }
 
+// XNA 4.0's constructor sets only IsFullScreen = true; the back buffer is 0x0 (museum cx-capi).
 TEST(PresentationParametersTest, DefaultBackBufferWidth)
 {
     PresentationParameters pp;
-    EXPECT_EQ(pp.getBackBufferWidthProperty(), 800);
+    EXPECT_EQ(pp.getBackBufferWidthProperty(), 0);
 }
 
 TEST(PresentationParametersTest, DefaultBackBufferHeight)
 {
     PresentationParameters pp;
-    EXPECT_EQ(pp.getBackBufferHeightProperty(), 480);
+    EXPECT_EQ(pp.getBackBufferHeightProperty(), 0);
 }
 
 TEST(PresentationParametersTest, DefaultDepthStencilFormat)
@@ -43,10 +44,26 @@ TEST(PresentationParametersTest, DefaultDepthStencilFormat)
     EXPECT_EQ(pp.getDepthStencilFormatProperty(), DepthFormat::None);
 }
 
-TEST(PresentationParametersTest, DefaultIsFullScreenFalse)
+TEST(PresentationParametersTest, DefaultIsFullScreenTrue)
 {
     PresentationParameters pp;
-    EXPECT_FALSE(pp.getIsFullScreenProperty());
+    EXPECT_TRUE(pp.getIsFullScreenProperty());
+}
+
+TEST(PresentationParametersTest, CreateWindowedEXTSetsOnlyTheSizeAndWindowedMode)
+{
+    const PresentationParameters defaults;
+    const PresentationParameters windowed = PresentationParameters::CreateWindowedEXT(640, 360);
+    EXPECT_EQ(windowed.getBackBufferWidthProperty(), 640);
+    EXPECT_EQ(windowed.getBackBufferHeightProperty(), 360);
+    EXPECT_FALSE(windowed.getIsFullScreenProperty());
+    EXPECT_EQ(windowed.getBackBufferFormatProperty(), defaults.getBackBufferFormatProperty());
+    EXPECT_EQ(windowed.getDepthStencilFormatProperty(), defaults.getDepthStencilFormatProperty());
+    EXPECT_EQ(windowed.getMultiSampleCountProperty(), defaults.getMultiSampleCountProperty());
+    EXPECT_EQ(windowed.getPresentationIntervalProperty(), defaults.getPresentationIntervalProperty());
+    EXPECT_EQ(windowed.getDisplayOrientationProperty(), defaults.getDisplayOrientationProperty());
+    EXPECT_EQ(windowed.getRenderTargetUsageProperty(), defaults.getRenderTargetUsageProperty());
+    EXPECT_EQ(windowed.getDeviceWindowHandleProperty(), defaults.getDeviceWindowHandleProperty());
 }
 
 TEST(PresentationParametersTest, DefaultMultiSampleCountZero)

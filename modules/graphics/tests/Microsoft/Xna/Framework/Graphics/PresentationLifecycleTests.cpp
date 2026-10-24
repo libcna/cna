@@ -46,7 +46,7 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 // differently from what the caller asked for and can see.
 TEST(PresentationLifecycle, PresentationParametersRoundTripTheirValues)
 {
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     parameters.setBackBufferWidthProperty(320);
     parameters.setBackBufferHeightProperty(240);
     parameters.setBackBufferFormatProperty(SurfaceFormat::Color);
@@ -82,7 +82,7 @@ TEST(PresentationLifecycle, EveryPresentIntervalRoundTrips)
                                           PresentInterval::Two, PresentInterval::Immediate};
     for (PresentInterval interval : kIntervals)
     {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         parameters.setPresentationIntervalProperty(interval);
         EXPECT_EQ(static_cast<int>(parameters.getPresentationIntervalProperty()),
                   static_cast<int>(interval));

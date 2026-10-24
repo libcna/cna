@@ -122,7 +122,7 @@ int main(int argc, char** argv)
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
     GraphicsDevice d(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                     PresentationParameters());
+                     PresentationParameters::CreateWindowedEXT(800, 480));
     if (argc == 2 && std::string(argv[1]) == "--device-only")
     {
         std::puts("PASS device-only control: no user textures or lifetime repair exercised");

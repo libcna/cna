@@ -15,7 +15,7 @@ public:
     HiDefDevice() : GraphicsDevice(
         Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
         Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
-        Microsoft::Xna::Framework::Graphics::PresentationParameters()) {}
+        Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(800, 480)) {}
 };
 inline bool CanBindRenderTargets(GraphicsDevice& device) {
     try {

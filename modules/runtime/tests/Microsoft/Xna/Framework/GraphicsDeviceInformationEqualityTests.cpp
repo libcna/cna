@@ -33,7 +33,7 @@ namespace
     {
         GraphicsDeviceInformation information;
         information.setGraphicsProfileProperty(GraphicsProfile::HiDef);
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         parameters.setBackBufferWidthProperty(1280);
         parameters.setBackBufferHeightProperty(720);
         parameters.setBackBufferFormatProperty(SurfaceFormat::Color);

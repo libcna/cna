@@ -3,13 +3,16 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    // XNA 4.0's constructor IL sets only IsFullScreen = true; its settings struct is otherwise
+    // zero, so the back buffer is 0x0. FNA (and CNA until the museum's C ABI checks) sets
+    // GraphicsDeviceManager's 800x480 windowed defaults instead, with a FIXME on IsFullScreen.
     PresentationParameters::PresentationParameters()
         : backBufferFormat_(SurfaceFormat::Color),
-          backBufferHeight_(480),  // matches GraphicsDeviceManager::DefaultBackBufferHeight
-          backBufferWidth_(800),   // matches GraphicsDeviceManager::DefaultBackBufferWidth
+          backBufferHeight_(0),
+          backBufferWidth_(0),
           deviceWindowHandle_(0),
           depthStencilFormat_(DepthFormat::None),
-          isFullScreen_(false),
+          isFullScreen_(true),
           multiSampleCount_(0),
           presentationInterval_(PresentInterval::Default),
           displayOrientation_(Microsoft::Xna::Framework::DisplayOrientation::Default),
@@ -130,6 +133,16 @@ namespace Microsoft::Xna::Framework::Graphics
     void PresentationParameters::setRenderTargetUsageProperty(RenderTargetUsage value)
     {
         renderTargetUsage_ = value;
+    }
+
+    PresentationParameters PresentationParameters::CreateWindowedEXT(
+        const SharpRuntime::intcs backBufferWidth, const SharpRuntime::intcs backBufferHeight)
+    {
+        PresentationParameters parameters;
+        parameters.backBufferWidth_ = backBufferWidth;
+        parameters.backBufferHeight_ = backBufferHeight;
+        parameters.isFullScreen_ = false;
+        return parameters;
     }
 
     PresentationParameters PresentationParameters::Clone() const

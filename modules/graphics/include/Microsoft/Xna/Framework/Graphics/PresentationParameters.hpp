@@ -22,8 +22,31 @@ namespace Microsoft::Xna::Framework::Graphics
     public:
         using IntPtr = std::uintptr_t;
 
-        /** @brief Creates presentation parameters with XNA-compatible defaults. */
+        /**
+         * @brief Creates presentation parameters with XNA's defaults.
+         *
+         * As in XNA 4.0, only IsFullScreen is set (to true): the back buffer is 0x0, and every
+         * other setting is its enumeration's zero value (Color, DepthFormat::None, no
+         * multisampling, PresentInterval::Default, DisplayOrientation::Default,
+         * RenderTargetUsage::DiscardContents) with no window handle. A GraphicsDeviceManager
+         * fills these in for a game; a caller constructing a GraphicsDevice directly states a
+         * size, for example with CreateWindowedEXT().
+         */
         PresentationParameters();
+
+        /**
+         * @brief Creates windowed presentation parameters with a back buffer of the given size.
+         *
+         * Everything else keeps XNA's defaults. This is CNA's shorthand for what a device built
+         * without a GraphicsDeviceManager needs, since XNA's own defaults describe a 0x0
+         * full-screen back buffer.
+         *
+         * @param backBufferWidth Back buffer width in pixels.
+         * @param backBufferHeight Back buffer height in pixels.
+         * @return Windowed parameters of that size.
+         */
+        CNAEXT [[nodiscard]] static PresentationParameters CreateWindowedEXT(
+            SharpRuntime::intcs backBufferWidth, SharpRuntime::intcs backBufferHeight);
 
         /**
          * @brief Gets the back buffer pixel format.

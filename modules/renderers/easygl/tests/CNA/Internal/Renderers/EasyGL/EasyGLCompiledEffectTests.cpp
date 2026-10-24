@@ -557,7 +557,7 @@ TEST(EasyGLCompiledEffectTest, SharedBackendConformanceContract)
     // lifetime -- through the public Effect/GraphicsDevice API, since SupportsCompiledEffects()
     // is true.
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectContract(device);
@@ -599,7 +599,7 @@ TEST(EasyGLCompiledEffectDrawTest, SharedPackedVertexColorContract)
 TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledOrdinaryDraw)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     if (device.SupportsCapability(CNA::GraphicsCapability::WireFrame))
@@ -633,7 +633,7 @@ TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledOrdi
 TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledMultiStreamDraw)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     if (device.SupportsCapability(CNA::GraphicsCapability::WireFrame))
@@ -678,7 +678,7 @@ TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledMult
 TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledInstancedDraw)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     if (device.SupportsCapability(CNA::GraphicsCapability::WireFrame))
@@ -730,7 +730,7 @@ TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledInst
 TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledSpriteBatchDraw)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     if (device.SupportsCapability(CNA::GraphicsCapability::WireFrame))
@@ -843,7 +843,7 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9DependentTemporaryCubeAndVolumeCoordinate
 {
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-        PresentationParameters());
+        PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectDependentTemporaryTextureCoordinate3DContract(device);
@@ -3435,7 +3435,7 @@ TEST(EasyGLCompiledEffectDrawTest, ProjectedCubeLoadDividesDirectionByW)
     namespace Fx = CNA::TestSupport::EffectFormat;
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-        PresentationParameters());
+        PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     constexpr std::array profiles{
@@ -3468,7 +3468,7 @@ TEST(EasyGLCompiledEffectDrawTest, Projected2DLoadDerivesLodAfterDivisionByW)
     namespace Fx = CNA::TestSupport::EffectFormat;
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-        PresentationParameters());
+        PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     const std::array probes = {
@@ -4316,7 +4316,7 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9LegacySampledTextureMatrix2)
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacySampledTextureMatrix3)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectLegacyTextureMatrix3SampleContract(device);
@@ -4325,7 +4325,7 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9LegacySampledTextureMatrix3)
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix3Specular)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectLegacyTextureMatrix3SpecularContract(device);
@@ -4350,7 +4350,7 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureComponentRemap)
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyDependentTextureOperations)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectLegacyDependentTextureContract(device);
@@ -4649,7 +4649,7 @@ TEST(EasyGLCompiledEffectDrawTest, SharedVertexSamplerContract)
 {
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-        PresentationParameters());
+        PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectVertexSamplerContract(device);
@@ -4659,7 +4659,7 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9VertexSamplerSourceSwizzlesSampleResult)
 {
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-        PresentationParameters());
+        PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectVertexSamplerResultSwizzleContract(device);
@@ -4669,7 +4669,7 @@ TEST(EasyGLCompiledEffectDrawTest, SharedVertexSamplerDimensionsContract)
 {
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-        PresentationParameters());
+        PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectVertexSamplerDimensionsContract(device);
@@ -5081,7 +5081,7 @@ TEST(EasyGLCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
     // SOFTWARE-179: Texture3D is a HiDef-only XNA resource. This compiled-effect family predated
     // profile-ceiling enforcement and accidentally kept constructing the default Reach device.
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
@@ -5125,7 +5125,7 @@ TEST(EasyGLCompiledEffectDrawTest, SharedDeviceTextureSlotAfterApplyContract)
 TEST(EasyGLCompiledEffectDrawTest, SharedMrtWriteMaskContract)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectMrtWriteMaskContract(device);
@@ -5158,7 +5158,7 @@ TEST(EasyGLCompiledEffectDrawTest, SharedLodBiasPerDrawContract)
 TEST(EasyGLCompiledEffectDrawTest, SharedAddressWContract)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectAddressWContract(device);

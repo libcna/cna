@@ -29,7 +29,7 @@ int main()
 {
     std::unique_ptr<GraphicsDevice> first;
     try {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         first = std::make_unique<GraphicsDevice>(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
     } catch (const std::exception& error) {
@@ -40,7 +40,7 @@ int main()
 
     std::unique_ptr<GraphicsDevice> second;
     try {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         second = std::make_unique<GraphicsDevice>(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
     } catch (const std::exception& error) {

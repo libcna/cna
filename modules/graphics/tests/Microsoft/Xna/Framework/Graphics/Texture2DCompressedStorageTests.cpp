@@ -100,7 +100,7 @@ class Texture2DCompressedStorageTest : public ::testing::Test
 {
 protected:
     GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters()};
+                          PresentationParameters::CreateWindowedEXT(800, 480)};
 };
 
 // The control: context recovery is on by default, so an uncompressed texture does keep its

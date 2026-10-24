@@ -35,7 +35,7 @@ class BlendSourceRangeTest : public testing::Test
 {
 protected:
     GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(),
-                          GraphicsProfile::HiDef, PresentationParameters{}};
+                          GraphicsProfile::HiDef, PresentationParameters::CreateWindowedEXT(800, 480)};
     void SetUp() override
     {
         RecordProperty("renderer", std::string(device.GetGraphicsRendererName()));

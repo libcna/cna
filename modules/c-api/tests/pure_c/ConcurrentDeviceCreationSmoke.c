@@ -28,6 +28,7 @@ static int attempt(void* const argument)
     }
     parameters.back_buffer_width = 64;
     parameters.back_buffer_height = 64;
+    parameters.is_full_screen = CNA_FALSE;
     *result = cna_graphics_device_create(0U, CNA_GRAPHICS_PROFILE_HI_DEF, &parameters, &device);
     if (*result == CNA_RESULT_SUCCESS && cna_graphics_device_destroy(device) != CNA_RESULT_SUCCESS) {
         *result = CNA_RESULT_INTERNAL;

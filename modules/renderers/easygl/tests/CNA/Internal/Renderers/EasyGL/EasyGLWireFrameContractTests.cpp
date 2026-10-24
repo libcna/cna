@@ -93,7 +93,7 @@ namespace
 
             device = std::make_unique<GraphicsDevice>(
                 GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                PresentationParameters());
+                PresentationParameters::CreateWindowedEXT(800, 480));
             if (device->SupportsCapability(CNA::GraphicsCapability::WireFrame))
             {
                 GTEST_SKIP() << "this context exposes native polygon-mode wireframe; the shared "

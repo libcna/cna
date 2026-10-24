@@ -213,7 +213,7 @@ TEST(NormalizedRenderTargetRoundTrip, CapabilityAndConstructionUseTheRequestedFo
 {
     if (!IsCampaignRenderer()) GTEST_SKIP() << "Software/EasyGL parity contract";
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     for (SurfaceFormat format : {SurfaceFormat::Rgba1010102, SurfaceFormat::Rg32,
                                  SurfaceFormat::Rgba64})
     {
@@ -237,7 +237,7 @@ TEST(NormalizedRenderTargetRoundTrip, Target2DPreservesExactTypedRegionsAndMips)
 {
     if (!IsCampaignRenderer()) GTEST_SKIP() << "Software/EasyGL parity contract";
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!HasCompleteNormalizedTargetMatrix(device))
         GTEST_SKIP() << "Active EasyGL context cannot represent the exact normalized target matrix";
     VerifyTarget2DTransfers<Rgba1010102>(device, SurfaceFormat::Rgba1010102, [](int i) {
@@ -257,7 +257,7 @@ TEST(NormalizedRenderTargetRoundTrip, ClearMipMsaaAndMissingChannelsStayFormatCo
 {
     if (!IsCampaignRenderer()) GTEST_SKIP() << "Software/EasyGL parity contract";
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!HasCompleteNormalizedTargetMatrix(device))
         GTEST_SKIP() << "Active EasyGL context cannot represent the exact normalized target matrix";
     RenderTarget2D rgba10(device, 4, 4, true, SurfaceFormat::Rgba1010102,
@@ -289,7 +289,7 @@ TEST(NormalizedRenderTargetRoundTrip, TargetCubePreservesExactTypedFacesRegionsA
 {
     if (!IsCampaignRenderer()) GTEST_SKIP() << "Software/EasyGL parity contract";
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!HasCompleteNormalizedTargetMatrix(device))
         GTEST_SKIP() << "Active EasyGL context cannot represent the exact normalized target matrix";
     VerifyTargetCubeTransfers<Rgba1010102>(device, SurfaceFormat::Rgba1010102, [](int i) {
@@ -309,7 +309,7 @@ TEST(NormalizedRenderTargetRoundTrip, RenderedCubeMipsResolveAndSampleWithoutRgb
 {
     if (!IsCampaignRenderer()) GTEST_SKIP() << "Software/EasyGL parity contract";
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!HasCompleteNormalizedTargetMatrix(device))
         GTEST_SKIP() << "Active EasyGL context cannot represent the exact normalized target matrix";
     RenderTargetCube cube(device, 4, true, SurfaceFormat::Rgba64, DepthFormat::None, 4,

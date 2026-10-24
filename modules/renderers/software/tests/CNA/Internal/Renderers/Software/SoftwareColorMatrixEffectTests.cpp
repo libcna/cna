@@ -35,7 +35,7 @@ namespace
     /// Reach.
     PresentationParameters SmallBackbuffer()
     {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         parameters.setBackBufferWidthProperty(4);
         parameters.setBackBufferHeightProperty(4);
         return parameters;

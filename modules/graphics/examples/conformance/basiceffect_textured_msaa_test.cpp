@@ -100,7 +100,7 @@ int main()
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
 
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     parameters.setBackBufferWidthProperty(kSize);
     parameters.setBackBufferHeightProperty(kSize);
     parameters.setMultiSampleCountProperty(8);

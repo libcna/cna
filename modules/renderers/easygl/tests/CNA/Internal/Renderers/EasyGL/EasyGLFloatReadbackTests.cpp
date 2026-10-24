@@ -79,7 +79,7 @@ TEST(EasyGLFloatReadbackTest, EsFloatTransfersUseRgbaFloatAndPreservePackedSubre
     ObservedPlatform platform;
     if (!platform.GetGlContext()) GTEST_SKIP() << "the platform has no GL context service";
     CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
-    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(),GraphicsProfile::HiDef,PresentationParameters());
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(),GraphicsProfile::HiDef,PresentationParameters::CreateWindowedEXT(800, 480));
     auto* renderer=dynamic_cast<CNA::Internal::Renderers::EasyGL::EasyGLRenderer*>(&device.GetRenderer());
     ASSERT_NE(nullptr,renderer);
     ReadObserver::calls=0;ReadObserver::rgbaFloatOnly=true;

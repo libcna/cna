@@ -50,7 +50,7 @@ protected:
 TEST(SpriteCompiledRetryPixelTest, DeferredApplyFailureRetriesWithoutDuplicatingTheRun)
 {
     GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(),
-                          GraphicsProfile::HiDef, PresentationParameters{}};
+                          GraphicsProfile::HiDef, PresentationParameters::CreateWindowedEXT(800, 480)};
     RecordProperty("renderer", std::string(device.GetGraphicsRendererName()));
     if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
         GTEST_SKIP() << "This configured renderer does not expose compiled effects";

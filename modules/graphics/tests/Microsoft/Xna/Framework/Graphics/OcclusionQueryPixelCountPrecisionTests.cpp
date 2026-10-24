@@ -62,7 +62,7 @@ namespace
     {
     protected:
         GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                              PresentationParameters()};
+                              PresentationParameters::CreateWindowedEXT(800, 480)};
 
         void SetUp() override
         {

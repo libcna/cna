@@ -45,7 +45,7 @@ namespace
     /// The backbuffer every case below reasons about, so a clipping expectation has a known surface.
     GraphicsDevice MakeDevice(const int width = 320, const int height = 240)
     {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         parameters.setBackBufferWidthProperty(width);
         parameters.setBackBufferHeightProperty(height);
         return GraphicsDevice(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach,

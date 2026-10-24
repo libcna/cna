@@ -39,7 +39,7 @@ namespace
 {
     PresentationParameters SmallBackBuffer()
     {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         parameters.setBackBufferWidthProperty(8);
         parameters.setBackBufferHeightProperty(8);
         parameters.setDepthStencilFormatProperty(DepthFormat::None);

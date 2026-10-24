@@ -99,7 +99,7 @@ namespace
             if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, WebGPU, SdlGpu, DirectX9, Fna3d))
                 GTEST_SKIP() << "needs a renderer that rasterizes stock effects";
 
-            PresentationParameters parameters;
+            PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
             parameters.setBackBufferWidthProperty(kSize);
             parameters.setBackBufferHeightProperty(kSize);
             parameters.setDepthStencilFormatProperty(DepthFormat::None);

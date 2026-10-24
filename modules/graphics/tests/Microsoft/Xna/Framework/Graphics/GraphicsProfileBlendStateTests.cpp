@@ -25,7 +25,7 @@ using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 TEST(GraphicsProfileBlendStateTest, ReachRejectsSeparateAlphaAndDestinationSaturation)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
 
@@ -53,7 +53,7 @@ TEST(GraphicsProfileBlendStateTest, ReachRejectsSeparateAlphaAndDestinationSatur
 TEST(GraphicsProfileBlendStateTest, ReachRecognizesEquivalentColorAndAlphaFactors)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
     BlendState state;
@@ -68,7 +68,7 @@ TEST(GraphicsProfileBlendStateTest, ReachRecognizesEquivalentColorAndAlphaFactor
 TEST(GraphicsProfileBlendStateTest, HiDefAllowsSeparateAlphaAndDestinationSaturation)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
     BlendState state;
@@ -82,7 +82,7 @@ TEST(GraphicsProfileBlendStateTest, HiDefAllowsSeparateAlphaAndDestinationSatura
 TEST(GraphicsProfileBlendStateTest, MinAndMaxRequireOneOneFactorsInBothProfiles)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice reach(
         GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
     GraphicsDevice hiDef(

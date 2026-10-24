@@ -358,7 +358,7 @@ TEST(RenderTargetSemantics, EachRenderTargetCubeFaceKeepsItsOwnContent)
 
 TEST(RenderTargetSemantics, PluralTargetsAcceptCubeFacesInEitherSlot)
 {
-    Microsoft::Xna::Framework::Graphics::PresentationParameters parameters;
+    Microsoft::Xna::Framework::Graphics::PresentationParameters parameters = Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(
         Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
         Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef, parameters);
@@ -422,7 +422,7 @@ TEST(RenderTargetSemantics, PluralCubeFaceSetsAcceptDrawsInEitherOrder)
 {
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
-    PresentationParameters parameters;
+    PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           parameters);
     if (!device.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets) ||
@@ -470,7 +470,7 @@ TEST(RenderTargetSemantics, PluralCubeFaceSetsAcceptDrawsInEitherOrder)
 
 TEST(RenderTargetSemantics, PluralCubeFacesResolveMsaaAndRegenerateMips)
 {
-    Microsoft::Xna::Framework::Graphics::PresentationParameters parameters;
+    Microsoft::Xna::Framework::Graphics::PresentationParameters parameters = Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(
         Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
         Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef, parameters);
@@ -529,7 +529,7 @@ TEST(RenderTargetSemantics, PluralCubeFacesResolveMsaaAndRegenerateMips)
 
 TEST(RenderTargetSemantics, DestroyingABoundPluralCubeFaceUnbindsTheSet)
 {
-    Microsoft::Xna::Framework::Graphics::PresentationParameters parameters;
+    Microsoft::Xna::Framework::Graphics::PresentationParameters parameters = Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(800, 480);
     GraphicsDevice device(
         Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
         Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef, parameters);

@@ -37,7 +37,7 @@ class SpriteDepthProjectionTest : public testing::Test
 protected:
     static GraphicsDevice MakeDevice()
     {
-        PresentationParameters parameters;
+        PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
         parameters.setBackBufferWidthProperty(256);
         parameters.setBackBufferHeightProperty(256);
         parameters.setDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);

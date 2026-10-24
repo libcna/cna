@@ -388,7 +388,11 @@ CNA_C_API CNA_Result cna_graphics_adapter_get_native_monitor_handle(
 CNA_C_API CNA_Result cna_graphics_adapters_refresh(CNA_Handle graphics_device);
 
 /**
- * @brief Initializes PresentationParameters with XNA-compatible defaults.
+ * @brief Initializes PresentationParameters with XNA's defaults.
+ *
+ * As XNA's constructor does, this sets only `is_full_screen` (to true): the back buffer is 0x0 and
+ * every other field is its zero value. Set `back_buffer_width`, `back_buffer_height` and
+ * `is_full_screen` before passing the value to `cna_graphics_device_create`.
  *
  * @param out_parameters Receives a complete version-one value.
  * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT`.

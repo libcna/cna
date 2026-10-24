@@ -23,6 +23,11 @@ static CNA_PresentationParameters make_parameters(void)
     if (cna_presentation_parameters_init(&parameters) != CNA_RESULT_SUCCESS) {
         parameters.struct_size = 0U;
     }
+    /* XNA's defaults describe a 0x0 full-screen back buffer; a caller-created device states its
+       window. */
+    parameters.back_buffer_width = 800;
+    parameters.back_buffer_height = 480;
+    parameters.is_full_screen = CNA_FALSE;
     return parameters;
 }
 

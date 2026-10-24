@@ -261,17 +261,20 @@ namespace Microsoft::Xna::Framework
         /// as XNA's does. Returned as a prvalue, so the device is built in the member itself.
         // CNAEXT: a game that registers no IGraphicsDeviceService still gets a device here,
         // where XNA would throw "No Graphics Device Service". Give that device what an XNA
-        // GraphicsDeviceManager gives every XNA game -- Depth24, the manager's default
-        // PreferredDepthStencilFormat -- rather than PresentationParameters' own default of
-        // None, which is what `new PresentationParameters()` means in XNA and stays so. Without
-        // it a C API game, which owns no manager unless it creates one, had a back buffer with
-        // no depth plane and its Clear(color, depth) was refused (SOFTWARE-333); found by
-        // cna-c-template 0.1.0's 3D path.
+        // GraphicsDeviceManager gives every XNA game -- a windowed 800x480 back buffer and
+        // Depth24, the manager's default PreferredBackBufferWidth/Height and
+        // PreferredDepthStencilFormat -- rather than `new PresentationParameters()`, which in XNA
+        // is a 0x0 full-screen back buffer with no depth plane. Without the depth format a C API
+        // game, which owns no manager unless it creates one, had its Clear(color, depth) refused
+        // (SOFTWARE-333); found by cna-c-template 0.1.0's 3D path.
         [[nodiscard]] Graphics::GraphicsDevice CreateGameGraphicsDevice()
         {
             try
             {
-                Graphics::PresentationParameters parameters;
+                Graphics::PresentationParameters parameters =
+                    Graphics::PresentationParameters::CreateWindowedEXT(
+                        GraphicsDeviceManager::DefaultBackBufferWidth,
+                        GraphicsDeviceManager::DefaultBackBufferHeight);
                 parameters.setDepthStencilFormatProperty(Graphics::DepthFormat::Depth24);
                 return Graphics::GraphicsDevice(
                     Graphics::GraphicsAdapter::getDefaultAdapterProperty(),

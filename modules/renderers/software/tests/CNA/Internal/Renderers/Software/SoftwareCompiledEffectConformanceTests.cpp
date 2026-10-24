@@ -22,7 +22,7 @@ namespace
     {
         SCOPED_TRACE(name);
         GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(),
-                              GraphicsProfile::HiDef, PresentationParameters());
+                              GraphicsProfile::HiDef, PresentationParameters::CreateWindowedEXT(800, 480));
         ASSERT_TRUE(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects));
         callback(device);
     }

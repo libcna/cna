@@ -73,7 +73,7 @@ namespace
     GraphicsDevice MakeHiDefDevice()
     {
         return GraphicsDevice(GraphicsAdapter::getDefaultAdapterProperty(),
-                              GraphicsProfile::HiDef, PresentationParameters{});
+                              GraphicsProfile::HiDef, PresentationParameters::CreateWindowedEXT(800, 480));
     }
 
     /// Not a vertex type at all.

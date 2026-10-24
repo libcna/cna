@@ -161,7 +161,7 @@ namespace
         void TearDown() override { ContentTypeReaderManager::ClearTypeCreators(); }
 
         GraphicsDevice gd{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters()};
+                          PresentationParameters::CreateWindowedEXT(800, 480)};
     };
 }
 

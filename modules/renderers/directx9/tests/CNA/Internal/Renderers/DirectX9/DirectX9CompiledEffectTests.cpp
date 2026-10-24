@@ -32,7 +32,7 @@ namespace
         GraphicsDevice()
             : Microsoft::Xna::Framework::Graphics::GraphicsDevice(
                   GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                  PresentationParameters()) {}
+                  PresentationParameters::CreateWindowedEXT(800, 480)) {}
 
         using Microsoft::Xna::Framework::Graphics::GraphicsDevice::GraphicsDevice;
     };
@@ -253,7 +253,7 @@ TEST(DirectX9CompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
     // XNA Reach intentionally forbids Texture3D; exercise D3D9's real cube/volume sampler route
     // under the profile where volume textures are part of the public contract.
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
 }
 
@@ -287,7 +287,7 @@ TEST(DirectX9CompiledEffectDrawTest, SharedDeviceTextureSlotAfterApplyContract)
 TEST(DirectX9CompiledEffectDrawTest, SharedMrtWriteMaskContract)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     CNA::TestSupport::RunCompiledEffectMrtWriteMaskContract(device);
 }
 
@@ -308,7 +308,7 @@ TEST(DirectX9CompiledEffectDrawTest, SharedLodBiasPerDrawContract)
 TEST(DirectX9CompiledEffectDrawTest, SharedAddressWContract)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
-                          PresentationParameters());
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     CNA::TestSupport::RunCompiledEffectAddressWContract(device);
 }
 
