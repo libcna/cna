@@ -331,6 +331,25 @@ well when a view is missing or the manifest stops covering the list above. After
 art change, regenerate with `avatar_visual_regression.py manifest` if items or framing moved, then
 `update` on SOFTWARE, and look at every golden that changed before committing it.
 
+**Acceptance.** One command says whether Avatar v3 is whole in a build tree:
+
+```
+python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi [--all-renderers | --renderer X ...]
+```
+
+It checks that `catalog.json`, the generator, the codec and CMake agree on the catalog version,
+revision and reader level, that ids are unique and every outfit, preset, rule and file resolves;
+that what this page, the limitations page and the generator's README state about the catalog
+(revision, counts, files, size) is what `catalog.json` holds; and that the catalog is exactly what
+the generator writes. Then, per renderer, it runs the avatar tests through the private GPU runner
+in ten pinned components -- codec, `AvatarDescription`, catalog, content and geometry, animation,
+`AvatarRenderer`, editor, Guide editor, Gamer Services persistence and deterministic randomization
+-- failing when a test fails, skips without an allowed reason, or a component runs fewer tests than
+it has (a component that silently stops running fails), and runs the visual regression on every
+renderer that draws. A stage left out on purpose (`--skip generator`, `--skip visual`) is reported
+as such; the report is `<build>/avatar-acceptance/acceptance.json`. Add a test and raise its
+component's count in the script in the same change.
+
 **Adding content.** New art is code in `tools/avatar_builder/` (`hair.py`, `garments.py`,
 `accessories.py`, `face.py`, `catalog.py`). A new entry takes the next free id of its kind's
 range, a label, random weights per body and `"format": 3`; regenerate with

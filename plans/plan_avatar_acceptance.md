@@ -16,7 +16,7 @@ Task ids `AVA-*`; one task, one commit.
 | AVA-02 | The two STUB failures the baseline found | done |
 | AVA-03 | Documentation drift (revision, sizes, folds, proportions) | done |
 | AVA-04 | Visual regression: checked-in manifest and goldens, legacy script retired | done |
-| AVA-05 | One Avatar v3 acceptance command | open |
+| AVA-05 | One Avatar v3 acceptance command | done |
 | AVA-06 | Earrings fitted to every ear shape | open |
 | AVA-07 | Planted-foot drift across bodies, heights and proportions | open |
 | AVA-08 | Deep-crouch clothing show-through | open |
@@ -131,3 +131,18 @@ tools instead:
 - `GamerServices_AvatarVisualRegression` (labels `avatar`, `visual`) runs `check` with a build's
   default renderer; it passes in `cmake-build-multi` (OPENGLES3) through the private runner, and
   `check --renderer` passes on all six drawing renderers.
+
+## AVA-05 acceptance command
+
+`python3 tools/avatar_builder/avatar_acceptance.py <build> [--all-renderers | --renderer X ...]`
+(stages in `docs/avatars.md`, "Acceptance"). It needs no new CTest entry: the avatar gtests are
+already discovered individually, and the command runs the test binary itself with a JSON report so
+it can tell a test that ran from one that skipped or vanished. Ten components are pinned at
+today's counts (226 tests); only three skips are allowed, with their reasons. Every GPU run goes
+through the private runner.
+
+On `cmake-build-multi` at `a1b4b6e18`, `--all-renderers` passed in 14 min 50 s: catalog, docs (16
+claims), generator, and on OPENGLES3, OPENGL33, WEBGPU, SDL_GPU, FNA3D, SOFTWARE and HEADLESS 225
+passed and 1 allowed skip, on STUB 223 and 3; the visual regression on the six that draw (HEADLESS
+and STUB reported as drawing no pixels). Pinning one more codec test than exists, or a component
+whose suite is gone, fails the tests stage.

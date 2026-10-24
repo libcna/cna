@@ -60,6 +60,13 @@ each garment, shoe, hat, glove and hairstyle how much skin pokes out through it 
 content tests (`AvatarCatalogContentTests`) check the rest: sound geometry, every reference, and every
 model skinned through every animation preset.
 
+## Acceptance
+
+`avatar_acceptance.py <build-dir> [--all-renderers]` is the Avatar v3 acceptance command (stages and
+rules in `docs/avatars.md`, "Acceptance"): catalog and documentation consistency, the generator
+check, and per renderer the pinned avatar test components and the visual regression, every GPU run
+through the private runner.
+
 ## Visual regression
 
 `avatar_visual_regression.py` keeps a small, checked-in regression set: `regression/manifest.json`
