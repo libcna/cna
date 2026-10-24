@@ -376,6 +376,40 @@ TEST(XnaBoneWeightCollection, NormalizeWeightsMatchesXna)
     EXPECT_EQ(Weights(spare), Expected("boneweight/collection_normalize_more_than_count"));
 }
 
+// XNA's NormalizeWeights(int) IL removes every weight <= 0 in the same pass that keeps the first
+// maxWeights, so a zero weight is gone and takes no place (museum wk-animation: CNA kept C at 0).
+TEST(XnaBoneWeightCollection, NormalizeWeightsDropsZeroWeights)
+{
+    BoneWeightCollection weights;
+    weights.Add(BoneWeight("A", 0.2f));
+    weights.Add(BoneWeight("B", 0.5f));
+    weights.Add(BoneWeight("C", 0.0f));
+    weights.Add(BoneWeight("D", 0.1f));
+    weights.NormalizeWeights();
+    const auto& normalized = static_cast<const System::Collections::ObjectModel::Collection<BoneWeight>&>(weights);
+    ASSERT_EQ(normalized.getCountProperty(), 3);
+    EXPECT_EQ(normalized[0].getBoneNameProperty(), "B");
+    EXPECT_FLOAT_EQ(normalized[0].getWeightProperty(), 0.625f);
+    EXPECT_EQ(normalized[1].getBoneNameProperty(), "A");
+    EXPECT_FLOAT_EQ(normalized[1].getWeightProperty(), 0.25f);
+    EXPECT_EQ(normalized[2].getBoneNameProperty(), "D");
+    EXPECT_FLOAT_EQ(normalized[2].getWeightProperty(), 0.125f);
+
+    BoneWeightCollection capped;
+    capped.Add(BoneWeight("A", 0.5f));
+    capped.Add(BoneWeight("B", 0.0f));
+    capped.Add(BoneWeight("C", 0.25f));
+    capped.NormalizeWeights(2);
+    const auto& kept = static_cast<const System::Collections::ObjectModel::Collection<BoneWeight>&>(capped);
+    ASSERT_EQ(kept.getCountProperty(), 2);
+    EXPECT_EQ(kept[0].getBoneNameProperty(), "A");
+    EXPECT_EQ(kept[1].getBoneNameProperty(), "C");
+
+    BoneWeightCollection onlyZero;
+    onlyZero.Add(BoneWeight("A", 0.0f));
+    EXPECT_THROW(onlyZero.NormalizeWeights(), InvalidContentException);
+}
+
 TEST(XnaBoneWeightCollection, NormalizeRefusalsMatchXna)
 {
     EXPECT_EQ(Result([]

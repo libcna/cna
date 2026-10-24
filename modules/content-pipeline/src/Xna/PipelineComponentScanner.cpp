@@ -55,9 +55,25 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         return Update(pipelineAssemblies, {});
     }
 
-    bool PipelineComponentScanner::Update(const std::vector<std::string>& pipelineAssemblies,
-                                          const std::vector<std::string>& pipelineAssemblyDependencies)
+    bool PipelineComponentScanner::Update(const std::vector<std::string>& requestedAssemblies,
+                                          const std::vector<std::string>& requestedDependencies)
     {
+        // XNA's Update removes null and empty names from both lists, then answers false only when
+        // AlreadyUpToDate finds the same list, in order, with unchanged assembly timestamps. A
+        // catalog has no timestamp; an unchanged scan of the same registry is the equivalent.
+        const auto withoutEmpty = [](const std::vector<std::string>& names) {
+            std::vector<std::string> kept;
+            for (const std::string& name : names)
+            {
+                if (!name.empty()) { kept.push_back(name); }
+            }
+            return kept;
+        };
+        const std::vector<std::string> pipelineAssemblies = withoutEmpty(requestedAssemblies);
+        const std::vector<std::string> pipelineAssemblyDependencies = withoutEmpty(requestedDependencies);
+        const bool sameList = previousAssemblies_.has_value() && *previousAssemblies_ == pipelineAssemblies;
+        previousAssemblies_ = pipelineAssemblies;
+
         const std::set<std::string> previousImporters = [this] {
             std::set<std::string> names;
             for (const auto& entry : importerAttributes_) { names.insert(entry.first); }
@@ -128,6 +144,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         for (const auto& entry : importerAttributes_) { currentImporters.insert(entry.first); }
         std::set<std::string> currentProcessors;
         for (const auto& entry : processorInputTypes_) { currentProcessors.insert(entry.first); }
-        return currentImporters != previousImporters || currentProcessors != previousProcessors;
+        return !sameList || currentImporters != previousImporters || currentProcessors != previousProcessors;
     }
 }

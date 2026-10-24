@@ -25,5 +25,24 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
 
         /** @brief Initializes a new instance of the ContentTypeSerializerAttribute class. */
         ContentTypeSerializerAttribute();
+
+        /**
+         * @brief Determines whether another attribute is equal to this one.
+         *
+         * .NET's Attribute.Equals compares the type and every instance field; this attribute has
+         * no fields, so every instance of the same type is equal, and Match (which defaults to
+         * Equals) agrees.
+         *
+         * @param other The attribute to compare with.
+         * @return true when @p other is a ContentTypeSerializerAttribute of the same type.
+         */
+        bool Equals(const System::Attribute& other) const override;
+
+        /**
+         * @brief Returns a hash code shared by every equal instance.
+         *
+         * @return A hash of the attribute's type.
+         */
+        int GetHashCode() const override;
     };
 }

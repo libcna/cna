@@ -76,24 +76,33 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
         // (measured, boneweight/collection_normalize_ties).
         std::stable_sort(weights.begin(), weights.end(), [](const BoneWeight& left, const BoneWeight& right)
                          { return left.getWeightProperty() > right.getWeightProperty(); });
-        if (static_cast<std::size_t>(maxWeights) < weights.size())
-        {
-            weights.resize(static_cast<std::size_t>(maxWeights));
-        }
+        // XNA's NormalizeWeights(int) IL drops every weight <= 0 and every weight past the first
+        // maxWeights it keeps in one pass, summing the rest; a zero weight neither survives nor
+        // takes one of the maxWeights places (museum wk-animation).
+        std::vector<BoneWeight> kept;
+        kept.reserve(weights.size());
         SharpRuntime::Single total = 0.0f;
         for (const BoneWeight& weight : weights)
         {
+            if (weight.getWeightProperty() <= 0.0f || kept.size() >= static_cast<std::size_t>(maxWeights))
+            {
+                continue;
+            }
             total += weight.getWeightProperty();
+            kept.push_back(weight);
         }
         if (total == 0.0f)
         {
             throw InvalidContentException(
                 "Error normalizing vertex bone weights. BoneWeightCollection does not contain any weighting values.");
         }
+        // The IL scales by one reciprocal rather than dividing each weight by the total, which can
+        // differ in the last bit.
+        const SharpRuntime::Single scale = 1.0f / total;
         ClearItems();
-        for (const BoneWeight& weight : weights)
+        for (const BoneWeight& weight : kept)
         {
-            Add(BoneWeight(weight.getBoneNameProperty(), weight.getWeightProperty() / total));
+            Add(BoneWeight(weight.getBoneNameProperty(), weight.getWeightProperty() * scale));
         }
     }
 

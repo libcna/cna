@@ -992,6 +992,36 @@ TEST(XnaMaterialProcessor, ForwardsItsPropertiesAndBuildsTheEffect)
     EXPECT_EQ(built, effectMaterial);
 }
 
+// XNA's MaterialProcessor.Process: an EffectMaterialContent with no Effect, or an Effect naming no
+// file, is InvalidContentException carrying the material's identity, and nothing is built for the
+// effect (museum wk-processor; CNA skipped the first silently and failed the second in BuildAsset).
+TEST(XnaMaterialProcessor, RefusesAnEffectMaterialWithoutAnEffectFile)
+{
+    Processors::MaterialProcessor processor;
+    auto noEffect = std::make_shared<Graphics::EffectMaterialContent>();
+    noEffect->setNameProperty("Plaque");
+    RecordingContext context;
+    try
+    {
+        (void)processor.Process(noEffect, context);
+        ADD_FAILURE() << "an EffectMaterialContent without an Effect was accepted";
+    }
+    catch (const Xna::InvalidContentException& error)
+    {
+        EXPECT_EQ(error.getMessageProperty(), "Plaque is an EffectMaterialContent, but its Effect is null.");
+    }
+    EXPECT_EQ(noEffect->getCompiledEffectProperty(), nullptr);
+
+    auto emptyFile = std::make_shared<Graphics::EffectMaterialContent>();
+    emptyFile->setNameProperty("Plaque");
+    emptyFile->setEffectProperty(
+        std::make_shared<Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<Graphics::EffectContent>>());
+    RecordingContext emptyContext;
+    EXPECT_THROW((void)processor.Process(emptyFile, emptyContext), Xna::InvalidContentException);
+    EXPECT_EQ(emptyContext.Built(), "[]");
+    EXPECT_EQ(emptyFile->getCompiledEffectProperty(), nullptr);
+}
+
 TEST(XnaMaterialProcessor, RefusesANullMaterial)
 {
     EXPECT_EQ(Result([]

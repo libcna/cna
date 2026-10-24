@@ -7,6 +7,7 @@
 
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessorContext.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "System/ArgumentNullException.hpp"
 
 namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
@@ -212,11 +213,25 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         }
         if (const auto effectMaterial = std::dynamic_pointer_cast<Graphics::EffectMaterialContent>(converted))
         {
-            if (const std::shared_ptr<ExternalReference<Graphics::EffectContent>> effect =
-                    effectMaterial->getEffectProperty())
+            // XNA's MaterialProcessor.Process refuses an EffectMaterialContent with no effect, or
+            // one naming no file, as invalid content, before building anything for it.
+            const std::shared_ptr<ExternalReference<Graphics::EffectContent>> effect =
+                effectMaterial->getEffectProperty();
+            if (effect == nullptr)
             {
-                effectMaterial->setCompiledEffectProperty(BuildEffect(effect, context));
+                throw InvalidContentException(converted->getNameProperty() +
+                                                  " is an EffectMaterialContent, but its Effect is null.",
+                                              effectMaterial->getIdentityProperty());
             }
+            if (effect->getFilenameProperty().empty())
+            {
+                throw InvalidContentException(
+                    converted->getNameProperty() +
+                        " is an EffectMaterialContent, but its Effect is invalid: Effect.Filename is null "
+                        "or or an empty string.",
+                    effectMaterial->getIdentityProperty());
+            }
+            effectMaterial->setCompiledEffectProperty(BuildEffect(effect, context));
         }
         return converted;
     }

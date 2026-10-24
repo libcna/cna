@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/ContentTypeSerializerAttribute.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateSerializer.hpp"
 #include "System/InvalidOperationException.hpp"
 
@@ -129,4 +130,18 @@ TEST(IntermediateRegistryCompatibilityTest, RepeatedTargetKeepsTheFirstRegistrat
     EXPECT_EQ(S::FindTypeSerializer(std::string("registryRepeated")), &first);
     EXPECT_EQ(S::FindTypeSerializer(std::string("registryUnused")), nullptr);
     EXPECT_EQ(S::FindTypeSerializer(std::string("CnaTests.Registry.Unused")), nullptr);
+}
+
+// .NET's Attribute.Equals compares the type and every instance field, and Match defaults to it, so
+// two independently made instances of this field-less attribute are equal (museum wk-cnbloader:
+// CNA inherited sharp-runtime's identity comparison).
+TEST(IntermediateRegistryCompatibilityTest, ContentTypeSerializerAttributesCompareByValue)
+{
+    using Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::ContentTypeSerializerAttribute;
+    const ContentTypeSerializerAttribute first;
+    const ContentTypeSerializerAttribute second;
+    EXPECT_TRUE(first.Equals(second));
+    EXPECT_TRUE(second.Equals(first));
+    EXPECT_TRUE(first.Match(second));
+    EXPECT_EQ(first.GetHashCode(), second.GetHashCode());
 }

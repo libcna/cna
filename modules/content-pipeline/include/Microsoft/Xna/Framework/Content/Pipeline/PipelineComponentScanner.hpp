@@ -3,6 +3,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -119,7 +120,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * @brief Updates the scanner object to reflect the components of the named catalogs.
          *
          * @param pipelineAssemblies Catalog names to include; empty includes every catalog.
-         * @return True when the set of components changed since the previous update.
+         * @return False only when the list, empty names removed, equals the previous call's and
+         *         the components it names are unchanged; true otherwise, including on the first
+         *         call, as XNA's scanner answers.
          */
         bool Update(const std::vector<std::string>& pipelineAssemblies);
 
@@ -129,13 +132,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          *
          * @param pipelineAssemblies Catalog names to include; empty includes every catalog.
          * @param pipelineAssemblyDependencies Catalog names only checked for existence.
-         * @return True when the set of components changed since the previous update.
+         * @return False only when the list, empty names removed, equals the previous call's and
+         *         the components it names are unchanged; true otherwise, including on the first
+         *         call. The dependency list is not compared, as in XNA.
          */
         bool Update(const std::vector<std::string>& pipelineAssemblies,
                     const std::vector<std::string>& pipelineAssemblyDependencies);
 
     private:
         std::shared_ptr<const CNA::Content::Pipeline::ContentPipelineRegistry> registry_;
+        std::optional<std::vector<std::string>> previousAssemblies_;
         std::vector<std::string> errors_;
         std::map<std::string, ContentImporterAttribute> importerAttributes_;
         std::map<std::string, std::string> importerOutputTypes_;

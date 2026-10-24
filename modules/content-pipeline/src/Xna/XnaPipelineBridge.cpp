@@ -17,6 +17,8 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/PipelineException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/XnaComponentNames.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
 namespace CNA::Content::Pipeline
@@ -122,6 +124,22 @@ namespace CNA::Content::Pipeline
 
     namespace
     {
+        /// AddDependency records a source file. CNA keeps every dependency inside a source root,
+        /// a deliberate sandbox XNA does not have; what it refuses is reported the way XNA's
+        /// BuildCoordinator.GetRelativePath reports a path it cannot use, as a PipelineException,
+        /// rather than as a std:: exception escaping the public pipeline API.
+        template<typename TCanonicalContext>
+        void ResolveDependencyAsXna(TCanonicalContext& context, const std::filesystem::path& authored)
+        {
+            try
+            {
+                (void)context.ResolveSourceDependency(authored);
+            }
+            catch (const std::invalid_argument& error)
+            {
+                throw Xna::PipelineException("AddDependency: {0}", std::string(error.what()));
+            }
+        }
 
         /**
          * @brief The declared spelling of a boxed enumeration, for the enumerations XNA's own
@@ -342,7 +360,7 @@ namespace CNA::Content::Pipeline
                 std::filesystem::relative(authored, context_->SourcePath().parent_path(), error);
             if (!error && !relative.empty()) { authored = relative; }
         }
-        (void)context_->ResolveSourceDependency(authored);
+        ResolveDependencyAsXna(*context_, authored);
     }
 
     XnaBridgeProcessorContext::XnaBridgeProcessorContext(CanonicalProcessorContext& context)
@@ -403,7 +421,7 @@ namespace CNA::Content::Pipeline
                 std::filesystem::relative(authored, context_->SourcePath().parent_path(), error);
             if (!error && !relative.empty()) { authored = relative; }
         }
-        (void)context_->ResolveSourceDependency(authored);
+        ResolveDependencyAsXna(*context_, authored);
     }
 
     void XnaBridgeProcessorContext::AddOutputFile(const std::string& filename)
@@ -839,9 +857,12 @@ namespace CNA::Content::Pipeline
                 "ContentProcessorContext::Convert needs a running pipeline; this context was "
                 "created outside a coordinator.");
         }
+        // XNA's Convert: ArgumentNullException("processorName") for a null or empty name, and
+        // ProcessorManager.ValidateProcessorTypes' InvalidOperationException for a processor it
+        // cannot find or whose input type does not fit.
         if (processorName.empty())
         {
-            throw Xna::PipelineException("ContentProcessorContext::Convert needs a processor name.");
+            throw System::ArgumentNullException("processorName");
         }
         std::shared_ptr<const ContentProcessor> processor;
         try
@@ -850,7 +871,13 @@ namespace CNA::Content::Pipeline
         }
         catch (const std::exception& error)
         {
-            throw Xna::PipelineException(std::string("Convert: ") + error.what());
+            throw System::InvalidOperationException(std::string("Convert: ") + error.what());
+        }
+        if (processor->OutputType() != outputTypeName)
+        {
+            throw System::InvalidOperationException(
+                "Convert: processor '" + processorName + "' produces '" + processor->OutputType() +
+                "', not the requested '" + outputTypeName + "'.");
         }
         const ContentProcessorParameters parameters = ToProcessorParameters(processorParameters);
         processor->ValidateParameters(parameters);

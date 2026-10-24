@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/ContentTypeSerializer.hpp"
 
+#include <functional>
+#include <typeindex>
+#include <typeinfo>
 #include <utility>
 
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
@@ -11,6 +14,16 @@
 namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate
 {
     ContentTypeSerializerAttribute::ContentTypeSerializerAttribute() = default;
+
+    bool ContentTypeSerializerAttribute::Equals(const System::Attribute& other) const
+    {
+        return typeid(other) == typeid(*this);
+    }
+
+    int ContentTypeSerializerAttribute::GetHashCode() const
+    {
+        return static_cast<int>(std::hash<std::type_index>{}(std::type_index(typeid(*this))));
+    }
 
     void ContentTypeSerializerBase::PrepareOperation()
     {

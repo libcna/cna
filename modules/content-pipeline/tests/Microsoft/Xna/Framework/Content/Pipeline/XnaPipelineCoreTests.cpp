@@ -41,8 +41,10 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/TargetPlatform.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/Collections/Generic/OrderedDictionary.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/FormatException.hpp"
 #include "System/InvalidCastException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 namespace
 {
@@ -627,7 +629,9 @@ namespace
             if (dependency.identity.find("extra.txt") != std::string::npos) { recorded = true; }
         }
         EXPECT_TRUE(recorded);
-        EXPECT_THROW(view.AddDependency("../escape.txt"), std::invalid_argument);
+        // CNA's source-root sandbox refuses the escape; the refusal is XNA's PipelineException
+        // (BuildCoordinator.GetRelativePath), not a std:: exception (museum wk-processor).
+        EXPECT_THROW(view.AddDependency("../escape.txt"), Xna::PipelineException);
 
         std::filesystem::remove_all(root);
     }
@@ -654,10 +658,15 @@ namespace
         parameters.SetValue<std::int32_t>("Repeat", 2);
         const std::string converted = context.Convert<GreetingContent, std::string>(greeting, "GreetingProcessor", parameters);
         EXPECT_EQ(converted, "> ABC> ABC");
-        EXPECT_THROW(((void)context.Convert<GreetingContent, std::string>(greeting, "NoSuchProcessor")), Xna::PipelineException);
-        EXPECT_THROW(((void)context.Convert<GreetingContent, std::string>(greeting, "")), Xna::PipelineException);
+        // XNA's Convert: ProcessorManager.ValidateProcessorTypes throws InvalidOperationException
+        // for an unknown processor or a wrong output type, before anything runs, and an empty name
+        // is ArgumentNullException("processorName") (museum wk-processor).
+        EXPECT_THROW(((void)context.Convert<GreetingContent, std::string>(greeting, "NoSuchProcessor")),
+                     System::InvalidOperationException);
+        EXPECT_THROW(((void)context.Convert<GreetingContent, std::string>(greeting, "")), System::ArgumentNullException);
         // The wrong output type is refused rather than mis-unboxed.
-        EXPECT_THROW(((void)context.Convert<GreetingContent, std::int32_t>(greeting, "GreetingProcessor")), Xna::PipelineException);
+        EXPECT_THROW(((void)context.Convert<GreetingContent, std::int32_t>(greeting, "GreetingProcessor")),
+                     System::InvalidOperationException);
         // Outside a coordinator there is nothing to convert with.
         Canon::ContentProcessorContext detached(root, root / "c.greet", "c", "Outer", none, roots, dependencies, logger);
         Canon::XnaBridgeProcessorContext detachedView(detached);
@@ -877,9 +886,24 @@ namespace
         ASSERT_EQ(scanner.getErrorsProperty().size(), 1u);
         EXPECT_NE(scanner.getErrorsProperty()[0].find("Nowhere.Assembly"), std::string::npos);
 
+        // XNA's Update answers false only for the same list (empty names removed) with nothing
+        // changed, and true for any other list, even when it names no new component -- the
+        // museum's wk-processor case: the added catalog does not exist, its error is recorded,
+        // and the answer is still true. The dependency list is not compared.
+        EXPECT_TRUE(scanner.Update({"TestGame.Pipeline"}));
+        EXPECT_TRUE(scanner.Update({"TestGame.Pipeline", "No.Such.Catalog"}));
+        ASSERT_EQ(scanner.getErrorsProperty().size(), 1u);
+        EXPECT_NE(scanner.getErrorsProperty()[0].find("No.Such.Catalog"), std::string::npos);
+        EXPECT_FALSE(scanner.Update({"", "TestGame.Pipeline", "No.Such.Catalog", ""}, {"TestGame.Other"}));
+        EXPECT_EQ(scanner.getErrorsProperty().size(), 1u);
+        EXPECT_TRUE(scanner.Update({"TestGame.Pipeline"}));
+        EXPECT_TRUE(scanner.getErrorsProperty().empty());
+
+        // The first call always answers true, even when it finds nothing.
         Xna::PipelineComponentScanner detached;
-        EXPECT_FALSE(detached.Update({}));
+        EXPECT_TRUE(detached.Update({}));
         EXPECT_TRUE(detached.getImporterNamesProperty().empty());
+        EXPECT_FALSE(detached.Update({}));
     }
 
     // ---- compile parity: the abstract bases can be derived from and used ------------------------
