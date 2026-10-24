@@ -15,7 +15,8 @@ Repositories and branches:
 - CNA: this repository, branch `next`. `origin/next` was pushed through `c6dec91fb` on 2026-10-24
   at 10:28 (a push from this clone that the repair session did not run); local since then:
   `30afa280b` (glTF Model pipeline component versions), the batch 9 closure `6c8b042c4`,
-  `51fb39d5a` (DC-R1), `c7f6c68e5` (DC-R2), `9ef292993` (DC-R3) and the DC-R closure commit.
+  `51fb39d5a` (DC-R1), `c7f6c68e5` (DC-R2), `9ef292993` (DC-R3), the DC-R closure `c21f57aec`, and
+  the consumer intake commits listed under "Latest accepted work".
 - cna-demos: `../cna-demos`, branch `next`. Published through `92ee315`; every later commit is
   local: the evidence, marker and corrected-check commits of batches 3-9 and their closures. Its
   `docs/CNA_ISSUES.md` is the permanent historical inventory and its assertions remain the oracle.
@@ -35,6 +36,24 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Consumer intake, museum `docs/CNA_FINDINGS.md` Open section (2026-10-24): every entry was checked
+  against HEAD; most were already fixed and await museum reruns (the list and evidence are at the
+  top of `CNA_MUSEUM_REPAIR_HANDOFF.md`). Fixed here: MouseState/GamePadState text as XNA's IL
+  formats it (`0ef875619`), six Pipeline Workshop divergences 3/4/5/10/11/12 (`889a31be4`), TaskItem
+  equality (`48a5c75eb`), the unsigned ENet fragment bitmaps (`03b92269c`), a readable refused
+  vertex type (`a80534927`), the WAV/devices.h and content-task link documentation (`acc2ee55b`,
+  `626de40e6`), and on the owner's decisions `RendererFeature::RenderTargetReadback` (36,
+  `e357bc4c4`), PresentationParameters with XNA's defaults (0x0, full screen; CNAEXT
+  `CreateWindowedEXT`, `e460e0ed6`) and XNA's TextureImporter/TextureProcessor answering an
+  XNA-typed `BuildAndLoadAsset<TextureContent, TextureContent>` (`671d8478e`). Found on the way:
+  `17cd5d3c3` (EasyGL drew a colourless PBR record black since `bb6a2f44e`) and `b747faca2` (the
+  input gate's filter picked up a media test). The pending-pan TSan race was already fixed by
+  `594d7d328`. Checkpoint after all of it: full cmake-build-multi CTest 12,542 of 12,563 (the 21
+  others are the multi-tree compiled-effect and audio-driver artefacts, which pass with their
+  renderer, and the faults fixed above); demos tree rebuilt from CNA `17cd5d3c3` plus the texture
+  route, 719-ID sweeps SOFTWARE 670/1/45/3 and OPENGLES3 708/1/7/3 with the one failure a demo check
+  corrected in demos `8855ae3` and then passing, and serial CTest 687 PASS/45 SKIP/0 FAIL/3 disabled
+  (838 s); reports `../cna-demos/build/linux-full/reports/repair-museum-closure-*`.
 - DC-R1 (`51fb39d5a`, owner: implement): SDL_GPU binds a RenderTargetCube face in any slot of a
   target set. DC-R2 (`c7f6c68e5`, owner: all-or-none exact, refuse others): SDL_GPU applies a
   MultiSampleMask keeping every sample or none and refuses any other, and
@@ -63,12 +82,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   galaxy-eggbert re-verified it.
 - Batch 8 (081, 091-096, 098, 104, 114) and ISSUE-010/020/029/062 closed earlier on 2026-10-23/24.
 
-The last complete cross-subsystem checkpoint is batch 9 (2026-10-24, demos tree rebuilt from CNA
-`30afa280b`): full 719-ID SOFTWARE 669 PASS/2 FAIL/45 SKIP/3 NOTRUN, OPENGLES3 707 PASS/2 FAIL/7
-SKIP/3 NOTRUN; the two failures on each were `content.model.pipeline_contract` and
+The latest complete cross-subsystem checkpoint is the consumer intake one under "Latest accepted
+work" (same CTest outcome, two FAIL-to-PASS identity rows). Before it, batch 9 (2026-10-24, demos
+tree rebuilt from CNA `30afa280b`): full 719-ID SOFTWARE 669 PASS/2 FAIL/45 SKIP/3 NOTRUN, OPENGLES3
+707 PASS/2 FAIL/7 SKIP/3 NOTRUN; the two failures on each were `content.model.pipeline_contract` and
 `content.xnb.output_pipeline` pinning the old identities, corrected in demos `dcc3811` and passing
-on both renderers. Against batch 8 only FAIL-to-PASS and SKIP-to-PASS rows changed otherwise.
-Serial CTest: 735 registered/732 enabled, 687 PASS/45 SKIP/**0 FAIL**/3 disabled (954.26 s). Reports:
+on both renderers. Against batch 8 only FAIL-to-PASS and SKIP-to-PASS rows changed otherwise. Serial
+CTest: 735 registered/732 enabled, 687 PASS/45 SKIP/**0 FAIL**/3 disabled (954.26 s). Reports:
 `../cna-demos/build/linux-full/reports/repair-batch9-closure-{full,ctest}*`.
 
 Native suites must run through the private runner with `SDL_AUDIO_DRIVER=dummy` (and from the
@@ -80,18 +100,25 @@ incremental builds keep stale outputs.
 
 ### Exact next task
 
-The consumer intake below and, when a Windows/XNA host exists, the three platform validations.
+Remaining museum items, none of them a quick fidelity fix: Pipeline Workshop 1 (XNA names nested
+outputs uniquely across the whole build; CNA's set is per bridge context and `Convert` starts a
+fresh one, so sharing it needs build-wide state in the canonical request and a deterministic answer
+under incremental builds), 9 (`XmlSerializer` for Color and Rectangle needs property members in
+sharp-runtime's XmlMember, and the element order measured against genuine XNA under Wine) and 16's
+move of the task sources (a design choice). Then, when a Windows/XNA host exists, the three
+platform validations.
 Untriaged observation: in `cmake-build-multi`, `cna_c_api_effect_smoke` run with
 `CNA_GRAPHICS_RENDERER=WEBGPU` fails its stage 3 at `EffectSmoke.c` "cube replaces the Texture2D
 on sampler 1", on an effect whose GLSL text WebGPU rejects (STUB fails the same stage creating
 textures, an expected STUB artefact). The registered test runs under the tree's HEADLESS default.
 
-Consumer-only work still matters. cna-engine's current `upstream-issues.md` reports UP-001,
-UP-006, UP-018, UP-019 and UP-020 resolved; UP-002 remains an informational documentation request
-about `CNAEXT` on C++ spellings of implicit XNA semantics. The museum's `docs/CNA_FINDINGS.md`
-Open section mixes actionable items with fixes awaiting museum reruns; read each entry's dated
-status before changing CNA. Do not claim UBSan/TSan/hardware/service validation when its required
-tree or hardware is absent.
+Consumer-only work still matters. cna-engine's `upstream-issues.md` reports UP-001, UP-006, UP-018,
+UP-019 and UP-020 resolved; its UP-002 (CNAEXT on C++ spellings of implicit XNA semantics) is
+answered by `99b54079e` in `docs/migration-guide.md` and awaits cna-engine's own reading. The
+museum's `docs/CNA_FINDINGS.md` Open section still lists every entry until the museum reruns it; the
+consumers also need to know that `new PresentationParameters()` is now XNA's 0x0 full-screen value,
+so a device built from it directly must state a size. Do not claim UBSan/TSan/hardware/service
+validation when its required tree or hardware is absent.
 
 Build discipline remains: existing build directories only, shared
 `CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv`, at most 8 jobs and preferably one compiler under

@@ -1,5 +1,61 @@
 # Museum-discovered CNA repairs
 
+## Consumer intake pass — 2026-10-24
+
+Every entry in the museum's Open section (measured at CNA `a6f9e9b2e`) was checked against
+CNA HEAD by reading source. The museum still owns its inventory and moves an entry only after its
+own rerun; nothing below claims a museum, sanitizer or hardware rerun.
+
+Already fixed at HEAD before this pass (museum rerun pending): BoundingFrustum.Intersects(Ray)
+`9a5e5d896` (the owner revoked the old "never implement" reservation); SDL_GPU volume ShaderEffect
+layout `830e9a934`; vertex texture fetch on SDL_GPU `079dfc55e` and WebGPU `e8bfdf2c5`/`c105303dc`;
+D3D9 failed Reset `d0cea7036` (Wine only); HapticDevice constructor `974c1ac08`; SystemTray
+documentation `d7ed7592d`; MessageBox default buttons `aff773b3b`; EnvironmentMapEffect texture
+parameters `28145a201`; WebGPU without a surface (documented fallback) `376eb834b`/`a47766886`;
+Storage argument and disposal checks `3798787bb`/`17c66a9d3`/`ac6be8f03`; lazy SetAppNameEXT root
+`fffa552ad`; ENet unsequenced window `5b6aab981`; notification Close race `20fe6efd2`; mixer
+callback race `844e3ce41`; HttpNotificationChannel ErrorOccurred `3c61c30ef`/`3078bb41e`;
+Float16 readback conversion `53292f147` (Android unverified); signed-out profile read
+`3cd6028b7`/`ca8633622`; FNA3D sampler unbinding `c2664bad6` (one clean GPU run); C API single
+CNA state `89fb1493f`; achievement unknown key `4a756413f`; pipeline items 6 `252e9bca1`, 7
+`583af2a5e` and 13 (`cd1f5ef0a`, owner decision ISSUE-022). Not a defect: the C
+`cna_cnb_copy_decompressed` NONE case is documented (`c57ecab8c`); pipeline 8 (XNB version 4) and
+17 (lock file) are deliberate and documented.
+
+Fixed in this pass:
+
+| Museum entry | CNA commit | Evidence |
+|---|---|---|
+| C API: MouseState/GamePadState text (XNA IL formats; the C gamepad route now formats the caller's snapshot) | `0ef875619` | input 563/563; C snapshot smokes; demos `f2fb348` |
+| Pipeline 14 (WAV import comments) and the devices.h note | `acc2ee55b` | docs only |
+| Pipeline 15 (TaskItem `operator==` was deleted) | `48a5c75eb` | content pipeline 563 + 1 skip |
+| Unreported twin of MUSEUM-NET-003: ENet fragment bitmaps `1 << 31` | `03b92269c` | UBSan test fails on the old code at protocol.c:614 and 732 |
+| VertexTypeRegistryEXT mangled name | `a80534927` | 24/24 |
+| Pipeline 3, 4, 5, 10, 11, 12 | `889a31be4` | content pipeline 566 + 1 skip; demos content 73/73; demos `34b6dbf` |
+| Pipeline 16, documentation half (link CNA::ContentCompiler) | `626de40e6` | docs only; moving the sources is not done |
+| No capability query for render-target readback (owner: add one) | `e357bc4c4` | RendererFeature::RenderTargetReadback (36); graphics 3,066, same 115 skips |
+| C API: presentation_parameters_init is not XNA's default (owner: match XNA) | `e460e0ed6` | full multi-tree CTest 12,542/12,563, the rest accounted for |
+| Pipeline 2 (TextureProcessor alias type; owner: XNA content type) | `671d8478e` | content pipeline 567 + 1 skip |
+
+Already fixed before this pass, not changed: the TSan pending-pan teardown race. `594d7d328`
+(MUSEUM-AUDIO-002, 2026-10-22) registers an `atexit` handler on the first sound that stops and
+joins the audio thread before the static drain runs, on both mixers. Taking the mixer lock in the
+static destructor would be wrong now: `MixerLock` calls `GetMixer()`, which would create a mixer
+during exit. A TSan rerun is what remains.
+
+Still open: pipeline 1 (nested build names; XNA chooses them unique across the whole build, CNA per
+bridge context, and `Convert` makes a fresh context; sharing them needs build-wide state in the
+canonical request and contexts, and a deterministic answer under incremental builds), pipeline 9
+(XmlSerializer for Color and Rectangle: `Color` has only properties and `Rectangle` a settable
+`Location`, which sharp-runtime's XmlMember cannot express yet, and the element order should be
+measured against genuine XNA under Wine first), pipeline 16's move of the task sources (a design
+choice). Needs the museum or hardware: the D3D9 failed Reset (Wine only), the Float16 Android
+readback, the FNA3D SDL_GPU sampler crash (one clean GPU run), the gs-avatar heap corruption (not
+reproduced), and every sanitizer item (UBSan, TSan) above.
+
+Found while validating, fixed: `17cd5d3c3` (EasyGL drew a colourless stride-48 PbrEffect record black
+since `bb6a2f44e`) and `b747faca2` (the input gate's filter picked up a media test).
+
 ## Current coordination note — 2026-10-23
 
 The CNA/cna-demos inherited review is complete through product commits
