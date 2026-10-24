@@ -15,8 +15,9 @@ Repositories and branches:
 - CNA: this repository, branch `next`. `origin/next` was pushed through `c6dec91fb` on 2026-10-24
   at 10:28 (a push from this clone that the repair session did not run); local since then:
   `30afa280b` (glTF Model pipeline component versions), the batch 9 closure `6c8b042c4`,
-  `51fb39d5a` (DC-R1), `c7f6c68e5` (DC-R2), `9ef292993` (DC-R3), the DC-R closure `c21f57aec`, and
-  the consumer intake commits listed under "Latest accepted work".
+  `51fb39d5a` (DC-R1), `c7f6c68e5` (DC-R2), `9ef292993` (DC-R3), the DC-R closure `c21f57aec`, the
+  consumer intake commits listed under "Latest accepted work", and the texture-upload ordering fixes
+  `d9b513ee0` and `96577db26`.
 - cna-demos: `../cna-demos`, branch `next`. Published through `92ee315`; every later commit is
   local: the evidence, marker and corrected-check commits of batches 3-9 and their closures. Its
   `docs/CNA_ISSUES.md` is the permanent historical inventory and its assertions remain the oracle.
@@ -96,8 +97,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   galaxy-eggbert re-verified it.
 - Batch 8 (081, 091-096, 098, 104, 114) and ISSUE-010/020/029/062 closed earlier on 2026-10-23/24.
 
-The latest complete cross-subsystem checkpoint is the consumer intake one under "Latest accepted
-work" (same CTest outcome, two FAIL-to-PASS identity rows). Before it, batch 9 (2026-10-24, demos
+The latest complete cross-subsystem checkpoint (2026-10-24, CNA `96577db26`): `cmake-build-multi`
+fully rebuilt, full CTest 12,553 of 12,569 passed in 927 s; the 16 others are the 15 SDL_GPU/FNA3D
+compiled-effect entries and `CApi_AudioUnavailableSmoke`, and pass when rerun with
+`CNA_GRAPHICS_RENDERER=SDL_GPU` (62/62), `=FNA3D` (37/37) and without `SDL_AUDIO_DRIVER=dummy` (1/1).
+Demos tree rebuilt from the same CNA: 719-ID sweeps SOFTWARE 671 PASS/0 FAIL/45 SKIP/3 NOTRUN and
+OPENGLES3 709/0/7/3, against the consumer intake checkpoint only
+`game.graphics_device_manager.preparing_device_settings` FAIL-to-PASS (the demos `8855ae3`
+correction); serial CTest 732 enabled, 687 PASS/45 SKIP/**0 FAIL**/3 disabled (791.75 s). Reports:
+`../cna-demos/build/linux-full/reports/repair-final-checkpoint-*` and
+`cmake-build-multi/pp-validate/final-full-ctest.log`. Before it, the consumer intake checkpoint
+under "Latest accepted work", and batch 9 (2026-10-24, demos
 tree rebuilt from CNA `30afa280b`): full 719-ID SOFTWARE 669 PASS/2 FAIL/45 SKIP/3 NOTRUN, OPENGLES3
 707 PASS/2 FAIL/7 SKIP/3 NOTRUN; the two failures on each were `content.model.pipeline_contract` and
 `content.xnb.output_pipeline` pinning the old identities, corrected in demos `dcc3811` and passing
@@ -149,8 +159,8 @@ every historical cna-demos finding, including pending items that are not yet con
 Capability documents describe supported behavior, tests are executable evidence, and plans/Git
 history preserve measurement history. Do not let an issue disappear from either applicable list.
 
-Repository state last reconciled: **2026-10-24** (`next`). The last genuinely full test run is
-still the older checkpoint identified above; do not upgrade focused evidence into a full claim.
+Repository state last reconciled: **2026-10-24** (`next`, `96577db26`). The last full test run is
+the checkpoint identified above; do not upgrade later focused evidence into a full claim.
 
 Owner-requested museum repair intake (2026-10-22), focused validation and next task:
 [`CNA_MUSEUM_REPAIR_HANDOFF.md`](CNA_MUSEUM_REPAIR_HANDOFF.md). This is additional
