@@ -16,8 +16,11 @@
 #include "System/Environment.hpp"
 #include <optional>
 
+#include "CNA/Content/Pipeline/ContentCompiler.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnaPipelineBridge.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MipmapChain.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ChildCollection.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentBuildLogger.hpp"
@@ -671,6 +674,70 @@ namespace
         Canon::ContentProcessorContext detached(root, root / "c.greet", "c", "Outer", none, roots, dependencies, logger);
         Canon::XnaBridgeProcessorContext detachedView(detached);
         EXPECT_THROW(((void)detachedView.Convert<GreetingContent, std::string>(greeting, "GreetingProcessor")), Xna::PipelineException);
+        std::filesystem::remove_all(root);
+    }
+
+    // A 2x2 24-bit BMP: blue, green / red, white, rows stored bottom-up and padded to 4 bytes.
+    std::string TwoByTwoBmp()
+    {
+        const unsigned char bytes[] = {
+            'B', 'M', 70, 0, 0, 0, 0, 0, 0, 0, 54, 0, 0, 0,
+            40, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 1, 0, 24, 0, 0, 0, 0, 0, 16, 0, 0, 0,
+            0x13, 0x0B, 0, 0, 0x13, 0x0B, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 255, 255, 255, 255, 0, 0,
+            255, 0, 0, 0, 255, 0, 0, 0};
+        return std::string(reinterpret_cast<const char*>(bytes), sizeof(bytes));
+    }
+
+    // Museum Pipeline Workshop item 2: an XNA-typed BuildAndLoadAsset<TextureContent,
+    // TextureContent> through "TextureProcessor" reads back XNA's TextureContent, built by XNA's
+    // TextureImporter and TextureProcessor. The registry's TextureProcessor is the canonical route
+    // to CNA's runtime texture, which answered with CNA.Content.Cnb.Texture2DData and failed.
+    TEST(XnaPipelineBridge, BuildAndLoadAssetOfATextureAnswersXnasTextureContent)
+    {
+        const std::filesystem::path root = MakeTempRoot("xnatexture");
+        WriteFixture(root / "tile.bmp", TwoByTwoBmp());
+        WriteFixture(root / "outer.greet", "outer\n");
+        auto registry = std::make_shared<Canon::ContentPipelineRegistry>();
+        Canon::RegisterBuiltInContentPipeline(*registry, {});
+        Canon::ContentPipeline pipeline(registry);
+        Canon::ContentSourceRootCapabilities roots;
+        Canon::ContentDependencyCollector dependencies;
+        RecordingLogger logger;
+        Canon::ContentProcessorParameters none;
+        Canon::ContentProcessorContext canonical(root, root / "outer.greet", "outer", "Outer", none, roots,
+                                                 dependencies, logger, Canon::ContentOutputFormat::Xnb, {},
+                                                 &pipeline);
+        Canon::XnaBridgeProcessorContext context(canonical);
+        const Xna::ExternalReference<Xna::Graphics::TextureContent> source("tile.bmp");
+        Xna::OpaqueDataDictionary parameters;
+        parameters.SetValue<bool>("GenerateMipmaps", true);
+        parameters.SetValue<std::string>("NoSuchSetting", "1");
+        const std::shared_ptr<Xna::Graphics::TextureContent> texture =
+            context.BuildAndLoadAsset<Xna::Graphics::TextureContent, Xna::Graphics::TextureContent>(
+                source, "TextureProcessor", parameters);
+        ASSERT_NE(texture, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<Xna::Graphics::Texture2DContent>(texture), nullptr);
+        Xna::Graphics::MipmapChainCollection& faces = texture->getFacesProperty();
+        ASSERT_EQ(faces.getCountProperty(), 1);
+        const auto& chain =
+            static_cast<const System::Collections::ObjectModel::Collection<std::shared_ptr<Xna::Graphics::MipmapChain>>&>(
+                faces)[0];
+        ASSERT_NE(chain, nullptr);
+        EXPECT_EQ(chain->getCountProperty(), 2) << "GenerateMipmaps builds 2x2 and 1x1";
+        // XNA's SetProcessorParameters warns about a name the processor has no property for.
+        bool warned = false;
+        for (const Canon::ContentLogMessage& message : logger.messages)
+        {
+            if (message.text.find("NoSuchSetting") != std::string::npos) { warned = true; }
+        }
+        EXPECT_TRUE(warned);
+        bool recorded = false;
+        for (const auto& dependency : dependencies.Dependencies())
+        {
+            if (dependency.identity.find("tile.bmp") != std::string::npos) { recorded = true; }
+        }
+        EXPECT_TRUE(recorded);
         std::filesystem::remove_all(root);
     }
 

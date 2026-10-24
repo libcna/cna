@@ -15,8 +15,11 @@
 #include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/ProcessorEnums.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/PipelineException.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/TextureProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/XnaComponentNames.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/TextureImporter.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -616,6 +619,80 @@ namespace CNA::Content::Pipeline
         }
     }
 
+    namespace
+    {
+        /// The importer context of an XNA importer a processor's nested build runs in process:
+        /// its dependencies, log and directories are the running processor's own.
+        class NestedXnaImporterContext final : public Xna::ContentImporterContext
+        {
+        public:
+            explicit NestedXnaImporterContext(Xna::ContentProcessorContext& owner) : owner_(&owner) {}
+
+            [[nodiscard]] std::string getIntermediateDirectoryProperty() const override
+            {
+                return owner_->getIntermediateDirectoryProperty();
+            }
+
+            [[nodiscard]] Xna::ContentBuildLogger& getLoggerProperty() const override
+            {
+                return owner_->getLoggerProperty();
+            }
+
+            [[nodiscard]] std::string getOutputDirectoryProperty() const override
+            {
+                return owner_->getOutputDirectoryProperty();
+            }
+
+            void AddDependency(const std::string& filename) override { owner_->AddDependency(filename); }
+
+        private:
+            Xna::ContentProcessorContext* owner_;
+        };
+
+        /// XNA's ProcessorManager.SetProcessorParameters: a name the processor has no settable
+        /// property for, or a value that does not convert, is a warning and the property keeps
+        /// its value; an empty string for an unknown name is skipped silently.
+        void ApplyXnaParameters(Xna::Processors::TextureProcessor& processor,
+                                const Xna::OpaqueDataDictionary& parameters,
+                                const Xna::ContentIdentity& identity, Xna::ContentBuildLogger& logger)
+        {
+            static const Xna::ProcessorParameterBindings<Xna::Processors::TextureProcessor> bindings =
+                Xna::DescribeProcessorParameters<Xna::Processors::TextureProcessor>();
+            for (const auto& [name, boxed] : parameters)
+            {
+                const std::string valueText = Xna::Holds<std::string>(boxed)
+                                                  ? Xna::Unbox<std::string>(boxed)
+                                                  : ParameterText(boxed).value_or(boxed.StableType());
+                const Xna::ProcessorParameterBinding<Xna::Processors::TextureProcessor>* binding =
+                    bindings.Find(name);
+                if (binding == nullptr)
+                {
+                    if (!(Xna::Holds<std::string>(boxed) && Xna::Unbox<std::string>(boxed).empty()))
+                    {
+                        logger.LogWarning(
+                            {}, identity,
+                            "The processorParameters dictionary contains an invalid entry, [" + name + ", " +
+                                valueText + "]. Entries should have the same name as a public property on "
+                                "the processor, and either be of the correct type or have an appropriate "
+                                "TypeConverter.");
+                    }
+                    continue;
+                }
+                try
+                {
+                    binding->assignObject(processor, boxed);
+                }
+                catch (const std::exception& error)
+                {
+                    logger.LogWarning({}, identity,
+                                      "There was a problem setting the " + name +
+                                          " property of TextureProcessor to the value \"" + valueText +
+                                          "\": " + error.what());
+                }
+            }
+        }
+    }
+
     Xna::ContentObject XnaBridgeProcessorContext::BuildAndLoadAssetCore(
         const std::string& sourceFilename, const Xna::ContentIdentity& sourceIdentity,
         const std::string& processorName, const Xna::OpaqueDataDictionary& processorParameters,
@@ -630,6 +707,49 @@ namespace CNA::Content::Pipeline
                 "created outside a coordinator.");
         }
         const std::filesystem::path source = CNA::Internal::PathFromUtf8(sourceFilename);
+
+        // XNA's TextureProcessor turns a TextureContent into a TextureContent, and that is what an
+        // XNA-typed BuildAndLoadAsset<TextureContent, TextureContent> reads back. CNA's registry
+        // answers the name with the canonical route to its runtime texture, so this request is
+        // answered by XNA's own TextureImporter and TextureProcessor, run in process as Convert
+        // runs a processor (museum Pipeline Workshop item 2).
+        static const std::string textureContentName(Xna::Graphics::TextureContent::XnaTypeName);
+        if (inputTypeName == textureContentName && outputTypeName == textureContentName &&
+            (processorName.empty() || processorName == "TextureProcessor") &&
+            (importerName.empty() || importerName == "TextureImporter"))
+        {
+            // Resolved as a nested build resolves its source (relative to the source root), and
+            // recorded as the dependency that build would record.
+            const std::filesystem::path full = source.is_relative() ? context_->SourceRoot() / source : source;
+            std::error_code relativeError;
+            std::filesystem::path authored =
+                std::filesystem::relative(full, context_->SourcePath().parent_path(), relativeError);
+            if (relativeError || authored.empty()) { authored = full; }
+            std::filesystem::path resolved;
+            try
+            {
+                resolved = context_->ResolveSourceDependency(authored);
+            }
+            catch (const std::invalid_argument& error)
+            {
+                throw Xna::PipelineException("BuildAndLoadAsset: {0}", std::string(error.what()));
+            }
+            try
+            {
+                NestedXnaImporterContext importerContext(*this);
+                Xna::TextureImporter importer;
+                std::shared_ptr<Xna::Graphics::TextureContent> texture =
+                    importer.Import(CNA::Internal::PathToUtf8(resolved), importerContext);
+                Xna::Processors::TextureProcessor processor;
+                ApplyXnaParameters(processor, processorParameters, sourceIdentity, getLoggerProperty());
+                return Xna::Box<Xna::Graphics::TextureContent>(processor.Process(texture, *this));
+            }
+            catch (...)
+            {
+                RethrowNested("BuildAndLoadAsset", sourceFilename, sourceIdentity);
+            }
+        }
+
         const std::string logicalName = DeriveAssetName(source, context_->SourceRoot());
         ContentProcessResult nested;
         try
