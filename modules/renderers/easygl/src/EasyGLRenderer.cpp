@@ -9810,7 +9810,19 @@ namespace CNA::Internal::Renderers::EasyGL
             }
             if (sourceElement == nullptr)
                 findInStream(buffer, buffer.GetStride(), 0, nullptr);
-            if (sourceElement == nullptr) continue;
+            if (sourceElement == nullptr)
+            {
+                // A disabled attribute reads the context's generic value, GL's (0,0,0,1) unless an
+                // earlier draw set another. A colour the declaration does not carry is white, the
+                // identity the vertex-colour multiply needs: bb6a2f44e lets a colourless stride-48
+                // PbrEffect record select the COLOR0 program, which then drew black
+                // (EasyGL_Conformance_pbr_vertex_colour D). Every other absent input keeps GL's
+                // own default rather than whatever an earlier draw left at this location.
+                const GLfloat absent = input.usage == VertexElementUsage::Color ? 1.0f : 0.0f;
+                ::metagl::glVertexAttrib4f(::metagl::AttribLocation{static_cast<GLuint>(location)},
+                                           absent, absent, absent, 1.0f);
+                continue;
+            }
 
             const VertexAttribFormat desc =
                 DescribeVertexElementFormat(sourceElement->getVertexElementFormatProperty());
