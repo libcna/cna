@@ -317,8 +317,14 @@ typedef uint32_t CNA_RendererFeature;
  * @since ABI 0.50.0
  */
 #define CNA_RENDERER_FEATURE_MULTI_SAMPLE_MASK UINT32_C(35)
+/**
+ * @brief RenderTarget2D contents read back through Texture2D GetData; unsupported means the read
+ *        is refused with `CNA_RESULT_NOT_SUPPORTED`.
+ * @since ABI 0.50.0
+ */
+#define CNA_RENDERER_FEATURE_RENDER_TARGET_READBACK UINT32_C(36)
 /** @brief Largest currently defined detailed renderer-feature identity. */
-#define CNA_RENDERER_FEATURE_MAXIMUM CNA_RENDERER_FEATURE_MULTI_SAMPLE_MASK
+#define CNA_RENDERER_FEATURE_MAXIMUM CNA_RENDERER_FEATURE_RENDER_TARGET_READBACK
 
 /** @brief Fixed-width classified answer for one detailed renderer feature. */
 typedef uint32_t CNA_RendererFeatureSupport;

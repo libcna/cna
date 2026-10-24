@@ -11,15 +11,17 @@ It is a CNA extension, not part of XNA 4.0.
 ## Why the catalog is small rather than an arbitrary large number
 
 The detailed enum is append-only, but an entry is added only when CNA can define an observable
-contract and classify it from an audited renderer query. The catalog holds 32 atomic features:
+contract and classify it from an audited renderer query. The catalog holds 33 atomic features:
 the 17 legacy capabilities, separated source acceptance/execution, shadows, image-based lighting,
 six shader dialects, `Texture3D` sampling, base-instance drawing, the sampler mip level-of-detail
-bias, `PbrEffect` and `SkinnedPbrEffect` shading, and the multisample mask. The three of 32-34
-(CNA-DEMOS-ISSUE-006) describe state a renderer accepts either way: where unsupported, the bias has
-no effect and the PBR effects draw an untextured, unlit fallback. `MultiSampleMask` (35, CNA-DEMOS
-DC-R2) is Restricted on SDL_GPU, which applies only a mask keeping every sample or none and refuses
-any other. `CrossRendererContractTest` draws each of the four on every compiled-in renderer and
-requires the reported answer to match the pixels. Reserving or publishing
+bias, `PbrEffect` and `SkinnedPbrEffect` shading, the multisample mask and render-target readback.
+The three of 32-34 (CNA-DEMOS-ISSUE-006) describe state a renderer accepts either way: where
+unsupported, the bias has no effect and the PBR effects draw an untextured, unlit fallback.
+`MultiSampleMask` (35, CNA-DEMOS DC-R2) is Restricted on SDL_GPU, which applies only a mask keeping
+every sample or none and refuses any other. `RenderTargetReadback` (36, a museum finding) is
+Unsupported on HEADLESS and STUB, where `Texture2D.GetData` on a render target throws
+`NotSupportedException`. `CrossRendererContractTest` exercises each of the five on every
+compiled-in renderer and requires the reported answer to match the pixels. Reserving or publishing
 hundreds of guessed identities would turn "unsupported" into a mixture of absent, unaudited and
 not-yet-defined behavior.
 

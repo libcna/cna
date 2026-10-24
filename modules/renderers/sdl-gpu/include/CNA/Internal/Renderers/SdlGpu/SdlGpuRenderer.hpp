@@ -3074,6 +3074,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             return device_ != nullptr ? CNA::RendererFeatureSupport::Restricted
                                       : CNA::RendererFeatureSupport::Unsupported;
         }
+        /** @brief A download transfer from the target's texture. @return Whether a device exists. */
+        [[nodiscard]] bool ReadsBackRenderTargetsEXT() const override { return device_ != nullptr; }
 
         /** @brief Largest uniform buffer. @return The limit in bytes. */
         [[nodiscard]] std::uint64_t GetMaxUniformBufferBytesEXT() const override;

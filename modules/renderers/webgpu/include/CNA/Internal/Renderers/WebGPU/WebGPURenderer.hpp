@@ -2280,6 +2280,8 @@ namespace CNA::Internal::Renderers::WebGPU
             return device_ != nullptr ? CNA::RendererFeatureSupport::Supported
                                       : CNA::RendererFeatureSupport::Unsupported;
         }
+        /** @brief A buffer copy of the target's texture, mapped. @return Whether a device exists. */
+        [[nodiscard]] bool ReadsBackRenderTargetsEXT() const override { return device_ != nullptr; }
 
         /**
          * @brief plans/plan_webgpu_modern_graphics.md WMG-0020: inserts a GPU debug label.

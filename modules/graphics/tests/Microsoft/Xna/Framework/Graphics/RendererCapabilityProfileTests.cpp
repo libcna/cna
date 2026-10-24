@@ -26,7 +26,8 @@ static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::BaseInstanceDrawi
 static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::SamplerLevelOfDetailBias) == 32);
 static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::SkinnedPbrEffectShading) == 34);
 static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::MultiSampleMask) == 35);
-static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::Count) == 36);
+static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::RenderTargetReadback) == 36);
+static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::Count) == 37);
 static_assert(static_cast<std::uint8_t>(CNA::RendererFeatureSupport::Unknown) == 0);
 static_assert(static_cast<std::uint8_t>(CNA::RendererFeatureSupport::Restricted) == 3);
 static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::MaxTextureDimension) == 0);
@@ -203,6 +204,10 @@ TEST(RendererCapabilityProfileTest, DeviceSnapshotMapsEveryLegacyCapabilityExpli
               ExpectedSupport(device.GetRenderer().ShadesSkinnedPbrEffectEXT()));
     EXPECT_EQ(device.GetRendererFeatureSupportEXT(CNA::RendererFeature::MultiSampleMask),
               device.GetRenderer().MultiSampleMaskSupportEXT());
+    EXPECT_EQ(device.GetRendererFeatureSupportEXT(CNA::RendererFeature::RenderTargetReadback),
+              device.GetRenderer().ReadsBackRenderTargetsEXT()
+                  ? CNA::RendererFeatureSupport::Supported
+                  : CNA::RendererFeatureSupport::Unsupported);
 
     for (const CNA::RendererFeature feature : CNA::AllRendererFeatures())
     {

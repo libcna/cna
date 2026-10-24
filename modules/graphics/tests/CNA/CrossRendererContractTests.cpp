@@ -750,4 +750,49 @@ TEST_F(CrossRendererContractTest, MultiSampleMaskSupportMatchesWhatTheResolvedTa
     EXPECT_GT(judged, 0) << "no renderer in this build drew and read back the mask probe";
 }
 
+// RendererFeature::RenderTargetReadback (museum: a program could only find out by trying). A
+// Supported renderer reads back the colour it cleared the target to; any other answer must be
+// the NotSupportedException GetData raises, never a fabricated frame.
+TEST_F(CrossRendererContractTest, RenderTargetReadbackSupportMatchesGetData)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    int judged = 0;
+    ForEachRenderer([&judged](GraphicsDevice& device, GraphicsRendererType type) {
+        const std::string name{CNA::getGraphicsRendererName(type)};
+        SCOPED_TRACE(name);
+        const Color clear(10, 20, 30, 255);
+        std::unique_ptr<RenderTarget2D> target;
+        try
+        {
+            target = std::make_unique<RenderTarget2D>(device, 4, 4);
+            device.SetRenderTarget(target.get());
+        }
+        catch (const std::exception&)
+        {
+            // No render targets at all, so nothing can be read back.
+            EXPECT_EQ(device.GetRendererFeatureSupportEXT(CNA::RendererFeature::RenderTargetReadback),
+                      CNA::RendererFeatureSupport::Unsupported);
+            return;
+        }
+        device.Clear(clear);
+        device.SetRenderTarget(nullptr);
+        const CNA::RendererFeatureSupport support =
+            device.GetRendererFeatureSupportEXT(CNA::RendererFeature::RenderTargetReadback);
+        std::vector<Color> pixels(16);
+        if (support == CNA::RendererFeatureSupport::Supported)
+        {
+            ++judged;
+            ASSERT_NO_THROW(target->GetData(pixels.data(), static_cast<int>(pixels.size())));
+            EXPECT_EQ(pixels[5], clear) << name << " reports readback but read another colour";
+            return;
+        }
+        EXPECT_EQ(support, CNA::RendererFeatureSupport::Unsupported);
+        EXPECT_THROW(target->GetData(pixels.data(), static_cast<int>(pixels.size())),
+                     System::NotSupportedException)
+            << name << " reports no readback but GetData did not refuse";
+    });
+    EXPECT_GT(judged, 0) << "no renderer in this build read a render target back";
+}
+
 #endif  // CNA_MULTI_RENDERER

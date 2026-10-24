@@ -112,8 +112,15 @@ namespace CNA
          * effect (CNA-DEMOS DC-R2). A single-sample target ignores the mask, as in XNA.
          */
         MultiSampleMask = 35,
+        /**
+         * @brief `RenderTarget2D` contents read back through `Texture2D.GetData`.
+         *
+         * Unsupported means GetData on a render target throws `NotSupportedException`, as on
+         * HEADLESS, which rasterizes nothing (museum: no way to ask before trying).
+         */
+        RenderTargetReadback = 36,
         /** @brief One past the highest feature ordinal; not itself a queryable feature. */
-        Count = 36
+        Count = 37
     };
 
     /** @brief The renderer's classified answer for one detailed feature. */

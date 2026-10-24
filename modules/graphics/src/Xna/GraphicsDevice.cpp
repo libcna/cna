@@ -3615,6 +3615,10 @@ namespace Microsoft::Xna::Framework::Graphics
                       "applied; any other mask is refused with NotSupportedException."
                     : "");
         }
+        profile.SetFeature(
+            CNA::RendererFeature::RenderTargetReadback,
+            FeatureSupport(renderer.ReadsBackRenderTargetsEXT()),
+            "Unsupported here means RenderTarget2D.GetData throws NotSupportedException.");
 
         const auto dialect = renderer.GetShaderDialectEXT();
         profile.SetFeature(CNA::RendererFeature::ShaderDialectGlslDesktop,

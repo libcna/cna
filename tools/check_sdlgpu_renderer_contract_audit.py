@@ -99,6 +99,7 @@ OUT_GRAPHICS_METHODS = {
     "ShadesPbrEffectEXT",
     "ShadesSkinnedPbrEffectEXT",
     "MultiSampleMaskSupportEXT",
+    "ReadsBackRenderTargetsEXT",
     "SupportsTexture3DSamplingEXT",
     "SupportsShaderLanguageEXT",
     "GetSurfaceFormatUsageSupportEXT",

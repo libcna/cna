@@ -1528,6 +1528,8 @@ namespace CNA::Internal::Renderers::Fna3d
             return device_ != nullptr && driverIsOpenGl_ ? CNA::RendererFeatureSupport::Supported
                                                          : CNA::RendererFeatureSupport::Unsupported;
         }
+        /** @brief `FNA3D_GetTextureData2D` on the target's texture. @return Whether a device exists. */
+        [[nodiscard]] bool ReadsBackRenderTargetsEXT() const override { return device_ != nullptr; }
 
         /**
          * @brief Classifies Texture2D formats backed by the selected FNA3D driver.

@@ -2058,6 +2058,8 @@ namespace CNA::Internal::Renderers::EasyGL
             return supportsSampleMask_ ? CNA::RendererFeatureSupport::Supported
                                        : CNA::RendererFeatureSupport::Unsupported;
         }
+        /** @brief `glReadPixels` from the target's framebuffer. @return True. */
+        [[nodiscard]] bool ReadsBackRenderTargetsEXT() const override { return true; }
         /// VULKAN-164: plans/plan_graphics.md Task 863 gave this renderer
         /// `BindTexture3D`, and `EasyGL_ShaderEffect_Texture3D` reads two different slices of one
         /// bound volume through a `sampler3D`.

@@ -2646,6 +2646,15 @@ namespace CNA::Internal::Renderers
         }
 
         /**
+         * @brief Reports whether `Texture2D.GetData` on this renderer's `RenderTarget2D` returns
+         *        the target's pixels (`RendererFeature::RenderTargetReadback`).
+         *
+         * @return True when the render-target renderer's GetData reads the drawn contents back;
+         *         false when it refuses, so GetData throws NotSupportedException.
+         */
+        [[nodiscard]] virtual bool ReadsBackRenderTargetsEXT() const { return false; }
+
+        /**
          * @brief Reports whether instanced draws consume a non-zero first-instance value.
          *
          * @return `true` when `GpuDrawParams::firstInstance` is supported; otherwise `false`.

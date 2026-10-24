@@ -43,7 +43,8 @@ namespace CNA
             RendererFeature::SamplerLevelOfDetailBias,
             RendererFeature::PbrEffectShading,
             RendererFeature::SkinnedPbrEffectShading,
-            RendererFeature::MultiSampleMask
+            RendererFeature::MultiSampleMask,
+            RendererFeature::RenderTargetReadback
         };
 
         constexpr std::array Limits = {
@@ -271,6 +272,7 @@ namespace CNA
             case RendererFeature::PbrEffectShading: return "PbrEffectShading";
             case RendererFeature::SkinnedPbrEffectShading: return "SkinnedPbrEffectShading";
             case RendererFeature::MultiSampleMask: return "MultiSampleMask";
+            case RendererFeature::RenderTargetReadback: return "RenderTargetReadback";
             case RendererFeature::Count: break;
         }
         return "UnknownRendererFeature";
@@ -349,6 +351,8 @@ namespace CNA
             case RendererFeature::MultiSampleMask:
                 return "MultiSampleMask selects which samples of a multisampled target a draw "
                        "writes.";
+            case RendererFeature::RenderTargetReadback:
+                return "RenderTarget2D contents read back through Texture2D.GetData.";
             case RendererFeature::Count: break;
         }
         return "Invalid detailed renderer feature identity.";

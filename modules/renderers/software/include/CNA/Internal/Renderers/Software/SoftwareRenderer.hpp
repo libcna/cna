@@ -1606,6 +1606,8 @@ namespace CNA::Internal::Renderers::Software
         {
             return CNA::RendererFeatureSupport::Supported;
         }
+        /** @brief The target's CPU colour plane, resolved. @return True. */
+        [[nodiscard]] bool ReadsBackRenderTargetsEXT() const override { return true; }
         /** @brief Classifies formats whose complete CPU texture path is implemented. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
             int surfaceFormat) const override;

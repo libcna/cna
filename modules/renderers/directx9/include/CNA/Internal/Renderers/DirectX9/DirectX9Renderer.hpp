@@ -452,6 +452,8 @@ namespace CNA::Internal::Renderers::DirectX9
             return device_ != nullptr ? CNA::RendererFeatureSupport::Supported
                                       : CNA::RendererFeatureSupport::Unsupported;
         }
+        /** @brief `GetRenderTargetData` into a system-memory surface. @return Whether a device exists. */
+        [[nodiscard]] bool ReadsBackRenderTargetsEXT() const override { return device_ != nullptr; }
         /// CNA's SM3 stock-extension and PBR shaders sample the full shared shadow contract:
         /// single/cascaded directional maps plus point-cube and spot-map shadows.
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override
