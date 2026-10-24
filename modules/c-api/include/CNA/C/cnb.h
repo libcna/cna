@@ -2573,6 +2573,8 @@ typedef uint32_t CNA_CnbSkeletonMatrixSet;
 #define CNA_CNB_MODEL_CHUNK_ANIMATIONS UINT32_C(0x4D4E414D)
 /** @brief `MLIT` -- the punctual lights. */
 #define CNA_CNB_MODEL_CHUNK_LIGHTS UINT32_C(0x54494C4D)
+/** @brief `MCAM` -- the scene's glTF cameras; not mandatory, so older readers skip it. */
+#define CNA_CNB_MODEL_CHUNK_CAMERAS UINT32_C(0x4D41434D)
 
 /** @brief Highest model schema version this build understands. */
 #define CNA_CNB_MODEL_SCHEMA_VERSION UINT32_C(1)
@@ -2630,6 +2632,42 @@ typedef struct CNA_CnbModelLight {
     /** @brief Diffuse colour, clamped to 0..1 per channel. */
     float diffuse_color[3];
 } CNA_CnbModelLight;
+
+/** @brief Version of @ref CNA_CnbModelCamera this header declares. */
+#define CNA_CNB_MODEL_CAMERA_STRUCT_VERSION UINT32_C(1)
+
+/**
+ * @brief One glTF camera of a compiled model's scene, without its name, as the importer read it.
+ *
+ * The runtime builds the camera's projection from these source parameters exactly as a run-time
+ * glTF import does.
+ */
+typedef struct CNA_CnbModelCamera {
+    /** @brief Size of this structure, in bytes. */
+    uint32_t struct_size;
+    /** @brief Structure version; `CNA_CNB_MODEL_CAMERA_STRUCT_VERSION`. */
+    uint32_t struct_version;
+    /** @brief The instancing scene node, an index into the model's bones, or -1. */
+    int32_t scene_node_index;
+    /** @brief `CNA_TRUE` for a perspective camera, `CNA_FALSE` for an orthographic one. */
+    CNA_Bool perspective;
+    /** @brief Reserved; always written as zero. */
+    uint8_t reserved[3];
+    /** @brief Perspective vertical field of view, in radians. */
+    float yfov;
+    /** @brief Perspective aspect ratio, or 0 when the source declares none. */
+    float aspect_ratio;
+    /** @brief Orthographic half-width. */
+    float xmag;
+    /** @brief Orthographic half-height. */
+    float ymag;
+    /** @brief Near clip distance. */
+    float znear;
+    /** @brief Far clip distance, or 0 for an infinite perspective projection. */
+    float zfar;
+    /** @brief The node's world transform at import, in XNA row-major field order `M11`..`M44`. */
+    float world_transform[16];
+} CNA_CnbModelCamera;
 
 /** @brief Version of @ref CNA_CnbModelInfo this header declares. */
 #define CNA_CNB_MODEL_INFO_STRUCT_VERSION UINT32_C(1)
@@ -3771,6 +3809,76 @@ CNA_C_API CNA_Result cna_cnb_model_get_light(
     CNA_CnbModelDataHandle model,
     uint64_t index,
     CNA_CnbModelLight* out_light);
+
+/**
+ * @brief Appends one glTF camera.
+ *
+ * @param model The model.
+ * @param name The camera's name; may be empty.
+ * @param camera The camera; `struct_size` and `struct_version` must be set.
+ * @param out_index Receives the new camera's index; may be null.
+ * @return A CNA result code. A camera whose `scene_node_index` names no bone is refused when the
+ *         model is encoded (`CNA_RESULT_IO`), since bones may still be added after it.
+ */
+CNA_C_API CNA_Result cna_cnb_model_add_camera(
+    CNA_CnbModelDataHandle model,
+    CNA_StringView name,
+    const CNA_CnbModelCamera* camera,
+    uint64_t* out_index);
+
+/**
+ * @brief Number of glTF cameras the model carries.
+ *
+ * @param model The model.
+ * @param out_count Receives the camera count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_camera_count(
+    CNA_CnbModelDataHandle model,
+    uint64_t* out_count);
+
+/**
+ * @brief Reads one camera's parameters.
+ *
+ * @param model The model.
+ * @param index Index into the model's cameras.
+ * @param out_camera Receives the camera; `struct_size` and `struct_version` must be set on input.
+ * @return A CNA result code; an out-of-range index is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_camera(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    CNA_CnbModelCamera* out_camera);
+
+/**
+ * @brief Reports the byte length of one camera's name.
+ *
+ * @param model The model.
+ * @param index Index into the model's cameras.
+ * @param out_byte_count Receives the length, without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_model_get_camera_name_size(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies one camera's name.
+ *
+ * @param model The model.
+ * @param index Index into the model's cameras.
+ * @param destination Destination bytes, or null only for zero capacity. Not terminated.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_model_copy_camera_name(
+    CNA_CnbModelDataHandle model,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
 
 /**
  * @brief Encodes a model as a complete `.cnb` byte image.

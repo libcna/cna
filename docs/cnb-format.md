@@ -510,6 +510,7 @@ game-supplied effects as external references so `ContentManager`'s cache keeps w
 | `MSKL` | mandatory | ≤ 1 | the skinning skeleton |
 | `MANM` | mandatory | ≤ 1 | embedded animation clips, 8-byte aligned |
 | `MLIT` | mandatory | ≤ 1 | punctual lights |
+| `MCAM` | optional | ≤ 1 | the scene's glTF cameras; a reader that predates it skips it |
 
 Geometry gets 16-byte alignment because it is the data a future memory-mapped reader would address
 in place, and 16 is the widest vector load any CNA target uses.
@@ -684,6 +685,15 @@ keyCount × <the 48-byte keyframe of §10>
 
 **`MLIT`.** `u32 count` (must equal `MDLH`'s `lightCount`), then `count` × `{ f32 direction[3],
 f32 diffuseColor[3] }`.
+
+**`MCAM`** (added 2026-10-24, CNA-DEMOS-ISSUE-023, without the `Mandatory` flag so an older reader
+loads the model without its cameras). `u32 count`, then `count` × `{ String name, i32 sceneNode,
+u32 flags, f32 yfov, f32 aspectRatio, f32 xmag, f32 ymag, f32 znear, f32 zfar,
+f32 worldTransform[16] }`, with `name` a `String` (§2, no padding after it); the
+chunk is self-contained so a camera-less model's string table is unchanged. `sceneNode` is -1 or
+an `MBON` index; `flags` bit 0 is "perspective" and no other bit is defined; `aspectRatio` 0 means
+the source declared none and `zfar` 0 an infinite perspective. The runtime builds each
+`ModelCameraEXT` from these source parameters exactly as a run-time glTF import does.
 
 ### 11.1 What the v1 Model schema deliberately does not carry
 

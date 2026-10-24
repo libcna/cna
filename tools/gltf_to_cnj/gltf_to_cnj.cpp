@@ -1150,6 +1150,33 @@ namespace
             }
             json << "  ],\n";
         }
+        // CNA-DEMOS-ISSUE-023: the scene's cameras, as the run-time import reads them, so the
+        // compiled Model has the same ModelCameraEXT list. Nine significant digits round-trip a
+        // float exactly; every mesh group's document carries them, as with the lights.
+        const std::vector<CameraOut> cameras = ExtractCamerasEXT(data, sceneGraph, unitScale);
+        if (!cameras.empty())
+        {
+            const std::streamsize precision = json.precision(9);
+            json << "  \"cameras\": [\n";
+            for (std::size_t i = 0; i < cameras.size(); ++i)
+            {
+                const CameraOut& c = cameras[i];
+                const Matrix& m = c.worldTransform;
+                json << "    { \"name\": \"" << JsonEscape(c.name) << "\", \"sceneNode\": "
+                     << c.sceneNodeIndex << ", \"perspective\": " << (c.perspective ? "true" : "false")
+                     << ", \"yfov\": " << c.yfov << ", \"aspectRatio\": " << c.aspectRatio
+                     << ", \"xmag\": " << c.xmag << ", \"ymag\": " << c.ymag
+                     << ", \"znear\": " << c.znear << ", \"zfar\": " << c.zfar
+                     << ", \"worldTransform\": ["
+                     << m.M11 << ", " << m.M12 << ", " << m.M13 << ", " << m.M14 << ", "
+                     << m.M21 << ", " << m.M22 << ", " << m.M23 << ", " << m.M24 << ", "
+                     << m.M31 << ", " << m.M32 << ", " << m.M33 << ", " << m.M34 << ", "
+                     << m.M41 << ", " << m.M42 << ", " << m.M43 << ", " << m.M44 << "] }"
+                     << (i + 1 < cameras.size() ? "," : "") << "\n";
+            }
+            json << "  ],\n";
+            json.precision(precision);
+        }
         if (!clipEntries.empty())
         {
             json << "  \"animations\": [\n";

@@ -572,6 +572,42 @@ namespace CNA::Content::Cnb
             }
         }
 
+        // --- cameras (CNA-DEMOS-ISSUE-023) ---------------------------------------------------
+        if (const Json::JsonValue* cameras = root.FindMember("cameras"); cameras != nullptr)
+        {
+            if (cameras->type != Json::JsonType::Array)
+            {
+                throw ContentLoadException(
+                    "cnj-to-cnb: Model '" + cnjPath + "' field 'cameras' must be an array.");
+            }
+            for (const Json::JsonValue& entry : cameras->arrayValue)
+            {
+                CnbModelCamera camera;
+                camera.name = StringField(entry, "name", cnjPath);
+                const double node = NumberField(entry, "sceneNode", cnjPath, -1.0);
+                if (node != std::floor(node) || node < -1.0 ||
+                    node >= static_cast<double>(result.model.bones.size()))
+                {
+                    throw ContentLoadException(
+                        "cnj-to-cnb: Model '" + cnjPath + "' camera '" + camera.name +
+                        "' names scene node " + std::to_string(node) + ", which is not one of its " +
+                        std::to_string(result.model.bones.size()) + " bone(s).");
+                }
+                camera.sceneNodeIndex = static_cast<std::int32_t>(node);
+                camera.perspective = BoolField(entry, "perspective", cnjPath, true);
+                camera.yfov = static_cast<float>(NumberField(entry, "yfov", cnjPath, 0.0));
+                camera.aspectRatio = static_cast<float>(NumberField(entry, "aspectRatio", cnjPath, 0.0));
+                camera.xmag = static_cast<float>(NumberField(entry, "xmag", cnjPath, 0.0));
+                camera.ymag = static_cast<float>(NumberField(entry, "ymag", cnjPath, 0.0));
+                camera.znear = static_cast<float>(NumberField(entry, "znear", cnjPath, 0.0));
+                camera.zfar = static_cast<float>(NumberField(entry, "zfar", cnjPath, 0.0));
+                const std::vector<float> world = FloatArrayField(entry, "worldTransform", cnjPath);
+                RequireExactLength(world, 16u, "worldTransform", cnjPath);
+                std::copy(world.begin(), world.end(), camera.worldTransform.begin());
+                result.model.cameras.push_back(std::move(camera));
+            }
+        }
+
         // --- skeleton ------------------------------------------------------------------------
         const std::string skeletonFile = StringField(root, "skeleton", cnjPath);
         if (!skeletonFile.empty())

@@ -1066,6 +1066,22 @@ TEST(XnbModelSourceRouteTest, AnExtractedTextureIsWrittenAsTheTexture2DItsModelR
     EXPECT_EQ(effect.textureReference, "asset_tex0.png");
 }
 
+// CNA-DEMOS-ISSUE-023: the CNB output keeps a glTF's cameras; the XNB one says it cannot.
+TEST(XnbModelSourceRouteTest, ACameraTheXnaModelCannotHoldIsNamed)
+{
+    ScratchDirectory scratch("gltf_camera");
+    CopyGltfFixture(scratch, "camera-perspective.glb");
+
+    Pipeline::ContentBuildResult result;
+    static_cast<void>(BuildGltfModel(scratch, "camera-perspective.glb", result));
+    bool named = false;
+    for (const std::string& warning : result.output.warnings)
+    {
+        if (warning.find("camera(s) are not written") != std::string::npos) { named = true; }
+    }
+    EXPECT_TRUE(named) << "an XNA Model has no cameras; dropping them must be stated";
+}
+
 TEST(XnbModelSourceRouteTest, ASkinnedModelStatesThatItsSkeletonIsNotWritten)
 {
     ScratchDirectory scratch("gltf_skin");

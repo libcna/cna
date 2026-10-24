@@ -46,6 +46,12 @@ namespace CNA::Content::Cnb
 
         /** @brief `MLIT` -- punctual lights. Optional, at most one. */
         inline constexpr CnbChunkId Lights = MakeChunkId('M', 'L', 'I', 'T');
+
+        /**
+         * @brief `MCAM` -- the scene's cameras. Optional, at most one, and not `Mandatory`, so a
+         *        reader that predates it loads the model without them (CNA-DEMOS-ISSUE-023).
+         */
+        inline constexpr CnbChunkId Cameras = MakeChunkId('M', 'C', 'A', 'M');
     }
 
     /** @brief Highest `Model` schema version this build understands. */

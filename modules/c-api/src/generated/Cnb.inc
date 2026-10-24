@@ -1089,6 +1089,71 @@ CNA_Result cna_cnb_model_copy_animation_name(
     });
 }
 
+CNA_Result cna_cnb_model_get_camera_count(
+    const CNA_CnbModelDataHandle model,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_camera_count: out_count is null.");
+        }
+        std::shared_ptr<CnbModelResource> object{};
+        if (const CNA_Result routeResult = GetModel(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<uint64_t>(object->value->cameras.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_model_get_camera_name_size(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_camera_name_size: out_byte_count is null.");
+        }
+        std::shared_ptr<CnbModelResource> object{};
+        if (const CNA_Result routeResult = GetModel(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->value->cameras.size(), "The camera index is out of range.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->cameras[static_cast<std::size_t>(index)].name, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_copy_camera_name(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CnbModelResource> object{};
+        if (const CNA_Result routeResult = GetModel(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->value->cameras.size(), "The camera index is out of range.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->cameras[static_cast<std::size_t>(index)].name, destination, capacity, out_byte_count);
+    });
+}
+
 CNA_Result cna_cnb_encode_model(
     const CNA_CnbModelDataHandle model,
     const CNA_StringView c_content_name,
@@ -3425,6 +3490,19 @@ CNA_Result cna_cnb_model_get_light(
     });
 }
 
+CNA_Result cna_cnb_model_get_camera(
+    const CNA_CnbModelDataHandle model,
+    const uint64_t index,
+    CNA_CnbModelCamera* const out_camera)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_camera == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_get_camera: out_camera is null.");
+        }
+        return CnbModelGetCamera(model, index, out_camera);
+    });
+}
+
 CNA_Result cna_cnb_build_model_from_cnj(
     const CNA_StringView cnj_path,
     const CNA_StringView content_root,
@@ -3931,6 +4009,17 @@ CNA_Result cna_cnb_model_add_light(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         return CnbModelAddLight(model, light, out_index);
+    });
+}
+
+CNA_Result cna_cnb_model_add_camera(
+    const CNA_CnbModelDataHandle model,
+    const CNA_StringView name,
+    const CNA_CnbModelCamera* const camera,
+    uint64_t* const out_index)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CnbModelAddCamera(model, name, camera, out_index);
     });
 }
 

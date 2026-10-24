@@ -629,6 +629,10 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_cnb_model_get_animation_name_size(v_CNA_CnbModelDataHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_get_animation_name_size", "a null out_byte_count");
     failures += expect(cna_cnb_model_copy_animation_name(v_CNA_CnbModelDataHandle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_animation_name", "a null destination with a capacity");
     failures += expect(cna_cnb_model_copy_animation_name(v_CNA_CnbModelDataHandle, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_animation_name", "a null out_bytes");
+    failures += expect(cna_cnb_model_get_camera_count(v_CNA_CnbModelDataHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_get_camera_count", "a null out_count");
+    failures += expect(cna_cnb_model_get_camera_name_size(v_CNA_CnbModelDataHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_get_camera_name_size", "a null out_byte_count");
+    failures += expect(cna_cnb_model_copy_camera_name(v_CNA_CnbModelDataHandle, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_camera_name", "a null destination with a capacity");
+    failures += expect(cna_cnb_model_copy_camera_name(v_CNA_CnbModelDataHandle, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_camera_name", "a null out_bytes");
     failures += expect(cna_cnb_encode_model(v_CNA_CnbModelDataHandle, v_CNA_StringView, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_encode_model", "a null destination with a capacity");
     failures += expect(cna_cnb_encode_model(v_CNA_CnbModelDataHandle, v_CNA_StringView, (uint8_t*)text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_encode_model", "a null out_bytes");
     failures += expect(cna_cnb_cnj_result_copy_asset_type_name(v_CNA_CnjToCnbResultHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_cnj_result_copy_asset_type_name", "a null destination with a capacity");
@@ -775,6 +779,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_cnb_model_copy_skeleton_matrices(v_CNA_CnbModelDataHandle, v_CNA_CnbSkeletonMatrixSet, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_skeleton_matrices", "a null out_value_count");
     failures += expect(cna_cnb_model_copy_animation_keyframes(v_CNA_CnbModelDataHandle, v_uint64_t, v_uint64_t, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_copy_animation_keyframes", "a null out_keyframe_count");
     failures += expect(cna_cnb_model_get_light(v_CNA_CnbModelDataHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_get_light", "a null out_light");
+    failures += expect(cna_cnb_model_get_camera(v_CNA_CnbModelDataHandle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_get_camera", "a null out_camera");
     failures += expect(cna_cnb_build_model_from_cnj(v_CNA_StringView, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_build_model_from_cnj", "a null out_result");
     failures += expect(cna_cnb_model_from_cnj_take_model(v_CNA_CnbModelFromCnjHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_model_from_cnj_take_model", "a null out_model");
     failures += expect(cna_cnb_sound_effect_data_create(NULL, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_cnb_sound_effect_data_create", "a null out_sound");
@@ -3316,6 +3321,9 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_cnb_model_copy_mesh_name(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_copy_mesh_name", what);
     failures += expect(cna_cnb_model_get_animation_name_size(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_get_animation_name_size", what);
     failures += expect(cna_cnb_model_copy_animation_name(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_copy_animation_name", what);
+    failures += expect(cna_cnb_model_get_camera_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_get_camera_count", what);
+    failures += expect(cna_cnb_model_get_camera_name_size(handle, v_uint64_t, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_get_camera_name_size", what);
+    failures += expect(cna_cnb_model_copy_camera_name(handle, v_uint64_t, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_model_copy_camera_name", what);
     failures += expect(cna_cnb_encode_model(handle, v_CNA_StringView, (uint8_t*)text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_encode_model", what);
     failures += expect(cna_cnb_cnj_result_copy_asset_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_cnb_cnj_result_copy_asset_type_name", what);
     failures += expect(cna_cnb_cnj_result_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_cnb_cnj_result_destroy", what);
@@ -5264,6 +5272,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 3199 generated routes\n", failures);
+    printf("%d failed checks across 3204 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

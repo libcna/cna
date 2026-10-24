@@ -92,7 +92,7 @@ the installed package and run, on every build of this repository, so the two hal
 
 The shared library keeps its symbol set honest with a version script
 (`cmake/CnaCApiExports.map`) and `--exclude-libs,ALL` on ELF, and with ld64's exported-symbols list
-(`cmake/CnaCApiExports.darwin.txt`) on macOS: `cna_*` and nothing else, 3,207 names pinned by
+(`cmake/CnaCApiExports.darwin.txt`) on macOS: `cna_*` and nothing else, 3,212 names pinned by
 `tools/c-api/abi_baseline.json`. `CApi_Exports` checks the built library on both. The archive has no such mechanism available to it, which is why
 a static CNA was refused for a long time — `ar`-ing the C API together with every CNA module and
 Sharp Runtime would publish tens of thousands of C++ symbols into your program.

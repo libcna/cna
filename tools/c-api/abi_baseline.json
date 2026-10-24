@@ -1340,6 +1340,7 @@
   "cna_cnb_make_chunk_id",
   "cna_cnb_model_add_animation",
   "cna_cnb_model_add_bone",
+  "cna_cnb_model_add_camera",
   "cna_cnb_model_add_light",
   "cna_cnb_model_add_mesh",
   "cna_cnb_model_add_morph_target",
@@ -1350,6 +1351,7 @@
   "cna_cnb_model_copy_animation_keyframes",
   "cna_cnb_model_copy_animation_name",
   "cna_cnb_model_copy_bone_name",
+  "cna_cnb_model_copy_camera_name",
   "cna_cnb_model_copy_material_texture",
   "cna_cnb_model_copy_mesh_name",
   "cna_cnb_model_copy_mesh_part_indices",
@@ -1377,6 +1379,9 @@
   "cna_cnb_model_get_animation_track",
   "cna_cnb_model_get_bone",
   "cna_cnb_model_get_bone_name_size",
+  "cna_cnb_model_get_camera",
+  "cna_cnb_model_get_camera_count",
+  "cna_cnb_model_get_camera_name_size",
   "cna_cnb_model_get_info",
   "cna_cnb_model_get_light",
   "cna_cnb_model_get_material",
@@ -4353,8 +4358,10 @@
   "CNA_CNB_METADATA_STRUCT_VERSION": 1,
   "CNA_CNB_MODEL_BONE_STRIDE": 72,
   "CNA_CNB_MODEL_BONE_STRUCT_VERSION": 1,
+  "CNA_CNB_MODEL_CAMERA_STRUCT_VERSION": 1,
   "CNA_CNB_MODEL_CHUNK_ANIMATIONS": 1296974157,
   "CNA_CNB_MODEL_CHUNK_BONES": 1313817165,
+  "CNA_CNB_MODEL_CHUNK_CAMERAS": 1296122701,
   "CNA_CNB_MODEL_CHUNK_HEADER": 1212957773,
   "CNA_CNB_MODEL_CHUNK_INDEX_DATA": 1480870221,
   "CNA_CNB_MODEL_CHUNK_LIGHTS": 1414089805,
@@ -7626,6 +7633,60 @@
     ]
    },
    "size": 80
+  },
+  "CNA_CnbModelCamera": {
+   "align": 4,
+   "fields": {
+    "aspect_ratio": [
+     20,
+     4
+    ],
+    "perspective": [
+     12,
+     1
+    ],
+    "reserved": [
+     13,
+     3
+    ],
+    "scene_node_index": [
+     8,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "world_transform": [
+     40,
+     64
+    ],
+    "xmag": [
+     24,
+     4
+    ],
+    "yfov": [
+     16,
+     4
+    ],
+    "ymag": [
+     28,
+     4
+    ],
+    "zfar": [
+     36,
+     4
+    ],
+    "znear": [
+     32,
+     4
+    ]
+   },
+   "size": 104
   },
   "CNA_CnbModelInfo": {
    "align": 8,

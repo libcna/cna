@@ -288,6 +288,7 @@ TEST(CnbSpecConformanceTest, TheDocumentedChunkIdentifiersMatchTheImplementation
     EXPECT_EQ(render(CNA::Content::Cnb::CnbModelChunk::Skeleton), "MSKL");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbModelChunk::Animations), "MANM");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbModelChunk::Lights), "MLIT");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbModelChunk::Cameras), "MCAM");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbModelV2Chunk::Header), "M2HD");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbModelV2Chunk::Strings), "M2ST");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbModelV2Chunk::Bones), "M2BN");
@@ -301,7 +302,7 @@ TEST(CnbSpecConformanceTest, TheDocumentedChunkIdentifiersMatchTheImplementation
     EXPECT_EQ(render(CNA::Content::Cnb::CnbModelV2Chunk::Effects), "M2FX");
 
     for (const char* id : {"CMET", "XREF", "CRVH", "CRVK", "ACLH", "ACLT", "ACLK", "MDLH", "MSTR",
-                           "MBON", "MMSH", "MMAT", "MVTX", "MIDX", "MMRP", "MSKL", "MANM", "MLIT",
+                           "MBON", "MMSH", "MMAT", "MVTX", "MIDX", "MMRP", "MSKL", "MANM", "MLIT", "MCAM",
                            "M2HD", "M2ST", "M2BN", "M2MS", "M2PT", "M2VD", "M2VR", "M2IR", "M2FX"})
     {
         ExpectSpecContains(spec, std::string("`") + id + "`");

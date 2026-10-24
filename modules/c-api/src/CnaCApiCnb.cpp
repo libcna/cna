@@ -3266,6 +3266,87 @@ namespace {
     return CNA_RESULT_SUCCESS;
 }
 
+[[nodiscard]] CNA_Result CnbModelAddCamera(
+    const CNA_CnbModelDataHandle modelHandle,
+    const CNA_StringView name,
+    const CNA_CnbModelCamera* const camera,
+    uint64_t* const outIndex)
+{
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            camera, CNA_CNB_MODEL_CAMERA_STRUCT_VERSION,
+            "The model-camera structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (camera->perspective != CNA_TRUE && camera->perspective != CNA_FALSE) {
+        return InvalidArgument("The camera's perspective flag is not a canonical CNA_Bool.");
+    }
+    std::string nameText;
+    if (const CNA_Result result =
+            ReadText(name, "The name text is not valid UTF-8.", &nameText);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    Cnb::CnbModelCamera stored;
+    stored.name = std::move(nameText);
+    stored.sceneNodeIndex = camera->scene_node_index;
+    stored.perspective = camera->perspective == CNA_TRUE;
+    stored.yfov = camera->yfov;
+    stored.aspectRatio = camera->aspect_ratio;
+    stored.xmag = camera->xmag;
+    stored.ymag = camera->ymag;
+    stored.znear = camera->znear;
+    stored.zfar = camera->zfar;
+    std::memcpy(stored.worldTransform.data(), camera->world_transform,
+                stored.worldTransform.size() * sizeof(float));
+    model->value->cameras.push_back(std::move(stored));
+    if (outIndex != nullptr) {
+        *outIndex = static_cast<uint64_t>(model->value->cameras.size() - 1U);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CnbModelGetCamera(
+    const CNA_CnbModelDataHandle modelHandle,
+    const uint64_t index,
+    CNA_CnbModelCamera* const outCamera)
+{
+    std::shared_ptr<CnbModelResource> model;
+    if (const CNA_Result result = GetModel(modelHandle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireStruct(
+            outCamera, CNA_CNB_MODEL_CAMERA_STRUCT_VERSION,
+            "The model-camera structure is not a known size and version.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = RequireIndex(
+            index, model->value->cameras.size(), "The camera index is out of range.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const Cnb::CnbModelCamera& camera = model->value->cameras[static_cast<std::size_t>(index)];
+    outCamera->scene_node_index = camera.sceneNodeIndex;
+    outCamera->perspective = camera.perspective ? CNA_TRUE : CNA_FALSE;
+    std::memset(outCamera->reserved, 0, sizeof(outCamera->reserved));
+    outCamera->yfov = camera.yfov;
+    outCamera->aspect_ratio = camera.aspectRatio;
+    outCamera->xmag = camera.xmag;
+    outCamera->ymag = camera.ymag;
+    outCamera->znear = camera.znear;
+    outCamera->zfar = camera.zfar;
+    std::memcpy(outCamera->world_transform, camera.worldTransform.data(),
+                camera.worldTransform.size() * sizeof(float));
+    return CNA_RESULT_SUCCESS;
+}
+
 [[nodiscard]] CNA_Result CnbBuildModelFromCnj(
     const CNA_StringView cnjPath,
     const CNA_StringView contentRoot,

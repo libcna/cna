@@ -1461,6 +1461,47 @@ TEST(GltfToCnjToolTest, StepInterpolatedChannelHoldsValueAcrossAForeignResampleT
     EXPECT_TRUE(foundForeignTime);
 }
 
+// CNA-DEMOS-ISSUE-023: the .cnj the tool writes carries the scene's cameras, and loading it gives
+// the same ModelCameraEXT list, exactly, as importing the .gltf.
+TEST(GltfToCnjToolTest, ACnjModelCarriesTheSceneCamerasExactly)
+{
+    using CnaTest::GltfOracle::CorpusDirectory;
+    ScratchDir contentRoot;
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+    ContentManager cnj(nullptr, contentRoot.path().string());
+    cnj.setGraphicsDevice(gd);
+    ContentManager gltf(nullptr, CorpusDirectory().string());
+    gltf.setGraphicsDevice(gd);
+    for (const char* fixture :
+         {"camera-perspective", "camera-perspective-infinite", "camera-orthographic",
+          "camera-animated-node"})
+    {
+        SCOPED_TRACE(fixture);
+        const std::filesystem::path source = CorpusDirectory() / (std::string(fixture) + ".gltf");
+        ASSERT_TRUE(std::filesystem::exists(source));
+        const std::string name = std::string("cnj-") + fixture;
+        ASSERT_EQ(RunGltfToCnjTool(source.string(), contentRoot.path().string(), name), 0);
+        const Model converted = cnj.Load<Model>(name);
+        const Model imported = gltf.Load<Model>(fixture);
+        const auto& expected = imported.getCamerasEXTProperty();
+        const auto& actual = converted.getCamerasEXTProperty();
+        ASSERT_FALSE(expected.empty());
+        ASSERT_EQ(actual.size(), expected.size());
+        for (std::size_t i = 0; i < expected.size(); ++i)
+        {
+            EXPECT_EQ(actual[i].Name, expected[i].Name);
+            EXPECT_EQ(actual[i].SceneNodeIndex, expected[i].SceneNodeIndex);
+            EXPECT_EQ(actual[i].IsPerspective, expected[i].IsPerspective);
+            EXPECT_EQ(actual[i].HasAuthoredAspectRatio, expected[i].HasAuthoredAspectRatio);
+            EXPECT_EQ(actual[i].HasInfiniteFarPlane, expected[i].HasInfiniteFarPlane);
+            EXPECT_EQ(actual[i].Projection, expected[i].Projection);
+            EXPECT_EQ(actual[i].WorldTransform, expected[i].WorldTransform);
+        }
+    }
+}
+
 TEST(GltfToCnjToolTest, RejectsDracoCompressedPrimitive)
 {
     ScratchDir gltfDir;

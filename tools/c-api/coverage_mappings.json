@@ -15569,8 +15569,8 @@
       "kinds": [
         "field"
       ],
-      "mapping": "The eleven chunk identifiers as `CNA_CNB_MODEL_CHUNK_HEADER`, `_STRINGS`, `_BONES`, `_MESHES`, `_MATERIALS`, `_VERTEX_DATA`, `_INDEX_DATA`, `_MORPH_DATA`, `_SKELETON`, `_ANIMATIONS` and `_LIGHTS`, plus `CNA_CNB_MODEL_SCHEMA_VERSION`, the four record strides, `CNA_CNB_NO_INDEX`, `CNA_CNB_TEXTURE_SLOT_COUNT` and `CNA_CNB_EFFECT_KIND_MAXIMUM` for `CnbMaxEffectKind`.\n\nThe strides are published for the same reason the texture ones are: a caller that walks a chunk itself needs the number the encoder used, and a schema change that moved one silently would otherwise be invisible until a file failed to load.",
-      "tests": "`CnbModelSmoke.c` `validate_identities` asserts the schema version, all four strides and the no-index sentinel; `validate_round_trip` looks up three of the chunk identifiers in a file the encoder actually produced, so a constant that drifted from what is written would be a missing chunk rather than a silent mismatch. `AbiHeaderC.c` freezes all eighteen.",
+      "mapping": "The twelve chunk identifiers as `CNA_CNB_MODEL_CHUNK_HEADER`, `_STRINGS`, `_BONES`, `_MESHES`, `_MATERIALS`, `_VERTEX_DATA`, `_INDEX_DATA`, `_MORPH_DATA`, `_SKELETON`, `_ANIMATIONS`, `_LIGHTS` and `_CAMERAS`, plus `CNA_CNB_MODEL_SCHEMA_VERSION`, the four record strides, `CNA_CNB_NO_INDEX`, `CNA_CNB_TEXTURE_SLOT_COUNT` and `CNA_CNB_EFFECT_KIND_MAXIMUM` for `CnbMaxEffectKind`.\n\nThe strides are published for the same reason the texture ones are: a caller that walks a chunk itself needs the number the encoder used, and a schema change that moved one silently would otherwise be invisible until a file failed to load.",
+      "tests": "`CnbModelSmoke.c` `validate_identities` asserts the schema version, all four strides and the no-index sentinel; `validate_round_trip` looks up three of the chunk identifiers in a file the encoder actually produced, so a constant that drifted from what is written would be a missing chunk rather than a silent mismatch. `AbiHeaderC.c` freezes all eighteen. `validate_identities` also pins `CNA_CNB_MODEL_CHUNK_CAMERAS` to `MCAM`.",
       "status": "implemented",
       "task": "CBIND-109",
       "approved_symbols": [
@@ -15584,6 +15584,7 @@
         "CPP-768337A9BB2A",
         "CPP-84768B5547D0",
         "CPP-8CC86A86AD3A",
+        "CPP-9DC48DD5E6A0",
         "CPP-A3A7D45A0297",
         "CPP-A4147A0C2CEA",
         "CPP-AD6B158EDD3C",
@@ -15624,7 +15625,7 @@
         "field"
       ],
       "mapping": "`CNA_CnbModelDataHandle` -- **one handle for the whole graph, whose nodes are reached by index.** The canonical description is a graph of nested vectors, so C cannot hold it by value; the choice that remained was a handle per node or indexed accessors, and this ABI takes the second. A bone, part, mesh, animation or light has no lifetime of its own, a handle each would multiply the registry by the size of the model and leave a caller with one release per node to get right, and every cross-reference the format itself writes -- a mesh's part indices, a bone's parent, the skeleton's hierarchy -- is already an index.\n\nThe model's counts and its two content flags are read through `CNA_CnbModelInfo` and set through `cna_cnb_model_set_flags`; `bones` and `meshes` become `cna_cnb_model_add_bone` / `_get_bone` / `_get_bone_name_size` / `_copy_bone_name` and the matching mesh five, with `partIndices` copied out by `cna_cnb_model_copy_mesh_part_indices`.\n\n`appliesGltfLightingPolicy` and `hasBoneHierarchy` are carried rather than inferred, because each selects a real behavioural fork -- which lighting defaults apply, and whether meshes attach to named bones -- and a reader that guessed would be right most of the time and silently wrong the rest.",
-      "tests": "`CnbModelSmoke.c` builds a two-bone hierarchy with a mesh parented to the child and reads every field back both before and after an encode/decode cycle, so a level dropped by either half of the codec is visible; `validate_refusals` drives an out-of-range index at the bone, part, mesh, animation and light levels.",
+      "tests": "`CnbModelSmoke.c` builds a two-bone hierarchy with a mesh parented to the child and reads every field back both before and after an encode/decode cycle, so a level dropped by either half of the codec is visible; `validate_refusals` drives an out-of-range index at the bone, part, mesh, animation and light levels. The model's `cameras` vector is reached through the camera routes of `cnb-model-animations-lights`.",
       "status": "implemented",
       "task": "CBIND-109",
       "approved_symbols": [
@@ -15639,6 +15640,7 @@
         "CPP-6552C76FB152",
         "CPP-6810AD5A5432",
         "CPP-76CE78B036BF",
+        "CPP-859FAA37747A",
         "CPP-94E5324C9875",
         "CPP-A67FD7631128",
         "CPP-B670D4457D24",
@@ -15778,20 +15780,31 @@
     },
     {
       "id": "cnb-model-animations-lights",
-      "qualified_name_regex": "^CNA::Content::Cnb::(CnbModelAnimation(::[A-Za-z0-9_]+)?|CnbModelLight(::[A-Za-z0-9_]+)?)$",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbModelAnimation(::[A-Za-z0-9_]+)?|CnbModelLight(::[A-Za-z0-9_]+)?|CnbModelCamera(::[A-Za-z0-9_]+)?)$",
       "kinds": [
         "struct",
         "field"
       ],
-      "mapping": "An animation is added with `cna_cnb_model_add_animation`, which takes the **`CNA_AnimationClipEXTDescriptor` this ABI already publishes** for `SkinnedModelEXT` rather than a second clip shape, and read back through `_get_animation`, `_get_animation_track` and `_copy_animation_keyframes` -- the indexed counterpart, since a decoded clip is owned by the model and cannot be handed out as a borrowed descriptor.\n\nThe target space is a separate argument because the descriptor does not carry one: a `SkinnedModelEXT` clip is always a joint palette, while a compiled model may hold either, and applying one as the other is a silent corruption rather than a visible error.\n\n`CNA_CnbModelLight` is a plain value: three floats of direction and three of colour, already reduced to XNA's directional form by the importer.",
-      "tests": "`CnbModelSmoke.c` round-trips a two-keyframe track on bone 1 with a scene-node target space and checks the space survives -- the default is the *other* value, so a dropped field would read as joint palette and fail. `validate_refusals` shows a target space above the maximum, a non-finite duration and a null descriptor each refused.",
+      "mapping": "An animation is added with `cna_cnb_model_add_animation`, which takes the **`CNA_AnimationClipEXTDescriptor` this ABI already publishes** for `SkinnedModelEXT` rather than a second clip shape, and read back through `_get_animation`, `_get_animation_track` and `_copy_animation_keyframes` -- the indexed counterpart, since a decoded clip is owned by the model and cannot be handed out as a borrowed descriptor.\n\nThe target space is a separate argument because the descriptor does not carry one: a `SkinnedModelEXT` clip is always a joint palette, while a compiled model may hold either, and applying one as the other is a silent corruption rather than a visible error.\n\n`CNA_CnbModelLight` is a plain value: three floats of direction and three of colour, already reduced to XNA's directional form by the importer.\n\nA glTF camera (CNA-DEMOS-ISSUE-023) is added with `cna_cnb_model_add_camera`, a versioned `CNA_CnbModelCamera` plus its name, and read back through `_get_camera_count`, `_get_camera` and `_get_camera_name_size`/`_copy_camera_name`; the count is its own route because `CNA_CnbModelInfo` is a versioned structure whose layout this does not change.",
+      "tests": "`CnbModelSmoke.c` round-trips a two-keyframe track on bone 1 with a scene-node target space and checks the space survives -- the default is the *other* value, so a dropped field would read as joint palette and fail. `validate_refusals` shows a target space above the maximum, a non-finite duration and a null descriptor each refused. It also round-trips a perspective camera on bone 1 and an orthographic one on no node, with the name, every parameter and the zeroed reserved bytes, and refuses an out-of-range camera index, a non-canonical perspective flag, an unknown structure version and a null camera.",
       "status": "implemented",
       "task": "CBIND-109",
       "approved_symbols": [
         "CPP-1A7F4B8C1955",
+        "CPP-36AE530FB7FC",
         "CPP-3997A337FBA7",
+        "CPP-4ED97BABB1B1",
+        "CPP-754B81644186",
+        "CPP-7FADB32D1100",
+        "CPP-88115092D3C2",
+        "CPP-8C10A967F7C9",
         "CPP-9EEB27A1B914",
+        "CPP-A88D21413F1D",
+        "CPP-AEBDD2761E0F",
+        "CPP-B23795974540",
         "CPP-B541AAA8813D",
+        "CPP-B6E2CC6D2209",
+        "CPP-D14682A7641E",
         "CPP-FE67A92509D2",
         "CPP-FF9F842C6459"
       ]

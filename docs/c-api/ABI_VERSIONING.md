@@ -11,8 +11,11 @@ attaching, moving or removing parts keeps each part's colour. It also restores
 `CNA_DisplayColorSpace` with `CNA_DISPLAY_COLOR_SPACE_SRGB`, `_SCRGB` and `_HDR10` in
 `graphics_device.h` and types the three `cna_graphics_device_*_display_color_space_ext` routes with
 it (CNA-DEMOS-ISSUE-067); the 0.47.0 engine-layer retirement had removed the type and left those
-routes on bare ordinals. The typedef is `uint32_t`, so their binary signatures do not change. The
-library exports 3,207 symbols. Purely additive: no existing route, constant, structure field or
+routes on bare ordinals. The typedef is `uint32_t`, so their binary signatures do not change. And
+it adds `CNA_CNB_MODEL_CHUNK_CAMERAS`, the versioned `CNA_CnbModelCamera` and five routes,
+`cna_cnb_model_add_camera`, `_get_camera_count`, `_get_camera`, `_get_camera_name_size` and
+`_copy_camera_name`, for the glTF cameras a compiled model now carries (CNA-DEMOS-ISSUE-023). The
+library exports 3,212 symbols. Purely additive: no existing route, constant, structure field or
 error rule changes, but a binding that requires the new routes or names needs this minor.
 
 ### Previous ABI 0.49.0
@@ -746,7 +749,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,207 exports; build configurations must export the same surface.
+The current baseline records 3,212 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than

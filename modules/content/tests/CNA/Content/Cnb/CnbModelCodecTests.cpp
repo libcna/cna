@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,7 @@ using CNA::Content::Cnb::CnbModelAnimation;
 using CNA::Content::Cnb::CnbModelBone;
 using CNA::Content::Cnb::CnbModelData;
 using CNA::Content::Cnb::CnbModelLight;
+using CNA::Content::Cnb::CnbModelCamera;
 using CNA::Content::Cnb::CnbModelMesh;
 using CNA::Content::Cnb::CnbModelPart;
 using CNA::Content::Cnb::CnbModelSkeleton;
@@ -978,4 +980,96 @@ TEST(CnbModelCodecTest, EncoderAcceptsNoVerticesOnlyWhenThereAreNoIndices)
     EXPECT_NO_THROW((void)DecodeModelFromCnb(Parse(EncodeModelToCnb(model))));
     model.parts[0] = MakePart("Only", 16u, 0u, 3u, 2u);
     EXPECT_THROW((void)EncodeModelToCnb(model), ContentLoadException);
+}
+
+// CNA-DEMOS-ISSUE-023: a compiled model keeps the scene's glTF cameras, in a chunk an older reader
+// may skip.
+TEST(CnbModelCodecTest, CamerasRoundTripInAChunkOlderReadersSkip)
+{
+    CnbModelData original = MakeSampleModel();
+    CnbModelCamera front;
+    front.name = "Front";
+    front.sceneNodeIndex = 1;
+    front.yfov = 0.7f;
+    front.aspectRatio = 0.8333333f;
+    front.znear = 0.1f;
+    front.zfar = 50.0f;
+    front.worldTransform[13] = 1.8f;
+    front.worldTransform[14] = 6.0f;
+    CnbModelCamera top;
+    top.name = "Top";
+    top.sceneNodeIndex = 2;
+    top.perspective = false;
+    top.xmag = 3.0f;
+    top.ymag = 3.6f;
+    top.znear = 0.1f;
+    top.zfar = 20.0f;
+    CnbModelCamera unplaced;
+    original.cameras = {front, top, unplaced};
+
+    const CnbDocument document = Parse(EncodeModelToCnb(original, "Models/rig"));
+    const std::optional<std::size_t> chunk = document.FindSingle(CnbModelChunk::Cameras);
+    ASSERT_TRUE(chunk.has_value());
+    EXPECT_FALSE(document.ChunkAt(*chunk).IsMandatory());
+    const CnbModelData decoded = DecodeModelFromCnb(document);
+    ASSERT_EQ(decoded.cameras.size(), original.cameras.size());
+    for (std::size_t i = 0; i < original.cameras.size(); ++i)
+    {
+        const CnbModelCamera& a = original.cameras[i];
+        const CnbModelCamera& b = decoded.cameras[i];
+        SCOPED_TRACE("camera " + std::to_string(i));
+        EXPECT_EQ(b.name, a.name);
+        EXPECT_EQ(b.sceneNodeIndex, a.sceneNodeIndex);
+        EXPECT_EQ(b.perspective, a.perspective);
+        EXPECT_EQ(b.yfov, a.yfov);
+        EXPECT_EQ(b.aspectRatio, a.aspectRatio);
+        EXPECT_EQ(b.xmag, a.xmag);
+        EXPECT_EQ(b.ymag, a.ymag);
+        EXPECT_EQ(b.znear, a.znear);
+        EXPECT_EQ(b.zfar, a.zfar);
+        EXPECT_EQ(b.worldTransform, a.worldTransform);
+    }
+
+    EXPECT_FALSE(Parse(EncodeModelToCnb(MakeSampleModel()))
+                     .FindSingle(CnbModelChunk::Cameras)
+                     .has_value())
+        << "a model without cameras carries no MCAM chunk";
+}
+
+TEST(CnbModelCodecTest, ACameraOnABoneTheModelDoesNotHaveIsRefusedBothWays)
+{
+    CnbModelData model = MakeSampleModel();
+    CnbModelCamera camera;
+    camera.sceneNodeIndex = static_cast<std::int32_t>(model.bones.size());
+    model.cameras = {camera};
+    EXPECT_THROW((void)EncodeModelToCnb(model), ContentLoadException);
+
+    // A file written elsewhere: the same MCAM row, appended to a valid model's chunks.
+    const CnbDocument source = Parse(EncodeModelToCnb(MakeSampleModel()));
+    CnbWriter writer(CnbAssetTypeId::Model, 1u);
+    if (!source.ExternalReferences().empty())
+    {
+        writer.SetExternalReferences(source.ExternalReferences());
+    }
+    for (std::size_t i = 0; i < source.ChunkCount(); ++i)
+    {
+        const auto& entry = source.ChunkAt(i);
+        if (entry.type == CNA::Content::Cnb::CnbContainerChunk::Metadata ||
+            entry.type == CNA::Content::Cnb::CnbContainerChunk::ExternalReferences)
+        {
+            continue;
+        }
+        const auto data = source.ChunkData(i);
+        writer.AddChunk(entry.type, std::vector<std::uint8_t>(data.begin(), data.end()),
+                        entry.flags, entry.alignment);
+    }
+    CNA::Content::Cnb::CnbByteWriter row;
+    row.WriteU32(1u);
+    row.WriteString("Stray");
+    row.WriteI32(camera.sceneNodeIndex);
+    row.WriteU32(1u);
+    for (int i = 0; i < 22; ++i) { row.WriteF32(0.0f); }
+    writer.AddChunk(CnbModelChunk::Cameras, row.Take(), CnbChunkFlags::None, 4u);
+    const CnbDocument document = CnbDocument::Parse(writer.Build(), "stray-camera.cnb");
+    EXPECT_THROW((void)DecodeModelFromCnb(document), ContentLoadException);
 }

@@ -514,6 +514,55 @@ TEST(ModelContentPipelineTest, ATexturedModelBuiltWithDefaultsLoadsWithItsTextur
     EXPECT_EQ(bound->getWidthProperty(), 16);
 }
 
+// CNA-DEMOS-ISSUE-023: a compiled glTF keeps the scene's cameras, identical to the run-time import.
+TEST(ModelContentPipelineTest, ACompiledModelHasTheSameCamerasAsTheRunTimeImport)
+{
+    GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+    {
+        GTEST_SKIP() << "configured renderer has no 3D pipeline";
+    }
+    for (const char* fixtureName :
+         {"camera-perspective", "camera-perspective-infinite", "camera-perspective-no-aspect",
+          "camera-orthographic", "camera-animated-node"})
+    {
+        SCOPED_TRACE(fixtureName);
+        const std::filesystem::path fixture = FindFixture(std::string(fixtureName) + ".gltf");
+        if (fixture.empty()) { GTEST_SKIP() << fixtureName << " fixture not found"; }
+        const Pipeline::ContentBuildResult result = BuildModel(fixture, "Models/rig");
+
+        ScratchDirectory scratch("cameras");
+        WriteBytes(scratch.Path() / "Models" / "rig.cnb", result.output.bytes);
+        ContentManager compiledContent(nullptr, scratch.Path().string());
+        compiledContent.setGraphicsDevice(device);
+        const Model compiled = compiledContent.Load<Model>("Models/rig");
+        ContentManager looseContent(nullptr, fixture.parent_path().string());
+        looseContent.setGraphicsDevice(device);
+        const Model loose = looseContent.Load<Model>(fixtureName);
+
+        const auto& expected = loose.getCamerasEXTProperty();
+        const auto& actual = compiled.getCamerasEXTProperty();
+        ASSERT_FALSE(expected.empty());
+        ASSERT_EQ(actual.size(), expected.size());
+        EXPECT_EQ(compiled.getBonesProperty().getCountProperty(),
+                  loose.getBonesProperty().getCountProperty());
+        for (std::size_t i = 0; i < expected.size(); ++i)
+        {
+            EXPECT_EQ(actual[i].Name, expected[i].Name);
+            EXPECT_EQ(actual[i].SceneNodeIndex, expected[i].SceneNodeIndex);
+            EXPECT_EQ(actual[i].IsPerspective, expected[i].IsPerspective);
+            EXPECT_EQ(actual[i].HasAuthoredAspectRatio, expected[i].HasAuthoredAspectRatio);
+            EXPECT_EQ(actual[i].HasInfiniteFarPlane, expected[i].HasInfiniteFarPlane);
+            EXPECT_EQ(actual[i].AspectRatio, expected[i].AspectRatio);
+            EXPECT_EQ(actual[i].FieldOfView, expected[i].FieldOfView);
+            EXPECT_EQ(actual[i].NearPlaneDistance, expected[i].NearPlaneDistance);
+            EXPECT_EQ(actual[i].FarPlaneDistance, expected[i].FarPlaneDistance);
+            EXPECT_EQ(actual[i].Projection, expected[i].Projection);
+            EXPECT_EQ(actual[i].WorldTransform, expected[i].WorldTransform);
+        }
+    }
+}
+
 TEST(ModelContentPipelineTest, RejectsParametersAtTheProcessorBoundary)
 {
     const std::filesystem::path fixture = FindFixture("skin-four-weighted.gltf");

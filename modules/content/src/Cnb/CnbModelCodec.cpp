@@ -564,6 +564,34 @@ namespace CNA::Content::Cnb
             }
         }
 
+        // --- MCAM: self-contained, so the string table of a camera-less model is unchanged ---
+        CnbByteWriter cameras;
+        if (!model.cameras.empty())
+        {
+            cameras.WriteU32(ToU32(model.cameras.size(), "a camera count"));
+            for (const CnbModelCamera& camera : model.cameras)
+            {
+                if (camera.sceneNodeIndex < -1 ||
+                    (camera.sceneNodeIndex >= 0 &&
+                     static_cast<std::uint32_t>(camera.sceneNodeIndex) >= boneCount))
+                {
+                    throw ContentLoadException(
+                        "CNB Model: camera '" + camera.name + "' names scene node " +
+                        std::to_string(camera.sceneNodeIndex) + " of a model with " +
+                        std::to_string(boneCount) + " bone(s).");
+                }
+                cameras.WriteString(camera.name);
+                cameras.WriteI32(camera.sceneNodeIndex);
+                cameras.WriteU32(camera.perspective ? 1u : 0u);
+                for (const float value : {camera.yfov, camera.aspectRatio, camera.xmag, camera.ymag,
+                                          camera.znear, camera.zfar})
+                {
+                    cameras.WriteF32(value);
+                }
+                for (const float value : camera.worldTransform) { cameras.WriteF32(value); }
+            }
+        }
+
         // --- MSTR, last, because everything above interned into it --------------------------
         CnbByteWriter stringChunk;
         stringChunk.WriteU32(ToU32(strings.Values().size(), "a string count"));
@@ -616,6 +644,10 @@ namespace CNA::Content::Cnb
         if (lightCount != 0u)
         {
             writer.AddChunk(CnbModelChunk::Lights, lights.Take(), CnbChunkFlags::Mandatory, 4u);
+        }
+        if (!model.cameras.empty())
+        {
+            writer.AddChunk(CnbModelChunk::Cameras, cameras.Take(), CnbChunkFlags::None, 4u);
         }
         return writer.Build();
     }

@@ -1448,6 +1448,13 @@ namespace CNA::Content::Pipeline
                     " punctual light(s) are not written: XNA stores lighting on an effect at run "
                     "time, not in a Model asset.");
             }
+            if (!model.cameras.empty())
+            {
+                warnings.push_back(
+                    std::to_string(model.cameras.size()) +
+                    " camera(s) are not written: an XNA Model has no camera storage. The CNB "
+                    "output of the same source keeps them.");
+            }
             std::size_t morphParts = 0u;
             for (const Cnb::CnbModelPart& part : model.parts)
             {

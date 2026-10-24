@@ -488,6 +488,51 @@ namespace Microsoft::Xna::Framework::Content
             return json.substr(os, oe - os);
         }
 
+        // plans/plan_gltf.md GLTF-317 … GLTF-321: one of the file's own cameras. The projection is
+        // built from the source's own parameters here rather than at use time, so an application
+        // never has to reimplement glTF's infinite-far-plane case to draw what the author framed.
+        // The run-time glTF import and the compiled .cnj/.cnb carriers all build their cameras
+        // here, so they cannot disagree (CNA-DEMOS-ISSUE-023).
+        Graphics::ModelCameraEXT MakeModelCameraEXT(const CNA::Internal::GltfImport::CameraOut& camera)
+        {
+            Graphics::ModelCameraEXT out;
+            out.Name = camera.name;
+            out.SceneNodeIndex = camera.sceneNodeIndex;
+            out.WorldTransform = camera.worldTransform;
+            out.IsPerspective = camera.perspective;
+            if (camera.perspective)
+            {
+                // plans/plan_gltf.md GLTF-322. §3.10.3: an absent aspectRatio means "use the
+                // viewport's", which an importer has no way to know. One is assumed -- and the
+                // assumption is RECORDED. Without the flag a consumer cannot tell an author who
+                // framed a square shot from one who deliberately left the decision to the
+                // runtime, and would either stretch the first or letterbox the second.
+                // yfov/znear/zfar are carried alongside for the same reason: rebuilding the
+                // projection at the real viewport aspect should not require inverting a matrix,
+                // and cannot be done at all for the infinite variant without knowing it is the
+                // infinite variant.
+                out.HasAuthoredAspectRatio = camera.aspectRatio > 0.0f;
+                out.AspectRatio = out.HasAuthoredAspectRatio ? camera.aspectRatio : 1.0f;
+                out.HasInfiniteFarPlane = (camera.zfar <= 0.0f);
+                out.FieldOfView = camera.yfov;
+                out.NearPlaneDistance = camera.znear;
+                out.FarPlaneDistance = out.HasInfiniteFarPlane ? 0.0f : camera.zfar;
+                out.Projection = out.HasInfiniteFarPlane
+                    ? Graphics::CreateInfinitePerspectiveFieldOfViewEXT(
+                          camera.yfov, out.AspectRatio, camera.znear)
+                    : Matrix::CreatePerspectiveFieldOfView(
+                          camera.yfov, out.AspectRatio, camera.znear, camera.zfar);
+            }
+            else
+            {
+                // §3.10.2: xmag/ymag are HALF extents, so the orthographic volume is twice each.
+                // Halving them here would be the classic silent factor-of-two.
+                out.Projection = Matrix::CreateOrthographic(
+                    camera.xmag * 2.0f, camera.ymag * 2.0f, camera.znear, camera.zfar);
+            }
+            return out;
+        }
+
         // Parses a flat JSON array of small objects bounded to the array's own closing
         // bracket (unlike the "meshes"/"glyphs" loops above, this schema has more than one
         // array key per file, so bounding matters — an unbounded scan would bleed into a
@@ -3063,49 +3108,12 @@ namespace Microsoft::Xna::Framework::Content
                     }
                 }
             }
-            // plans/plan_gltf.md GLTF-317 … GLTF-321: the file's own cameras. Projection built from the
-            // source's own parameters here rather than at use time, so an application never has to
-            // reimplement glTF's infinite-far-plane case to draw what the author framed.
+            // plans/plan_gltf.md GLTF-317 … GLTF-321: the file's own cameras.
             {
                 std::vector<Graphics::ModelCameraEXT> cameras;
                 for (const CameraOut& camera : ExtractCamerasEXT(data, sceneGraph, 1.0f))
                 {
-                    Graphics::ModelCameraEXT out;
-                    out.Name = camera.name;
-                    out.SceneNodeIndex = camera.sceneNodeIndex;
-                    out.WorldTransform = camera.worldTransform;
-                    out.IsPerspective = camera.perspective;
-                    if (camera.perspective)
-                    {
-                        // plans/plan_gltf.md GLTF-322. §3.10.3: an absent aspectRatio means "use the
-                        // viewport's", which an importer has no way to know. One is assumed --
-                        // and, unlike before, the assumption is RECORDED. Without the flag a
-                        // consumer cannot tell an author who framed a square shot from one who
-                        // deliberately left the decision to the runtime, and would either stretch
-                        // the first or letterbox the second. yfov/znear/zfar are carried alongside
-                        // for the same reason: rebuilding the projection at the real viewport
-                        // aspect should not require inverting a matrix, and cannot be done at all
-                        // for the infinite variant without knowing it is the infinite variant.
-                        out.HasAuthoredAspectRatio = camera.aspectRatio > 0.0f;
-                        out.AspectRatio = out.HasAuthoredAspectRatio ? camera.aspectRatio : 1.0f;
-                        out.HasInfiniteFarPlane = (camera.zfar <= 0.0f);
-                        out.FieldOfView = camera.yfov;
-                        out.NearPlaneDistance = camera.znear;
-                        out.FarPlaneDistance = out.HasInfiniteFarPlane ? 0.0f : camera.zfar;
-                        out.Projection = out.HasInfiniteFarPlane
-                            ? Graphics::CreateInfinitePerspectiveFieldOfViewEXT(
-                                  camera.yfov, out.AspectRatio, camera.znear)
-                            : Matrix::CreatePerspectiveFieldOfView(
-                                  camera.yfov, out.AspectRatio, camera.znear, camera.zfar);
-                    }
-                    else
-                    {
-                        // §3.10.2: xmag/ymag are HALF extents, so the orthographic volume is twice
-                        // each. Halving them here would be the classic silent factor-of-two.
-                        out.Projection = Matrix::CreateOrthographic(
-                            camera.xmag * 2.0f, camera.ymag * 2.0f, camera.znear, camera.zfar);
-                    }
-                    cameras.push_back(std::move(out));
+                    cameras.push_back(MakeModelCameraEXT(camera));
                 }
                 model.setCamerasEXTProperty(std::move(cameras));
             }
@@ -3329,6 +3337,36 @@ namespace Microsoft::Xna::Framework::Content
                     light.direction = Vector3(dir[0], dir[1], dir[2]);
                     light.diffuseColor = Vector3(diff[0], diff[1], diff[2]);
                     punctualLights.push_back(light);
+                }
+
+                // CNA-DEMOS-ISSUE-023: the scene's cameras, written by gltf_to_cnj.cpp as a
+                // top-level "cameras" array.
+                std::vector<Graphics::ModelCameraEXT> cnjCameras;
+                for (const std::string& cg : ParseFlatObjectArrayEXT(json, "cameras"))
+                {
+                    CNA::Internal::GltfImport::CameraOut camera;
+                    camera.name = ExtractJsonStringField(cg, "name");
+                    camera.sceneNodeIndex = JsonInt(cg, "sceneNode", -1);
+                    camera.perspective = JsonBool(cg, "perspective", true);
+                    camera.yfov = JsonFloat(cg, "yfov");
+                    camera.aspectRatio = JsonFloat(cg, "aspectRatio");
+                    camera.xmag = JsonFloat(cg, "xmag");
+                    camera.ymag = JsonFloat(cg, "ymag");
+                    camera.znear = JsonFloat(cg, "znear");
+                    camera.zfar = JsonFloat(cg, "zfar");
+                    const std::vector<float> world =
+                        JsonFloatArrayN(cg, FindKeyArray(cg, "worldTransform"));
+                    if (world.size() != 16u)
+                    {
+                        throw ContentLoadException(
+                            "Model '" + path + "': camera '" + camera.name +
+                            "' needs a 16-element worldTransform.");
+                    }
+                    camera.worldTransform = Matrix(world[0], world[1], world[2], world[3],
+                                                   world[4], world[5], world[6], world[7],
+                                                   world[8], world[9], world[10], world[11],
+                                                   world[12], world[13], world[14], world[15]);
+                    cnjCameras.push_back(MakeModelCameraEXT(camera));
                 }
 
                 // Meshes
@@ -4000,6 +4038,16 @@ namespace Microsoft::Xna::Framework::Content
                     CNA::Internal::Graphics::ConfigureModelMaterialVariantsEXT(
                         model, materialVariantNames, std::move(materialVariantBindings));
                 }
+                for (const Graphics::ModelCameraEXT& camera : cnjCameras)
+                {
+                    if (camera.SceneNodeIndex >= model.getBonesProperty().getCountProperty())
+                    {
+                        throw ContentLoadException(
+                            "Model '" + path + "': camera '" + camera.Name +
+                            "' names a scene node the model does not have.");
+                    }
+                }
+                model.setCamerasEXTProperty(std::move(cnjCameras));
                 // Task 941 (Phase 77): attach the skeleton/animation-clip data (if any) to the
                 // real XNA Model.Tag property, mirroring the Skinned Model Sample's own
                 // convention -- game code retrieves it via
@@ -4376,6 +4424,27 @@ namespace Microsoft::Xna::Framework::Content
             model.setOwnedResources(res);
             if (res->skinningData) { model.setTagProperty(res->skinningData.get()); }
             else if (res->modelAnimations) { model.setTagProperty(res->modelAnimations.get()); }
+            // CNA-DEMOS-ISSUE-023: the decoder has already checked each camera's node index.
+            std::vector<Graphics::ModelCameraEXT> cameras;
+            cameras.reserve(data.cameras.size());
+            for (const Cnb::CnbModelCamera& source : data.cameras)
+            {
+                CNA::Internal::GltfImport::CameraOut camera;
+                camera.name = source.name;
+                camera.sceneNodeIndex = source.sceneNodeIndex;
+                camera.perspective = source.perspective;
+                camera.yfov = source.yfov;
+                camera.aspectRatio = source.aspectRatio;
+                camera.xmag = source.xmag;
+                camera.ymag = source.ymag;
+                camera.znear = source.znear;
+                camera.zfar = source.zfar;
+                const auto& w = source.worldTransform;
+                camera.worldTransform = Matrix(w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7],
+                                               w[8], w[9], w[10], w[11], w[12], w[13], w[14], w[15]);
+                cameras.push_back(MakeModelCameraEXT(camera));
+            }
+            model.setCamerasEXTProperty(std::move(cameras));
             if (res->skinningData)
             {
                 SetCompiledModelSkinEXT(model, *res->skinningData);

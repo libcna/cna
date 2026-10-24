@@ -92,6 +92,8 @@ static int validate_identities(void)
     REQUIRE(CNA_CNB_MODEL_PART_STRIDE == UINT32_C(56));
     REQUIRE(CNA_CNB_MODEL_MATERIAL_STRIDE == UINT32_C(368));
     REQUIRE(CNA_CNB_NO_INDEX == UINT32_C(0xFFFFFFFF));
+    REQUIRE(CNA_CNB_MODEL_CHUNK_CAMERAS == UINT32_C(0x4D41434D));
+    REQUIRE(CNA_CNB_MODEL_CAMERA_STRUCT_VERSION == UINT32_C(1));
     return 1;
 }
 
@@ -284,6 +286,30 @@ static int build_reference_model(CNA_CnbModelDataHandle* const outModel)
     uint64_t lightIndex = UINT64_MAX;
     REQUIRE(cna_cnb_model_add_light(model, &light, &lightIndex) == CNA_RESULT_SUCCESS);
     REQUIRE(lightIndex == 0U);
+
+    /* CNA-DEMOS-ISSUE-023: a perspective camera on bone 1 and an orthographic one on no node. */
+    CNA_CnbModelCamera camera;
+    memset(&camera, 0, sizeof(camera));
+    camera.struct_size = (uint32_t)sizeof(camera);
+    camera.struct_version = CNA_CNB_MODEL_CAMERA_STRUCT_VERSION;
+    camera.scene_node_index = 1;
+    camera.perspective = CNA_TRUE;
+    camera.yfov = 0.7f;
+    camera.aspect_ratio = 1.25f;
+    camera.znear = 0.1f;
+    camera.zfar = 50.0f;
+    camera.world_transform[0] = camera.world_transform[5] = 1.0f;
+    camera.world_transform[10] = camera.world_transform[15] = 1.0f;
+    camera.world_transform[13] = 1.8f;
+    uint64_t cameraIndex = UINT64_MAX;
+    REQUIRE(cna_cnb_model_add_camera(model, view("Front"), &camera, &cameraIndex) ==
+            CNA_RESULT_SUCCESS);
+    REQUIRE(cameraIndex == 0U);
+    camera.scene_node_index = -1;
+    camera.perspective = CNA_FALSE;
+    camera.xmag = 3.0f;
+    camera.ymag = 3.6f;
+    REQUIRE(cna_cnb_model_add_camera(model, view(""), &camera, NULL) == CNA_RESULT_SUCCESS);
 
     *outModel = model;
     return 1;
@@ -516,6 +542,31 @@ static int expect_reference_model(const CNA_CnbModelDataHandle model)
     REQUIRE(cna_cnb_model_get_light(model, 0U, &light) == CNA_RESULT_SUCCESS);
     REQUIRE(near_enough(light.direction[1], -1.0f));
     REQUIRE(near_enough(light.diffuse_color[1], 0.5f));
+
+    uint64_t cameraCount = 0U;
+    REQUIRE(cna_cnb_model_get_camera_count(model, &cameraCount) == CNA_RESULT_SUCCESS);
+    REQUIRE(cameraCount == 2U);
+    CNA_CnbModelCamera camera;
+    memset(&camera, 0xAB, sizeof(camera));
+    camera.struct_size = (uint32_t)sizeof(camera);
+    camera.struct_version = CNA_CNB_MODEL_CAMERA_STRUCT_VERSION;
+    REQUIRE(cna_cnb_model_get_camera(model, 0U, &camera) == CNA_RESULT_SUCCESS);
+    REQUIRE(camera.scene_node_index == 1 && camera.perspective == CNA_TRUE);
+    REQUIRE(camera.reserved[0] == 0U && camera.reserved[1] == 0U && camera.reserved[2] == 0U);
+    REQUIRE(camera.yfov == 0.7f && camera.aspect_ratio == 1.25f);
+    REQUIRE(camera.znear == 0.1f && camera.zfar == 50.0f);
+    REQUIRE(camera.world_transform[13] == 1.8f && camera.world_transform[15] == 1.0f);
+    char cameraName[8];
+    uint64_t cameraNameBytes = 0U;
+    REQUIRE(cna_cnb_model_get_camera_name_size(model, 0U, &cameraNameBytes) ==
+            CNA_RESULT_SUCCESS);
+    REQUIRE(cameraNameBytes == 5U);
+    REQUIRE(cna_cnb_model_copy_camera_name(model, 0U, cameraName, sizeof(cameraName),
+                                           &cameraNameBytes) == CNA_RESULT_SUCCESS);
+    REQUIRE(cameraNameBytes == 5U && memcmp(cameraName, "Front", 5U) == 0);
+    REQUIRE(cna_cnb_model_get_camera(model, 1U, &camera) == CNA_RESULT_SUCCESS);
+    REQUIRE(camera.scene_node_index == -1 && camera.perspective == CNA_FALSE);
+    REQUIRE(camera.xmag == 3.0f && camera.ymag == 3.6f);
     return 1;
 }
 
@@ -670,6 +721,27 @@ static int validate_refusals(void)
     REQUIRE(cna_cnb_model_get_animation_track(model, 0U, 1U, NULL, NULL) ==
             CNA_RESULT_INVALID_ARGUMENT);
     REQUIRE(cna_cnb_model_get_light(model, 1U, NULL) == CNA_RESULT_INVALID_ARGUMENT);
+    {
+        CNA_CnbModelCamera camera;
+        memset(&camera, 0, sizeof(camera));
+        camera.struct_size = (uint32_t)sizeof(camera);
+        camera.struct_version = CNA_CNB_MODEL_CAMERA_STRUCT_VERSION;
+        uint64_t cameraCount = 0U;
+        REQUIRE(cna_cnb_model_get_camera_count(model, &cameraCount) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_cnb_model_get_camera(model, cameraCount, &camera) ==
+                CNA_RESULT_INVALID_ARGUMENT);
+        REQUIRE(cna_cnb_model_get_camera_name_size(model, cameraCount, &produced) ==
+                CNA_RESULT_INVALID_ARGUMENT);
+        camera.perspective = UINT8_C(2);
+        REQUIRE(cna_cnb_model_add_camera(model, view("Bad"), &camera, NULL) ==
+                CNA_RESULT_INVALID_ARGUMENT);
+        camera.perspective = CNA_TRUE;
+        camera.struct_version = UINT32_C(99);
+        REQUIRE(cna_cnb_model_add_camera(model, view("Bad"), &camera, NULL) ==
+                CNA_RESULT_INVALID_ARGUMENT);
+        REQUIRE(cna_cnb_model_add_camera(model, view("Bad"), NULL, NULL) ==
+                CNA_RESULT_INVALID_ARGUMENT);
+    }
     REQUIRE(cna_cnb_model_set_material_texture_coordinate_set(
                 model, 0U, CNA_CNB_TEXTURE_SLOT_COUNT, 0U) == CNA_RESULT_INVALID_ARGUMENT);
 

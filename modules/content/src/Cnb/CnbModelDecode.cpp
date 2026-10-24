@@ -296,7 +296,7 @@ namespace CNA::Content::Cnb
             CnbModelChunk::Header, CnbModelChunk::Strings, CnbModelChunk::Bones,
             CnbModelChunk::Meshes, CnbModelChunk::Materials, CnbModelChunk::VertexData,
             CnbModelChunk::IndexData, CnbModelChunk::MorphData, CnbModelChunk::Skeleton,
-            CnbModelChunk::Animations, CnbModelChunk::Lights};
+            CnbModelChunk::Animations, CnbModelChunk::Lights, CnbModelChunk::Cameras};
         document.RequireMandatoryChunksUnderstood(known);
 
         CnbModelData model;
@@ -835,6 +835,37 @@ namespace CNA::Content::Cnb
             throw ContentLoadException(
                 "'" + document.Origin() + "' declares " + std::to_string(lightCount) +
                 " light(s) but carries no MLIT chunk.");
+        }
+
+        // --- MCAM ---------------------------------------------------------------------------
+        if (const auto index = document.FindSingle(CnbModelChunk::Cameras); index.has_value())
+        {
+            CnbByteReader reader = document.OpenChunk(*index);
+            // Each camera is at least an empty name (4), the node and flag words (8) and 22 floats.
+            const std::uint32_t count = reader.ReadCount(4u + 8u + 22u * 4u, "cameras");
+            model.cameras.resize(count);
+            for (CnbModelCamera& camera : model.cameras)
+            {
+                camera.name = reader.ReadString();
+                camera.sceneNodeIndex = reader.ReadI32();
+                if (camera.sceneNodeIndex < -1 ||
+                    (camera.sceneNodeIndex >= 0 &&
+                     static_cast<std::uint32_t>(camera.sceneNodeIndex) >= boneCount))
+                {
+                    reader.Fail("names camera node " + std::to_string(camera.sceneNodeIndex) +
+                                " of a model with " + std::to_string(boneCount) + " bone(s).");
+                }
+                const std::uint32_t flags = reader.ReadU32();
+                if (flags > 1u) { reader.Fail("sets camera flags this build does not define."); }
+                camera.perspective = flags == 1u;
+                for (float* value : {&camera.yfov, &camera.aspectRatio, &camera.xmag, &camera.ymag,
+                                     &camera.znear, &camera.zfar})
+                {
+                    *value = reader.ReadF32();
+                }
+                for (float& value : camera.worldTransform) { value = reader.ReadF32(); }
+            }
+            reader.RequireExhausted();
         }
 
         if (morphChunks.size() > partCount)

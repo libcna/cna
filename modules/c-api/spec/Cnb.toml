@@ -77,6 +77,9 @@ cna_cnb_model_get_mesh_name_size = { size = "object->value->meshes[static_cast<s
 cna_cnb_model_copy_mesh_name = { copy = "object->value->meshes[static_cast<std::size_t>(index)].name", require = 'RequireIndex(index, object->value->meshes.size(), "The mesh index is out of range.")' }
 cna_cnb_model_get_animation_name_size = { size = "object->value->animations[static_cast<std::size_t>(index)].name", require = 'RequireIndex(index, object->value->animations.size(), "The animation index is out of range.")' }
 cna_cnb_model_copy_animation_name = { copy = "object->value->animations[static_cast<std::size_t>(index)].name", require = 'RequireIndex(index, object->value->animations.size(), "The animation index is out of range.")' }
+cna_cnb_model_get_camera_count = { get = "object->value->cameras.size()" }
+cna_cnb_model_get_camera_name_size = { size = "object->value->cameras[static_cast<std::size_t>(index)].name", require = 'RequireIndex(index, object->value->cameras.size(), "The camera index is out of range.")' }
+cna_cnb_model_copy_camera_name = { copy = "object->value->cameras[static_cast<std::size_t>(index)].name", require = 'RequireIndex(index, object->value->cameras.size(), "The camera index is out of range.")' }
 cna_cnb_encode_model = { copy = "Cnb::EncodeModelToCnb(*object->value, content_name)" }
 
 [compiled_cnj]
@@ -332,6 +335,7 @@ cna_cnb_model_copy_skeleton_hierarchy = { result = "CnbModelCopySkeletonHierarch
 cna_cnb_model_copy_skeleton_matrices = { result = "CnbModelCopySkeletonMatrices(model, set, destination, capacity, out_value_count)" }
 cna_cnb_model_copy_animation_keyframes = { result = "CnbModelCopyAnimationKeyframes(model, index, track, destination, capacity, out_keyframe_count)" }
 cna_cnb_model_get_light = { result = "CnbModelGetLight(model, index, out_light)" }
+cna_cnb_model_get_camera = { result = "CnbModelGetCamera(model, index, out_camera)" }
 cna_cnb_build_model_from_cnj = { result = "CnbBuildModelFromCnj(cnj_path, content_root, out_result)" }
 cna_cnb_model_from_cnj_take_model = { result = "CnbModelFromCnjTakeModel(result, out_model)" }
 cna_cnb_sound_effect_data_create = { result = "CnbSoundEffectDataCreate(info, samples, byte_count, out_sound)" }
@@ -371,6 +375,7 @@ cna_cnb_model_add_animation = { result = "CnbModelAddAnimation(model, name, clip
 cna_cnb_model_get_animation = { result = "CnbModelGetAnimation(model, index, out_duration_seconds, out_track_count, out_target_space)", optional = ["out_duration_seconds", "out_track_count", "out_target_space"] }
 cna_cnb_model_get_animation_track = { result = "CnbModelGetAnimationTrack(model, index, track, out_bone_index, out_keyframe_count)", optional = ["out_bone_index", "out_keyframe_count"] }
 cna_cnb_model_add_light = { result = "CnbModelAddLight(model, light, out_index)", optional = ["out_index"] }
+cna_cnb_model_add_camera = { result = "CnbModelAddCamera(model, name, camera, out_index)", optional = ["out_index"] }
 cna_cnb_sprite_font_data_add_glyph = { result = "CnbSpriteFontDataAddGlyph(font, glyph, out_index)", optional = ["out_index"] }
 cna_cnb_animation_clip_get = { result = "CnbAnimationClipGet(clip, out_duration_seconds, out_track_count, out_target_space)", optional = ["out_duration_seconds", "out_track_count", "out_target_space"] }
 cna_cnb_animation_clip_get_track = { result = "CnbAnimationClipGetTrack(clip, track, out_bone_index, out_keyframe_count)", optional = ["out_bone_index", "out_keyframe_count"] }

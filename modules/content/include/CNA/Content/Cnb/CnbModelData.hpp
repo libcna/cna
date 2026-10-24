@@ -314,6 +314,37 @@ namespace CNA::Content::Cnb
         std::array<float, 3> diffuseColor{{1.0f, 1.0f, 1.0f}};
     };
 
+    /**
+     * @brief One glTF camera of the model's scene, as the importer reads it (`GLTF-317`).
+     *
+     * The runtime rebuilds the `ModelCameraEXT` projection from these source parameters exactly
+     * as a run-time glTF import does, so the two carriers cannot disagree (CNA-DEMOS-ISSUE-023).
+     */
+    struct CnbModelCamera
+    {
+        /** @brief The camera's name, or its node's when the camera is unnamed; may be empty. */
+        std::string name;
+        /** @brief The instancing scene node, an index into CnbModelData::bones. */
+        std::int32_t sceneNodeIndex = -1;
+        /** @brief True for a perspective camera, false for an orthographic one. */
+        bool perspective = true;
+        /** @brief Perspective vertical field of view, in radians. */
+        float yfov = 0.0f;
+        /** @brief Perspective aspect ratio, or 0 when the source declares none. */
+        float aspectRatio = 0.0f;
+        /** @brief Orthographic half-width. */
+        float xmag = 0.0f;
+        /** @brief Orthographic half-height. */
+        float ymag = 0.0f;
+        /** @brief Near clip distance. */
+        float znear = 0.0f;
+        /** @brief Far clip distance, or 0 for an infinite perspective projection. */
+        float zfar = 0.0f;
+        /** @brief The node's world transform at import, XNA row-major. */
+        std::array<float, 16> worldTransform{{1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                                              0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f}};
+    };
+
     /** @brief Everything a compiled `.cnb` `Model` holds. */
     struct CnbModelData
     {
@@ -339,6 +370,9 @@ namespace CNA::Content::Cnb
 
         /** @brief Punctual lights applied to every part's effect. */
         std::vector<CnbModelLight> lights;
+
+        /** @brief The scene's glTF cameras, in the importer's order. */
+        std::vector<CnbModelCamera> cameras;
 
         /**
          * @brief Whether this model's materials were authored under glTF's lighting conventions.
