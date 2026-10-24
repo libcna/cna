@@ -203,9 +203,10 @@ renderer `Unavailable`), it is never drawn from catalog 3, and stale packs of th
 developer's disk are ignored.
 
 **Revisions.** Catalog v3 was first released on 2026-09-30; revision 2 added entries, revision 3
-reworked their art, and **revision 4** (manifest `"revision": 4`), the current content of the same
-version, refines it: sculpted lids, lips and brows with the face's paint on the head's own facets,
-face shapes that differ, hair tucked behind the ears, clean beard edges. A revision may improve the art of
+reworked their art, revision 4 refined it (sculpted lids, lips and brows with the face's paint on
+the head's own facets, face shapes that differ, hair tucked behind the ears, clean beard edges),
+and **revision 5** (manifest `"revision": 5`), the current content of the same version, names each
+ear shape's lobes, so earrings hang from the lobe of the shape worn. A revision may improve the art of
 every item and add entries, but every first-release id keeps its kind and its description format
 1 (hair 1–10, tops 20–28, bottoms 40–45, shoes 60–64, glasses 80–83, hats 100–104, facial hair
 120–123), and everything a revision adds is marked `"format": 3`, so only a format 3 description
@@ -223,7 +224,7 @@ every item replaced by its slot default (its ids are not read against another ve
 animations are system data, not part of a description, and come from the newest compiled-in
 catalog.
 
-Catalog v3 revision 4 has the entries revision 2 added, with their art reworked for visual
+Catalog v3 revision 5 has the entries revision 2 added, with their art reworked for visual
 quality (the generator's modules say how each kind is built; `docs/avatar-art-direction.md` records
 the visual language):
 
@@ -269,7 +270,9 @@ the visual language):
 **Compatibility rules are data**, not code: a hat's `hairCover` gives the line where its brim
 meets the head and how far hair under it is lifted, and the assembly removes the hair the hat hides
 and flattens the rest to the head surface under it (an open hat such as a visor has none);
-glasses `follow` the eyes and earrings the ears, so face shapes move them with the feature;
+glasses `follow` the eyes and earrings the ears, so face shapes move them with the feature
+(earrings are made for the first ear shape's lobes, and each shape names its `lobes`, so they are
+carried to the lobes of the shape worn);
 `hides` lists kinds an item hides (gloves hide rings); items made of left and right parts mark
 them (`cnaSide`) and are worn on the side the description names; stubble is drawn translucent
 (`cnaBlend`).
@@ -394,8 +397,8 @@ sends a projection onto the newest catalog the client has, marked as such, and l
 avatar unchanged. A client that reads fewer description formats than the stored avatar uses (a CNA
 build from before format 3) receives a canonical copy without what it cannot read: an item only
 format 3 names becomes its slot's lowest older item, and eyebrows, ears, accessories and makeup are
-left out. A manifest larger than one service message (every revision's since 2: revision 4's is
-189 KB, the message limit 64 KiB) is named by
+left out. A manifest larger than one service message (every revision's since 2: revision 5's is
+191 KB, the message limit 64 KiB) is named by
 `avatars.catalog` and read by hash from the file route. Games see an
 ordinary description either way, and `AvatarDescription.Changed` follows the stored avatar's
 revision, so installing a catalog or receiving a projection is never a change.

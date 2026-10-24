@@ -30,7 +30,8 @@ CATALOG_VERSION = 3
 # named only by format 3 descriptions (docs/avatars.md).
 # Revision 3 (2026-10): the same entries, art reworked for visual quality.
 # Revision 4 (2026-10): the same entries; sculpted lids, lips and brows, decals on the head's own facets.
-CATALOG_REVISION = 4
+# Revision 5 (2026-10): ear shapes say where their lobes are, so earrings hang from the lobe of every shape.
+CATALOG_REVISION = 5
 # The catalog contract level a reader needs: 2 adds shared texture files, face styles, accessories,
 # ear shapes, hair covers, anchors and the head surface.
 READER = 2
@@ -105,6 +106,11 @@ def build(jobs=1):
         if name in accessories.HAT_COVER:
             entry["hairCover"] = {"line": list(accessories.HAT_COVER[name]),
                                   "lift": round(accessories.UNDER_HAT_LIFT * max(head.SCALE.values()), 5)}
+        if slot == "ears":
+            # Where an earring hangs on this shape (the avatar's left, right): earrings are made for
+            # the first shape's lobes and carried to the shape worn (AvatarModel.cpp).
+            entry["lobes"] = {b: [_round(head.ear_lobe(b, side, catalog.EAR_SHAPE_OF[name])[0]) for side in (1.0, -1.0)]
+                              for b in rig.BODY_TYPES}
         entry.update(extras)
         if name in catalog.LABELS:
             entry["label"] = catalog.LABELS[name]

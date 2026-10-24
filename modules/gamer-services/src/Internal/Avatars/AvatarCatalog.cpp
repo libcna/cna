@@ -428,6 +428,16 @@ CatalogManifest parseManifestJson(std::string_view text)
             else if(follow=="ears"&&entry.slot==AvatarItemSlot::Earrings)entry.follow=ItemFollow::Ears;
             else malformed("item follow");
         }
+        if(item.contains("lobes")) {
+            if(entry.slot!=AvatarItemSlot::Ears)malformed("lobes on a non-ear item");
+            std::array<std::array<Microsoft::Xna::Framework::Vector3,2>,2> lobes;
+            for(int body=0;body<2;++body) {
+                const auto& sides=item["lobes"].at(body==0?"female":"male");
+                if(!sides.is_array()||sides.size()!=2)malformed("ear lobes");
+                for(int side=0;side<2;++side)lobes[body][side]=vector3(sides[side],5.0f);
+            }
+            entry.lobes=lobes;
+        }
         if(item.contains("hides")) {
             if(!item["hides"].is_array()||item["hides"].size()>AvatarItemKindCount)malformed("item hides");
             for(const auto& hidden:item["hides"]) {

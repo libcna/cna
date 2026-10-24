@@ -501,15 +501,18 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
     const auto* hat=worn(descriptor.items[static_cast<std::size_t>(AvatarItemSlot::Hat)],AvatarItemSlot::Hat);
     const HairCover* cover=hat&&hat->hairCover&&!manifest.headSurface[body].radii.empty()?&*hat->hairCover:nullptr;
     // Ears: the description's shape, else the catalog's default (the first).
+    const CatalogItem* earShape=nullptr;
+    const CatalogItem* firstEarShape=nullptr;
     {
-        const auto* ears=worn(descriptor.ears,AvatarItemSlot::Ears);
-        if(!ears) {
+        const auto defaults=manifest.itemsOf(AvatarItemSlot::Ears);
+        firstEarShape=defaults.empty()?nullptr:defaults.front();
+        earShape=worn(descriptor.ears,AvatarItemSlot::Ears);
+        if(!earShape) {
             if(descriptor.ears)result->substitutedItems.push_back(descriptor.ears);
-            const auto defaults=manifest.itemsOf(AvatarItemSlot::Ears);
-            ears=defaults.empty()?nullptr:defaults.front();
+            earShape=firstEarShape;
         }
-        if(ears)
-            if(auto glb=model(manifest,ears->assets[body]))pieces.push_back({fitted(glb),Scope::Face});
+        if(earShape)
+            if(auto glb=model(manifest,earShape->assets[body]))pieces.push_back({fitted(glb),Scope::Face});
     }
     for(std::size_t slot=0;slot<AvatarItemSlotCount;++slot) {
         const auto kind=static_cast<AvatarItemSlot>(slot);
@@ -573,7 +576,15 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
     const auto& anchors=manifest.faceAnchors[body];
     auto follow=[&](const Vector3& point){return shaped?faceDisplacement(point,controls,descriptor.face,Scope::Face):Vector3::Zero;};
     const Vector3 eyeLeft=anchors.eyeLeft+follow(anchors.eyeLeft), eyeRight=anchors.eyeRight+follow(anchors.eyeRight);
-    const std::array<Vector3,2> earMove{follow(anchors.earLeft),follow(anchors.earRight)};
+    // Earrings are made for the first ear shape's lobes: the shape worn carries them to its own, and
+    // face controls move them as they move the lobe (a catalog without lobes: as the ear's root).
+    std::array<Vector3,2> lobe{anchors.earLeft,anchors.earRight},carry{Vector3::Zero,Vector3::Zero};
+    if(earShape&&firstEarShape&&earShape->lobes&&firstEarShape->lobes)
+        for(int side=0;side<2;++side) {
+            lobe[side]=(*earShape->lobes)[body][side];
+            carry[side]=lobe[side]-(*firstEarShape->lobes)[body][side];
+        }
+    const std::array<Vector3,2> earMove{carry[0]+follow(lobe[0]),carry[1]+follow(lobe[1])};
     const float eyeSpan=std::fabs(anchors.eyeLeft.X-anchors.eyeRight.X);
     const float eyeStretch=eyeSpan>1e-4f?std::fabs(eyeLeft.X-eyeRight.X)/eyeSpan:1.0f;
     const Vector3 eyeCentre=(anchors.eyeLeft+anchors.eyeRight)*0.5f, eyeMove=(eyeLeft+eyeRight)*0.5f-eyeCentre;
@@ -628,8 +639,8 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
                     vertex.position.X=eyeCentre.X+(vertex.position.X-eyeCentre.X)*eyeStretch;
                     vertex.position+=eyeMove;
                 }
-            } else if(shaped&&piece.follow==ItemFollow::Ears) {
-                // Earrings hang from the ear on their side.
+            } else if(piece.follow==ItemFollow::Ears) {
+                // Earrings hang from the lobe on their side.
                 for(auto& vertex:part.vertices)vertex.position+=earMove[vertex.position.X>=0.0f?0:1];
             }
             applyProportions(part.vertices,authored,morph);

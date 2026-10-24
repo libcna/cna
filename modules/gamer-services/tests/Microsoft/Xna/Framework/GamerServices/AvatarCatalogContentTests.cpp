@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// The content of CNA's avatar catalog v3 (revision 4): every model is sound geometry, every
+// The content of CNA's avatar catalog v3 (revision 5): every model is sound geometry, every
 // reference of the manifest resolves to what the editor and the random generator expect, and what
 // an avatar wears is assembled where and as its description says.
 #include <gtest/gtest.h>
@@ -229,6 +229,91 @@ TEST(AvatarCatalogContentTest, AccessoriesAreWornOnTheSideTheDescriptionNames) {
         EXPECT_EQ(both.vertices - bare.vertices, (left.vertices - bare.vertices) + (right.vertices - bare.vertices)) << static_cast<int>(slot);
         EXPECT_GT(left.sumX - bare.sumX, 0.0) << static_cast<int>(slot);
         EXPECT_LT(right.sumX - bare.sumX, 0.0) << static_cast<int>(slot);
+    }
+}
+
+// plans/plan_avatar_acceptance.md AVA-06: earrings are made for the first ear shape's lobes. Each
+// shape names its own (catalog v3 revision 5), lying on that ear, and the earring keeps the place it
+// has on the first shape's lobe on the worn shape's lobe -- for every shape, both bodies and the ear
+// controls at their ends. Before, a small ear's stud hung 5 mm under its lobe and a long lobe's sat
+// 11 mm up inside it.
+TEST(AvatarCatalogContentTest, EarringsHangFromTheLobeOfEveryEarShape) {
+    const auto manifest = catalog();
+    const auto shapes = manifest->itemsOf(AvatarItemSlot::Ears);
+    ASSERT_GE(shapes.size(), 3u);
+    const auto stud = std::ranges::find(manifest->items, std::string("earrings_stud"), &Avatars::CatalogItem::name);
+    ASSERT_NE(stud, manifest->items.end());
+    const auto earrings = Avatars::accessoryIndex(AvatarItemSlot::Earrings);
+    const auto opaque = [](const Avatars::AvatarModel& model) {
+        std::vector<const Avatars::AvatarModelPart*> out;
+        for (const auto& part : model.parts)
+            if (part.feature == Avatars::AvatarFeature::None && !part.blend) out.push_back(&part);
+        return out;
+    };
+    // The avatar's left stud: the opaque part the earrings add on the left (+X).
+    const auto leftStud = [&](const Avatars::AvatarDescriptor& bare) {
+        auto worn = bare;
+        worn.accessories[earrings] = stud->id;
+        const auto unworn = Avatars::buildAvatarModel(bare);
+        const auto without = opaque(*unworn);
+        const auto model = Avatars::buildAvatarModel(worn);
+        const auto with = opaque(*model);
+        Vector3 centre;
+        std::size_t count = 0;
+        for (std::size_t k = without.size(); k < with.size(); ++k)
+            for (const auto& vertex : with[k]->vertices)
+                if (vertex.position.X > 0.0f) { centre += vertex.position; ++count; }
+        EXPECT_GT(count, 0u);
+        return count ? centre / static_cast<float>(count) : centre;
+    };
+    for (std::uint8_t body = 0; body < 2; ++body) {
+        // A shape's left lobe as its ear is drawn: the named lobe, moved as face controls move the ear
+        // vertex nearest it.
+        const auto lobeOf = [&](const Avatars::CatalogItem& shape, const Avatars::AvatarDescriptor& descriptor) {
+            const auto bytes = Avatars::resolveAsset(*manifest, shape.assets[body]);
+            const auto glb = Avatars::parseAvatarGlb(bytes->view);
+            const Vector3 named = (*shape.lobes)[body][0];
+            std::size_t best = 0, primitive = 0;
+            float nearest = 1.0f;
+            for (std::size_t p = 0; p < glb.primitives.size(); ++p)
+                for (std::size_t v = 0; v < glb.primitives[p].vertices.size(); ++v) {
+                    const float d = Vector3::Distance(glb.primitives[p].vertices[v].position, named);
+                    if (d < nearest) { nearest = d; best = v; primitive = p; }
+                }
+            // The named lobe lies on the ear (its front surface, not in the air beside it).
+            EXPECT_LT(nearest, 0.004f) << shape.name << " body " << int(body);
+            // The ear's part in a neutral model is the glb primitive itself (authored height, build
+            // and proportions); a shaped model keeps the parts in the same order.
+            auto neutral = descriptor;
+            neutral.face.fill(Avatars::NeutralFaceParameter);
+            const auto neutralModel = Avatars::buildAvatarModel(neutral);
+            const auto plain = opaque(*neutralModel);
+            const auto& source = glb.primitives[primitive].vertices;
+            const auto found = std::ranges::find_if(plain, [&](const auto* part) {
+                return part->vertices.size() == source.size() &&
+                       Vector3::Distance(part->vertices.front().position, source.front().position) < 1e-4f;
+            });
+            EXPECT_NE(found, plain.end()) << shape.name;
+            if (found == plain.end()) return named;
+            const auto shaped = Avatars::buildAvatarModel(descriptor);
+            const auto part = static_cast<std::size_t>(found - plain.begin());
+            return named + opaque(*shaped)[part]->vertices[best].position - plain[part]->vertices[best].position;
+        };
+        auto reference = dressed(body);
+        reference.ears = shapes.front()->id;
+        ASSERT_TRUE(shapes.front()->lobes.has_value());
+        const Vector3 resting = leftStud(reference) - lobeOf(*shapes.front(), reference);
+        for (const auto* shape : shapes) {
+            ASSERT_TRUE(shape->lobes.has_value()) << shape->name;
+            for (const auto& [control, value] : std::vector<std::pair<int, std::uint8_t>>{{-1, 0}, {15, 0}, {15, 255}, {28, 255}, {29, 255}}) {
+                auto descriptor = reference;
+                descriptor.ears = shape->id;
+                if (control >= 0) descriptor.face[static_cast<std::size_t>(control)] = value;
+                const Vector3 offset = leftStud(descriptor) - lobeOf(*shape, descriptor);
+                EXPECT_LT(Vector3::Distance(offset, resting), 0.0015f)
+                    << shape->name << " body " << int(body) << " control " << control << "=" << int(value);
+            }
+        }
     }
 }
 

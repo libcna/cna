@@ -380,13 +380,21 @@ def assemble(catalogs, description_bytes):
     shaped = bool(controls) and any(v != 128 for v in d.face)
     anchors = manifest.get("faceAnchors", {}).get(body)
     eye_move, eye_stretch, eye_centre, ear_move = np.zeros(3), 1.0, np.zeros(3), np.zeros((2, 3))
+    # Earrings are made for the first ear shape's lobes and carried to the worn shape's (AvatarModel.cpp).
+    first_ears = next((e for e in manifest.get("featureItems", []) if e["slot"] == "ears"), None)
+    lobes = None
+    if ears and first_ears and "lobes" in ears and "lobes" in first_ears:
+        lobes = np.array(ears["lobes"][body])
+        ear_move = lobes - np.array(first_ears["lobes"][body])
     if shaped and anchors:
         pts = np.array([anchors["eyeLeft"], anchors["eyeRight"], anchors["earLeft"], anchors["earRight"]])
+        if lobes is not None:
+            pts[2:] = lobes
         moved = pts + face_displacement(pts, controls, d.face)
         eye_centre = (pts[0] + pts[1]) / 2.0
         eye_move = (moved[0] + moved[1]) / 2.0 - eye_centre
         eye_stretch = abs(moved[0][0] - moved[1][0]) / max(abs(pts[0][0] - pts[1][0]), 1e-4)
-        ear_move = moved[2:] - pts[2:]
+        ear_move = ear_move + moved[2:] - pts[2:]
     brows = worn(d.eyebrows, "eyebrows")
     makeup = {kind: worn(d.makeup.get(kind, 0), kind) for kind in MAKEUP}
     opaque, decals = [], []
@@ -410,7 +418,7 @@ def assemble(catalogs, description_bytes):
                 positions = positions.copy()
                 positions[:, 0] = eye_centre[0] + (positions[:, 0] - eye_centre[0]) * eye_stretch
                 positions = positions + eye_move
-            elif shaped and follow == "ears":
+            elif follow == "ears":
                 positions = positions + np.where((positions[:, 0] >= 0.0)[:, None], ear_move[0], ear_move[1])
             positions = apply_proportions(positions, prim["joints"], prim["weights"], authored, morph)
             positions = apply_build(positions, prim["joints"], prim["weights"], morph[0], factor) * scale

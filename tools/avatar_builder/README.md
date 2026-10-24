@@ -16,7 +16,7 @@ python3 tools/avatar_builder/generate_avatar_catalog.py --jobs 8  # build the GL
 It writes catalog v3, CNA's baseline avatar catalog, to `modules/gamer-services/assets/avatars/v3/`,
 which the gamer-services library embeds (`CNA_AVATAR_CATALOG_VERSIONS` in
 `modules/gamer-services/CMakeLists.txt`, `cmake/EmbedBinaryFiles.cmake`), deflated. It writes
-revision 4 of catalog v3: a revision may improve every item's art and add entries, but every id
+revision 5 of catalog v3: a revision may improve every item's art and add entries, but every id
 keeps its kind and description format, and every added entry is `"format": 3`
 (`AvatarCatalogTest.CatalogV3RevisionsKeepTheFirstReleaseAndAddOnlyFormat3Entries`; the rules
 and how to add an entry are in `docs/avatars.md`, "Assets"). The generator removes catalog files it

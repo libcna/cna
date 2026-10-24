@@ -817,15 +817,15 @@ per-user models. A server catalog pack is only the update path for a catalog a c
 ### 41. Visual fidelity of catalog v3
 
 - **Status:** implementation differs by design (art direction).
-- **CNA now:** original assets in a stylized, friendly Xbox 360-era style (revision 4: adult
+- **CNA now:** original assets in a stylized, friendly Xbox 360-era style (revision 5: adult
   proportions of about 4.8 heads female and 4.9 male, a sculpted head with lids, lips and brows in
   relief, decal eyes, brows and makeup painted on the head's own facets, fitted clothes). Known
   deficiencies: no baked occlusion (40); garments carry soft low-frequency folds in their surface
   (hanging folds and gathers 3-8 mm deep, folds at cuffs, elbows and knees) with hems, cuffs,
   pockets and quilting, but no fine creases and no normal-mapped detail (`SkinnedEffect` has no
   normal map); hair is shaped clumps and shells, so curls, coils and twists read
-  as a stylized mass rather than strands; earrings hang from the ear anchor moved by the ear
-  controls, not refitted to each of the six ear shapes; rings are legible only in the editor's
+  as a stylized mass rather than strands; earrings hang from the lobe of the ear shape worn and
+  move with it under the ear controls, but keep the first shape's tilt on the others; rings are legible only in the editor's
   Hands view; makeup does not follow the eye expressions, except eyeliner, which has closed-eye
   tiles; a preset authored for one body lets a planted foot drift 1-3 cm on the other; in the
   deepest crouch (FemaleIdleFixShoe) a few millimetres of trouser front can show above a shirt hem.
@@ -838,7 +838,7 @@ per-user models. A server catalog pack is only the update path for a catalog a c
 - **CNA now:** description formats 1, 2 and 3 exist (format 2 adds facial hair and face shape,
   format 3 eyebrows, ears, accessories, makeup, colours, proportions and more face shape); every
   description uses the lowest format that says it. Catalog v3 is the baseline and the only catalog
-  shipped, at revision 4, pinned by hash tests; the development catalogs 1 and 2 are not supported. A description is always drawn
+  shipped, at revision 5, pinned by hash tests; the development catalogs 1 and 2 are not supported. A description is always drawn
   from exactly the catalog version it names, and same-named files of different versions are told
   apart by size and SHA-256. Edges:
   - a description naming catalog 1 or 2 is not a CNA description (height 0, female body type, a

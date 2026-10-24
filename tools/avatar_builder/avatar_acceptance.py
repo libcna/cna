@@ -58,7 +58,7 @@ COMPONENTS = [
     ("codec and serialization", ["AvatarDescriptionCodecTest.*"], 18),
     ("AvatarDescription (XNA)", ["AvatarDescriptionTest.*", "AvatarBodyTypeTest.*"], 23),
     ("catalog", ["AvatarCatalogTest.*"], 18),
-    ("catalog content and geometry", ["AvatarCatalogContentTest.*"], 15),
+    ("catalog content and geometry", ["AvatarCatalogContentTest.*"], 16),
     ("animation and expressions", ["AvatarAnimationTest.*", "AvatarExpressionTest.*", "AvatarAnimationPresetTest.*", "AvatarBoneTest.*",
                                    "AvatarEyeTest.*", "AvatarMouthTest.*", "AvatarEyebrowTest.*"], 35),
     ("AvatarRenderer (XNA)", ["AvatarRendererTest.*", "AvatarRendererStateTest.*"], 35),

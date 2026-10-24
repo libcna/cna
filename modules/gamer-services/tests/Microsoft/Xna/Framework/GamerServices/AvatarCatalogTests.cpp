@@ -117,7 +117,7 @@ TEST(AvatarCatalogTest, CatalogV3RevisionsKeepTheFirstReleaseAndAddOnlyFormat3En
     // reader of only formats 1 and 2 never receives (the service projects it).
     const auto v3 = Avatars::embeddedManifest(3);
     ASSERT_NE(v3, nullptr);
-    EXPECT_EQ(v3->revision, 4);
+    EXPECT_EQ(v3->revision, 5);
     std::set<std::uint16_t> first;
     for (const auto& [slot, ids] : firstRelease()) {
         for (auto id : ids) {
@@ -285,7 +285,8 @@ std::string ModelDigest(const Avatars::AvatarModel& model) {
 
 TEST(AvatarCatalogTest, V3DescriptionsAssembleExactlyAsRevised) {
     // A v3 description, format 1 or format 2, draws the same model on every machine: these digests
-    // pin catalog v3 revision 4 (a later revision changes them on purpose).
+    // pin catalog v3 revision 5, which drew these avatars as revision 4 did (a later revision
+    // changes them on purpose).
     // The 1950-mm body includes build-projection vertices at a digest rounding boundary.
     // Keep the catalog recipe's rounding stable when public XNA vector precision changes;
     // do not regenerate these fingerprints merely to accommodate that numerical change.

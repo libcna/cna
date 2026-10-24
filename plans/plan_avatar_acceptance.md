@@ -17,7 +17,7 @@ Task ids `AVA-*`; one task, one commit.
 | AVA-03 | Documentation drift (revision, sizes, folds, proportions) | done |
 | AVA-04 | Visual regression: checked-in manifest and goldens, legacy script retired | done |
 | AVA-05 | One Avatar v3 acceptance command | done |
-| AVA-06 | Earrings fitted to every ear shape | open |
+| AVA-06 | Earrings fitted to every ear shape | done |
 | AVA-07 | Planted-foot drift across bodies, heights and proportions | open |
 | AVA-08 | Deep-crouch clothing show-through | open |
 | AVA-09 | Severe hair/headwear intersections | open |
@@ -146,3 +146,30 @@ claims), generator, and on OPENGLES3, OPENGL33, WEBGPU, SDL_GPU, FNA3D, SOFTWARE
 passed and 1 allowed skip, on STUB 223 and 3; the visual regression on the six that draw (HEADLESS
 and STUB reported as drawing no pixels). Pinning one more codec test than exists, or a component
 whose suite is gone, fails the tests stage.
+
+## AVA-06 earrings on every ear shape
+
+Reproduced on HEAD: earrings are made for the first ear shape's lobes (`accessories.earrings`,
+`head.ear_lobe(body, side)`) and were only moved by the face controls' displacement at the ear's
+root. The other shapes' lobes lie elsewhere: small 5.3-5.5 mm higher (the earring hung under the
+lobe), large 4.4-4.6 mm lower, long lobes 10.6-11.0 mm lower (the stud sat up inside the lobe),
+attached 2.2 mm, protruding 3.7 mm out and back; and at the ear controls' ends the root's
+displacement differed from the lobe's by up to 2 cm. Estimating a lobe from the ear mesh (lowest
+vertex, or 82 % of the way to it from the centroid) left 3.5-5 mm on the long-lobed and protruding
+ears, as large as the defect, so the generator, which knows each shape exactly, now says it.
+
+- Catalog v3 revision 5: each `ears` feature item names its `lobes` (per body, left and right).
+  Only `catalog.json` changes (+1,808 bytes; every model is revision 4's, so the pinned assembly
+  digests are unchanged). Older CNA builds and the service ignore the key; the service's
+  `avatar_validation_tests` (209 assertions, the CNA catalog imported) and `avatar_tests` (200) and
+  `cna_avatar_e2e.py` (catalog pack built from it installed and validated, editor saves) pass
+  against revision 5 without a service change.
+- `AvatarModel.cpp` (and the CPU preview) carries earrings by the worn shape's lobes minus the
+  first shape's, and moves them by the face controls' displacement at the lobe.
+- `EarringsHangFromTheLobeOfEveryEarShape`: every shape's lobes lie on its ear, and a stud keeps
+  its place on the first shape's lobe on every shape, both bodies and the ear-size, height and
+  angle controls at their ends, within 1.5 mm; without the assembly change it is off by up to 22.6 mm.
+- The visual regression's three ear close-ups changed as intended (the protruding ear's hoop now
+  hangs from its lobe, the long-lobe stud sits at the lobe); goldens updated.
+
+`CnaGamerServicesTests` 740: 739 passed, 1 allowed skip (OPENGLES3).

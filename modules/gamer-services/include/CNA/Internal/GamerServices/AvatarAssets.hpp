@@ -99,6 +99,9 @@ struct CatalogItem {
     std::vector<int> tiles;
     /** @brief A face style's opacity. */
     float opacity=1.0f;
+    /** @brief An ear shape: where an earring hangs on it, per body type (female, male) and side (the
+     * avatar's left, right), authored model space; absent in catalogs before v3 revision 5. */
+    std::optional<std::array<std::array<Microsoft::Xna::Framework::Vector3,2>,2>> lobes;
 };
 
 /** @brief Named points of a body's face, authored model space (the catalog's faceAnchors). */
