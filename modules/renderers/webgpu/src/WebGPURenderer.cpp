@@ -1484,35 +1484,7 @@ namespace CNA::Internal::Renderers::WebGPU
                     "CNA WebGPU: Texture2D pixel buffer is smaller than width*height*bytesPerTexel");
         }
 
-        WGPUTextureDescriptor descriptor{};
-        descriptor.label = StringView("CNA WebGPU Texture2D");
-        // WEBGPU-51: CopySrc is required by GetData()'s wgpuCommandEncoderCopyTextureToBuffer()
-        // readback (added alongside that method -- every texture created before GetData() existed
-        // never needed it). WEBGPU-52: RenderAttachment is required by GenerateMips2D()'s
-        // render-pass-based mip blit (see that method's own doc comment) -- only actually used
-        // when mipLevels_ > 1 and initial pixel data is supplied below, but declared
-        // unconditionally since usage flags are fixed at texture-creation time.
-        // WEBGPU-144: a block-compressed texture is never a render attachment and never mip-generated
-        // (its mips are supplied pre-compressed), so RenderAttachment is dropped for it; CopySrc/Dst
-        // stay for block upload/readback.
-        // WEBGPU-184: and neither is a SIGNED-NORMALIZED one. `rgba8snorm`/`rg8snorm` are sampleable
-        // and filterable in core WebGPU but NOT renderable, so asking for RenderAttachment is a
-        // validation error that invalidates the texture -- measured: "Texture usages
-        // TextureUsages(RENDER_ATTACHMENT) are not allowed on a texture of type Rgba8Snorm", after
-        // which every view and every write on it fails too. Dropping the flag is what makes the
-        // format usable at all; the cost is that GenerateMips2D's render-pass blit cannot run on
-        // one. MSR-018 still permits the resource's mip chain and explicit per-level uploads --
-        // the normal XNB content path -- without pretending an automatic generator exists.
-        const bool renderable = !compressed_ && !IsSignedNormalizedTextureFormatEXT(wgpuFormat_);
-        descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst |
-                           WGPUTextureUsage_CopySrc |
-                           (renderable ? WGPUTextureUsage_RenderAttachment : WGPUTextureUsage_None);
-        descriptor.dimension = WGPUTextureDimension_2D;
-        descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
-        descriptor.format = wgpuFormat_;
-        descriptor.mipLevelCount = static_cast<std::uint32_t>(mipLevels_);
-        descriptor.sampleCount = 1;
-        texture_ = wgpuDeviceCreateTexture(owner.Device(), &descriptor);
+        texture_ = CreateNativeTextureEXT("CNA WebGPU Texture2D");
         if (texture_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create Texture2D");
 
@@ -1537,6 +1509,97 @@ namespace CNA::Internal::Renderers::WebGPU
         owner.RegisterDeviceResourceEXT(this);   // WEBGPU-182
     }
 
+    WGPUTexture WebGPUTextureRenderer::CreateNativeTextureEXT(const char* label) const
+    {
+        WGPUTextureDescriptor descriptor{};
+        descriptor.label = StringView(label);
+        // WEBGPU-51: CopySrc is required by GetData()'s wgpuCommandEncoderCopyTextureToBuffer()
+        // readback (added alongside that method -- every texture created before GetData() existed
+        // never needed it). WEBGPU-52: RenderAttachment is required by GenerateMips2D()'s
+        // render-pass-based mip blit (see that method's own doc comment) -- only actually used
+        // when mipLevels_ > 1 and level 0 is uploaded, but declared unconditionally since usage
+        // flags are fixed at texture-creation time.
+        // WEBGPU-144: a block-compressed texture is never a render attachment and never mip-generated
+        // (its mips are supplied pre-compressed), so RenderAttachment is dropped for it; CopySrc/Dst
+        // stay for block upload/readback.
+        // WEBGPU-184: and neither is a SIGNED-NORMALIZED one. `rgba8snorm`/`rg8snorm` are sampleable
+        // and filterable in core WebGPU but NOT renderable, so asking for RenderAttachment is a
+        // validation error that invalidates the texture -- measured: "Texture usages
+        // TextureUsages(RENDER_ATTACHMENT) are not allowed on a texture of type Rgba8Snorm", after
+        // which every view and every write on it fails too. Dropping the flag is what makes the
+        // format usable at all; the cost is that GenerateMips2D's render-pass blit cannot run on
+        // one. MSR-018 still permits the resource's mip chain and explicit per-level uploads --
+        // the normal XNB content path -- without pretending an automatic generator exists.
+        const bool renderable = !compressed_ && !IsSignedNormalizedTextureFormatEXT(wgpuFormat_);
+        descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst |
+                           WGPUTextureUsage_CopySrc |
+                           (renderable ? WGPUTextureUsage_RenderAttachment : WGPUTextureUsage_None);
+        descriptor.dimension = WGPUTextureDimension_2D;
+        descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
+        descriptor.format = wgpuFormat_;
+        descriptor.mipLevelCount = static_cast<std::uint32_t>(mipLevels_);
+        descriptor.sampleCount = 1;
+        return wgpuDeviceCreateTexture(owner_->Device(), &descriptor);
+    }
+
+    WebGPUSampledTextureEXT WebGPUTextureRenderer::Sampled() const
+    {
+        if (owner_ != nullptr) queuedCycleEXT_ = owner_->QueuedCycleEXT();
+        return {view_, sampled_};
+    }
+
+    void WebGPUTextureRenderer::RenameForWriteEXT(const int writtenLevel)
+    {
+        WGPUTexture texture = CreateNativeTextureEXT("CNA WebGPU Texture2D (renamed for a write)");
+        if (texture == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create a Texture2D to write into");
+        WGPUTextureView view = wgpuTextureCreateView(texture, nullptr);
+        if (view == nullptr)
+        {
+            wgpuTextureRelease(texture);
+            throw std::runtime_error("CNA WebGPU: failed to create a Texture2D view to write into");
+        }
+        if (mipLevels_ > 1)
+        {
+            // The levels the write leaves alone keep their contents. Submitted here, so the copy
+            // reads the old texture before the queue write that follows lands in the new one.
+            WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(owner_->Device(), nullptr);
+            for (int level = 0; level < mipLevels_; ++level)
+            {
+                if (level == writtenLevel) continue;
+                WGPUTexelCopyTextureInfo source{};
+                source.texture = texture_;
+                source.mipLevel = static_cast<std::uint32_t>(level);
+                source.aspect = WGPUTextureAspect_All;
+                WGPUTexelCopyTextureInfo destination = source;
+                destination.texture = texture;
+                // A block-compressed level is copied at its block-aligned physical extent, as
+                // UpdatePixelsLevel writes it.
+                int levelW = std::max(1, width_ >> level);
+                int levelH = std::max(1, height_ >> level);
+                if (compressed_)
+                {
+                    levelW = (levelW + 3) / 4 * 4;
+                    levelH = (levelH + 3) / 4 * 4;
+                }
+                const WGPUExtent3D extent{static_cast<std::uint32_t>(levelW),
+                                          static_cast<std::uint32_t>(levelH), 1};
+                wgpuCommandEncoderCopyTextureToTexture(encoder, &source, &destination, &extent);
+            }
+            WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, nullptr);
+            wgpuQueueSubmit(owner_->Queue(), 1, &commandBuffer);
+            wgpuCommandBufferRelease(commandBuffer);
+            wgpuCommandEncoderRelease(encoder);
+        }
+        // The queued commands hold the old texture through sampled_'s copies, and release it.
+        wgpuTextureViewRelease(view_);
+        wgpuTextureRelease(texture_);
+        texture_ = texture;
+        view_ = view;
+        sampled_ = std::make_shared<const WebGPUSampledResourceEXT>(texture_, view_);
+        queuedCycleEXT_ = 0;
+    }
+
     void WebGPUTextureRenderer::ReleaseDeviceObjectsEXT()
     {
         // The sampled_ handle is a shared_ptr a queued command may still hold; dropping this
@@ -1550,19 +1613,7 @@ namespace CNA::Internal::Renderers::WebGPU
     void WebGPUTextureRenderer::RecreateAfterDeviceLossEXT()
     {
         if (owner_ == nullptr || texture_ != nullptr) return;
-        WGPUTextureDescriptor descriptor{};
-        descriptor.label = StringView("CNA WebGPU Texture2D (recreated)");
-        const bool renderable = !compressed_ && !IsSignedNormalizedTextureFormatEXT(wgpuFormat_);
-        descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst |
-                           WGPUTextureUsage_CopySrc |
-                           (renderable ? WGPUTextureUsage_RenderAttachment : WGPUTextureUsage_None);
-        descriptor.dimension = WGPUTextureDimension_2D;
-        descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_),
-                                       static_cast<std::uint32_t>(height_), 1};
-        descriptor.format = wgpuFormat_;
-        descriptor.mipLevelCount = static_cast<std::uint32_t>(mipLevels_);
-        descriptor.sampleCount = 1;
-        texture_ = wgpuDeviceCreateTexture(owner_->Device(), &descriptor);
+        texture_ = CreateNativeTextureEXT("CNA WebGPU Texture2D (recreated)");
         if (texture_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to recreate a Texture2D after a device loss");
         view_ = wgpuTextureCreateView(texture_, nullptr);
@@ -1657,6 +1708,15 @@ namespace CNA::Internal::Renderers::WebGPU
         if (owner_ != nullptr) owner_->OrderExternalQueueWorkEXT();
         if (level < 0 || level >= mipLevels_ || rgba == nullptr || levelW <= 0 || levelH <= 0)
             throw std::invalid_argument("CNA WebGPU: invalid mip upload");
+        // ...and ahead of the commands queued but not yet encoded, which this renderer replays at
+        // the bind cycle's end. XNA issues a draw before the SetData that follows it, so an
+        // Immediate SpriteBatch sprite keeps the contents its texture had at its Draw
+        // (handoff.md 5.1): while a queued command samples this texture, the write goes to a
+        // fresh one and the command keeps the old -- the texture twin of STREETPERF-0004's buffer
+        // storage. A use count cannot tell here, because the binding cache holds the same
+        // reference as the commands, so Sampled() stamps the queue it was resolved in.
+        if (owner_ != nullptr && queuedCycleEXT_ == owner_->QueuedCycleEXT())
+            RenameForWriteEXT(level);
 
         WGPUTexelCopyTextureInfo destination{};
         destination.texture = texture_;
@@ -9173,6 +9233,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     // keeps native release strictly inside the device's lifetime.
     void WebGPURenderer::DiscardQueuedCommands()
     {
+        ++queuedCycleEXT_;
         drawOrder_.clear();
         clearCommands_.clear();
         markerCommands_.clear();  // WMG-0020: per bind cycle, exactly as the clears are.

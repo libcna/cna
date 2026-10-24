@@ -23,9 +23,10 @@
 //      therefore rasterized every sprite of the batch against the texture's FINAL contents. That
 //      divergence from XNA was CNA-wide rather than Vulkan-specific, and it was recorded as
 //      VULKAN-057 rather than papered over here. SOFTWARE-252 later made EasyGL flush each
-//      Immediate sprite from Draw; the renderers that still diverge are in handoff.md §5.1. Leg B
-//      reports the measurement and asserts only what Immediate must do regardless (draw every
-//      sprite, in place, in issue order).
+//      Immediate sprite from Draw. SDL_GPU and WEBGPU still replayed the batch after the upload
+//      until an upload to a texture a queued draw samples was ordered after that draw (SDL_GPU
+//      submits the queued work first, WEBGPU writes into a fresh texture), so leg B now asserts
+//      XNA's answer on every renderer.
 //
 //   3. What still discriminates the modes above the renderer is the device-level Immediate
 //      mutual exclusion: XNA coordinates every SpriteBatch on one GraphicsDevice and Immediate is
@@ -217,34 +218,15 @@ protected:
               "A Deferred: both sprites show the texture's FINAL contents, left=" +
                   Text(deferred[0]) + " right=" + Text(deferred[2]));
 
-        // B. Immediate. XNA submits each Draw as it is issued, so the first sprite would keep the
-        //    old colour; CNA's renderers cannot produce that, because they accumulate below the
-        //    SpriteBatch seam (see the header, and VULKAN-057). What Immediate must still do is
-        //    draw EVERY sprite, into its own destination rectangle, leaving the rest cleared --
-        //    this leg fails if the mode drops a sprite, duplicates one, or misplaces it.
+        // B. Immediate. XNA submits each Draw as it is issued, so the first sprite keeps the old
+        //    colour and the second shows the new one, each in its own quadrant.
         {
             const std::vector<Color> immediate =
                 MutateBetweenDraws(dev, SpriteSortMode::Immediate, kRed, kBlue);
-            const bool leftPainted  = !Is(immediate[0], kClear);
-            const bool rightPainted = !Is(immediate[2], kClear);
-            const bool uniform = QuadrantIs(immediate, 0, immediate[0]) &&
-                                 QuadrantIs(immediate, 2, immediate[2]);
-            check(leftPainted && rightPainted && uniform,
-                  "B Immediate: both sprites are drawn, each filling its own quadrant, left=" +
-                      Text(immediate[0]) + " right=" + Text(immediate[2]));
-
-            // The measurement itself, printed rather than asserted: asserting XNA's answer here
-            // would fail on the renderers that still defer, and asserting CNA's would cement the
-            // divergence. VULKAN-057 closed on the second arm of its acceptance -- the divergence
-            // was REFUSED, with the cost leg D below as its evidence. handoff.md §5.1 names the
-            // renderers that still print blue/blue; when a renderer's answer changes, change that
-            // entry, not this print.
-            std::printf("[INFO] mid-batch texture mutation under Immediate: left=%s right=%s "
-                        "(XNA gives red/blue; renderers that differ: handoff.md 5.1) -- "
-                        "Deferred gave %s/%s\n",
-                        Text(immediate[0]).c_str(), Text(immediate[2]).c_str(),
-                        Text(deferred[0]).c_str(), Text(deferred[2]).c_str());
-            std::fflush(stdout);
+            check(QuadrantIs(immediate, 0, kRed) && QuadrantIs(immediate, 2, kBlue),
+                  "B Immediate: the first sprite keeps the texture's contents at its Draw and the "
+                  "second shows the mutation, left=" + Text(immediate[0]) + " (want red) right=" +
+                      Text(immediate[2]) + " (want blue)");
         }
 
         // B2. Begin() records the sort mode, and the device-level Immediate mutual exclusion is

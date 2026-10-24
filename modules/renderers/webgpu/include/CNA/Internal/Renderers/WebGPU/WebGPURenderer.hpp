@@ -170,12 +170,23 @@ namespace CNA::Internal::Renderers::WebGPU
 
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
         [[nodiscard]] WGPUTextureView View() const override { return view_; }
-        [[nodiscard]] WebGPUSampledTextureEXT Sampled() const override { return {view_, sampled_}; }
+        /// The view a queued command binds; records that a command of the current queue holds it.
+        [[nodiscard]] WebGPUSampledTextureEXT Sampled() const override;
 
     private:
+        /// Allocates a native texture of this one's size, format, levels and usage.
+        [[nodiscard]] WGPUTexture CreateNativeTextureEXT(const char* label) const;
+        /// Moves this texture to a fresh native one holding the same contents except
+        /// @p writtenLevel, which the caller is about to write, and leaves the old one to the
+        /// queued commands that sample it.
+        void RenameForWriteEXT(int writtenLevel);
+
         WebGPURenderer* owner_ = nullptr;
         WGPUTexture texture_ = nullptr;
         WGPUTextureView view_ = nullptr;
+        /// The owner's queue (WebGPURenderer::QueuedCycleEXT) a command last resolved this
+        /// texture in; zero when no command of a queue has.
+        mutable std::uint64_t queuedCycleEXT_ = 0;
         /// Built once, at construction; handed to every deferred command that
         /// samples this texture so the native handles outlive this object when one does.
         std::shared_ptr<const WebGPUSampledResourceEXT> sampled_;
@@ -2002,6 +2013,17 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             if (frameEncoderEXT_ != nullptr && replayingEXT_ == 0) SubmitFrameEncoderEXT();
         }
+        /**
+         * @brief Identifies the commands queued since the last replay or discard.
+         *
+         * A queue write lands before even the commands not yet encoded, so a texture written while
+         * a command of this queue samples it is moved to a fresh native texture first
+         * (WebGPUTextureRenderer::RenameForWriteEXT): the command keeps the contents it was issued
+         * against, as XNA's draw does.
+         *
+         * @return The current queue's serial; it changes whenever the queue is consumed.
+         */
+        [[nodiscard]] std::uint64_t QueuedCycleEXT() const noexcept { return queuedCycleEXT_; }
         [[nodiscard]] WGPUInstance Instance() const { return instance_; }
 
         // WEBGPU-53/54: RenderTarget2D support (single-target only; MRT is WEBGPU-85/86/87).
@@ -2866,6 +2888,8 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUCommandEncoder frameEncoderEXT_ = nullptr;
         /// WEBGPUPERF-0006: non-zero while a replay records into the frame encoder.
         int replayingEXT_ = 0;
+        /// See QueuedCycleEXT(); advanced by DiscardQueuedCommands().
+        std::uint64_t queuedCycleEXT_ = 1;
         /// Drops the ordered stream and every family vector together, releasing the
         /// native references their commands hold. Called at the tail of a replay and, crucially,
         /// FIRST in the destructor -- these vectors are members, so left populated they would

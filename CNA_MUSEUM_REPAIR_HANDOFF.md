@@ -37,7 +37,7 @@ Fixed in this pass:
 | C API: presentation_parameters_init is not XNA's default (owner: match XNA) | `e460e0ed6` | full multi-tree CTest 12,542/12,563, the rest accounted for |
 | Pipeline 2 (TextureProcessor alias type; owner: XNA content type) | `671d8478e` | content pipeline 567 + 1 skip |
 | Pipeline 9 (XmlSerializer for Color, Rectangle, Point) | `bbed8c61e`, Sharp Runtime `f990d074` | genuine XNA under Wine: `../cna-demos/docs/repair-evidence/content/XmlColorRectangleOracle.cs` |
-| Pipeline 1 (nested names unique across the build; owner: build-wide like XNA) | `98aa655f2` and the coordinator commit after it | one asset's contexts share names; two nodes are resolved in node order with 1 or 2 workers and incrementally |
+| Pipeline 1 (nested names unique across the build; owner: build-wide like XNA) | `98aa655f2`, `419723275` | one asset's contexts share names; two nodes are resolved in node order with 1 or 2 workers and incrementally |
 | Pipeline 16, source half (owner: the documentation is enough) | none | the task sources stay in `modules/content-pipeline` |
 
 Already fixed before this pass, not changed: the TSan pending-pan teardown race. `594d7d328`

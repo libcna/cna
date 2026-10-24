@@ -3319,6 +3319,19 @@ namespace CNA::Internal::Renderers::SdlGpu
         return rt != nullptr ? rt->colorFormat : cube->colorFormat;
     }
 
+    void SdlGpuRenderer::SubmitQueuedSamplersEXT(
+        const std::shared_ptr<SdlGpuSampledTextureState>& state)
+    {
+        // Public SetData is chronological with queued draws, as RenderTarget2D's already is: XNA
+        // issues a draw before the SetData that follows it, so an Immediate SpriteBatch sprite
+        // keeps the contents its texture had at its Draw (handoff.md 5.1). This renderer replays
+        // the frame at submission while an upload goes out at once, so a draw queued before the
+        // upload is submitted first. Every queued command that samples a texture holds a copy of
+        // its state; an upload to a texture nothing has queued submits nothing.
+        if (framePending_ && state.use_count() > 1)
+            EnsureFrameRendered();
+    }
+
     void SdlGpuRenderer::FillExtraColorTargets(std::vector<SDL_GPUColorTargetInfo>& colorTargets,
                                                const PassSegment& segment, bool colorLoadedLater)
     {
@@ -11574,6 +11587,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             throw std::runtime_error(
                 "CNA SDL_GPU: Texture2D converted upload size does not match SDL_gpu's format size");
 
+        owner_->SubmitQueuedSamplersEXT(state_);
         SDL_GPUDevice* device = owner_->Device();
         const Uint32 sizeBytes = expectedUploadBytes;
 
@@ -11756,6 +11770,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                  static_cast<Uint32>(depth) * bytesPerTexel_;
         if (dataLength < 0 || static_cast<Uint32>(dataLength) < sizeBytes) return false;
 
+        owner_->SubmitQueuedSamplersEXT(state_);
         SDL_GPUDevice* device = owner_->Device();
         SDL_GPUTransferBufferCreateInfo transferInfo{};
         transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
@@ -11955,6 +11970,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
         if (dataLength < 0 || static_cast<Uint32>(dataLength) < sizeBytes) return false;
 
+        owner_->SubmitQueuedSamplersEXT(state_);
         SDL_GPUDevice* device = owner_->Device();
         SDL_GPUTransferBufferCreateInfo transferInfo{};
         transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
@@ -12034,6 +12050,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "format size");
         }
 
+        owner_->SubmitQueuedSamplersEXT(state_);
         SDL_GPUDevice* device = owner_->Device();
         SDL_GPUTransferBufferCreateInfo transferInfo{};
         transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;

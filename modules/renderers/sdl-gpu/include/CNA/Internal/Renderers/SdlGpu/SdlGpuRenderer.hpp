@@ -1726,6 +1726,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         // QueueTextureRelease path render targets already used.
         friend struct SdlGpuSampledTextureState;
         friend class SdlGpuEffectRenderer;
+        // Uploads to an ordinary texture submit the queued draws that sample it first.
+        friend class SdlGpuTextureRenderer;
+        friend class SdlGpuTextureCubeRenderer;
+        friend class SdlGpuTexture3DRenderer;
     public:
         /** @brief Vertex layout for the `sprite2d` pipeline: 3D position, UV, RGBA color (36 bytes). */
         struct SpriteVertex
@@ -3650,6 +3654,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         // on-demand-submit semantics. @p presenting is true only for Present(); any other flush
         // happens mid-frame, see the body.
         bool EnsureFrameRendered(bool presenting = false);
+        // Submits the queued frame when a queued command still samples the texture whose shared
+        // @p state is about to be written, so the write lands after every draw issued before it.
+        void SubmitQueuedSamplersEXT(const std::shared_ptr<SdlGpuSampledTextureState>& state);
         // (Re)creates depthStencilTexture_ if it does not already match the requested size.
         // depthStencilFormat_ is selected at construction/Reset, not here, since pipeline creation
         // needs a stable answer before any frame has rendered.

@@ -51,8 +51,8 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   `XmlSerializer` text for Color, Rectangle and Point (`bbed8c61e`, Sharp Runtime `f990d074` adds
   property members and document-order reads; oracle `../cna-demos/docs/repair-evidence/content/
   XmlColorRectangleOracle.cs`), and generated nested names chosen against the whole build:
-  `98aa655f2` shares one asset's names with the contexts `Convert` creates, and the coordinator
-  commit after it resolves two nodes that generated one name for different assets in node order,
+  `98aa655f2` shares one asset's names with the contexts `Convert` creates, and `419723275`
+  resolves two nodes that generated one name for different assets in node order,
   rebuilding the later node with the name reserved, whatever the worker count and under
   incremental builds. The pending-pan TSan race was already fixed by
   `594d7d328`. Checkpoint after all of it: full cmake-build-multi CTest 12,542 of 12,563 (the 21
@@ -61,6 +61,12 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   route, 719-ID sweeps SOFTWARE 670/1/45/3 and OPENGLES3 708/1/7/3 with the one failure a demo check
   corrected in demos `8855ae3` and then passing, and serial CTest 687 PASS/45 SKIP/0 FAIL/3 disabled
   (838 s); reports `../cna-demos/build/linux-full/reports/repair-museum-closure-*`.
+- handoff §5.1's one defect, `SpriteSortMode::Immediate` batched on `SDL_GPU` and `WEBGPU`: an
+  upload to a texture a queued draw samples is now ordered after that draw (SDL_GPU submits the
+  queued work first, WEBGPU writes Texture2D into a fresh texture), and
+  `EasyGL_SpriteBatch_SortModeSemantics` leg B asserts XNA's red/blue on SDL_GPU, WEBGPU,
+  OPENGLES3, OPENGL33, SOFTWARE and FNA3D. Reading for it found the WEBGPU cube/volume twin now in
+  §5.1.
 - DC-R1 (`51fb39d5a`, owner: implement): SDL_GPU binds a RenderTargetCube face in any slot of a
   target set. DC-R2 (`c7f6c68e5`, owner: all-or-none exact, refuse others): SDL_GPU applies a
   MultiSampleMask keeping every sample or none and refuses any other, and
@@ -108,7 +114,7 @@ incremental builds keep stale outputs.
 ### Exact next task
 
 The museum Pipeline Workshop items are all answered: 1 (build-wide nested names, `98aa655f2` and
-the coordinator commit after it), 9 (`bbed8c61e` on Sharp Runtime `f990d074`, measured against
+`419723275`), 9 (`bbed8c61e` on Sharp Runtime `f990d074`, measured against
 genuine XNA, demos `9598b43`) and 16 (owner: the documentation half is enough; the task sources
 stay in `modules/content-pipeline`). What remains needs a host this machine does not have: the
 three Windows/XNA platform validations (003, 101, 152) and the museum's own reruns of the entries
@@ -268,14 +274,14 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-- **`SpriteSortMode::Immediate` is batched on `SDL_GPU` and `WEBGPU`** (low priority). Both accept
-  the mode but defer its sprites, so a texture changed between two `Draw` calls of one Immediate
-  batch shows its new contents in both sprites. XNA draws each Immediate sprite with the state and
-  texture contents current at its `Draw`, so the first keeps the old contents. `OPENGLES3`
-  (EasyGL), `SOFTWARE` and `FNA3D` do. Reproducer: `EasyGL_SpriteBatch_SortModeSemantics` (on
-  `SDL_GPU` also `SdlGpu_CrossFamily_SpriteBatch_SortModeSemantics`, elsewhere the same program
-  with `CNA_GRAPHICS_RENDERER`); the test passes, and leg B's `[INFO]` line prints blue/blue where
-  XNA gives red/blue. Reproduced 2026-10-17.
+- **`WEBGPU`: a `TextureCube` or `Texture3D` `SetData` lands ahead of draws already queued in its
+  bind cycle** (found by reading the code on 2026-10-24, not reproduced). A queue write runs before
+  the next submission and a bind cycle is encoded only when it ends, so a draw queued before the
+  write samples the new contents, where XNA's keeps the old. `Texture2D` has the fix
+  (`WebGPUTextureRenderer::RenameForWriteEXT` writes into a fresh texture while a queued command
+  samples the old one), which also closed `SpriteSortMode::Immediate` drawing every sprite with its
+  texture's final contents on `SDL_GPU` and `WEBGPU`; `SDL_GPU` submits the queued work first for
+  all three texture kinds.
 
 ### 5.2 Limitations
 
