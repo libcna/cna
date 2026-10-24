@@ -193,18 +193,20 @@ def gather_folds(body_type, seed, lower, band, depth):
 
 
 def hem_weights(body_type):
-    """Torso weights for a top: below the waist the cloth follows both thighs, shared smoothly
-    across the front and back centre, so a bent hip lifts the hem instead of pushing the trousers
-    through it, and the hem neither tears between the legs nor stays behind."""
+    """Torso weights for a top: below the waist the front follows both thighs, shared smoothly
+    across the centre, so a raised knee lifts the hem instead of pushing the trousers through it,
+    and the hem neither tears between the legs nor stays behind. The back follows the pelvis, as the
+    trousers' waistband under it does: a thigh share there swung the back of the hem forward into
+    the waistband in a deep crouch (FemaleIdleFixShoe; plans/plan_avatar_acceptance.md AVA-08)."""
     tw = body.torso_weights(body_type)
     hip_y = rig.PROPORTIONS[body_type]["hip"][1]
     left, right = I["HipLeft"], I["HipRight"]
 
     def fn(p):
         w = tw(p)
-        # Only below the hip joints: cloth above them would swing inward as a thigh rises. The
-        # front follows the thighs most (a raised knee lifts it); the back hangs from the seat.
-        share = 0.9 * smoothstep(hip_y + 0.01, hip_y - 0.05, p[1]) * (0.45 + 0.55 * smoothstep(-0.08, 0.04, p[2]))
+        # Only below the hip joints: cloth above them would swing inward as a thigh rises. Only the
+        # front follows the thighs (a raised knee lifts it).
+        share = 0.9 * smoothstep(hip_y + 0.01, hip_y - 0.05, p[1]) * smoothstep(-0.08, 0.04, p[2])
         if share <= 0.0:
             return w
         w = {k: v * (1.0 - share) for k, v in w.items()}
@@ -861,10 +863,13 @@ def top(body_type, style):
     elif style == "top_tank":
         # The body up to the chest, then a scooped neckline and armholes, with flat straps.
         sections = body.torso_sections(body_type, 0.017)
-        c, rx, rz, n = sections[1]
-        rows = [(add(c, (0.0, -0.03, 0.0)), rx + 0.028, rz + 0.028, n)] + sections[2:8]
+        # A little ease round the waist and hips: in a deep crouch the trousers' or skirt's top
+        # moves out under it (plans/plan_avatar_acceptance.md AVA-08).
+        eased = body.torso_sections(body_type, 0.023)
+        c, rx, rz, n = eased[1]
+        rows = [(add(c, (0.0, -0.03, 0.0)), rx + 0.028, rz + 0.028, n)] + eased[2:4] + sections[4:8]
         main.append(body.section_loft(rows, 40, tw, adjust=top_clearance(body_type, 0.017)))
-        main.append(_hem(body_type, 0.017, 0.028, 0.03, 0.005))
+        main.append(_hem(body_type, 0.023, 0.028, 0.03, 0.005))
         c8, rx8, rz8, n8 = sections[8]
         c7 = sections[7][0]
         rim = []
@@ -1591,13 +1596,15 @@ def _skirt(body_type, length_offset, flare, texture, pleats=0, seed=0):
     source = {q: edge for row in lining for q, edge in zip(row, rows[0])}
     rows = list(reversed(lining)) + rows
 
+    tw = body.torso_weights(body_type)
+
     def skirt(pt):
         k = 0.95 * smoothstep(hip_y + 0.005, hip_y - 0.06, pt[1])
         s = smoothstep(-0.07, 0.07, pt[0])
-        w = {I["BackLower"]: 1.0 - k}
+        w = {j: v * (1.0 - k) for j, v in tw(pt).items()}
         if k > 0:
-            w[I["HipLeft"]] = k * s
-            w[I["HipRight"]] = k * (1.0 - s)
+            w[I["HipLeft"]] = w.get(I["HipLeft"], 0.0) + k * s
+            w[I["HipRight"]] = w.get(I["HipRight"], 0.0) + k * (1.0 - s)
         return w
     main.append(Mesh().grid(rows, lambda q, v, u: skirt(source.get(q, q)), uv_seam=True))
     return [(main, "bottom", texture, (1.0, 1.0, 1.0))]

@@ -828,7 +828,11 @@ per-user models. A server catalog pack is only the update path for a catalog a c
   move with it under the ear controls, but keep the first shape's tilt on the others; rings are legible only in the editor's
   Hands view; makeup does not follow the eye expressions, except eyeliner, which has closed-eye
   tiles; a preset authored for one body lets a planted foot drift 1-3 cm on the other; in the
-  deepest crouch (FemaleIdleFixShoe) a few millimetres of trouser front can show above a shirt hem.
+  deepest crouch (FemaleIdleFixShoe) the tops of the trouser legs and a skirt's flare come a few
+  millimetres through some tops at the sides, most on the tight tank top (at most 16 vertices of a
+  top's covered waist over jeans, shorts or joggers and 21 over a skirt, pinned by
+  `TheTrousersStayUnderTheTopInTheDeepestCrouch`; before revision 5 jeans showed through the back of
+  the tank top and every skirt through the back of every top, in patches).
 - **Porting impact:** none; functional compatibility does not depend on likeness.
 - **Future work:** a later revision or catalog version.
 

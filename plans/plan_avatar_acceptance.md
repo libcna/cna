@@ -19,7 +19,7 @@ Task ids `AVA-*`; one task, one commit.
 | AVA-05 | One Avatar v3 acceptance command | done |
 | AVA-06 | Earrings fitted to every ear shape | done |
 | AVA-07 | Planted-foot drift across bodies, heights and proportions | open |
-| AVA-08 | Deep-crouch clothing show-through | open |
+| AVA-08 | Deep-crouch clothing show-through | done |
 | AVA-09 | Severe hair/headwear intersections | open |
 | AVA-10 | Final acceptance run and report | open |
 
@@ -173,3 +173,31 @@ ears, as large as the defect, so the generator, which knows each shape exactly, 
   hangs from its lobe, the long-lobe stud sits at the lobe); goldens updated.
 
 `CnaGamerServicesTests` 740: 739 passed, 1 allowed skip (OPENGLES3).
+
+## AVA-08 deep-crouch show-through
+
+Measured on HEAD as the existing inner-layer test measures (in the lower back's frame, a vertex of
+the bottom the top covers in the bind pose that the top lies inward of in a pose): over every
+preset's key frames only FemaleIdleFixShoe's deepest frames let a bottom through, and far more than
+"a few millimetres of trouser front": jeans through the back of the tank top in patches (103 of its
+covered waist vertices female, 89 male; up to 6-15 mm out) and every skirt through the back of every
+top (33-76). The other tops over trousers: 1-13 vertices.
+
+- A top's hem gave the thighs a 0.4 share at the back below the hips; under a deep hip flexion that
+  swings the back of the hem forward into the waistband, which follows the pelvis. Raising the share
+  made it worse (171); now only the front follows the thighs (`garments.hem_weights`).
+- A skirt's weights were the pelvis alone plus the thighs' share; a top's start from the torso's, hip
+  share included, so the two moved apart. Skirts now start from the torso's weights (`_skirt`); the
+  body under them is unchanged (6-9 vertices before and after). Making the skirt's back follow the
+  pelvis, or starting its thigh share lower, was worse (61-83).
+- The tank top, lofted tight from the body, has 6 mm more ease round the waist and hips.
+
+Catalog v3 revision 5 (not yet released): 56 top and 8 skirt models change, nothing else.
+`TheTrousersStayUnderTheTopInTheDeepestCrouch` (every top over jeans, shorts and joggers, budget 18,
+and over two skirts, budget 24, both bodies, the two worst frames) finds at most 16 and 21; on the
+pre-fix catalog it finds 105. The deep-crouch close-ups of every top over jeans and over the
+pleated skirt were compared before and after on OPENGL33; what remains is a few-millimetre sliver at
+the side of a few tops. The back of a top's hem now rides up off the seat in that crouch and shows
+the waistband, as cloth does. Pinned assembly digests re-pinned (three of the four wear a top or a
+skirt that changed). `CnaGamerServicesTests` 741: 740 passed, 1 allowed skip (OPENGLES3); visual
+regression goldens updated where the crouch views changed.

@@ -113,13 +113,16 @@ are revision 3's: `avatar_audit.py` measured the same on 2026-10-24):
 Review it with the focus sheets of `avatar_review.py`: `eyes`, `mouth`, `temples`, `profiles`,
 `hands` and `presetgroups`.
 
-## Catalog v3 revision 5 (2026-10-25): earrings on every ear
+## Catalog v3 revision 5 (2026-10-25): earrings on every ear, hems in a crouch
 
-Every entry and every model of revision 4 is unchanged. Each ear shape now names where an earring
+Every entry is unchanged, and every model but the tops and skirts. Each ear shape now names where an earring
 hangs on it (`lobes`: the bottom of its lobe, on the front of the lobe's surface), and the
 assembly carries earrings, made for the first shape's lobes, to the shape worn: before, they hung
 5 mm under a small ear's lobe and 11 mm up inside a long lobe (`plans/plan_avatar_acceptance.md`
-AVA-06).
+AVA-06). Below the hips only the front of a top's hem follows the thighs; the back follows the
+pelvis, as the trousers' waistband under it does, so a deep crouch lifts the back of the hem off the
+seat instead of swinging it into the waistband; a skirt's weights start from the torso's, hips
+included, as a top's do, and the tank top has 6 mm more ease round the waist (AVA-08).
 
 ## Proportion targets
 

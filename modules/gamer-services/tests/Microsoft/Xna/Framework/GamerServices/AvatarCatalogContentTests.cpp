@@ -696,6 +696,150 @@ TEST(AvatarCatalogContentTest, AnInnerLayerStaysUnderTheOneOverItInEveryPose) {
     EXPECT_EQ(exposed, 0) << "first: " << firstExposed;
 }
 
+// plans/plan_avatar_acceptance.md AVA-08: in the deepest crouch (FemaleIdleFixShoe) the trousers stay
+// under the top over them. The back of a top's hem followed the thighs and swung forward into the
+// waistband: jeans showed through the back of the tank top in patches (103 of the waist vertices it
+// covers on the female body, 89 on the male), and every skirt through the back of every top (33-76:
+// the skirt followed the thighs from the pelvis alone, without the hips' share the top has). Seen in
+// the lower back's frame, a vertex of the bottom the top covers in the bind pose is through it in a
+// pose when the top lies inward of it and none of it outward. The tops of the trouser legs and a
+// skirt's flare still come a few millimetres through some tops at the sides; the budgets keep that to
+// a handful of vertices.
+TEST(AvatarCatalogContentTest, TheTrousersStayUnderTheTopInTheDeepestCrouch) {
+    using Microsoft::Xna::Framework::Matrix;
+    using Microsoft::Xna::Framework::Quaternion;
+    const auto manifest = catalog();
+    const auto& library = Avatars::clipLibrary();
+    const auto& parents = Avatars::parentBones();
+    const auto crouch = std::ranges::find(library.clips, std::string("FemaleIdleFixShoe"), &Avatars::AvatarClip::name);
+    ASSERT_NE(crouch, library.clips.end());
+    const int backLower = Avatars::boneIndex("BackLower"), hipLeft = Avatars::boneIndex("HipLeft");
+    // Whether the horizontal ray from o along d crosses triangle (a, b, c) within `reach`.
+    auto hits = [](const Vector3& o, const Vector3& d, const std::array<Vector3, 3>& t, float reach) {
+        const Vector3 e1 = t[1] - t[0], e2 = t[2] - t[0], pv = Vector3::Cross(d, e2);
+        const float det = Vector3::Dot(e1, pv);
+        if (std::fabs(det) < 1e-12f) return false;
+        const Vector3 tv = o - t[0];
+        constexpr float slack = 1e-3f;
+        const float u = Vector3::Dot(tv, pv) / det;
+        if (u < -slack || u > 1.0f + slack) return false;
+        const Vector3 qv = Vector3::Cross(tv, e1);
+        const float v = Vector3::Dot(d, qv) / det;
+        if (v < -slack || u + v > 1.0f + slack) return false;
+        const float at = Vector3::Dot(e2, qv) / det;
+        return at > -0.001f && at < reach;
+    };
+    // A top's triangles near the hips, filed by height in 5 mm rows so a ray meets only its own row.
+    struct Cloth {
+        float base = 0.0f;
+        std::vector<std::vector<std::array<Vector3, 3>>> rows;
+        void add(const std::array<Vector3, 3>& t) {
+            const float low = std::min({t[0].Y, t[1].Y, t[2].Y}) - 1e-3f, high = std::max({t[0].Y, t[1].Y, t[2].Y}) + 1e-3f;
+            for (int row = std::max(0, row_of(low)); row <= std::min(static_cast<int>(rows.size()) - 1, row_of(high)); ++row)
+                rows[static_cast<std::size_t>(row)].push_back(t);
+        }
+        int row_of(float y) const { return static_cast<int>(std::floor((y - base) / 0.005f)); }
+    };
+    auto reaches = [&](const Cloth& cloth, const Vector3& o, const Vector3& d, float reach) {
+        const int row = cloth.row_of(o.Y);
+        if (row < 0 || row >= static_cast<int>(cloth.rows.size())) return false;
+        return std::ranges::any_of(cloth.rows[static_cast<std::size_t>(row)], [&](const auto& t) { return hits(o, d, t, reach); });
+    };
+    int pairs = 0;
+    std::map<int, std::pair<int, std::string>> worst;   // budget -> (worst count, pair)
+    for (int body = 0; body < 2; ++body) {
+        for (const auto& [bottomName, budget] : std::vector<std::pair<const char*, int>>{
+                 {"bottom_jeans", 18}, {"bottom_shorts", 18}, {"bottom_joggers", 18}, {"bottom_skirt", 24}, {"bottom_denimskirt", 24}}) {
+            const auto* bottom = &*std::ranges::find(manifest->items, std::string(bottomName), &Avatars::CatalogItem::name);
+            const auto trousers = Avatars::parseAvatarGlb(Avatars::resolveAsset(*manifest, bottom->assets[body])->view);
+            std::array<Vector3, Avatars::BoneCount> bind{};
+            for (int bone = 0; bone < Avatars::BoneCount; ++bone)
+                bind[bone] = (parents[bone] < 0 ? Vector3::Zero : bind[parents[bone]]) + trousers.bindTranslations[bone];
+            const float hipY = bind[hipLeft].Y;
+            const Vector3 axis = bind[backLower];
+            // Each frame's skinning into the lower back's frame (a bent avatar measured upright).
+            std::vector<std::array<Matrix, Avatars::BoneCount>> frames;
+            for (const double fraction : {0.25, 0.65}) {
+                std::array<Quaternion, Avatars::BoneCount> rotations;
+                Vector3 root;
+                Avatars::sampleClip(*crouch, crouch->duration * fraction, rotations, root);
+                std::array<Matrix, Avatars::BoneCount> world, skin;
+                for (int bone = 0; bone < Avatars::BoneCount; ++bone) {
+                    const Matrix local = Matrix::CreateFromQuaternion(rotations[bone]) *
+                                         Matrix::CreateTranslation(bone == 0 ? root : trousers.bindTranslations[bone]);
+                    world[bone] = parents[bone] < 0 ? local : local * world[parents[bone]];
+                    skin[bone] = Matrix::CreateTranslation(-bind[bone]) * world[bone];
+                }
+                const Matrix toTorso = Matrix::Invert(skin[backLower]);
+                for (auto& m : skin) m = m * toTorso;
+                frames.push_back(skin);
+            }
+            auto posed = [](const Avatars::AvatarVertex& v, const std::array<Matrix, Avatars::BoneCount>* skin) {
+                if (!skin) return v.position;
+                const float w[4]{v.weights.X, v.weights.Y, v.weights.Z, v.weights.W};
+                Vector3 p = Vector3::Zero;
+                for (int k = 0; k < 4; ++k) p += Vector3::Transform(v.position, (*skin)[v.joints[k]]) * w[k];
+                return p;
+            };
+            // The trousers' cloth round the waist and hips.
+            std::vector<const Avatars::AvatarVertex*> waist;
+            for (const auto& primitive : trousers.primitives)
+                if (primitive.tint == "bottom")
+                    for (const auto& v : primitive.vertices)
+                        if (std::fabs(v.position.Y - hipY) < 0.10f) waist.push_back(&v);
+            for (const auto* top : manifest->itemsOf(AvatarItemSlot::Top)) {
+                const auto glb = Avatars::parseAvatarGlb(Avatars::resolveAsset(*manifest, top->assets[body])->view);
+                auto cloth = [&](const std::array<Matrix, Avatars::BoneCount>* skin) {
+                    Cloth triangles;
+                    triangles.base = hipY - 0.40f;
+                    triangles.rows.resize(160);
+                    for (const auto& primitive : glb.primitives) {
+                        if (primitive.tint != "top") continue;
+                        for (std::size_t t = 0; t + 2 < primitive.indices.size(); t += 3) {
+                            const auto& a = primitive.vertices[primitive.indices[t]];
+                            if (std::fabs(a.position.Y - hipY) > 0.20f) continue;
+                            triangles.add({posed(a, skin), posed(primitive.vertices[primitive.indices[t + 1]], skin),
+                                           posed(primitive.vertices[primitive.indices[t + 2]], skin)});
+                        }
+                    }
+                    return triangles;
+                };
+                const auto rest = cloth(nullptr);
+                std::vector<const Avatars::AvatarVertex*> covered;
+                for (const auto* v : waist) {
+                    Vector3 d(v->position.X - axis.X, 0.0f, v->position.Z - axis.Z);
+                    if (d.Length() < 1e-4f) continue;
+                    d.Normalize();
+                    if (reaches(rest, v->position, d, 0.08f)) covered.push_back(v);
+                }
+                if (covered.empty()) continue;
+                ++pairs;
+                for (const auto& frame : frames) {
+                    const auto triangles = cloth(&frame);
+                    int through = 0;
+                    for (const auto* v : covered) {
+                        const Vector3 o = posed(*v, &frame);
+                        Vector3 d(o.X - axis.X, 0.0f, o.Z - axis.Z);
+                        if (d.Length() < 1e-4f) continue;
+                        d.Normalize();
+                        if (!reaches(triangles, o, d, 0.08f) && reaches(triangles, o, -d, 0.06f)) ++through;
+                    }
+                    auto& [most, pair] = worst[budget];
+                    if (through > most) {
+                        most = through;
+                        pair = top->name + " over " + bottomName + (body ? " (male)" : " (female)");
+                    }
+                }
+            }
+        }
+    }
+    EXPECT_GT(pairs, 250);
+    for (const auto& [budget, found] : worst) {
+        RecordProperty("worstWithin" + std::to_string(budget), found.second + ": " + std::to_string(found.first));
+        EXPECT_LE(found.first, budget) << found.second;
+    }
+}
+
 TEST(AvatarCatalogContentTest, ModelsShareTheTexturesTheyHaveInCommon) {
     // Two avatars in different clothes decode each texture they share (skin, hair, fabrics) once.
     auto a = dressed(0), b = dressed(1);

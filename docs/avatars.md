@@ -206,7 +206,9 @@ developer's disk are ignored.
 reworked their art, revision 4 refined it (sculpted lids, lips and brows with the face's paint on
 the head's own facets, face shapes that differ, hair tucked behind the ears, clean beard edges),
 and **revision 5** (manifest `"revision": 5`), the current content of the same version, names each
-ear shape's lobes, so earrings hang from the lobe of the shape worn. A revision may improve the art of
+ear shape's lobes, so earrings hang from the lobe of the shape worn, and keeps trousers and skirts
+under the top in the deepest crouch (only the front of a top's hem follows the thighs, skirts take
+the hips' share the top has, the tank top has a little more ease). A revision may improve the art of
 every item and add entries, but every first-release id keeps its kind and its description format
 1 (hair 1–10, tops 20–28, bottoms 40–45, shoes 60–64, glasses 80–83, hats 100–104, facial hair
 120–123), and everything a revision adds is marked `"format": 3`, so only a format 3 description
