@@ -446,6 +446,12 @@ namespace CNA::Internal::Renderers::DirectX9
         [[nodiscard]] bool ShadesPbrEffectEXT() const override { return device_ != nullptr; }
         /** @brief CNA's SM3 skinned PBR shaders. @return Whether a device exists. */
         [[nodiscard]] bool ShadesSkinnedPbrEffectEXT() const override { return device_ != nullptr; }
+        /** @brief `D3DRS_MULTISAMPLEMASK`. @return Supported with a device. */
+        [[nodiscard]] CNA::RendererFeatureSupport MultiSampleMaskSupportEXT() const override
+        {
+            return device_ != nullptr ? CNA::RendererFeatureSupport::Supported
+                                      : CNA::RendererFeatureSupport::Unsupported;
+        }
         /// CNA's SM3 stock-extension and PBR shaders sample the full shared shadow contract:
         /// single/cascaded directional maps plus point-cube and spot-map shadows.
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override

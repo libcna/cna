@@ -16,8 +16,8 @@ it adds `CNA_CNB_MODEL_CHUNK_CAMERAS`, the versioned `CNA_CnbModelCamera` and fi
 `cna_cnb_model_add_camera`, `_get_camera_count`, `_get_camera`, `_get_camera_name_size` and
 `_copy_camera_name`, for the glTF cameras a compiled model now carries (CNA-DEMOS-ISSUE-023). It
 adds the detailed renderer features `CNA_RENDERER_FEATURE_SAMPLER_LEVEL_OF_DETAIL_BIAS` (32),
-`_PBR_EFFECT_SHADING` (33) and `_SKINNED_PBR_EFFECT_SHADING` (34), and
-`CNA_RENDERER_FEATURE_MAXIMUM` moves to 34 (CNA-DEMOS-ISSUE-006). The library exports 3,212 symbols. Purely additive: no existing route, constant, structure field or
+`_PBR_EFFECT_SHADING` (33) and `_SKINNED_PBR_EFFECT_SHADING` (34) (CNA-DEMOS-ISSUE-006), and
+`_MULTI_SAMPLE_MASK` (35, CNA-DEMOS DC-R2); `CNA_RENDERER_FEATURE_MAXIMUM` moves to 35. The library exports 3,212 symbols. Purely additive: no existing route, constant, structure field or
 error rule changes, but a binding that requires the new routes or names needs this minor.
 
 ### Previous ABI 0.49.0

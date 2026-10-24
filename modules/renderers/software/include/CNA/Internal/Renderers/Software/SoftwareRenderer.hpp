@@ -1601,6 +1601,11 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] bool ShadesPbrEffectEXT() const override { return true; }
         /** @brief The same BRDF after CPU skinning. @return True. */
         [[nodiscard]] bool ShadesSkinnedPbrEffectEXT() const override { return true; }
+        /** @brief The four-sample colour plane's per-sample writes. @return Supported. */
+        [[nodiscard]] CNA::RendererFeatureSupport MultiSampleMaskSupportEXT() const override
+        {
+            return CNA::RendererFeatureSupport::Supported;
+        }
         /** @brief Classifies formats whose complete CPU texture path is implemented. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
             int surfaceFormat) const override;

@@ -231,6 +231,7 @@ TEST(RendererCapabilityDefaultsTest, LodBiasAndPbrShadingDefaultToUnsupported)
     EXPECT_FALSE(renderer.AppliesSamplerLevelOfDetailBiasEXT());
     EXPECT_FALSE(renderer.ShadesPbrEffectEXT());
     EXPECT_FALSE(renderer.ShadesSkinnedPbrEffectEXT());
+    EXPECT_EQ(renderer.MultiSampleMaskSupportEXT(), CNA::RendererFeatureSupport::Unsupported);
 }
 
 TEST(RendererCapabilityDefaultsTest, ShaderDialectOrdinalsArePublicAndStableAndDefaultToUnknown)

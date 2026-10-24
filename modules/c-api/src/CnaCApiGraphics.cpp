@@ -281,6 +281,8 @@ static_assert(
     static_cast<uint32_t>(CNA::RendererFeature::PbrEffectShading) ==
         CNA_RENDERER_FEATURE_PBR_EFFECT_SHADING &&
     static_cast<uint32_t>(CNA::RendererFeature::SkinnedPbrEffectShading) ==
+        CNA_RENDERER_FEATURE_SKINNED_PBR_EFFECT_SHADING &&
+    static_cast<uint32_t>(CNA::RendererFeature::MultiSampleMask) ==
         CNA_RENDERER_FEATURE_MAXIMUM &&
     static_cast<uint32_t>(CNA::RendererFeature::Count) ==
         CNA_RENDERER_FEATURE_MAXIMUM + UINT32_C(1));

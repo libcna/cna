@@ -2052,6 +2052,12 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] bool ShadesPbrEffectEXT() const override { return true; }
         /** @brief EasyGL's skinned PBR program. @return True. */
         [[nodiscard]] bool ShadesSkinnedPbrEffectEXT() const override { return true; }
+        /** @brief `glSampleMaski` where the context has it (GL 3.2, ES 3.1). @return The answer. */
+        [[nodiscard]] CNA::RendererFeatureSupport MultiSampleMaskSupportEXT() const override
+        {
+            return supportsSampleMask_ ? CNA::RendererFeatureSupport::Supported
+                                       : CNA::RendererFeatureSupport::Unsupported;
+        }
         /// VULKAN-164: plans/plan_graphics.md Task 863 gave this renderer
         /// `BindTexture3D`, and `EasyGL_ShaderEffect_Texture3D` reads two different slices of one
         /// bound volume through a `sampler3D`.

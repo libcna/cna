@@ -3606,6 +3606,15 @@ namespace Microsoft::Xna::Framework::Graphics
             CNA::RendererFeature::SkinnedPbrEffectShading,
             FeatureSupport(renderer.ShadesSkinnedPbrEffectEXT()),
             "Unsupported here means SkinnedPbrEffect draws an untextured, unlit fallback.");
+        {
+            const CNA::RendererFeatureSupport maskSupport = renderer.MultiSampleMaskSupportEXT();
+            profile.SetFeature(
+                CNA::RendererFeature::MultiSampleMask, maskSupport,
+                maskSupport == CNA::RendererFeatureSupport::Restricted
+                    ? "Only a mask that keeps every sample or none of the target's samples is "
+                      "applied; any other mask is refused with NotSupportedException."
+                    : "");
+        }
 
         const auto dialect = renderer.GetShaderDialectEXT();
         profile.SetFeature(CNA::RendererFeature::ShaderDialectGlslDesktop,

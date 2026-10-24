@@ -42,7 +42,8 @@ namespace CNA
             RendererFeature::BaseInstanceDrawing,
             RendererFeature::SamplerLevelOfDetailBias,
             RendererFeature::PbrEffectShading,
-            RendererFeature::SkinnedPbrEffectShading
+            RendererFeature::SkinnedPbrEffectShading,
+            RendererFeature::MultiSampleMask
         };
 
         constexpr std::array Limits = {
@@ -269,6 +270,7 @@ namespace CNA
             case RendererFeature::SamplerLevelOfDetailBias: return "SamplerLevelOfDetailBias";
             case RendererFeature::PbrEffectShading: return "PbrEffectShading";
             case RendererFeature::SkinnedPbrEffectShading: return "SkinnedPbrEffectShading";
+            case RendererFeature::MultiSampleMask: return "MultiSampleMask";
             case RendererFeature::Count: break;
         }
         return "UnknownRendererFeature";
@@ -344,6 +346,9 @@ namespace CNA
             case RendererFeature::SkinnedPbrEffectShading:
                 return "SkinnedPbrEffect draws with its material maps and lighting rather than an "
                        "untextured, unlit fallback.";
+            case RendererFeature::MultiSampleMask:
+                return "MultiSampleMask selects which samples of a multisampled target a draw "
+                       "writes.";
             case RendererFeature::Count: break;
         }
         return "Invalid detailed renderer feature identity.";

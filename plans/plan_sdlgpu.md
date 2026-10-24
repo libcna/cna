@@ -25,8 +25,10 @@ See CNA_MUSEUM_REPAIR_HANDOFF.md for complete evidence and consumer revalidation
 > graphics family is observably equivalent or is
 > one of three rigorously documented SDL_gpu API limits: arbitrary `MultiSampleMask`, exact
 > half-rate `PresentInterval::Two`, and `OcclusionQuery`. Exact half-rate presentation and
-> occlusion queries are the two remaining EasyGL capabilities SDL_gpu cannot express;
-> `MultiSampleMask` is unimplemented in EasyGL too. SDL GPU reports the query limitation and
+> occlusion queries are EasyGL capabilities SDL_gpu cannot express, and so is an arbitrary
+> `MultiSampleMask`, which EasyGL applies through `glSampleMaski`; since CNA-DEMOS DC-R2
+> (2026-10-24) SDL GPU applies a mask keeping every sample or none exactly, refuses any other, and
+> reports `RendererFeature::MultiSampleMask` as Restricted. SDL GPU reports the query limitation and
 > refuses construction instead of fabricating results. `SDLGPU-92` now gives every built-in shader
 > a pinned ShaderCross route to native D3D12/Metal formats while preserving direct SPIR-V on
 > Vulkan. `SDLGPU-93` now routes compiled XNA effects through that same static compiler. However,
@@ -1004,8 +1006,8 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   surface and the extensively exercised windowless D3D12 surface, no remediable classic-XNA parity
   gap remains. The only known EasyGL capability differences are exact half-rate
   `PresentInterval::Two` and `OcclusionQuery`, both rigorously documented underlying SDL_gpu API
-  limits; non-default `MultiSampleMask` is an SDL_gpu limit but not an EasyGL difference because
-  EasyGL does not implement it either.
+  limits; an arbitrary `MultiSampleMask` is a third, which EasyGL applies (`glSampleMaski`) and
+  SDL GPU, since DC-R2, applies only when it keeps every sample or none, refusing any other.
 
   `SDLGPU-94` subsequently found and used the installed headless Mutter DRI3 route, so the D3D12
   part of this checkpoint is superseded; only `SDLGPU-95` and `SDLGPU-96` remain open.
@@ -1806,7 +1808,7 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | Final SDL GPU verification | **194/194** registered native SDL integration CTests pass sequentially from the post-`SDLGPU-133` tree in 183.71 seconds, including all **115** parity-labelled registrations. This single current sweep supersedes the prior 191 plus separately-run 192nd–194th evidence. The current focused renderer aggregate remains **54/54**; the compiled-effect subset is **45/45** on native Vulkan, focused ASan Vulkan and headless D3D12; the strict texture-filter oracle is **70/70** on Vulkan and D3D12; the depth-format contract is **17/17** on both; sampler/pipeline retention remains bounded and exact at **5/5** and **71/71**; and `SDLGPU-94` provides **75/75** real D3D12 swapchain checks across eight presentation/acquire/resize/recovery executions. |
 | Validation | SDL GPU debug mode is enabled. All 194 integration registrations make `Validation Error`, `Validation Warning`, bare `VUID-`, `D3D12 ERROR:` or `D3D12 WARNING:` output fatal; the new format, native focused presentation and eight real-window D3D12 runs emitted none. |
 | Final EasyGL/parity oracle | **33/33** registered EasyGL oracle CTests pass under Xvfb/llvmpipe. The two `SDLGPU-133`-modified sources additionally pass directly under a fresh isolated Xvfb (**5/5 + 2/2** pixel checks). The direct corpus executes all 32 shared sources under both renderers: 27 frames satisfy the strict byte policy, two use renderer-local discriminating invariants, and three stay within fixed measured line/edge coverage budgets. |
-| Exact remaining EasyGL differences | Exact half-rate `PresentInterval::Two` (`⛔`) and `OcclusionQuery` (`SDLGPU-80`, `⛔`). EasyGL's non-default `MultiSampleMask` is also unimplemented, so it is an SDL_gpu limitation but not an EasyGL difference. SDL GPU intentionally differs from the ten XNA/FNA-invalid findings in `EASYGL-PARITY-1`–`10`; findings 4 and 7 are two EasyGL examples of the same bound-FBO backbuffer-readback defect. |
+| Exact remaining EasyGL differences | Exact half-rate `PresentInterval::Two` (`⛔`) and `OcclusionQuery` (`SDLGPU-80`, `⛔`). An arbitrary `MultiSampleMask` is an EasyGL difference too: EasyGL applies it, SDL GPU applies only a mask keeping every sample or none and refuses the rest (DC-R2). SDL GPU intentionally differs from the ten XNA/FNA-invalid findings in `EASYGL-PARITY-1`–`10`; findings 4 and 7 are two EasyGL examples of the same bound-FBO backbuffer-readback defect. |
 
 The first attempted baseline used the suite's historical hard-coded `SDL_VIDEODRIVER=x11` and
 could not reach the inaccessible host display: early programs skipped and 47 tests failed for the
@@ -1865,7 +1867,7 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | Logical resolution/transforms/letterbox | Explicit default viewport and transforms | Explicit physical/logical transforms | `=` — physical rectangle, all modes, HiDPI transforms, zero-size safety, SpriteBatch projection and real resize pass; `SDLGPU-68` |
 | Blend factors/functions/BlendFactor | Full separate RGB/A state | Complete immutable pipeline state and per-draw dynamic factor | `=` — all 13 factors in all four roles, all five equations for RGB/A, separate fields and A→B→A are pixel-verified; `SDLGPU-58` |
 | ColorWriteChannels | Four slot-aligned masks | Four slot-aligned immutable pipeline masks | `=` — every slot-0 mask value plus distinct four-MRT-slot masks and cache restoration pass; `SDLGPU-58` |
-| MultiSampleMask | EasyGL also documents non-default masks as unimplemented | SDL receives the value but cannot apply it | `⛔` — SDL 3.5 requires `sample_mask=0` and `enable_mask=false`; arbitrary-shader emulation cannot preserve sample coverage/depth/stencil side effects; `SDLGPU-58` |
+| MultiSampleMask | Arbitrary masks through `glSampleMaski` (GL 3.2, ES 3.1) | A mask keeping every sample draws normally; one keeping none drops the draw, which writes nothing, exactly; any other is refused with `NotSupportedException`, and `RendererFeature::MultiSampleMask` reports Restricted | `⛔` for arbitrary masks — SDL 3.5 requires `sample_mask=0` and `enable_mask=false`; arbitrary-shader emulation cannot preserve sample coverage/depth/stencil side effects; `SDLGPU-58`, CNA-DEMOS DC-R2 |
 | Depth compare/write | All comparisons | Complete immutable depth state | `=` — shared 8×3 signature matrix, exact EasyGL frame, direct EasyGL source and write-enable oracle pass; `SDLGPU-58` |
 | Stencil masks/ops/two-sided/reference | Full front/back state | Complete immutable descriptor and per-draw dynamic reference | `=` — all eight compares and operations, masks, two-sided state and reference pass, including A→B→A; `SDLGPU-58` |
 | Cull/scissor/viewport/depth range | Full GL state | Cull/bias immutable; scissor/viewport/range captured per draw | `=` — exact EasyGL sources, exhaustive deferred A→B→A draws, cube/RT2D/backbuffer switches and resize all pass; presentation-mode lifecycle remains separately `SDLGPU-68` |

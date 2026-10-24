@@ -1518,6 +1518,16 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] bool ShadesPbrEffectEXT() const override { return device_ != nullptr; }
         /** @brief CNA's compiled skinned PBR effect. @return Whether a device exists. */
         [[nodiscard]] bool ShadesSkinnedPbrEffectEXT() const override { return device_ != nullptr; }
+        /**
+         * @brief FNA3D's OpenGL driver applies the mask with `glSampleMaski`; its SDL_GPU driver
+         *        writes SDL's reserved `sample_mask`, which has no effect.
+         * @return Supported on the OpenGL driver, otherwise Unsupported.
+         */
+        [[nodiscard]] CNA::RendererFeatureSupport MultiSampleMaskSupportEXT() const override
+        {
+            return device_ != nullptr && driverIsOpenGl_ ? CNA::RendererFeatureSupport::Supported
+                                                         : CNA::RendererFeatureSupport::Unsupported;
+        }
 
         /**
          * @brief Classifies Texture2D formats backed by the selected FNA3D driver.

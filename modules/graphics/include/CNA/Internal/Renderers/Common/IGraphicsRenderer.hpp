@@ -2633,6 +2633,19 @@ namespace CNA::Internal::Renderers
         [[nodiscard]] virtual bool ShadesSkinnedPbrEffectEXT() const { return false; }
 
         /**
+         * @brief How this renderer honours `MultiSampleMask` on a multisampled target
+         *        (`RendererFeature::MultiSampleMask`).
+         *
+         * @return Supported for arbitrary masks; Restricted when only a mask that keeps every
+         *         sample or none is applied and any other is refused; Unsupported when the mask
+         *         has no effect.
+         */
+        [[nodiscard]] virtual CNA::RendererFeatureSupport MultiSampleMaskSupportEXT() const
+        {
+            return CNA::RendererFeatureSupport::Unsupported;
+        }
+
+        /**
          * @brief Reports whether instanced draws consume a non-zero first-instance value.
          *
          * @return `true` when `GpuDrawParams::firstInstance` is supported; otherwise `false`.

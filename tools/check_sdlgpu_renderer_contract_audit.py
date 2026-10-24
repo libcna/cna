@@ -98,6 +98,7 @@ OUT_GRAPHICS_METHODS = {
     "AppliesSamplerLevelOfDetailBiasEXT",
     "ShadesPbrEffectEXT",
     "ShadesSkinnedPbrEffectEXT",
+    "MultiSampleMaskSupportEXT",
     "SupportsTexture3DSamplingEXT",
     "SupportsShaderLanguageEXT",
     "GetSurfaceFormatUsageSupportEXT",

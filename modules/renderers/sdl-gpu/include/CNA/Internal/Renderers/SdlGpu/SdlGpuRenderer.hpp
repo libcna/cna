@@ -3064,6 +3064,16 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] bool ShadesPbrEffectEXT() const override { return device_ != nullptr; }
         /** @brief The pbr_skinned3d shaders. @return Whether a device exists. */
         [[nodiscard]] bool ShadesSkinnedPbrEffectEXT() const override { return device_ != nullptr; }
+        /**
+         * @brief Restricted: SDL 3.5 reserves `sample_mask`, so a mask that keeps no sample drops
+         *        the draw exactly and any other partial mask is refused (CNA-DEMOS DC-R2).
+         * @return Restricted, or Unsupported without a device.
+         */
+        [[nodiscard]] CNA::RendererFeatureSupport MultiSampleMaskSupportEXT() const override
+        {
+            return device_ != nullptr ? CNA::RendererFeatureSupport::Restricted
+                                      : CNA::RendererFeatureSupport::Unsupported;
+        }
 
         /** @brief Largest uniform buffer. @return The limit in bytes. */
         [[nodiscard]] std::uint64_t GetMaxUniformBufferBytesEXT() const override;
@@ -4782,6 +4792,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // RenderStateSnapshot at Queue*Draw()/QueueSprite() time (see CaptureRenderState()).
         BlendKeyParams blendParams_;
         std::array<int, 4> colorWriteMasks_{{15, 15, 15, 15}};  ///< current per-MRT-slot masks
+        unsigned int multiSampleMask_ = 0xFFFFFFFFu;  ///< current BlendState/device MultiSampleMask
         /**
          * @brief Slot-aligned formats of the native render pass currently being recorded.
          *

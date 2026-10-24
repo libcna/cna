@@ -311,8 +311,14 @@ typedef uint32_t CNA_RendererFeature;
  * @since ABI 0.50.0
  */
 #define CNA_RENDERER_FEATURE_SKINNED_PBR_EFFECT_SHADING UINT32_C(34)
+/**
+ * @brief MultiSampleMask selects which samples of a multisampled target a draw writes; Restricted
+ *        means only a mask keeping every sample or none is applied and any other is refused.
+ * @since ABI 0.50.0
+ */
+#define CNA_RENDERER_FEATURE_MULTI_SAMPLE_MASK UINT32_C(35)
 /** @brief Largest currently defined detailed renderer-feature identity. */
-#define CNA_RENDERER_FEATURE_MAXIMUM CNA_RENDERER_FEATURE_SKINNED_PBR_EFFECT_SHADING
+#define CNA_RENDERER_FEATURE_MAXIMUM CNA_RENDERER_FEATURE_MULTI_SAMPLE_MASK
 
 /** @brief Fixed-width classified answer for one detailed renderer feature. */
 typedef uint32_t CNA_RendererFeatureSupport;

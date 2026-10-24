@@ -2274,6 +2274,12 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] bool ShadesPbrEffectEXT() const override { return device_ != nullptr; }
         /** @brief The skinned PBR route for strides 68 and 80. @return Whether a device exists. */
         [[nodiscard]] bool ShadesSkinnedPbrEffectEXT() const override { return device_ != nullptr; }
+        /** @brief The pipeline's `multisample.mask`. @return Supported with a device. */
+        [[nodiscard]] CNA::RendererFeatureSupport MultiSampleMaskSupportEXT() const override
+        {
+            return device_ != nullptr ? CNA::RendererFeatureSupport::Supported
+                                      : CNA::RendererFeatureSupport::Unsupported;
+        }
 
         /**
          * @brief plans/plan_webgpu_modern_graphics.md WMG-0020: inserts a GPU debug label.

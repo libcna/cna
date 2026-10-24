@@ -103,8 +103,17 @@ namespace CNA
          * Unsupported means it draws an untextured, unlit fallback instead.
          */
         SkinnedPbrEffectShading = 34,
+        /**
+         * @brief `BlendState`/`GraphicsDevice` `MultiSampleMask` selects which samples of a
+         *        multisampled target a draw writes.
+         *
+         * Restricted means only a mask that keeps every sample, or none, is applied and any
+         * other is refused with `NotSupportedException`; Unsupported means the mask has no
+         * effect (CNA-DEMOS DC-R2). A single-sample target ignores the mask, as in XNA.
+         */
+        MultiSampleMask = 35,
         /** @brief One past the highest feature ordinal; not itself a queryable feature. */
-        Count = 35
+        Count = 36
     };
 
     /** @brief The renderer's classified answer for one detailed feature. */

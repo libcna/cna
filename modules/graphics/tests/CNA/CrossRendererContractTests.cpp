@@ -669,4 +669,85 @@ TEST_F(CrossRendererContractTest, PbrShadingSupportMatchesWhetherTheEffectSample
     EXPECT_GT(judged, 0) << "no renderer in this build drew and read back the PBR probe";
 }
 
+// CNA-DEMOS DC-R2: RendererFeature::MultiSampleMask tells the truth on every renderer. A red quad
+// covering a 4x multisampled target is drawn under a mask keeping every sample, none, and one: a
+// Supported renderer resolves the last to a quarter of the red, a Restricted one refuses it while
+// honouring the other two, and an Unsupported one ignores every mask.
+TEST_F(CrossRendererContractTest, MultiSampleMaskSupportMatchesWhatTheResolvedTargetShows)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    int judged = 0;
+    ForEachRenderer([&judged](GraphicsDevice& device, GraphicsRendererType type) {
+        if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD) ||
+            !device.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing))
+        {
+            return;
+        }
+        const std::string name{CNA::getGraphicsRendererName(type)};
+        SCOPED_TRACE(name);
+        device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+        RenderTarget2D target(device, 8, 8, false, SurfaceFormat::Color, DepthFormat::None, 4,
+                              RenderTargetUsage::DiscardContents);
+        if (target.getMultiSampleCountProperty() < 4) { return; }
+        BasicEffect effect(device);
+        effect.setVertexColorEnabledProperty(true);
+        const Color red(255, 0, 0, 255);
+        const VertexPositionColor quad[6] = {
+            {Vector3(-1, -1, 0), red}, {Vector3(1, -1, 0), red}, {Vector3(1, 1, 0), red},
+            {Vector3(-1, -1, 0), red}, {Vector3(1, 1, 0), red}, {Vector3(-1, 1, 0), red}};
+        const auto draw = [&](int mask) -> std::optional<Color> {
+            BlendState masked;
+            masked.setMultiSampleMaskProperty(mask);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            device.setBlendStateProperty(masked);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            try
+            {
+                for (auto& pass : effect.getCurrentTechniqueProperty()->getPassesProperty()) { pass.Apply(); }
+                device.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            }
+            catch (...)
+            {
+                device.SetRenderTarget(nullptr);
+                device.setBlendStateProperty(BlendState::Opaque);
+                throw;
+            }
+            device.SetRenderTarget(nullptr);
+            device.setBlendStateProperty(BlendState::Opaque);
+            std::vector<Color> pixels(64);
+            try { target.GetData(pixels.data(), static_cast<int>(pixels.size())); }
+            catch (const std::exception&) { return std::nullopt; }
+            return pixels[4 * 8 + 4];
+        };
+
+        const std::optional<Color> all = draw(-1);
+        if (!all.has_value()) { return; }  // no colour readback
+        ++judged;
+        EXPECT_EQ(*all, red) << "a mask keeping every sample";
+        const CNA::RendererFeatureSupport support =
+            device.GetRendererFeatureSupportEXT(CNA::RendererFeature::MultiSampleMask);
+        const std::optional<Color> none = draw(0);
+        ASSERT_TRUE(none.has_value());
+        if (support == CNA::RendererFeatureSupport::Unsupported)
+        {
+            EXPECT_EQ(*none, red) << name << " reports no mask support but honoured mask 0";
+            return;
+        }
+        EXPECT_EQ(*none, Color(0, 0, 0, 255)) << name << " ignored a mask keeping no sample";
+        if (support == CNA::RendererFeatureSupport::Restricted)
+        {
+            EXPECT_THROW((void)draw(0x1), System::NotSupportedException)
+                << name << " reports a restricted mask but did not refuse a partial one";
+            return;
+        }
+        const std::optional<Color> one = draw(0x1);
+        ASSERT_TRUE(one.has_value());
+        EXPECT_NEAR(one->getRProperty(), 64, 24) << name << " resolved one of four samples";
+        EXPECT_EQ(support, CNA::RendererFeatureSupport::Supported);
+    });
+    EXPECT_GT(judged, 0) << "no renderer in this build drew and read back the mask probe";
+}
+
 #endif  // CNA_MULTI_RENDERER

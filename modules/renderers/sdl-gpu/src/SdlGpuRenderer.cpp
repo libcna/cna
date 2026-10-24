@@ -4664,11 +4664,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         blendParams_.alphaFunc = alphaBlendFunc;
         // BlendState.ColorWriteChannels (slot 0) is baked into the color target's
         // SDL_GPUColorTargetBlendState (static → part of the pipeline cache key; see FillBlendState
-        // + PipelineCacheKey). BlendState.MultiSampleMask is NOT supported: SDL 3.5.0 documents
-        // SDL_GPUMultisampleState::sample_mask / enable_mask as "Reserved for future use, must be
-        // set to 0 / false" — a genuine renderer capability gap, not a silent drop.
+        // + PipelineCacheKey). SDL 3.5.0 documents SDL_GPUMultisampleState::sample_mask /
+        // enable_mask as "Reserved for future use, must be set to 0 / false", so MultiSampleMask is
+        // recorded here and judged per draw against the bound target (PushDrawOrder, DC-R2).
         for (int i = 0; i < 4; ++i)
             colorWriteMasks_[i] = writeState.colorWriteChannels[i];
+        multiSampleMask_ = writeState.multiSampleMask;
     }
 
     void SdlGpuRenderer::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
@@ -4831,6 +4832,32 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::PushDrawOrder(DrawKind kind, std::size_t index)
     {
+        // CNA-DEMOS DC-R2: MultiSampleMask on a multisampled target. SDL_gpu has no sample mask, so
+        // the two masks it can honour exactly are kept: one that keeps every sample draws as
+        // usual, and one that keeps none writes nothing -- no colour, depth, stencil or occlusion
+        // sample -- which dropping the draw reproduces exactly. Any other is refused, never
+        // approximated. A single-sample target ignores the mask, as XNA does.
+        {
+            SdlGpuColorTargetFormatsEXT formats{};
+            SDL_GPUSampleCount sampleCount = SDL_GPU_SAMPLECOUNT_1;
+            SDL_GPUTextureFormat depthFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+            int targetCount = 1;
+            ResolveActiveTargetFormatsEXT(formats, sampleCount, depthFormat, targetCount);
+            const int samples = SampleCountToInt(sampleCount);
+            if (samples > 1)
+            {
+                const unsigned int all = (1u << static_cast<unsigned int>(samples)) - 1u;
+                const unsigned int kept = multiSampleMask_ & all;
+                if (kept == 0u) { return; }
+                if (kept != all)
+                {
+                    throw System::NotSupportedException(
+                        "CNA SDL_GPU: a MultiSampleMask that keeps only some of a multisampled "
+                        "target's samples is not supported (SDL_gpu reserves its sample mask); "
+                        "only a mask keeping every sample or none is applied.");
+                }
+            }
+        }
         // Snapshot the current viewport, scissor AND blend factor into the
         // ref so a later SetRenderTarget reset / SetViewport / SetScissorRect / ApplyRasterizerState
         // / SetBlendFactor change never retroactively alters an already-queued draw's dynamic state.
