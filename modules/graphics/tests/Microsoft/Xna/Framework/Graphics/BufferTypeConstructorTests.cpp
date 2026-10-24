@@ -277,3 +277,22 @@ TEST(BufferTypeConstructorTest, TheRegistryAnswersDirectlyToo)
     EXPECT_EQ(CNA::Graphics::VertexTypeRegistryEXT::TryResolve(System::Type::From<NotAVertex>()),
               nullptr);
 }
+
+TEST(BufferTypeConstructorTest, TheRefusalNamesTheTypeAsItsSourceSpellsIt)
+{
+    // The museum's rv-vertextype saw `N12_GLOBAL__N_118UnregisteredVertexE`: the raw RTTI name.
+    try
+    {
+        (void)CNA::Graphics::VertexTypeRegistryEXT::Resolve(System::Type::From<NotAVertex>());
+        ADD_FAILURE() << "an unregistered type resolved";
+    }
+    catch (const System::ArgumentException& error)
+    {
+        const std::string message = error.getMessageProperty();
+#if defined(__GNUG__)
+        EXPECT_NE(message.find("'(anonymous namespace)::NotAVertex'"), std::string::npos) << message;
+#else
+        EXPECT_NE(message.find("NotAVertex"), std::string::npos) << message;
+#endif
+    }
+}

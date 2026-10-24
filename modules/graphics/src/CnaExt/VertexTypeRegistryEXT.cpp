@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/VertexTypeRegistryEXT.hpp"
 
+#include <cstdlib>
+#include <memory>
 #include <unordered_map>
 #include <mutex>
 #include <typeindex>
+#if defined(__GNUG__)
+#include <cxxabi.h>
+#endif
 
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
@@ -36,6 +41,27 @@ namespace CNA::Graphics
         {
             static std::unordered_map<std::type_index, VertexDeclaration> registry;
             return registry;
+        }
+
+        /// The type as its source spells it. System::Type's name is the raw RTTI one, which GCC
+        /// and Clang mangle, so a refusal named `N12_GLOBAL__N_118UnregisteredVertexE`.
+        std::string ReadableTypeName(const System::Type& type)
+        {
+            const std::type_info* info = type.getTypeInfo();
+            if (info == nullptr)
+            {
+                return type.getNameProperty();
+            }
+#if defined(__GNUG__)
+            int status = 0;
+            const std::unique_ptr<char, void (*)(void*)> demangled(
+                abi::__cxa_demangle(info->name(), nullptr, nullptr, &status), std::free);
+            if (status == 0 && demangled != nullptr)
+            {
+                return demangled.get();
+            }
+#endif
+            return info->name();
         }
 
         /// CNA's own vertex structures, registered on first use rather than by static initialisers,
@@ -100,7 +126,7 @@ namespace CNA::Graphics
             // XNA's two ArgumentException cases -- not a value type, and not an IVertexType -- are
             // one case here: a C++ type satisfying neither could not have been registered.
             throw System::ArgumentException(
-                "The vertex type '" + vertexType.getNameProperty() +
+                "The vertex type '" + ReadableTypeName(vertexType) +
                 "' is not a registered IVertexType structure. CNA's own vertex structures are "
                 "registered automatically; a game's own structure must call "
                 "CNA::Graphics::VertexTypeRegistryEXT::Register<TVertex>() once before naming it "
