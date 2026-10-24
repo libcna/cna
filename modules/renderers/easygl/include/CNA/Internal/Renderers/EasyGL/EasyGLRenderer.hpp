@@ -2046,6 +2046,12 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
         [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return true; }
+        /** @brief Desktop GL's `GL_TEXTURE_LOD_BIAS`; OpenGL ES has none. @return The profile answer. */
+        [[nodiscard]] bool AppliesSamplerLevelOfDetailBiasEXT() const override;
+        /** @brief EasyGL's PBR program. @return True. */
+        [[nodiscard]] bool ShadesPbrEffectEXT() const override { return true; }
+        /** @brief EasyGL's skinned PBR program. @return True. */
+        [[nodiscard]] bool ShadesSkinnedPbrEffectEXT() const override { return true; }
         /// VULKAN-164: plans/plan_graphics.md Task 863 gave this renderer
         /// `BindTexture3D`, and `EasyGL_ShaderEffect_Texture3D` reads two different slices of one
         /// bound volume through a `sampler3D`.

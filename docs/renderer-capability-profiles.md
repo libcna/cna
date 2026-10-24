@@ -11,9 +11,13 @@ It is a CNA extension, not part of XNA 4.0.
 ## Why the catalog is small rather than an arbitrary large number
 
 The detailed enum is append-only, but an entry is added only when CNA can define an observable
-contract and classify it from an audited renderer query. The catalog holds 28 atomic features:
+contract and classify it from an audited renderer query. The catalog holds 31 atomic features:
 the 17 legacy capabilities, separated source acceptance/execution, shadows, image-based lighting,
-six shader dialects, `Texture3D` sampling and base-instance drawing. Reserving or publishing
+six shader dialects, `Texture3D` sampling, base-instance drawing, the sampler mip level-of-detail
+bias, and `PbrEffect` and `SkinnedPbrEffect` shading. The last three (32-34, CNA-DEMOS-ISSUE-006)
+describe state a renderer accepts either way: where unsupported, the bias has no effect and the PBR
+effects draw an untextured, unlit fallback. `CrossRendererContractTest` draws each one on every
+compiled-in renderer and requires the reported answer to match the pixels. Reserving or publishing
 hundreds of guessed identities would turn "unsupported" into a mixture of absent, unaudited and
 not-yet-defined behavior.
 

@@ -44,7 +44,10 @@ _Static_assert(sizeof(CNA_RendererFeature) == sizeof(uint32_t) &&
                    CNA_RENDERER_FEATURE_IMAGE_BASED_LIGHTING == UINT32_C(22) &&
                    CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING == UINT32_C(30) &&
                    CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING == UINT32_C(31) &&
-                   CNA_RENDERER_FEATURE_MAXIMUM == UINT32_C(31),
+                   CNA_RENDERER_FEATURE_SAMPLER_LEVEL_OF_DETAIL_BIAS == UINT32_C(32) &&
+                   CNA_RENDERER_FEATURE_PBR_EFFECT_SHADING == UINT32_C(33) &&
+                   CNA_RENDERER_FEATURE_SKINNED_PBR_EFFECT_SHADING == UINT32_C(34) &&
+                   CNA_RENDERER_FEATURE_MAXIMUM == UINT32_C(34),
                "CNA detailed renderer-feature identities must remain stable");
 _Static_assert(sizeof(CNA_ShaderDialect) == sizeof(uint32_t) &&
                    CNA_SHADER_DIALECT_GLSL_VULKAN == UINT32_C(3) &&

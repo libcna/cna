@@ -35,9 +35,8 @@ namespace Microsoft::Xna::Framework::Graphics
      * GetSkinTransforms() into SetBoneTransforms() itself, every frame.
      *
      * Every renderer with a real PbrEffect shader also has one for this class (plans/plan_cnj.md
-     * CNB-75..79, CNB-103..109) except WebGPU, which implements PbrEffect's unskinned case only --
-     * this renderer has no skinning shader at all yet for any stock effect, a pre-existing gap
-     * outside PBR's own scope.
+     * CNB-75..79, CNB-103..109). Ask `RendererFeature::SkinnedPbrEffectShading` which renderer
+     * draws it with its maps and lighting; the others draw an untextured, unlit fallback.
      */
     class SkinnedPbrEffect : public Effect, public IEffectMatrices, public IEffectFog, public IEffectLights, public IShadowReceiverEXT
     {

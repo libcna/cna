@@ -39,7 +39,10 @@ namespace CNA
             RendererFeature::ShaderDialectMsl,
             RendererFeature::ShaderDialectWgsl,
             RendererFeature::Texture3DSampling,
-            RendererFeature::BaseInstanceDrawing
+            RendererFeature::BaseInstanceDrawing,
+            RendererFeature::SamplerLevelOfDetailBias,
+            RendererFeature::PbrEffectShading,
+            RendererFeature::SkinnedPbrEffectShading
         };
 
         constexpr std::array Limits = {
@@ -263,6 +266,9 @@ namespace CNA
             case RendererFeature::ShaderDialectWgsl: return "ShaderDialectWgsl";
             case RendererFeature::Texture3DSampling: return "Texture3DSampling";
             case RendererFeature::BaseInstanceDrawing: return "BaseInstanceDrawing";
+            case RendererFeature::SamplerLevelOfDetailBias: return "SamplerLevelOfDetailBias";
+            case RendererFeature::PbrEffectShading: return "PbrEffectShading";
+            case RendererFeature::SkinnedPbrEffectShading: return "SkinnedPbrEffectShading";
             case RendererFeature::Count: break;
         }
         return "UnknownRendererFeature";
@@ -329,6 +335,15 @@ namespace CNA
                        "slot's SamplerState governing it.";
             case RendererFeature::BaseInstanceDrawing:
                 return "An instanced indexed draw can begin at a caller-selected logical instance.";
+            case RendererFeature::SamplerLevelOfDetailBias:
+                return "SamplerState.MipMapLevelOfDetailBias shifts the mip level SpriteBatch and the "
+                       "XNA stock effects sample; otherwise the state is accepted with no effect.";
+            case RendererFeature::PbrEffectShading:
+                return "PbrEffect draws with its material maps and lighting rather than an "
+                       "untextured, unlit fallback.";
+            case RendererFeature::SkinnedPbrEffectShading:
+                return "SkinnedPbrEffect draws with its material maps and lighting rather than an "
+                       "untextured, unlit fallback.";
             case RendererFeature::Count: break;
         }
         return "Invalid detailed renderer feature identity.";

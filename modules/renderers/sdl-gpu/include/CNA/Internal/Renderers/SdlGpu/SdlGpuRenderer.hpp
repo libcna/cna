@@ -3035,6 +3035,12 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @return True while a device exists.
          */
         [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return device_ != nullptr; }
+        /** @brief The bias is a SPIR-V sample operand on every stock route (SDLGPU-121/122). @return Whether a device exists. */
+        [[nodiscard]] bool AppliesSamplerLevelOfDetailBiasEXT() const override { return device_ != nullptr; }
+        /** @brief The pbr3d shaders. @return Whether a device exists. */
+        [[nodiscard]] bool ShadesPbrEffectEXT() const override { return device_ != nullptr; }
+        /** @brief The pbr_skinned3d shaders. @return Whether a device exists. */
+        [[nodiscard]] bool ShadesSkinnedPbrEffectEXT() const override { return device_ != nullptr; }
 
         /** @brief Largest uniform buffer. @return The limit in bytes. */
         [[nodiscard]] std::uint64_t GetMaxUniformBufferBytesEXT() const override;

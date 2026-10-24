@@ -295,8 +295,24 @@ typedef uint32_t CNA_RendererFeature;
  * @since ABI 0.26.0
  */
 #define CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING UINT32_C(31)
+/**
+ * @brief `SamplerState::MipMapLevelOfDetailBias` shifts the mip level SpriteBatch and the XNA
+ *        stock effects sample; where unsupported the state is accepted with no effect.
+ * @since ABI 0.50.0
+ */
+#define CNA_RENDERER_FEATURE_SAMPLER_LEVEL_OF_DETAIL_BIAS UINT32_C(32)
+/**
+ * @brief PbrEffect draws with its material maps and lighting, not an untextured, unlit fallback.
+ * @since ABI 0.50.0
+ */
+#define CNA_RENDERER_FEATURE_PBR_EFFECT_SHADING UINT32_C(33)
+/**
+ * @brief SkinnedPbrEffect draws with its material maps and lighting, not the fallback.
+ * @since ABI 0.50.0
+ */
+#define CNA_RENDERER_FEATURE_SKINNED_PBR_EFFECT_SHADING UINT32_C(34)
 /** @brief Largest currently defined detailed renderer-feature identity. */
-#define CNA_RENDERER_FEATURE_MAXIMUM CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING
+#define CNA_RENDERER_FEATURE_MAXIMUM CNA_RENDERER_FEATURE_SKINNED_PBR_EFFECT_SHADING
 
 /** @brief Fixed-width classified answer for one detailed renderer feature. */
 typedef uint32_t CNA_RendererFeatureSupport;

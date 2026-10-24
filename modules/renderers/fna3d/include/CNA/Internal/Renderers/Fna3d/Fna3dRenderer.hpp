@@ -815,6 +815,30 @@ namespace CNA::Internal::Renderers::Fna3d
     };
 
     /**
+     * @brief Every public `SamplerState` property of one SpriteBatch, as raw XNA ordinals.
+     *
+     * XNA's SpriteBatch assigns the batch's whole state to `SamplerStates[0]`, the mip bias and
+     * level included (CNA-DEMOS-ISSUE-006); the defaults are `SamplerState`'s own.
+     */
+    struct Fna3dSpriteSamplerEXT
+    {
+        /** @brief Raw `TextureFilter` ordinal. */
+        int filter = 0;
+        /** @brief Raw `TextureAddressMode` ordinal for U. */
+        int addressU = 1;
+        /** @brief Raw `TextureAddressMode` ordinal for V. */
+        int addressV = 1;
+        /** @brief Raw `TextureAddressMode` ordinal for W. */
+        int addressW = 1;
+        /** @brief Maximum anisotropy. */
+        int maxAnisotropy = 4;
+        /** @brief Most detailed mip level the sampler may select. */
+        int maxMipLevel = 0;
+        /** @brief Bias added to the computed mip level of detail. */
+        float mipMapLevelOfDetailBias = 0.0f;
+    };
+
+    /**
      * @brief The 2D sprite path, drawn through XNA's own `SpriteEffect`.
      *
      * Sprites are accumulated into a CPU staging array as `VertexPositionColorTexture` quads and
@@ -870,6 +894,19 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param addressV Raw XNA `TextureAddressMode` ordinal for V.
          */
         void SetSamplerAddressMode(int addressU, int addressV) override;
+
+        /**
+         * @brief Sets every public `SamplerState` property for subsequent draws.
+         * @param textureFilter Raw `TextureFilter` ordinal.
+         * @param addressU Raw `TextureAddressMode` ordinal for U.
+         * @param addressV Raw `TextureAddressMode` ordinal for V.
+         * @param addressW Raw `TextureAddressMode` ordinal for W.
+         * @param maxAnisotropy Maximum anisotropy.
+         * @param maxMipLevel Most detailed mip level the sampler may select.
+         * @param lodBias Mipmap level-of-detail bias.
+         */
+        void SetSamplerState(int textureFilter, int addressU, int addressV, int addressW,
+                             int maxAnisotropy, int maxMipLevel, float lodBias) override;
 
         /**
          * @brief Flushes per-draw while `SpriteSortMode::Immediate` is active.
@@ -928,9 +965,7 @@ namespace CNA::Internal::Renderers::Fna3d
         const ITextureRenderer* batchTexture_ = nullptr;
         Effect* customEffect_ = nullptr;
         Matrix transform_;
-        int samplerFilter_ = 0;
-        int addressU_ = 1;
-        int addressV_ = 1;
+        Fna3dSpriteSamplerEXT sampler_;
         bool immediate_ = false;
     };
 
@@ -1474,6 +1509,15 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             return device_ != nullptr && maxTextureSlots_ >= 13;
         }
+        /** @brief The driver's native sampler bias, where it reaches the GPU. @return The answer. */
+        [[nodiscard]] bool AppliesSamplerLevelOfDetailBiasEXT() const override
+        {
+            return device_ != nullptr && SamplerLodBiasReachesTheGpuEXT();
+        }
+        /** @brief CNA's compiled PBR effect. @return Whether a device exists. */
+        [[nodiscard]] bool ShadesPbrEffectEXT() const override { return device_ != nullptr; }
+        /** @brief CNA's compiled skinned PBR effect. @return Whether a device exists. */
+        [[nodiscard]] bool ShadesSkinnedPbrEffectEXT() const override { return device_ != nullptr; }
 
         /**
          * @brief Classifies Texture2D formats backed by the selected FNA3D driver.
@@ -1545,14 +1589,12 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param vertices    Interleaved position/colour/texcoord vertices, 24 bytes each.
          * @param vertexCount Number of vertices; must be a multiple of four.
          * @param transform   Transform applied on top of the orthographic projection.
-         * @param filter      Raw `TextureFilter` ordinal.
-         * @param addressU    Raw `TextureAddressMode` ordinal for U.
-         * @param addressV    Raw `TextureAddressMode` ordinal for V.
+         * @param sampler     The batch's complete sampler state.
          * @param customEffect Caller-selected effect, or null for the stock sprite effect.
          * @param binding Public texture identity published after each custom pass.
          */
         void DrawSpriteRunEXT(FNA3D_Texture* texture, const void* vertices, int vertexCount,
-                              const Matrix& transform, int filter, int addressU, int addressV,
+                              const Matrix& transform, const Fna3dSpriteSamplerEXT& sampler,
                               Effect* customEffect,
                               const CNA::Internal::Graphics::SpriteTextureBinding& binding = {});
 

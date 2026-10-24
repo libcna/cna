@@ -275,6 +275,12 @@ static_assert(
     static_cast<uint32_t>(CNA::RendererFeature::Texture3DSampling) ==
         CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING &&
     static_cast<uint32_t>(CNA::RendererFeature::BaseInstanceDrawing) ==
+        CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING &&
+    static_cast<uint32_t>(CNA::RendererFeature::SamplerLevelOfDetailBias) ==
+        CNA_RENDERER_FEATURE_SAMPLER_LEVEL_OF_DETAIL_BIAS &&
+    static_cast<uint32_t>(CNA::RendererFeature::PbrEffectShading) ==
+        CNA_RENDERER_FEATURE_PBR_EFFECT_SHADING &&
+    static_cast<uint32_t>(CNA::RendererFeature::SkinnedPbrEffectShading) ==
         CNA_RENDERER_FEATURE_MAXIMUM &&
     static_cast<uint32_t>(CNA::RendererFeature::Count) ==
         CNA_RENDERER_FEATURE_MAXIMUM + UINT32_C(1));

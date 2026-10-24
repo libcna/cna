@@ -2609,6 +2609,30 @@ namespace CNA::Internal::Renderers
         [[nodiscard]] virtual bool SupportsImageBasedLightingEXT() const { return false; }
 
         /**
+         * @brief Whether `SamplerState::MipMapLevelOfDetailBias` changes what SpriteBatch and the
+         *        XNA stock effects sample (`RendererFeature::SamplerLevelOfDetailBias`).
+         *
+         * @return False unless the renderer applies the bias; the state is accepted either way.
+         */
+        [[nodiscard]] virtual bool AppliesSamplerLevelOfDetailBiasEXT() const { return false; }
+
+        /**
+         * @brief Whether `PbrEffect` draws with its maps and lighting rather than the untextured,
+         *        unlit fallback (`RendererFeature::PbrEffectShading`).
+         *
+         * @return False unless the renderer has a real PBR shader.
+         */
+        [[nodiscard]] virtual bool ShadesPbrEffectEXT() const { return false; }
+
+        /**
+         * @brief Whether `SkinnedPbrEffect` draws with its maps and lighting rather than the
+         *        fallback (`RendererFeature::SkinnedPbrEffectShading`).
+         *
+         * @return False unless the renderer has a real skinned PBR shader.
+         */
+        [[nodiscard]] virtual bool ShadesSkinnedPbrEffectEXT() const { return false; }
+
+        /**
          * @brief Reports whether instanced draws consume a non-zero first-instance value.
          *
          * @return `true` when `GpuDrawParams::firstInstance` is supported; otherwise `false`.

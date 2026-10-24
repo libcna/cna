@@ -102,15 +102,25 @@ namespace CNA::Internal::Renderers::Fna3d
     {
         (void) deviceState_->RequireRenderer("SpriteBatch sampler change");
         Flush();
-        samplerFilter_ = textureFilter;
+        sampler_.filter = textureFilter;
     }
 
     void Fna3dSpriteBatchRenderer::SetSamplerAddressMode(int addressU, int addressV)
     {
         (void) deviceState_->RequireRenderer("SpriteBatch sampler change");
         Flush();
-        addressU_ = addressU;
-        addressV_ = addressV;
+        sampler_.addressU = addressU;
+        sampler_.addressV = addressV;
+    }
+
+    void Fna3dSpriteBatchRenderer::SetSamplerState(int textureFilter, int addressU, int addressV,
+                                                   int addressW, int maxAnisotropy,
+                                                   int maxMipLevel, float lodBias)
+    {
+        (void) deviceState_->RequireRenderer("SpriteBatch sampler change");
+        Flush();
+        sampler_ = {textureFilter, addressU, addressV, addressW, maxAnisotropy, maxMipLevel,
+                    lodBias};
     }
 
     void Fna3dSpriteBatchRenderer::SetImmediateMode(bool immediate)
@@ -275,8 +285,8 @@ namespace CNA::Internal::Renderers::Fna3d
             const std::size_t remaining = vertices_.size() - first;
             const std::size_t vertexCount = std::min(remaining, maxVerticesPerDraw);
             renderer.DrawSpriteRunEXT(sampled->GetFna3dTextureEXT(), vertices_.data() + first,
-                                      static_cast<int>(vertexCount), transform_, samplerFilter_,
-                                      addressU_, addressV_, customEffect_, textureBinding_);
+                                      static_cast<int>(vertexCount), transform_, sampler_,
+                                      customEffect_, textureBinding_);
         }
         vertices_.clear();
     }
@@ -287,8 +297,9 @@ namespace CNA::Internal::Renderers::Fna3d
     }
 
     void Fna3dRenderer::DrawSpriteRunEXT(FNA3D_Texture* texture, const void* vertices,
-                                         int vertexCount, const Matrix& transform, int filter,
-                                         int addressU, int addressV, Effect* customEffect,
+                                         int vertexCount, const Matrix& transform,
+                                         const Fna3dSpriteSamplerEXT& batchSampler,
+                                         Effect* customEffect,
                                          const CNA::Internal::Graphics::SpriteTextureBinding& publicBinding)
     {
         if (texture == nullptr || vertices == nullptr || vertexCount < 4)
@@ -394,16 +405,16 @@ namespace CNA::Internal::Renderers::Fna3d
         // Effect's own sampler_state block, for one, which clamped every later stock sprite draw to
         // the mip level that effect asked for. FNA has no such inheritance: PrepRenderState assigns
         // `GraphicsDevice.SamplerStates[0] = samplerState` wholesale before VerifySampler reads it,
-        // so every field comes from the batch. The three defaults below are SamplerState's own, and
-        // are what every XNA preset (LinearClamp, PointWrap, ...) carries.
+        // so every field comes from the batch -- the anisotropy, mip level, bias and W address too,
+        // which this route used to replace with SamplerState's defaults (CNA-DEMOS-ISSUE-006).
         FNA3D_SamplerState sampler{};
-        sampler.filter = ToFna3dTextureFilter(filter);
-        sampler.addressU = ToFna3dTextureAddressMode(addressU);
-        sampler.addressV = ToFna3dTextureAddressMode(addressV);
-        sampler.addressW = sampler.addressU;
-        sampler.maxAnisotropy = 4;
-        sampler.maxMipLevel = 0;
-        sampler.mipMapLevelOfDetailBias = 0.0f;
+        sampler.filter = ToFna3dTextureFilter(batchSampler.filter);
+        sampler.addressU = ToFna3dTextureAddressMode(batchSampler.addressU);
+        sampler.addressV = ToFna3dTextureAddressMode(batchSampler.addressV);
+        sampler.addressW = ToFna3dTextureAddressMode(batchSampler.addressW);
+        sampler.maxAnisotropy = batchSampler.maxAnisotropy;
+        sampler.maxMipLevel = batchSampler.maxMipLevel;
+        sampler.mipMapLevelOfDetailBias = batchSampler.mipMapLevelOfDetailBias;
         if (customEffect == nullptr)
         {
             FNA3D_VerifySampler(device_, 0, texture, &sampler);

@@ -7825,6 +7825,11 @@ namespace CNA::Internal::Renderers::EasyGL
         }
     }
 
+    bool EasyGLRenderer::AppliesSamplerLevelOfDetailBiasEXT() const
+    {
+        return ProfileIsDesktopCore();
+    }
+
     void EasyGLRenderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
     {
         if (metagl::IsContextLost()) return;

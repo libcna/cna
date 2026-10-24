@@ -224,6 +224,15 @@ TEST(RendererCapabilityDefaultsTest, BaseInstanceDrawingDefaultsToUnsupported)
     EXPECT_FALSE(renderer.SupportsBaseInstanceDrawingEXT());
 }
 
+// CNA-DEMOS-ISSUE-006: a renderer that has not implemented them must not claim these.
+TEST(RendererCapabilityDefaultsTest, LodBiasAndPbrShadingDefaultToUnsupported)
+{
+    DefaultsOnlyRenderer renderer;
+    EXPECT_FALSE(renderer.AppliesSamplerLevelOfDetailBiasEXT());
+    EXPECT_FALSE(renderer.ShadesPbrEffectEXT());
+    EXPECT_FALSE(renderer.ShadesSkinnedPbrEffectEXT());
+}
+
 TEST(RendererCapabilityDefaultsTest, ShaderDialectOrdinalsArePublicAndStableAndDefaultToUnknown)
 {
     // CNA::ShaderDialectEXT is what GraphicsDevice::GetShaderDialectEXT() hands applications and

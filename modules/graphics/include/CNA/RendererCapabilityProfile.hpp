@@ -83,8 +83,28 @@ namespace CNA
         Texture3DSampling = 30,
         /** @brief Instanced indexed drawing can start at a caller-selected instance. */
         BaseInstanceDrawing = 31,
+        /**
+         * @brief `SamplerState::MipMapLevelOfDetailBias` shifts the mip level `SpriteBatch` and the
+         *        XNA stock effects sample.
+         *
+         * Unsupported means the state is accepted and has no effect, as XNA programs expect it
+         * to be accepted; OpenGL ES, for one, has no sampler LOD bias (CNA-DEMOS-ISSUE-006).
+         */
+        SamplerLevelOfDetailBias = 32,
+        /**
+         * @brief `PbrEffect` draws with its material maps and lighting.
+         *
+         * Unsupported means it draws an untextured, unlit fallback instead.
+         */
+        PbrEffectShading = 33,
+        /**
+         * @brief `SkinnedPbrEffect` draws with its material maps and lighting.
+         *
+         * Unsupported means it draws an untextured, unlit fallback instead.
+         */
+        SkinnedPbrEffectShading = 34,
         /** @brief One past the highest feature ordinal; not itself a queryable feature. */
-        Count = 32
+        Count = 35
     };
 
     /** @brief The renderer's classified answer for one detailed feature. */

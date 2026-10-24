@@ -1595,6 +1595,12 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
         /** @brief Reports split-sum PBR image-based lighting through CPU cube/2D sampling. */
         [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return true; }
+        /** @brief The CPU sampler adds the bias to its computed level. @return True. */
+        [[nodiscard]] bool AppliesSamplerLevelOfDetailBiasEXT() const override { return true; }
+        /** @brief The CPU metallic-roughness BRDF (SOFTWARE-347). @return True. */
+        [[nodiscard]] bool ShadesPbrEffectEXT() const override { return true; }
+        /** @brief The same BRDF after CPU skinning. @return True. */
+        [[nodiscard]] bool ShadesSkinnedPbrEffectEXT() const override { return true; }
         /** @brief Classifies formats whose complete CPU texture path is implemented. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
             int surfaceFormat) const override;

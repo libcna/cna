@@ -39,8 +39,17 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "CNA/RendererCapabilityProfile.hpp"
 
 #include <memory>
+#include <type_traits>
+#include <array>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -443,6 +452,221 @@ TEST_F(CrossRendererContractTest, SetBlendEnabledInstallsNonPremultipliedBlendin
         EXPECT_EQ(*disabled, halfRed) << "SetBlendEnabled(false) did not restore overwrite";
     });
     EXPECT_GT(judged, 0) << "no renderer in this build could draw and read the result back";
+}
+
+// CNA-DEMOS-ISSUE-006: RendererFeature::SamplerLevelOfDetailBias tells the truth on every
+// renderer. A 16x16 texture whose mip levels are red, green, blue, white and yellow is drawn 1:1
+// (level 0) with a +1.25 bias: a renderer that applies the bias shows level 1's green, one that
+// does not shows level 0's red, and the reported support must say which.
+TEST_F(CrossRendererContractTest, SamplerLevelOfDetailBiasSupportMatchesWhatSpriteBatchSamples)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    int judged = 0;
+    ForEachRenderer([&judged](GraphicsDevice& device, GraphicsRendererType type) {
+        const std::string name{CNA::getGraphicsRendererName(type)};
+        SCOPED_TRACE(name);
+        Texture2D texture(device, 16, 16, true, SurfaceFormat::Color);
+        const Color levels[] = {Color(255, 0, 0, 255), Color(0, 255, 0, 255),
+                                Color(0, 0, 255, 255), Color(255, 255, 255, 255),
+                                Color(255, 255, 0, 255)};
+        for (int level = 0; level < texture.getLevelCountProperty() && level < 5; ++level)
+        {
+            const int size = 16 >> level;
+            std::vector<Color> texels(static_cast<std::size_t>(size * size), levels[level]);
+            texture.SetData(level, nullptr, texels.data(), 0, size * size);
+        }
+        SamplerState biased;
+        biased.setFilterProperty(TextureFilter::Point);
+        biased.setAddressUProperty(TextureAddressMode::Clamp);
+        biased.setAddressVProperty(TextureAddressMode::Clamp);
+        biased.setMipMapLevelOfDetailBiasProperty(1.25f);
+
+        RenderTarget2D target(device, 16, 16);
+        SpriteBatch batch(device);
+        try
+        {
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            batch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque, &biased, nullptr, nullptr,
+                        nullptr);
+            batch.Draw(texture, Rectangle(0, 0, 16, 16), Color::White);
+            batch.End();
+            device.SetRenderTarget(nullptr);
+        }
+        catch (const std::exception&)
+        {
+            // No render-target route (STUB): nothing to sample, so nothing to judge.
+            EXPECT_FALSE(device.SupportsRendererFeatureEXT(
+                CNA::RendererFeature::SamplerLevelOfDetailBias)) << name;
+            return;
+        }
+        std::vector<Color> pixels(256);
+        try { target.GetData(pixels.data(), static_cast<int>(pixels.size())); }
+        catch (const std::exception&) { return; }  // no colour readback (HEADLESS)
+        const Color centre = pixels[8 * 16 + 8];
+        if (centre == Color::Black) { return; }  // draws nothing at all (STUB)
+        ++judged;
+        const bool applied = centre == levels[1];
+        EXPECT_TRUE(applied || centre == levels[0])
+            << name << " sampled rgba(" << int(centre.getRProperty()) << ","
+            << int(centre.getGProperty()) << "," << int(centre.getBProperty())
+            << "), neither level 0 nor the biased level 1";
+        EXPECT_EQ(device.SupportsRendererFeatureEXT(CNA::RendererFeature::SamplerLevelOfDetailBias),
+                  applied)
+            << name << (applied ? " applies the bias but does not report it"
+                                : " reports the bias but sampled level 0");
+    });
+    EXPECT_GT(judged, 0) << "no renderer in this build drew and read back the mip probe";
+}
+
+namespace
+{
+    /// The PBR layouts the renderers draw PbrEffect and SkinnedPbrEffect from: position, normal,
+    /// tangent and UV (stride 48), plus four weights and four indices (stride 68).
+    struct PbrProbeVertex
+    {
+        float position[3];
+        float normal[3];
+        float tangent[4];
+        float uv[2];
+    };
+    struct SkinnedPbrProbeVertex
+    {
+        PbrProbeVertex base;
+        float weights[4];
+        std::uint8_t indices[4];
+    };
+    static_assert(sizeof(PbrProbeVertex) == 48 && sizeof(SkinnedPbrProbeVertex) == 68);
+
+    template <typename Vertex>
+    std::array<Vertex, 6> PbrProbeQuad()
+    {
+        const float corners[6][4] = {{-1, -1, 0, 1}, {1, -1, 1, 1}, {1, 1, 1, 0},
+                                     {-1, -1, 0, 1}, {1, 1, 1, 0}, {-1, 1, 0, 0}};
+        std::array<Vertex, 6> quad{};
+        for (std::size_t i = 0; i < quad.size(); ++i)
+        {
+            PbrProbeVertex v{{corners[i][0], corners[i][1], 0.0f}, {0.0f, 0.0f, 1.0f},
+                             {1.0f, 0.0f, 0.0f, 1.0f}, {corners[i][2], corners[i][3]}};
+            if constexpr (std::is_same_v<Vertex, PbrProbeVertex>) { quad[i] = v; }
+            else { quad[i] = {v, {1.0f, 0.0f, 0.0f, 0.0f}, {0, 0, 0, 0}}; }
+        }
+        return quad;
+    }
+
+    Microsoft::Xna::Framework::Graphics::VertexDeclaration PbrProbeDeclaration(bool skinned)
+    {
+        using namespace Microsoft::Xna::Framework::Graphics;
+        std::vector<VertexElement> elements{
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+            VertexElement(24, VertexElementFormat::Vector4, VertexElementUsage::Tangent, 0),
+            VertexElement(40, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0)};
+        if (skinned)
+        {
+            elements.emplace_back(48, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0);
+            elements.emplace_back(64, VertexElementFormat::Byte4, VertexElementUsage::BlendIndices, 0);
+        }
+        return VertexDeclaration(elements);
+    }
+
+    /// Draws a full-target quad textured with a left-red, right-blue image through @p Effect and
+    /// reports whether the two halves came out red and blue -- whether the effect sampled its
+    /// texture rather than drawing a uniform fallback. Empty without colour readback.
+    template <typename Effect, typename Vertex, typename Configure>
+    std::optional<bool> DrawsItsTexture(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+                                        bool skinned, Configure&& configure)
+    {
+        using namespace Microsoft::Xna::Framework;
+        using namespace Microsoft::Xna::Framework::Graphics;
+        Texture2D texture(device, 2, 1, false, SurfaceFormat::Color);
+        const Color halves[] = {Color(255, 0, 0, 255), Color(0, 0, 255, 255)};
+        texture.SetData(halves, 2);
+        Effect effect(device);
+        effect.EnableDefaultLighting();
+        effect.setTextureProperty(&texture);
+        effect.setMetallicFactorProperty(0.0f);
+        effect.setRoughnessFactorProperty(1.0f);
+        configure(effect);
+
+        const std::array<Vertex, 6> quad = PbrProbeQuad<Vertex>();
+        const VertexDeclaration declaration = PbrProbeDeclaration(skinned);
+        RenderTarget2D target(device, 16, 8);
+        VertexBuffer vertices(device, declaration, 6, BufferUsage::None);
+        vertices.SetData(quad.data(), 6);
+        // The left (red) half's centre texel, drawn with the effect's current lights.
+        const auto draw = [&]() -> std::optional<std::pair<Color, Color>> {
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+            device.SetVertexBuffer(&vertices);
+            for (auto& pass : effect.getCurrentTechniqueProperty()->getPassesProperty()) { pass.Apply(); }
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            device.SetRenderTarget(nullptr);
+            std::vector<Color> pixels(128);
+            try { target.GetData(pixels.data(), static_cast<int>(pixels.size())); }
+            catch (const std::exception&) { return std::nullopt; }
+            return std::pair{pixels[4 * 16 + 3], pixels[4 * 16 + 12]};
+        };
+        const auto lit = draw();
+        if (!lit.has_value()) { return std::nullopt; }
+        const auto [left, right] = *lit;
+        const bool textured = left.getRProperty() > left.getBProperty() + 40 &&
+                              right.getBProperty() > right.getRProperty() + 40;
+        // With every light off and no ambient, a lit material goes (nearly) black; an unlit
+        // fallback does not change.
+        effect.getDirectionalLight0Property().setEnabledProperty(false);
+        effect.getDirectionalLight1Property().setEnabledProperty(false);
+        effect.getDirectionalLight2Property().setEnabledProperty(false);
+        effect.setAmbientLightColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+        const auto dark = draw();
+        const bool lighted = dark.has_value() &&
+                             dark->first.getRProperty() + 20 < left.getRProperty();
+        return textured && lighted;
+    }
+}
+
+// CNA-DEMOS-ISSUE-006: PbrEffectShading and SkinnedPbrEffectShading tell the truth on every
+// renderer: a renderer that reports them samples the material's texture, and one that does not
+// draws the uniform fallback (or refuses the draw).
+TEST_F(CrossRendererContractTest, PbrShadingSupportMatchesWhetherTheEffectSamplesItsTexture)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    int judged = 0;
+    ForEachRenderer([&judged](GraphicsDevice& device, GraphicsRendererType type) {
+        if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD)) { return; }
+        const std::string name{CNA::getGraphicsRendererName(type)};
+        SCOPED_TRACE(name);
+        const auto judge = [&](CNA::RendererFeature feature, const char* effectName, auto&& draw) {
+            std::optional<bool> shaded;
+            try { shaded = draw(); }
+            catch (const std::exception& e)
+            {
+                EXPECT_FALSE(device.SupportsRendererFeatureEXT(feature))
+                    << name << " reports " << effectName << " shading but refused it: " << e.what();
+                return;
+            }
+            if (!shaded.has_value()) { return; }  // no colour readback (HEADLESS)
+            ++judged;
+            EXPECT_EQ(device.SupportsRendererFeatureEXT(feature), *shaded)
+                << name << (*shaded ? " shades " : " reports shading but drew the fallback for ")
+                << effectName << (*shaded ? " but does not report it" : "");
+        };
+        judge(CNA::RendererFeature::PbrEffectShading, "PbrEffect", [&] {
+            return DrawsItsTexture<PbrEffect, PbrProbeVertex>(device, false, [](PbrEffect&) {});
+        });
+        judge(CNA::RendererFeature::SkinnedPbrEffectShading, "SkinnedPbrEffect", [&] {
+            return DrawsItsTexture<SkinnedPbrEffect, SkinnedPbrProbeVertex>(
+                device, true, [](SkinnedPbrEffect& effect) {
+                    effect.SetBoneTransforms({Matrix::getIdentityProperty()});
+                });
+        });
+    });
+    EXPECT_GT(judged, 0) << "no renderer in this build drew and read back the PBR probe";
 }
 
 #endif  // CNA_MULTI_RENDERER

@@ -3595,6 +3595,17 @@ namespace Microsoft::Xna::Framework::Graphics
                            FeatureSupport(renderer.SupportsShadowSamplingEXT()));
         profile.SetFeature(CNA::RendererFeature::ImageBasedLighting,
                            FeatureSupport(renderer.SupportsImageBasedLightingEXT()));
+        profile.SetFeature(
+            CNA::RendererFeature::SamplerLevelOfDetailBias,
+            FeatureSupport(renderer.AppliesSamplerLevelOfDetailBiasEXT()),
+            "Unsupported here means the bias is accepted and has no effect, never refused.");
+        profile.SetFeature(CNA::RendererFeature::PbrEffectShading,
+                           FeatureSupport(renderer.ShadesPbrEffectEXT()),
+                           "Unsupported here means PbrEffect draws an untextured, unlit fallback.");
+        profile.SetFeature(
+            CNA::RendererFeature::SkinnedPbrEffectShading,
+            FeatureSupport(renderer.ShadesSkinnedPbrEffectEXT()),
+            "Unsupported here means SkinnedPbrEffect draws an untextured, unlit fallback.");
 
         const auto dialect = renderer.GetShaderDialectEXT();
         profile.SetFeature(CNA::RendererFeature::ShaderDialectGlslDesktop,

@@ -2265,6 +2265,15 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             return device_ != nullptr;
         }
+        /** @brief WGSL `textureSampleBias` on every stock route (WEBGPU-205/208). @return Whether a device exists. */
+        [[nodiscard]] bool AppliesSamplerLevelOfDetailBiasEXT() const override
+        {
+            return device_ != nullptr;
+        }
+        /** @brief The unskinned PBR shader. @return Whether a device exists. */
+        [[nodiscard]] bool ShadesPbrEffectEXT() const override { return device_ != nullptr; }
+        /** @brief The skinned PBR route for strides 68 and 80. @return Whether a device exists. */
+        [[nodiscard]] bool ShadesSkinnedPbrEffectEXT() const override { return device_ != nullptr; }
 
         /**
          * @brief plans/plan_webgpu_modern_graphics.md WMG-0020: inserts a GPU debug label.

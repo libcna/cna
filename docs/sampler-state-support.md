@@ -153,7 +153,10 @@ for Tint. The shared compiled-effect sampler pixel contract runs on both routes 
 `ISpriteBatchRenderer::SetSamplerState` hook now carries filter, U/V/W addressing, anisotropy,
 `MaxMipLevel` and `MipMapLevelOfDetailBias`. `SpriteBatch::Begin` also assigns the resolved state to
 `GraphicsDevice.SamplerStates[0]`, matching FNA's observable `PrepRenderState` behavior. EasyGL,
-SDL GPU and WebGPU consume the complete hook. The shared `parity_sprite_sampler_state` oracle now
+SDL GPU, WebGPU and, since CNA-DEMOS-ISSUE-006, FNA3D consume the complete hook; FNA3D's sprite
+route had replaced the anisotropy, `MaxMipLevel`, bias and W address with the defaults.
+`RendererFeature::SamplerLevelOfDetailBias` reports whether a renderer applies the bias at all, and
+`CrossRendererContractTest` checks that answer against the mip level SpriteBatch actually samples. The shared `parity_sprite_sampler_state` oracle now
 requires bias +1 and -2 to select deliberately different mip colours, checks every retained device
 property, passes on all three renderers, and remains byte-identical between EasyGL and WebGPU.
 

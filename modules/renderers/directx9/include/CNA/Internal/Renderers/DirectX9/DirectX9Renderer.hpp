@@ -437,6 +437,15 @@ namespace CNA::Internal::Renderers::DirectX9
          * @return True when the device has not been lost.
          */
         [[nodiscard]] bool CanBeginDrawEXT() const override { return !deviceLost_; }
+        /** @brief `D3DSAMP_MIPMAPLODBIAS`. @return Whether a device exists. */
+        [[nodiscard]] bool AppliesSamplerLevelOfDetailBiasEXT() const override
+        {
+            return device_ != nullptr;
+        }
+        /** @brief CNA's SM3 PBR shaders. @return Whether a device exists. */
+        [[nodiscard]] bool ShadesPbrEffectEXT() const override { return device_ != nullptr; }
+        /** @brief CNA's SM3 skinned PBR shaders. @return Whether a device exists. */
+        [[nodiscard]] bool ShadesSkinnedPbrEffectEXT() const override { return device_ != nullptr; }
         /// CNA's SM3 stock-extension and PBR shaders sample the full shared shadow contract:
         /// single/cascaded directional maps plus point-cube and spot-map shadows.
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override
