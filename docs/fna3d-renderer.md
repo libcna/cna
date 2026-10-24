@@ -265,6 +265,16 @@ CNA's contract is unambiguous ("x, y are top-left in game coordinates"), so `Fna
 reads the whole backbuffer — which every driver agrees is top-row-first — and crops in CNA.
 Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only.
 
+### Texture upload ordering (upstream, reported)
+
+FNA3D's SDL_GPU driver records uploads on a command buffer of its own and submits it ahead of the
+frame's draws. `SetTextureData2D` cycles the texture -- earlier draws keep the old resource -- only
+for a whole write of a single-level, single-layer texture; `SetTextureDataCube` and
+`SetTextureData3D` never cycle. So a `TextureCube` changed between two draws of one frame shows its
+new contents in the earlier draw too, where XNA's keeps the old (`texture_setdata_after_draw` leg
+B, measured 2026-10-24 on the SDL_GPU driver over Vulkan); by the same source a `Texture3D` or a
+mipmapped `Texture2D` does the same. CNA reports it rather than working around it (handoff.md §5.3).
+
 ## Validation
 
 | Kind | Status |

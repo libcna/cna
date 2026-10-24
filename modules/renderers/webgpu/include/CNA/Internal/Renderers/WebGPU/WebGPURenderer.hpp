@@ -466,7 +466,8 @@ namespace CNA::Internal::Renderers::WebGPU
         /// The single `WGPUTextureViewDimension_Cube` view sampled by `texture_cube<f32>` in
         /// env_map3d.wgsl's fragment shader.
         [[nodiscard]] WGPUTextureView CubeView() const override { return cubeView_; }
-        [[nodiscard]] WebGPUSampledTextureEXT SampledCube() const override { return {cubeView_, sampled_}; }
+        /// The cube view a queued command binds; records that a command of the current queue holds it.
+        [[nodiscard]] WebGPUSampledTextureEXT SampledCube() const override;
 
         /**
          * @brief Keeps a reference to the framework's own CPU pixels for one cube face.
@@ -487,9 +488,19 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] const std::shared_ptr<std::vector<uint8_t>>& SharedCpuPixelsEXT(int face) const;
 
     private:
+        /// Allocates a native six-layer texture of this cube's size, format, levels and usage.
+        [[nodiscard]] WGPUTexture CreateNativeTextureEXT(const char* label) const;
+        /// Creates the whole-cube view of @p texture that a shader samples.
+        [[nodiscard]] WGPUTextureView CreateCubeViewEXT(WGPUTexture texture) const;
+        /// Moves this cube to a fresh native texture holding the same contents, leaving the old one
+        /// to the queued commands that sample it (see WebGPUTextureRenderer::RenameForWriteEXT).
+        void RenameForWriteEXT();
+
         WebGPURenderer* owner_ = nullptr;
         WGPUTexture texture_ = nullptr;
         WGPUTextureView cubeView_ = nullptr;
+        /// See WebGPUTextureRenderer::queuedCycleEXT_.
+        mutable std::uint64_t queuedCycleEXT_ = 0;
         /// WEBGPU-181: the framework's own level-0 pixels, one entry per face, shared not copied.
         std::array<std::shared_ptr<std::vector<uint8_t>>, 6> cpuPixels_{};
         /// See WebGPUTextureRenderer::sampled_.
@@ -703,8 +714,16 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WebGPUSampledTextureEXT SampledEXT() const;
 
     private:
+        /// Allocates a native volume of this texture's size, format and levels.
+        [[nodiscard]] WGPUTexture CreateNativeTextureEXT(const char* label) const;
+        /// Moves this volume to a fresh native texture holding the same contents, leaving the old
+        /// one to the queued commands that sample it (see WebGPUTextureRenderer::RenameForWriteEXT).
+        void RenameForWriteEXT();
+
         WebGPURenderer* owner_ = nullptr;
         WGPUTexture texture_ = nullptr;
+        /// See WebGPUTextureRenderer::queuedCycleEXT_.
+        mutable std::uint64_t queuedCycleEXT_ = 0;
         mutable WGPUTextureView sampledView_ = nullptr;
         mutable std::shared_ptr<const WebGPUSampledResourceEXT> sampledKeepAlive_;
         int width_ = 0;

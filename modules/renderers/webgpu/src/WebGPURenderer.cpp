@@ -1509,6 +1509,51 @@ namespace CNA::Internal::Renderers::WebGPU
         owner.RegisterDeviceResourceEXT(this);   // WEBGPU-182
     }
 
+    namespace
+    {
+        // handoff.md 5.1: copies every level of @p from but @p skipLevel (-1 copies all) into
+        // @p to, a texture of the same size, format and level count, on a command submitted before
+        // this returns -- so the copy reads @p from ahead of the queue write that follows. A
+        // cube's six layers go with their level and a volume's slices shrink with it. A
+        // block-compressed level is copied at its block-aligned physical extent, as the uploads
+        // write it.
+        void CopyLevelsForWriteEXT(WebGPURenderer& owner, WGPUTexture from, WGPUTexture to,
+                                   const int width, const int height, const int depthOrLayers,
+                                   const bool volume, const int mipLevels, const bool blockCompressed,
+                                   const int skipLevel)
+        {
+            WGPUCommandEncoder encoder = nullptr;
+            for (int level = 0; level < mipLevels; ++level)
+            {
+                if (level == skipLevel) continue;
+                if (encoder == nullptr) encoder = wgpuDeviceCreateCommandEncoder(owner.Device(), nullptr);
+                WGPUTexelCopyTextureInfo source{};
+                source.texture = from;
+                source.mipLevel = static_cast<std::uint32_t>(level);
+                source.aspect = WGPUTextureAspect_All;
+                WGPUTexelCopyTextureInfo destination = source;
+                destination.texture = to;
+                int levelW = std::max(1, width >> level);
+                int levelH = std::max(1, height >> level);
+                if (blockCompressed)
+                {
+                    levelW = (levelW + 3) / 4 * 4;
+                    levelH = (levelH + 3) / 4 * 4;
+                }
+                const int layers = volume ? std::max(1, depthOrLayers >> level) : depthOrLayers;
+                const WGPUExtent3D extent{static_cast<std::uint32_t>(levelW),
+                                          static_cast<std::uint32_t>(levelH),
+                                          static_cast<std::uint32_t>(layers)};
+                wgpuCommandEncoderCopyTextureToTexture(encoder, &source, &destination, &extent);
+            }
+            if (encoder == nullptr) return;
+            WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, nullptr);
+            wgpuQueueSubmit(owner.Queue(), 1, &commandBuffer);
+            wgpuCommandBufferRelease(commandBuffer);
+            wgpuCommandEncoderRelease(encoder);
+        }
+    }
+
     WGPUTexture WebGPUTextureRenderer::CreateNativeTextureEXT(const char* label) const
     {
         WGPUTextureDescriptor descriptor{};
@@ -1559,38 +1604,9 @@ namespace CNA::Internal::Renderers::WebGPU
             wgpuTextureRelease(texture);
             throw std::runtime_error("CNA WebGPU: failed to create a Texture2D view to write into");
         }
-        if (mipLevels_ > 1)
-        {
-            // The levels the write leaves alone keep their contents. Submitted here, so the copy
-            // reads the old texture before the queue write that follows lands in the new one.
-            WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(owner_->Device(), nullptr);
-            for (int level = 0; level < mipLevels_; ++level)
-            {
-                if (level == writtenLevel) continue;
-                WGPUTexelCopyTextureInfo source{};
-                source.texture = texture_;
-                source.mipLevel = static_cast<std::uint32_t>(level);
-                source.aspect = WGPUTextureAspect_All;
-                WGPUTexelCopyTextureInfo destination = source;
-                destination.texture = texture;
-                // A block-compressed level is copied at its block-aligned physical extent, as
-                // UpdatePixelsLevel writes it.
-                int levelW = std::max(1, width_ >> level);
-                int levelH = std::max(1, height_ >> level);
-                if (compressed_)
-                {
-                    levelW = (levelW + 3) / 4 * 4;
-                    levelH = (levelH + 3) / 4 * 4;
-                }
-                const WGPUExtent3D extent{static_cast<std::uint32_t>(levelW),
-                                          static_cast<std::uint32_t>(levelH), 1};
-                wgpuCommandEncoderCopyTextureToTexture(encoder, &source, &destination, &extent);
-            }
-            WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, nullptr);
-            wgpuQueueSubmit(owner_->Queue(), 1, &commandBuffer);
-            wgpuCommandBufferRelease(commandBuffer);
-            wgpuCommandEncoderRelease(encoder);
-        }
+        // The levels the write leaves alone keep their contents.
+        CopyLevelsForWriteEXT(*owner_, texture_, texture, width_, height_, 1, false, mipLevels_,
+                              compressed_, writtenLevel);
         // The queued commands hold the old texture through sampled_'s copies, and release it.
         wgpuTextureViewRelease(view_);
         wgpuTextureRelease(texture_);
@@ -1946,8 +1962,24 @@ namespace CNA::Internal::Renderers::WebGPU
         if (compressed_)
             compressedLevels_.resize(static_cast<std::size_t>(6 * mipLevels_));
 
+        texture_ = CreateNativeTextureEXT("CNA WebGPU TextureCube");
+        if (texture_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create TextureCube");
+
+        cubeView_ = CreateCubeViewEXT(texture_);
+        if (cubeView_ == nullptr)
+        {
+            wgpuTextureRelease(texture_);
+            texture_ = nullptr;
+            throw std::runtime_error("CNA WebGPU: failed to create TextureCube view");
+        }
+        sampled_ = std::make_shared<const WebGPUSampledResourceEXT>(texture_, cubeView_);
+    }
+
+    WGPUTexture WebGPUTextureCubeRenderer::CreateNativeTextureEXT(const char* label) const
+    {
         WGPUTextureDescriptor descriptor{};
-        descriptor.label = StringView("CNA WebGPU TextureCube");
+        descriptor.label = StringView(label);
         // WEBGPU-113: CopySrc is required by GetData()'s wgpuCommandEncoderCopyTextureToBuffer()
         // readback (added alongside that method). WEBGPU-52: RenderAttachment is required by
         // GenerateMipsCubeFace()'s render-pass-based mip blit -- see that method's own doc
@@ -1964,10 +1996,11 @@ namespace CNA::Internal::Renderers::WebGPU
         descriptor.format = wgpuFormat_;
         descriptor.mipLevelCount = static_cast<std::uint32_t>(mipLevels_);
         descriptor.sampleCount = 1;
-        texture_ = wgpuDeviceCreateTexture(owner.Device(), &descriptor);
-        if (texture_ == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create TextureCube");
+        return wgpuDeviceCreateTexture(owner_->Device(), &descriptor);
+    }
 
+    WGPUTextureView WebGPUTextureCubeRenderer::CreateCubeViewEXT(WGPUTexture texture) const
+    {
         WGPUTextureViewDescriptor viewDescriptor{};
         viewDescriptor.label = StringView("CNA WebGPU TextureCube View");
         viewDescriptor.format = wgpuFormat_;
@@ -1977,14 +2010,36 @@ namespace CNA::Internal::Renderers::WebGPU
         viewDescriptor.baseArrayLayer = 0;
         viewDescriptor.arrayLayerCount = 6;
         viewDescriptor.aspect = WGPUTextureAspect_All;
-        cubeView_ = wgpuTextureCreateView(texture_, &viewDescriptor);
-        if (cubeView_ == nullptr)
+        return wgpuTextureCreateView(texture, &viewDescriptor);
+    }
+
+    WebGPUSampledTextureEXT WebGPUTextureCubeRenderer::SampledCube() const
+    {
+        if (owner_ != nullptr) queuedCycleEXT_ = owner_->QueuedCycleEXT();
+        return {cubeView_, sampled_};
+    }
+
+    void WebGPUTextureCubeRenderer::RenameForWriteEXT()
+    {
+        // See WebGPUTextureRenderer::UpdatePixelsLevel. A face write may cover part of one level,
+        // so every level of every face is copied and the write lands on top.
+        WGPUTexture texture = CreateNativeTextureEXT("CNA WebGPU TextureCube (renamed for a write)");
+        if (texture == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create a TextureCube to write into");
+        WGPUTextureView view = CreateCubeViewEXT(texture);
+        if (view == nullptr)
         {
-            wgpuTextureRelease(texture_);
-            texture_ = nullptr;
-            throw std::runtime_error("CNA WebGPU: failed to create TextureCube view");
+            wgpuTextureRelease(texture);
+            throw std::runtime_error("CNA WebGPU: failed to create a TextureCube view to write into");
         }
+        CopyLevelsForWriteEXT(*owner_, texture_, texture, size_, size_, 6, false, mipLevels_,
+                              compressed_, -1);
+        wgpuTextureViewRelease(cubeView_);
+        wgpuTextureRelease(texture_);
+        texture_ = texture;
+        cubeView_ = view;
         sampled_ = std::make_shared<const WebGPUSampledResourceEXT>(texture_, cubeView_);
+        queuedCycleEXT_ = 0;
     }
 
     WebGPUTextureCubeRenderer::~WebGPUTextureCubeRenderer()
@@ -2021,6 +2076,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         const std::size_t required = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
         if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
+        if (owner_ != nullptr && queuedCycleEXT_ == owner_->QueuedCycleEXT()) RenameForWriteEXT();
 
         WGPUTexelCopyTextureInfo destination{};
         destination.texture = texture_;
@@ -2104,6 +2160,7 @@ namespace CNA::Internal::Renderers::WebGPU
                         source + static_cast<std::size_t>(row) * rectRowBytes, rectRowBytes);
         }
         const std::uint8_t* blocks = store.data();
+        if (owner_ != nullptr && queuedCycleEXT_ == owner_->QueuedCycleEXT()) RenameForWriteEXT();
 
         WGPUTexelCopyTextureInfo destination{};
         destination.texture = texture_;
@@ -2747,16 +2804,7 @@ namespace CNA::Internal::Renderers::WebGPU
             }
         }
 
-        WGPUTextureDescriptor descriptor{};
-        descriptor.label = StringView("CNA WebGPU Texture3D");
-        descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst | WGPUTextureUsage_CopySrc;
-        descriptor.dimension = WGPUTextureDimension_3D;
-        descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_),
-                                       static_cast<std::uint32_t>(depth_)};
-        descriptor.format = wgpuFormat_;
-        descriptor.mipLevelCount = static_cast<std::uint32_t>(mipLevels_);
-        descriptor.sampleCount = 1;
-        texture_ = wgpuDeviceCreateTexture(owner.Device(), &descriptor);
+        texture_ = CreateNativeTextureEXT("CNA WebGPU Texture3D");
         if (texture_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create Texture3D");
         // WEBGPU-182: this kind cannot rebuild itself on a new device, so a simulated loss
@@ -2769,10 +2817,41 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         // WEBGPU-182.
         if (owner_ != nullptr) owner_->CountUnrecoverableResourceEXT(-1);
-#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        // SampledView() makes the view in every build since WMG-0006, not only with compiled
+        // effects, so it is released in every build.
         if (sampledView_ != nullptr) wgpuTextureViewRelease(sampledView_);
-#endif
         if (texture_ != nullptr) wgpuTextureRelease(texture_);
+    }
+
+    WGPUTexture WebGPUTexture3DRenderer::CreateNativeTextureEXT(const char* label) const
+    {
+        WGPUTextureDescriptor descriptor{};
+        descriptor.label = StringView(label);
+        descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst | WGPUTextureUsage_CopySrc;
+        descriptor.dimension = WGPUTextureDimension_3D;
+        descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_),
+                                       static_cast<std::uint32_t>(depth_)};
+        descriptor.format = wgpuFormat_;
+        descriptor.mipLevelCount = static_cast<std::uint32_t>(mipLevels_);
+        descriptor.sampleCount = 1;
+        return wgpuDeviceCreateTexture(owner_->Device(), &descriptor);
+    }
+
+    void WebGPUTexture3DRenderer::RenameForWriteEXT()
+    {
+        // See WebGPUTextureRenderer::UpdatePixelsLevel; a box write may cover part of a level, so
+        // every level is copied and the write lands on top. The view is made again on demand.
+        WGPUTexture texture = CreateNativeTextureEXT("CNA WebGPU Texture3D (renamed for a write)");
+        if (texture == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create a Texture3D to write into");
+        CopyLevelsForWriteEXT(*owner_, texture_, texture, width_, height_, depth_, true, mipLevels_,
+                              false, -1);
+        if (sampledView_ != nullptr) wgpuTextureViewRelease(sampledView_);
+        sampledView_ = nullptr;
+        sampledKeepAlive_.reset();
+        wgpuTextureRelease(texture_);
+        texture_ = texture;
+        queuedCycleEXT_ = 0;
     }
 
     bool WebGPUTexture3DRenderer::SetData(int level, int x, int y, int z,
@@ -2795,6 +2874,7 @@ namespace CNA::Internal::Renderers::WebGPU
             static_cast<std::size_t>(w) * static_cast<std::size_t>(h) *
             static_cast<std::size_t>(depth) * static_cast<std::size_t>(bytesPerTexel_);
         if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
+        if (owner_ != nullptr && queuedCycleEXT_ == owner_->QueuedCycleEXT()) RenameForWriteEXT();
 
         WGPUTexelCopyTextureInfo destination{};
         destination.texture = texture_;
@@ -10519,6 +10599,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     WebGPUSampledTextureEXT WebGPUTexture3DRenderer::SampledEXT() const
     {
+        if (owner_ != nullptr) queuedCycleEXT_ = owner_->QueuedCycleEXT();
         WGPUTextureView view = SampledView();
         if (view == nullptr) return {};
         if (sampledKeepAlive_ == nullptr)

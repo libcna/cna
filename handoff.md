@@ -65,8 +65,9 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   upload to a texture a queued draw samples is now ordered after that draw (SDL_GPU submits the
   queued work first, WEBGPU writes Texture2D into a fresh texture), and
   `EasyGL_SpriteBatch_SortModeSemantics` leg B asserts XNA's red/blue on SDL_GPU, WEBGPU,
-  OPENGLES3, OPENGL33, SOFTWARE and FNA3D. Reading for it found the WEBGPU cube/volume twin now in
-  §5.1.
+  OPENGLES3, OPENGL33, SOFTWARE and FNA3D. WEBGPU's TextureCube and Texture3D, found by reading,
+  rename the same way since the commit after it, and `*_Conformance_texture_setdata_after_draw`
+  checks a Texture2D and a TextureCube changed between two draws on every pixel renderer.
 - DC-R1 (`51fb39d5a`, owner: implement): SDL_GPU binds a RenderTargetCube face in any slot of a
   target set. DC-R2 (`c7f6c68e5`, owner: all-or-none exact, refuse others): SDL_GPU applies a
   MultiSampleMask keeping every sample or none and refuses any other, and
@@ -274,14 +275,7 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-- **`WEBGPU`: a `TextureCube` or `Texture3D` `SetData` lands ahead of draws already queued in its
-  bind cycle** (found by reading the code on 2026-10-24, not reproduced). A queue write runs before
-  the next submission and a bind cycle is encoded only when it ends, so a draw queued before the
-  write samples the new contents, where XNA's keeps the old. `Texture2D` has the fix
-  (`WebGPUTextureRenderer::RenameForWriteEXT` writes into a fresh texture while a queued command
-  samples the old one), which also closed `SpriteSortMode::Immediate` drawing every sprite with its
-  texture's final contents on `SDL_GPU` and `WEBGPU`; `SDL_GPU` submits the queued work first for
-  all three texture kinds.
+None open (reconciled 2026-10-24).
 
 ### 5.2 Limitations
 
@@ -344,7 +338,11 @@ Behaviour CNA does not own, measured and reported rather than worked around.
   - FNA3D: `SkinnedEffect.VertexColorEnabled` is ignored outright (B equals A) and saturates before
     the fold; its back buffer keeps a 3, 5 or 7 sample request unrounded while its render targets
     round it down; `GraphicsDeviceManager`'s default `Depth24` request is not applied in
-    `graphics_adapter_query`. FNA3D's driver owns those answers.
+    `graphics_adapter_query`. A `TextureCube` changed between two draws of one frame shows its new
+    contents in the earlier draw too (`texture_setdata_after_draw` B, 2026-10-24): FNA3D's SDL_GPU
+    driver uploads on a command buffer it submits ahead of the frame's draws and cycles only a whole
+    single-level 2D texture, so by its source a `Texture3D` or a mipmapped `Texture2D` does the
+    same. FNA3D's driver owns those answers.
   - WEBGPU and DIRECTX9: cube faces in a multi-render-target set are refused with
     `System::NotSupportedException` while `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4
     and the plural cube-face `RenderTargetSemantics` cases skip on that refusal); HEADLESS accepts
