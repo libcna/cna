@@ -54,6 +54,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         return names;
     }
 
+    bool TaskItem::operator==(const TaskItem& other) const
+    {
+        // Not defaulted: System::Object, the base, has no operator==, so a defaulted one is
+        // deleted and no caller could compare two items.
+        return itemSpec_ == other.itemSpec_ && metadata_ == other.metadata_;
+    }
+
     const std::string& TaskItem::GetTypeName() const
     {
         static const std::string name("Microsoft.Xna.Framework.Content.Pipeline.Tasks.TaskItem");

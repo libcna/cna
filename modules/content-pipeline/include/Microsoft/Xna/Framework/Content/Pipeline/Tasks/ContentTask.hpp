@@ -89,8 +89,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
          */
         CNAEXT [[nodiscard]] std::vector<std::string> MetadataNames() const;
 
-        /** @brief Compares the path and every metadata entry. */
-        CNAEXT [[nodiscard]] bool operator==(const TaskItem& other) const = default;
+        /**
+         * @brief Compares the path and every metadata entry.
+         *
+         * @param other The item to compare with.
+         * @return true when both name the same path and carry the same metadata.
+         */
+        CNAEXT [[nodiscard]] bool operator==(const TaskItem& other) const;
 
         /** @brief Returns the type's stable name. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;

@@ -150,6 +150,31 @@ TEST(XnaTaskItem, CarriesAPathAndCaseInsensitiveMetadata)
     EXPECT_EQ(item.MetadataNames().size(), 2u);
 }
 
+// The museum's wk-tasks room: a defaulted operator== was deleted (System::Object has none), so
+// `item == other` did not compile.
+TEST(XnaTaskItem, EqualityComparesThePathAndEveryMetadataEntry)
+{
+    Tasks::TaskItem item("Content/Tree.png");
+    item.SetMetadata("Processor", "TextureProcessor");
+    Tasks::TaskItem same("Content/Tree.png");
+    same.SetMetadata("Processor", "TextureProcessor");
+    EXPECT_TRUE(item == same);
+    EXPECT_FALSE(item != same);
+
+    Tasks::TaskItem otherPath("Content/Rock.png");
+    otherPath.SetMetadata("Processor", "TextureProcessor");
+    EXPECT_FALSE(item == otherPath);
+
+    Tasks::TaskItem otherValue("Content/Tree.png");
+    otherValue.SetMetadata("Processor", "ModelProcessor");
+    EXPECT_FALSE(item == otherValue);
+
+    Tasks::TaskItem extraEntry = same;
+    extraEntry.SetMetadata("Name", "");
+    EXPECT_TRUE(item != extraEntry);
+    EXPECT_TRUE(Tasks::TaskItem() == Tasks::TaskItem());
+}
+
 TEST(XnaBuildContent, TheCancelEventNameIsXnasOwnTemplate)
 {
     // Read from the assemblies' metadata, verbatim: a string.Format template whose one argument is
