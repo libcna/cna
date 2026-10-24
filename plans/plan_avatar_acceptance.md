@@ -13,7 +13,7 @@ Task ids `AVA-*`; one task, one commit.
 | Task | What | Status |
 |---|---|---|
 | AVA-01 | Reproducible baseline on the current HEAD | done |
-| AVA-02 | The two STUB failures the baseline found | open |
+| AVA-02 | The two STUB failures the baseline found | done |
 | AVA-03 | Documentation drift (revision, sizes, folds, proportions) | open |
 | AVA-04 | One Avatar v3 acceptance command | open |
 | AVA-05 | Visual regression: checked-in manifest and goldens, legacy script retired | open |
@@ -66,3 +66,19 @@ body at its authored height up to 3-4 mm sideways and 6 mm vertically (FemaleIdl
 description extremes (1.45 or 2.05 m, proportions 0 or 255) up to 30 mm (FemaleIdleFixShoe), 21 mm
 (Celebrate), 19 mm (MaleSurprised) and 11-14 mm (the weight shifts, Stand5, FemaleShocked).
 Presets without root motion do not drift.
+
+## AVA-02 STUB failures
+
+- The Guide's avatar editor stage and its portraits (`GuideAvatarEditor.cpp`, `GuidePortraits.cpp`)
+  bound a `RenderTarget2D` unconditionally; on a renderer without off-screen targets the bind threw
+  out of the Guide's draw, which only the device tests whose avatar happened to finish loading in
+  time reached. They now leave the picture out when the target reports no renderer behind it
+  (`GetRenderTargetRenderer()`), and the editor's `stateForTesting` names the stage drawn, refused
+  or not yet drawn. `TheStageIsDrawnOrLeftOutOnEveryRenderer` and
+  `PortraitsAreDrawnOrLeftOutOnEveryRenderer` wait for the avatar, so every renderer reaches the
+  draw; both fail on STUB without the fix.
+- `AFailedGpuUploadFailsEveryDrawCleanlyRatherThanHalfBuilding` skips unless the device refuses a
+  vertex buffer, which is what provokes the failed upload it pins; STUB accepts them.
+
+Result: `CnaGamerServicesTests` 739 tests -- STUB 736 passed and 3 skipped (the upload test and
+the two 3D draw tests), OPENGLES3 738 passed and 1 skipped; nothing failed.

@@ -5,6 +5,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -287,11 +289,21 @@ TEST(AvatarRendererTest, EveryFormat3FeatureDrawsAndANewDeviceGetsItsOwnResource
 // plans/plan_apple_m4.md AM4-008: the GPU upload used to set its "uploaded" marker before the
 // buffers existed, so a renderer that refuses vertex buffers left a half-built upload behind a
 // complete-looking marker and the second Draw indexed past the end of the part list. Every Draw
-// must now fail the same clean way, which only a renderer without 3D can provoke.
+// must now fail the same clean way, which only a renderer that refuses vertex buffers can provoke:
+// the retired 2D-only SDL_RENDERER did; STUB, without a 3D pipeline too, accepts them and draws
+// nothing (plans/plan_avatar_acceptance.md AVA-02).
 TEST(AvatarRendererTest, AFailedGpuUploadFailsEveryDrawCleanlyRatherThanHalfBuilding) {
     GraphicsDevice device;
-    if (device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
-        GTEST_SKIP() << "needs a renderer without a 3D pipeline to make the upload fail";
+    bool refused = false;
+    try {
+        namespace Graphics = Microsoft::Xna::Framework::Graphics;
+        Graphics::VertexBuffer probe(device, Graphics::VertexPositionNormalTextureSkinned::getVertexDeclarationStatic(), 3,
+                                     Graphics::BufferUsage::WriteOnly);
+    } catch (const std::exception&) {
+        refused = true;
+    }
+    if (!refused)
+        GTEST_SKIP() << "needs a renderer that refuses vertex buffers to make the upload fail";
     TestingDevice testing(&device);
     auto description = Describe(AvatarBodyType::Female, 1650);
     AvatarRenderer renderer(&description);

@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
 #include "../../../../../../platform/tests/CNA/Platform/CannedGamepad.hpp"
@@ -549,6 +550,34 @@ TEST_F(GuideAvatarEditorDeviceTest, AMouseReachesEveryPartOfTheEditor) {
     Mouse({stage.X + 80.0f, stage.Y}, true, 120);
     Mouse({stage.X + 80.0f, stage.Y}, false, 120);
     EXPECT_NE(View().first, yaw);
+}
+
+// plans/plan_avatar_acceptance.md AVA-02: the stage and the portraits are drawn into render targets.
+// A renderer without them (STUB) used to throw out of the Guide's draw once an avatar was ready,
+// which only the device tests whose avatar happened to finish loading in time reached. These wait
+// for the avatar, so every renderer reaches the draw: one with render targets draws, one without
+// shows the editor without the picture.
+TEST_F(GuideAvatarEditorDeviceTest, TheStageIsDrawnOrLeftOutOnEveryRenderer) {
+    ASSERT_TRUE(Open());
+    const auto stage = [] { const auto state = Ui::stateForTesting(); return state.substr(state.find("stage=") + 6); };
+    for (int frame = 0; frame < 2500 && stage() == "none"; ++frame) ASSERT_NO_THROW(Keys({}));
+    for (int frame = 0; frame < 5; ++frame) ASSERT_NO_THROW(Keys({}));
+    Microsoft::Xna::Framework::Graphics::RenderTarget2D probe(device_, 4, 4);
+    EXPECT_EQ(probe.GetRenderTargetRenderer() ? "drawn" : "refused", stage());
+}
+
+TEST_F(GuideAvatarEditorDeviceTest, PortraitsAreDrawnOrLeftOutOnEveryRenderer) {
+    auto portraits = Ui::makeAvatarPortraits();
+    const auto avatar = Avatar(1, 11);
+    for (int frame = 0; frame < 2500; ++frame) {
+        (void)portraits->request(avatar, Ui::Framing::Head, 64, 64, false);
+        ASSERT_NO_THROW(portraits->render(device_, 0.0));
+        if (portraits->waiting() == 0) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(4));
+    }
+    ASSERT_EQ(0, portraits->waiting()) << "the portrait's avatar never became ready";
+    Microsoft::Xna::Framework::Graphics::RenderTarget2D probe(device_, 4, 4);
+    EXPECT_EQ(probe.GetRenderTargetRenderer() != nullptr, portraits->request(avatar, Ui::Framing::Head, 64, 64, false) != nullptr);
 }
 
 TEST(GuideAvatarEditorFramingTest, TheHandsViewFramesTheStandingHand) {

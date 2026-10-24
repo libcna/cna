@@ -150,6 +150,8 @@ void AvatarPortraits::render(Xna::Graphics::GraphicsDevice& device,double second
         if(!entry.target)
             entry.target=std::make_unique<Xna::Graphics::RenderTarget2D>(device,entry.width,entry.height,false,Xna::Graphics::SurfaceFormat::Color,
                 Xna::Graphics::DepthFormat::Depth24);
+        // A renderer without off-screen targets (STUB) refuses binding one: the Guide shows no portrait.
+        if(!entry.target->GetRenderTargetRenderer())continue;
         // Framed from the avatar's own bind pose: its height and proportions vary.
         const float height=entry.description->getHeightProperty();
         const float aspect=static_cast<float>(entry.width)/static_cast<float>(entry.height);

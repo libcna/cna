@@ -233,7 +233,8 @@ public:
     }
     std::string stateForTesting() const override {
         char text[64];
-        std::snprintf(text,sizeof text,"yaw=%.3f zoom=%.3f",static_cast<double>(yaw_),static_cast<double>(zoom_));
+        std::snprintf(text,sizeof text,"yaw=%.3f zoom=%.3f stage=%s",static_cast<double>(yaw_),static_cast<double>(zoom_),
+                      stageDrawn_?"drawn":stageRefused_?"refused":"none");
         return text;
     }
 
@@ -297,6 +298,9 @@ public:
         if(!target_||target_->getWidthProperty()!=stageWidth_||target_->getHeightProperty()!=stageHeight_)
             target_=std::make_unique<Xna::Graphics::RenderTarget2D>(device,stageWidth_,stageHeight_,false,Xna::Graphics::SurfaceFormat::Color,
                 Xna::Graphics::DepthFormat::Depth24);
+        // A renderer without off-screen targets (STUB) refuses binding one: the editor works without its stage.
+        stageRefused_=!target_->GetRenderTargetRenderer();
+        if(stageRefused_)return;
         // The camera eases to the category's view; turning and zoom are the player's.
         const float aspect=static_cast<float>(stageWidth_)/static_cast<float>(stageHeight_);
         const float height=shownDescription_->getHeightProperty();
@@ -969,7 +973,7 @@ private:
     int idleTurn_=0;
     std::unique_ptr<Xna::Graphics::RenderTarget2D> target_;
     int stageWidth_=0,stageHeight_=0;
-    bool stageDrawn_=false,cameraSet_=false;
+    bool stageDrawn_=false,stageRefused_=false,cameraSet_=false;
     Xna::Vector3 cameraTarget_,cameraOffset_;
     float cameraFov_=0.5f,yaw_=3.44159265f,zoom_=1.0f,viewTurn_=0.0f;
     bool resetFocus_=false;
