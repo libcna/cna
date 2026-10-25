@@ -14,15 +14,10 @@ required; clone it once outside this repository if none exists.
 
 Do **not** treat old CNA code or AI-generated stubs as authoritative if they conflict with the FNA reference API.
 
-### Binding Analysis Sources
+### Language bindings
 
-The following project-design documents are **read-only source material**. Do not edit, reformat,
-move, or delete them. Derive C-binding decisions and planning artifacts from them instead:
-
-```text
-misc/analysis_binding.md
-misc/analysis_binding_sharp_runtime.md
-```
+How CNA is exposed to other languages, and why, is [`docs/binding.md`](docs/binding.md); the C ABI
+contract is [`docs/c-api/`](docs/c-api/README.md).
 
 The current approved planning boundary is limited to CNA's native C API/C ABI. Do not create
 plans or implementations for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go,

@@ -32,9 +32,9 @@ shared ccache and at most six parallel compile jobs, without concurrent builds.
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
 > owner instruction.
 
-> **Authoritative design inputs (read-only):** `misc/analysis_binding.md` and
-> `misc/analysis_binding_sharp_runtime.md`. The behavioral reference for the underlying XNA-facing C++
-> implementation remains the local FNA tree required by `AGENTS.md`.
+> **Design:** [`docs/binding.md`](../docs/binding.md). It replaced the 2026-08-14 design analyses
+> `misc/analysis_binding*.md` on 2026-10-25; Git history keeps them. The behavioral reference for
+> the underlying XNA-facing C++ implementation remains the local FNA tree required by `AGENTS.md`.
 
 ## Goal
 
@@ -2684,7 +2684,6 @@ paths:
 
 ### Standing constraints
 
-- `misc/analysis_binding.md` and `misc/analysis_binding_sharp_runtime.md` are **strictly read-only**.
 - Only the C binding is in scope. Do not plan or implement C#, .NET, JavaScript, Rust, Python,
   Java, Zig, Go, Swift or any other language binding.
 - One task, one commit. Stage explicit file names; never `git add -A`. Do not push unless asked.

@@ -11,6 +11,9 @@ on it) rather than assuming either way.
 
 - **[`installed-cpp-sdk.md`](installed-cpp-sdk.md)** — opt-in binary C++ SDK, exported
   CNA/Sharp Runtime modules, relocation, C API coexistence and install regression gate.
+- **[`binding.md`](binding.md)** — language bindings: why every language goes through the C ABI,
+  the boundary rules, Sharp Runtime's place, how to design and test a binding, and what CNA.NET
+  may claim. The ABI contract itself is [`c-api/`](c-api/README.md).
 - **[`../handoff.md`](../handoff.md)** (repo root) — the current state of the project. Its §5 is the
   **one** authoritative list of current known bugs and limitations; treat it as the source of truth
   for "is X still broken" over any dated snapshot below. Nothing else in the repository keeps a live
