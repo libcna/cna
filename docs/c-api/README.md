@@ -114,7 +114,9 @@ must not be able to widen a rule's authority (CBIND-050).
 
 - Public types use the `CNA_` prefix; public functions use lowercase `cna_`.
 - C API public headers live under `CNA/C/`; `CNA/C/cna.h` is the umbrella header.
-- Initial headers require C17 and must also compile as C++23 for mixed-language consumers.
+- Public headers need only C99 and must also compile as C++11 and later for mixed-language
+  consumers; [`COMPATIBILITY.md`](COMPATIBILITY.md) records the compilers and modes that hold them
+  to it.
 - All fallible functions return `CNA_Result`; successful values use out parameters.
 - Headers include only standard C headers and use no C++ or Sharp Runtime spelling.
 - Every public declaration receives a Doxygen block in its `.h` header.

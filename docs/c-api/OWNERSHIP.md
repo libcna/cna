@@ -69,7 +69,11 @@ allocator ownership rule.
 
 An event subscription returns an owned registration handle. Destroying that registration removes
 the callback and synchronizes with any documented in-flight invocation before the call returns.
-Destroying its source removes all registrations and invalidates their handles. A callback receives
+Destroying its source detaches every registration. That is the one exception to the parent and child
+ordering above: a live registration does not block destroying its source, so a subscriber can
+observe the source's own disposal. The registration handle stays the caller's to release exactly
+once, before or after the source is gone; releasing it afterwards succeeds and detaches nothing
+([`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md)). A callback receives
 borrowed CNA handles only; it may request supported state changes but may not retain them without a
 separate documented retain operation.
 

@@ -610,9 +610,16 @@ bits  7..0   patch
 
 The public header will provide `CNA_ABI_VERSION_ENCODE(major, minor, patch)`,
 `CNA_ABI_VERSION_MAJOR`, `CNA_ABI_VERSION_MINOR`, `CNA_ABI_VERSION_PATCH`, and
-`cna_get_abi_version()`. A consumer must reject a different major and may require a minimum minor.
-The installed CMake package enforces exactly that: its version file is `SameMajorVersion`, so
-`find_package(CNA 0.1 CONFIG)` accepts `0.1` and everything additive after it, and rejects a `1.x`.
+`cna_get_abi_version()`. A consumer must reject a different major. From `1.0` on it may then require
+a minimum minor and accept every later one, because later minors are only additive. While the
+major is `0` that is not enough: under the `0.x` rule below any minor may break, so a `0.x`
+consumer must also reject a minor it was not written against — CNA.NET admits exactly one — and may
+accept a later patch of that minor.
+
+The installed CMake package checks only the first half: its version file is `SameMajorVersion`, so
+`find_package(CNA 0.1 CONFIG)` accepts `0.1` and every later `0.x`, and rejects a `1.x`. Under `0.x`
+the consumer's own runtime check against `cna_get_abi_version()` is what refuses a newer minor;
+`modules/c-api/examples/c/hello_cna.c` shows it.
 
 ABI `0.x` is experimental: an incompatible change requires a minor-version increment, release
 notes and a regenerated ABI baseline. ABI `1.x` and later permit only additive, backward-compatible

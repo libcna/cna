@@ -2,9 +2,17 @@
 
 ## CNA owns renderer selection
 
-The C API uses the renderer selected by CNA's build configuration. It does not expose a renderer
-pointer or create a separate runtime renderer-selection path. The C API reports the active renderer
-identity, build/platform capabilities and supported feature flags using fixed-width POD output.
+The C API uses the renderer CNA selects. It does not expose a renderer pointer or create a renderer
+selection path of its own. The C API reports the active renderer identity, build/platform
+capabilities and supported feature flags using fixed-width POD output.
+
+A build that compiles several renderers in chooses among them at run time
+([`runtime-renderer-selection.md`](../runtime-renderer-selection.md)), and the CNAEXT `cna_graphics_renderer_*_ext` family in
+`core_ext.h` is the C face of that same `CNA::GraphicsRendererSelection`, not a second mechanism. It
+lists the renderers compiled into the build (`cna_graphics_renderer_get_available_count_ext`,
+`_copy_available_ext`, `_get_is_available_ext`), accepts a preferred renderer by identity or name and
+a fallback chain until the first device latches the choice, and then reports the selected and
+active renderers and every fallback record with its reason and message.
 
 An operation unavailable on the active renderer returns `CNA_RESULT_NOT_SUPPORTED` and leaves any
 documented output parameter unchanged. It must not silently substitute different graphics behavior.

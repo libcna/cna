@@ -63,10 +63,14 @@ Use `#include <CNA/C/cna.h>` and the one target.
 
 The package version **is** the C ABI version, read out of `abi.h` at configure time so the two
 cannot drift. `find_package(CNA 0.1 CONFIG)` accepts **any same-major version at or above the one
-requested**, which is what [`ABI_VERSIONING.md`](ABI_VERSIONING.md) promises: reject a different
-major, require a minimum minor. So request the version you wrote against and leave it there --
-every minor within a major is additive, and raising the request with each one buys nothing. Ask for
-a version at all, though: a package request without one accepts anything.
+requested**. Request the version you wrote against, and ask for one at all: a package request
+without a version accepts anything.
+
+That is the whole check from ABI `1.0` on, where every minor within a major is additive. It is not
+enough while the ABI is `0.x`: there any minor may break ([`ABI_VERSIONING.md`](ABI_VERSIONING.md)),
+and the package will still accept a newer one. A `0.x` program therefore also checks
+`cna_get_abi_version()` at startup and refuses a minor other than the one it was built against, as
+step 1 of the example does.
 
 ## Without CMake
 

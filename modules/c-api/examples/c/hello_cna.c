@@ -244,13 +244,21 @@ int main(void)
     uint64_t type_name_bytes = 0U;
 
     /* 1. The version check comes first, because it decides whether anything else in this file is
-          meaningful. A different major is never compatible; a lower minor lacks routes this
-          program may have been compiled against. */
+          meaningful. A different major is never compatible. While the major is 0 any minor may
+          break, so only the minor these headers describe is accepted; from 1.0 on a newer minor
+          is additive and only a lower one, which lacks routes this program may use, is refused. */
     if ((runtime_abi >> 16U) != CNA_ABI_VERSION_MAJOR) {
         fprintf(stderr,
             "CNA ABI major mismatch: built against %u, found %u\n",
             (unsigned)CNA_ABI_VERSION_MAJOR,
             (unsigned)(runtime_abi >> 16U));
+        return 1;
+    }
+    if (CNA_ABI_VERSION_MAJOR == 0U && ((runtime_abi >> 8U) & 0xFFU) != CNA_ABI_VERSION_MINOR) {
+        fprintf(stderr,
+            "CNA ABI 0.%u found; this program was built against 0.%u, and 0.x minors may break\n",
+            (unsigned)((runtime_abi >> 8U) & 0xFFU),
+            (unsigned)CNA_ABI_VERSION_MINOR);
         return 1;
     }
     if (runtime_abi < CNA_ABI_VERSION) {
