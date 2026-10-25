@@ -296,8 +296,8 @@ limitation: FNA3D, SDL_GPU and EasyGL all pass the compiled cube-sampler contrac
 Running EasyGL's Shader Model 1-3 sections on the MojoShader SPIR-V route (`plans/plan_apple_m4.md`
 AM4-144) found silent wrong-pixel defects shared by every SPIR-V backend, all fixed for `SDL_GPU`
 and `WEBGPU`: a predicated `TEXKILL` that killed unconditionally
-(`mojoshader-6333f74-spirv-predicated-texkill.patch`), `vPos` at the pixel centre rather than
-Direct3D 9's integer pixel (`mojoshader-6333f74-spirv-vpos-pixel-corner.patch`), and `TEXBEM`/
+(libcna/mojoshader `spirv-predicated-texkill`), `vPos` at the pixel centre rather than
+Direct3D 9's integer pixel (`spirv-vpos-pixel-corner`), and `TEXBEM`/
 `TEXBEML` with zero bump matrices (`MojoShaderEffect::PackSpirvUniformBlock` fills the two float4s
 per sampler MojoShader appends to the uniform block). Three more are the pipeline's, and
 `MojoShaderEffect`'s SPIR-V adaptations (`SpirvPipelineAdaptation.hpp`) fit the module to it: `vFace`
@@ -430,7 +430,7 @@ constant and nothing else can look like a working render until the light is move
 pixel changes.
 
 CNA therefore translates fragment shaders at `highp`
-(`cmake/patches/mojoshader-6333f74-fragment-precision.patch`). GLSL ES 3.00 requires fragment
+(libcna/mojoshader `fragment-precision`). GLSL ES 3.00 requires fragment
 `highp`, so `WEBGL2`, `OPENGLES3` and the desktop GL profile get it unconditionally.
 
 Found on `NormalMappingSample_4_0` (`plans/plan_fx.md` FX-121).
@@ -454,7 +454,7 @@ vertex colours 1.24 and 0.40, interpolated across a triangle
 ```
 
 On a low-poly mesh that flat region is large and obvious. CNA restores the clamp
-(`cmake/patches/mojoshader-6333f74-vertex-color-clamp.patch`) at the end of the generated
+(libcna/mojoshader `vertex-color-clamp`) at the end of the generated
 `main()`, for the ES profiles only; the desktop profiles are left alone because GL already does
 it there.
 
@@ -506,15 +506,19 @@ applied, which is where a port keeps its per-frame parameter updates.
 Compiled-effect execution on FNA3D uses MojoShader, which FNA3D carries as a submodule. CNA links
 exactly one MojoShader — the revision FNA3D pins — and never builds a second copy.
 
-- FNA3D: pinned at `3240147` by `cmake/ThirdPartyFNA3D.cmake`.
-- MojoShader: `6333f74dbd5644789a63e903816441b16c1e8b60`, zlib licence.
-- CNA applies one narrow, versioned robustness patch to that exact MojoShader revision
-  (`cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`), which turns forty ways
-  untrusted bytecode could crash the process into ordinary parser errors. Thirty-nine of the forty were
-  found by the FX-051 fuzz campaign; see [`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md) for
-  the list and for the exposure that remains. CMake applies the patch automatically and
-  idempotently, for fetched checkouts and for an explicit `FETCHCONTENT_SOURCE_DIR_FNA3D` override
-  alike.
+- FNA3D: CNA's fork libcna/FNA3D, pinned by `cmake/ThirdPartyFNA3D.cmake`
+  ([`fna3d-renderer.md`](fna3d-renderer.md#the-two-forks) lists the pins and why the forks exist).
+- MojoShader: CNA's fork libcna/mojoshader, FNA3D's submodule: upstream
+  `6333f74dbd5644789a63e903816441b16c1e8b60` plus CNA's commits, zlib licence. A MojoShader fix is
+  named here by its former patch name (`effect-parser-robustness` was
+  `cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`); each is one commit on the
+  fork's `cna` branch with that name in its `CNA-Patch:` trailer
+  (`git log --grep=effect-parser-robustness`).
+- The `effect-parser-robustness` commit turns forty ways untrusted bytecode could crash the process
+  into ordinary parser errors. Thirty-nine of the forty were found by the FX-051 fuzz campaign; see
+  [`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md) for the list and for the exposure that
+  remains. It is part of the fork's source, so a fetched checkout and an explicit
+  `FETCHCONTENT_SOURCE_DIR_FNA3D` checkout of the pin both have it.
 - The stock `.fxb` fixtures under `modules/renderers/fna3d/effects/` are Microsoft's XNA stock
   effects as redistributed by FNA under `LICENSE.StockEffects`; their provenance and hashes are
   recorded in that directory's `README.md` and verified by a test.

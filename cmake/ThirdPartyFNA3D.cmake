@@ -1,11 +1,19 @@
-# --- FNA3D (3D graphics library for FNA, https://github.com/FNA-XNA/FNA3D) ---
+# --- FNA3D (3D graphics library for FNA) and its MojoShader submodule ---
 #
-# plans/plan_fna3d.md FNA3D-1 / design decision 1: FNA3D is fetched at configure time from the upstream
-# repository at a pinned tag, in the same spirit as the WEBGPU integration. FNA3D is a real
-# multi-file C library (not a single-header drop-in), so this actually builds a static archive; it carries MojoShader as a git submodule, which the fetch must recurse into
-# because FNA3D's own CMakeLists.txt compiles MojoShader's translation units directly. CNA carries
-# a narrow compatibility/conformance patch series for that exact FNA3D and submodule revision;
-# the fetch/configure path applies it automatically and idempotently.
+# plans/plan_fna3d.md FNA3D-1 / design decision 1: FNA3D is fetched at configure time at a pinned
+# commit, in the same spirit as the WEBGPU integration. FNA3D is a real multi-file C library (not a
+# single-header drop-in), so this actually builds a static archive; it carries MojoShader as a git
+# submodule, which the fetch must recurse into because FNA3D's own CMakeLists.txt compiles
+# MojoShader's translation units directly.
+#
+# The pin is CNA's fork https://github.com/libcna/FNA3D (upstream https://github.com/FNA-XNA/FNA3D).
+# Its `cna` branch is upstream FNA3D plus CNA's FNA3D fixes, one commit each, and its MojoShader
+# submodule points at the fork https://github.com/libcna/mojoshader (upstream
+# https://github.com/icculus/mojoshader), whose `cna` branch carries CNA's Effect parser,
+# shader-validation and shader-profile fixes the same way. Those fixes were once a series of patches
+# applied here at configure time; they are history in the forks now, so the fetched or supplied
+# checkout is used exactly as it is and nothing here writes to it. docs/fna3d-renderer.md says how
+# the forks follow upstream.
 #
 # FNA3D's only dependency is SDL 3.2.0 or newer -- exactly the SDL3 CNA already vendors -- so the
 # fetched project resolves SDL3::SDL3 from CNA's own already-configured imported target
@@ -14,17 +22,80 @@
 #
 # Offline / air-gapped builds: pass -DFETCHCONTENT_SOURCE_DIR_FNA3D=/path/to/FNA3D to point at an
 # existing checkout (CMake's own built-in per-dependency override, so no CNA-specific variable is
-# needed). That checkout must have its MojoShader submodule initialized.
+# needed): a clone of the fork at CNA_FNA3D_GIT_TAG with its MojoShader submodule initialized
+# (git submodule update --init). A checkout at another revision is reported, not refused -- that is
+# how a fork change is tried before the pin moves.
 
 include_guard(GLOBAL)
 
-set(CNA_FNA3D_GIT_REPOSITORY "https://github.com/FNA-XNA/FNA3D.git"
-    CACHE STRING "Upstream FNA3D repository fetched for the FNA3D graphics renderer")
-# Release tag 26.08 (FNA3D's own calendar versioning), commit 3240147. Bump deliberately: FNA3D's
-# driver list and FNA3D_* ABI move between releases, and modules/renderers/fna3d/effects/ holds
-# stock-effect binaries whose MojoShader parse path must keep matching the pinned library.
-set(CNA_FNA3D_GIT_TAG "3240147"
-    CACHE STRING "Pinned FNA3D revision used by the FNA3D graphics renderer")
+# libcna/FNA3D `cna`: FNA3D 26.08 (32401479a3ab), CNA's four FNA3D commits, and the MojoShader
+# submodule at libcna/mojoshader e6d80c19b3f6 (MojoShader 6333f74 and CNA's 133 commits). Bump
+# deliberately: FNA3D's driver list and FNA3D_* ABI move between releases, and
+# modules/renderers/fna3d/effects/ holds stock-effect binaries whose MojoShader parse path must keep
+# matching the pinned library.
+set(_cna_fna3d_default_repository "https://github.com/libcna/FNA3D.git")
+set(_cna_fna3d_default_tag "f4bef618d2c2e59866b02896b52efa25815c829b")
+# A build tree keeps the defaults of the CNA revision that first configured it. A cached value that
+# is one of CNA's own former defaults follows the current one; any other value is a developer's
+# override and is kept. Until the forks the defaults were upstream FNA3D at 3240147, which this file
+# then patched -- fetched as it is now, that revision would build without CNA's fixes.
+foreach(_cna_fna3d_setting IN ITEMS REPOSITORY TAG)
+    string(TOLOWER "${_cna_fna3d_setting}" _cna_fna3d_setting_lower)
+    set(_cna_fna3d_former_defaults "${_CNA_FNA3D_DEFAULT_GIT_${_cna_fna3d_setting}}")
+    if(_cna_fna3d_setting STREQUAL "REPOSITORY")
+        list(APPEND _cna_fna3d_former_defaults "https://github.com/FNA-XNA/FNA3D.git")
+    else()
+        list(APPEND _cna_fna3d_former_defaults "3240147")
+    endif()
+    get_property(_cna_fna3d_setting_type CACHE CNA_FNA3D_GIT_${_cna_fna3d_setting} PROPERTY TYPE)
+    if(_cna_fna3d_setting_type STREQUAL "STRING"
+       AND CNA_FNA3D_GIT_${_cna_fna3d_setting} IN_LIST _cna_fna3d_former_defaults
+       AND NOT CNA_FNA3D_GIT_${_cna_fna3d_setting} STREQUAL _cna_fna3d_default_${_cna_fna3d_setting_lower})
+        message(STATUS "CNA: CNA_FNA3D_GIT_${_cna_fna3d_setting} follows the new default "
+            "(${CNA_FNA3D_GIT_${_cna_fna3d_setting}} -> ${_cna_fna3d_default_${_cna_fna3d_setting_lower}})")
+        set_property(CACHE CNA_FNA3D_GIT_${_cna_fna3d_setting} PROPERTY VALUE
+            "${_cna_fna3d_default_${_cna_fna3d_setting_lower}}")
+    endif()
+    set(_CNA_FNA3D_DEFAULT_GIT_${_cna_fna3d_setting} "${_cna_fna3d_default_${_cna_fna3d_setting_lower}}"
+        CACHE INTERNAL "CNA's own default for CNA_FNA3D_GIT_${_cna_fna3d_setting}")
+endforeach()
+set(CNA_FNA3D_GIT_REPOSITORY "${_cna_fna3d_default_repository}"
+    CACHE STRING "FNA3D repository fetched for the FNA3D graphics renderer (CNA's fork)")
+set(CNA_FNA3D_GIT_TAG "${_cna_fna3d_default_tag}"
+    CACHE STRING "Pinned FNA3D commit used by the FNA3D graphics renderer")
+
+# A FETCHCONTENT_SOURCE_DIR_FNA3D checkout is built as it is. Say so when it is not the pinned
+# commit, or has local changes in FNA3D or its MojoShader submodule, because no step here brings
+# it to the pin any more. Read-only: a shared checkout may not be writable.
+function(_cna_fna3d_report_source_override source_dir)
+    find_package(Git QUIET)
+    if(NOT GIT_EXECUTABLE OR NOT EXISTS "${source_dir}/.git")
+        message(STATUS "CNA: FNA3D source ${source_dir} is not a git checkout; built as it is")
+        return()
+    endif()
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" -C "${source_dir}" rev-parse HEAD
+        OUTPUT_VARIABLE _head OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" -C "${source_dir}" rev-parse --verify --quiet
+                "${CNA_FNA3D_GIT_TAG}^{commit}"
+        OUTPUT_VARIABLE _pin OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" --no-optional-locks -C "${source_dir}" status --porcelain
+        OUTPUT_VARIABLE _changes OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(_head STREQUAL "" OR NOT _head STREQUAL _pin)
+        message(WARNING
+            "CNA: FETCHCONTENT_SOURCE_DIR_FNA3D=${source_dir} is at '${_head}', not the pinned "
+            "CNA_FNA3D_GIT_TAG=${CNA_FNA3D_GIT_TAG} of ${CNA_FNA3D_GIT_REPOSITORY}. It is built as "
+            "it is; CNA no longer patches FNA3D or MojoShader at configure time.")
+    endif()
+    if(NOT _changes STREQUAL "")
+        string(REPLACE "\n" "; " _changes "${_changes}")
+        message(WARNING
+            "CNA: FETCHCONTENT_SOURCE_DIR_FNA3D=${source_dir} has local changes (${_changes}). "
+            "They are built as they are.")
+    endif()
+endfunction()
 
 # plans/plan_fx.md FX-061/FX-062/FX-063/FX-065: fetches the pin and publishes `cna_mojoshader` alone --
 # the Effect Framework parser plus the OpenGL, SDL_GPU and D3D11 adapters, with no FNA3D linked.
@@ -41,172 +112,6 @@ function(cna_configure_mojoshader)
     endif()
 
     include(FetchContent)
-
-    set(_cna_fna3d_mojoshader_patch
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-effect-parser-robustness.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-fragment-precision.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-vertex-color-clamp.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-texcrd.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-legacy-texcoord-input.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-unmatched-fragment-input.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-ilp32-float-literal.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-d3d9-loop-count.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-subroutine-label.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-pixel-center.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-raster-inputs.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-predicated-destinations.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-predicated-texkill.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-projective-source-modifiers.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-log-semantics.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-nrm-xyz.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-shader-model-14-texld.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texm3x3-without-sampler.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-texreg2.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-texm3x3spec-reflection.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-legacy-depth.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-legacy-dependent-texture.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-legacy-bump-environment.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-vertex-sampler-dcl-mask.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-vs11-expp.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-temp-self-read-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texkill-temp-components.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sgn-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-partial-precision-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-vertex-only-arithmetic-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-model-one-opcode-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-vertex-shader-model-one-opcode-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-model-two-zero-opcode-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-shader-model-two-dynamic-profile-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-model-two-extended-loop-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-matrix-operand-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-source-absolute-profile-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-shader-model-three-constant-absolute-consistency.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sampler-register-range-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-temporary-register-range-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-input-register-range-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-output-register-range-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-constant-control-register-range-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-vertex-instruction-slot-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-model-two-zero-instruction-slot-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-model-one-instruction-slot-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-model-one-destination-mask-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-model-one-coissue-opcode-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-model-one-coissue-pair-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-read-only-input-register-destination-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-restricted-destination-register-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-write-only-output-register-source-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-address-register-access-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sampler-register-source-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-typed-control-source-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-special-control-source-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-relative-addressing-contract.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-vertex-subroutine-epilogue.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-miscellaneous-input-contract.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sm3-semantic-packing.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-centroid-interpolation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-sm2-centroid-interpolation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-composite-write-mask.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-flow-control-structure-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-vs20-static-flow-count.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-call-graph-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-label-lifecycle-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-shader-model-three-label-range.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-immediate-constant-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-duplicate-declaration-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texldd-sampler-position.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texture-source-modifier-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texld20-operand-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texldd-operand-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texldl-saturate-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texld-saturate-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-projected-cube-texture.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texbem-source-lifetime.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texkill-operand-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-temp-initialization-profile-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-mov-component-initialization-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-componentwise-initialization-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-scalar-initialization-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-fixed-vector-initialization-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-matrix-initialization-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-special-vector-initialization-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-cnd-initialization-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-shader-model-14-texture-operand-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-shader-model-14-phase-state-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-bem-operand-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-shader-model-14-texture-selector-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-shader-model-14-temporary-texture-selector-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-2x-temp-initialization.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-20-texld-temp-initialization.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sincos-scratch-operand-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sgn-scratch-operand-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-matrix-implied-row-alias-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-legacy-texture-matrix-sequence-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-legacy-texture-operand-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-legacy-texture-stage-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-legacy-texcoord-destination-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texdepth-result-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-dcl-result-modifier-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-if-source-operand-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-predicate-flow-source-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-label-source-token-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-loop-rep-source-token-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-comparison-control-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-reserved-instruction-control-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-texcrd.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-ps1x-interface.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-entry-interface-unique.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-pointcoord-existence.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-static-sdl-shadercross.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sdlgpu-spirv-transform.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sdlgpu-program-identity.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-centroid-color-clamp.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-d3d11-bound-shader-lifetime.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-sm3-scalar-outputs.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-shader-model-three-mixed-constant-absolute.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-sm1-color-input-not-centroid.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsles3-sampler3d-precision.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsles3-sampler-precision.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsles3-vertex-lod-bias.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsles3-texture3d-proj.patch"
-        # plans/plan_apple_m4.md AM4-144: the SPIR-V profile ignored a TEXKILL predicate and
-        # killed unconditionally (WebGPU and SDL_GPU compiled effects alike).
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-predicated-texkill.patch"
-        # Direct3D 9's vPos is the integer pixel; the SPIR-V profile's Vulkan mode passed FragCoord,
-        # the pixel centre, straight through (SDL_GPU and WebGPU compiled effects alike).
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-vpos-pixel-corner.patch"
-        # plans/plan_apple_m4.md AM4-192: the Metal profile -- which FNA3D's SDL_GPU driver uses on
-        # Apple -- had neither the TEXCRD opcode nor D3D9's oD# clamp; the GLSL/SPIR-V profiles got
-        # both above (glsl-texcrd, spirv-texcrd, vertex-color-clamp).
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-metal-texcrd.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-metal-vertex-color-clamp.patch"
-        # The same oD# clamp for desktop GLSL (FNA3D's OpenGL driver drew BasicEffect's lit colour
-        # unclamped on Mesa) and for SPIR-V (FNA3D's SDL_GPU driver): plans/plan_fna3d.md FNA3D-55.
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-desktop-vertex-color-clamp.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-vertex-color-clamp.patch"
-        # FNA3D PBR uses seven pixel samplers. The SPIR-V profile accidentally checked the
-        # ps_2/3 sampler index against the four-entry ps_1.x TEXBEM scratch table.
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-pixel-sampler-range.patch"
-        # A linked SDL_GPU program is keyed by the number of color targets it draws into, which
-        # its SPIR-V transform receives: Vulkan reports a fragment output without an attachment.
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sdlgpu-color-target-count.patch")
-    set(_cna_fna3d_mojoshader_patch_script
-        "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
-    # In order, each patch made on top of the previous ones; a new one is appended at the end
-    # (apply-fna3d-patches.cmake).
-    set(_cna_fna3d_source_patch
-        "${CMAKE_CURRENT_LIST_DIR}/patches/fna3d-3240147-xna-pixel-center.patch"
-        # plans/plan_fna3d.md FNA3D-54: a multisampled render target read back as 0 on OpenGL (its
-        # renderbuffer's GL name matched the texture's), and a mipped RenderTargetCube's resolve
-        # asked glGenerateMipmap for a face.
-        "${CMAKE_CURRENT_LIST_DIR}/patches/fna3d-3240147-opengl-msaa-readback.patch"
-        # FNA3D-51: every OpenGL entry point makes its own device's GL and MojoShader contexts
-        # current, so several live devices on one thread work.
-        "${CMAKE_CURRENT_LIST_DIR}/patches/fna3d-3240147-opengl-device-context.patch"
-        # FNA3D-56: the SDL_GPU driver drew a multisampled cube face into a layer its 2D
-        # renderbuffer does not have, and resolved every face into +X.
-        "${CMAKE_CURRENT_LIST_DIR}/patches/fna3d-3240147-sdlgpu-msaa-cube-face.patch")
-    set(_cna_fna3d_patch_script
-        "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-patches.cmake")
 
     # MojoShader itself has two standard-library routes -- SDL's (MOJOSHADER_USE_SDL_STDLIB, which
     # FNA3D's build selects) and the C library's.
@@ -225,11 +130,9 @@ function(cna_configure_mojoshader)
         set(_cna_mojoshader_without_sdl TRUE)
     endif()
 
-    # ExternalProject splits a ';' inside a PATCH_COMMAND argument into separate arguments, which
-    # left the patch step with only the first patch of each series. LIST_SEPARATOR keeps them whole.
-    string(REPLACE ";" "|" _cna_fna3d_mojoshader_patch_arg "${_cna_fna3d_mojoshader_patch}")
-    string(REPLACE ";" "|" _cna_fna3d_source_patch_arg "${_cna_fna3d_source_patch}")
-
+    # GIT_TAG is a full commit, so once the checkout is at it the update step returns without
+    # contacting the remote; when the pin moves it fetches and checks out the new commit and its
+    # submodule.
     FetchContent_Declare(
         fna3d
         GIT_REPOSITORY "${CNA_FNA3D_GIT_REPOSITORY}"
@@ -238,17 +141,6 @@ function(cna_configure_mojoshader)
         GIT_PROGRESS   TRUE
         GIT_SUBMODULES_RECURSE TRUE
         EXCLUDE_FROM_ALL
-        # Without this the update step re-checks out the pinned ref on EVERY configure, which
-        # reverts the patch series below and makes the patch step rewrite -- and MojoShader
-        # recompile -- every single time. The ref is pinned, so there is nothing to update to; the
-        # explicit re-apply after MakeAvailable is what keeps the sources correct regardless.
-        UPDATE_DISCONNECTED TRUE
-        LIST_SEPARATOR "|"
-        PATCH_COMMAND  "${CMAKE_COMMAND}"
-                       "-DCNA_FNA3D_MOJOSHADER_PATCH_FILE=${_cna_fna3d_mojoshader_patch_arg}"
-                       "-DCNA_FNA3D_MOJOSHADER_PATCH_SCRIPT=${_cna_fna3d_mojoshader_patch_script}"
-                       "-DCNA_FNA3D_SOURCE_PATCH_FILE=${_cna_fna3d_source_patch_arg}"
-                       -P "${_cna_fna3d_patch_script}"
     )
 
     # FNA3D defaults to a shared library. CNA links every renderer's dependencies statically into
@@ -261,21 +153,8 @@ function(cna_configure_mojoshader)
     FetchContent_MakeAvailable(fna3d)
     set(BUILD_SHARED_LIBS "${_cna_fna3d_saved_shared}" CACHE BOOL "" FORCE)
 
-    # A FETCHCONTENT_SOURCE_DIR_FNA3D override bypasses FetchContent's download/update/patch
-    # steps. Re-run the idempotent script explicitly so an offline/local checkout receives the
-    # same required fixes before any configured FNA3D target is compiled.
-    execute_process(
-        COMMAND "${CMAKE_COMMAND}"
-                "-DCNA_FNA3D_MOJOSHADER_PATCH_FILE=${_cna_fna3d_mojoshader_patch}"
-                "-DCNA_FNA3D_MOJOSHADER_PATCH_SCRIPT=${_cna_fna3d_mojoshader_patch_script}"
-                "-DCNA_FNA3D_SOURCE_PATCH_FILE=${_cna_fna3d_source_patch}"
-                -P "${_cna_fna3d_patch_script}"
-        WORKING_DIRECTORY "${fna3d_SOURCE_DIR}"
-        RESULT_VARIABLE _cna_fna3d_patch_result)
-    if(NOT _cna_fna3d_patch_result EQUAL 0)
-        message(FATAL_ERROR
-            "CNA: failed to ensure the required FNA3D and MojoShader patches are applied in "
-            "${fna3d_SOURCE_DIR}.")
+    if(FETCHCONTENT_SOURCE_DIR_FNA3D)
+        _cna_fna3d_report_source_override("${fna3d_SOURCE_DIR}")
     endif()
 
     if(NOT TARGET FNA3D)
@@ -287,7 +166,7 @@ function(cna_configure_mojoshader)
         message(FATAL_ERROR
             "CNA: fetched FNA3D at ${fna3d_SOURCE_DIR} but MojoShader/mojoshader.h is missing -- "
             "the MojoShader submodule was not initialized. For an offline checkout supplied via "
-            "-DFETCHCONTENT_SOURCE_DIR_FNA3D, run: git submodule update --init --recursive.")
+            "-DFETCHCONTENT_SOURCE_DIR_FNA3D, run: git submodule update --init.")
     endif()
 
     if(_cna_mojoshader_without_sdl AND TARGET mojoshader)

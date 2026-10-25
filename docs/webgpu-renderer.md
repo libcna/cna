@@ -144,7 +144,7 @@ harness (13/13; needs `-DCNA_WEBGPU_COMPILED_EFFECTS=ON` on the Emscripten confi
 ```sh
 emcmake cmake -S . -B cmake-build-wasm-webgpu -DCNA_GRAPHICS_RENDERER=WEBGPU \
       -DCNA_BUILD_EXAMPLES=ON -DCNA_WEBGPU_COMPILED_EFFECTS=ON \
-      -DFETCHCONTENT_SOURCE_DIR_FNA3D="$HOME/deps/FNA3D"
+      -DFETCHCONTENT_SOURCE_DIR_FNA3D="$HOME/deps/libcna-FNA3D"
 cmake --build cmake-build-wasm-webgpu --target cna_webgpu_compiled_effect_page -j4
 CNA_WEBGPU_DEMO=cna_webgpu_compiled_effect_page scripts/run-webgpu-browser-test.sh
 ```
@@ -790,7 +790,7 @@ indexed (16- and 32-bit) draws, instancing, multiple vertex streams, `SpriteBatc
 effect)` including multi-pass and the sprite-texture override of slot 0, a `RenderTarget2D` as a
 sampler source, and pixel-stage cube AND volume sampling. Real XNA 4.0 game content with `ps_1_x`
 pixel shaders works too -- **all 27 committed technique/pass pairs across all nine fixtures**, which
-needed four additive MojoShader patches carried in `cmake/patches/`: `TEXCRD` in the SPIR-V profile,
+needed four additive MojoShader fixes, now commits on libcna/mojoshader: `TEXCRD` in the SPIR-V profile,
 a `Location` on `ps_1_x`'s `r0`-as-colour-output, a unique `OpEntryPoint` interface, and a
 `gl_PointCoord` patch-up guarded on the variable it belongs to rather than on the `attrib_offsets`
 slot it shares. The last two closed the six passes that used to be refused (`plans/plan_fx.md`

@@ -58,13 +58,52 @@ OpenGL and SDL_GPU/Vulkan drivers; this is not a new Windows or Apple qualificat
 
 | Field | Value |
 |---|---|
-| Repository | https://github.com/FNA-XNA/FNA3D |
-| Pinned revision | `3240147` (release tag **26.08**) |
+| Repository | CNA's fork https://github.com/libcna/FNA3D (upstream https://github.com/FNA-XNA/FNA3D) |
+| Pinned revision | `f4bef618d2c2e59866b02896b52efa25815c829b` on the fork's `cna` branch: release **26.08** (`32401479a3ab`) plus CNA's commits |
 | License | zlib |
-| Vendored submodule | MojoShader (`icculus/mojoshader`, `6333f74`), built from FNA3D's own CMake |
+| Vendored submodule | MojoShader from CNA's fork https://github.com/libcna/mojoshader (upstream https://github.com/icculus/mojoshader), `e6d80c19b3f6` on its `cna` branch: `6333f74` plus CNA's commits; built from FNA3D's own CMake |
 | Dependencies | **SDL 3.2.0 or newer, and nothing else** — the very SDL3 CNA already vendors |
-| Integration | `cmake/ThirdPartyFNA3D.cmake`, FetchContent at the pin, built as a static archive with CNA's revision-specific conformance patches applied idempotently |
-| Offline builds | `-DFETCHCONTENT_SOURCE_DIR_FNA3D=/path/to/FNA3D` (checkout must have its MojoShader submodule initialized) |
+| Integration | `cmake/ThirdPartyFNA3D.cmake`, FetchContent at the pin (`CNA_FNA3D_GIT_REPOSITORY`, `CNA_FNA3D_GIT_TAG`), built as a static archive; nothing is patched at configure time |
+| Offline builds | `-DFETCHCONTENT_SOURCE_DIR_FNA3D=/path/to/FNA3D`: a clone of the fork at the pin with its MojoShader submodule initialized (`git submodule update --init`). Configure warns when that checkout is at another commit or has local changes, and builds it as it is |
+
+### The two forks
+
+Both forks exist only to carry CNA's fixes as ordinary commits on a `cna` branch; their default
+branches (`master`, `main`) mirror upstream. Upstream accepts no AI-written code, so the fixes are
+not offered there. Both are linked statically into CNA only: they add entry points
+(`FNA3D_SetXnaPixelCenterEXT`, `MOJOSHADER_glProgram*Info`, the `MOJOSHADER_sdl*` hooks), render-state
+values and fields of public structures (`MOJOSHADER_attribute`, `MOJOSHADER_effectState`), so neither
+is ABI-compatible with an upstream shared library.
+
+- **libcna/FNA3D** `cna`: the XNA/Direct3D 9 pixel-centre entry point (OpenGL, D3D11 and SDL_GPU
+  drivers), OpenGL multisampled-target readback and cube mipmap resolve (FNA3D-54), per-call GL and
+  MojoShader context activation for several live devices (FNA3D-51), the SDL_GPU multisampled cube
+  face (FNA3D-56) — and the MojoShader submodule switched to the fork.
+- **libcna/mojoshader** `cna`: 133 commits — malformed-bytecode hardening of the Effect and
+  preshader parsers, Direct3D 9 shader-model validation, GLSL/GLSL ES, SPIR-V and Metal profile
+  fixes (TEXCRD, vertex colour clamp, pixel centres, centroid, predication, precision), the SDL_GPU
+  adapter hooks (static SDL_shadercross, SPIR-V transform, program identity, colour-target count)
+  and the D3D11 bound-shader lifetime. Each commit names the CNA patch it was and the CNA commit that
+  introduced it (`CNA-Patch:` trailer).
+
+Their tracked sources at these pins are byte-identical to what CNA's former configure-time patch
+series (137 files under `cmake/patches/`, removed in the same change) produced from
+FNA3D `3240147` and MojoShader `6333f74`.
+
+**Following upstream.** In a clone of each fork, add upstream as a remote, merge its default
+branch (or a release tag) into `cna` — a merge, never a rebase, so pinned commits stay reachable —
+resolve conflicts in favour of the behaviour CNA's commits establish, and push. Push MojoShader
+first, then commit its new gitlink in FNA3D (`git -C MojoShader checkout <sha>; git add MojoShader`)
+and push FNA3D, then move `CNA_FNA3D_GIT_TAG` here. A pin is always a full commit SHA on the
+fork, never a branch name.
+
+**Testing an update** before the pin moves: configure a tree with
+`-DFETCHCONTENT_SOURCE_DIR_FNA3D=<the candidate checkout>` and run the FNA3D, SDL_GPU, WebGPU and
+GL compiled-effect suites (`Fna3dCompiledEffect*`, `SdlGpuCompiledEffect*`, `WebGPUCompiledEffect*`,
+`CompiledEffect*`, `MojoShader*`, `RenderTargetSemantics.*`) per renderer, with `FNA3D_FORCE_DRIVER`
+set to `OpenGL` and to `SDLGPU`, plus `cna_mojoshader_effect_probe` and `CnaFna3dSamplerLifetimeTests`
+(see [Runtime renderer selection](runtime-renderer-selection.md) for running one multi-renderer
+tree per renderer).
 
 FNA3D's own API design is XNA 4.0: `FNA3D_DrawIndexedPrimitives`, `FNA3D_SetBlendState`,
 `FNA3D_VerifySampler`, `FNA3D_SetRenderTargets`, `FNA3D_ResolveTarget` and the rest map to

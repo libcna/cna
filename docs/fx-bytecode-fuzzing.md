@@ -122,8 +122,9 @@ the campaign.
 
 ## What the campaign found (2026-08-14)
 
-All but one were in the pinned MojoShader, fixed by
-`cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`; the last one is CNA's own and is
+All but one were in the pinned MojoShader, fixed by the `effect-parser-robustness` commit on CNA's
+fork libcna/mojoshader (then `cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`); the
+last one is CNA's own and is
 fixed in `Fna3dCompiledEffect.cpp`. Each fix was confirmed by the campaign running measurably
 deeper afterwards: on the GLSL profile the first crash moved from iteration 0 to 100, 300, 500,
 700, 1,200, 3,700, 4,000, 6,400, 8,700 and then away entirely.

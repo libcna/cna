@@ -76,8 +76,9 @@ git submodule update --init --recursive   # an existing clone, and after a pull 
   submodules and Draco's test dependencies, which CNA's configuration builds none of, so the plain
   `git submodule update --init` is enough and much faster.
 - Some renderer dependencies are downloaded at configure time instead: the pinned wgpu-native
-  release for `WEBGPU` (`CNA_WEBGPU_ROOT` for an offline build), FNA3D and MojoShader for `FNA3D`
-  and the `*_COMPILED_EFFECTS` options (`FETCHCONTENT_SOURCE_DIR_FNA3D`), and SDL_shadercross for
+  release for `WEBGPU` (`CNA_WEBGPU_ROOT` for an offline build), FNA3D and MojoShader -- CNA's
+  forks libcna/FNA3D and libcna/mojoshader, see `docs/fna3d-renderer.md` -- for `FNA3D` and the
+  `*_COMPILED_EFFECTS` options (`FETCHCONTENT_SOURCE_DIR_FNA3D`), and SDL_shadercross for
   `SDL_GPU` on Windows and Apple targets.
 
 ## Optional native features

@@ -17,7 +17,7 @@ No in the browser, because the browser's shader ingestion accepts WGSL and nothi
 ```sh
 export CCACHE_DIR=$HOME/.cache/ccache CCACHE_BASEDIR=/rv
 W=$HOME/deps/wgpu-native-v29.0.1.1
-M=$HOME/deps/FNA3D/MojoShader
+M=$HOME/deps/libcna-FNA3D/MojoShader
 D="-DMOJOSHADER_NO_VERSION_INCLUDE -DMOJOSHADER_USE_SDL_STDLIB -DUSE_SDL3 \
    -DMOJOSHADER_EFFECT_SUPPORT -DMOJOSHADER_DEPTH_CLIPPING -DMOJOSHADER_FLIP_RENDERTARGET \
    -DMOJOSHADER_XNA4_VERTEX_TEXTURES -DSUPPORT_PROFILE_ARB1=0 -DSUPPORT_PROFILE_ARB1_NV=0 \
@@ -40,8 +40,11 @@ DISPLAY=:131 ./spikes/webgpu-spirv-spike/webgpu_spirv_spike \
   modules/renderers/fna3d/effects/*.fxb tests/fixtures/compiled-effects/*.fxb
 ```
 
-The MojoShader checkout must carry CNA's patch series (`cmake/patches/`), **including the two this
-spike produced** — without them the last two questions below have different answers.
+The MojoShader checkout must be CNA's fork at the pinned commit (libcna/mojoshader, the submodule
+of the libcna/FNA3D pin in `cmake/ThirdPartyFNA3D.cmake`), whose commits carry CNA's fixes,
+**including the two this spike produced** — without them the last two questions below have
+different answers. The fixes were patches under `cmake/patches/` when this spike ran; the history
+below names them that way.
 
 The binary and `obj/` are gitignored; the sources and this file are the artefacts.
 
