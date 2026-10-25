@@ -137,6 +137,9 @@ Kept for their investigation methodology and root-cause detail, not as current s
   see `../plans/plan_ascii.md` for the full historical task-by-task detail.
 - `fna-reference-harness.md` — the differential-testing infra (`tools/fna-reference/`) mentioned
   in `../README.md`'s verification-methodology bullet.
+- **[`consoles.md`](consoles.md)** — game consoles: what NDA, homebrew and PC-handheld targets each
+  require, the FNA model for licensed ports, the rules any console work follows from day one, and
+  what certification asks of the framework. No console port exists.
 
 ## Input namespace
 
