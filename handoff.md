@@ -134,9 +134,10 @@ genuine XNA, demos `9598b43`) and 16 (owner: the documentation half is enough; t
 stay in `modules/content-pipeline`). What remains needs a host this machine does not have: the
 three Windows/XNA platform validations (003, 101, 152). The museum's reruns of
 2026-10-25 against `9d49828f4` are in `../museum-simulator/docs/CNA_FINDINGS.md`: every finding it
-can run here is verified fixed or documented, except two still open there, the ThreadSanitizer and
-UBSan reruns (a build-tsan tree is being built) and the Android emulator's Float16 readback (this
-machine has no `/dev/kvm` at the moment).
+can run here is verified fixed or documented, the ThreadSanitizer races and ENet's UBSan shift
+included (a `-fsanitize=thread,undefined` museum tree: no report). One stays open there: the Android
+emulator's Float16 readback (`53292f147`) is unverified because this machine has no `/dev/kvm` at
+the moment (`sudo modprobe kvm_amd`, then the museum's `tools/android_run.sh rv-capabilities`).
 The museum repair log `CNA_MUSEUM_REPAIR_HANDOFF.md` was removed then; it is in Git history
 (`git show 9d49828f4:CNA_MUSEUM_REPAIR_HANDOFF.md`).
 Triaged, not a defect: in `cmake-build-multi`, `cna_c_api_effect_smoke` run with
