@@ -692,11 +692,13 @@ been run.
   build through the private GPU runner, each confirmed by its log, all frames rendered. Against
   OpenGL 3.3 (`avatar_review.py compare`) the worst mean absolute pixel difference is 0.09/255
   (WebGPU) and the worst silhouette overlap 0.9992 (SOFTWARE); OpenGL ES 3 is identical. At catalog
-  v3 revision 5, on 2026-10-25 at `1bf504b26` (AVA-10), the Avatar v3 acceptance command
-  (`tools/avatar_builder/avatar_acceptance.py --all-renderers`, `avatars.md`) passed on all eight
-  renderers compiled in: 230 avatar tests on each (one skip by design, three on STUB) and the
-  36-view checked-in visual regression (`GamerServices_AvatarVisualRegression`) on the six that
-  draw, against goldens captured on SOFTWARE (it also passed on Mesa llvmpipe at revision 4).
+  v3 revision 5, on 2026-10-25 at `ac20344ef` (`plans/plan_avatar_acceptance.md` AVH-08), the
+  Avatar v3 acceptance command (`tools/avatar_builder/avatar_acceptance.py --all-renderers --service
+  ...`, `avatars.md`), which builds the binaries it runs from the commit it names, passed on all
+  eight renderers compiled in, in the main tree and in a freshly configured checkout: the 233
+  avatar tests it names on each (one skip by design, three on STUB) and the 36-view checked-in
+  visual regression (`GamerServices_AvatarVisualRegression`) on the six that draw, against goldens
+  captured on SOFTWARE (it also passed on Mesa llvmpipe at revision 4).
   Through Windows translation layers, not native drivers, and not repeated for revision 5:
   revision 4's 258-frame review rendered on DIRECTX9 (Wine with DXVK) and on SDL_GPU's Direct3D 12
   backend (Wine with vkd3d-proton) from the MinGW build on 2026-10-16, and the Windows build's

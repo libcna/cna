@@ -284,7 +284,7 @@ revision 5, the serialization format and the public API stay as they are; no art
 | AVH-05 | Size, link-footprint, load-time and cache-lifetime measurements | done |
 | AVH-06 | Gamer Services service validation and end-to-end persistence | done |
 | AVH-07 | SDL_GPU and FNA3D compiled-effect suites run on their renderer in a multi tree | done |
-| AVH-08 | Final acceptance matrix, fresh checkout, full CTest suite | |
+| AVH-08 | Final acceptance matrix, fresh checkout, full CTest suite | done |
 
 ## AVH-01 provenance
 
@@ -426,3 +426,38 @@ Fresh checkout, first attempt: `--configure` in a new worktree configured withou
 `cna_c_api_avatars_smoke` target, as it should rather than run without the C API smokes.
 `--configure` now passes `-DCNA_BUILD_C_API=ON`, and an unknown target names the options the
 acceptance needs.
+
+Results (2026-10-25; evidence in `/rv/tmp/avatar-acceptance/`, each run's `acceptance.json` with
+commit, toolchain, binary SHA-256 and every stage's log):
+
+- `avh-07-main`: `avatar_acceptance.py cmake-build-multi --all-renderers --service
+  ../cna-gamer-services-server` at `0c0fb31e6`, clean: PASSED, validating that commit. Per renderer
+  233 required tests -- OPENGLES3, OPENGL33, WEBGPU, SDL_GPU, FNA3D, SOFTWARE and HEADLESS 232 passed
+  and 1 allowed skip, STUB 230 and 3 -- exit status 0 each; the visual manifest reproduced byte for
+  byte; the 36-view regression on the six that draw (SOFTWARE exact; OPENGLES3, OPENGL33, SDL_GPU,
+  FNA3D within mean 0.044/255 and block 1; WEBGPU 0.485/255 and block 21; silhouettes 0.9996); the
+  seven CTest entries; measure (library 22.3 MB, 2D game text +0.00 %, first/next/reused avatar
+  327/137/0.33 ms, textures released); service `1e7a4a8` clean, 209 and 200 assertions and the
+  end-to-end test.
+- `avh-08-fresh`: the same command with `--configure` in a new sibling worktree (`git worktree add`
+  at `ac20344ef`, the catalog submodule initialised from the local `cna-avatar-assets` checkout,
+  SDL/SDL_mixer/draco/googletest as hard-linked copies of the main tree's sources, its own SDL
+  cache; `--cmake-arg` for `~/deps` wgpu-native and FNA3D): an empty tree configured and built
+  (2,009 compile/link steps, shared ccache 1,687 hits and 258 misses), then PASSED, validating
+  `ac20344ef`, with the same per-renderer and visual results; first/next/reused 356/137/0.33 ms; its
+  2D game text 9,730,367 bytes, 5.8 % under the main tree's (a fresh configure's other defaults),
+  which the budget allows. The worktree (6.9 GB) was removed afterwards; the evidence stays.
+- Full `cmake-build-multi` CTest through the private runner under `check_clean_checkout.sh`, `-j8`,
+  excluding the 6 Wine-hosted XNA entries (`XnaPipelineGenuineRuntime*`,
+  `XnaDifferentialBuildTest`, which `handoff.md` says to run outside the private runner; not run
+  here): at `9ef6da27f` 12,571 of 12,572 passed and the keyring case above failed; at `ac20344ef`,
+  with its cleanup fixed, 12,572 passed, 0 failed, 232 skipped, the checkout unchanged (12 min 25 s).
+  The 15 compiled-effect failures of AVA-10 are gone (AVH-07).
+
+Remaining, not in this pass's scope: many of the 232 skips are other renderer families' suites
+(`WebGPUCompiledEffect*Test`, `SdlGpuIndexedDrawRangeTest`, WebGPU contracts, ...) that skip in a
+tree whose default is OPENGLES3 for the reason AVH-07 fixed for the compiled-effect suites; they
+pass or fail only in a tree (or a run) that selects their renderer. The Wine/DXVK and
+Wine/vkd3d-proton renders remain revision 4's; native Windows and macOS remain pending external
+qualification. `AFailedGpuUploadFailsEveryDrawCleanlyRatherThanHalfBuilding` runs on no renderer of
+today.
