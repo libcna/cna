@@ -14,7 +14,8 @@
 > `CNB-1`…`CNB-111` (the historical CNJ work, back when `.cnj` was still called `.cnb`).
 > `grep -r 'CNBF-'` therefore returns only this project.
 >
-> **Companion documents.** `misc/cnb.md` is the original architectural proposal and stays as-is.
+> **Companion documents.** `misc/cnb.md` was the original architectural proposal; it was removed on
+> 2026-10-25 (Git history keeps it), and §2 below records what was adopted, changed and rejected.
 > `docs/cnb-format.md` is the authoritative byte-level specification of what is actually
 > implemented. This file is the living engineering record: audit, decisions, rejected
 > alternatives, task status, measurements.

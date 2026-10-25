@@ -19,7 +19,7 @@ Those two decisions fail in opposite directions, and this gate holds both:
 
 Deliberately narrow. This is not a general dead-API scanner: it pins the two specific decisions that
 the curation forced, in the files that decide them, so a later session cannot undo either by
-accident. Historical records are not searched -- `plans/`, `misc/` and the dated evidence
+accident. Historical records are not searched -- `plans/` and the dated evidence
 trees legitimately record that `DrawMeshEXT` once existed, and rewriting history to erase it would
 be a defect, not a fix.
 """

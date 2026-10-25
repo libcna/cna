@@ -142,7 +142,8 @@ branch stays at its verified CNB-complete existing base.
 `plans/plan_cnb.md` section 16.2 confirms ten implemented/frozen asset schemas with runtime loaders
 and producers: Texture2D, Texture3D, TextureCube, SpriteFont, Model, AnimationClip, Curve,
 SoundEffect, Song and Video. Effect remains intentionally absent. `docs/cnb-format.md` is the
-implemented byte specification; `misc/cnb.md` is historical rationale, not the specification.
+implemented byte specification; `misc/cnb.md`, the historical rationale, was removed on 2026-10-25
+(Git history; `plans/plan_cnb.md` §2 records what was taken from it).
 
 No frozen definition or existing CNB byte is expected to change in this project.
 

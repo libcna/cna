@@ -6,7 +6,8 @@
 every constant in §3, §4 and §7 below is asserted against the code, and §14's hex dump is
 regenerated and byte-compared.
 
-* The original architectural proposal and its rationale are `misc/cnb.md`.
+* The original architectural proposal, `misc/cnb.md`, was removed on 2026-10-25 (Git history keeps
+  it); `plans/plan_cnb.md` §2 records what was adopted, changed and rejected from it.
 * The engineering record — audit, decisions, rejected alternatives, task status — is
   `plans/plan_cnb.md`.
 * This file is the authoritative description of the format.
