@@ -29,13 +29,19 @@ A binding is a presentation layer over that ABI, never a second implementation o
   it covers is in [`c-api/COVERAGE.md`](c-api/COVERAGE.md). A C program can use it directly;
   [`c-api/CONSUMING.md`](c-api/CONSUMING.md) and `modules/c-api/examples/c/hello_cna.c` show how.
 - **C# / .NET — CNA.NET** ([`libcna/cna-dotnet`](https://github.com/libcna/cna-dotnet)) is the
-  maintained language binding. It admits exactly the ABI minor it was reviewed against and pins
-  one CNA commit; [`handoff.md`](../handoff.md) (*Bindings*) states which one, and what it still
-  has to adopt.
+  actively maintained language binding. It is not release-ready yet; its README states what has
+  been measured. It admits exactly the ABI minor it was reviewed against and pins one CNA commit;
+  [`handoff.md`](../handoff.md) (*Bindings*) states which one, and what it still has to adopt.
 - **Go, Java, Python, Ruby, Rust, Swift and TypeScript** bindings, each with a template project,
   were built in 2026-08/09, requalified one last time on 2026-09-30 and archived into `cna-lab`.
-  They stay pinned to old ABI versions and are not maintained. The CNA defects they measured are
-  recorded in [`../plans/plan_bindings_upstream.md`](../plans/plan_bindings_upstream.md).
+  They stay pinned to old ABI versions and are not maintained. A Common Lisp binding
+  (`cna-common-lisp`) existed too but was not part of that final pass, and where it lives now is
+  not recorded here. The CNA defects all of them measured are in
+  [`../plans/plan_bindings_upstream.md`](../plans/plan_bindings_upstream.md).
+
+What a binding supports is always an intersection: what the binding implements, what the CNA
+subsystem supports, what the selected renderer and platform support, and what the binding's
+packaging delivers for that platform. A binding does not make every renderer or platform available.
 
 ### CNA.NET
 
@@ -44,7 +50,7 @@ CNA.NET has three layers, so that XNA's 2010-era names never constrain what CNA 
 | Project | Namespace | Role |
 |---|---|---|
 | `CNA.XnaCompat` | `Microsoft.Xna.Framework.*` | The XNA 4.0 public facade an existing game compiles against. |
-| `CNA.Framework` | `CNA.*` | The idiomatic managed CNA API: local value types, `SafeHandle`-backed resources, the game-loop callback adapter. Free to grow beyond XNA. |
+| `CNA.Framework` | `CNA.*` | The idiomatic managed CNA API: local value types, resources that own their native handle, the game-loop callback adapter. Free to grow beyond XNA. |
 | `CNA.Interop` | internal | `LibraryImport` declarations and ABI-shaped structs. |
 
 C# programs use the real .NET runtime and base class library. Nothing in CNA.NET wraps Sharp
@@ -54,8 +60,7 @@ Runtime (see [below](#sharp-runtime-stays-on-the-native-side)).
 
 **One engine.** Every binding shares the same graphics, renderers, audio, content, input and
 platform code, so a fix in C++ reaches every language at once. Porting CNA to each language would
-mean maintaining parallel engines. The 2026-08 estimate put a full-parity port at tens of
-thousands of hours per language, against hundreds to a few thousand for a binding.
+mean maintaining a parallel engine for each.
 
 **The ABI is part of CNA, not a separate project.** A change to a C++ type and the change to its
 C mapping land in the same commit. A separate `cna-c` repository would only add release lag and
@@ -79,7 +84,7 @@ Every binding relies on the same rules. Each one is specified, and tested, in `c
 | Rule | In short | Contract |
 |---|---|---|
 | Handles | Every native object is a `CNA_Handle` (`uint64_t`): a slot index plus a generation. A stale, double-released, wrong-kind or foreign handle is refused, never dereferenced. | [`HANDLES.md`](c-api/HANDLES.md) |
-| Ownership | Every handle and pointer parameter is *owned*, *borrowed*, *retained*, *transferred*, a *callback context* or a *caller buffer*. Children are released before their parent; the game goes last. | [`OWNERSHIP.md`](c-api/OWNERSHIP.md) |
+| Ownership | Every handle and pointer parameter is *owned*, *borrowed*, *retained*, *transferred*, a *callback context* or a *caller buffer*. Resources are released before their parent and the game goes last; event registrations are the exception and may outlive their source. | [`OWNERSHIP.md`](c-api/OWNERSHIP.md) |
 | Errors | Every fallible route returns `CNA_Result`; details are queried per thread with `cna_error_*`. No C++, Sharp Runtime or platform exception ever crosses the boundary. | [`ERRORS.md`](c-api/ERRORS.md) |
 | Text and buffers | Strings are UTF-8 `CNA_StringView`s going in and *query the size, then copy* coming out. Bulk data moves as pointer plus `uint64_t` length. Collections are count-then-copy, never a native container. | [`STRINGS_AND_BUFFERS.md`](c-api/STRINGS_AND_BUFFERS.md) |
 | Types | Fixed-width integers, IEEE `float`/`double`, `CNA_Bool` (`uint8_t`, 0 or 1 only), `uint32_t` identifiers instead of C enums. No `size_t`, `long`, `wchar_t` or `bool`. | [`ABI_VERSIONING.md`](c-api/ABI_VERSIONING.md) |
@@ -89,10 +94,14 @@ Every binding relies on the same rules. Each one is specified, and tested, in `c
 | Capabilities | Ask the renderer and platform what they support instead of assuming. An unsupported operation returns `CNA_RESULT_NOT_SUPPORTED`; nothing is silently substituted. | [`RENDERERS_AND_CAPABILITIES.md`](c-api/RENDERERS_AND_CAPABILITIES.md) |
 | Sharp Runtime | Invisible at the boundary. | [`SHARP_RUNTIME_BOUNDARY.md`](c-api/SHARP_RUNTIME_BOUNDARY.md) |
 
-The ABI validates everything a foreign caller passes — handles, lengths, null pointers, UTF-8,
-identifier ranges, struct prefixes, the calling thread — and answers a mistake with a result code
-rather than a crash. One CNA runtime may be active per process. The browser build exports the same
-routes from a WebAssembly module: [`c-api/WASM_ARTIFACT.md`](c-api/WASM_ARTIFACT.md).
+The ABI checks every value it can check — handles, lengths against limits, null pointers, UTF-8,
+identifier ranges, struct prefixes, the calling thread — and answers such a mistake with a result
+code. It cannot check what C cannot express: a non-null pointer to freed or too-small memory is
+undefined behaviour, as in any C library. Nor can a result code stand in for a crash: a segmentation
+fault, stack corruption, an assertion abort or a GPU driver crash still ends the process, which is
+why sanitizer runs stay part of the testing. One CNA runtime may be active per process. The browser
+build exports the same routes from a WebAssembly module:
+[`c-api/WASM_ARTIFACT.md`](c-api/WASM_ARTIFACT.md).
 
 ## Sharp Runtime stays on the native side
 
@@ -108,7 +117,7 @@ helps the C++ implementation; the C ABI converts all of it, once, into neutral f
 | dictionaries | explicit lookup and enumeration routes |
 | `TimeSpan`, dates | fixed tick or duration values (`CNA_GameTime`) |
 | `Stream` | a CNA stream handle or callback table |
-| `Task<T>` | a CNA operation handle |
+| `Task<T>` | a synchronous route, or a completion callback plus polling |
 | delegates, events | function pointer, context and registration handle |
 | exceptions | `CNA_Result` plus error information |
 
@@ -139,7 +148,7 @@ the language's own idioms win:
 
 | Style | Languages | Direction | `Texture2D` width |
 |---|---|---|---|
-| XNA-compatible | C# | XNA 4.0 names, overloads and inheritance as exactly as practical | `texture.Width` |
+| XNA-compatible | C# | XNA 4.0 names, overloads and inheritance as closely as practical | `texture.Width` |
 | Idiomatic object-oriented | Java, Kotlin, Swift, Python, Ruby, TypeScript | the language's properties, exceptions and lifecycle conventions | `getWidth()`, `texture.width` |
 | Ownership-oriented | Rust, Zig, D, Nim | private handles, RAII / `Drop` / explicit `deinit` | `texture.width()` |
 | Interface or callback-oriented | Go, C, Lua, functional languages | lifecycle as interfaces, records or callback tables rather than simulated inheritance | `texture.Width()` |
@@ -159,16 +168,26 @@ arguments to native operations, as fixed-layout POD structs: `CNA_Vector2`, `CNA
 
 Native-backed are the resources: `GraphicsDevice`, `Texture2D`, `RenderTarget2D`, buffers,
 effects, `SpriteBatch`, `SoundEffect`, models and window/platform objects. A binding object for one
-of them holds a `CNA_Handle`.
+of them owns a `CNA_Handle`, borrows one, or fetches it again when it needs it. In CNA.NET a
+`GraphicsDevice` asks for the callback-scoped device handle anew in each operation instead of keeping
+it, and a `Model` is a managed aggregate of bones and meshes over handle-backed parts.
+
+**Equality follows the same split.** Value types implement XNA's equality and hashing locally
+(`Equals`, `GetHashCode`, `==`), field by field. A resource has identity instead, and the ABI does
+not promise that two queries for the same native object return the same handle value: some routes
+hand out a new owned alias each time ([`c-api/OWNERSHIP.md`](c-api/OWNERSHIP.md)). Where XNA
+returns the same instance twice and a game relies on reference equality, the binding has to cache
+its wrappers; comparing handle bit patterns is not enough.
 
 ### The game loop is native; the game is callbacks
 
 No language can derive from a C++ class across an FFI. The native side owns the window, event
 pumping, timing, frame lifecycle, graphics initialization and renderer selection, and calls the
-binding through a callback table (`CNA_GameCallbacks`, copied by `cna_game_create`) at
-`Initialize`, `LoadContent`, `Update`, `Draw`, `UnloadContent` and exit. A C# `Game` subclass, a
-Rust trait, a Go interface and a Python subclass all reduce to that table; in .NET the entry points
-are static `[UnmanagedCallersOnly]` methods.
+binding through callback tables. `CNA_GameCallbacks`, copied by `cna_game_create`, carries
+`load_content`, `update`, `draw`, `unload_content` and `exiting`; `CNA_GameFrameHooks`, installed
+with `cna_game_set_frame_hooks_ext`, adds `initialize`, `begin_run`, `end_run`, `begin_draw` and
+`end_draw`. A C# `Game` subclass, a Rust trait, a Go interface and a Python subclass all reduce to
+those tables; in .NET the entry points are static `[UnmanagedCallersOnly]` methods.
 
 Keep the crossings coarse: a handful of callbacks per frame, with each callback making the native
 calls it needs. Control should not ping-pong between the two sides thousands of times a frame.
@@ -178,14 +197,20 @@ calls it needs. Control should not ping-pong between the two sides thousands of 
 Garbage-collected runtimes and native ownership meet only through handles, and the two lifetimes
 must never be assumed equal.
 
-- **Explicit release is the primary mechanism**: `IDisposable` + `SafeHandle` in C#,
-  `AutoCloseable` in Java, `Drop` in Rust, `with`/`close()` in Python, `dispose()` in JavaScript.
-  Finalizers and GC cleanup are only a safety net — GPU and audio memory must not wait for a
-  collector.
+- **Explicit release is the primary mechanism**: `IDisposable` in C#, `AutoCloseable` in Java,
+  `Drop` in Rust, `with`/`close()` in Python, `dispose()` in JavaScript. Finalizers and GC cleanup
+  are only a safety net — GPU and audio memory must not wait for a collector.
+- In .NET, do not reach for `SafeHandle`: it is pointer-sized and cannot hold the 64-bit
+  `CNA_Handle` on WebAssembly or a 32-bit target. CNA.NET's `NativeResourceHandle` keeps the same
+  contract — release at most once, from `Dispose` or a critical finalizer — over the real 64-bit
+  value.
 - Native destruction happens on the creation thread. A finalizer thread or an arbitrary async
   continuation must not destroy a GPU resource; queue the release for the owning thread instead.
-- Release children before their parent and every resource before the game; the ABI refuses the
-  wrong order with `CNA_RESULT_INVALID_STATE` instead of crashing.
+- Release child resources before their parent and every resource before the game; the ABI refuses
+  the wrong order with `CNA_RESULT_INVALID_STATE` instead of crashing. Event registrations are the
+  exception: they do not block destroying their source, which detaches them, and each registration
+  handle is still released exactly once, in any order
+  ([`c-api/CALLBACKS_AND_THREADING.md`](c-api/CALLBACKS_AND_THREADING.md)).
 - Allocation and destruction always go through CNA routes, so no allocator or C runtime is ever
   shared across the boundary.
 
@@ -213,6 +238,12 @@ The FFI boundary costs something on every crossing, so:
   may collect draws and hand them over in bulk (`cna_sprite_batch_submit_many` takes an array of
   `CNA_SpriteCommand`). The same applies to vertex, index, texture and audio data: move whole
   buffers, never element by element.
+- **Zero-copy only where a route says so.** Unless a route documents otherwise, CNA reads an input
+  buffer only during the call and copies what it keeps
+  ([`c-api/OWNERSHIP.md`](c-api/OWNERSHIP.md)). A binding that passes managed memory pins it for
+  the duration of the call (`fixed` or a pinned `GCHandle` in .NET, critical arrays in JNI, the
+  buffer protocol in Python) and never keeps a JavaScript view of WebAssembly memory across a call
+  that may grow it. Where ownership, lifetime, mutability, alignment or layout is not stated, copy.
 - **Take input as snapshots.** `Keyboard.GetState()` makes one native call and copies a
   `CNA_KeyboardState`; every `IsKeyDown` afterwards is local. Mouse, gamepad and touch work the
   same way ([`c-api/INPUT_SNAPSHOTS.md`](c-api/INPUT_SNAPSHOTS.md)). This is also exactly XNA's
@@ -247,17 +278,26 @@ error model:
 `UnsupportedOperationException`, `CnaError::NotSupported`): it means *this build or renderer cannot
 do that*, which is different from a bug.
 
-Asynchronous APIs exist only where CNA has a native operation handle; a binding maps that to
-`Task<T>`, `Promise<T>`, a `Future` or `CompletableFuture`. It must not invent its own async
-variants of synchronous routes, or two bindings will behave differently for the same operation.
+Asynchronous operations follow whatever completion contract the ABI defines for them. Today that
+is either a single synchronous route (storage's XNA-style begin/end pairs,
+[`c-api/STORAGE.md`](c-api/STORAGE.md)) or a completion callback plus a pollable pending state (the
+Guide's keyboard input and message box, [`c-api/GAMER_SERVICES.md`](c-api/GAMER_SERVICES.md)); the
+ABI has no general operation handle. A binding maps a genuinely deferred operation to `Task<T>`,
+`Promise<T>`, a `Future` or `CompletableFuture`. It must not invent asynchronous variants of
+synchronous routes, or two bindings will behave differently for the same operation.
 
 ### Renderer choice stays native
 
 A binding may offer a renderer enum and capability queries, but never the renderer's internals
-(`VkDevice`, `ID3D12Device`, `SDL_GPUDevice`, …). The ABI reports the active renderer, the
-renderers available in a multi-renderer build and what each supports, so adding a renderer to CNA
-should need no binding release. A native-handle escape hatch, if one is ever wanted, is a separate,
-explicitly labelled extension API.
+(`VkDevice`, `ID3D12Device`, `SDL_GPUDevice`, …). The ABI reports the active renderer and what it
+supports. In a multi-renderer build the `cna_graphics_renderer_*_ext` family also lists the
+renderers compiled in, accepts a preferred renderer and a fallback chain before the first device
+exists, and reports which renderer was created and why others were passed over
+([`c-api/RENDERERS_AND_CAPABILITIES.md`](c-api/RENDERERS_AND_CAPABILITIES.md)). A binding that
+enumerates instead of hard-coding needs no new code when CNA gains a renderer. While the ABI is
+`0.x`, though, a new renderer identity arrives in a new minor version, which the binding still has to
+review and admit. A native-handle escape hatch, if one is ever wanted, is a separate, explicitly
+labelled extension API.
 
 ### What to generate and what to design
 
@@ -297,6 +337,12 @@ Three layers of tests:
    check for no leaks, double frees or stale handles, and a clean shutdown); and parity runs where
    the same deterministic frame, drawn through the binding and through C++, yields the same pixels,
    state, errors and input.
+
+For XNA-compatible behaviour, compare three results where they can differ: the XNA/.NET reference,
+CNA's native result (which may come through Sharp Runtime), and what the binding returns. Strings,
+path normalization, `TimeSpan` arithmetic, exception categories, formatting and collection order are
+where Sharp Runtime, CNA and marshalling each introduce their own differences, and the C# side can
+check against the real .NET base class library directly.
 
 When something goes wrong, the layers also tell you where to fix it:
 
@@ -362,14 +408,16 @@ public sealed class Game1 : Game
 
 Small as it is, this exercises string conversion (`RootDirectory`, the asset name), native content
 loading and its error path, resource handles, the callback lifecycle, `GameTime` as a value and an
-input snapshot. CNA.NET's `samples/HelloGame` is this program; the C equivalent is
-`modules/c-api/examples/c/hello_cna.c`. Prove it on more than one operating system and renderer
+input snapshot. CNA.NET's `samples/HelloGame` is this program. The C example,
+`modules/c-api/examples/c/hello_cna.c`, is the same vertical slice without `ContentManager` and
+input: it creates and fills its texture itself, and shows capability queries, the string protocol
+and error diagnostics instead. Prove the program on more than one operating system and renderer
 before broadening the API, and use real games to find ABI design mistakes before hundreds of
 classes depend on them.
 
-## When a binding counts as maintained
+## When a binding counts as supported
 
-Compiling is not enough. A binding is maintained when it has:
+Compiling is not enough. A binding can be called supported when it has:
 
 1. an ABI version check at initialization with a clear error on mismatch, and automated ABI tests
    (imports, layouts, constants);
@@ -417,6 +465,11 @@ Publish what was measured: API coverage, tested classes and methods, sample game
 known content and behaviour deviations. Where FNA and XNA disagree, CNA follows XNA (`CLAUDE.md`),
 and the divergences bindings measured are listed in
 [`../plans/plan_bindings_upstream.md`](../plans/plan_bindings_upstream.md).
+
+XNA reference material — decompiled behaviour, the reference assemblies a parity tool compares
+against — is used only as the project's legal policy allows. Microsoft's binaries are never
+committed or shipped. A tool that needs them asks the user to supply legally obtained copies, as
+CNA.NET's API verification does.
 
 ## Further reading
 
