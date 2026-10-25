@@ -952,6 +952,77 @@ TEST(AvatarCatalogContentTest, HairNeverComesThroughAHat) {
     EXPECT_LE(worst, 6) << worstPair;
 }
 
+// plans/plan_avatar_acceptance.md AVA-07: how far a planted foot drifts when a preset plays on an avatar
+// it was not authored for. Presets are solved, feet planted, on one body at its authored height (the
+// Female* ones on the female, the rest on the male); the renderer draws every other joint from the
+// avatar's own bind pose but the root's motion is the clip's, in metres, as XNA's
+// BoneTransforms * BindPose composition (which attachments rely on) requires. So a preset whose root
+// moves keeps a foot exactly planted only on its own body: on the other body at its authored height
+// the foot moves at most a few millimetres, at the ends of the height and proportion ranges by up to
+// 3 cm in the presets that move the root most (the deepest crouch, the jump, the start). Composed
+// as the renderer draws, over every frame where the authoring avatar's ankle stays within 2 mm.
+TEST(AvatarCatalogContentTest, PlantedFeetDriftOnlyAsFarAsTheRootMotionAllows) {
+    using Microsoft::Xna::Framework::Matrix;
+    using Microsoft::Xna::Framework::Quaternion;
+    const auto& library = Avatars::clipLibrary();
+    const auto& parents = Avatars::parentBones();
+    const int ankles[2] = {Avatars::boneIndex("AnkleLeft"), Avatars::boneIndex("AnkleRight")};
+    const auto ankleAt = [&](const Avatars::AvatarModel& model, const Avatars::AvatarClip& clip, double seconds) {
+        std::array<Quaternion, Avatars::BoneCount> rotations;
+        Vector3 root;
+        Avatars::sampleClip(clip, seconds, rotations, root);
+        std::array<Matrix, Avatars::BoneCount> world;
+        for (int bone = 0; bone < Avatars::BoneCount; ++bone) {
+            const Matrix local = Matrix::CreateFromQuaternion(rotations[bone]) *
+                                 Matrix::CreateTranslation(bone == 0 ? root : model.bindTranslations[bone]);
+            world[bone] = parents[bone] < 0 ? local : local * world[parents[bone]];
+        }
+        return std::array<Vector3, 2>{world[ankles[0]].getTranslationProperty(), world[ankles[1]].getTranslationProperty()};
+    };
+    const auto avatar = [&](std::uint8_t body, std::uint16_t height, std::uint8_t proportion) {
+        auto descriptor = dressed(body);
+        descriptor.heightMillimeters = height;
+        descriptor.proportion = proportion;
+        return Avatars::buildAvatarModel(descriptor);
+    };
+    const std::uint16_t authored[2] = {1680, 1800};
+    float onOther = 0.0f, atExtremes = 0.0f;
+    std::string worstOther, worstExtreme;
+    for (const auto& clip : library.clips) {
+        const std::uint8_t own = clip.name.starts_with("Female") ? 0 : 1;
+        const auto authoring = avatar(own, authored[own], 128);
+        std::vector<std::shared_ptr<const Avatars::AvatarModel>> others{avatar(static_cast<std::uint8_t>(1 - own), authored[1 - own], 128)};
+        for (std::uint8_t body = 0; body < 2; ++body)
+            for (const std::uint16_t height : {1450, 2050})
+                for (const std::uint8_t proportion : {0, 255}) others.push_back(avatar(body, height, proportion));
+        std::vector<double> times;
+        for (double t = 0.0; t <= clip.duration + 1e-9; t += 1.0 / 30.0) times.push_back(t);
+        const auto rest = ankleAt(*authoring, clip, 0.0);
+        std::vector<std::array<bool, 2>> planted;
+        for (const double t : times) {
+            const auto now = ankleAt(*authoring, clip, t);
+            planted.push_back({Vector3::Distance(now[0], rest[0]) < 0.002f, Vector3::Distance(now[1], rest[1]) < 0.002f});
+        }
+        for (std::size_t k = 0; k < others.size(); ++k) {
+            const auto start = ankleAt(*others[k], clip, 0.0);
+            float drift = 0.0f;
+            for (std::size_t i = 0; i < times.size(); ++i) {
+                const auto now = ankleAt(*others[k], clip, times[i]);
+                for (std::size_t side = 0; side < 2; ++side)
+                    if (planted[i][side]) drift = std::max(drift, Vector3::Distance(now[side], start[side]));
+            }
+            if (k == 0 && drift > onOther) onOther = drift, worstOther = clip.name;
+            if (k > 0 && drift > atExtremes) atExtremes = drift, worstExtreme = clip.name;
+        }
+    }
+    RecordProperty("onOtherBodyMicrometres", static_cast<int>(onOther * 1.0e6f));
+    RecordProperty("onOtherBodyPreset", worstOther);
+    RecordProperty("atExtremesMicrometres", static_cast<int>(atExtremes * 1.0e6f));
+    RecordProperty("atExtremesPreset", worstExtreme);
+    EXPECT_LT(onOther, 0.008f) << worstOther;
+    EXPECT_LT(atExtremes, 0.033f) << worstExtreme;
+}
+
 TEST(AvatarCatalogContentTest, ModelsShareTheTexturesTheyHaveInCommon) {
     // Two avatars in different clothes decode each texture they share (skin, hair, fabrics) once.
     auto a = dressed(0), b = dressed(1);

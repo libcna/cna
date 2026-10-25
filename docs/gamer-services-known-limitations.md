@@ -829,7 +829,12 @@ per-user models. A server catalog pack is only the update path for a catalog a c
   a ragged edge just under it from behind (the afro under a bucket hat); earrings hang from the lobe of the ear shape worn and
   move with it under the ear controls, but keep the first shape's tilt on the others; rings are legible only in the editor's
   Hands view; makeup does not follow the eye expressions, except eyeliner, which has closed-eye
-  tiles; a preset authored for one body lets a planted foot drift 1-3 cm on the other; in the
+  tiles; a preset keeps a planted foot exactly in place only on the body it was solved on (the
+  Female* presets on the female, the rest on the male): on the other body at its authored height
+  the foot moves up to 7 mm, and at the ends of the height and proportion ranges up to 3 cm in the
+  presets that move the root most (FemaleIdleFixShoe, Celebrate, MaleSurprised), because XNA's
+  `BoneTransforms * BindPose` composition, which attachments rely on, makes a clip's root motion the
+  same in metres on every avatar (pinned by `PlantedFeetDriftOnlyAsFarAsTheRootMotionAllows`); in the
   deepest crouch (FemaleIdleFixShoe) the tops of the trouser legs and a skirt's flare come a few
   millimetres through some tops at the sides, most on the tight tank top (at most 16 vertices of a
   top's covered waist over jeans, shorts or joggers and 21 over a skirt, pinned by

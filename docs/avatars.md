@@ -184,7 +184,10 @@ renderer's `BindPose` supplies the joint offsets. Thus `BoneTransforms[i] * Bind
 parentWorld` computes the same joint as drawing that pose, including attachments. `Update` follows the reference exactly: negative time
 plays backward, looping wraps by the remainder of `Length` (a position equal to `Length` is kept),
 a non-looping animation clamps, and an overflowing step clamps to the nearer end. An undefined
-preset value is a zero-length bind pose.
+preset value is a zero-length bind pose. Presets are solved with the feet planted on one body at its
+authored height; because the root's motion is the clip's on every avatar (what the composition
+above requires), a planted foot moves a little on other bodies and heights, up to 3 cm at the
+extremes of a preset that crouches or jumps (`gamer-services-known-limitations.md` 41).
 
 ## Assets
 

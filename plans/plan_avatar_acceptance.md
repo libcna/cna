@@ -18,7 +18,7 @@ Task ids `AVA-*`; one task, one commit.
 | AVA-04 | Visual regression: checked-in manifest and goldens, legacy script retired | done |
 | AVA-05 | One Avatar v3 acceptance command | done |
 | AVA-06 | Earrings fitted to every ear shape | done |
-| AVA-07 | Planted-foot drift across bodies, heights and proportions | open |
+| AVA-07 | Planted-foot drift across bodies, heights and proportions | done: narrowed and pinned |
 | AVA-08 | Deep-crouch clothing show-through | done |
 | AVA-09 | Severe hair/headwear intersections | done |
 | AVA-10 | Final acceptance run and report | open |
@@ -227,3 +227,22 @@ outside stayed put, so its triangles stretched out through the brim or crown.
 
 `CnaGamerServicesTests` 742: 741 passed, 1 allowed skip (OPENGLES3). One pinned assembly digest
 (a ponytail under a headband) re-pinned.
+
+## AVA-07 planted-foot drift
+
+The documented "a preset authored for one body lets a planted foot drift 1-3 cm on the other" does
+not match HEAD: composed as the renderer draws, a planted ankle moves at most 6.6 mm on the other
+body at its authored height (FemaleIdleFixShoe); 1-3 cm happens at the ends of the height and
+proportion ranges, on either body, up to 31.3 mm (FemaleIdleFixShoe; Celebrate and MaleSurprised
+about 2 cm). Presets without root motion do not drift.
+
+Cause: the presets are solved with planted feet on one rig, and the renderer applies the clip's root
+translation unchanged while every other joint comes from the avatar's own, height-scaled bind pose.
+Scaling the root motion (or re-solving the legs) at draw time would keep the feet planted but break
+XNA's `BoneTransforms[i] * BindPose[i] * parent` composition that games use to attach objects (the
+`ObjectPlacementOnAvatar` sample; `AttachmentCompositionAgreesWithDrawnJointsForEveryPresetAndBody`),
+since `AvatarAnimation` cannot know the avatar; a single avatar-independent clip cannot be exact on
+every leg length. Not fixed: the limitation is stated with these numbers in
+`gamer-services-known-limitations.md` 41 and `avatars.md`, and
+`PlantedFeetDriftOnlyAsFarAsTheRootMotionAllows` pins it (other body under 8 mm, extremes under
+33 mm).
