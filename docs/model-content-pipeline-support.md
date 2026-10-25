@@ -1,24 +1,8 @@
 # Model loading and content pipeline: support and limitations
 
-> **Update (plans/plan_xnb.md Phase F, 2026-07-16):** a second, genuinely real binary `.xnb` `ModelReader`
-> now exists (`CNA::Internal::Xnb::ModelReader`), wire-compatible with real XNA/MonoGame/FNA-produced
-> `Model` assets — full bone hierarchy, per-mesh `ParentBone`, `BoundingSphere`, shared-resource
-> (`VertexBuffer`/`IndexBuffer`/`Effect`) resolution, all real. Per [`cnj-format.md`](cnj-format.md)'s resolution order, `.xnb`
-> always wins first in `ContentManager::Load<Model>()`'s resolution order, ahead of the
-> `.model.json` path this document describes. **Everything below this note describes only the
-> older, CNA-original `.model.json` loose-file loader** (`ModelTypeReader`) — see
-> `docs/xnb-content-pipeline-support.md` for the real binary `.xnb` `ModelReader` this note
-> refers to. The gaps documented below (no multi-bone hierarchy, no `ParentBone`/`BoundingSphere`/
-> `Tag`, no resource sharing) are specific to the `.model.json` path and do **not** apply to the
-> real `.xnb` `ModelReader`.
-
 Covers `Microsoft::Xna::Framework::Graphics::Model` (and its `ModelMesh`/`ModelMeshPart`/
-`ModelBone`/collection types) plus its content-pipeline loader, `ModelTypeReader`
-(`src/Content/Xna/ContentManager.cpp`). Written as the closing documentation
-task for Phase 49 (Tasks 431-440), which line-by-line audited and unit/pixel-tested `Model`'s own
-runtime API against FNA (see `plans/plan_graphics.md` rows 431-439). This doc covers the one piece those
-tasks didn't: how a `Model` actually gets **loaded from content**, and where that loader falls
-short of both FNA's real behavior and CNA's own runtime API surface.
+`ModelBone`/collection types): its runtime API, which Phase 49 (Tasks 431-440, `plans/plan_graphics.md`)
+audited line by line against FNA, and the content loaders that build a `Model` from files.
 
 ## `Model`'s runtime API: fully audited, FNA-faithful
 
@@ -47,51 +31,40 @@ behavior closely, real bugs found and fixed along the way:
   an out-of-bounds index, matches the 3-arg constructor's own empty-bones leniency (no throw, `Root`
   stays `nullptr`) when `bones` is empty regardless of the requested index.
 
-None of the above is about *loading* a model from content, though — that's a separate system,
-covered below, and it does **not** yet take advantage of the Task 439 fix.
+## How a `Model` is loaded
 
-## CNA's Model content format is NOT FNA's `.xnb` binary format
+`ContentManager::Load<Model>()` takes the first file that exists, in the order described in
+[`cnj-format.md`](cnj-format.md):
 
-FNA's real `ModelReader` (`src/Content/ContentReaders/ModelReader.cs`) deserializes a compiled
-binary `.xnb` produced by the XNA/MonoGame content pipeline (`ContentReader.ReadMatrix()`,
-`ReadSharedResource<T>()`, etc.) — the same binary format every other FNA content type uses.
-
-CNA has **no binary `.xnb` model reader at all**. `ModelTypeReader` instead defines an entirely
-CNA-original format:
-
-- A `.model.json` descriptor (hand-editable JSON, not the compiled binary XNA format)
-- listing `"bones"` and `"meshes"` arrays, where each mesh entry references
-- separate raw binary sidecar files for its vertex data (`"vertices"`) and 16-bit index data
-  (`"indices"`), plus an inline `"vertexStride"` used to guess which of 4 known
-  `VertexPositionColor`/`VertexPositionColorTexture`/`VertexPositionTexture`/
-  `VertexPositionNormalTexture` layouts to interpret the bytes as (`ContentManager.cpp:519-532`).
-
-This is a deliberate, CNAEXT departure — a real `.xnb` binary reader would require reimplementing
-XNA's full content-pipeline compiler and its shared-resource graph serialization, well beyond this
-project's scope. **No existing FNA-produced `.xnb` model asset can be loaded by CNA.** Games must
-author (or generate) the `.model.json` + sidecar format directly.
-
-## Content-pipeline `ModelTypeReader` gaps versus FNA's real `ModelReader`
-
-| FNA `ModelReader` behavior | CNA `ModelTypeReader` behavior | Gap |
+| File | Loader | What it is |
 |---|---|---|
-| Reads N bones with names/transforms, then a full parent/child bone hierarchy (`ReadBoneReference`, `AddChild`) | Always synthesizes exactly **one** `ModelBone` (index 0). The JSON `"bones"` array is only ever consulted for its **first element's `"name"`** field — no other bones are created, no hierarchy, no `AddChild` calls at all | **Real gap.** Any content-authored multi-bone hierarchy (needed to exercise the Task 439 per-mesh-ParentBone / Task 435-437 `Copy*`-transform machinery through real loaded content) is unrepresentable via this loader today |
-| `mesh.ParentBone = bones[parentBoneIndex]` per mesh, arbitrary bone | Every mesh is constructed via the OLD 3-arg `Model`/`ModelMesh` path — `ParentBone` is never assigned, so it's always `nullptr` (defaults to bone 0 at draw time, Task 431's finding) | **Real gap**, and notably **not yet fixed even though the underlying API now can** (Task 439's new 4-arg `Model` constructor exists but `ModelTypeReader` doesn't call it) |
-| `model.Root = bones[rootBoneIndex]`, arbitrary bone | Always defaults to `bones[0]` (the only bone that ever exists) | The runtime constructor API now supports an arbitrary `rootBoneIndex` (Task 916, fixed), but `ModelTypeReader` doesn't call it — moot regardless, since the loader only ever creates one bone |
-| Reads a real per-mesh `BoundingSphere` from content | `ModelMesh::boundingSphere_` is **never set** — stays default-constructed for every loaded mesh | **Real gap.** Any game code relying on `Model.Meshes[i].BoundingSphere` for culling/hit-testing will silently get a degenerate (zero-radius) sphere for every content-loaded model |
-| Reads a `Tag` per model and per mesh (`reader.ReadObject<object>()`) | Neither `Model::Tag` nor any `ModelMesh::Tag` is ever set by the loader | **Real gap**, low-severity (an optional, game-defined field) |
-| `VertexBuffer`/`IndexBuffer`/`Effect` are `ReadSharedResource<T>` — the SAME buffer/effect object can be shared across multiple meshes/parts if the source content says so (resource deduplication) | Every mesh gets its own freshly-allocated `VertexBuffer`/`IndexBuffer`; every part with a non-`"BasicEffect"` name gets its own `Effect` via a fresh `cm.Load<...>()` call | Intentional simplification, not a correctness bug — just means CNA's loader can't reproduce a source asset that intentionally shares one mesh's buffers across several `ModelMeshPart`s |
-| Supports `existingInstance` (re-populating an already-loaded `Model` in place, used by the content pipeline's hot-reload/rebuild path) | Not supported — every `Load<Model>()` call always constructs a brand new `Model` and set of GPU resources | Acceptable: FNA's own hot-reload path is `internal`/pipeline-tooling-only, never called from ordinary game code either |
+| `.xnb` | `CNA::Internal::Xnb::ModelReader` | a model compiled by XNA, MonoGame, FNA or CNA's own pipeline; see [`xnb-content-pipeline-support.md`](xnb-content-pipeline-support.md) |
+| `.cnb` | the CNB `Model` codec | CNA's compiled form, produced by `cna_tool_cnj_to_cnb` or `cna_tool_gltf_to_cnb`; see [`cnb-format.md`](cnb-format.md) |
+| `.cnj` | `ModelTypeReader` | the editable JSON document with binary sidecars; see [`cnj-format.md`](cnj-format.md), "Model documents" |
+| `.gltf`, `.glb` | the direct glTF 2.0 import | no conversion step; see [`gltf-conformance.md`](gltf-conformance.md) and [`gltf-limitations.md`](gltf-limitations.md) |
 
-**Zero test coverage**: confirmed via repo-wide search that no test or example anywhere exercises
-`ModelTypeReader` (`ContentManager::Load<Model>(...)`) at all — only the unrelated
-`SkinnedModelEXT` pipeline (a completely separate CNAEXT system, see
-below) has any content-loading test coverage. None of Tasks 431-439's extensive `Model` unit/pixel
-tests load a `Model` through `ContentManager` — they all hand-build `Model`/`ModelMesh`/
-`ModelBone` instances directly in C++, which is exactly what let Task 439's own dead-`ParentBone`
-gap go unnoticed for as long as it did. This is flagged as an open follow-up, not fixed here (pure
-documentation task; fixing the bone-hierarchy/`ParentBone`/`BoundingSphere`/`Tag` gaps above and
-adding real test coverage for the JSON loader are natural next steps but out of this task's scope).
+The CNA-original `.model.json` format is no longer read. A `.model.json` file becomes a version-1
+`.cnj` by renaming it and adding the envelope ([`cnj-format.md`](cnj-format.md), "Older CNA JSON files").
+
+## What the loaders build, against FNA's `ModelReader`
+
+Until 2026-07 the only loader was the `.model.json` reader, which created a single bone, never set
+`ParentBone`, `BoundingSphere` or `Tag`, and had no tests. That is no longer the case:
+
+| FNA `ModelReader` behaviour | CNA today |
+|---|---|
+| a bone hierarchy with names and transforms | ✅ `.xnb` reads it; a version-2 `.cnj`, a `.cnb` and a glTF file carry the node tree. A version-1 `.cnj` has no hierarchy: each mesh gets its own child bone of the root at the identity transform. |
+| `mesh.ParentBone = bones[parentBoneIndex]` | ✅ every route assigns it (`parentBone` in a `.cnj`) |
+| `model.Root = bones[rootBoneIndex]` | ✅ `.xnb` honours the stored index; the other routes put the root at index 0 |
+| a per-mesh `BoundingSphere` | ✅ read from `.xnb`; computed from the vertex positions for `.cnj` and glTF |
+| `Tag` on the model, each mesh and each part | ✅ read from `.xnb`. A `.cnj` model's `Tag` carries its skinning data when it names a `skeleton`, and a morphing part's `Tag` its morph targets |
+| shared `VertexBuffer`/`IndexBuffer`/`Effect` resources | ✅ `.xnb` resolves shared resources. A `.cnj` shares textures and effects by asset name through the content cache, and gives each mesh entry its own buffers |
+| `existingInstance` (re-populating a loaded `Model`) | ❌ not supported on any route; FNA uses it only for pipeline hot-reload, never from game code |
+
+The loaders are tested through `ContentManager`, not only through hand-built models: among others
+`CnjModelTests.cpp`, `CnjModelSharedAnimationClipTests.cpp`, the XNB `ModelContentTypeReaderTests.cpp`,
+the CNB model codec and equivalence suites, and the glTF import suites and conformance ladder
+([`gltf-conformance.md`](gltf-conformance.md)).
 
 ## Not the same system: `SkinnedModelEXT`
 
@@ -101,19 +74,17 @@ built on `Model`/`ModelBone`/`ModelMesh` at all, since those encode XNA's *rigid
 parent-bone-transform hierarchy (a wrong fit for per-vertex GPU skinning). It is for games that
 bring their own skinned characters and has its own binary format, its own content-pipeline reader,
 and its own test coverage (`ContentManagerSkinnedModelTests.cpp`) — see `docs/skinned-model-ext.md`.
-Everything in this document is about the **plain, XNA-shaped** `Model`/`ModelTypeReader` path only.
+Everything else in this document is about the **plain, XNA-shaped** `Model` only.
 
 ## Summary
 
 | Area | Status |
 |---|---|
-| `Model`/`ModelMesh`/`ModelMeshPart`/`ModelBone` runtime API | ✅ Fully audited and tested against FNA (Tasks 431-439); 1 documented safe deviation; Task 916's `rootBoneIndex` gap fixed 2026-07-09, zero known open gaps in the runtime API |
-| `Model` binary `.xnb` loading | ❌ Not implemented — CNA uses an original `.model.json` + binary-sidecar format instead, not wire-compatible with any real XNA/FNA content asset |
-| Multi-bone hierarchy via content pipeline | ❌ Not implemented — loader always synthesizes exactly 1 bone, even though the runtime API fully supports arbitrary hierarchies |
-| Per-mesh `ParentBone` via content pipeline | ❌ Not implemented — loader never assigns it, even though Task 439 added the runtime API needed to do so |
-| Per-mesh `BoundingSphere` via content pipeline | ❌ Not implemented — always left at its zero-radius default |
-| `Tag` (model/mesh) via content pipeline | ❌ Not implemented |
-| Resource sharing/dedup across meshes | ❌ Not implemented (always allocates fresh per mesh) — low severity |
-| `existingInstance` hot-reload | ❌ Not implemented — acceptable, FNA's own use of this is pipeline-tooling-only |
-| Test coverage of the JSON model loader itself | ❌ None — zero tests or examples exercise `ModelTypeReader` |
-| Skinned/animated content (`SkinnedModelEXT`) | ✅ Separate system, covered — see `docs/skinned-model-ext.md` |
+| `Model`/`ModelMesh`/`ModelMeshPart`/`ModelBone` runtime API | ✅ Fully audited and tested against FNA (Tasks 431-439); 1 documented safe deviation; Task 916's `rootBoneIndex` gap fixed 2026-07-09 |
+| Loading from `.xnb` | ✅ `ModelReader`, wire-compatible with XNA/MonoGame/FNA models |
+| Loading from `.cnb`, `.cnj` and glTF | ✅ see the table above |
+| `.model.json` | ❌ no longer read; convert it to `.cnj` |
+| Bone hierarchy, `ParentBone`, `BoundingSphere`, `Tag` through content | ✅ on every route that stores them; a version-1 `.cnj` has no node hierarchy |
+| Resource sharing across meshes | ✅ `.xnb`; textures and effects only for `.cnj` |
+| `existingInstance` hot-reload | ❌ not implemented; FNA uses it only from pipeline tooling |
+| Skinned/animated content (`SkinnedModelEXT`) | ✅ separate system, see [`skinned-model-ext.md`](skinned-model-ext.md) |

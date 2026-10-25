@@ -95,8 +95,8 @@ original phase closed — check each file's own status banner/date.
   EasyGL anisotropic filtering (Task 918) corrected from stale ❌ to ✅/fixed.
 - `rasterizerstate-support.md` — Phase 38 audit; see `graphics-renderer-feature-matrix.md` for the
   current per-renderer `DepthBias` status.
-- `model-content-pipeline-support.md` — current as of Task 916 (2026-07-09); honestly documents
-  real remaining content-pipeline-loader gaps (no bone hierarchy, no `ParentBone`/`BoundingSphere`).
+- `model-content-pipeline-support.md` — `Model`'s FNA-audited runtime API and its four loading
+  routes (`.xnb`, `.cnb`, `.cnj`, glTF) with what each builds; refreshed 2026-10-25.
 - `occlusionquery-support.md` — per-renderer `OcclusionQuery` support.
 - `rendertarget-support.md`, `texture3d-texturecube-support.md`, `surface-format-support.md`,
   `texture-stream-formats.md`, `vertex-format-support.md`, `spritefont-support.md`,
