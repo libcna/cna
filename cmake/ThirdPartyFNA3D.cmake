@@ -28,13 +28,14 @@
 
 include_guard(GLOBAL)
 
-# libcna/FNA3D `cna`: FNA3D 26.08 (32401479a3ab), CNA's four FNA3D commits, and the MojoShader
-# submodule at libcna/mojoshader e6d80c19b3f6 (MojoShader 6333f74 and CNA's 133 commits). Bump
+# libcna/FNA3D `cna`: FNA3D 26.08 (32401479a3ab) with CNA's four FNA3D commits, merged with release
+# 26.10 (62a41708e975); the MojoShader submodule at libcna/mojoshader 8b4c92e9813 (MojoShader 6333f74
+# with CNA's 133 commits, merged with upstream main ad5dff8, the revision 26.10 pins). Bump
 # deliberately: FNA3D's driver list and FNA3D_* ABI move between releases, and
 # modules/renderers/fna3d/effects/ holds stock-effect binaries whose MojoShader parse path must keep
 # matching the pinned library.
 set(_cna_fna3d_default_repository "https://github.com/libcna/FNA3D.git")
-set(_cna_fna3d_default_tag "f4bef618d2c2e59866b02896b52efa25815c829b")
+set(_cna_fna3d_default_tag "a78cbed4a29e28a128480b954f2a5edffcbc6d1e")
 # A build tree keeps the defaults of the CNA revision that first configured it. A cached value that
 # is one of CNA's own former defaults follows the current one; any other value is a developer's
 # override and is kept. Until the forks the defaults were upstream FNA3D at 3240147, which this file
