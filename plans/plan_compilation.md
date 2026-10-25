@@ -2,8 +2,9 @@
 
 > **Status:** ACTIVE — every compilation experiment and the regression-guard implementation are
 > complete. Final COMP-008 acceptance is waiting on unrelated existing OPENGLES3 runtime-test
-> failures recorded below. This plan turns [`../misc/cnacomp.md`](../misc/cnacomp.md) into an
-> executable task sequence.
+> failures recorded below. This plan turned the 2026-08-28 build-system audit `misc/cnacomp.md`
+> into an executable task sequence; that audit was removed on 2026-10-25 once every recommendation
+> was implemented here or deferred in `../docs/build-performance.md`, and Git history keeps it.
 >
 > **Goal:** shorten the edit/build/test loop without weakening XNA/FNA compatibility, diagnostics,
 > platform coverage, installed-package compatibility, or reproducibility.

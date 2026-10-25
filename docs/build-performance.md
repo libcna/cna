@@ -24,7 +24,7 @@ not presented as elapsed-time improvements.
 | Final linking | Large Debug `CnaTests` link fell 90.9% with LLD and 89.9% with Mold versus GNU ld. | `CNA_LINKER=DEFAULT`; `AUTO`, `LLD`, and `MOLD` are explicit alternatives. |
 | Shared runtime | A Debug `VULKAN;OPENGL33` tree (2026-09-21, renderer since retired) fell from 87 GB to 5.4 GB; a test executable from ~104 MB to 0.5–0.9 MB; a renderer `.cpp` edit relinked 29 targets (~1.7 GB) instead of ~800 (~83 GB), and a rebuilt `libcna.so` relinks none. | `CNA_SHARED_LIBRARY=ON` is the default on native ELF GNU/Clang with CMake ≥ 3.30; `-DCNA_SHARED_LIBRARY=OFF` restores the static link. |
 | ccache | A public-header rebuild recovered 23/23 compile edges as direct hits in 0.36 s, with no preprocessed hits or eviction. | `CNA_USE_CCACHE=OFF`; CNA never changes global sloppiness/direct-mode policy. |
-| Complete clean build | At 12 jobs GCC took 10:44 and Clang 10:05 for all 1,929 compile edges; this is the post-optimization machine baseline, not an improvement inferred from command counts. | Use a focused profile for normal edits; keep complete GCC/Clang integration in CI. |
+| Complete clean build | At 12 jobs GCC took 10:44 and Clang 10:05 for all 1,929 compile edges (2026-08-29, before the shared machine's 8-job limit); this is the post-optimization machine baseline, not an improvement inferred from command counts. | Use a focused profile for normal edits; keep complete GCC/Clang integration in CI. |
 
 Split DWARF and broad default unity/PCH remain deferred: the measured tradeoffs did not justify
 making them normal developer policy. IPO/LTO remains an opt-in release experiment rather than a
@@ -48,10 +48,10 @@ Examples:
 
 ```sh
 cmake --preset dev
-cmake --build --preset dev --parallel 12
+cmake --build --preset dev --parallel 8
 
 cmake --preset unit
-cmake --build --preset unit --parallel 12
+cmake --build --preset unit --parallel 8
 ./cmake-build-unit/CnaTests
 ```
 
@@ -66,10 +66,10 @@ The common build presets cover the most useful edit loops:
 
 ```sh
 cmake --preset unit
-cmake --build --preset unit-math --parallel 12
+cmake --build --preset unit-math --parallel 8
 SDL_AUDIODRIVER=dummy ./cmake-build-unit/CnaMathTests
 
-cmake --build --preset unit-content --parallel 12
+cmake --build --preset unit-content --parallel 8
 SDL_AUDIODRIVER=dummy ./cmake-build-unit/CnaContentTests
 ```
 
@@ -144,7 +144,7 @@ consumers or third-party targets, and has a dedicated preset:
 
 ```sh
 cmake --preset unit-pch
-cmake --build --preset unit-content-pch --parallel 12
+cmake --build --preset unit-content-pch --parallel 8
 SDL_AUDIODRIVER=dummy ./cmake-build-unit-pch/CnaContentTests
 ```
 
@@ -171,22 +171,25 @@ capability failures also observed without PCH.
 
 `tools/build/analyze_clang_time_trace.py` aggregates Clang `-ftime-trace` JSON without modifying
 the build tree. It ranks translation units by `Total ExecuteCompiler` and project headers by
-inclusive `Source` time, and can emit text or JSON. A profiling build can be reproduced with an
-isolated build directory (the raw flag is intentionally confined to this diagnostic build):
+inclusive `Source` time, and can emit text or JSON. A profiling build needs a configuration of its
+own: the raw flag is intentionally confined to this diagnostic build, and ccache is off so the
+traces measure real compilation. That makes it a clean, uncached build, so run it only with the
+owner's approval, in the shared `build-probe/` directory rather than `/tmp`, and delete it once the
+traces are recorded:
 
 ```sh
-cmake -S . -B /tmp/cna-trace -G Ninja \
+cmake -S . -B build-probe/clang-time-trace -G Ninja \
   -DCMAKE_CXX_COMPILER=clang++ \
   '-DCMAKE_CXX_FLAGS=-ftime-trace -ftime-trace-granularity=500' \
   -DCMAKE_BUILD_TYPE=Debug -DCNA_GRAPHICS_RENDERER=STUB \
   -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF -DCNA_BUILD_C_API=OFF \
   -DCNA_ENABLE_NET=OFF -DCNA_ENABLE_VIDEO=OFF -DCNA_ENABLE_DRACO=OFF \
   -DCNA_USE_CCACHE=OFF
-cmake --build /tmp/cna-trace --target cna_content --parallel 12
+cmake --build build-probe/clang-time-trace --target cna_content --parallel 8
 python3 tools/build/analyze_clang_time_trace.py \
-  /tmp/cna-trace/modules/content/CMakeFiles/cna_content.dir --top 20
-clang-scan-deps-19 -compilation-database=/tmp/cna-trace/compile_commands.json \
-  -format=make -j 12 -o /tmp/cna-trace-dependencies.make
+  build-probe/clang-time-trace/modules/content/CMakeFiles/cna_content.dir --top 20
+clang-scan-deps-19 -compilation-database=build-probe/clang-time-trace/compile_commands.json \
+  -format=make -j 8 -o build-probe/clang-time-trace/dependencies.make
 ```
 
 The 2026-08-28 Clang 19.1.7 baseline identified these leading production content TUs:
@@ -222,7 +225,7 @@ is the controlled header probe plus the deterministic parse-count reduction. GCC
 
 ```sh
 cmake --preset dev-fast-debug
-cmake --build --preset dev-fast-debug --parallel 12
+cmake --build --preset dev-fast-debug --parallel 8
 ```
 
 Line tables retain source-level stacks, breakpoints, symbols, and address-to-line resolution, but
@@ -375,6 +378,10 @@ New warning, diagnostic, sanitizer, linker, coverage, or profiling flags belong 
 appropriate layer. Do not add routine policy to `CMAKE_CXX_FLAGS`, `CMAKE_C_FLAGS`, or a global
 `add_compile_options()` call.
 
+`-Werror` is never project-wide. CNA builds sibling and vendored code with several compiler
+families, so treating warnings as errors stays a target-local decision, as
+`cna_c_api_enable_strict_warnings` makes it for the C API's own targets.
+
 ## ccache
 
 `CNA_USE_CCACHE=ON` is the default when `ccache` is available. CNA invokes it with
@@ -387,10 +394,11 @@ Inspect the actual cache instead of assuming it helps:
 cmake --build cmake-build-dev --target cna_ccache_stats
 ```
 
-If eviction is frequent, increase the cache only after confirming persistent disk capacity, for
-example with `ccache --max-size 40G`. A shared cache is most effective when developer worktrees use
-the same `CNA_CCACHE_BASEDIR`. Do not enable `CCACHE_NOHASHDIR` globally: it needs a separate
-reproducible-debug-path and `__FILE__` compatibility check.
+On the shared development machine there is exactly one ccache, and its own `ccache.conf` governs
+its size and its `hash_dir = false` setting (the parent `CLAUDE.md`, Rule 1). Never point
+`CCACHE_DIR` at a new directory, and never export `CCACHE_MAXSIZE`, `CCACHE_HASHDIR` or
+`CCACHE_NOHASHDIR`: the environment overrides the cache's configuration for everyone using it. A
+shared cache is most effective when developer worktrees use the same `CNA_CCACHE_BASEDIR`.
 
 Interpret direct/preprocessed hit counters as workload deltas, not as a lifetime percentage. A
 2026-08-28 investigation of an apparent 0% direct-hit rate showed `direct_mode = true` and a debug
@@ -406,11 +414,11 @@ environment that can write both `cache_dir` and `temporary_dir`. When the aggreg
 surprising, enable ccache's per-invocation debug log temporarily:
 
 ```sh
-mkdir -p /tmp/cna-ccache-debug
+mkdir -p cmake-build-unit/ccache-debug
 touch modules/math/tests/Microsoft/Xna/Framework/MathHelperTests.cpp
-CCACHE_DEBUG=1 CCACHE_DEBUGDIR=/tmp/cna-ccache-debug \
+CCACHE_DEBUG=1 CCACHE_DEBUGDIR="$PWD/cmake-build-unit/ccache-debug" \
   cmake --build cmake-build-unit --target CnaMathTests --parallel 1
-rg 'Result:|Error while finalizing stats' /tmp/cna-ccache-debug
+rg 'Result:|Error while finalizing stats' cmake-build-unit/ccache-debug
 ```
 
 Three writable-cache workloads on 2026-08-29 used the existing 50 GiB global cache with its
@@ -481,13 +489,13 @@ After building the target once, reproduce a linker variant with:
 cmake -S . -B cmake-build-unit -DCNA_LINKER=LLD
 python3 tools/build/benchmark_final_link.py \
   --build-dir cmake-build-unit --target CnaTests --artifact CnaTests \
-  --label unit-lld --iterations 5 --output /tmp/unit-lld-link.json
+  --label unit-lld --iterations 5 --output cmake-build-unit/unit-lld-link.json
 
 cmake -S . -B cmake-build-release-modules -DCNA_LINKER=LLD
 python3 tools/build/benchmark_final_link.py \
   --build-dir cmake-build-release-modules --target cna_tool_cnb_info \
   --artifact cna_tool_cnb_info --label release-lld --iterations 7 \
-  --output /tmp/release-lld-link.json
+  --output cmake-build-release-modules/release-lld-link.json
 ```
 
 Repeat with `DEFAULT` and `MOLD`. The 2026-08-29 reference used GCC 14.2.0, GNU ld 2.44, LLD
@@ -538,9 +546,10 @@ cache state, and target. Record:
 4. one-source and one-public-header incremental rebuild time;
 5. final-link time, output size, and relevant tests.
 
-Start local parallelism experiments at 8, 12, and 16 jobs on a 16-logical-CPU host, and keep the
-largest value that does not cause memory pressure. `CNA_MAX_VENDORED_BUILD_JOBS` controls the nested
-configure-time SDL build separately; it is not the main Ninja parallelism limit.
+Build with at most 8 jobs: the development machine's 16 cores and 30 GiB are shared by several
+sessions (the parent `CLAUDE.md`, Rule 5). Lower the count for one target that swaps rather than
+raising it elsewhere. `CNA_MAX_VENDORED_BUILD_JOBS` controls the nested configure-time SDL build
+separately; it is not the main Ninja parallelism limit.
 
 ### CI trend report and structural guard
 
@@ -573,12 +582,20 @@ hard pass/fail threshold; only machine-independent preset and policy invariants 
 ### Reproducible clean-build matrix
 
 `tools/build/benchmark_clean_build.py` runs one clean benchmark in a new directory and writes the
-full evidence to `benchmark-result.json`. An explicit directory must not exist and its basename
-must start with `cmake-build-benchmark-`; the script never deletes a build directory. With
-`--ccache isolated`, the cache and temporary directory are private to that build, so an empty
-directory is a verifiable cold-cache start. Linux peak RSS is the sampled sum of the complete
-process tree, not only the outer CMake/Ninja process. Schema 2 also records load average before and
-after each measured phase.
+full evidence to `benchmark-result.json`. Every run is a complete, uncached build, which is exactly
+the kind of rebuild the shared machine's rules exist to avoid, so the script refuses to start
+without `--owner-approved`. It also refuses more than 8 jobs and any directory under `/tmp`; an
+automatic directory goes into the repository's `build-probe/`. An explicit directory must not exist
+and its basename must start with `cmake-build-benchmark-`. The script never deletes a build
+directory: copy the result out and delete the directory yourself, because a `legacy` tree is
+20–30 GiB.
+
+`--ccache off` (the default) measures a cold compile without any cache. `--ccache isolated` gives
+the build a private cache, so an empty directory is a verifiable cold-cache start with ccache
+counters, but a second cache is what the one-shared-cache rule forbids; use it only when the owner
+asks for those counters. Linux peak RSS is the sampled sum of the complete process tree, not only
+the outer CMake/Ninja process. Schema 2 also records load average before and after each measured
+phase.
 
 The three profiles select these reproducible closures:
 
@@ -618,43 +635,36 @@ race; all six complete measurements contain the same 1,929 compiler calls.
 At 12 jobs the complete build took 643.75 s (10 min 44 s) with GCC and 605.18 s (10 min 05 s) with
 Clang. Clang was 6.0% faster, peaked at 4.65 GiB versus GCC's 4.73 GiB, and produced a 20.80-GiB
 tree versus GCC's 29.54-GiB tree (29.6% smaller). Clang's 12→16 gain was only 3.8% while RSS rose
-58.8%; GCC gained 6.0% while RSS rose 31.7%. Twelve jobs is therefore the balanced full-build
-default on this host, while 16 jobs is an opt-in choice when shortest wall time matters. Clang
-`-j16` was the fastest complete point at 582.34 s (9 min 42 s). GCC was fastest for the focused
+58.8%; GCC gained 6.0% while RSS rose 31.7%. On that day twelve jobs was the balanced point and 16
+the fastest; Clang `-j16` was the fastest complete point at 582.34 s (9 min 42 s). The machine has
+since become shared, and 8 jobs is now the limit, so the 12- and 16-job rows are a historical
+record, not settings to use. GCC was fastest for the focused
 `dev` and `unit` closures, while Clang used less disk and usually less memory below saturation.
 Keep both compilers in CI rather than declaring one universal winner.
 
-Reproduce the full matrix with new output paths (the safety check intentionally rejects a rerun into
-an existing directory):
+With the owner's approval, reproduce a point at the current limit. Each run creates its own
+`build-probe/cmake-build-benchmark-*` directory:
 
 ```sh
 for profile in dev unit; do
-  for jobs in 8 12 16; do
-    python3 tools/build/benchmark_clean_build.py \
-      --label "comp001-${profile}-gcc-j${jobs}" --profile "${profile}" \
-      --cxx-compiler /usr/bin/g++ --c-compiler /usr/bin/gcc \
-      --parallel "${jobs}" --linker MOLD --ccache isolated \
-      --build-dir "/tmp/cmake-build-benchmark-repro-${profile}-gcc-j${jobs}"
-    python3 tools/build/benchmark_clean_build.py \
-      --label "comp001-${profile}-clang-j${jobs}" --profile "${profile}" \
-      --cxx-compiler /usr/bin/clang++ --c-compiler /usr/bin/clang \
-      --parallel "${jobs}" --linker MOLD --ccache isolated \
-      --build-dir "/tmp/cmake-build-benchmark-repro-${profile}-clang-j${jobs}"
-  done
+  python3 tools/build/benchmark_clean_build.py --owner-approved \
+    --label "comp001-${profile}-gcc-j8" --profile "${profile}" \
+    --cxx-compiler /usr/bin/g++ --c-compiler /usr/bin/gcc \
+    --parallel 8 --linker MOLD
+  python3 tools/build/benchmark_clean_build.py --owner-approved \
+    --label "comp001-${profile}-clang-j8" --profile "${profile}" \
+    --cxx-compiler /usr/bin/clang++ --c-compiler /usr/bin/clang \
+    --parallel 8 --linker MOLD
 done
 
-python3 tools/build/benchmark_clean_build.py \
-  --label comp001-legacy-gcc-j12 --profile legacy \
+python3 tools/build/benchmark_clean_build.py --owner-approved \
+  --label comp001-legacy-gcc-j8 --profile legacy \
   --cxx-compiler /usr/bin/g++ --c-compiler /usr/bin/gcc \
-  --fna3d-source /path/to/FNA3D --parallel 12 --linker MOLD --ccache isolated \
-  --build-dir /tmp/cmake-build-benchmark-repro-legacy-gcc-j12
-
-python3 tools/build/benchmark_clean_build.py \
-  --label comp001-legacy-clang-j12 --profile legacy \
-  --cxx-compiler /usr/bin/clang++ --c-compiler /usr/bin/clang \
-  --fna3d-source /path/to/FNA3D --parallel 12 --linker MOLD --ccache isolated \
-  --build-dir /tmp/cmake-build-benchmark-repro-legacy-clang-j12
+  --fna3d-source /path/to/FNA3D --parallel 8 --linker MOLD
 ```
+
+The 2026-08-29 rows above were measured with `--ccache isolated`; a `--ccache off` run reports no
+ccache counters but compiles the same graph cold.
 
 ## Deferred techniques
 

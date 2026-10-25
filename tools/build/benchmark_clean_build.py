@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Run one reproducible CNA clean-build benchmark and emit machine-readable evidence."""
+"""Run one reproducible CNA clean-build benchmark and emit machine-readable evidence.
+
+Every run is a complete, uncached build in a new directory, which is exactly the kind of avoidable
+rebuild the shared machine's build rules (the parent CLAUDE.md/AGENTS.md) exist to prevent. The
+script therefore refuses to run without --owner-approved, keeps its directories in the repository's
+shared build-probe/ instead of /tmp, compiles with at most 8 jobs, and builds without ccache unless
+a private cache is explicitly requested. Delete the build directory once its result is recorded.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +23,9 @@ from typing import Any
 
 
 BUILD_PREFIX = "cmake-build-benchmark-"
+MAX_PARALLEL_JOBS = 8
+SOURCE_DIR = Path(__file__).resolve().parents[2]
+DEFAULT_TEMP_ROOT = SOURCE_DIR / "build-probe"
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -23,6 +33,11 @@ def parse_arguments() -> argparse.Namespace:
         description=(
             "Configure and build CNA in a new directory. Existing directories are always refused."
         )
+    )
+    parser.add_argument(
+        "--owner-approved",
+        action="store_true",
+        help="Confirm the project owner approved this complete clean build",
     )
     parser.add_argument("--label", required=True, help="Result label, for example gcc-14")
     parser.add_argument("--cxx-compiler", required=True, type=Path)
@@ -33,7 +48,12 @@ def parse_arguments() -> argparse.Namespace:
         help="Optional existing FNA3D checkout for the legacy compiled-effect closure",
     )
     parser.add_argument("--profile", choices=("dev", "unit", "legacy"), default="dev")
-    parser.add_argument("--parallel", type=int, default=12)
+    parser.add_argument(
+        "--parallel",
+        type=int,
+        default=MAX_PARALLEL_JOBS,
+        help=f"Ninja jobs, at most {MAX_PARALLEL_JOBS} on the shared machine",
+    )
     parser.add_argument("--target", help="Override the selected profile's target")
     parser.add_argument(
         "--artifact",
@@ -46,15 +66,31 @@ def parse_arguments() -> argparse.Namespace:
         help=f"New directory whose basename starts with {BUILD_PREFIX!r}",
     )
     parser.add_argument(
-        "--temp-root", type=Path, default=Path("/tmp"), help="Parent for an automatic build dir"
+        "--temp-root",
+        type=Path,
+        default=DEFAULT_TEMP_ROOT,
+        help="Parent for an automatic build dir (default: the repository's build-probe/)",
     )
     parser.add_argument(
         "--linker", choices=("DEFAULT", "LLD", "MOLD"), default="MOLD"
     )
     parser.add_argument(
-        "--ccache", choices=("isolated", "off"), default="isolated"
+        "--ccache",
+        choices=("off", "isolated"),
+        default="off",
+        help=(
+            "'off' measures a cold compile without any cache. 'isolated' creates a private cache "
+            "inside the build directory, which the one-shared-cache rule forbids; use it only when "
+            "the owner asks for cold-cache counters"
+        ),
     )
     return parser.parse_args()
+
+
+def refuse_tmp(path: Path, what: str) -> None:
+    tmp = Path("/tmp").resolve()
+    if path == tmp or tmp in path.parents:
+        raise SystemExit(f"{what} must not be under /tmp: {path}")
 
 
 def command_version(command: list[str]) -> str:
@@ -90,11 +126,15 @@ def process_tree_rss_kib(root_pid: int) -> int:
 def create_build_directory(args: argparse.Namespace) -> Path:
     if args.build_dir is None:
         root = args.temp_root.resolve()
+        refuse_tmp(root, "the temporary root")
+        if root == DEFAULT_TEMP_ROOT:
+            root.mkdir(exist_ok=True)
         if not root.is_dir():
             raise SystemExit(f"temporary root is not a directory: {root}")
         return Path(tempfile.mkdtemp(prefix=BUILD_PREFIX, dir=root))
 
     build_dir = args.build_dir.resolve()
+    refuse_tmp(build_dir, "the build directory")
     if not build_dir.name.startswith(BUILD_PREFIX):
         raise SystemExit(
             f"explicit build directory basename must start with {BUILD_PREFIX!r}: {build_dir}"
@@ -178,12 +218,21 @@ def selected_cache_values(cache_file: Path, names: set[str]) -> dict[str, str]:
 
 def main() -> None:
     args = parse_arguments()
+    if not args.owner_approved:
+        raise SystemExit(
+            "a clean-build benchmark is a complete, uncached rebuild; run it only with the project "
+            "owner's approval and pass --owner-approved"
+        )
     if args.parallel < 1:
         raise SystemExit("--parallel must be positive")
+    if args.parallel > MAX_PARALLEL_JOBS:
+        raise SystemExit(
+            f"--parallel must not exceed {MAX_PARALLEL_JOBS}: the machine's cores are shared"
+        )
     if not Path("/proc/self/status").is_file():
         raise SystemExit("process-tree RSS measurement requires Linux /proc")
 
-    source_dir = Path(__file__).resolve().parents[2]
+    source_dir = SOURCE_DIR
     # Keep the exact driver name: resolving /usr/bin/clang++ can turn it into
     # clang and silently omit the C++ runtime during the final link.
     cxx_compiler = args.cxx_compiler.absolute()
@@ -428,6 +477,7 @@ def main() -> None:
     result_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))
     print(f"Result written to {result_path}")
+    print(f"Copy the result out and delete {build_dir} once it is recorded.")
 
 
 if __name__ == "__main__":
