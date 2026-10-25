@@ -2,7 +2,7 @@
 //
 // plans/plan_cnb.md CNBF-081/CNBF-082/CNBF-083 (Phase G tests): ContentManager's `.cnb` tier.
 //
-// The centrepiece is the resolution-order suite. `misc/cnj.md`'s "core rule" fixes an existing,
+// The centrepiece is the resolution-order suite. `docs/cnj-format.md`'s resolution order fixes an existing,
 // dated, deliberately-chosen precedence (.xnb outranks everything, .cnj outranks native), and
 // this file pins where `.cnb` lands in it -- immediately below `.xnb`, above everything CNA can
 // compile a `.cnb` FROM. Rather than asserting on one pair at a time, the fixture puts all five

@@ -12,7 +12,7 @@ namespace Microsoft::Xna::Framework::Content
 
     /**
      * @brief CNAEXT abstract base for type-specific loose-file asset loaders used by
-     *        ContentManager's `.cnj`/native-extension loading scheme (see cnj.md).
+     *        ContentManager's `.cnj`/native-extension loading scheme (see docs/cnj-format.md).
      *
      * Renamed 2026-07-16 from `ContentTypeReader<T>` (which this class was originally called)
      * to free that name for the real, binary-protocol-shaped `Microsoft.Xna.Framework.Content.

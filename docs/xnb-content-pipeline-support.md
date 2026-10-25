@@ -12,11 +12,11 @@ back to. .NET finds each reader by resolving its type name through reflection, w
 have, so CNA keeps a registry of readers, each registered by hand under its normalized .NET type
 name; a game registers its own readers the same way (see "Custom readers" below).
 
-This is **CNA's second, independent content format** alongside `.cnj` (see `cnj.md`) and the older,
+This is **CNA's second, independent content format** alongside `.cnj` (see [`cnj-format.md`](cnj-format.md)) and the older,
 CNA-original `.model.json` loose-file format (see `docs/model-content-pipeline-support.md`, which
 predates this document and does not cover the real binary `Model` reader described below —
 `ModelTypeReader`'s `.model.json` path and `ModelReader`'s real `.xnb` binary path are two
-genuinely separate systems that happen to both produce a `Model`). Per `cnj.md`'s "Core rule",
+genuinely separate systems that happen to both produce a `Model`). Per `cnj-format.md`'s resolution order,
 `ContentManager::Load<T>()` always tries a `.xnb` file first, ahead of a literal caller-given path
 or a `.cnj` sidecar/file.
 
@@ -113,7 +113,7 @@ ContentTypeReaderManager::AddTypeCreator(
 ```
 
 Then `content.Load<MyLevelData>("level1")` works exactly like any built-in type, going through the
-same `.xnb` → literal path → `.cnj` resolution order. See
+same `.xnb` → `.cnb` → literal path → `.cnj` → native resolution order. See
 `tests/Microsoft/Xna/Framework/Content/CustomContentTypeReaderTests.cpp` for a complete, runnable
 example (including the correct canonical-name string a real `.xnb` file compiled against your
 custom `ContentTypeWriter` would reference).

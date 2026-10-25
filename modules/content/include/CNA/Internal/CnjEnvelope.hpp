@@ -9,12 +9,12 @@
 namespace CNA::Internal
 {
     /**
-     * @brief Parsed top-level fields of a `.cnj` content envelope (see `cnj.md`).
+     * @brief Parsed top-level fields of a `.cnj` content envelope (see `docs/cnj-format.md`).
      *
      * A `.cnj` file is a JSON document whose top level always carries a `"cnjVersion"`
      * schema version and a `"type"` identifying which per-type CNA loader should handle
      * the rest of the document, plus an optional `"sourceFile"` naming another asset this
-     * document is metadata for (see `cnj.md`'s `sourceFile` section). Everything else in a
+     * document is metadata for (`docs/cnj-format.md`, "`sourceFile`"). Everything else in a
      * `.cnj` document is per-type and parsed by that type's own reader, not by this struct.
      */
     struct CnjEnvelope
@@ -179,8 +179,8 @@ namespace CNA::Internal
      * @brief Validates a parsed `.cnj` envelope against the type a reader expected.
      *
      * Calls ValidateCnjEnvelopeBaseline() first, then additionally checks that `"type"` matches
-     * @p expectedType exactly. This is the integrity check described in `cnj.md`'s "Note on
-     * dispatch" -- the primary dispatch key stays the caller's compile-time `T` at the
+     * @p expectedType exactly. This is the integrity check `docs/cnj-format.md` describes for
+     * `type` -- the primary dispatch key stays the caller's compile-time `T` at the
      * `Load<T>()` call site; this only catches a `.cnj` file that doesn't actually hold what the
      * caller asked for.
      *

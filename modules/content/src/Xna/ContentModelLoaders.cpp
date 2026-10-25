@@ -748,10 +748,10 @@ namespace Microsoft::Xna::Framework::Content
 
 
         // plans/plan_cnj.md CNB-40: a directly-loadable .cnj AnimationClip document, independent of
-        // any specific Model -- cnj.md's own per-type conventions table documented this as a
+        // any specific Model -- the per-type table now in docs/cnj-format.md documented this as a
         // natural, open-ended follow-up beyond plans/plan_cnj.md's original 9 phases. Either inline
         // JSON keyframe/bone-transform data ("tracks"), or -- for large clips, to avoid bloating
-        // JSON with thousands of matrices, exactly as cnj.md's table describes -- a reference to
+        // JSON with thousands of matrices, exactly as docs/cnj-format.md's table describes -- a reference to
         // an existing raw binary blob via "clipFile", read through the same shared
         // ReadAnimationClipFileEXT() helper ModelTypeReader's/SkinnedModelTypeReader's own
         // "animations" field already uses. Self-contained either way: like SpriteFont/Effect/
@@ -3150,7 +3150,7 @@ namespace Microsoft::Xna::Framework::Content
             {
                 // CNB-70/71 (Phase 13D): .gltf/.glb are tried after .cnj (ResolveAssetPath's own
                 // "always try .cnj first" rule), so an asset with both a .cnj sidecar and a
-                // same-named .gltf/.glb file still resolves to the .cnj -- matching cnj.md's
+                // same-named .gltf/.glb file still resolves to the .cnj -- matching docs/cnj-format.md's
                 // established "sidecar always wins" convention for every other native format.
                 return {".cnj", ".gltf", ".glb"};
             }

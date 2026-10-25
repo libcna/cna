@@ -184,10 +184,13 @@
 > tests added (3 for the scoping bug, 1 for the missing-`cnjVersion` bypass); full-suite regression
 > after both fixes: 4408 tests, 4406 passed, same 2 pre-existing skips, 0 failures.
 >
-> Turns [`cnj.md`](../misc/cnj.md)'s design into a phased, numbered task list (`CNB-1`, `CNB-2`, ...),
-> mirroring how [`plan_xnb.md`](plan_xnb.md) turned `misc/xnb.md` (removed 2026-10-25; Git history) into concrete tasks. Read
-> `cnj.md` first — this file assumes its design decisions (resolution order, envelope shape,
-> `sourceFile`, `RegisterCnjLoader<T>`) as given and does not re-argue them.
+> Turns the design in `misc/cnj.md` into a phased, numbered task list (`CNB-1`, `CNB-2`, ...),
+> mirroring how [`plan_xnb.md`](plan_xnb.md) turned `misc/xnb.md` (removed 2026-10-25; Git history) into concrete tasks.
+> On 2026-10-25 `misc/cnj.md` became the format specification
+> [`../docs/cnj-format.md`](../docs/cnj-format.md) (Git history keeps the original). This file
+> assumes its design decisions (resolution order, envelope shape, `sourceFile`,
+> `RegisterCnjLoader<T>`) as given and does not re-argue them; `cnj.md` in the rows below is that
+> document.
 >
 > Unlike `plan_xnb.md`, this was **mostly a migration of already-working, already-tested-or-
 > exercised readers** (`SpriteFontTypeReader`, `EffectTypeReader`, `ModelTypeReader`), not a

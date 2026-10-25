@@ -422,7 +422,7 @@ namespace Microsoft::Xna::Framework::Content
          * multiple differently-named .cnj "type" values can each register their own factory
          * here, all producing the same T -- e.g. a game's "EnemyDefinition" and "LootTable" .cnj
          * types both deserializing into the same generic data struct via two different
-         * factories (see cnj.md's "Custom loaders" section). Only applies to a T with no
+         * factories (docs/cnj-format.md, "Custom loaders"). Only applies to a T with no
          * existing reader already registered (built-in or via RegisterTypeReader<T>()); throws
          * immediately if one already exists, since it would never be consulted by that reader.
          *
@@ -611,7 +611,7 @@ namespace Microsoft::Xna::Framework::Content
             // The readers of T, registered by the first load that needs them (BuiltinContent).
             detail::BuiltinContent<T>::Register(*this);
 
-            // .xnb always wins first (cnj.md's "Core rule", 2026-07-16 decision): checked even
+            // .xnb always wins first (docs/cnj-format.md's resolution order, 2026-07-16): checked even
             // ahead of a literal caller-given path or a registered LooseFileContentTypeReader<T>
             // (a real compiled .xnb asset represents authentic external content that should never
             // be silently shadowed by CNA's own loose-file/.cnj conveniences). Unlike the
@@ -719,8 +719,8 @@ namespace Microsoft::Xna::Framework::Content
 
         // Generic reader for game-registered .cnj "type" values that don't have a dedicated
         // LooseFileContentTypeReader<T>. Looks up the .cnj envelope's "type" field in cnjNamedLoaders_
-        // and invokes whichever RegisterCnjLoader<T>()-registered factory matches (cnj.md's
-        // "Custom loaders" section). Auto-registered by RegisterCnjLoader<T>() the first time
+        // and invokes whichever RegisterCnjLoader<T>()-registered factory matches
+        // (docs/cnj-format.md, "Custom loaders"). Auto-registered by RegisterCnjLoader<T>() the first time
         // it's called for a T with no existing reader; never auto-registered for a T that
         // already has a built-in or otherwise-registered reader.
         template <typename T>
@@ -926,8 +926,8 @@ namespace Microsoft::Xna::Framework::Content
                 return literalPath;
             }
 
-            // .cnj is always tried before any native/reader-declared extension (cnj.md's "core
-            // rule" -- when a .cnj sidecar is present, it always has final say over how an asset
+            // .cnj is always tried before any native/reader-declared extension (docs/cnj-format.md's
+            // resolution order -- when a .cnj sidecar is present, it always has final say over how an asset
             // name resolves, even if a native file with the same name also exists). This makes
             // .cnj usable as an optional metadata sidecar (plans/plan_cnj.md CNB-4), not just a
             // mutually-exclusive alternative to a native file.

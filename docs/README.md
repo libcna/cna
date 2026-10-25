@@ -53,6 +53,10 @@ on it) rather than assuming either way.
   the separate [Content Pipeline parity report](xna-content-pipeline-parity-report.md) covers build-time APIs.
 - **[`migration-guide.md`](migration-guide.md)** — practical guide for porting an existing XNA/FNA
   game to CNA; consult the current content and effect documentation for format support.
+- **[`cnj-format.md`](cnj-format.md)** — the `.cnj` editable JSON content format: how
+  `ContentManager` resolves `.xnb`/`.cnb`/`.cnj`/native files, the envelope, `sourceFile`
+  sidecars, the per-type members, `Model` versions and custom loaders. The compiled form is
+  [`cnb-format.md`](cnb-format.md).
 - **[`content-pipeline.md`](content-pipeline.md)** — the CNA-native build-time
   Importer -> Processor -> Content Type Writer system above frozen CNB: `cna-content`, built-in
   source routes, dependency/XREF semantics, incremental manifests, determinism, atomic publication,

@@ -2,7 +2,7 @@
 //
 // plans/plan_cnj.md CNB-26/CNB-27: tests for RegisterCnjLoader<T> (CNB-24/CNB-25) -- a game-registered,
 // .cnj "type"-string-keyed loader table, for asset types with no dedicated ContentTypeReader<T>.
-// Matches cnj.md's "Custom loaders" section worked example ("EnemyDefinition"/"LootTable" both
+// Matches docs/cnj-format.md's "Custom loaders" worked example ("EnemyDefinition"/"LootTable" both
 // producing the same generic data struct via two different factories).
 
 #include <filesystem>
@@ -59,7 +59,7 @@ namespace
         f << text;
     }
 
-    // A game-defined type with no CNA-provided reader -- exactly cnj.md's "Custom loaders"
+    // A game-defined type with no CNA-provided reader -- exactly docs/cnj-format.md's "Custom loaders"
     // example: several distinct .cnj "type" strings can all deserialize into this one struct.
     struct GameData
     {

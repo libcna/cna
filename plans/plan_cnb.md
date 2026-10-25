@@ -66,7 +66,7 @@ purely additive set of files.
    d. bare `base` as a last resort;
 6. `reader.Read(resolvedPath, *this)`, cache, return.
 
-`misc/cnj.md` §"The core rule" documents exactly this and states the reasons per tier. **`.xnb`
+`docs/cnj-format.md` ("How `ContentManager` finds an asset") documents exactly this and states the reasons per tier. **`.xnb`
 always wins** is an explicit, dated (2026-07-16) design decision, not an accident, and
 `CnjResolverOrderTests.cpp` / `ContentManagerXnbTests.cpp` pin it.
 

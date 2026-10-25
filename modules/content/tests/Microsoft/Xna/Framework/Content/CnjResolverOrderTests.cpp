@@ -129,5 +129,5 @@ TEST_F(CnjResolverOrderTest, CnjTakesPriorityOverNativeFileOfSameName)
     std::vector<Color> pixels(4, Color(0, 0, 0, 0));
     loaded.GetData(pixels.data(), 4);
     EXPECT_EQ(pixels[0], Color(255, 0, 0, 255))
-        << ".cnj must win over a same-named native file, per cnj.md's core rule";
+        << ".cnj must win over a same-named native file, per docs/cnj-format.md's resolution order";
 }

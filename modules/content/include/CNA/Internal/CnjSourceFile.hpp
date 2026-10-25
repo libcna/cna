@@ -28,7 +28,7 @@ namespace CNA::Internal
      *        asset name (plans/plan_cnj.md CNB-32).
      *
      * `sourceFile` is always resolved relative to the referring `.cnj` file's own directory (not
-     * the content root), matching `cnj.md`'s design and `SkinnedModelTypeReader`'s pre-existing
+     * the content root), matching `docs/cnj-format.md` and `SkinnedModelTypeReader`'s pre-existing
      * manifest-relative convention. This function additionally enforces the safety invariants a
      * `.cnj` sidecar reference must never violate:
      *
