@@ -75,7 +75,7 @@ CATALOG = ROOT / "modules" / "gamer-services" / "assets" / "avatars" / "v3"
 RUNNER = ROOT / "tools" / "platform" / "run_gpu_tests_private.sh"
 NO_PIXELS = {"HEADLESS", "STUB"}
 # What --configure gives a tree that does not exist yet (docs/avatars.md, "Acceptance").
-CONFIGURE = ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Debug", "-DCNA_BUILD_TESTS=ON", "-DCNA_BUILD_EXAMPLES=ON",
+CONFIGURE = ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Debug", "-DCNA_BUILD_TESTS=ON", "-DCNA_BUILD_EXAMPLES=ON", "-DCNA_BUILD_C_API=ON",
              "-DCNA_GRAPHICS_RENDERER=OPENGLES3",
              "-DCNA_GRAPHICS_RENDERERS=OPENGLES3;OPENGL33;WEBGPU;SDL_GPU;FNA3D;SOFTWARE;HEADLESS;STUB",
              "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache", "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
@@ -212,6 +212,8 @@ def stage_build(build, out, configure, provenance, service=False):
         log.write_text("\n".join(text))
         if result.returncode != 0:
             tail = " | ".join(l for l in (result.stdout + result.stderr).splitlines() if "error" in l.lower())[:600]
+            if "unknown target" in tail:
+                tail += " -- the acceptance needs a tree configured with %s" % " ".join(o for o in CONFIGURE if o.startswith("-DCNA_BUILD"))
             return ["%s exited %d (%s): %s" % (command[1], result.returncode, log, tail)], "build failed"
     steps = sum(1 for l in text[-1].splitlines() if re.match(r"\[\d+/\d+\] (Building (C|CXX) object|Linking)", l))
     binaries = {}

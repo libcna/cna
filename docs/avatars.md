@@ -365,8 +365,8 @@ and then validates no commit), and a build tree configured from another checkout
 every binary it runs (`cmake --build` of those targets, 8 jobs; seconds when the tree is up to
 date), so nothing older than the commit is ever reported as validating it, and refuses a tree
 another process is building in. In a fresh checkout `--configure` first configures the tree
-(Debug, Ninja, ccache, `OPENGLES3` default with the eight renderers compiled in; `--cmake-arg`
-adds e.g. `-DCNA_WEBGPU_ROOT=...` or `-DFETCHCONTENT_SOURCE_DIR_FNA3D=...`). `acceptance.json`
+(Debug, Ninja, ccache, tests, examples and the C API, `OPENGLES3` default with the eight renderers
+compiled in; `--cmake-arg` adds e.g. `-DCNA_WEBGPU_ROOT=...` or `-DFETCHCONTENT_SOURCE_DIR_FNA3D=...`). `acceptance.json`
 records the commit, the catalog submodule, the compiler, build type and the SHA-256 of each binary
 run, and names the commit validated only for a clean checkout. At the end it checks that HEAD did
 not move under the run: a commit touching only documentation the run did not read is reported,

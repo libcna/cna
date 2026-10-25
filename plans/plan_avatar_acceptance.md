@@ -420,3 +420,9 @@ The session's gnome-keyring-daemon can still be removing its socket directory wh
 `dbus-run-session` returns. The helper now removes its directory with the non-throwing overload
 and retries while entries vanish under it; what the case reports is decided before the cleanup,
 as before. `CredentialStore*` (11) passed twice under `-j8` afterwards.
+
+Fresh checkout, first attempt: `--configure` in a new worktree configured without the C API
+(`CNA_BUILD_C_API` defaults to OFF), and the build stage failed on the unknown
+`cna_c_api_avatars_smoke` target, as it should rather than run without the C API smokes.
+`--configure` now passes `-DCNA_BUILD_C_API=ON`, and an unknown target names the options the
+acceptance needs.
