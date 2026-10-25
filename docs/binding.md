@@ -168,9 +168,10 @@ arguments to native operations, as fixed-layout POD structs: `CNA_Vector2`, `CNA
 
 Native-backed are the resources: `GraphicsDevice`, `Texture2D`, `RenderTarget2D`, buffers,
 effects, `SpriteBatch`, `SoundEffect`, models and window/platform objects. A binding object for one
-of them owns a `CNA_Handle`, borrows one, or fetches it again when it needs it. In CNA.NET a
+of them owns a `CNA_Handle`, borrows one, or fetches it again when it needs it. In CNA.NET a game's
 `GraphicsDevice` asks for the callback-scoped device handle anew in each operation instead of keeping
-it, and a `Model` is a managed aggregate of bones and meshes over handle-backed parts.
+it (only a standalone device owns one), and a `Model` is a managed aggregate of bones and meshes
+over handle-backed parts.
 
 **Equality follows the same split.** Value types implement XNA's equality and hashing locally
 (`Equals`, `GetHashCode`, `==`), field by field. A resource has identity instead, and the ABI does
