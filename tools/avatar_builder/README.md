@@ -70,7 +70,7 @@ through the private runner.
 ## Visual regression
 
 `avatar_visual_regression.py` keeps a small, checked-in regression set: `regression/manifest.json`
-(35 views of representative avatars, generated from `AVATARS` and `VIEWS` in the script) and
+(36 views of representative avatars, generated from `AVATARS` and `VIEWS` in the script) and
 `regression/golden/` (their renders on SOFTWARE). `check` draws the manifest with `cna_avatar_review`
 and compares every view with its golden within the renderer's tolerance; `update` captures goldens
 (SOFTWARE only); `manifest` regenerates the job list. Run `check` and `update` on a private display:

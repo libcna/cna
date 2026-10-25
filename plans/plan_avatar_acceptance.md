@@ -20,7 +20,7 @@ Task ids `AVA-*`; one task, one commit.
 | AVA-06 | Earrings fitted to every ear shape | done |
 | AVA-07 | Planted-foot drift across bodies, heights and proportions | open |
 | AVA-08 | Deep-crouch clothing show-through | done |
-| AVA-09 | Severe hair/headwear intersections | open |
+| AVA-09 | Severe hair/headwear intersections | done |
 | AVA-10 | Final acceptance run and report | open |
 
 ## AVA-01 baseline (2026-10-24)
@@ -201,3 +201,29 @@ the side of a few tops. The back of a top's hem now rides up off the seat in tha
 the waistband, as cloth does. Pinned assembly digests re-pinned (three of the four wear a top or a
 skirt that changed). `CnaGamerServicesTests` 741: 740 passed, 1 allowed skip (OPENGLES3); visual
 regression goldens updated where the crouch views changed.
+
+## AVA-09 hair through hats
+
+Every hat over every hairstyle on both bodies (2,220 renders, `/rv/tmp/avatar-acceptance/hats`)
+and a geometric measure (a hair vertex is beyond the hat's cloth when the segment from the head's
+centre to it crosses the hat's surface an odd number of times) found 168 of 1,110 pairs with more
+than 10 such vertices: high ponytails and ponytails spiking out through sun hats, western hats,
+bucket hats and backward caps, pigtails through a bucket hat, spikes, curls, twists and the afro
+speckling through the beret, the afro through a bucket hat's brim, a headband or visor sunk into
+voluminous hair. Flattening under a hat pulled such hair in towards the head while its neighbours
+outside stayed put, so its triangles stretched out through the brim or crown.
+
+- `AvatarModel.cpp` hides hair a hat passes through or over (that test, on the hair as authored and
+  again after flattening, for hair flattening moved into a sloping brim), whatever the hat, the
+  open ones included; the hat's triangles are filed by direction from the head's centre and the
+  test uses the catalog's binary32 arithmetic. The CPU preview does the same. Debug assembly of an
+  avatar wearing a hat costs about 14 ms more.
+- `HairNeverComesThroughAHat` (every hat, the eight offending styles, both bodies, measured with its
+  own implementation of that test) finds at most 4 (rounding at the afro's edge under a headband);
+  with the previous assembly 293.
+- A new visual-regression view (a high ponytail under a sun hat, from behind). What remains: a
+  very wide style is cut where it meets a brim and shows a ragged edge just under it from behind
+  (the afro under a bucket hat); nothing of it is through the hat.
+
+`CnaGamerServicesTests` 742: 741 passed, 1 allowed skip (OPENGLES3). One pinned assembly digest
+(a ponytail under a headband) re-pinned.

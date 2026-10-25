@@ -105,6 +105,10 @@ AVATARS = {
         face="Round", ears="ears_protruding", outfit="Summer",
         accessories={"earrings": ("earrings_bighoop", 0)}, jewelry=(212, 175, 90),
         makeup={"lips": "lips_bold"}, lips=(150, 40, 60)),
+    # A tied tail under a wide brim (plans/plan_avatar_acceptance.md AVA-09: it came through the brim).
+    "female-ponytail-sunhat": dict(
+        body=0, height=1700, skin=2, hair="hair_highponytail", hair_colour=(150, 70, 40), eyes=(70, 130, 90), face="Soft",
+        hat="hat_sunhat", outfit="Smart casual"),
     "male-longlobe-stud": dict(
         body=1, height=1760, skin=2, hair="hair_crop", hair_colour=(36, 28, 24), eyes=(70, 46, 30), face="Angular",
         ears="ears_longlobe", outfit="Sport", accessories={"earrings": ("earrings_stud", 1)}, jewelry=(200, 200, 196)),
@@ -143,12 +147,14 @@ VIEWS = [
     ("female-curls-earrings", "ear", "Stand0", 0.0, None),
     ("female-curls-earrings", "three-quarter", "Stand0", 0.0, None),
     ("male-longlobe-stud", "ear", "Stand0", 0.0, None),
+    ("female-ponytail-sunhat", "head-back", "Stand0", 0.0, None),
 ] + [("random-%d" % k, view, "Stand0", 0.0, None) for k in range(RANDOM_COUNT) for view in ("three-quarter", "head")]
 
 ANIMATION_COVERS = {"Wave": "animation:arms-raised", "Celebrate": "animation:arms-raised", "MaleIdleCheckHand": "animation:hands",
                     "Clap": "animation:hands", "MaleIdleLookAround": "animation:head-turn", "FemaleIdleFixShoe": "animation:crouch"}
 HAIR_CLASS = {"hair_wavy": "hair:long", "hair_afro": "hair:curly", "hair_highponytail": "hair:tied", "hair_short": "hair:short",
-              "hair_long": "hair:long", "hair_balding": "hair:short", "hair_longcurly": "hair:curly", "hair_crop": "hair:short"}
+              "hair_long": "hair:long", "hair_balding": "hair:short", "hair_longcurly": "hair:curly", "hair_crop": "hair:short",
+}
 
 
 # ----- the manifest --------------------------------------------------------------------------------
@@ -263,10 +269,11 @@ def build_manifest(program):
         time = crouch_time(animation) if fraction == "crouch" else duration * fraction
         head, span = review.head_height(catalogs, library, data)
         k = span / review.REFERENCE_SPAN
-        yaw = {"front": 0.0, "three-quarter": -35.0, "side": -90.0, "back": 180.0, "head": -30.0, "profile": -90.0}.get(view, 0.0)
+        yaw = {"front": 0.0, "three-quarter": -35.0, "side": -90.0, "back": 180.0, "head": -30.0, "profile": -90.0,
+               "head-back": 150.0}.get(view, 0.0)
         if view in ("front", "three-quarter", "side", "back"):
             eye, target, fov = review.full_body(h)
-        elif view in ("head", "profile"):
+        elif view in ("head", "profile", "head-back"):
             # Framed as the portraits sheet frames a head, and moved with it where the clip carries it.
             c = review.head_centre(catalogs, library, data, yaw)
             moved, _ = review.posed_joint(catalogs, library, data, animation, time, "Head", yaw)

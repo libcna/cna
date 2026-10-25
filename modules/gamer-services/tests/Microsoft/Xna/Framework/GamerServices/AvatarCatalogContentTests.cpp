@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp"
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <map>
 #include <optional>
 #include <random>
@@ -838,6 +839,117 @@ TEST(AvatarCatalogContentTest, TheTrousersStayUnderTheTopInTheDeepestCrouch) {
         RecordProperty("worstWithin" + std::to_string(budget), found.second + ": " + std::to_string(found.first));
         EXPECT_LE(found.first, budget) << found.second;
     }
+}
+
+// plans/plan_avatar_acceptance.md AVA-09: hair never comes through a hat. Flattening hair under a hat
+// pulled a ponytail's tie or a mass of curls in to the head and stretched its triangles out through
+// the brim or crown (high ponytails through sun hats, western hats and backward caps, an afro through
+// a bucket hat's brim, curls and spikes through a beret, locks over a headband: 17-290 vertices of
+// those pairs). Hair the hat passes through is hidden now: of what an avatar draws, no hair vertex
+// lies beyond the hat's cloth where the hat is -- the segment from the head's centre to it crosses
+// the hat's surface an even number of times -- for every hat and the bulkiest hairstyles, both bodies.
+TEST(AvatarCatalogContentTest, HairNeverComesThroughAHat) {
+    constexpr float Pi = 3.14159265358979f;
+    const auto manifest = catalog();
+    const auto glbOf = [&](const Avatars::CatalogItem& item, int body) {
+        return Avatars::parseAvatarGlb(Avatars::resolveAsset(*manifest, item.assets[body])->view);
+    };
+    // The parts a model drew from a glb's primitives: at the authored height, build and
+    // proportions an item's vertices are its glb's, in order.
+    const auto partsOf = [](const Avatars::AvatarModel& model, const Avatars::AvatarGlb& glb) {
+        std::vector<const Avatars::AvatarModelPart*> out;
+        for (const auto& primitive : glb.primitives)
+            for (const auto& part : model.parts)
+                if (part.vertices.size() == primitive.vertices.size() && !primitive.vertices.empty() &&
+                    Vector3::Distance(part.vertices.front().position, primitive.vertices.front().position) < 1e-4f &&
+                    std::ranges::find(out, &part) == out.end()) {
+                    out.push_back(&part);
+                    break;
+                }
+        return out;
+    };
+    const auto crosses = [](const Vector3& o, const Vector3& d, float length, const std::array<Vector3, 3>& t) {
+        const Vector3 e1 = t[1] - t[0], e2 = t[2] - t[0], p = Vector3::Cross(d, e2);
+        const float det = Vector3::Dot(e1, p);
+        if (std::fabs(det) < 1e-12f) return false;
+        const Vector3 s = o - t[0];
+        const float u = Vector3::Dot(s, p) / det;
+        if (u < 0.0f || u > 1.0f) return false;
+        const Vector3 q = Vector3::Cross(s, e1);
+        const float v = Vector3::Dot(d, q) / det;
+        if (v < 0.0f || u + v > 1.0f) return false;
+        const float at = Vector3::Dot(e2, q) / det;
+        return at > 1e-5f && at < length - 1e-5f;
+    };
+    const std::vector<std::string> bulky{"hair_afro", "hair_highponytail", "hair_ponytail", "hair_mohawk", "hair_spiky", "hair_longcurly",
+                                         "hair_pigtails", "hair_curly"};
+    int pairs = 0, worst = 0;
+    std::string worstPair;
+    for (int body = 0; body < 2; ++body) {
+        const Vector3 centre = manifest->headSurface[body].centre;
+        // Directions from the head's centre in 10-degree cells; a triangle is filed in every cell its
+        // corners' directions span, one more each way, and every column near the poles.
+        constexpr int rows = 18, columns = 36;
+        const auto cellOf = [&](const Vector3& p) {
+            const Vector3 d = p - centre;
+            const float theta = std::acos(std::clamp(d.Y / std::max(d.Length(), 1e-6f), -1.0f, 1.0f)), phi = std::atan2(d.X, d.Z);
+            return std::pair{std::clamp(static_cast<int>(theta / Pi * rows), 0, rows - 1),
+                             std::clamp(static_cast<int>((phi + Pi) / (2.0f * Pi) * columns), 0, columns - 1)};
+        };
+        for (const auto* hat : manifest->itemsOf(AvatarItemSlot::Hat)) {
+            const auto hatGlb = glbOf(*hat, body);
+            for (const auto& hairName : bulky) {
+                const auto* hair = &*std::ranges::find(manifest->items, hairName, &Avatars::CatalogItem::name);
+                auto descriptor = dressed(static_cast<std::uint8_t>(body));
+                descriptor.items[0] = hair->id;
+                descriptor.items[5] = hat->id;
+                const auto model = Avatars::buildAvatarModel(descriptor);
+                const auto hatParts = partsOf(*model, hatGlb);
+                ASSERT_EQ(hatParts.size(), hatGlb.primitives.size()) << hat->name;
+                std::vector<std::vector<std::array<Vector3, 3>>> cells(static_cast<std::size_t>(rows * columns));
+                for (const auto* part : hatParts)
+                    for (std::size_t t = 0; t + 2 < part->indices.size(); t += 3) {
+                        const std::array<Vector3, 3> tri{part->vertices[part->indices[t]].position, part->vertices[part->indices[t + 1]].position,
+                                                         part->vertices[part->indices[t + 2]].position};
+                        int low = rows, high = -1;
+                        std::array<int, 3> cs{};
+                        for (int k = 0; k < 3; ++k) {
+                            const auto [r, c] = cellOf(tri[static_cast<std::size_t>(k)]);
+                            low = std::min(low, r), high = std::max(high, r), cs[static_cast<std::size_t>(k)] = c;
+                        }
+                        std::ranges::sort(cs);
+                        const std::array<int, 3> gaps{cs[1] - cs[0], cs[2] - cs[1], cs[0] + columns - cs[2]};
+                        const auto widest = static_cast<std::size_t>(std::ranges::max_element(gaps) - gaps.begin());
+                        const int first = cs[(widest + 1) % 3], span = columns - gaps[widest];
+                        for (int r = std::max(0, low - 1); r <= std::min(rows - 1, high + 1); ++r) {
+                            const bool pole = r == 0 || r == rows - 1;
+                            for (int k = pole ? 0 : -1; k <= (pole ? columns - 1 : span + 1); ++k)
+                                cells[static_cast<std::size_t>(r * columns + (first + k + columns) % columns)].push_back(tri);
+                        }
+                    }
+                int through = 0;
+                for (const auto* part : partsOf(*model, glbOf(*hair, body))) {
+                    for (const auto index : std::set<std::uint16_t>(part->indices.begin(), part->indices.end())) {
+                        const Vector3 point = part->vertices[index].position, offset = point - centre;
+                        const float length = offset.Length();
+                        const auto [r, c] = cellOf(point);
+                        int count = 0;
+                        for (const auto& tri : cells[static_cast<std::size_t>(r * columns + c)]) count += crosses(centre, offset / length, length, tri) ? 1 : 0;
+                        through += count % 2;
+                    }
+                }
+                ++pairs;
+                if (through > worst) {
+                    worst = through;
+                    worstPair = hairName + " under " + hat->name + (body ? " (male)" : " (female)");
+                }
+            }
+        }
+    }
+    RecordProperty("worst", worst);
+    RecordProperty("worstPair", worstPair);
+    EXPECT_EQ(pairs, 2 * 15 * 8);
+    EXPECT_LE(worst, 6) << worstPair;
 }
 
 TEST(AvatarCatalogContentTest, ModelsShareTheTexturesTheyHaveInCommon) {

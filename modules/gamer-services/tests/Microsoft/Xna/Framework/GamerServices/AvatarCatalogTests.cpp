@@ -285,7 +285,8 @@ std::string ModelDigest(const Avatars::AvatarModel& model) {
 
 TEST(AvatarCatalogTest, V3DescriptionsAssembleExactlyAsRevised) {
     // A v3 description, format 1 or format 2, draws the same model on every machine: these digests
-    // pin catalog v3 revision 5 (a later revision changes them on purpose).
+    // pin catalog v3 revision 5 as it is assembled (a later revision, or a change to how hair meets
+    // a hat, changes them on purpose).
     // The 1950-mm body includes build-projection vertices at a digest rounding boundary.
     // Keep the catalog recipe's rounding stable when public XNA vector precision changes;
     // do not regenerate these fingerprints merely to accommodate that numerical change.
@@ -301,7 +302,7 @@ TEST(AvatarCatalogTest, V3DescriptionsAssembleExactlyAsRevised) {
     const Case cases[] = {
         {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "5b254d59d22fccd1edc1aa769207d9140aa339ca1aa3c92f9abf21121bbe5abb"},
         {1, 1950, 40, {2, 22, 40, 61, 81, 100}, 0, 128, "8cba9f9782cf1c70f1e36a737258d04324799672ce8310d607c48094cf6c728b"},
-        {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "d4a1d031500233ee57a5a3683a48d96812bc7c88d6bd028dec40f6840c92bb0e"},
+        {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "ec002300ac48bf3ee62dc1a61cbe814f32f2db1ccc25243cbf9ac8ba2cd27624"},
         {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "1ac4f0dd449fad2a85f8a63cd63b596cac4bcd867bbe94e9aa93552198ea8b22"},
     };
     for (const auto& c : cases) {

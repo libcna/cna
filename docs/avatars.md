@@ -271,7 +271,10 @@ the visual language):
 
 **Compatibility rules are data**, not code: a hat's `hairCover` gives the line where its brim
 meets the head and how far hair under it is lifted, and the assembly removes the hair the hat hides
-and flattens the rest to the head surface under it (an open hat such as a visor has none);
+and flattens the rest to the head surface under it (an open hat such as a visor has none); hair any
+hat passes through or over -- a tail under a brim, a mass of curls round a crown, locks over a
+headband -- is hidden, before and after the flattening (the segment from the head's centre to it
+crosses the hat's surface an odd number of times);
 glasses `follow` the eyes and earrings the ears, so face shapes move them with the feature
 (earrings are made for the first ear shape's lobes, and each shape names its `lobes`, so they are
 carried to the lobes of the shape worn);
@@ -319,7 +322,7 @@ own. `tools/avatar_builder/avatar_review.py` renders review sheets (views, faces
 headwear, facial hair, accessories, makeup, animations, expressions) through the real renderer
 (`cna_avatar_review`) and a CPU preview.
 
-**Visual regression.** `tools/avatar_builder/regression/` keeps 35 views of eight described
+**Visual regression.** `tools/avatar_builder/regression/` keeps 36 views of nine described
 avatars and of three `CreateRandom` avatars from a fixed seed (`cna_avatar_review --random 3 --seed
 2026`): both body types, short and tall, slim and broad, compact and long-limbed, light and dark
 skin, eight face presets, short, long, curly and tied hair, facial hair, glasses and sunglasses,

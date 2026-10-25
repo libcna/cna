@@ -10,6 +10,7 @@
 #include <deque>
 #include <functional>
 #include <map>
+#include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <thread>
@@ -279,6 +280,136 @@ void flattenUnderHat(AvatarPrimitive& primitive,const HeadSurface& surface,const
     primitive.indices=std::move(kept);
 }
 
+// A hat's surface filed by direction from the head's centre (rows from the crown, columns round
+// it), so a point asks only the triangles in its own direction whether the hat lies between it and
+// the head. Cells only choose candidates; the answer is the catalog arithmetic's.
+class HatShell {
+public:
+    HatShell(const AvatarGlb& hat,const Vector3& centre)
+        : centre_(centre)
+        , cells_(static_cast<std::size_t>(Rows*Columns))
+        , nearest_(static_cast<std::size_t>(Rows*Columns),1e9f)
+    {
+        for(const auto& primitive:hat.primitives) {
+            for(std::size_t t=0;t+2<primitive.indices.size();t+=3) {
+                const std::array<Vector3,3> triangle{primitive.vertices[primitive.indices[t]].position,
+                    primitive.vertices[primitive.indices[t+1]].position,primitive.vertices[primitive.indices[t+2]].position};
+                int low=Rows,high=-1;
+                std::array<int,3> columns{};
+                for(int k=0;k<3;++k) {
+                    const auto [row,column]=cell(triangle[static_cast<std::size_t>(k)]);
+                    low=std::min(low,row);
+                    high=std::max(high,row);
+                    columns[static_cast<std::size_t>(k)]=column;
+                }
+                std::ranges::sort(columns);
+                // The triangle spans the columns between its corners the short way round: everything
+                // but the widest gap between them.
+                const std::array<int,3> gaps{columns[1]-columns[0],columns[2]-columns[1],columns[0]+Columns-columns[2]};
+                const auto widest=static_cast<std::size_t>(std::ranges::max_element(gaps)-gaps.begin());
+                const int first=columns[(widest+1)%3],span=Columns-gaps[widest];
+                const auto index=static_cast<std::uint32_t>(triangles_.size());
+                triangles_.push_back(triangle);
+                // A crossing lies on the triangle, so no nearer the centre than the triangle comes (less a
+                // margin: this only skips work, never changes an answer).
+                const float reach=nearestDistance(triangle)-1e-4f;
+                for(int row=std::max(0,low-1);row<=std::min(Rows-1,high+1);++row) {
+                    const bool pole=row<=1||row>=Rows-2;
+                    for(int k=pole?0:-1;k<=(pole?Columns-1:span+1);++k) {
+                        const auto cell=static_cast<std::size_t>(row*Columns+(first+k+Columns)%Columns);
+                        cells_[cell].push_back(index);
+                        nearest_[cell]=std::min(nearest_[cell],reach);
+                    }
+                }
+            }
+        }
+    }
+    // Whether the segment from the head's centre to the point crosses the hat's surface an odd number
+    // of times: the point lies outside the hat's cloth where the hat is, through it.
+    [[nodiscard]] bool covers(const Vector3& point) const
+    {
+        const Vector3 offset=point-centre_;
+        const float length=catalogLength(offset);
+        if(length<1e-6f)return false;
+        Vector3 direction=offset;
+        catalogNormalize(direction);
+        const auto [row,column]=cell(point);
+        // Under the hat, nearer the head than any of its cloth in that direction: nothing to cross.
+        if(length<nearest_[static_cast<std::size_t>(row*Columns+column)])return false;
+        int crossings=0;
+        for(const auto index:cells_[static_cast<std::size_t>(row*Columns+column)])
+            crossings+=crosses(triangles_[index],direction,length)?1:0;
+        return crossings%2==1;
+    }
+
+private:
+    static constexpr int Rows=24,Columns=48;
+    // The centre's distance to the nearest point of a triangle (Ericson, Real-Time Collision Detection 5.1.5).
+    float nearestDistance(const std::array<Vector3,3>& t) const
+    {
+        const Vector3 ab=t[1]-t[0],ac=t[2]-t[0],ap=centre_-t[0];
+        const float d1=Vector3::Dot(ab,ap),d2=Vector3::Dot(ac,ap);
+        if(d1<=0.0f&&d2<=0.0f)return Vector3::Distance(centre_,t[0]);
+        const Vector3 bp=centre_-t[1];
+        const float d3=Vector3::Dot(ab,bp),d4=Vector3::Dot(ac,bp);
+        if(d3>=0.0f&&d4<=d3)return Vector3::Distance(centre_,t[1]);
+        const float vc=d1*d4-d3*d2;
+        if(vc<=0.0f&&d1>=0.0f&&d3<=0.0f)return Vector3::Distance(centre_,t[0]+ab*(d1/(d1-d3)));
+        const Vector3 cp=centre_-t[2];
+        const float d5=Vector3::Dot(ab,cp),d6=Vector3::Dot(ac,cp);
+        if(d6>=0.0f&&d5<=d6)return Vector3::Distance(centre_,t[2]);
+        const float vb=d5*d2-d1*d6;
+        if(vb<=0.0f&&d2>=0.0f&&d6<=0.0f)return Vector3::Distance(centre_,t[0]+ac*(d2/(d2-d6)));
+        const float va=d3*d6-d5*d4;
+        if(va<=0.0f&&(d4-d3)>=0.0f&&(d5-d6)>=0.0f)return Vector3::Distance(centre_,t[1]+(t[2]-t[1])*((d4-d3)/((d4-d3)+(d5-d6))));
+        const float denominator=1.0f/(va+vb+vc);
+        return Vector3::Distance(centre_,t[0]+ab*(vb*denominator)+ac*(vc*denominator));
+    }
+    std::pair<int,int> cell(const Vector3& point) const
+    {
+        constexpr float Pi=3.14159265358979f;
+        const Vector3 d=point-centre_;
+        const float r=std::max(catalogLength(d),1e-6f);
+        const float theta=std::acos(std::clamp(d.Y/r,-1.0f,1.0f)),phi=std::atan2(d.X,d.Z);
+        return {std::clamp(static_cast<int>(theta/Pi*Rows),0,Rows-1),std::clamp(static_cast<int>((phi+Pi)/(2.0f*Pi)*Columns),0,Columns-1)};
+    }
+    bool crosses(const std::array<Vector3,3>& t,const Vector3& d,float length) const
+    {
+        const Vector3 e1=t[1]-t[0],e2=t[2]-t[0],p=catalogCross(d,e2);
+        const float det=catalogDot(e1,p);
+        if(std::fabs(det)<1e-12f)return false;
+        const volatile float inverse=1.0f/det;
+        const Vector3 s=centre_-t[0];
+        const volatile float u=catalogDot(s,p)*inverse;
+        if(u<0.0f||u>1.0f)return false;
+        const Vector3 q=catalogCross(s,e1);
+        const volatile float v=catalogDot(d,q)*inverse;
+        if(v<0.0f||u+v>1.0f)return false;
+        const volatile float at=catalogDot(e2,q)*inverse;
+        return at>1e-5f&&at<length-1e-5f;
+    }
+    Vector3 centre_;
+    std::vector<std::array<Vector3,3>> triangles_;
+    std::vector<std::vector<std::uint32_t>> cells_;
+    std::vector<float> nearest_;
+};
+
+// Hair a hat passes through or over (a ponytail's tie under a brim, a mass of curls round a crown,
+// locks over a headband) is hidden with its triangles: before the rest is flattened under the hat,
+// since flattening pulled it in and stretched its triangles out through the brim, and again after,
+// for hair flattening moved into a brim.
+void hideThroughHat(AvatarPrimitive& primitive,const HatShell& shell)
+{
+    std::vector<bool> through(primitive.vertices.size());
+    for(std::size_t index=0;index<primitive.vertices.size();++index)through[index]=shell.covers(primitive.vertices[index].position);
+    std::vector<std::uint16_t> kept;
+    kept.reserve(primitive.indices.size());
+    for(std::size_t i=0;i+2<primitive.indices.size();i+=3)
+        if(!through[primitive.indices[i]]&&!through[primitive.indices[i+1]]&&!through[primitive.indices[i+2]])
+            kept.insert(kept.end(),primitive.indices.begin()+static_cast<std::ptrdiff_t>(i),primitive.indices.begin()+static_cast<std::ptrdiff_t>(i)+3);
+    primitive.indices=std::move(kept);
+}
+
 // Bones whose flesh thickens with the build, and the joint their thickness is measured from.
 struct BuildAxis {int bone; int toward;};
 constexpr BuildAxis BuildAxes[]={{1,5},{5,14},{2,6},{3,8},{6,11},{8,15},{12,20},{16,22},{20,25},{22,28},{25,33},{28,36}};
@@ -480,7 +611,8 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
     const auto bodyGlb=model(manifest,manifest.bodies[body]);
     if(!bodyGlb)throw std::runtime_error("avatar body asset is unavailable");
     struct Piece {std::shared_ptr<const AvatarGlb> glb;Scope scope=Scope::None;ItemFollow follow=ItemFollow::Shape;
-                  AvatarSides sides=AvatarSides::Both;const HairCover* cover=nullptr;};
+                  AvatarSides sides=AvatarSides::Both;const HairCover* cover=nullptr;bool hair=false;};
+    std::shared_ptr<const AvatarGlb> hatGlb;
     std::vector<Piece> pieces{{bodyGlb,Scope::Face}};
     auto fitted=[&](const std::shared_ptr<const AvatarGlb>& glb) {
         for(int bone=0;bone<BoneCount;++bone)
@@ -530,7 +662,11 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
         if(!glb)continue;
         Piece piece{fitted(glb)};
         if(kind==AvatarItemSlot::Hair||kind==AvatarItemSlot::Hat)piece.scope=Scope::Head;
-        if(kind==AvatarItemSlot::Hair)piece.cover=cover;
+        if(kind==AvatarItemSlot::Hair) {
+            piece.cover=cover;
+            piece.hair=true;
+        }
+        if(kind==AvatarItemSlot::Hat)hatGlb=piece.glb;
         if(item)piece.follow=item->follow;
         if(kind==AvatarItemSlot::Glasses&&piece.follow==ItemFollow::Shape)piece.scope=Scope::Head;
         pieces.push_back(std::move(piece));
@@ -605,6 +741,8 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
     if(const auto* lips=makeup[makeupIndex(AvatarItemSlot::Lips)])
         std::copy_n(lips->tiles.begin(),14,result->lipTiles.begin());
 
+    std::optional<HatShell> shell;
+    if(hatGlb&&!manifest.headSurface[body].radii.empty())shell.emplace(*hatGlb,manifest.headSurface[body].centre);
     std::vector<AvatarModelPart> decals;
     for(const auto& piece:pieces) {
         for(const auto& source:piece.glb->primitives) {
@@ -629,7 +767,12 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
                 part.feature=feature->feature;
             }
             AvatarPrimitive primitive=source;
-            if(piece.cover)flattenUnderHat(primitive,manifest.headSurface[body],*piece.cover);
+            if(piece.hair&&shell)hideThroughHat(primitive,*shell);
+            if(piece.cover) {
+                flattenUnderHat(primitive,manifest.headSurface[body],*piece.cover);
+                // Flattened hair beyond a sloping brim can land in it: hide that too.
+                if(shell)hideThroughHat(primitive,*shell);
+            }
             if(primitive.indices.empty())continue;
             part.vertices=std::move(primitive.vertices);
             if(shaped)applyFaceControls(part.vertices,controls,descriptor.face,piece.scope);

@@ -27,6 +27,14 @@ inline void catalogNormalize(Microsoft::Xna::Framework::Vector3& value)
     value={x,y,z};
 }
 
+inline Microsoft::Xna::Framework::Vector3 catalogCross(const Microsoft::Xna::Framework::Vector3& a,
+    const Microsoft::Xna::Framework::Vector3& b)
+{
+    const volatile float x1=a.Y*b.Z,x2=a.Z*b.Y,y1=a.Z*b.X,y2=a.X*b.Z,z1=a.X*b.Y,z2=a.Y*b.X;
+    const volatile float x=x1-x2,y=y1-y2,z=z1-z2;
+    return {x,y,z};
+}
+
 inline float catalogDistance(const Microsoft::Xna::Framework::Vector3& a,
     const Microsoft::Xna::Framework::Vector3& b)
 {

@@ -824,7 +824,9 @@ per-user models. A server catalog pack is only the update path for a catalog a c
   (hanging folds and gathers 3-8 mm deep, folds at cuffs, elbows and knees) with hems, cuffs,
   pockets and quilting, but no fine creases and no normal-mapped detail (`SkinnedEffect` has no
   normal map); hair is shaped clumps and shells, so curls, coils and twists read
-  as a stylized mass rather than strands; earrings hang from the lobe of the ear shape worn and
+  as a stylized mass rather than strands; under a hat hair is flattened, and hidden where the hat
+  passes through or over it, so a tail or a very wide style is cut where it meets the brim and shows
+  a ragged edge just under it from behind (the afro under a bucket hat); earrings hang from the lobe of the ear shape worn and
   move with it under the ear controls, but keep the first shape's tilt on the others; rings are legible only in the editor's
   Hands view; makeup does not follow the eye expressions, except eyeliner, which has closed-eye
   tiles; a preset authored for one body lets a planted foot drift 1-3 cm on the other; in the

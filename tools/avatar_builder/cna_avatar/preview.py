@@ -222,6 +222,33 @@ def _surface_radius(surface, theta, phi):
     return top + (bottom - top) * fr
 
 
+def hide_through_hat(prim, hat_triangles, centre):
+    """AvatarModel.cpp's hideThroughHat: hair the hat passes through or over (an odd number of the hat's
+    triangles between the head's centre and it) is dropped with its triangles."""
+    positions = prim["positions"]
+    a, b, c = hat_triangles[:, 0], hat_triangles[:, 1], hat_triangles[:, 2]
+    e1, e2 = b - a, c - a
+    through = np.zeros(len(positions), bool)
+    s = centre - a
+    for start in range(0, len(positions), 256):
+        offset = positions[start:start + 256] - centre
+        length = np.linalg.norm(offset, axis=1)
+        d = offset / np.maximum(length, 1e-9)[:, None]
+        p = np.cross(d[:, None, :], e2[None, :, :])
+        det = np.einsum("mk,nmk->nm", e1, p)
+        ok = np.abs(det) > 1e-12
+        inverse = np.where(ok, 1.0 / np.where(ok, det, 1.0), 0.0)
+        u = np.einsum("mk,nmk->nm", s, p) * inverse
+        q = np.cross(s, e1)
+        v = np.einsum("nk,mk->nm", d, q) * inverse
+        t = np.einsum("mk,mk->m", e2, q)[None, :] * inverse
+        hit = ok & (u >= 0) & (u <= 1) & (v >= 0) & (u + v <= 1) & (t > 1e-5) & (t < length[:, None] - 1e-5)
+        through[start:start + 256] = hit.sum(axis=1) % 2 == 1
+    tri = prim["indices"].reshape(-1, 3)
+    kept = tri[~through[tri].any(axis=1)]
+    return dict(prim, indices=kept if prim["indices"].ndim == 2 else kept.reshape(-1))
+
+
 def flatten_under_hat(prim, surface, cover):
     """AvatarModel.cpp's flattenUnderHat: hair a covering hat hides lies flat under it."""
     centre = np.array(surface["centre"])
@@ -351,7 +378,8 @@ def assemble(catalogs, description_bytes):
             follow = item.get("follow")
             if slot == "glasses" and not follow:
                 scope = "head"
-            pieces.append((catalogs.glb(version, item["assets"][body]), scope, follow, 0, cover if slot == "hair" else None))
+            # Hair carries its hat's cover ({} under a hat that covers none); other pieces None.
+            pieces.append((catalogs.glb(version, item["assets"][body]), scope, follow, 0, (cover or {}) if slot == "hair" else None))
         elif item_id:
             substituted.append(item_id)
             fallback = next((i for i in manifest["items"] if i["slot"] == slot), None)
@@ -366,6 +394,11 @@ def assemble(catalogs, description_bytes):
         item = worn(d.accessories.get(name, 0), name)
         if item and name not in hidden:
             pieces.append((catalogs.glb(version, item["assets"][body]), None, item.get("follow"), d.sides.get(name, 0), None))
+    hat_triangles = None
+    if hat and manifest.get("headSurface"):
+        hat_glb = catalogs.glb(version, hat["assets"][body])
+        hat_triangles = np.concatenate([p["positions"][p["indices"].reshape(-1, 3)] for p in hat_glb["primitives"]])
+        head_centre = np.array(manifest["headSurface"][body]["centre"])
     authored_height = manifest["bodies"][body]["authoredHeightMillimeters"] / 1000.0
     bind = body_glb["bind"]
     authored = world_positions(bind)
@@ -409,8 +442,12 @@ def assemble(catalogs, description_bytes):
                 if not style:
                     continue
                 extra = {"style_tiles": style["tiles"], "alpha": style.get("opacity", 1.0), "makeup_side": side}
+            if hair_cover is not None and hat_triangles is not None:
+                prim = hide_through_hat(prim, hat_triangles, head_centre)
             if hair_cover:
                 prim = flatten_under_hat(prim, manifest["headSurface"][body], hair_cover)
+                if hat_triangles is not None:
+                    prim = hide_through_hat(prim, hat_triangles, head_centre)
             positions = prim["positions"]
             if shaped and scope:
                 positions = face_deform(positions, prim["joints"], prim["weights"], controls, d.face, scope == "face")
