@@ -387,6 +387,9 @@ families, so treating warnings as errors stays a target-local decision, as
 `CNA_USE_CCACHE=ON` is the default when `ccache` is available. CNA invokes it with
 `CCACHE_BASEDIR` set to `CNA_CCACHE_BASEDIR`, which defaults to the common parent of the CNA and
 Sharp Runtime source directories. This makes source paths stable across their separate build trees.
+It also makes `__FILE__` relative to the build directory, so a test must never locate its
+fixtures through `std::filesystem::path(__FILE__)`; `tests/support/CNA/TestSupport/TestPaths.hpp`
+finds the repository root from the working directory instead (COMP-010).
 
 Inspect the actual cache instead of assuming it helps:
 
@@ -672,3 +675,8 @@ Precompiled headers, unity builds, PGO, source partitioning, `-march=native`, `-
 `-ffast-math` are intentionally not global defaults. They require a measured, target-specific case:
 they can make clean builds faster while harming incremental rebuilds, portability, binary packaging,
 or XNA numerical behaviour.
+
+A generic PGO campaign waits for a deterministic workload that represents real client applications.
+A C++ modules migration is not a build-speed shortcut: toolchains, dependency scanning, package
+consumption and cross-compiles need a separate design first. Any measured experiment becomes a
+default only after it meets its acceptance threshold on both native GCC and Clang builds.
