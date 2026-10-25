@@ -292,9 +292,9 @@ A narrowed set rotates the window asynchronously. SDL's `UIKit_ComputeViewFrame`
 portrait window's bounds for a landscape-only set before that rotation, and UIKit's autoresizing
 then turned the rotation into a 1346x0 root view (iPhone 17 Simulator started in portrait): the
 game ran on, drawing into a drawable one pixel high. CNA carries
-`cmake/patches/sdl-cbe3fbe9-0005-uikit-scene-window-frame.patch` for iOS builds, which keeps a
-scene window's bounds as UIKit reports them (`plans/plan_apple_m4.md` `AM4-120`; SDL main still
-swaps).
+`cmake/patches/sdl-86296ac8-0003-uikit-scene-window-frame.patch` for iOS builds, which keeps a
+scene window's bounds as UIKit reports them (`plans/plan_apple_m4.md` `AM4-120`; SDL main stopped
+swapping on iOS 13+ in `22a4d8b25`, 2026-10-23, after the pin).
 
 ### Storage locations
 

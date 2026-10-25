@@ -468,6 +468,16 @@ namespace CNA::Platform::Sdl3 {
     std::string Sdl3FileSystem::GetBasePath() const
     {
         const char* base = SDL_GetBasePath();
+#if defined(__ANDROID__)
+        // SDL 3.5.0 since 9672f5b6 names the APK's assets "assets://", a prefix only SDL's own I/O
+        // understands. TitleLocation.Path and the std::filesystem code that combines it keep the
+        // "./" SDL returned before; SDL resolves a relative path through internal storage and then
+        // the same assets.
+        if (base != nullptr && std::string(base) == "assets://")
+        {
+            return "./";
+        }
+#endif
         return base != nullptr ? std::string(base) : std::string();
     }
 

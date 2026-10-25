@@ -947,7 +947,7 @@ first.
   page; SDL's Emscripten backend creates the shared `/tmp/filedrop` drop directory inside a `try`
   but removed it unguarded, so the second window torn down threw out of `SDL_DestroyWindow`. CNA
   carries an Emscripten-only SDL patch guarding the removal as setup already does
-  (`cmake/patches/sdl-cbe3fbe9-0003-emscripten-filedrop-rmdir.patch`; SDL `main` still has the
+  (`cmake/patches/sdl-86296ac8-0001-emscripten-filedrop-rmdir.patch`; SDL `main` still has the
   bug). Pinned by the twelfth check of `modules/c-api/wasm/browser_probe.html`
   (`CApi_WasmBrowserProbe`), which fails 11/12 against the previous module.
 - **BINDFIX-053** — `cna-ts` finding 30: on WEBGL2 a `BasicEffect` draw into two bound render

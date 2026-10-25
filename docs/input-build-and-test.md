@@ -92,11 +92,11 @@ backend then built.
 Ninja 1.12.1, Debian 13).
 
 The **SDL** dependency is the `third_party/SDL` git submodule (`libsdl-org/SDL`), pinned at commit
-**`cbe3fbe9f367340dcd924de29c225c9f4ffea1f5`** (alongside `SDL_mixer`);
+**`86296ac8f01597076979630667472a846b04ce46`** (alongside `SDL_mixer`);
 `git submodule update --init` restores it. **Tag lookup:**
-`git -C third_party/SDL describe --tags` = **`release-3.4.0-685-gcbe3fbe9f`** — 685 commits past the
+`git -C third_party/SDL describe --tags` = **`release-3.4.0-752-g86296ac8f`** — 752 commits past the
 `release-3.4.0` tag on SDL `main`, self-reporting as SDL **3.5.0** (in-development). It is **not** a tagged
-release; the nearest **stable release tags** are the `release-3.4.x` line (latest **`release-3.4.8`**).
+release; the nearest **stable release tags** are the `release-3.4.x` line (latest **`release-3.4.18`**).
 
 **Minimum SDL3 API relied upon:** standard SDL3 gamepad and raw joystick APIs (including hotplug,
 axes/buttons/hats/trackballs and joystick-to-haptic correlation), keyboard

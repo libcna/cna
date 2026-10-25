@@ -22,40 +22,41 @@ endif()
 #   rm -rf <the exact CNA_SDL_PREBUILT_ROOT reported by CMake>
 include("${CMAKE_CURRENT_LIST_DIR}/SdlPrebuiltFingerprint.cmake")
 
-# Upstream SDL fixes carried on top of the vendored revision (third_party/SDL, pinned at
-# cbe3fbe9f367340dcd924de29c225c9f4ffea1f5), applied in this order to a staged copy of the source --
-# never to third_party/SDL itself. Each file is the upstream commit verbatim (`git format-patch`
-# output, named after the commit it is), so it can be dropped the day the pin moves past it.
+# CNA fixes carried on top of the vendored revision (third_party/SDL, pinned at SDL main
+# 86296ac8f01597076979630667472a846b04ce46, 2026-05-15), applied in this order to a staged copy of the
+# source -- never to third_party/SDL itself. Each is needed only on one platform, so it is carried only
+# there and leaves every other platform's build manifest unchanged; on desktop Linux, Windows, macOS
+# and Android SDL is built exactly as upstream ships it.
 #
+# The pin is the first upstream commit with both Vulkan GPU fixes CNA used to carry as patches on
+# cbe3fbe9 -- the Vulkan backend of SDL_gpu is what CNA's SDL_GPU renderer and FNA3D's SDL_GPU driver
+# run on Linux and Android:
 #  f286e420afd3ccb0dedc7ec77eb09d4bd2e5e102  GPU: Refactor Vulkan barriers to fix defrag segfault
-#      The Vulkan defragmenter barriers the replacement texture before it has a container, and the
-#      barrier helper reads container->header.info.type: a null dereference on the first
-#      defragmentation of any texture allocation (plans/plan_sdlgpu_modern_graphics.md SMG-0034).
+#      The defragmenter barriered the replacement texture before it had a container, a null
+#      dereference on the first defragmentation of a texture allocation
+#      (plans/plan_sdlgpu_modern_graphics.md SMG-0034; SdlGpu_TextureDefragment forces it).
 #  86296ac8f01597076979630667472a846b04ce46  GPU: Set missing fields on Vulkan swapchain texture
-#      The upstream follow-up: swapchain textures are not made by CreateTexture, so without it the
-#      fields the refactor added are uninitialised on them.
-set(CNA_SDL3_PATCHES
-    "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0001-vulkan-defrag-barriers-f286e420.patch"
-    "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0002-vulkan-swapchain-barrier-fields-86296ac8.patch")
-# A CNA fix, not an upstream commit (SDL main still has the bug): the Emscripten video backend's
-# window teardown removed /tmp/filedrop unguarded, so destroying a second window on one page threw
-# ENOENT out of SDL_DestroyWindow (plans/plan_bindings_upstream.md BINDFIX-052). The file compiles
-# only for Emscripten, so it is carried only there and leaves the native build manifest unchanged.
+#      Its follow-up: swapchain textures are not made by CreateTexture, so the fields the refactor
+#      added were uninitialised on them.
+set(CNA_SDL3_PATCHES)
+# The Emscripten video backend's window teardown removed /tmp/filedrop unguarded, so destroying a
+# second window on one page threw ENOENT out of SDL_DestroyWindow (plans/plan_bindings_upstream.md
+# BINDFIX-052). SDL main still removes it unguarded (checked 2026-10-25).
 if(EMSCRIPTEN)
     list(APPEND CNA_SDL3_PATCHES
-        "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0003-emscripten-filedrop-rmdir.patch")
-    # Also CNA's: a GL context proxied from a pthread (-sOFFSCREEN_FRAMEBUFFER, a threaded .NET
-    # bundle's deputy thread) is presented only by emscripten_webgl_commit_frame().
+        "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-86296ac8-0001-emscripten-filedrop-rmdir.patch")
+    # A GL context proxied from a pthread (-sOFFSCREEN_FRAMEBUFFER, a threaded .NET bundle's deputy
+    # thread) is presented only by emscripten_webgl_commit_frame(); SDL main still never calls it.
     list(APPEND CNA_SDL3_PATCHES
-        "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0004-emscripten-commit-proxied-frame.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-86296ac8-0002-emscripten-commit-proxied-frame.patch")
 endif()
-# Also CNA's (SDL main still has it): UIKit_ComputeViewFrame swapped a scene window's portrait
-# bounds for a landscape-only app before UIKit had rotated the window, and autoresizing then left
-# the root view 1346x0 once it did (plans/plan_apple_m4.md AM4-120). The file is UIKit-only, so the
-# patch is carried only for iOS and leaves every other build manifest unchanged.
+# UIKit_ComputeViewFrame swapped a scene window's portrait bounds for a landscape-only app before
+# UIKit had rotated the window, and autoresizing then left the root view 1346x0 once it did
+# (plans/plan_apple_m4.md AM4-120). SDL main stopped swapping on iOS 13 and later in 22a4d8b25
+# ("Fixed window orientation on iOS 27", 2026-10-23); drop this once the pin includes it.
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     list(APPEND CNA_SDL3_PATCHES
-        "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-cbe3fbe9-0005-uikit-scene-window-frame.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-86296ac8-0003-uikit-scene-window-frame.patch")
 endif()
 set(_cna_sdl_wayland_build_capable OFF)
 if(EMSCRIPTEN)
