@@ -550,7 +550,8 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   on SOFTWARE/OPENGLES3. Seven C metadata gates, strict C17/C++23 ABI/error/bool
   checks, real-frame pure-C smoke and final ten demo/eight CTest checks pass.
   The three knownIssue markers are removed with assertions retained; see
-  CNA_DEMOS_REPAIR_HANDOFF.md for exact evidence and shared-worktree limitations.
+  `git show 15d5d6f3d:CNA_DEMOS_REPAIR_HANDOFF.md` (removed 2026-10-25) for
+  exact evidence and shared-worktree limitations.
 
   **2026-10-21 URI/file correction (CNA-DEMOS-ISSUE-101, locally validated):** the
   genuine XNA pre-decoder file guard returns E_INVALIDARG, translated to exact
