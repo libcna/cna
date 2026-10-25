@@ -1,9 +1,10 @@
 # Location (GPS) for CNA: a proposal
 
-**Status: proposal, nothing implemented.** Written 2026-10-25. It replaces the five-line TODO that
-used to be this file, and it extends [`docs/location-future-plan.md`](../docs/location-future-plan.md),
-which records where location support belongs and why. Decisions the owner still has to take are
-collected at the end.
+**Status: proposal with the owner's decisions taken (2026-10-25); nothing implemented.** It
+replaces the five-line TODO that used to be this file, and it extends
+[`docs/location-future-plan.md`](../docs/location-future-plan.md), which records where location
+support belongs and why. The decisions are listed at the end; the sections below already follow
+them.
 
 ## In one paragraph
 
@@ -70,7 +71,7 @@ need a geocoding service, and nothing in a game depends on them.
 ## Where the code lives
 
 The project rule is that a `System.*` type belongs in Sharp Runtime, and that rule fits here once
-the platform part is kept out of it. The recommended split:
+the platform part is kept out of it. The split (decision 1):
 
 - **Sharp Runtime, a new `device-location` component**: the types above, `GeoCoordinate`'s
   validation and `GetDistanceTo`, the watcher's state machine, movement-threshold filtering, and a
@@ -81,9 +82,9 @@ the platform part is kept out of it. The recommended split:
 - **CNA**: the `IPlatformLocation` platform service and its backends, and the small adapter that
   installs a provider over it when a `Game` starts.
 
-The alternative is to put everything in CNA's `modules/devices` under `System::Device::Location`.
-It wires up more simply, but it breaks the rule, and the types would not be usable from Sharp
-Runtime on their own.
+Putting everything in CNA's `modules/devices` under `System::Device::Location` would wire up more
+simply, but it would break the rule and leave the types unusable from Sharp Runtime on its own; it
+was rejected.
 
 ## The platform service
 
@@ -102,21 +103,22 @@ follows the rules in `docs/platform-abstraction.md`:
 
 | Host | Backend | Notes |
 |---|---|---|
-| Android | `android.location.LocationManager` through JNI | Android has no NDK location API, and a `LocationListener` has to be a Java object, so the app template gains one small Java helper class. `ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION` are runtime permissions (SDL3's `SDL_RequestAndroidPermission`). Google's fused provider stays an optional extra at most, so devices without Google Play services keep working. |
+| Android | `android.location.LocationManager` through JNI | Android has no NDK location API, and a `LocationListener` has to be a Java object, so the app template gains one small Java helper class. `ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION` are runtime permissions (SDL3's `SDL_RequestAndroidPermission`). AOSP only (decision 4): no Google fused provider, so every Android device works the same, with or without Google Play services. |
 | iOS, macOS | Core Location (`CLLocationManager`) in Objective-C++ | Needs the usage-description keys in `Info.plist` and, on macOS, an app bundle. When-in-use authorisation only. |
-| Windows | `Windows.Devices.Geolocation.Geolocator` | Usable from desktop applications, subject to the system's location privacy setting. It needs C++/WinRT, which raises the MinGW question below; the older COM Location API is deprecated. |
+| Windows | `Windows.Devices.Geolocation.Geolocator` | Usable from desktop applications, subject to the system's location privacy setting. It needs C++/WinRT, so it is built with MSVC or clang-cl only; a MinGW build reports `PlatformCapability::Location` as false (decision 3). The older COM Location API is deprecated and not used. |
 | Linux desktop | GeoClue 2 over D-Bus | An optional dependency, detected like the other optional ones. GeoClue asks for the application's desktop ID; sandboxed (Flatpak) builds go through the xdg-desktop-portal location portal. |
-| Linux with a GPS receiver | `gpsd` | The one route that really is "via GPS": kiosks, vehicles, single-board computers. Optional, and only if someone needs it. |
+| Linux with a GPS receiver | `gpsd` | The one route that really is "via GPS": kiosks, vehicles, single-board computers. Not planned (decision 5); added only for a concrete need. |
 | Browser | `navigator.geolocation` | Secure contexts (HTTPS) only, and the browser asks the user. |
 | Tests | a fake provider and a recorded-track replay (GPX or NMEA) | Deterministic positions, permission refusals and signal loss without hardware. |
 
 ## Events, threads and lifecycle
 
 - **Which thread raises the events.** CNA's sensors raise theirs on whatever thread the operating
-  system calls back on (`docs/devices-event-contract.md`). For location the proposal is the
-  opposite: queue fixes and raise `PositionChanged` and `StatusChanged` on the game thread before the
-  next `Update`. Fixes arrive about once a second, so queueing costs nothing, and game code that
-  handles them mutates game state. Check what Windows Phone 7 itself did before settling this.
+  system calls back on (`docs/devices-event-contract.md`). Location does the opposite (decision 2):
+  fixes are queued and `PositionChanged` and `StatusChanged` are raised on the game thread before
+  the next `Update`. Fixes arrive about once a second, so queueing costs nothing, and game code that
+  handles them mutates game state without locking. LOC-1 still records what Windows Phone 7 did, so
+  the difference is documented, not discovered.
 - **Movement threshold.** The shared Sharp Runtime layer applies `MovementThreshold` with
   `GetDistanceTo`, so every backend filters the same way whatever the operating system offers.
 - **`TryStart(bool, TimeSpan)` blocks.** On the game thread it stalls a frame for up to its timeout,
@@ -163,7 +165,7 @@ later, so its Windows Phone compatibility layer would provide the types itself o
 
 | Step | Content |
 |---|---|
-| LOC-1 | Check the Windows Phone 7 surface and event-thread behaviour; settle the decisions below. |
+| LOC-1 | Check the Windows Phone 7 surface and record its event-thread behaviour. |
 | LOC-2 | Sharp Runtime `device-location`: the value types, `GetDistanceTo`, their tests. |
 | LOC-3 | `GeoCoordinateWatcher` with the provider seam, the fake provider and track replay, their tests. |
 | LOC-4 | `IPlatformLocation`, `PlatformCapability::Location`, refusal on `HEADLESS`/`TERMINAL`, conformance tests. |
@@ -171,17 +173,18 @@ later, so its Windows Phone compatibility layer would provide the types itself o
 | LOC-6 | Browser backend; headless Chrome test. |
 | LOC-7 | Linux GeoClue backend. |
 | LOC-8 | Core Location backend; needs the Apple machine. |
-| LOC-9 | Windows `Geolocator` backend. |
+| LOC-9 | Windows `Geolocator` backend (MSVC/clang-cl). |
 | LOC-10 | Optional: compass declination, C API routes, CNA.NET. |
+| LOC-11 | Merge this proposal and `docs/location-future-plan.md` into one `docs/location.md`. |
 
-## Decisions for the owner
+## Decisions (owner, 2026-10-25)
 
-1. **Placement.** The Sharp Runtime/CNA split above, or everything in CNA's `modules/devices`?
-2. **Event thread.** Marshal to the game thread as proposed, or match the sensors and raise on the
-   callback thread?
-3. **Windows toolchain.** C++/WinRT ties the Windows backend to MSVC or clang-cl. Should MinGW
-   builds simply report no location?
-4. **Android extras.** AOSP `LocationManager` only, or Google's fused provider as an opt-in?
-5. **`gpsd`.** Wanted at all?
-6. **Documents.** Once approved, should this proposal and `docs/location-future-plan.md` become a
-   single `docs/location.md`?
+1. **Placement:** the .NET types and the watcher go into a new Sharp Runtime `device-location`
+   component; CNA supplies `IPlatformLocation` and the adapter.
+2. **Event thread:** `PositionChanged` and `StatusChanged` are raised on the game thread before the
+   next `Update`, unlike the sensors.
+3. **Windows:** `Geolocator` with MSVC or clang-cl only; MinGW builds report no location.
+4. **Android:** AOSP `LocationManager` only, no Google fused provider.
+5. **`gpsd`:** not planned.
+6. **Documents:** when implementation starts, this proposal and `docs/location-future-plan.md`
+   become a single `docs/location.md` (LOC-11).
