@@ -21,7 +21,7 @@ Task ids `AVA-*`; one task, one commit.
 | AVA-07 | Planted-foot drift across bodies, heights and proportions | done: narrowed and pinned |
 | AVA-08 | Deep-crouch clothing show-through | done |
 | AVA-09 | Severe hair/headwear intersections | done |
-| AVA-10 | Final acceptance run and report | open |
+| AVA-10 | Final acceptance run and report | done |
 
 ## AVA-01 baseline (2026-10-24)
 
@@ -246,3 +246,23 @@ every leg length. Not fixed: the limitation is stated with these numbers in
 `gamer-services-known-limitations.md` 41 and `avatars.md`, and
 `PlantedFeetDriftOnlyAsFarAsTheRootMotionAllows` pins it (other body under 8 mm, extremes under
 33 mm).
+
+## AVA-10 final acceptance (2026-10-25, `1bf504b26`)
+
+- `python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --all-renderers`: PASSED in
+  17 min 33 s. Catalog (v3 revision 5, reader 2, 189 ids, every reference resolves), docs (16
+  claims), generator byte-for-byte; per renderer 230 avatar tests in the ten pinned components --
+  OPENGLES3, OPENGL33, WEBGPU, SDL_GPU, FNA3D, SOFTWARE and HEADLESS 229 passed and 1 allowed skip,
+  STUB 227 and 3 -- and the 36-view visual regression on the six that draw (SOFTWARE exact; GPUs
+  within mean 0.044/255, WEBGPU 0.485/255 and block 21; silhouettes 0.9996).
+- The whole `cmake-build-multi` CTest suite through the private runner (12,570 tests, excluding the
+  Wine-hosted XNA builds as every earlier full run did): 12,555 passed. The 15 failures are SDL_GPU
+  and FNA3D compiled-effect suites (`SdlGpuCompiledEffect*`, one `Fna3dCompiledEffectTest`) that
+  assume their renderer is the active one; this tree's default is OPENGLES3. They pass when their
+  renderer is selected (62 and 37), came with `e460e0ed6` before this pass, and this pass changed
+  nothing under `modules/renderers`, `modules/graphics` or `cmake`. Not an avatar matter; left as is.
+- The service against revision 5: `avatar_validation_tests` 209 and `avatar_tests` 200 assertions,
+  `cna_avatar_e2e.py` (catalog imported, a pack built from it installed, editor saves) passed.
+- Not repeated for revision 5: the Wine/DXVK and Wine/vkd3d-proton translation-layer renders (the
+  MinGW tree had been emptied; they remain revision 4's). Native Windows and macOS: pending external
+  qualification (`docs/gamer-services-known-limitations.md` 33).

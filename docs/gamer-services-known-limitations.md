@@ -691,14 +691,16 @@ been run.
   SOFTWARE, SDL_GPU (Vulkan), WebGPU and FNA3D (its SDL_GPU Vulkan driver) from one multi-renderer
   build through the private GPU runner, each confirmed by its log, all frames rendered. Against
   OpenGL 3.3 (`avatar_review.py compare`) the worst mean absolute pixel difference is 0.09/255
-  (WebGPU) and the worst silhouette overlap 0.9992 (SOFTWARE); OpenGL ES 3 is identical. The
-  checked-in visual regression (35 views, `GamerServices_AvatarVisualRegression`, AVA-04) passes on
-  those six and on Mesa llvmpipe against goldens captured on SOFTWARE. The Gamer
-  Services gtests (737 then) passed on all eight renderers compiled in except two on STUB, fixed
-  in AVA-02. Through Windows translation layers, not native drivers: revision 4's 258-frame review
-  rendered on DIRECTX9 (Wine with DXVK) and on SDL_GPU's Direct3D 12 backend (Wine with
-  vkd3d-proton) from the MinGW build on 2026-10-16, and the Windows build's gamer-services suite
-  passed under Wine at revision 2 on 2026-10-15. The XNA AvatarShadows sample ran on OpenGL ES 3
+  (WebGPU) and the worst silhouette overlap 0.9992 (SOFTWARE); OpenGL ES 3 is identical. At catalog
+  v3 revision 5, on 2026-10-25 at `1bf504b26` (AVA-10), the Avatar v3 acceptance command
+  (`tools/avatar_builder/avatar_acceptance.py --all-renderers`, `avatars.md`) passed on all eight
+  renderers compiled in: 230 avatar tests on each (one skip by design, three on STUB) and the
+  36-view checked-in visual regression (`GamerServices_AvatarVisualRegression`) on the six that
+  draw, against goldens captured on SOFTWARE (it also passed on Mesa llvmpipe at revision 4).
+  Through Windows translation layers, not native drivers, and not repeated for revision 5:
+  revision 4's 258-frame review rendered on DIRECTX9 (Wine with DXVK) and on SDL_GPU's Direct3D 12
+  backend (Wine with vkd3d-proton) from the MinGW build on 2026-10-16, and the Windows build's
+  gamer-services suite passed under Wine at revision 2 on 2026-10-15. The XNA AvatarShadows sample ran on OpenGL ES 3
   (Mesa software) on 2026-09-30, not re-run since. HEADLESS runs the API tests. Pending external
   qualification, not simulated here: SDL_GPU's Metal backend on macOS, and DIRECTX9, FNA3D and
   SDL_GPU's Direct3D 12 backend on native Windows drivers.
