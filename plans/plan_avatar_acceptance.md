@@ -266,3 +266,34 @@ every leg length. Not fixed: the limitation is stated with these numbers in
 - Not repeated for revision 5: the Wine/DXVK and Wine/vkd3d-proton translation-layer renders (the
   MinGW tree had been emptied; they remain revision 4's). Native Windows and macOS: pending external
   qualification (`docs/gamer-services-known-limitations.md` 33).
+
+# Technical acceptance hardening (AVH)
+
+Owner brief, 2026-10-25: an independent audit found the acceptance infrastructure above weaker than
+its report: it ran whatever binaries a tree held, counted tests instead of naming them, never
+checked the visual manifest against the catalog, and left documentation at revision 4. Scope:
+technical correctness, test reliability, documentation consistency and evidence; catalog v3
+revision 5, the serialization format and the public API stay as they are; no art work.
+
+| Task | What | Status |
+|---|---|---|
+| AVH-01 | Source and build provenance | done |
+| AVH-02 | Expected test identities, exit status | |
+| AVH-03 | Visual manifest reproduced and checked against the catalog | |
+| AVH-04 | Documentation at revision 5, consistency check without a build | |
+| AVH-05 | Size, link-footprint, load-time and cache-lifetime measurements | |
+| AVH-06 | Gamer Services service validation and end-to-end persistence | |
+| AVH-07 | Final acceptance matrix and full CTest suite | |
+
+## AVH-01 provenance
+
+`avatar_acceptance.py` ran `<build>/CnaTests` and `cna_avatar_review` as it found them and labelled
+the result with `git describe --dirty`: a tree last built at an older commit was reported as that
+commit's acceptance. Now a `source` stage records the commit and refuses a checkout that differs
+from it (tracked, untracked, or the catalog submodule; `--allow-dirty` runs and validates no commit)
+or a tree configured from another checkout; a `build` stage builds every binary it runs and records
+compiler, build type and SHA-256 of each (a tree already up to date costs 0.3 s; the always-run
+content-fixture steps are not counted as rebuilt), refusing a tree another ninja/make/cmake
+--build is working in; `--configure` configures a tree that does not exist yet; `source end`
+fails a run whose checkout changed under it except by documentation it did not read. Checked: a
+foreign `CMAKE_HOME_DIRECTORY`, a fake concurrent `ninja` and an uncommitted edit are each refused.

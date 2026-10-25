@@ -5,9 +5,16 @@
     python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi                  # its default renderer
     python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --all-renderers  # every one compiled in
     python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --renderer SDL_GPU --renderer SOFTWARE
+    python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --all-renderers --configure  # a fresh checkout
 
 Stages, each of which must pass:
 
+  source     the checkout: its commit, and that no tracked file, untracked file or the catalog
+             submodule differs from it (--allow-dirty runs anyway, and then validates no commit);
+             the build tree was configured from this checkout
+  build      cmake --build of every target the stages run, so what runs is what this commit builds
+             (incremental: a tree already up to date costs a second); --configure first configures
+             a tree that does not exist yet, as docs/avatars.md "Acceptance" describes
   catalog    catalog.json, the generator, the codec and CMake agree on the catalog version,
              revision and reader level; every id is unique; outfits, presets and rules name what exists
   docs       what docs/avatars.md, the limitations page and the generator's README state about the
@@ -19,12 +26,18 @@ Stages, each of which must pass:
              fail, and only the listed skips are allowed -- a component that stops running fails
   visual     per renderer that draws, avatar_visual_regression.py check against the goldens
 
+  source end HEAD and the working tree are what they were when the build ran; a commit that only
+             touches documentation the run did not read is reported, anything else fails the run
+
 Every test binary and the visual check run through tools/platform/run_gpu_tests_private.sh (a private
 display, never the desktop). `--skip STAGE` leaves a stage out on purpose; the summary says so.
-Writes acceptance.json and every stage's log to --out. Exit status 0 only when every stage passed.
+Writes acceptance.json (with the commit, the build's toolchain and the SHA-256 of every binary run)
+and every stage's log to --out. Exit status 0 only when every stage passed; the result names the
+commit it validated only when the checkout was clean.
 """
 import argparse
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -37,6 +50,16 @@ ROOT = HERE.parent.parent
 CATALOG = ROOT / "modules" / "gamer-services" / "assets" / "avatars" / "v3"
 RUNNER = ROOT / "tools" / "platform" / "run_gpu_tests_private.sh"
 NO_PIXELS = {"HEADLESS", "STUB"}
+# What --configure gives a tree that does not exist yet (docs/avatars.md, "Acceptance").
+CONFIGURE = ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Debug", "-DCNA_BUILD_TESTS=ON", "-DCNA_BUILD_EXAMPLES=ON",
+             "-DCNA_GRAPHICS_RENDERER=OPENGLES3",
+             "-DCNA_GRAPHICS_RENDERERS=OPENGLES3;OPENGL33;WEBGPU;SDL_GPU;FNA3D;SOFTWARE;HEADLESS;STUB",
+             "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache", "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+             "-DFETCHCONTENT_UPDATES_DISCONNECTED=ON"]
+# Every binary a stage runs; the build stage builds them all, so none is older than the checkout.
+TARGETS = ["CnaTests", "cna_avatar_review"]
+# Documentation stage_docs reads: a commit touching one of these during the run invalidates it.
+DOCUMENTS = ["docs/avatars.md", "docs/gamer-services-known-limitations.md", "tools/avatar_builder/README.md"]
 
 RANDOMIZATION = [
     "AvatarCatalogContentTest.RandomAvatarsAreRepeatableVariedAndBelievable",
@@ -87,6 +110,127 @@ def matches(name, patterns):
 def cache_value(build, key):
     found = re.search(r"^%s:[A-Z]+=(.*)$" % re.escape(key), (build / "CMakeCache.txt").read_text(), re.M)
     return found.group(1).strip() if found else ""
+
+
+def git(*args):
+    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True).stdout.rstrip("\n")
+
+
+def sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        for block in iter(lambda: stream.read(1 << 22), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+# ----- source and build provenance ---------------------------------------------------------------------
+
+def source_state():
+    """The commit, what differs from it (tracked or untracked, the catalog submodule included)."""
+    return {"commit": git("rev-parse", "HEAD"), "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
+            "changes": [l for l in git("status", "--porcelain=v1", "--untracked-files=normal").splitlines() if l],
+            "catalogSubmodule": git("submodule", "status", "--", str(CATALOG.parent.relative_to(ROOT)))}
+
+
+def stage_source(state, build, allow_dirty):
+    problems = []
+    if not state["commit"]:
+        problems.append("%s is not a Git checkout" % ROOT)
+    if state["changes"] and not allow_dirty:
+        problems.append("the checkout differs from %s (%d paths: %s); commit, or --allow-dirty to run without "
+                        "validating a commit" % (state["commit"][:12], len(state["changes"]), "; ".join(state["changes"][:6])))
+    if not state["catalogSubmodule"].startswith(" "):
+        problems.append("the catalog submodule is not at the commit CNA records: %s" % state["catalogSubmodule"])
+    if (build / "CMakeCache.txt").is_file():
+        home = Path(cache_value(build, "CMAKE_HOME_DIRECTORY")).resolve()
+        if home != ROOT:
+            problems.append("%s was configured from %s, not from this checkout %s" % (build.name, home, ROOT))
+    summary = "%s (%s)%s, catalog submodule %s" % (
+        state["commit"][:12], state["branch"], ", %d uncommitted paths" % len(state["changes"]) if state["changes"] else ", clean",
+        state["catalogSubmodule"][1:13])
+    return problems, summary
+
+
+def builders(build):
+    """Other processes building in this tree (ninja, make or cmake --build)."""
+    busy = []
+    for proc in Path("/proc").glob("[0-9]*"):
+        try:
+            args = [a.decode(errors="replace") for a in (proc / "cmdline").read_bytes().split(b"\0") if a]
+            cwd = os.readlink(proc / "cwd")
+        except OSError:
+            continue
+        if not args or int(proc.name) == os.getpid():
+            continue
+        tool = os.path.basename(args[0])
+        if tool in ("ninja", "make", "gmake") or (tool == "cmake" and "--build" in args):
+            if any(str(build) in a for a in args) or cwd == str(build) or cwd.startswith(str(build) + os.sep):
+                busy.append(int(proc.name))
+    return busy
+
+
+def compiler(build):
+    for found in sorted((build / "CMakeFiles").glob("*/CMakeCXXCompiler.cmake")):
+        text = found.read_text()
+        ident = re.search(r'CMAKE_CXX_COMPILER_ID "([^"]*)"', text)
+        version = re.search(r'CMAKE_CXX_COMPILER_VERSION "([^"]*)"', text)
+        return "%s %s" % (ident.group(1) if ident else "?", version.group(1) if version else "?")
+    return "unknown"
+
+
+def stage_build(build, out, configure, provenance):
+    log = out / "build.log"
+    env = dict(os.environ)
+    env.setdefault("CCACHE_DIR", "/rv/cnaccache" if Path("/rv/cnaccache").is_dir() else env.get("CCACHE_DIR", ""))
+    env.setdefault("CCACHE_BASEDIR", "/rv" if str(ROOT).startswith("/rv/") else str(ROOT.parent))
+    env = {k: v for k, v in env.items() if v != ""}
+    commands = []
+    if not (build / "CMakeCache.txt").is_file():
+        if configure is None:
+            return ["%s is not a configured build tree; --configure configures it (%s)" % (build, " ".join(CONFIGURE))], "not configured"
+        commands.append(["cmake", "-S", str(ROOT), "-B", str(build), *CONFIGURE, *configure])
+    busy = builders(build)
+    if busy:
+        return ["another build is running in %s (pids %s); run again when it has finished" % (build, busy)], "tree busy"
+    commands.append(["cmake", "--build", str(build), "--target", *TARGETS, "--parallel", "8"])
+    text = []
+    for command in commands:
+        result = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True)
+        text.append("$ %s\n%s%s" % (" ".join(command), result.stdout, result.stderr))
+        log.write_text("\n".join(text))
+        if result.returncode != 0:
+            tail = " | ".join(l for l in (result.stdout + result.stderr).splitlines() if "error" in l.lower())[:600]
+            return ["%s exited %d (%s): %s" % (command[1], result.returncode, log, tail)], "build failed"
+    steps = sum(1 for l in text[-1].splitlines() if re.match(r"\[\d+/\d+\] (Building C|Building CXX|Linking)", l))
+    binaries = {}
+    for target in TARGETS:
+        path = build / target
+        if not path.is_file():
+            return ["%s built no %s" % (build.name, path)], "missing binary"
+        binaries[target] = {"path": str(path), "bytes": path.stat().st_size, "sha256": sha256(path)}
+    provenance.update({"tree": str(build), "generator": cache_value(build, "CMAKE_GENERATOR"),
+                       "buildType": cache_value(build, "CMAKE_BUILD_TYPE"), "compiler": compiler(build),
+                       "launcher": cache_value(build, "CMAKE_CXX_COMPILER_LAUNCHER"), "configured": len(commands) > 1,
+                       "stepsRun": steps, "binaries": binaries, "log": str(log)})
+    return [], "%s %s, %s: %s (%s)" % (provenance["compiler"], provenance["buildType"], provenance["generator"],
+                                       "up to date" if not steps else "%d compile/link steps run" % steps, ", ".join(TARGETS))
+
+
+def stage_source_end(start):
+    now = source_state()
+    if now == start:
+        return [], "HEAD and the working tree are unchanged since the build"
+    moved = []
+    if now["commit"] != start["commit"]:
+        moved = git("diff", "--name-only", start["commit"], now["commit"]).splitlines()
+    moved += sorted(set(now["changes"]) ^ set(start["changes"]))
+    harmless = all(re.match(r"(.. )?(docs/|plans/|[^/]+\.md$)", p) and p.split(" ")[-1] not in DOCUMENTS for p in moved)
+    if moved and harmless:
+        return [], "HEAD moved to %s during the run, touching documentation the run did not read only (%d paths); results are %s's" % (
+            now["commit"][:12], len(moved), start["commit"][:12])
+    return ["the checkout changed during the run (HEAD %s -> %s; %s); the binaries are %s's, run again" % (
+        start["commit"][:12], now["commit"][:12], "; ".join(moved[:6]), start["commit"][:12])], "changed during the run"
 
 
 # ----- catalog and documentation ----------------------------------------------------------------------
@@ -255,10 +399,12 @@ def stage_visual(program, renderer, out):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("build", type=Path, help="a configured and built CNA build tree")
+    parser.add_argument("build", type=Path, help="a CNA build tree configured from this checkout (or, with --configure, to configure)")
     parser.add_argument("--renderer", action="append", default=[], help="renderer to accept on (repeatable); default: the tree's default")
     parser.add_argument("--all-renderers", action="store_true", help="every renderer compiled into the tree")
-    parser.add_argument("--tests", type=Path, help="test binary (default: <build>/CnaTests)")
+    parser.add_argument("--configure", action="store_true", help="configure the build tree first when it does not exist")
+    parser.add_argument("--cmake-arg", action="append", default=[], help="extra configure argument for --configure (repeatable)")
+    parser.add_argument("--allow-dirty", action="store_true", help="run on a checkout with uncommitted changes (validates no commit)")
     parser.add_argument("--out", type=Path, help="report directory (default: <build>/avatar-acceptance)")
     parser.add_argument("--skip", action="append", default=[], choices=["generator", "visual"], help="leave a stage out on purpose")
     args = parser.parse_args()
@@ -267,17 +413,9 @@ def main():
                  "git submodule update --init modules/gamer-services/assets/avatars" % (CATALOG / "catalog.json"))
     build = args.build.resolve()
     out = (args.out or build / "avatar-acceptance").resolve()
-    out.mkdir(parents=True, exist_ok=True)
-    default = cache_value(build, "CNA_GRAPHICS_RENDERER")
-    compiled = [r for r in cache_value(build, "CNA_GRAPHICS_RENDERERS").split(";") if r] or [default]
-    renderers = compiled if args.all_renderers else (args.renderer or [default])
-    unknown = [r for r in renderers if r not in compiled]
-    if unknown:
-        sys.exit("%s compiled in %s, not %s" % (build.name, compiled, unknown))
-    tests = (args.tests or build / "CnaTests").resolve()
-    program = build / "cna_avatar_review"
-    commit = subprocess.run(["git", "describe", "--always", "--dirty"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
-
+    tests, program = build / "CnaTests", build / "cna_avatar_review"
+    start = source_state()
+    provenance = {"source": start}
     results = []
 
     def record(name, outcome):
@@ -287,7 +425,32 @@ def main():
         for problem in problems[:40]:
             print("      - " + problem)
 
-    print("Avatar v3 acceptance: %s (default %s) at %s" % (build.name, default, commit), flush=True)
+    def finish():
+        passed = all(r["passed"] is not False for r in results)
+        validated = start["commit"] if passed and not start["changes"] else None
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "acceptance.json").write_text(json.dumps({"build": str(build), "commit": start["commit"], "validatedCommit": validated,
+                                                         "passed": passed, "provenance": provenance, "stages": results}, indent=1) + "\n")
+        verdict = ("PASSED, validating %s" % start["commit"][:12] if validated else
+                   "PASSED on uncommitted changes (validates no commit)" if passed else "FAILED")
+        print("Avatar v3 acceptance %s (%s)" % (verdict, out / "acceptance.json"))
+        return 0 if passed else 1
+
+    print("Avatar v3 acceptance: %s at %s" % (build.name, start["commit"][:12]), flush=True)
+    record("source", stage_source(start, build, args.allow_dirty))
+    if results[-1]["passed"]:
+        out.mkdir(parents=True, exist_ok=True)
+        record("build", stage_build(build, out, args.cmake_arg if args.configure else None, provenance.setdefault("build", {})))
+    if not all(r["passed"] for r in results):
+        return finish()
+    default = cache_value(build, "CNA_GRAPHICS_RENDERER")
+    compiled = [r for r in cache_value(build, "CNA_GRAPHICS_RENDERERS").split(";") if r] or [default]
+    renderers = compiled if args.all_renderers else (args.renderer or [default])
+    unknown = [r for r in renderers if r not in compiled]
+    if unknown:
+        record("renderers", (["%s compiled in %s, not %s" % (build.name, compiled, unknown)], "unknown renderer"))
+        return finish()
+    provenance["renderers"] = {"default": default, "compiled": compiled, "accepted": renderers}
     record("catalog", stage_catalog())
     record("docs", stage_docs())
     if "generator" in args.skip:
@@ -295,27 +458,18 @@ def main():
         print("  %-22s SKIPPED BY REQUEST" % "generator")
     else:
         record("generator", stage_generator(out))
-    if not tests.is_file():
-        record("tests", (["no test binary at %s (build CnaTests)" % tests], "not built"))
     for renderer in renderers:
-        if tests.is_file():
-            record("tests %s" % renderer, stage_tests(tests, renderer, out))
+        record("tests %s" % renderer, stage_tests(tests, renderer, out))
         if renderer in NO_PIXELS:
             results.append({"stage": "visual %s" % renderer, "passed": None, "summary": "not applicable: draws no pixels", "problems": []})
             print("  %-22s n/a   %s draws no pixels" % ("visual " + renderer, renderer))
         elif "visual" in args.skip:
             results.append({"stage": "visual %s" % renderer, "passed": None, "summary": "left out (--skip visual)", "problems": []})
             print("  %-22s SKIPPED BY REQUEST" % ("visual " + renderer))
-        elif not program.is_file():
-            record("visual %s" % renderer, (["no cna_avatar_review in %s (CNA_BUILD_EXAMPLES and a drawing default renderer build it; "
-                                             "--skip visual leaves the stage out)" % build.name], "not built"))
         else:
             record("visual %s" % renderer, stage_visual(program, renderer, out))
-    passed = all(r["passed"] is not False for r in results)
-    (out / "acceptance.json").write_text(json.dumps({"build": str(build), "commit": commit, "renderers": renderers, "passed": passed,
-                                                     "stages": results}, indent=1) + "\n")
-    print("Avatar v3 acceptance %s (%s)" % ("PASSED" if passed else "FAILED", out / "acceptance.json"))
-    return 0 if passed else 1
+    record("source end", stage_source_end(start))
+    return finish()
 
 
 if __name__ == "__main__":

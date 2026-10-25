@@ -350,6 +350,19 @@ art change, regenerate with `avatar_visual_regression.py manifest` if items or f
 python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi [--all-renderers | --renderer X ...]
 ```
 
+It first establishes what it is testing: the checkout's commit, refusing a checkout with uncommitted
+or untracked changes or a catalog submodule off its recorded commit (`--allow-dirty` runs anyway
+and then validates no commit), and a build tree configured from another checkout. It then builds
+every binary it runs (`cmake --build` of those targets, 8 jobs; seconds when the tree is up to
+date), so nothing older than the commit is ever reported as validating it, and refuses a tree
+another process is building in. In a fresh checkout `--configure` first configures the tree
+(Debug, Ninja, ccache, `OPENGLES3` default with the eight renderers compiled in; `--cmake-arg`
+adds e.g. `-DCNA_WEBGPU_ROOT=...` or `-DFETCHCONTENT_SOURCE_DIR_FNA3D=...`). `acceptance.json`
+records the commit, the catalog submodule, the compiler, build type and the SHA-256 of each binary
+run, and names the commit validated only for a clean checkout. At the end it checks that HEAD did
+not move under the run: a commit touching only documentation the run did not read is reported,
+anything else fails it.
+
 It checks that `catalog.json`, the generator, the codec and CMake agree on the catalog version,
 revision and reader level, that ids are unique and every outfit, preset, rule and file resolves;
 that what this page, the limitations page and the generator's README state about the catalog
