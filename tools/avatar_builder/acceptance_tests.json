@@ -174,6 +174,7 @@
     "AvatarRendererTest.ALoadCompletingInsideDrawWaitsUntilTheCallerCanUpdateItsAnimation",
     "AvatarRendererTest.AValidDescriptionLoadsAndBecomesReady",
     "AvatarRendererTest.AmbientLightColorGetSet",
+    "AvatarRendererTest.AnAvatarIsReusedWhileDrawnAndReleasedWithItsTexturesAfterwards",
     "AvatarRendererTest.AnUnreadableDescriptionIsUnavailable",
     "AvatarRendererTest.AttachmentCompositionAgreesWithDrawnJointsForEveryPresetAndBody",
     "AvatarRendererTest.BindPoseThrowsAfterDispose",
@@ -410,5 +411,14 @@
     "target": "cna_link_footprint_full"
    }
   ]
+ },
+ "measurements": {
+  "about": "The measure stage's budgets. The catalog sizes docs/avatars.md and docs/link-size-architecture.md state must be the built library's (to 0.1 MB); the game without avatars must not grow by more than 'growth' over its baseline, which is compared only on the toolchain and build type it was measured with; a load time may be at most loadTimeFactor times the upper figure docs/avatars.md states; a reused avatar must be ready within reusedMilliseconds.",
+  "loadTest": "AvatarRendererTest.AnAvatarIsReusedWhileDrawnAndReleasedWithItsTexturesAfterwards",
+  "toolchain": "GNU 14.2.0 Debug",
+  "game2DTextBytes": 10326194,
+  "growth": 0.05,
+  "loadTimeFactor": 2.0,
+  "reusedMilliseconds": 50
  }
 }

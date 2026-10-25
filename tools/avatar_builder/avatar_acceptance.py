@@ -34,6 +34,10 @@ Stages, each of which must pass:
   ctest      once, with the default renderer: the avatar CTest entries outside CnaTests (the EasyGL
              avatar render, the C API avatar smokes, the link-footprint gates); each must be
              registered and pass
+  measure    once: the built catalog library's size is what the documentation states; the game that
+             does not use avatars links none of it and stays within its baseline; the first, next
+             and a reused avatar load within the documented times, in a process of their own, and
+             the caches let go of an avatar and its textures when no renderer draws it any more
   visual manifest
              once: avatar_visual_regression.py manifest --check -- regenerating the job list from its
              sources reproduces the checked-in manifest byte for byte, the manifest names the current
@@ -470,6 +474,91 @@ def stage_ctest(build, out):
     return problems, "%d/%d passed (%s)" % (sum(1 for n in names if status.get(n) == "run"), len(names), ", ".join(names))
 
 
+def footprint(junit, name):
+    """text, data and bss of a link-footprint probe, from its CTest output."""
+    import xml.etree.ElementTree as ElementTree
+    for case in ElementTree.parse(junit).getroot().iter("testcase"):
+        if case.get("name") == name:
+            found = re.search(r"^\s*(\d+)\s+(\d+)\s+(\d+)\s+\d+\s+[0-9a-f]+\s", case.findtext("system-out") or "", re.M)
+            if found:
+                return tuple(int(g) for g in found.groups())
+    return None
+
+
+def stage_measure(build, tests, renderer, out, measurements):
+    budget = expected()["measurements"]
+    problems = []
+    avatars, links = (ROOT / "docs/avatars.md").read_text(), (ROOT / "docs/link-size-architecture.md").read_text()
+    files = list(CATALOG.iterdir())
+    library = next(iter(sorted((build / "modules" / "gamer-services").glob("libcna_gamerservices_avatar_catalog.*"))), None)
+    measured = {"catalogFiles": len(files), "catalogBytes": sum(p.stat().st_size for p in files),
+                "catalogJsonBytes": (CATALOG / "catalog.json").stat().st_size, "libraryBytes": library.stat().st_size if library else None}
+    if library is None:
+        problems.append("%s has no built avatar catalog library" % build.name)
+    else:
+        stated = [("docs/avatars.md", m) for m in re.findall(r"to a ([\d.]+) MB library", avatars)] + \
+                 [("docs/link-size-architecture.md", m) for m in re.findall(r"([\d.]+) MB deflated at revision", links)]
+        if len(stated) < 3:
+            problems.append("the documentation no longer states the library's size where this stage looks (%d of 3 statements)" % len(stated))
+        for document, value in stated:
+            if float(value) != round(measured["libraryBytes"] / 1e6, 1):
+                problems.append("%s states a %s MB catalog library; %s is %.1f MB (%d bytes)" % (
+                    document, value, library.name, measured["libraryBytes"] / 1e6, measured["libraryBytes"]))
+    junit = out / "ctest-avatar.xml"
+    plain = footprint(junit, "LinkFootprint_2DGame") if junit.is_file() else None
+    gamer = footprint(junit, "LinkFootprint_GamerServicesGame") if junit.is_file() else None
+    toolchain = "%s %s" % (compiler(build), cache_value(build, "CMAKE_BUILD_TYPE"))
+    growth = None
+    if not plain or not gamer:
+        problems.append("no link-footprint sizes in %s (the ctest stage runs the probes)" % junit)
+    else:
+        measured.update({"game2DTextBytes": plain[0], "gamerServicesGameTextBytes": gamer[0]})
+        if library and gamer[0] - plain[0] < measured["libraryBytes"] * 0.95:
+            problems.append("the Gamer Services game is only %d bytes larger than the 2D game; the %d-byte catalog is not in it" % (
+                gamer[0] - plain[0], measured["libraryBytes"]))
+        if toolchain == budget["toolchain"]:
+            growth = plain[0] / budget["game2DTextBytes"] - 1.0
+            if growth > budget["growth"]:
+                problems.append("the 2D game's text is %d bytes, %.1f %% over its %d-byte baseline (%s)" % (
+                    plain[0], growth * 100, budget["game2DTextBytes"], toolchain))
+    report, log = out / "measure-load.json", out / "measure-load.log"
+    report.unlink(missing_ok=True)
+    result = private([str(tests), "--gtest_filter=" + budget["loadTest"], "--gtest_output=json:" + str(report)], renderer, log, 600)
+    case = None
+    if report.is_file():
+        case = next((c for s in json.loads(report.read_text())["testsuites"] for c in s["testsuite"]), None)
+    if result.returncode != 0 or not case or case.get("result") != "COMPLETED" or case.get("failures"):
+        problems.append("%s did not pass in a process of its own (exit %d, %s)" % (budget["loadTest"], result.returncode, log))
+    else:
+        measured.update({key: int(case[key]) for key in ("firstAvatarMilliseconds", "nextAvatarMilliseconds", "reusedAvatarMicroseconds",
+                                                          "liveTexturesWhileDrawn", "parsedModelsKept")})
+        if case.get("coldProcess") != "yes":
+            problems.append("%s did not start from empty caches" % budget["loadTest"])
+        documented = re.search(r"is ready in about (\d+)-(\d+) ms\s+and the next in about (\d+)-(\d+) ms", avatars)
+        if not documented:
+            problems.append("docs/avatars.md no longer states the first and next avatar's load times")
+        else:
+            measured["documentedMilliseconds"] = [int(g) for g in documented.groups()]
+            for key, ceiling in (("firstAvatarMilliseconds", int(documented.group(2))), ("nextAvatarMilliseconds", int(documented.group(4)))):
+                if measured[key] > ceiling * budget["loadTimeFactor"]:
+                    problems.append("%s %d ms, over %.1f times the documented %d ms" % (key, measured[key], budget["loadTimeFactor"], ceiling))
+        if measured["reusedAvatarMicroseconds"] > budget["reusedMilliseconds"] * 1000:
+            problems.append("a reused avatar took %.1f ms" % (measured["reusedAvatarMicroseconds"] / 1000.0))
+    measurements.update(measured)
+    (out / "measurements.json").write_text(json.dumps(measured, indent=1) + "\n")
+    summary = "catalog %d files, %.1f MB; library %s; 2D game text %s%s; Gamer Services game text %s" % (
+        measured["catalogFiles"], measured["catalogBytes"] / 1e6,
+        "%.1f MB" % (measured["libraryBytes"] / 1e6) if library else "?",
+        "{:,}".format(plain[0]) if plain else "?",
+        " (%+.2f %% on %s)" % (growth * 100, toolchain) if growth is not None else " (no baseline for %s)" % toolchain,
+        "{:,}".format(gamer[0]) if gamer else "?")
+    if "firstAvatarMilliseconds" in measured:
+        summary += "; first avatar %d ms, next %d ms, reused %.2f ms; %d textures while drawn, released after; %d parsed models kept" % (
+            measured["firstAvatarMilliseconds"], measured["nextAvatarMilliseconds"], measured["reusedAvatarMicroseconds"] / 1000.0,
+            measured["liveTexturesWhileDrawn"], measured["parsedModelsKept"])
+    return problems, summary
+
+
 def stage_visual_manifest(program, renderer, out):
     log = out / "visual-manifest.log"
     result = private([sys.executable, str(HERE / "avatar_visual_regression.py"), "manifest", "--check", "--program", str(program)],
@@ -610,6 +699,7 @@ def main():
         else:
             record("visual %s" % renderer, stage_visual(program, renderer, out))
     record("ctest", stage_ctest(build, out))
+    record("measure", stage_measure(build, tests, default, out, provenance.setdefault("measurements", {})))
     record("source end", stage_source_end(start))
     return finish()
 

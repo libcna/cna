@@ -269,10 +269,13 @@ the visual language):
   avatars link the catalog. (Revision 2 was 32.9 MB, 14.1 MB deflated, revision 3 45.2 and 21.6 MB:
   its hair, clothing and shoes are sculpted rather than lofted. Revision 4's face has about twice
   revision 3's vertices, and face controls work out a description's deformers once, so assembling
-  and drawing 300 random avatars in a Debug build takes 21 s against revision 3's 27 s; the first
-  avatar of a process, which parses the larger body model and atlas, is ready in about 450-500 ms
-  and the next in about 200-230 ms (revision 3: 345 and 185 ms); an avatar already assembled is
-  reused at once.)
+  and drawing 300 random avatars in a Debug build takes 21 s against revision 3's 27 s. At revision 5
+  the first avatar of a process, which parses the body model and atlas, is ready in about 370-410 ms
+  and the next in about 140-210 ms, and an avatar a renderer still draws is reused in about 0.3 ms
+  (Debug, `AvatarRendererTest.AnAvatarIsReusedWhileDrawnAndReleasedWithItsTexturesAfterwards` in a
+  process of its own, which the acceptance's `measure` stage runs; revision 4 was recorded as
+  450-500 and 200-230 ms, revision 3 as 345 and 185 ms). Once no renderer draws an avatar, it and
+  its textures are released; parsed catalog models are kept for reuse, at most 96.)
 
 **Compatibility rules are data**, not code: a hat's `hairCover` gives the line where its brim
 meets the head and how far hair under it is lifted, and the assembly removes the hair the hat hides
@@ -386,7 +389,12 @@ private GPU runner, failing when one fails, does not run, or skips without an en
 says; and runs the visual regression on every renderer that draws. Once, with the default
 renderer, it runs the avatar CTest entries outside `CnaTests` the file names (the EasyGL avatar
 render, the C API avatar smokes, the link-footprint gates), each of which must be registered and
-pass. A stage left out on purpose (`--skip generator`, `--skip visual`) is reported as such; the
+pass, and measures: the built catalog library must be the size this page and
+`link-size-architecture.md` state, the game without avatars (`LinkFootprint_2DGame`) must not
+contain it and must stay within 5 % of its measured text size (compared on the toolchain that
+baseline was taken with), and in a process of its own the first, next and reused avatar must load
+within twice the times stated under Assets and the caches must release an avatar and its textures
+once nothing draws it (budgets in `acceptance_tests.json`). A stage left out on purpose (`--skip generator`, `--skip visual`) is reported as such; the
 report is `<build>/avatar-acceptance/acceptance.json`. After adding, renaming or removing an
 avatar test, `--write-expected` rewrites the lists from the binary; review that diff with the change.
 

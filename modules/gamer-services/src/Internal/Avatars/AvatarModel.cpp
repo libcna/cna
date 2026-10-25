@@ -943,4 +943,22 @@ std::shared_ptr<AvatarLoad> loadAvatarAsync(const AvatarDescriptor& descriptor)
     });
     return load;
 }
+
+AvatarCacheStatistics avatarCacheStatisticsForTesting()
+{
+    AvatarCacheStatistics statistics;
+    {
+        std::lock_guard guard(cacheLock);
+        statistics.modelKeys=cache.size();
+        statistics.liveModels=static_cast<std::size_t>(std::ranges::count_if(cache,[](const auto& entry){return !entry.second.expired();}));
+    }
+    {
+        std::lock_guard guard(assetLock);
+        statistics.parsedModels=cachedModels.size();
+        statistics.liveTextures=static_cast<std::size_t>(std::ranges::count_if(cachedImages,[](const auto& entry){return !entry.second.expired();}));
+    }
+    std::lock_guard guard(faceLock);
+    statistics.faceAtlases=cachedTiles.size();
+    return statistics;
+}
 }

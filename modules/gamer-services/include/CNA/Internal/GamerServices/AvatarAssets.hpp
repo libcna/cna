@@ -581,6 +581,22 @@ struct AvatarLoad {
  * @return Progress. */
 std::shared_ptr<AvatarLoad> loadAvatarAsync(const AvatarDescriptor& descriptor);
 
+/** @brief What the avatar caches hold at one moment. */
+struct AvatarCacheStatistics {
+    /** @brief Assembled avatars some renderer still holds. */
+    std::size_t liveModels=0;
+    /** @brief Descriptions the assembled-avatar cache has a key for, live or expired. */
+    std::size_t modelKeys=0;
+    /** @brief Parsed catalog models kept for reuse (at most 96, least recently used dropped). */
+    std::size_t parsedModels=0;
+    /** @brief Decoded textures some assembled avatar still uses. */
+    std::size_t liveTextures=0;
+    /** @brief Decoded face atlases, one per distinct atlas file. */
+    std::size_t faceAtlases=0;
+};
+/** @brief Tests and measurements: what the avatar caches hold now. @return Statistics. */
+AvatarCacheStatistics avatarCacheStatisticsForTesting();
+
 /** @brief Progress of a background catalog lookup. */
 struct CatalogLoad {
     /** @brief Guards the fields below. */

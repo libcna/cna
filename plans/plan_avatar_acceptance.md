@@ -281,7 +281,7 @@ revision 5, the serialization format and the public API stay as they are; no art
 | AVH-02 | Expected test identities, exit status | done |
 | AVH-03 | Visual manifest reproduced and checked against the catalog | done |
 | AVH-04 | Documentation at revision 5, consistency check without a build | done |
-| AVH-05 | Size, link-footprint, load-time and cache-lifetime measurements | |
+| AVH-05 | Size, link-footprint, load-time and cache-lifetime measurements | done |
 | AVH-06 | Gamer Services service validation and end-to-end persistence | |
 | AVH-07 | Final acceptance matrix and full CTest suite | |
 
@@ -354,3 +354,24 @@ entry `GamerServices_AvatarAcceptanceStatic` (labels `avatar`, `configuration`, 
 size the pages state (22.3 MB) needs a build and is checked with the measurements (AVH-05).
 Limitations item 33's revision 4 review is dated history and stays; AVH-07 brings its current
 evidence up to date.
+
+## AVH-05 measurements
+
+No stage measured anything: the documented sizes and load times were figures someone once wrote
+down. A `measure` stage, reusing what exists, now checks: the built
+`libcna_gamerservices_avatar_catalog.a` (22,324,512 bytes) against the three places the
+documentation states 22.3 MB; from the link-footprint probes' own `size` output (the ctest stage),
+that the Gamer Services game's text exceeds the 2D game's by at least the catalog and that the 2D
+game's (10,326,194 bytes) stays within 5 % of that baseline, compared only on the toolchain it was
+taken with (GCC 14.2.0 Debug); and, from a new test run in a process of its own,
+`AnAvatarIsReusedWhileDrawnAndReleasedWithItsTexturesAfterwards`, the first, next and reused avatar's
+load times against twice the figures `avatars.md` states, and that the caches let go. The test reads
+a new internal `avatarCacheStatisticsForTesting()` (live assembled avatars, cache keys, parsed models,
+live textures, face atlases; no public API) and fails unless a reused avatar is Ready at once, the
+avatars and their 9 textures are released when their renderers are disposed, the parsed-model cache
+stays within its 96 and a new avatar prunes expired keys. Measured at revision 5 (Debug, five runs
+under the shared machine's load): first 352-403 ms, next 138-203 ms, reused 0.21-0.28 ms; 14 parsed
+models kept. `avatars.md` stated revision 4's 450-500 and 200-230 ms and now states these, with the
+earlier figures as history. Injected: a lower 2D baseline, the catalog in the 2D game, a load-time
+factor of 0.1 each fail; another toolchain skips only the baseline comparison.
+`acceptance_tests.json` now requires 233 tests.

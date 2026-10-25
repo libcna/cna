@@ -481,3 +481,60 @@ TEST(AvatarRendererTest, AttachmentCompositionAgreesWithDrawnJointsForEveryPrese
         }
     }
 }
+
+// plans/plan_avatar_acceptance.md AVH-05: an avatar a renderer still draws is reused at once, and
+// once every renderer drawing it is disposed the caches let go of it and of its textures. The load
+// times are recorded as test properties; avatar_acceptance.py runs this test alone, so the first
+// load is the process's first (docs/avatars.md, Assets, states what to expect).
+TEST(AvatarRendererTest, AnAvatarIsReusedWhileDrawnAndReleasedWithItsTexturesAfterwards) {
+    namespace Assets = CNA::Internal::GamerServices::Avatars;
+    using Clock = std::chrono::steady_clock;
+    const auto since = [](Clock::time_point start) {
+        return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+    };
+    const auto before = Assets::avatarCacheStatisticsForTesting();
+    auto first = Describe(AvatarBodyType::Female, 1613);
+    auto second = Describe(AvatarBodyType::Male, 1787);
+
+    auto start = Clock::now();
+    auto drawn = std::make_unique<AvatarRenderer>(&first, false);
+    ASSERT_EQ(WaitUntilLoaded(*drawn), AvatarRendererState::Ready);
+    const double firstMilliseconds = since(start);
+    start = Clock::now();
+    auto other = std::make_unique<AvatarRenderer>(&second, false);
+    ASSERT_EQ(WaitUntilLoaded(*other), AvatarRendererState::Ready);
+    const double nextMilliseconds = since(start);
+    start = Clock::now();
+    auto again = std::make_unique<AvatarRenderer>(&first, false);
+    EXPECT_EQ(again->getStateProperty(), AvatarRendererState::Ready);
+    const double reusedMilliseconds = since(start);
+
+    const auto held = Assets::avatarCacheStatisticsForTesting();
+    EXPECT_GE(held.liveModels, before.liveModels + 2);
+    EXPECT_GT(held.liveTextures, before.liveTextures);
+    EXPECT_GE(held.faceAtlases, 1u);
+    EXPECT_LE(held.parsedModels, 96u);
+
+    drawn->Dispose();
+    again->Dispose();
+    other->Dispose();
+    drawn.reset();
+    again.reset();
+    other.reset();
+    const auto released = Assets::avatarCacheStatisticsForTesting();
+    EXPECT_LE(released.liveModels, before.liveModels);
+    EXPECT_LE(released.liveTextures, before.liveTextures);
+    EXPECT_LE(released.parsedModels, 96u);
+    // A new avatar removes the keys of avatars nobody draws any more.
+    auto third = Describe(AvatarBodyType::Female, 1702);
+    AvatarRenderer later(&third, false);
+    ASSERT_EQ(WaitUntilLoaded(later), AvatarRendererState::Ready);
+    EXPECT_LE(Assets::avatarCacheStatisticsForTesting().modelKeys, before.liveModels + 1);
+
+    RecordProperty("coldProcess", before.parsedModels == 0 && before.faceAtlases == 0 ? "yes" : "no");
+    RecordProperty("firstAvatarMilliseconds", std::to_string(static_cast<int>(firstMilliseconds + 0.5)));
+    RecordProperty("nextAvatarMilliseconds", std::to_string(static_cast<int>(nextMilliseconds + 0.5)));
+    RecordProperty("reusedAvatarMicroseconds", std::to_string(static_cast<int>(reusedMilliseconds * 1000.0 + 0.5)));
+    RecordProperty("liveTexturesWhileDrawn", std::to_string(held.liveTextures - before.liveTextures));
+    RecordProperty("parsedModelsKept", std::to_string(released.parsedModels));
+}
