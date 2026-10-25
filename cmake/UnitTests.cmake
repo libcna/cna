@@ -1316,9 +1316,41 @@ if(CNA_BUILD_TESTS)
     # themselves and still in parallel with everything else.
     set(_cna_unit_tests_network_filter
         "ENetBackendTest.*:ENetHostHandleTest.*:ENetDiscoveryServiceTest.*:NetworkSessionTest.*:ServiceSearchTest.*:OnlineNetworkSessionTest.*:NetworkSessionTypePolicyTest.*:TwoProcessLoopbackTest.*:AvailableNetworkSession*.*:QualityOfServiceTest.*:OnlineLeaderboardTest.*:LocalNetworkGamerTest.*:GamerServicesDispatcherHangRegressionTest.*:RelayTransportTest.*")
+    # plans/plan_avatar_acceptance.md AVH-07: the SDL_GPU and FNA3D compiled-effect suites test their
+    # renderer's own runtime and need it to be the device's. In a multi-renderer tree whose default
+    # is another renderer they were discovered with the default, so most cases skipped and those
+    # that assert the runtime exists failed (15 in cmake-build-multi). They are discovered on their
+    # own, with their renderer selected, wherever it is compiled in but not the default.
+    set(_cna_unit_tests_renderer_suites)
+    if(NOT CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU" AND "SDL_GPU" IN_LIST CNA_RENDERER_IDENTITIES)
+        list(APPEND _cna_unit_tests_renderer_suites
+            "SDL_GPU|SdlGpuCompiledEffectTest.*:SdlGpuCompiledEffectDrawTest.*:SdlGpuCompiledEffectVertexLayoutTest.*")
+    endif()
+    if(NOT CNA_GRAPHICS_RENDERER STREQUAL "FNA3D" AND "FNA3D" IN_LIST CNA_RENDERER_IDENTITIES)
+        list(APPEND _cna_unit_tests_renderer_suites "FNA3D|Fna3dCompiledEffectTest.*:Fna3dCompiledEffectDrawTest.*")
+    endif()
+    set(_cna_unit_tests_default_filter "${_cna_unit_tests_network_filter}")
+    foreach(_cna_suites IN LISTS _cna_unit_tests_renderer_suites)
+        string(REPLACE "|" ";" _cna_suites "${_cna_suites}")
+        list(GET _cna_suites 0 _cna_suites_renderer)
+        list(GET _cna_suites 1 _cna_suites_filter)
+        string(APPEND _cna_unit_tests_default_filter ":${_cna_suites_filter}")
+        set(_cna_suites_environment ${_cna_unit_tests_environment} "CNA_GRAPHICS_RENDERER=${_cna_suites_renderer}")
+        if(_cna_suites_renderer STREQUAL "FNA3D" AND DEFINED CNA_FNA3D_TEST_DRIVER)
+            list(APPEND _cna_suites_environment "FNA3D_FORCE_DRIVER=${CNA_FNA3D_TEST_DRIVER}")
+        endif()
+        set(_cna_suites_properties ENVIRONMENT "${_cna_suites_environment}")
+        if(CNA_TEST_WAYLAND_GUARD_APPLIES)
+            list(APPEND _cna_suites_properties ENVIRONMENT_MODIFICATION "${CNA_TEST_WAYLAND_GUARD}")
+        endif()
+        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            TEST_FILTER "${_cna_suites_filter}"
+            PROPERTIES ${_cna_suites_properties})
+    endforeach()
     gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-        TEST_FILTER "-${_cna_unit_tests_network_filter}"
+        TEST_FILTER "-${_cna_unit_tests_default_filter}"
         PROPERTIES ${_cna_unit_tests_audio_environment})
     gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"

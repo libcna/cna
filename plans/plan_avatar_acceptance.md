@@ -283,7 +283,8 @@ revision 5, the serialization format and the public API stay as they are; no art
 | AVH-04 | Documentation at revision 5, consistency check without a build | done |
 | AVH-05 | Size, link-footprint, load-time and cache-lifetime measurements | done |
 | AVH-06 | Gamer Services service validation and end-to-end persistence | done |
-| AVH-07 | Final acceptance matrix and full CTest suite | |
+| AVH-07 | SDL_GPU and FNA3D compiled-effect suites run on their renderer in a multi tree | done |
+| AVH-08 | Final acceptance matrix, fresh checkout, full CTest suite | |
 
 ## AVH-01 provenance
 
@@ -389,3 +390,19 @@ build tree must be its own and idle, `cna-gamer-services-server`, `-admin`, `ava
 and `run` (a skip fails), the assertion counts and the binaries' SHA-256 are recorded. At
 `1e7a4a8` (service `develop`, clean; its tree was up to date): 209 and 200 assertions, the
 end-to-end test passed. Injected: an unregistered test name fails; the skip's `notrun` is rejected.
+
+## AVH-07 compiled-effect suites in a multi-renderer tree
+
+AVA-10's full CTest run left 15 failures, all in the SDL_GPU and FNA3D compiled-effect suites
+(`SdlGpuCompiledEffect{,Draw,VertexLayout}Test`, 62 cases; `Fna3dCompiledEffect{,Draw}Test`, 64):
+`gtest_discover_tests` registers every `CnaTests` case with the tree's default renderer
+(OPENGLES3 in `cmake-build-multi`), so most of these cases skipped ("this build did not select the
+SDL_GPU renderer") and the ones that `ASSERT_NE` on the runtime failed; none tested anything there.
+`cmake/UnitTests.cmake` now discovers them separately with `CNA_GRAPHICS_RENDERER` set to their
+family (and `FNA3D_FORCE_DRIVER` where the FNA3D lane defines one) whenever that renderer is
+compiled in and is not the default, and leaves them out of the default discovery; a tree whose
+default is SDL_GPU or FNA3D is unchanged. No test changed. Result in `cmake-build-multi` through the
+private runner: 126 entries, each registered once with its renderer, 124 passed and 2 skipped for
+their configuration (`StaticShaderCrossCompilesAndDrawsARepresentativeEffect`: ShaderCross is not
+linked into MojoShader here; `SharedCubeAndVolumeSamplerContract` on FNA3D: the device's profile
+refuses volume textures), where 15 failed and most of the rest skipped before.
