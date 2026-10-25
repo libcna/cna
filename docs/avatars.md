@@ -394,7 +394,12 @@ pass, and measures: the built catalog library must be the size this page and
 contain it and must stay within 5 % of its measured text size (compared on the toolchain that
 baseline was taken with), and in a process of its own the first, next and reused avatar must load
 within twice the times stated under Assets and the caches must release an avatar and its textures
-once nothing draws it (budgets in `acceptance_tests.json`). A stage left out on purpose (`--skip generator`, `--skip visual`) is reported as such; the
+once nothing draws it (budgets in `acceptance_tests.json`). With `--service
+../cna-gamer-services-server` it also builds the service's avatar targets in its `build-agent/`
+tree (its checkout must be clean too, and its commit is recorded) and runs its avatar validation
+and avatar persistence tests and its end-to-end test (`service_avatar_validation`,
+`service_avatars`, `service_cna_avatars`) against this checkout's catalogs and
+`cna_service_avatar_client_harness`; each must pass, and a skipped one fails. A stage left out on purpose (`--skip generator`, `--skip visual`) is reported as such; the
 report is `<build>/avatar-acceptance/acceptance.json`. After adding, renaming or removing an
 avatar test, `--write-expected` rewrites the lists from the binary; review that diff with the change.
 

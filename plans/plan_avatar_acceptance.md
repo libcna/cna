@@ -282,7 +282,7 @@ revision 5, the serialization format and the public API stay as they are; no art
 | AVH-03 | Visual manifest reproduced and checked against the catalog | done |
 | AVH-04 | Documentation at revision 5, consistency check without a build | done |
 | AVH-05 | Size, link-footprint, load-time and cache-lifetime measurements | done |
-| AVH-06 | Gamer Services service validation and end-to-end persistence | |
+| AVH-06 | Gamer Services service validation and end-to-end persistence | done |
 | AVH-07 | Final acceptance matrix and full CTest suite | |
 
 ## AVH-01 provenance
@@ -375,3 +375,17 @@ models kept. `avatars.md` stated revision 4's 450-500 and 200-230 ms and now sta
 earlier figures as history. Injected: a lower 2D baseline, the catalog in the 2D game, a load-time
 factor of 0.1 each fail; another toolchain skips only the baseline comparison.
 `acceptance_tests.json` now requires 233 tests.
+
+## AVH-06 service
+
+AVA-10's service results were run by hand, with no record of which service commit or binaries ran,
+and `service_cna_avatars` skips (exit 77, which CTest counts as passing: exit status 0, JUnit
+`notrun`) whenever its harness or catalogs are not given. `--service <checkout>` now runs it as a
+stage: the service checkout's commit and cleanliness are recorded (dirty refuses, as for CNA), its
+build tree must be its own and idle, `cna-gamer-services-server`, `-admin`, `avatar_tests` and
+`avatar_validation_tests` are built (8 jobs, ccache), the CNA build stage builds
+`cna_service_avatar_client_harness`, and `service_avatar_validation`, `service_avatars` and
+`service_cna_avatars` run with `CNA_AVATAR_CATALOGS` and the harness set; each must be registered
+and `run` (a skip fails), the assertion counts and the binaries' SHA-256 are recorded. At
+`1e7a4a8` (service `develop`, clean; its tree was up to date): 209 and 200 assertions, the
+end-to-end test passed. Injected: an unregistered test name fails; the skip's `notrun` is rejected.

@@ -420,5 +420,20 @@
   "growth": 0.05,
   "loadTimeFactor": 2.0,
   "reusedMilliseconds": 50
+ },
+ "service": {
+  "about": "With --service <cna-gamer-services-server checkout>, the service's avatar tests the acceptance builds and runs, by CTest name, against this checkout's catalogs and its avatar client harness; each must be registered and pass (an exit-77 skip, which the end-to-end test takes when its harness or catalogs are not given, fails).",
+  "targets": [
+   "cna-gamer-services-server",
+   "cna-gamer-services-admin",
+   "avatar_tests",
+   "avatar_validation_tests"
+  ],
+  "harness": "cna_service_avatar_client_harness",
+  "tests": [
+   "service_avatars",
+   "service_avatar_validation",
+   "service_cna_avatars"
+  ]
  }
 }

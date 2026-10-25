@@ -6,6 +6,7 @@
     python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --all-renderers  # every one compiled in
     python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --renderer SDL_GPU --renderer SOFTWARE
     python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --all-renderers --configure  # a fresh checkout
+    python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --all-renderers --service ../cna-gamer-services-server
     python3 tools/avatar_builder/avatar_acceptance.py --static   # no build: catalog, docs, visual manifest metadata
 
 Stages, each of which must pass:
@@ -43,6 +44,11 @@ Stages, each of which must pass:
              sources reproduces the checked-in manifest byte for byte, the manifest names the current
              catalog (version, revision, catalog.json SHA-256), and the goldens are exactly its jobs'
   visual     per renderer that draws, avatar_visual_regression.py check against the goldens
+
+  service    with --service, the Gamer Services service checkout: its commit (clean, like this one),
+             its avatar targets built in its build tree (default build-agent/), and its avatar
+             validation, avatar persistence and end-to-end CTest entries run against this checkout's
+             catalogs and avatar client harness; each must be registered and pass, none may skip
 
   source end HEAD and the working tree are what they were when the build ran; a commit that only
              touches documentation the run did not read is reported, anything else fails the run
@@ -96,8 +102,8 @@ def ctest_entries(build):
     return [t for t in expected()["ctest"]["tests"] if default in t.get("defaultRenderers", [default])]
 
 
-def targets(build):
-    return TARGETS + [t["target"] for t in ctest_entries(build)]
+def targets(build, service=False):
+    return TARGETS + [t["target"] for t in ctest_entries(build)] + ([expected()["service"]["harness"]] if service else [])
 
 
 def matches(name, patterns):
@@ -176,7 +182,7 @@ def compiler(build):
     return "unknown"
 
 
-def stage_build(build, out, configure, provenance):
+def stage_build(build, out, configure, provenance, service=False):
     log = out / "build.log"
     env = dict(os.environ)
     env.setdefault("CCACHE_DIR", "/rv/cnaccache" if Path("/rv/cnaccache").is_dir() else env.get("CCACHE_DIR", ""))
@@ -193,7 +199,7 @@ def stage_build(build, out, configure, provenance):
     text = []
     for command in commands + [None]:
         if command is None:
-            command = ["cmake", "--build", str(build), "--target", *targets(build), "--parallel", "8"]
+            command = ["cmake", "--build", str(build), "--target", *targets(build, service), "--parallel", "8"]
         result = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True)
         text.append("$ %s\n%s%s" % (" ".join(command), result.stdout, result.stderr))
         log.write_text("\n".join(text))
@@ -210,9 +216,9 @@ def stage_build(build, out, configure, provenance):
     provenance.update({"tree": str(build), "generator": cache_value(build, "CMAKE_GENERATOR"),
                        "buildType": cache_value(build, "CMAKE_BUILD_TYPE"), "compiler": compiler(build),
                        "launcher": cache_value(build, "CMAKE_CXX_COMPILER_LAUNCHER"), "configured": bool(commands),
-                       "stepsRun": steps, "targets": targets(build), "binaries": binaries, "log": str(log)})
+                       "stepsRun": steps, "targets": targets(build, service), "binaries": binaries, "log": str(log)})
     return [], "%s %s, %s: %s (%s)" % (provenance["compiler"], provenance["buildType"], provenance["generator"],
-                                       "up to date" if not steps else "%d compile/link steps run" % steps, ", ".join(targets(build)))
+                                       "up to date" if not steps else "%d compile/link steps run" % steps, ", ".join(targets(build, service)))
 
 
 def stage_source_end(start):
@@ -559,6 +565,63 @@ def stage_measure(build, tests, renderer, out, measurements):
     return problems, summary
 
 
+def stage_service(checkout, service_build, build, out, allow_dirty, provenance):
+    spec = expected()["service"]
+    run = lambda *args, **kw: subprocess.run(list(args), capture_output=True, text=True, **kw)
+    state = {"checkout": str(checkout), "commit": run("git", "-C", str(checkout), "rev-parse", "HEAD").stdout.strip(),
+             "branch": run("git", "-C", str(checkout), "rev-parse", "--abbrev-ref", "HEAD").stdout.strip(),
+             "changes": [l for l in run("git", "-C", str(checkout), "status", "--porcelain=v1").stdout.splitlines() if l]}
+    provenance.update(state)
+    if not state["commit"]:
+        return ["%s is not a Git checkout of the service" % checkout], "no checkout"
+    if state["changes"] and not allow_dirty:
+        return ["the service checkout differs from %s (%s)" % (state["commit"][:12], "; ".join(state["changes"][:6]))], "dirty"
+    if not (service_build / "CMakeCache.txt").is_file():
+        return ["%s is not a configured service build tree (see the service's README, Tests)" % service_build], "not configured"
+    if Path(cache_value(service_build, "CMAKE_HOME_DIRECTORY")).resolve() != checkout:
+        return ["%s was configured from another checkout" % service_build], "foreign tree"
+    if builders(service_build):
+        return ["another build is running in %s" % service_build], "tree busy"
+    log = out / "service.log"
+    env = dict(os.environ, SDL_AUDIODRIVER="dummy", CNA_AVATAR_CATALOGS=str(CATALOG.parent),
+               CNA_SERVICE_AVATAR_CLIENT_HARNESS=str(build / spec["harness"]))
+    env.setdefault("CCACHE_DIR", "/rv/cnaccache" if Path("/rv/cnaccache").is_dir() else "")
+    env.setdefault("CCACHE_BASEDIR", "/rv" if str(checkout).startswith("/rv/") else str(checkout.parent))
+    env = {k: v for k, v in env.items() if v != ""}
+    built = run("cmake", "--build", str(service_build), "--target", *spec["targets"], "--parallel", "8", env=env)
+    text = "$ cmake --build\n" + built.stdout + built.stderr
+    log.write_text(text)
+    if built.returncode != 0:
+        return ["building the service's avatar targets failed (%s)" % log], "build failed"
+    steps = sum(1 for l in built.stdout.splitlines() if re.match(r"\[\d+/\d+\] (Building (C|CXX) object|Linking)", l))
+    junit = out / "service.xml"
+    junit.unlink(missing_ok=True)
+    tested = run("ctest", "--test-dir", str(service_build), "-R", "^(%s)$" % "|".join(spec["tests"]), "--no-tests=error",
+                 "--output-on-failure", "-V", "--output-junit", str(junit), env=env, timeout=1800)
+    log.write_text(text + "\n$ ctest\n" + tested.stdout + tested.stderr)
+    problems = [] if tested.returncode == 0 else ["the service's ctest exited %d (%s)" % (tested.returncode, log)]
+    status = {}
+    if junit.is_file():
+        import xml.etree.ElementTree as ElementTree
+        status = {c.get("name"): c.get("status") for c in ElementTree.parse(junit).getroot().iter("testcase")}
+    else:
+        problems.append("the service's ctest wrote no JUnit report (%s)" % log)
+    for name in spec["tests"]:
+        if name not in status:
+            problems.append("%s is not registered in %s" % (name, service_build))
+        elif status[name] != "run":
+            problems.append("%s: %s" % (name, status[name]))
+    counts = dict(re.findall(r"^\d+: (avatar validation|avatars?) (\d+) assertions passed", tested.stdout, re.M))
+    provenance.update({"buildTree": str(service_build), "buildType": cache_value(service_build, "CMAKE_BUILD_TYPE"),
+                       "compiler": compiler(service_build), "stepsRun": steps, "log": str(log), "assertions": counts,
+                       "binaries": {t: sha256(service_build / t) for t in spec["targets"] if (service_build / t).is_file()}})
+    return problems, "%s at %s (%s): %s; %s" % (
+        checkout.name, state["commit"][:12], "clean" if not state["changes"] else "%d uncommitted paths" % len(state["changes"]),
+        "up to date" if not steps else "%d compile/link steps run" % steps,
+        ", ".join("%s %s" % (n, "passed" if status.get(n) == "run" else status.get(n, "missing")) for n in spec["tests"]) +
+        "".join(" (%s %s assertions)" % (k, v) for k, v in sorted(counts.items())))
+
+
 def stage_visual_manifest(program, renderer, out):
     log = out / "visual-manifest.log"
     result = private([sys.executable, str(HERE / "avatar_visual_regression.py"), "manifest", "--check", "--program", str(program)],
@@ -611,6 +674,8 @@ def main():
     parser.add_argument("--configure", action="store_true", help="configure the build tree first when it does not exist")
     parser.add_argument("--cmake-arg", action="append", default=[], help="extra configure argument for --configure (repeatable)")
     parser.add_argument("--allow-dirty", action="store_true", help="run on a checkout with uncommitted changes (validates no commit)")
+    parser.add_argument("--service", type=Path, help="a cna-gamer-services-server checkout: build and run its avatar tests against this one")
+    parser.add_argument("--service-build", type=Path, help="the service's configured build tree (default: <service>/build-agent)")
     parser.add_argument("--out", type=Path, help="report directory (default: <build>/avatar-acceptance)")
     parser.add_argument("--write-expected", action="store_true",
                         help="build, then rewrite acceptance_tests.json's lists from the tests its patterns match, and stop")
@@ -660,7 +725,8 @@ def main():
     record("source", stage_source(start, build, args.allow_dirty))
     if results[-1]["passed"]:
         out.mkdir(parents=True, exist_ok=True)
-        record("build", stage_build(build, out, args.cmake_arg if args.configure else None, provenance.setdefault("build", {})))
+        record("build", stage_build(build, out, args.cmake_arg if args.configure else None, provenance.setdefault("build", {}),
+                                    service=args.service is not None))
     if not all(r["passed"] for r in results):
         return finish()
     if args.write_expected:
@@ -700,6 +766,13 @@ def main():
             record("visual %s" % renderer, stage_visual(program, renderer, out))
     record("ctest", stage_ctest(build, out))
     record("measure", stage_measure(build, tests, default, out, provenance.setdefault("measurements", {})))
+    if args.service:
+        checkout = args.service.resolve()
+        record("service", stage_service(checkout, (args.service_build or checkout / "build-agent").resolve(), build, out,
+                                        args.allow_dirty, provenance.setdefault("service", {})))
+    else:
+        results.append({"stage": "service", "passed": None, "summary": "left out (no --service)", "problems": []})
+        print("  %-22s SKIPPED BY REQUEST (no --service)" % "service")
     record("source end", stage_source_end(start))
     return finish()
 
