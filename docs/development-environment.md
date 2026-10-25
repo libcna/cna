@@ -80,6 +80,13 @@ git submodule update --init --recursive   # an existing clone, and after a pull 
   forks libcna/FNA3D and libcna/mojoshader, see `docs/fna3d-renderer.md` -- for `FNA3D` and the
   `*_COMPILED_EFFECTS` options (`FETCHCONTENT_SOURCE_DIR_FNA3D`), and SDL_shadercross for
   `SDL_GPU` on Windows and Apple targets.
+- Third-party code is built as upstream ships it, with three exceptions, each explained where it
+  is applied: SDL carries two Emscripten-only patches and one iOS-only patch
+  (`cmake/ThirdPartySDL.cmake`), SDL_shadercross one build-integration patch
+  (`cmake/ThirdPartySDLShaderCross.cmake`), and FNA3D and MojoShader carry CNA's fixes as commits on
+  the libcna forks. The submodules, ENet (upstream master, see `cmake/ThirdPartyENet.cmake`), cgltf
+  1.15 and dr_libs are upstream revisions unchanged; `third_party/stb` holds FNA3D's copies of
+  `stb_image.h` and `stb_image_write.h`, also unchanged.
 
 ## Optional native features
 
