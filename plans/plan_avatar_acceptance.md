@@ -278,7 +278,7 @@ revision 5, the serialization format and the public API stay as they are; no art
 | Task | What | Status |
 |---|---|---|
 | AVH-01 | Source and build provenance | done |
-| AVH-02 | Expected test identities, exit status | |
+| AVH-02 | Expected test identities, exit status | done |
 | AVH-03 | Visual manifest reproduced and checked against the catalog | |
 | AVH-04 | Documentation at revision 5, consistency check without a build | |
 | AVH-05 | Size, link-footprint, load-time and cache-lifetime measurements | |
@@ -297,3 +297,26 @@ content-fixture steps are not counted as rebuilt), refusing a tree another ninja
 --build is working in; `--configure` configures a tree that does not exist yet; `source end`
 fails a run whose checkout changed under it except by documentation it did not read. Checked: a
 foreign `CMAKE_HOME_DIRECTORY`, a fake concurrent `ninja` and an uncommitted edit are each refused.
+
+## AVH-02 test identities
+
+The tests stage counted, per component, the tests that passed or skipped and failed only when a
+count fell below its pin; a renamed test whose count another test made up, a disabled one in a
+component with slack, or a crash that still left a clean JSON report would pass, and the exit
+status was never read. Now `acceptance_tests.json` names the 232 required tests (the 230 before
+plus `ServiceConfigurationTest.AvatarCatalogUpdatesAreOnByDefaultAndCanBeTurnedOff` and
+`ServiceRequestRetryTest.AnAvatarReadThatNamesNoCatalogsSendsNoCatalogList`, which the persistence
+patterns never matched) with their components' patterns and the three allowed skips. An
+`identities` stage reads `CnaTests --gtest_list_tests` (disabled tests included) and fails a listed
+test that is missing, or disabled by its own or its suite's `DISABLED_`, and a matching test that is
+not listed; each renderer then runs exactly the listed tests and fails on a non-zero exit status, a
+test that did not run or was suppressed, a failure, or a skip `allowedSkips` does not allow on that
+renderer. A `ctest` stage runs the seven avatar CTest entries outside `CnaTests` (EasyGL avatar
+render, three C API smokes, three link-footprint gates; their targets are built by the build stage)
+and fails one that is not registered or does not pass. Each fault was injected (a rename, a test
+and a suite disabled, a removal, a new test, an unexpected and a wrong-renderer skip, a failure,
+exit status 1 with a clean report, a test missing from the report, a suppressed one, an
+unregistered CTest entry) and failed the stage; `--write-expected` reproduces the file byte for
+byte. `AFailedGpuUploadFailsEveryDrawCleanlyRatherThanHalfBuilding` skips on every renderer of
+today (none refuses a vertex buffer): it stays allowed, and is the one required test that runs
+nowhere.

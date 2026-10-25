@@ -1,0 +1,414 @@
+{
+ "about": "The tests the Avatar v3 acceptance requires, by name (tools/avatar_builder/avatar_acceptance.py). Each component's tests are every test its patterns match in CnaTests, no more and no fewer: a test that is missing, renamed, disabled, skipped without an entry in allowedSkips, or new and not listed fails the acceptance. After adding, renaming or removing a test, rewrite the lists with avatar_acceptance.py <build> --write-expected and review the diff.",
+ "components": [
+  {
+   "name": "codec and serialization",
+   "patterns": [
+    "AvatarDescriptionCodecTest.*"
+   ],
+   "tests": [
+    "AvatarDescriptionCodecTest.ANewDescriptorNamesTheBaselineCatalog",
+    "AvatarDescriptionCodecTest.AShapedFaceOrFacialHairIsFormat2AndRoundTrips",
+    "AvatarDescriptionCodecTest.AnyFlippedBitIsRejected",
+    "AvatarDescriptionCodecTest.ChecksumIsIeeeCrc32",
+    "AvatarDescriptionCodecTest.DescriptionsNamingDevelopmentCatalogsAreRefused",
+    "AvatarDescriptionCodecTest.EachFormat3FieldAloneNeedsFormat3",
+    "AvatarDescriptionCodecTest.Format2RefusesWhatItCannotMean",
+    "AvatarDescriptionCodecTest.Format3BytesAreStable",
+    "AvatarDescriptionCodecTest.Format3RefusesWhatItCannotMean",
+    "AvatarDescriptionCodecTest.Format3RoundTripsEveryFieldInItsDocumentedPlace",
+    "AvatarDescriptionCodecTest.ItemsAreCheckedAgainstTheCatalogVersionTheyName",
+    "AvatarDescriptionCodecTest.NewerCatalogItemsAreCarriedForTheResolver",
+    "AvatarDescriptionCodecTest.RandomAvatarsHaveIndividualFaces",
+    "AvatarDescriptionCodecTest.RandomDescriptorsAreAlwaysEncodable",
+    "AvatarDescriptionCodecTest.RefusesUnencodableDescriptors",
+    "AvatarDescriptionCodecTest.RejectsForeignVersionsAndReservedData",
+    "AvatarDescriptionCodecTest.RoundTripsEveryField",
+    "AvatarDescriptionCodecTest.TheCatalogVersionSurvivesEncoding"
+   ]
+  },
+  {
+   "name": "AvatarDescription (XNA)",
+   "patterns": [
+    "AvatarDescriptionTest.*",
+    "AvatarBodyTypeTest.*"
+   ],
+   "tests": [
+    "AvatarBodyTypeTest.ValuesExist",
+    "AvatarDescriptionTest.ANewDescriptionHasNoSubscribers",
+    "AvatarDescriptionTest.BeginGetFromGamerInvokesCallbackSynchronously",
+    "AvatarDescriptionTest.BeginGetFromGamerRejectsNullGamer",
+    "AvatarDescriptionTest.BodyTypeOfANonCnaBufferIsFemale",
+    "AvatarDescriptionTest.ChangedDeliversTheSenderAndArguments",
+    "AvatarDescriptionTest.ChangedIsPerInstanceNotShared",
+    "AvatarDescriptionTest.ChangedSubscribersRunInSubscriptionOrder",
+    "AvatarDescriptionTest.ChangedSubscriptionCanBeRemoved",
+    "AvatarDescriptionTest.ConstructorAcceptsCorrectSize",
+    "AvatarDescriptionTest.ConstructorRejectsWrongSize",
+    "AvatarDescriptionTest.CreateRandomProducesDifferentAvatars",
+    "AvatarDescriptionTest.CreateRandomReturnsAValidMeasuredAvatar",
+    "AvatarDescriptionTest.CreateRandomWithBodyTypeHonoursTheBodyType",
+    "AvatarDescriptionTest.CreateRandomWithInvalidBodyTypeThrows",
+    "AvatarDescriptionTest.DamagedDescriptionKeepsTheReferenceDefaults",
+    "AvatarDescriptionTest.DescriptionReturnsDefensiveCopy",
+    "AvatarDescriptionTest.EndGetFromGamerRejectsResultNotFromBegin",
+    "AvatarDescriptionTest.EndGetFromGamerReturnsInvalidDescription",
+    "AvatarDescriptionTest.HeightOfANonCnaBufferIsZero",
+    "AvatarDescriptionTest.IsValidFalseWhenFirstByteIsZero",
+    "AvatarDescriptionTest.IsValidTrueWhenFirstByteIsNonzero",
+    "AvatarDescriptionTest.RoundTripThroughTheDescriptionBufferKeepsTheAvatar"
+   ]
+  },
+  {
+   "name": "catalog",
+   "patterns": [
+    "AvatarCatalogTest.*"
+   ],
+   "tests": [
+    "AvatarCatalogTest.AManifestMustNameASupportedCatalogVersion",
+    "AvatarCatalogTest.AnAssembledAvatarUsesItsDescription",
+    "AvatarCatalogTest.AnUnavailableCatalogNeverReadsItsIdsAgainstAnotherVersion",
+    "AvatarCatalogTest.CatalogV3HasTheItemFeatureStyleAndAnimationContract",
+    "AvatarCatalogTest.CatalogV3RevisionsKeepTheFirstReleaseAndAddOnlyFormat3Entries",
+    "AvatarCatalogTest.DevelopmentCatalogsBelowTheBaselineAreNeverResolved",
+    "AvatarCatalogTest.EmbeddedAssetsResolveByContentNotByName",
+    "AvatarCatalogTest.EveryEmbeddedAssetMatchesItsHashAndParses",
+    "AvatarCatalogTest.EveryEmbeddedCatalogResolvesToExactlyItsVersion",
+    "AvatarCatalogTest.EveryPresetIsAnimatedOnNamedBonesOnly",
+    "AvatarCatalogTest.FacialHairAndFaceShapeChangeOnlyTheHead",
+    "AvatarCatalogTest.HairUnderACoveringHatIsFlattenedUnderIt",
+    "AvatarCatalogTest.ItemsAreFittedToTheirBody",
+    "AvatarCatalogTest.MalformedAssetsAreRejected",
+    "AvatarCatalogTest.MalformedManifestsAreRejected",
+    "AvatarCatalogTest.TheBaselineCatalogV3IsTheOnlyCatalogThisReleaseShips",
+    "AvatarCatalogTest.TheSkeletonIsTheXnaTable",
+    "AvatarCatalogTest.V3DescriptionsAssembleExactlyAsRevised"
+   ]
+  },
+  {
+   "name": "catalog content and geometry",
+   "patterns": [
+    "AvatarCatalogContentTest.*"
+   ],
+   "tests": [
+    "AvatarCatalogContentTest.AFormat3DescriptionIsAnOrdinaryXnaAvatarDescription",
+    "AvatarCatalogContentTest.AccessoriesAreWornOnTheSideTheDescriptionNames",
+    "AvatarCatalogContentTest.AnInnerLayerStaysUnderTheOneOverItInEveryPose",
+    "AvatarCatalogContentTest.EarringsHangFromTheLobeOfEveryEarShape",
+    "AvatarCatalogContentTest.EveryManifestReferenceResolves",
+    "AvatarCatalogContentTest.EveryModelIsSoundGeometry",
+    "AvatarCatalogContentTest.EveryModelMovesSoundlyInEveryAnimation",
+    "AvatarCatalogContentTest.EyebrowStylesAndEarShapesChangeOnlyTheHead",
+    "AvatarCatalogContentTest.GarmentDetailsLieOnTheCloth",
+    "AvatarCatalogContentTest.GlovesHideRings",
+    "AvatarCatalogContentTest.HairNeverComesThroughAHat",
+    "AvatarCatalogContentTest.MakeupDrawsAsFaceDecalsOfItsStyle",
+    "AvatarCatalogContentTest.MaterialsKeepTheirFamilysHighlight",
+    "AvatarCatalogContentTest.ModelsShareTheTexturesTheyHaveInCommon",
+    "AvatarCatalogContentTest.PlantedFeetDriftOnlyAsFarAsTheRootMotionAllows",
+    "AvatarCatalogContentTest.ProportionsReshapeTheBodyAtTheSameHeight",
+    "AvatarCatalogContentTest.RandomAvatarsAreRepeatableVariedAndBelievable",
+    "AvatarCatalogContentTest.TheCatalogOffersAWardrobeInEveryKind",
+    "AvatarCatalogContentTest.TheTrousersStayUnderTheTopInTheDeepestCrouch"
+   ]
+  },
+  {
+   "name": "animation and expressions",
+   "patterns": [
+    "AvatarAnimationTest.*",
+    "AvatarExpressionTest.*",
+    "AvatarAnimationPresetTest.*",
+    "AvatarBoneTest.*",
+    "AvatarEyeTest.*",
+    "AvatarMouthTest.*",
+    "AvatarEyebrowTest.*"
+   ],
+   "tests": [
+    "AvatarAnimationPresetTest.FirstAndLastValue",
+    "AvatarAnimationPresetTest.RepresentativeValues",
+    "AvatarAnimationTest.AnUndefinedPresetIsAZeroLengthBindPose",
+    "AvatarAnimationTest.BoneTransformsAreLocalToTheParent",
+    "AvatarAnimationTest.BonesMoveOverTime",
+    "AvatarAnimationTest.CurrentPositionIsClampedIntoTheLength",
+    "AvatarAnimationTest.DisposeIsIdempotent",
+    "AvatarAnimationTest.DisposeSetsIsDisposed",
+    "AvatarAnimationTest.EveryPresetHasARealLengthAndDecomposableBones",
+    "AvatarAnimationTest.ExpressionFollowsTheClip",
+    "AvatarAnimationTest.FeetStayOnTheGroundAndHandsOutOfTheBody",
+    "AvatarAnimationTest.IdlesLoopSeamlessly",
+    "AvatarAnimationTest.ImplementsIAvatarAnimationInterface",
+    "AvatarAnimationTest.IsDisposedDefaultsFalse",
+    "AvatarAnimationTest.LoopingIdlesJoinSeamlessly",
+    "AvatarAnimationTest.LoopingWrapsByTheRemainderOfTheLength",
+    "AvatarAnimationTest.OverflowingUpdateClampsToTheEnd",
+    "AvatarAnimationTest.PresetsAreDistinctMotions",
+    "AvatarAnimationTest.PresetsMoveWithoutPops",
+    "AvatarAnimationTest.PublicBonesUseXnaFacingMinusZCoordinates",
+    "AvatarAnimationTest.UpdateAdvancesAndClampsWithoutLoop",
+    "AvatarAnimationTest.UpdateThrowsAfterDispose",
+    "AvatarBoneTest.GapsArePreservedExactly",
+    "AvatarBoneTest.LastValue",
+    "AvatarBoneTest.RootAndFirstFewValues",
+    "AvatarExpressionTest.DefaultsToNeutral",
+    "AvatarExpressionTest.LeftEyeGetSet",
+    "AvatarExpressionTest.LeftEyebrowGetSet",
+    "AvatarExpressionTest.MouthGetSet",
+    "AvatarExpressionTest.PropertiesAreIndependent",
+    "AvatarExpressionTest.RightEyeGetSet",
+    "AvatarExpressionTest.RightEyebrowGetSet",
+    "AvatarEyeTest.ValuesExist",
+    "AvatarEyebrowTest.ValuesExist",
+    "AvatarMouthTest.ValuesExist"
+   ]
+  },
+  {
+   "name": "AvatarRenderer (XNA)",
+   "patterns": [
+    "AvatarRendererTest.*",
+    "AvatarRendererStateTest.*"
+   ],
+   "tests": [
+    "AvatarRendererStateTest.ValuesExist",
+    "AvatarRendererTest.ADescriptionWithoutAnAvatarIsUnavailable",
+    "AvatarRendererTest.AFailedGpuUploadFailsEveryDrawCleanlyRatherThanHalfBuilding",
+    "AvatarRendererTest.ALoadCompletingInsideDrawWaitsUntilTheCallerCanUpdateItsAnimation",
+    "AvatarRendererTest.AValidDescriptionLoadsAndBecomesReady",
+    "AvatarRendererTest.AmbientLightColorGetSet",
+    "AvatarRendererTest.AnUnreadableDescriptionIsUnavailable",
+    "AvatarRendererTest.AttachmentCompositionAgreesWithDrawnJointsForEveryPresetAndBody",
+    "AvatarRendererTest.BindPoseThrowsAfterDispose",
+    "AvatarRendererTest.BoneCountIs71",
+    "AvatarRendererTest.CachedCompletionReleasesItsLoadOnlyAfterUnlocking",
+    "AvatarRendererTest.ConstructorRejectsANullDescription",
+    "AvatarRendererTest.DisposeIsIdempotent",
+    "AvatarRendererTest.DisposeSetsIsDisposed",
+    "AvatarRendererTest.DisposeWhileLoadingIsSafe",
+    "AvatarRendererTest.DrawRejectsANonDecomposableBoneOnceReady",
+    "AvatarRendererTest.DrawThrowsAfterDispose",
+    "AvatarRendererTest.DrawWithNullAnimationThrowsArgumentNull",
+    "AvatarRendererTest.DrawWithWrongBoneCountThrows",
+    "AvatarRendererTest.DrawingNeedsInitializedGamerServices",
+    "AvatarRendererTest.DrawsEveryPresetAndExpressionOnTheDispatcherDevice",
+    "AvatarRendererTest.EveryFormat3FeatureDrawsAndANewDeviceGetsItsOwnResources",
+    "AvatarRendererTest.IsDisposedDefaultsFalse",
+    "AvatarRendererTest.LightColorGetSet",
+    "AvatarRendererTest.LightDirectionGetSet",
+    "AvatarRendererTest.ParentBonesExactValuesMatchReferenceAssembly",
+    "AvatarRendererTest.ParentBonesHas71Entries",
+    "AvatarRendererTest.ParentBonesRootHasNoParent",
+    "AvatarRendererTest.ProjectionGetSet",
+    "AvatarRendererTest.PublicBindPoseUsesTheSameSpaceAsPublicAnimations",
+    "AvatarRendererTest.StateThrowsAfterDispose",
+    "AvatarRendererTest.TheBindPoseFollowsTheDescriptionHeight",
+    "AvatarRendererTest.ViewGetSet",
+    "AvatarRendererTest.WorldGetSet",
+    "AvatarRendererTest.WorldViewProjectionDefaultToIdentity"
+   ]
+  },
+  {
+   "name": "editor",
+   "patterns": [
+    "AvatarEditorTest.*"
+   ],
+   "tests": [
+    "AvatarEditorTest.ABaselineAvatarIsCarriedIntoALaterCatalog",
+    "AvatarEditorTest.ACatalogWithoutFaceControlsOrFacialHairOffersNone",
+    "AvatarEditorTest.AStoredDevelopmentCatalogAvatarIsNotCarriedOver",
+    "AvatarEditorTest.AccessoriesOfferASideOnlyWhileWorn",
+    "AvatarEditorTest.CategoriesOfferWhatTheirNameSays",
+    "AvatarEditorTest.ChangingBodyTypeKeepsTheRelativeHeight",
+    "AvatarEditorTest.ColorsStepThroughThePaletteAndACustomColorJoinsIt",
+    "AvatarEditorTest.EveryCategoryOffersSomethingAndEveryOptionIsWearable",
+    "AvatarEditorTest.EveryEditNamesTheEditedCatalog",
+    "AvatarEditorTest.EveryReachableValueEncodes",
+    "AvatarEditorTest.FaceFeaturesAndFacialHairUseFormatTwo",
+    "AvatarEditorTest.HeightAndBuildStepWithinTheirRanges",
+    "AvatarEditorTest.ItemsCycleThroughTheCatalogAndOptionalSlotsOfferNone",
+    "AvatarEditorTest.MakeupColorsAppearWithAStyleAndStartNatural",
+    "AvatarEditorTest.OutfitsDressTheAvatarAndPiecesStayEditable",
+    "AvatarEditorTest.PresetsMoveSeveralFeaturesAndBalancedResetsThem",
+    "AvatarEditorTest.RandomAvatarsAreCoherent",
+    "AvatarEditorTest.RandomizeKeepsTheBodyAndRevertAndSaveTrackTheStoredAvatar",
+    "AvatarEditorTest.RandomizingACategoryChangesOnlyIt",
+    "AvatarEditorTest.ResetPutsBackOnlyTheCategoryShown",
+    "AvatarEditorTest.RowsSayHowTheyAreShown",
+    "AvatarEditorTest.SelectionStopsAtTheEndsAndResetsOnACategoryChange",
+    "AvatarEditorTest.ShufflingAnAccessoryCategoryAlwaysWearsOne",
+    "AvatarEditorTest.StartsFromTheStoredAvatarInTheCatalogItEdits",
+    "AvatarEditorTest.TheFakeServiceStoresASavedAvatar",
+    "AvatarEditorTest.TheFirstEarShapeIsTheDefaultAndStoredAsNone",
+    "AvatarEditorTest.WithoutAStoredAvatarItStartsFromARandomOne"
+   ]
+  },
+  {
+   "name": "Guide editor",
+   "patterns": [
+    "GuideAvatarEditorTest.*",
+    "GuideAvatarEditorDeviceTest.*",
+    "GuideAvatarEditorFramingTest.*"
+   ],
+   "tests": [
+    "GuideAvatarEditorDeviceTest.AControllerReachesEveryPartOfTheEditor",
+    "GuideAvatarEditorDeviceTest.AKeyboardReachesEveryPartOfTheEditor",
+    "GuideAvatarEditorDeviceTest.AMouseReachesEveryPartOfTheEditor",
+    "GuideAvatarEditorDeviceTest.PortraitsAreDrawnOrLeftOutOnEveryRenderer",
+    "GuideAvatarEditorDeviceTest.TheStageIsDrawnOrLeftOutOnEveryRenderer",
+    "GuideAvatarEditorFramingTest.TheHandsViewFramesTheStandingHand",
+    "GuideAvatarEditorTest.AFailedSaveSaysWhyAndKeepsTheEdits",
+    "GuideAvatarEditorTest.ALocalProfileSavesToThisComputer",
+    "GuideAvatarEditorTest.AServiceWhoseNewestCatalogIsADevelopmentCatalogIsNotEditedAgainstIt",
+    "GuideAvatarEditorTest.AnAvatarChangedElsewhereWhileOpenIsShown",
+    "GuideAvatarEditorTest.CategoriesWrapAndChoicesAreTriedOnBeforeTheyAreKept",
+    "GuideAvatarEditorTest.DiscardingAndKeepingEditingLeaveTheStoredAvatarAlone",
+    "GuideAvatarEditorTest.EveryCategoryOpensAndEveryRowCanBeFocused",
+    "GuideAvatarEditorTest.OpensFromHomeOnTheCategories",
+    "GuideAvatarEditorTest.ResetAboveTheFirstRowPutsTheCategoryBack",
+    "GuideAvatarEditorTest.SavingStoresTheAvatarOnTheServiceAndLeaves",
+    "GuideAvatarEditorTest.SlidersMoveWithLeftAndRight",
+    "GuideAvatarEditorTest.WithoutAProfileOrACatalogItExplains"
+   ]
+  },
+  {
+   "name": "Gamer Services persistence",
+   "patterns": [
+    "AvatarServiceTest.*",
+    "AvatarChangedTest.*",
+    "AvatarCatalogProcessTest.*",
+    "LocalProfileStoreTest.MalformedEntriesAreSkippedAndALostAvatarIsReplaced",
+    "LocalProfileStoreTest.ADevelopmentCatalogAvatarIsReplacedByANewBaselineAvatar",
+    "LocalSignInTest.ALocalProfilesAvatarIsItsStoredDescription",
+    "LocalSignInTest.SavingAnotherAvatarIntoTheProfileRaisesChanged",
+    "ServiceConfigurationTest.AvatarCatalogUpdatesAreOnByDefaultAndCanBeTurnedOff",
+    "ServiceRequestRetryTest.AnAvatarReadThatNamesNoCatalogsSendsNoCatalogList"
+   ],
+   "tests": [
+    "AvatarCatalogProcessTest.TwoProcessesInstallingOnePackActivateItOnce",
+    "AvatarChangedTest.ANewServiceAvatarRaisesChangedOnceWithTheGamerOnTheDispatcherThread",
+    "AvatarChangedTest.AnUnreachableServiceRaisesNothingUntilItAnswersAgain",
+    "AvatarChangedTest.GamersWhoAreNotSignedInAreReadFreshAndNeverRaise",
+    "AvatarChangedTest.OtherBytesForTheSameStoredAvatarAreNotAChange",
+    "AvatarChangedTest.SigningOutDropsTheSlotWithoutAnEvent",
+    "AvatarChangedTest.TheSameAvatarRaisesNothingAndTheSlotKeepsItsDescription",
+    "AvatarChangedTest.UnsubscribingThroughAnyCopyStopsTheHandler",
+    "AvatarServiceTest.AClientThatDeclinesUpdatesDrawsTheDefaultAvatarAndReadsNoIds",
+    "AvatarServiceTest.ADescriptionInAnUnknownFormatIsNotDrawnAsAnything",
+    "AvatarServiceTest.ADescriptionNamingADevelopmentCatalogIsNotDrawnAsAnything",
+    "AvatarServiceTest.ADevelopmentCatalogPackIsNeverInstalled",
+    "AvatarServiceTest.AFailedInstallLockCannotActivateOrDeleteStaging",
+    "AvatarServiceTest.AFileWhoseBytesDoNotMatchTheManifestIsNeverActivated",
+    "AvatarServiceTest.AGamerLookedUpByGamertagHasTheirAvatar",
+    "AvatarServiceTest.AGamerWithoutAnAvatarGetsAnInvalidDescription",
+    "AvatarServiceTest.AMalformedManifestIsNeverActivated",
+    "AvatarServiceTest.AMissingCatalogIsInstalledOnceAsOneValidatedPack",
+    "AvatarServiceTest.AModelOnAnotherSkeletonIsNeverActivated",
+    "AvatarServiceTest.APackClaimingAnotherVersionIsNeverSubstituted",
+    "AvatarServiceTest.ARestartedClientResumesItsStagingAndClearsAbandonedStaging",
+    "AvatarServiceTest.ASignedInGamersAvatarComesFromTheService",
+    "AvatarServiceTest.AWarmInstallationDrawsAServiceAvatarWithTheFileEndpointOff",
+    "AvatarServiceTest.AnInterruptedInstallActivatesNothingAndARetryResumesIt",
+    "AvatarServiceTest.AnOversizedCatalogIsRefusedBeforeAnyDownload",
+    "AvatarServiceTest.AnUnavailableUpdateDrawsTheDefaultAvatarAndIsNotAskedAgainAtOnce",
+    "AvatarServiceTest.AnUnreadableModelIsNeverActivated",
+    "AvatarServiceTest.AnimationsWithoutEveryPresetAreNeverActivated",
+    "AvatarServiceTest.ConcurrentRequestsForOnePackInstallItOnce",
+    "AvatarServiceTest.InstallingANewCatalogDoesNotChangeOlderDescriptions",
+    "AvatarServiceTest.StaleDevelopmentCatalogPacksOnDiskAreIgnored",
+    "AvatarServiceTest.TheServiceAvatarRendersThroughTheStandardApi",
+    "AvatarServiceTest.TwoClientsWithTheSameCatalogAndDescriptionBuildTheSameAvatar",
+    "LocalProfileStoreTest.ADevelopmentCatalogAvatarIsReplacedByANewBaselineAvatar",
+    "LocalProfileStoreTest.MalformedEntriesAreSkippedAndALostAvatarIsReplaced",
+    "LocalSignInTest.ALocalProfilesAvatarIsItsStoredDescription",
+    "LocalSignInTest.SavingAnotherAvatarIntoTheProfileRaisesChanged",
+    "ServiceConfigurationTest.AvatarCatalogUpdatesAreOnByDefaultAndCanBeTurnedOff",
+    "ServiceRequestRetryTest.AnAvatarReadThatNamesNoCatalogsSendsNoCatalogList"
+   ]
+  },
+  {
+   "name": "deterministic randomization",
+   "patterns": [
+    "AvatarCatalogContentTest.RandomAvatarsAreRepeatableVariedAndBelievable",
+    "AvatarDescriptionCodecTest.RandomDescriptorsAreAlwaysEncodable",
+    "AvatarDescriptionCodecTest.RandomAvatarsHaveIndividualFaces",
+    "AvatarDescriptionTest.CreateRandomReturnsAValidMeasuredAvatar",
+    "AvatarDescriptionTest.CreateRandomWithBodyTypeHonoursTheBodyType",
+    "AvatarDescriptionTest.CreateRandomProducesDifferentAvatars",
+    "AvatarDescriptionTest.CreateRandomWithInvalidBodyTypeThrows",
+    "AvatarEditorTest.WithoutAStoredAvatarItStartsFromARandomOne",
+    "AvatarEditorTest.ShufflingAnAccessoryCategoryAlwaysWearsOne",
+    "AvatarEditorTest.RandomizeKeepsTheBodyAndRevertAndSaveTrackTheStoredAvatar",
+    "AvatarEditorTest.RandomAvatarsAreCoherent",
+    "AvatarEditorTest.RandomizingACategoryChangesOnlyIt"
+   ],
+   "tests": [
+    "AvatarCatalogContentTest.RandomAvatarsAreRepeatableVariedAndBelievable",
+    "AvatarDescriptionCodecTest.RandomAvatarsHaveIndividualFaces",
+    "AvatarDescriptionCodecTest.RandomDescriptorsAreAlwaysEncodable",
+    "AvatarDescriptionTest.CreateRandomProducesDifferentAvatars",
+    "AvatarDescriptionTest.CreateRandomReturnsAValidMeasuredAvatar",
+    "AvatarDescriptionTest.CreateRandomWithBodyTypeHonoursTheBodyType",
+    "AvatarDescriptionTest.CreateRandomWithInvalidBodyTypeThrows",
+    "AvatarEditorTest.RandomAvatarsAreCoherent",
+    "AvatarEditorTest.RandomizeKeepsTheBodyAndRevertAndSaveTrackTheStoredAvatar",
+    "AvatarEditorTest.RandomizingACategoryChangesOnlyIt",
+    "AvatarEditorTest.ShufflingAnAccessoryCategoryAlwaysWearsOne",
+    "AvatarEditorTest.WithoutAStoredAvatarItStartsFromARandomOne"
+   ]
+  }
+ ],
+ "allowedSkips": {
+  "AvatarRendererTest.AFailedGpuUploadFailsEveryDrawCleanlyRatherThanHalfBuilding": {
+   "renderers": null,
+   "reason": "needs a renderer that refuses vertex buffers; none of today's does"
+  },
+  "AvatarRendererTest.DrawsEveryPresetAndExpressionOnTheDispatcherDevice": {
+   "renderers": [
+    "STUB"
+   ],
+   "reason": "STUB has no 3D pipeline"
+  },
+  "AvatarRendererTest.EveryFormat3FeatureDrawsAndANewDeviceGetsItsOwnResources": {
+   "renderers": [
+    "STUB"
+   ],
+   "reason": "STUB has no 3D pipeline"
+  }
+ },
+ "ctest": {
+  "about": "CTest entries outside CnaTests that the acceptance runs once, with the build's default renderer, through the private runner; each must be registered and pass (a skip fails). 'target' is what the build stage builds for it; 'defaultRenderers' limits an entry to the trees whose default renderer registers it.",
+  "tests": [
+   {
+    "name": "EasyGL_AvatarRenderer_Standard",
+    "target": "cna_test_avatar_standard_render",
+    "defaultRenderers": [
+     "OPENGLES3",
+     "OPENGL33",
+     "WEBGL2"
+    ]
+   },
+   {
+    "name": "CApi_AvatarsSmoke",
+    "target": "cna_c_api_avatars_smoke"
+   },
+   {
+    "name": "CApi_AvatarIdentitiesSmoke",
+    "target": "cna_c_api_avatar_identities_smoke"
+   },
+   {
+    "name": "CApi_AvatarExitWhileLoadingSmoke",
+    "target": "cna_c_api_avatar_exit_while_loading_smoke"
+   },
+   {
+    "name": "LinkFootprint_2DGame",
+    "target": "cna_link_footprint_2d"
+   },
+   {
+    "name": "LinkFootprint_GamerServicesGame",
+    "target": "cna_link_footprint_gamer_services"
+   },
+   {
+    "name": "LinkFootprint_FullFeatures",
+    "target": "cna_link_footprint_full"
+   }
+  ]
+ }
+}

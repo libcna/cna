@@ -20,10 +20,17 @@ Stages, each of which must pass:
   docs       what docs/avatars.md, the limitations page and the generator's README state about the
              catalog (revision, counts, files, size) is what catalog.json holds
   generator  generate_avatar_catalog.py --check: the checked-in catalog is exactly what it generates
-  tests      per renderer, the avatar test components below (codec, description, catalog, content and
-             geometry, animation, renderer, editor, Guide editor, Gamer Services persistence,
-             deterministic randomization): each must run at least its pinned number of tests, none may
-             fail, and only the listed skips are allowed -- a component that stops running fails
+  identities every test acceptance_tests.json names exists in CnaTests under that name and is not
+             disabled, and every test a component's patterns match is named there: a missing,
+             renamed, disabled or unlisted test fails (--write-expected rewrites the lists from the
+             binary, for review in the diff)
+  tests      per renderer, exactly those tests (codec, description, catalog, content and geometry,
+             animation, renderer, editor, Guide editor, Gamer Services persistence, deterministic
+             randomization): each must run and pass, or skip where allowedSkips allows it on that
+             renderer; the binary's exit status must be 0 whatever its JSON report says
+  ctest      once, with the default renderer: the avatar CTest entries outside CnaTests (the EasyGL
+             avatar render, the C API avatar smokes, the link-footprint gates); each must be
+             registered and pass
   visual     per renderer that draws, avatar_visual_regression.py check against the goldens
 
   source end HEAD and the working tree are what they were when the build ran; a commit that only
@@ -56,51 +63,28 @@ CONFIGURE = ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Debug", "-DCNA_BUILD_TESTS=ON", 
              "-DCNA_GRAPHICS_RENDERERS=OPENGLES3;OPENGL33;WEBGPU;SDL_GPU;FNA3D;SOFTWARE;HEADLESS;STUB",
              "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache", "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
              "-DFETCHCONTENT_UPDATES_DISCONNECTED=ON"]
-# Every binary a stage runs; the build stage builds them all, so none is older than the checkout.
+# The binaries the stages run themselves (hashed in the report); the build stage builds them and the
+# targets of the CTest entries (acceptance_tests.json), so none is older than the checkout.
 TARGETS = ["CnaTests", "cna_avatar_review"]
 # Documentation stage_docs reads: a commit touching one of these during the run invalidates it.
 DOCUMENTS = ["docs/avatars.md", "docs/gamer-services-known-limitations.md", "tools/avatar_builder/README.md"]
 
-RANDOMIZATION = [
-    "AvatarCatalogContentTest.RandomAvatarsAreRepeatableVariedAndBelievable",
-    "AvatarDescriptionCodecTest.RandomDescriptorsAreAlwaysEncodable",
-    "AvatarDescriptionCodecTest.RandomAvatarsHaveIndividualFaces",
-    "AvatarDescriptionTest.CreateRandomReturnsAValidMeasuredAvatar",
-    "AvatarDescriptionTest.CreateRandomWithBodyTypeHonoursTheBodyType",
-    "AvatarDescriptionTest.CreateRandomProducesDifferentAvatars",
-    "AvatarDescriptionTest.CreateRandomWithInvalidBodyTypeThrows",
-    "AvatarEditorTest.WithoutAStoredAvatarItStartsFromARandomOne",
-    "AvatarEditorTest.ShufflingAnAccessoryCategoryAlwaysWearsOne",
-    "AvatarEditorTest.RandomizeKeepsTheBodyAndRevertAndSaveTrackTheStoredAvatar",
-    "AvatarEditorTest.RandomAvatarsAreCoherent",
-    "AvatarEditorTest.RandomizingACategoryChangesOnlyIt",
-]
-# (component, gtest patterns, the number of tests it has today). Raise a count when tests are added;
-# lowering one is a decision to drop coverage and belongs in the same commit as the removal.
-COMPONENTS = [
-    ("codec and serialization", ["AvatarDescriptionCodecTest.*"], 18),
-    ("AvatarDescription (XNA)", ["AvatarDescriptionTest.*", "AvatarBodyTypeTest.*"], 23),
-    ("catalog", ["AvatarCatalogTest.*"], 18),
-    ("catalog content and geometry", ["AvatarCatalogContentTest.*"], 19),
-    ("animation and expressions", ["AvatarAnimationTest.*", "AvatarExpressionTest.*", "AvatarAnimationPresetTest.*", "AvatarBoneTest.*",
-                                   "AvatarEyeTest.*", "AvatarMouthTest.*", "AvatarEyebrowTest.*"], 35),
-    ("AvatarRenderer (XNA)", ["AvatarRendererTest.*", "AvatarRendererStateTest.*"], 35),
-    ("editor", ["AvatarEditorTest.*"], 27),
-    ("Guide editor", ["GuideAvatarEditorTest.*", "GuideAvatarEditorDeviceTest.*", "GuideAvatarEditorFramingTest.*"], 18),
-    ("Gamer Services persistence", ["AvatarServiceTest.*", "AvatarChangedTest.*", "AvatarCatalogProcessTest.*",
-                                    "LocalProfileStoreTest.MalformedEntriesAreSkippedAndALostAvatarIsReplaced",
-                                    "LocalProfileStoreTest.ADevelopmentCatalogAvatarIsReplacedByANewBaselineAvatar",
-                                    "LocalSignInTest.ALocalProfilesAvatarIsItsStoredDescription",
-                                    "LocalSignInTest.SavingAnotherAvatarIntoTheProfileRaisesChanged"], 37),
-    ("deterministic randomization", RANDOMIZATION, len(RANDOMIZATION)),
-]
-# Skips that are not a lost component: test -> (renderers it may skip on, or None for any; why).
-ALLOWED_SKIPS = {
-    "AvatarRendererTest.AFailedGpuUploadFailsEveryDrawCleanlyRatherThanHalfBuilding":
-        (None, "needs a renderer that refuses vertex buffers; none of today's does"),
-    "AvatarRendererTest.DrawsEveryPresetAndExpressionOnTheDispatcherDevice": ({"STUB"}, "STUB has no 3D pipeline"),
-    "AvatarRendererTest.EveryFormat3FeatureDrawsAndANewDeviceGetsItsOwnResources": ({"STUB"}, "STUB has no 3D pipeline"),
-}
+# The tests the acceptance requires, by name, and the skips it allows (with their reasons).
+EXPECTED = HERE / "acceptance_tests.json"
+
+
+def expected():
+    return json.loads(EXPECTED.read_text())
+
+
+def ctest_entries(build):
+    """The CTest entries the acceptance runs in this tree (some register only for a default renderer)."""
+    default = cache_value(build, "CNA_GRAPHICS_RENDERER")
+    return [t for t in expected()["ctest"]["tests"] if default in t.get("defaultRenderers", [default])]
+
+
+def targets(build):
+    return TARGETS + [t["target"] for t in ctest_entries(build)]
 
 
 def matches(name, patterns):
@@ -193,16 +177,17 @@ def stage_build(build, out, configure, provenance):
     busy = builders(build)
     if busy:
         return ["another build is running in %s (pids %s); run again when it has finished" % (build, busy)], "tree busy"
-    commands.append(["cmake", "--build", str(build), "--target", *TARGETS, "--parallel", "8"])
     text = []
-    for command in commands:
+    for command in commands + [None]:
+        if command is None:
+            command = ["cmake", "--build", str(build), "--target", *targets(build), "--parallel", "8"]
         result = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True)
         text.append("$ %s\n%s%s" % (" ".join(command), result.stdout, result.stderr))
         log.write_text("\n".join(text))
         if result.returncode != 0:
             tail = " | ".join(l for l in (result.stdout + result.stderr).splitlines() if "error" in l.lower())[:600]
             return ["%s exited %d (%s): %s" % (command[1], result.returncode, log, tail)], "build failed"
-    steps = sum(1 for l in text[-1].splitlines() if re.match(r"\[\d+/\d+\] (Building C|Building CXX|Linking)", l))
+    steps = sum(1 for l in text[-1].splitlines() if re.match(r"\[\d+/\d+\] (Building (C|CXX) object|Linking)", l))
     binaries = {}
     for target in TARGETS:
         path = build / target
@@ -211,10 +196,10 @@ def stage_build(build, out, configure, provenance):
         binaries[target] = {"path": str(path), "bytes": path.stat().st_size, "sha256": sha256(path)}
     provenance.update({"tree": str(build), "generator": cache_value(build, "CMAKE_GENERATOR"),
                        "buildType": cache_value(build, "CMAKE_BUILD_TYPE"), "compiler": compiler(build),
-                       "launcher": cache_value(build, "CMAKE_CXX_COMPILER_LAUNCHER"), "configured": len(commands) > 1,
-                       "stepsRun": steps, "binaries": binaries, "log": str(log)})
+                       "launcher": cache_value(build, "CMAKE_CXX_COMPILER_LAUNCHER"), "configured": bool(commands),
+                       "stepsRun": steps, "targets": targets(build), "binaries": binaries, "log": str(log)})
     return [], "%s %s, %s: %s (%s)" % (provenance["compiler"], provenance["buildType"], provenance["generator"],
-                                       "up to date" if not steps else "%d compile/link steps run" % steps, ", ".join(TARGETS))
+                                       "up to date" if not steps else "%d compile/link steps run" % steps, ", ".join(targets(build)))
 
 
 def stage_source_end(start):
@@ -348,42 +333,116 @@ def private(command, renderer, log, timeout):
     return result
 
 
-def stage_tests(tests, renderer, out):
-    patterns = sorted({p for _, ps, _ in COMPONENTS for p in ps})
+def listed_tests(tests):
+    """Every test CnaTests defines, disabled ones included (listing runs no test and opens no window)."""
+    env = {k: v for k, v in os.environ.items() if k not in ("DISPLAY", "WAYLAND_DISPLAY")}
+    result = subprocess.run([str(tests), "--gtest_list_tests"], env=env, capture_output=True, text=True, timeout=600)
+    names, suite = [], ""
+    for line in result.stdout.splitlines():
+        entry = line.split("#")[0].strip()
+        if not entry:
+            continue
+        if line.startswith(" "):
+            names.append(suite + entry)
+        else:
+            suite = entry
+    return result.returncode, names
+
+
+def stage_identities(tests, out, required):
+    data = expected()
+    code, present = listed_tests(tests)
+    (out / "test-list.txt").write_text("\n".join(present) + "\n")
+    if code != 0 or not present:
+        return ["%s --gtest_list_tests exited %d and listed %d tests" % (tests.name, code, len(present))], "no test list"
+    defined, problems, counts = set(present), [], []
+    for component in data["components"]:
+        want = set(component["tests"])
+        required.update(want)
+        disabled = {}
+        for name in want - defined:
+            suite, case = name.split(".", 1)
+            variants = {"%s.DISABLED_%s" % (suite, case), "DISABLED_%s.%s" % (suite, case)} & defined
+            if variants:
+                disabled[name] = variants
+                problems.append("%s: %s is disabled (%s)" % (component["name"], name, ", ".join(sorted(variants))))
+            else:
+                problems.append("%s: %s is missing from %s (renamed or removed)" % (component["name"], name, tests.name))
+        hidden = set().union(*disabled.values()) if disabled else set()
+        for name in sorted(n for n in present if matches(n, component["patterns"]) and n not in want and n not in hidden):
+            problems.append("%s: %s is not in %s (a new, renamed or disabled test; --write-expected rewrites the lists)" % (
+                component["name"], name, EXPECTED.name))
+        counts.append("%s %d" % (component["name"], len(want)))
+    for name in data["allowedSkips"]:
+        if name not in required:
+            problems.append("allowedSkips names %s, which no component requires" % name)
+    return problems, "%d required tests by name, all defined and enabled in %s (%d tests): %s" % (
+        len(required), tests.name, len(present), "; ".join(counts))
+
+
+def stage_tests(tests, renderer, out, required):
+    data = expected()
     report = out / ("tests-%s.json" % renderer)
     report.unlink(missing_ok=True)
     log = out / ("tests-%s.log" % renderer)
-    result = private([str(tests), "--gtest_filter=" + ":".join(patterns), "--gtest_output=json:" + str(report)], renderer, log, 3600)
-    if not report.is_file():
-        return ["%s wrote no test report (exit %d, %s)" % (tests.name, result.returncode, log)], "no report"
+    result = private([str(tests), "--gtest_filter=" + ":".join(sorted(required)), "--gtest_output=json:" + str(report)], renderer, log, 3600)
     problems = []
+    if result.returncode != 0:
+        problems.append("%s exited %d (%s)" % (tests.name, result.returncode, log))
+    if not report.is_file():
+        return problems + ["%s wrote no test report (%s)" % (tests.name, log)], "no report"
     if "graphics renderer: %s" % renderer not in result.stdout + result.stderr:
         problems.append("the tests never reported drawing with %s (%s)" % (renderer, log))
+    document = json.loads(report.read_text())
     outcome = {}
-    for suite in json.loads(report.read_text())["testsuites"]:
+    for suite in document["testsuites"]:
         for case in suite["testsuite"]:
             name = "%s.%s" % (suite["name"], case["name"])
-            outcome[name] = "failed" if case.get("failures") else "skipped" if case.get("result") == "SKIPPED" else "passed"
+            outcome[name] = ("failed" if case.get("failures") else "skipped" if case.get("result") == "SKIPPED" else
+                             "passed" if case.get("status") == "RUN" and case.get("result") == "COMPLETED" else
+                             "not run (%s, %s)" % (case.get("status"), case.get("result")))
+    if document.get("failures") or document.get("errors"):
+        problems.append("the report counts %s failures and %s errors" % (document.get("failures"), document.get("errors")))
+    for name in sorted(required - set(outcome)):
+        problems.append("did not run: " + name)
+    for name in sorted(set(outcome) - required):
+        problems.append("ran, though not required: " + name)
     for name, state in sorted(outcome.items()):
         if state == "failed":
             problems.append("FAILED " + name)
         elif state == "skipped":
-            renderers, _ = ALLOWED_SKIPS.get(name, (set(), ""))
-            if name not in ALLOWED_SKIPS or (renderers is not None and renderer not in renderers):
+            allowed = data["allowedSkips"].get(name)
+            if not allowed or (allowed["renderers"] is not None and renderer not in allowed["renderers"]):
                 problems.append("skipped, which is not an allowed skip on %s: %s" % (renderer, name))
-    counts = []
-    for component, component_patterns, pinned in COMPONENTS:
-        mine = [n for n in outcome if matches(n, component_patterns)]
-        accounted = [n for n in mine if outcome[n] == "passed" or (outcome[n] == "skipped" and n in ALLOWED_SKIPS)]
-        counts.append("%s %d/%d" % (component, len(accounted), pinned))
-        if len(accounted) < pinned:
-            problems.append("%s: %d of its %d tests ran (%s)" % (component, len(accounted), pinned,
-                                                                 "none" if not mine else "%d found" % len(mine)))
+        elif state != "passed":
+            problems.append("%s: %s" % (state, name))
     passed = sum(1 for s in outcome.values() if s == "passed")
     skipped = sorted(n for n, s in outcome.items() if s == "skipped")
-    return problems, "%d tests: %d passed, %d skipped%s; %s" % (
-        len(outcome), passed, len(skipped), (" (" + ", ".join(n.split(".")[1] for n in skipped) + ")") if skipped else "",
-        "; ".join(counts))
+    return problems, "%d/%d required tests ran: %d passed, %d skipped%s; exit status %d" % (
+        len(set(outcome) & required), len(required), passed, len(skipped),
+        (" (" + ", ".join(n.split(".")[1] for n in skipped) + ")") if skipped else "", result.returncode)
+
+
+def stage_ctest(build, out):
+    names = [t["name"] for t in ctest_entries(build)]
+    junit, log = out / "ctest-avatar.xml", out / "ctest-avatar.log"
+    junit.unlink(missing_ok=True)
+    env = dict(os.environ, SDL_AUDIODRIVER="dummy")
+    env.pop("CNA_GRAPHICS_RENDERER", None)
+    result = subprocess.run([str(RUNNER), str(build), "-R", "^(%s)$" % "|".join(names), "--no-tests=error", "--output-on-failure",
+                             "--output-junit", str(junit)], cwd=ROOT, env=env, capture_output=True, text=True, timeout=1800)
+    log.write_text(result.stdout + result.stderr)
+    problems = [] if result.returncode == 0 else ["ctest exited %d (%s)" % (result.returncode, log)]
+    if not junit.is_file():
+        return problems + ["ctest wrote no JUnit report (%s)" % log], "no report"
+    import xml.etree.ElementTree as ElementTree
+    status = {case.get("name"): case.get("status") for case in ElementTree.parse(junit).getroot().iter("testcase")}
+    for name in names:
+        if name not in status:
+            problems.append("%s is not registered in %s" % (name, build.name))
+        elif status[name] != "run":
+            problems.append("%s: %s" % (name, status[name]))
+    return problems, "%d/%d passed (%s)" % (sum(1 for n in names if status.get(n) == "run"), len(names), ", ".join(names))
 
 
 def stage_visual(program, renderer, out):
@@ -397,6 +456,24 @@ def stage_visual(program, renderer, out):
     return problems, summary.replace("avatar visual regression on %s: " % renderer, "")
 
 
+def write_expected(tests):
+    data = expected()
+    code, present = listed_tests(tests)
+    if code != 0 or not present:
+        sys.exit("%s --gtest_list_tests exited %d" % (tests, code))
+    for component in data["components"]:
+        old = set(component["tests"])
+        component["tests"] = sorted(n for n in present if matches(n, component["patterns"]) and "DISABLED_" not in n)
+        new = set(component["tests"])
+        for name in sorted(new - old):
+            print("  + %s: %s" % (component["name"], name))
+        for name in sorted(old - new):
+            print("  - %s: %s" % (component["name"], name))
+    EXPECTED.write_text(json.dumps(data, indent=1) + "\n")
+    print("%s rewritten; review the diff before committing it" % EXPECTED)
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("build", type=Path, help="a CNA build tree configured from this checkout (or, with --configure, to configure)")
@@ -406,6 +483,8 @@ def main():
     parser.add_argument("--cmake-arg", action="append", default=[], help="extra configure argument for --configure (repeatable)")
     parser.add_argument("--allow-dirty", action="store_true", help="run on a checkout with uncommitted changes (validates no commit)")
     parser.add_argument("--out", type=Path, help="report directory (default: <build>/avatar-acceptance)")
+    parser.add_argument("--write-expected", action="store_true",
+                        help="build, then rewrite acceptance_tests.json's lists from the tests its patterns match, and stop")
     parser.add_argument("--skip", action="append", default=[], choices=["generator", "visual"], help="leave a stage out on purpose")
     args = parser.parse_args()
     if not (CATALOG / "catalog.json").is_file():
@@ -443,6 +522,8 @@ def main():
         record("build", stage_build(build, out, args.cmake_arg if args.configure else None, provenance.setdefault("build", {})))
     if not all(r["passed"] for r in results):
         return finish()
+    if args.write_expected:
+        return write_expected(tests)
     default = cache_value(build, "CNA_GRAPHICS_RENDERER")
     compiled = [r for r in cache_value(build, "CNA_GRAPHICS_RENDERERS").split(";") if r] or [default]
     renderers = compiled if args.all_renderers else (args.renderer or [default])
@@ -458,8 +539,11 @@ def main():
         print("  %-22s SKIPPED BY REQUEST" % "generator")
     else:
         record("generator", stage_generator(out))
+    required = set()
+    record("identities", stage_identities(tests, out, required))
     for renderer in renderers:
-        record("tests %s" % renderer, stage_tests(tests, renderer, out))
+        if required:
+            record("tests %s" % renderer, stage_tests(tests, renderer, out, required))
         if renderer in NO_PIXELS:
             results.append({"stage": "visual %s" % renderer, "passed": None, "summary": "not applicable: draws no pixels", "problems": []})
             print("  %-22s n/a   %s draws no pixels" % ("visual " + renderer, renderer))
@@ -468,6 +552,7 @@ def main():
             print("  %-22s SKIPPED BY REQUEST" % ("visual " + renderer))
         else:
             record("visual %s" % renderer, stage_visual(program, renderer, out))
+    record("ctest", stage_ctest(build, out))
     record("source end", stage_source_end(start))
     return finish()
 

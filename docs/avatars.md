@@ -367,14 +367,20 @@ It checks that `catalog.json`, the generator, the codec and CMake agree on the c
 revision and reader level, that ids are unique and every outfit, preset, rule and file resolves;
 that what this page, the limitations page and the generator's README state about the catalog
 (revision, counts, files, size) is what `catalog.json` holds; and that the catalog is exactly what
-the generator writes. Then, per renderer, it runs the avatar tests through the private GPU runner
-in ten pinned components -- codec, `AvatarDescription`, catalog, content and geometry, animation,
-`AvatarRenderer`, editor, Guide editor, Gamer Services persistence and deterministic randomization
--- failing when a test fails, skips without an allowed reason, or a component runs fewer tests than
-it has (a component that silently stops running fails), and runs the visual regression on every
-renderer that draws. A stage left out on purpose (`--skip generator`, `--skip visual`) is reported
-as such; the report is `<build>/avatar-acceptance/acceptance.json`. Add a test and raise its
-component's count in the script in the same change.
+the generator writes. The avatar tests it requires are named one by one in
+`tools/avatar_builder/acceptance_tests.json`, in ten components -- codec, `AvatarDescription`,
+catalog, content and geometry, animation, `AvatarRenderer`, editor, Guide editor, Gamer Services
+persistence and deterministic randomization -- each also giving the patterns its tests match: a
+listed test missing from `CnaTests` (renamed or removed) or disabled, or a matching test that is
+not listed, fails before anything runs. Then, per renderer, it runs exactly those tests through the
+private GPU runner, failing when one fails, does not run, or skips without an entry in
+`allowedSkips` for that renderer, and when the binary exits non-zero whatever its JSON report
+says; and runs the visual regression on every renderer that draws. Once, with the default
+renderer, it runs the avatar CTest entries outside `CnaTests` the file names (the EasyGL avatar
+render, the C API avatar smokes, the link-footprint gates), each of which must be registered and
+pass. A stage left out on purpose (`--skip generator`, `--skip visual`) is reported as such; the
+report is `<build>/avatar-acceptance/acceptance.json`. After adding, renaming or removing an
+avatar test, `--write-expected` rewrites the lists from the binary; review that diff with the change.
 
 **Adding content.** New art is code in `tools/avatar_builder/` (`hair.py`, `garments.py`,
 `accessories.py`, `face.py`, `catalog.py`). A new entry takes the next free id of its kind's
