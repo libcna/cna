@@ -1,4 +1,4 @@
-AC_INIT([libenet], [1.3.17])
+AC_INIT([libenet], [1.3.18])
 AC_CONFIG_SRCDIR([include/enet/enet.h])
 AM_INIT_AUTOMAKE([foreign])
 
@@ -15,6 +15,7 @@ AC_CHECK_FUNC(poll, [AC_DEFINE(HAS_POLL)])
 AC_CHECK_FUNC(fcntl, [AC_DEFINE(HAS_FCNTL)])
 AC_CHECK_FUNC(inet_pton, [AC_DEFINE(HAS_INET_PTON)])
 AC_CHECK_FUNC(inet_ntop, [AC_DEFINE(HAS_INET_NTOP)])
+AC_CHECK_DECLS(offsetof, [AC_DEFINE(HAS_OFFSETOF)], [], [#include <stddef.h>])
 
 AC_CHECK_MEMBER(struct msghdr.msg_flags, [AC_DEFINE(HAS_MSGHDR_FLAGS)], , [#include <sys/socket.h>])
 
