@@ -298,6 +298,9 @@ content-fixture steps are not counted as rebuilt), refusing a tree another ninja
 --build is working in; `--configure` configures a tree that does not exist yet; `source end`
 fails a run whose checkout changed under it except by documentation it did not read. Checked: a
 foreign `CMAKE_HOME_DIRECTORY`, a fake concurrent `ninja` and an uncommitted edit are each refused.
+Follow-up (found preparing AVH-08's fresh worktree): the stage read only `git status`'s output,
+so a status that fails -- as it does when a submodule path is a symbolic link -- looked like a
+clean checkout. A failing status is now itself a difference (CNA's checkout and the service's).
 
 ## AVH-02 test identities
 

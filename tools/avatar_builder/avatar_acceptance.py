@@ -115,8 +115,16 @@ def cache_value(build, key):
     return found.group(1).strip() if found else ""
 
 
-def git(*args):
-    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True).stdout.rstrip("\n")
+def git(*args, cwd=ROOT):
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True).stdout.rstrip("\n")
+
+
+def changes(cwd):
+    """What differs from HEAD in a checkout; a git status that fails is itself a difference, never clean."""
+    result = subprocess.run(["git", "status", "--porcelain=v1", "--untracked-files=normal"], cwd=cwd, capture_output=True, text=True)
+    if result.returncode != 0:
+        return ["git status failed (exit %d): %s" % (result.returncode, (result.stderr.strip().splitlines() or ["?"])[0])]
+    return [l for l in result.stdout.splitlines() if l]
 
 
 def sha256(path):
@@ -132,8 +140,7 @@ def sha256(path):
 def source_state():
     """The commit, what differs from it (tracked or untracked, the catalog submodule included)."""
     return {"commit": git("rev-parse", "HEAD"), "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
-            "changes": [l for l in git("status", "--porcelain=v1", "--untracked-files=normal").splitlines() if l],
-            "catalogSubmodule": git("submodule", "status", "--", str(CATALOG.parent.relative_to(ROOT)))}
+            "changes": changes(ROOT), "catalogSubmodule": git("submodule", "status", "--", str(CATALOG.parent.relative_to(ROOT)))}
 
 
 def stage_source(state, build, allow_dirty):
@@ -570,7 +577,7 @@ def stage_service(checkout, service_build, build, out, allow_dirty, provenance):
     run = lambda *args, **kw: subprocess.run(list(args), capture_output=True, text=True, **kw)
     state = {"checkout": str(checkout), "commit": run("git", "-C", str(checkout), "rev-parse", "HEAD").stdout.strip(),
              "branch": run("git", "-C", str(checkout), "rev-parse", "--abbrev-ref", "HEAD").stdout.strip(),
-             "changes": [l for l in run("git", "-C", str(checkout), "status", "--porcelain=v1").stdout.splitlines() if l]}
+             "changes": changes(checkout)}
     provenance.update(state)
     if not state["commit"]:
         return ["%s is not a Git checkout of the service" % checkout], "no checkout"
