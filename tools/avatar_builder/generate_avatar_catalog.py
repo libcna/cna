@@ -6,10 +6,11 @@
     python3 tools/avatar_builder/generate_avatar_catalog.py --check    # verify it byte for byte
 
 Everything is procedural and original; nothing is downloaded or derived from third-party or
-Xbox avatar content. Output: modules/gamer-services/assets/avatars/v3/, CNA's avatar catalog
-(docs/avatars.md), revision CATALOG_REVISION: a revision keeps every id of the previous one in its
-kind. The development catalogs v1 and v2 that preceded v3 are not shipped or supported; Git history
-keeps them (v1 from this tool's predecessor at commit 6ca06d069, v2 from this tool at commit d1730d4f3).
+Xbox avatar content. Output: modules/gamer-services/assets/avatars/v3/ (the cna-avatar-assets
+submodule), CNA's avatar catalog (docs/avatars.md), revision CATALOG_REVISION: a revision keeps
+every id of the previous one in its kind. The development catalogs v1 and v2 that preceded v3 are
+not shipped or supported; CNA's Git history keeps them (v1 from this tool's predecessor at commit
+6ca06d069, v2 from this tool at commit d1730d4f3).
 """
 import argparse
 import hashlib
@@ -231,6 +232,12 @@ def main():
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--jobs", type=int, default=1, help="build the GLBs in this many processes")
     args = parser.parse_args()
+    # The default output is in the cna-avatar-assets submodule, which is empty until initialized.
+    catalogs = DEFAULT_OUT.parent
+    if args.out == DEFAULT_OUT and not (catalogs.is_dir() and any(catalogs.iterdir())):
+        print("the avatar catalogs are not checked out: %s is the cna-avatar-assets Git submodule; run "
+              "git submodule update --init modules/gamer-services/assets/avatars" % catalogs, file=sys.stderr)
+        return 2
     files = build(args.jobs)
     if args.check:
         stale = [name for name, data in files.items()

@@ -50,12 +50,13 @@ Wayland packages below are the exception, because they select a different key.
 ## Sibling checkouts and submodules
 
 ```bash
-cd ..   # the directory that holds the cna checkout
+# in the directory that holds the checkouts
+git clone --recurse-submodules https://github.com/libcna/cna.git
 git clone --branch next https://github.com/libcna/sharp-runtime.git
 git clone https://github.com/libcna/easy-gl.git
 git clone https://github.com/libcna/meta-gl.git
 cd cna
-git submodule update --init
+git submodule update --init --recursive   # an existing clone, and after a pull that moves a submodule
 ```
 
 - The siblings are separate checkouts consumed with `add_subdirectory`, not submodules.
@@ -69,9 +70,11 @@ git submodule update --init
   compatible with the one `cmake/DependencyVersions.cmake` requires
   ([`releasing.md`](releasing.md)).
 - `git submodule update --init` fills `third_party/SDL`, `third_party/SDL_mixer`,
-  `third_party/draco` and `vendor/googletest`; ENet, cgltf, stb and dr_libs are committed. Do not
-  add `--recursive`. It also clones SDL_mixer's codec submodules and Draco's test dependencies,
-  and CNA's configuration builds none of them.
+  `third_party/draco`, `vendor/googletest` and the avatar catalogs in
+  `modules/gamer-services/assets/avatars` ([cna-avatar-assets](https://github.com/libcna/cna-avatar-assets));
+  ENet, cgltf, stb and dr_libs are committed. The recursive forms above also clone SDL_mixer's codec
+  submodules and Draco's test dependencies, which CNA's configuration builds none of, so the plain
+  `git submodule update --init` is enough and much faster.
 - Some renderer dependencies are downloaded at configure time instead: the pinned wgpu-native
   release for `WEBGPU` (`CNA_WEBGPU_ROOT` for an offline build), FNA3D and MojoShader for `FNA3D`
   and the `*_COMPILED_EFFECTS` options (`FETCHCONTENT_SOURCE_DIR_FNA3D`), and SDL_shadercross for

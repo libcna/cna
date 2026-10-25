@@ -93,6 +93,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   classify renderer identities, and the 2026-08 naming normalization had retired "backend" for
   that. Values, answers and the automatic fallback order are unchanged; no alias of an old name
   is kept.
+- **The avatar catalogs are a submodule.** `modules/gamer-services/assets/avatars` is the
+  [cna-avatar-assets](https://github.com/libcna/cna-avatar-assets) repository, checked out at the
+  same path; an existing clone needs `git submodule update --init` once. Catalog v3 revision 5 is
+  byte for byte the same, and so is everything built from it.
 
 ### Removed
 

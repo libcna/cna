@@ -262,6 +262,9 @@ def main():
     parser.add_argument("--out", type=Path, help="report directory (default: <build>/avatar-acceptance)")
     parser.add_argument("--skip", action="append", default=[], choices=["generator", "visual"], help="leave a stage out on purpose")
     args = parser.parse_args()
+    if not (CATALOG / "catalog.json").is_file():
+        sys.exit("no %s: the avatar catalogs are the cna-avatar-assets Git submodule; run "
+                 "git submodule update --init modules/gamer-services/assets/avatars" % (CATALOG / "catalog.json"))
     build = args.build.resolve()
     out = (args.out or build / "avatar-acceptance").resolve()
     out.mkdir(parents=True, exist_ok=True)

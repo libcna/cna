@@ -13,15 +13,29 @@ python3 tools/avatar_builder/generate_avatar_catalog.py --out DIR # write elsewh
 python3 tools/avatar_builder/generate_avatar_catalog.py --jobs 8  # build the GLBs and atlas tiles in 8 processes
 ```
 
-It writes catalog v3, CNA's baseline avatar catalog, to `modules/gamer-services/assets/avatars/v3/`,
-which the gamer-services library embeds (`CNA_AVATAR_CATALOG_VERSIONS` in
+It writes catalog v3, CNA's baseline avatar catalog, to `modules/gamer-services/assets/avatars/v3/`
+in the [cna-avatar-assets](https://github.com/libcna/cna-avatar-assets) submodule, which the
+gamer-services library embeds (`CNA_AVATAR_CATALOG_VERSIONS` in
 `modules/gamer-services/CMakeLists.txt`, `cmake/EmbedBinaryFiles.cmake`), deflated. It writes
 revision 5 of catalog v3: a revision may improve every item's art and add entries, but every id
 keeps its kind and description format, and every added entry is `"format": 3`
 (`AvatarCatalogTest.CatalogV3RevisionsKeepTheFirstReleaseAndAddOnlyFormat3Entries`; the rules
 and how to add an entry are in `docs/avatars.md`, "Assets"). The generator removes catalog files it
 no longer writes. The development catalogs v1 and v2 that preceded v3 are not shipped or
-supported; Git history keeps them.
+supported; CNA's Git history keeps them.
+
+## Publishing a catalog revision
+
+The catalog is committed in cna-avatar-assets and CNA records which commit it uses:
+
+1. Change the generator, regenerate, and validate (the checks below) in the submodule.
+2. Commit the catalog in `modules/gamer-services/assets/avatars` and push it to cna-avatar-assets.
+3. In CNA, stage the new pointer: `git add modules/gamer-services/assets/avatars`.
+4. Run `avatar_acceptance.py` against a rebuilt tree.
+5. Commit the pointer together with the generator change.
+
+Push the asset commit before the CNA commit that names it; a pointer to an unpublished commit
+cannot be cloned.
 
 ## Modules
 

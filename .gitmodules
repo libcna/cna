@@ -10,3 +10,6 @@
 [submodule "third_party/draco"]
 	path = third_party/draco
 	url = https://github.com/google/draco.git
+[submodule "modules/gamer-services/assets/avatars"]
+	path = modules/gamer-services/assets/avatars
+	url = https://github.com/libcna/cna-avatar-assets.git

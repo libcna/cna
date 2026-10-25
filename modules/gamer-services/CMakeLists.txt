@@ -60,18 +60,30 @@ endif()
 # -- never through Guide.IsTrialMode, a message box or the service client.
 include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/EmbedBinaryFiles.cmake")
 set(CNA_AVATAR_CATALOG_VERSIONS 3)
+# assets/avatars is the cna-avatar-assets repository, checked out as a Git submodule. It is empty
+# until the submodule is initialized, and in a source archive, which never contains submodules.
+file(GLOB _catalog_checkout "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars/*")
+if(NOT _catalog_checkout)
+    message(FATAL_ERROR "CNA: the avatar catalogs are not checked out: modules/gamer-services/assets/avatars is the "
+        "Git submodule https://github.com/libcna/cna-avatar-assets.git.\n"
+        "  Run: git submodule update --init modules/gamer-services/assets/avatars\n"
+        "  A source archive (git archive, a GitHub ZIP) contains no submodules: clone with Git instead. "
+        "A build without GamerServices (CNA_ENABLE_GAMER_SERVICES=OFF) does not need the catalogs.")
+endif()
 set(CNA_AVATAR_CATALOG_FILES)
 foreach(_version IN LISTS CNA_AVATAR_CATALOG_VERSIONS)
     set(_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars/v${_version}")
     if(NOT EXISTS "${_directory}/catalog.json")
-        message(FATAL_ERROR "CNA: avatar catalog v${_version} is listed in CNA_AVATAR_CATALOG_VERSIONS but ${_directory}/catalog.json is missing")
+        message(FATAL_ERROR "CNA: avatar catalog v${_version} is listed in CNA_AVATAR_CATALOG_VERSIONS but ${_directory}/catalog.json is missing "
+            "(is the submodule at the commit CNA records? git submodule update modules/gamer-services/assets/avatars)")
     endif()
     file(GLOB _files CONFIGURE_DEPENDS "${_directory}/*")
     list(APPEND CNA_AVATAR_CATALOG_FILES ${_files})
 endforeach()
-# A catalog directory outside the list would be checked in but never shipped.
+# A catalog directory outside the list would be checked in but never shipped. Catalogs are the
+# v<N> directories; the asset repository's own files (.git, README.md, LICENSE) are not.
 file(GLOB _catalog_directories LIST_DIRECTORIES true RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars"
-    CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars/*")
+    CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars/v[0-9]*")
 foreach(_entry IN LISTS _catalog_directories)
     string(REGEX REPLACE "^v" "" _version "${_entry}")
     if(NOT _version IN_LIST CNA_AVATAR_CATALOG_VERSIONS)
