@@ -409,3 +409,14 @@ private runner: 126 entries, each registered once with its renderer, 124 passed 
 their configuration (`StaticShaderCrossCompilesAndDrawsARepresentativeEffect`: ShaderCross is not
 linked into MojoShader here; `SharedCubeAndVolumeSamplerContract` on FNA3D: the device's profile
 refuses volume textures), where 15 failed and most of the rest skipped before.
+
+## AVH-08 final runs
+
+Keyring cleanup race (found by the full CTest run below, not an avatar matter): under `-j8`
+`CredentialStoreKeyringTest.KeepsRecordsInTheSecretServiceAndMovesOldFilesIntoIt` failed once with
+"filesystem error: cannot remove all: No such file or directory [.../run/keyring]" thrown by the
+private-session helper's cleanup, after the case itself had reported; it passed five of five alone.
+The session's gnome-keyring-daemon can still be removing its socket directory when
+`dbus-run-session` returns. The helper now removes its directory with the non-throwing overload
+and retries while entries vanish under it; what the case reports is decided before the cleanup,
+as before. `CredentialStore*` (11) passed twice under `-j8` afterwards.

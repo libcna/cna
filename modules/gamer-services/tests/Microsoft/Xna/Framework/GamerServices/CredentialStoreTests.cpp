@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <thread>
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -95,12 +96,25 @@ TEST_F(CredentialStoreTest, ANamedDirectoryIsPrivateFilesNeverTheKeyring) {
 // itself again inside a private D-Bus session with a throwaway gnome-keyring, so the owner's
 // keyring is never touched.
 namespace {
+// Removes a private session's directory. The gnome-keyring-daemon of a session that just ended may
+// still be removing its own socket directory, which makes a throwing remove_all fail on an entry
+// that vanished under it; retry until the tree is gone.
+void RemoveSessionDirectory(const std::filesystem::path& root) {
+    for(int attempt=0;attempt<50;++attempt) {
+        std::error_code error;
+        std::filesystem::remove_all(root,error);
+        if(!error&&!std::filesystem::exists(root))return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    std::filesystem::remove_all(root);
+}
+
 // Runs one keyring case of this binary in a private D-Bus session: with a gnome-keyring unlocked
 // before the test ("unlocked"), or one D-Bus starts on demand with no unlocked collection
 // ("locked"), or on a bus that never answers ("silent"). Reports whether the case left its marker.
 bool RunInPrivateKeyringSession(const std::string& test,const std::string& mode) {
     const auto root=std::filesystem::temp_directory_path()/("cna-keyring-unit-"+std::to_string(getpid()));
-    std::filesystem::remove_all(root);
+    RemoveSessionDirectory(root);
     const auto runtime=root/"run";
     for(const auto& sub:{root/"data",root/"home",root/"state",runtime})std::filesystem::create_directories(sub);
     std::filesystem::permissions(runtime,std::filesystem::perms::owner_all,std::filesystem::perm_options::replace);
@@ -123,7 +137,7 @@ bool RunInPrivateKeyringSession(const std::string& test,const std::string& mode)
     const int status=std::system(command.c_str());
     if(silent>=0)close(silent);
     const bool passed=status==0&&std::filesystem::exists(root/"passed");
-    std::filesystem::remove_all(root);
+    RemoveSessionDirectory(root);
     return passed;
 }
 bool KeyringToolsPresent() {
