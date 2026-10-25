@@ -267,8 +267,9 @@ These are the details that make the difference between a demo and something usab
 
 ## 8. What this does *not* solve
 
-- **It does not make CNA C++23-independent.** `cnaplatform.md` §"C++23 remains a separate problem"
-  applies unchanged: reaching an old system needs an old toolchain, not just a TTY.
+- **It does not make CNA C++23-independent.** The legacy C++/toolchain row of
+  `plans/plan_platform.md` §12 applies unchanged: reaching an old system needs an old toolchain, not
+  just a TTY.
 - **It is not a fast path.** It is a portability and accessibility path.
 - **It does not replace `HeadlessPlatform`.** Headless is for CI runs that want no I/O at all;
   terminal is for a human watching. Both are useful, and they validate different things.
@@ -281,7 +282,8 @@ These are the details that make the difference between a demo and something usab
 
 Sequencing matters. A terminal platform written *before* the contract has been proven against
 `Sdl3Platform` and the conformance suite would end up shaping the contract around terminal
-quirks — the mirror image of the SDL3-shaped mistake `cnaplatform.md` warns against. Written
+quirks — the mirror image of the SDL3-shaped contract that `docs/platform-abstraction.md` ("The
+contract describes what CNA needs") rules out. Written
 *after*, it is the test that shows the contract holds.
 
 The cost is genuinely low, because the hard part — turning a rendered frame into a character grid

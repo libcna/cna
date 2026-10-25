@@ -67,7 +67,7 @@ namespace CNA::Platform {
      * ### Events are polled in batches
      *
      * `PollEvents` fills a caller-owned vector once per frame. Per-event virtual dispatch is the
-     * design `cnaplatform.md` explicitly warns against, and the batch signature is what makes it
+     * design `docs/platform-abstraction.md` rules out, and the batch signature is what makes it
      * impossible rather than merely discouraged.
      */
     class IPlatform

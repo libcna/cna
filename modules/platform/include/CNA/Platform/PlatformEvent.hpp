@@ -456,7 +456,7 @@ namespace CNA::Platform {
      * that has no concept of a "window event" still produce a resize.
      *
      * Events are delivered in **batches** — see `IPlatform::PollEvents`. Per-event virtual
-     * dispatch is exactly the design `cnaplatform.md` warns against.
+     * dispatch is what `docs/platform-abstraction.md` ("Events are batches") rules out.
      */
     using PlatformEvent = std::variant<
         QuitEvent,

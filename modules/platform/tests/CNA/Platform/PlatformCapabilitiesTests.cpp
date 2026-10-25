@@ -137,7 +137,7 @@ TEST(PlatformCapabilitiesTests, ToStringReturnsStableStorage)
 
 TEST(PlatformCapabilitiesTests, CapabilitySetCoversTheDocumentedContract)
 {
-    // cnaplatform.md sketched ten capabilities; PLAT-2's classification, PLAT-3's renderer audit
+    // The 2026-08 sketch had ten capabilities; PLAT-2's classification, PLAT-3's renderer audit
     // and the terminal analysis each added more -- the thirtieth, DragAndDrop, with
     // plans/plan_x11.md X11-0154, the thirty-first, PrimarySelection, with X11-0157, and the
     // thirty-second, ClipboardData, with X11-0158. VulkanSurface left with the retired VULKAN

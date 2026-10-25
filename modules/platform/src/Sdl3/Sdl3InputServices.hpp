@@ -20,7 +20,7 @@ namespace CNA::Platform::Sdl3 {
      * @brief SDL3-backed keyboard state.
      *
      * Snapshot-shaped by construction: `Update()` reads SDL's whole key array once per frame and
-     * the caller then reads a local structure. `cnaplatform.md`'s input-snapshot rule is what
+     * the caller then reads a local structure. The performance contract's snapshot rule is what
      * this shape enforces — thousands of `IsKeyDown` calls must not become thousands of platform
      * calls.
      */

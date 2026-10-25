@@ -62,8 +62,8 @@ namespace CNA::Platform {
      *
      * XNA's `Keyboard::GetState()` is a level query — "is this key held right now" — so the
      * platform produces one snapshot per frame and the game reads a local structure. That is
-     * `cnaplatform.md`'s input-snapshot rule made concrete: thousands of `IsKeyDown` calls must
-     * not become thousands of platform calls.
+     * the performance contract's snapshot rule made concrete (`docs/platform-abstraction.md`):
+     * thousands of `IsKeyDown` calls must not become thousands of platform calls.
      */
     struct KeyboardSnapshot
     {

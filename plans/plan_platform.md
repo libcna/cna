@@ -26,8 +26,9 @@
 > | SDL2 extension (Phase 11) — PLAT-SDL2-1…PLAT-SDL2-8 | 8 | 8 historically implemented; backend retired 2026-10-04 |
 >
 > See the completion record, the 2026-08-13 post-completion audit and the **2026-08-17
-> post-merge re-audit** below. This plan turns [`cnaplatform.md`](../misc/cnaplatform.md) into an
-> executable task list.
+> post-merge re-audit** below. This plan turned `misc/cnaplatform.md`, a 2026-08-12 design
+> discussion, into an executable task list. That document was removed on 2026-10-25 (Git history
+> keeps it); its lasting rules are in [`docs/platform-abstraction.md`](../docs/platform-abstraction.md).
 >
 > **Goal:** separate CNA from SDL3. Today SDL3 is called directly from the runtime, the input
 > stack, audio, media, devices, storage, content and 40-odd renderers. After this plan, all of

@@ -101,7 +101,7 @@ TEST(HapticContractTests, DeviceDescriptorDefaultsToDisconnectedIdentity)
 
 TEST(InputSnapshotTests, KeyboardSnapshotIsAWholeKeyboardNotAPerKeyQuery)
 {
-    // cnaplatform.md's input-snapshot rule: thousands of IsKeyDown calls must read a local
+    // The performance contract's snapshot rule: thousands of IsKeyDown calls must read a local
     // structure, not become thousands of platform calls. The shape of the contract is what
     // enforces that -- there is deliberately no IsKeyDown(key) on the interface.
     KeyboardSnapshot snapshot;

@@ -8,7 +8,7 @@ Purpose
 PLAT-1 counts the coupling; this decides what each piece of it *becomes*. Every SDL identifier is
 assigned to exactly one contract area, and each area names the interface that will own it and the
 task that migrates it. The result is the input to Phase 1's interface shape: an interface exists
-because identifiers were classified into it, not because cnaplatform.md sketched it.
+because identifiers were classified into it, not because a design sketch proposed it.
 
 The classification is rule-based and ordered -- first match wins -- because SDL's naming is
 overlapping rather than hierarchical. `SDL_GetWindowProperties` is native-handle extraction, not

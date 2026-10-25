@@ -89,6 +89,14 @@ An SDL-free build does not have to be a silent one: `CNA_AUDIO_PLATFORM=ALSA` pl
 
 ## Contract rules
 
+### The contract describes what CNA needs
+
+Shape the contract after what CNA needs from a host, never after one library's API or after what
+several libraries happen to have in common. Each implementation then provides that contract as well
+as its host allows and declares the rest unsupported through its capabilities. A contract shaped
+after SDL3 would have fitted only SDL3; the Headless and Terminal implementations, and the Win32
+one before its retirement, joined without a change to any contract header.
+
 ### Capabilities are promises
 
 Read `PlatformCapabilities` once and cache it outside hot paths. Every field defaults to false.

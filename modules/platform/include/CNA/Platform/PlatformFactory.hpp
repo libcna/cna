@@ -17,9 +17,9 @@ namespace CNA::Platform {
      * is the property that makes the whole separation worth doing.
      *
      * Called **once** at startup; the returned pointer outlives every window, renderer and input
-     * device and is never replaced. `cnaplatform.md` notes that a stable pointer also lets the
-     * CPU's branch predictor learn the indirect target, so the virtual dispatch costs nothing
-     * measurable.
+     * device and is never replaced. Because the pointer is stable, the CPU's branch predictor
+     * learns the indirect target, so the virtual dispatch costs nothing measurable
+     * (`docs/platform-abstraction.md`, "Performance contract").
      */
     class PlatformFactory
     {
