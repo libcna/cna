@@ -72,7 +72,7 @@ if(CNA_BUILD_TESTS AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN AND NOT ANDR
         # What a game that loads textures, fonts and sounds, plays them and asks the Guide about
         # its license must not contain. Each family is one subsystem that used to ride along.
         set(_cna_footprint_absent
-            # The avatar system, its ~13 MB built-in catalog and the system Guide that draws it.
+            # The avatar system, its built-in catalog (docs/avatars.md gives its size) and the system Guide that draws it.
             "CNA::Internal::GamerServices::Avatars::"
             "GamerServices::AvatarRenderer::"
             "GamerServices::AvatarDescription::"

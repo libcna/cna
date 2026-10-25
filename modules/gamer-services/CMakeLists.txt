@@ -108,6 +108,11 @@ if(CNA_BUILD_TESTS)
     if(Python3_Interpreter_FOUND)
         add_test(NAME GamerServices_AvatarCatalogUpToDate
             COMMAND "${Python3_EXECUTABLE}" "${CNA_SOURCE_DIR}/tools/avatar_builder/generate_avatar_catalog.py" --check)
+        # What the documentation states about the catalog and the visual regression is what
+        # catalog.json and regression/manifest.json hold, and the manifest names the current catalog.
+        add_test(NAME GamerServices_AvatarAcceptanceStatic
+            COMMAND "${Python3_EXECUTABLE}" "${CNA_SOURCE_DIR}/tools/avatar_builder/avatar_acceptance.py" --static)
+        set_tests_properties(GamerServices_AvatarAcceptanceStatic PROPERTIES LABELS "avatar;configuration")
     endif()
 endif()
 # The avatar asset reader parses GLB with the cgltf implementation compiled into cna_content.

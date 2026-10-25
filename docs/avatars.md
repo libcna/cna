@@ -330,7 +330,7 @@ headwear, facial hair, accessories, makeup, animations, expressions) through the
 **Visual regression.** `tools/avatar_builder/regression/` keeps 36 views of nine described
 avatars and of three `CreateRandom` avatars from a fixed seed (`cna_avatar_review --random 3 --seed
 2026`): both body types, short and tall, slim and broad, compact and long-limbed, light and dark
-skin, eight face presets, short, long, curly and tied hair, facial hair, glasses and sunglasses,
+skin, nine face presets, short, long, curly and tied hair, facial hair, glasses and sunglasses,
 headwear (over long hair too), eye, lip and blush makeup, earrings on three ear shapes, a watch, a
 ring, gloves, outfits and open shoes -- from the front, three-quarter, side and back, and as head,
 profile, ear, hand, feet and waist close-ups; standing, waving, celebrating, checking a hand,
@@ -371,9 +371,11 @@ anything else fails it.
 
 It checks that `catalog.json`, the generator, the codec and CMake agree on the catalog version,
 revision and reader level, that ids are unique and every outfit, preset, rule and file resolves;
-that what this page, the limitations page and the generator's README state about the catalog
-(revision, counts, files, size) is what `catalog.json` holds; and that the catalog is exactly what
-the generator writes. The avatar tests it requires are named one by one in
+that what this page, the limitations page, `link-size-architecture.md` and the generator's README
+state about the catalog (revision, counts, files, size) and the visual regression (views, avatars,
+face presets) is what `catalog.json` and the regression manifest hold; and that the catalog is
+exactly what the generator writes. The checks that need no build (`--static`: catalog, documentation,
+the visual manifest's metadata) are also the CTest entry `GamerServices_AvatarAcceptanceStatic`. The avatar tests it requires are named one by one in
 `tools/avatar_builder/acceptance_tests.json`, in ten components -- codec, `AvatarDescription`,
 catalog, content and geometry, animation, `AvatarRenderer`, editor, Guide editor, Gamer Services
 persistence and deterministic randomization -- each also giving the patterns its tests match: a

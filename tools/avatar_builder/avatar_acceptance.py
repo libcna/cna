@@ -6,6 +6,7 @@
     python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --all-renderers  # every one compiled in
     python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --renderer SDL_GPU --renderer SOFTWARE
     python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --all-renderers --configure  # a fresh checkout
+    python3 tools/avatar_builder/avatar_acceptance.py --static   # no build: catalog, docs, visual manifest metadata
 
 Stages, each of which must pass:
 
@@ -17,8 +18,10 @@ Stages, each of which must pass:
              a tree that does not exist yet, as docs/avatars.md "Acceptance" describes
   catalog    catalog.json, the generator, the codec and CMake agree on the catalog version,
              revision and reader level; every id is unique; outfits, presets and rules name what exists
-  docs       what docs/avatars.md, the limitations page and the generator's README state about the
-             catalog (revision, counts, files, size) is what catalog.json holds
+  docs       what docs/avatars.md, the limitations page, docs/link-size-architecture.md and the
+             generator's README state about the catalog (revision, counts, files, size) and the
+             visual regression (views, avatars, face presets) is what catalog.json and the
+             regression manifest hold
   generator  generate_avatar_catalog.py --check: the checked-in catalog is exactly what it generates
   identities every test acceptance_tests.json names exists in CnaTests under that name and is not
              disabled, and every test a component's patterns match is named there: a missing,
@@ -71,7 +74,9 @@ CONFIGURE = ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Debug", "-DCNA_BUILD_TESTS=ON", 
 # targets of the CTest entries (acceptance_tests.json), so none is older than the checkout.
 TARGETS = ["CnaTests", "cna_avatar_review"]
 # Documentation stage_docs reads: a commit touching one of these during the run invalidates it.
-DOCUMENTS = ["docs/avatars.md", "docs/gamer-services-known-limitations.md", "tools/avatar_builder/README.md"]
+DOCUMENTS = ["docs/avatars.md", "docs/gamer-services-known-limitations.md", "docs/link-size-architecture.md",
+             "tools/avatar_builder/README.md"]
+WORDS = "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen".split()
 
 # The tests the acceptance requires, by name, and the skips it allows (with their reasons).
 EXPECTED = HERE / "acceptance_tests.json"
@@ -277,46 +282,62 @@ def stage_catalog():
 
 
 def stage_docs():
+    import avatar_visual_regression as visual
     manifest = json.loads((CATALOG / "catalog.json").read_text())
+    regression = json.loads(visual.MANIFEST.read_text())
     count = lambda key, slot: sum(1 for e in manifest[key] if e["slot"] == slot)
     files = list(CATALOG.iterdir())
     size_mb = round(sum(p.stat().st_size for p in files) / 1e6, 1)
-    avatars = (ROOT / "docs/avatars.md").read_text()
-    limits = (ROOT / "docs/gamer-services-known-limitations.md").read_text()
-    readme = (HERE / "README.md").read_text()
+    text = {d: (ROOT / d).read_text() for d in DOCUMENTS}
     revision = manifest["revision"]
-    # (document, pattern, expected values of its groups)
+    faces = {t for j in regression["jobs"] for t in j["covers"] if t.startswith("face:")}
+    # (document, pattern, expected values of its groups, every occurrence rather than the first)
     claims = [
-        ("docs/avatars.md", avatars, r'\*\*revision (\d+)\*\* \(manifest `"revision": (\d+)`\)', (revision, revision)),
-        ("docs/avatars.md", avatars, r"(\d+) wardrobe items and accessories", (len(manifest["items"]),)),
-        ("docs/avatars.md", avatars, r"(\d+) hairstyles \(", (count("items", "hair"),)),
-        ("docs/avatars.md", avatars, r"(\d+) tops, (\d+) bottoms, (\d+) shoes, (\d+) glasses,\s+(\d+) headwear, (\d+) earrings, "
-                                     r"(\d+) wristwear, (\d+) gloves and (\d+) rings",
+        ("docs/avatars.md", r'\*\*revision (\d+)\*\* \(manifest `"revision": (\d+)`\)', (revision, revision)),
+        ("docs/avatars.md", r"(\d+) wardrobe items and accessories", (len(manifest["items"]),)),
+        ("docs/avatars.md", r"(\d+) hairstyles \(", (count("items", "hair"),)),
+        ("docs/avatars.md", r"(\d+) tops, (\d+) bottoms, (\d+) shoes, (\d+) glasses,\s+(\d+) headwear, (\d+) earrings, "
+                            r"(\d+) wristwear, (\d+) gloves and (\d+) rings",
          tuple(count("items", s) for s in ("top", "bottom", "shoes", "glasses", "hat", "earrings", "wristwear", "gloves", "rings"))),
-        ("docs/avatars.md", avatars, r"(\d+) facial-hair styles \(stubble to full beards\) and (\d+) ear shapes",
+        ("docs/avatars.md", r"(\d+) facial-hair styles \(stubble to full beards\) and (\d+) ear shapes",
          (count("featureItems", "facialHair"), count("featureItems", "ears"))),
-        ("docs/avatars.md", avatars, r"(\d+) eyebrow styles", (count("faceStyles", "eyebrows"),)),
-        ("docs/avatars.md", avatars, r"(\d+) eye shadow, (\d+)\s+eyeliner", (count("faceStyles", "eyeShadow"), count("faceStyles", "eyeliner"))),
-        ("docs/avatars.md", avatars, r"(\d+) blush and (\d+) lip styles", (count("faceStyles", "blush"), count("faceStyles", "lips"))),
-        ("docs/avatars.md", avatars, r"the editor's (\d+) named shapes", (len(manifest["facePresets"]),)),
-        ("docs/avatars.md", avatars, r"\((\d+) catalog presets", (len(manifest["facePresets"]),)),
-        ("docs/avatars.md", avatars, r"each of the (\d+) face features", (len(manifest["faceControls"]["male"]),)),
-        ("docs/avatars.md", avatars, r"(\d+) complete looks", (len(manifest["outfits"]),)),
-        ("docs/avatars.md", avatars, r"listing the other (\d+) files", (len(manifest["assets"]),)),
-        ("docs/avatars.md", avatars, r"\((\d+) files, ([\d.]+) MB in\s+all\)", (len(files), size_mb)),
-        ("docs/gamer-services-known-limitations.md", limits, r"shipped, at revision (\d+)", (revision,)),
-        ("tools/avatar_builder/README.md", readme, r"It writes\s+revision (\d+) of catalog v3", (revision,)),
+        ("docs/avatars.md", r"(\d+) eyebrow styles", (count("faceStyles", "eyebrows"),)),
+        ("docs/avatars.md", r"(\d+) eye shadow, (\d+)\s+eyeliner", (count("faceStyles", "eyeShadow"), count("faceStyles", "eyeliner"))),
+        ("docs/avatars.md", r"(\d+) blush and (\d+) lip styles", (count("faceStyles", "blush"), count("faceStyles", "lips"))),
+        ("docs/avatars.md", r"the editor's (\d+) named shapes", (len(manifest["facePresets"]),)),
+        ("docs/avatars.md", r"\((\d+) catalog presets", (len(manifest["facePresets"]),)),
+        ("docs/avatars.md", r"each of the (\d+) face features", (len(manifest["faceControls"]["male"]),)),
+        ("docs/avatars.md", r"(\d+) complete looks", (len(manifest["outfits"]),)),
+        ("docs/avatars.md", r"listing the other (\d+) files", (len(manifest["assets"]),)),
+        ("docs/avatars.md", r"\((\d+) files, ([\d.]+) MB in\s+all\)", (len(files), size_mb)),
+        # The visual regression paragraph, against the checked-in manifest and the script that makes it.
+        ("docs/avatars.md", r"keeps (\d+) views of (\w+) described\s+avatars and of (\w+) `CreateRandom` avatars from a fixed seed "
+                            r"\(`cna_avatar_review --random (\d+) --seed\s+(\d+)`\)",
+         (len(regression["jobs"]), WORDS[len(visual.AVATARS)], WORDS[visual.RANDOM_COUNT], visual.RANDOM_COUNT, visual.RANDOM_SEED)),
+        ("docs/avatars.md", r"skin, (\w+) face presets", (WORDS[len(faces)],)),
+        ("docs/gamer-services-known-limitations.md", r"shipped, at revision (\d+)", (revision,)),
+        ("docs/gamer-services-known-limitations.md", r"\(revision (\d+): adult", (revision,)),
+        ("docs/link-size-architecture.md", r"MB deflated at revision (\d+)", (revision,), True),
+        ("tools/avatar_builder/README.md", r"It writes\s+revision (\d+) of catalog v3", (revision,)),
     ]
     problems = []
-    for document, text, pattern, expected in claims:
-        found = re.search(pattern, text)
+    for document, pattern, expected, *every in claims:
+        found = list(re.finditer(pattern, text[document]))
         if not found:
             problems.append("%s no longer states /%s/ (update the claim or this check)" % (document, pattern))
-            continue
-        stated = tuple(float(g) if "." in g else int(g) for g in found.groups())
-        if stated != tuple(expected):
-            problems.append("%s states %s where catalog.json has %s: /%s/" % (document, stated, tuple(expected), pattern))
-    return problems, "%d documented claims checked against catalog.json (revision %d)" % (len(claims), revision)
+        for match in found if every else found[:1]:
+            stated = tuple(g if not re.fullmatch(r"[\d.]+", g) else float(g) if "." in g else int(g) for g in match.groups())
+            if stated != tuple(expected):
+                problems.append("%s states %s where the catalog and manifest have %s: /%s/" % (document, stated, tuple(expected), pattern))
+    return problems, "%d documented claims checked against catalog.json (revision %d) and the visual manifest" % (len(claims), revision)
+
+
+def stage_visual_metadata():
+    import avatar_visual_regression as visual
+    data = json.loads(visual.MANIFEST.read_text())
+    return visual.stale(data), "%d jobs, %d goldens, made for catalog v%d revision %d (catalog.json %s)" % (
+        len(data["jobs"]), len(list(visual.GOLDEN.glob("*.png"))), data["catalogVersion"], data["catalogRevision"],
+        data.get("catalogSha256", "?")[:12])
 
 
 def stage_generator(out):
@@ -493,7 +514,9 @@ def write_expected(tests):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("build", type=Path, help="a CNA build tree configured from this checkout (or, with --configure, to configure)")
+    parser.add_argument("build", type=Path, nargs="?", help="a CNA build tree configured from this checkout (or, with --configure, to configure)")
+    parser.add_argument("--static", action="store_true",
+                        help="only what needs no build: catalog, docs and the visual manifest's metadata (GamerServices_AvatarAcceptanceStatic)")
     parser.add_argument("--renderer", action="append", default=[], help="renderer to accept on (repeatable); default: the tree's default")
     parser.add_argument("--all-renderers", action="store_true", help="every renderer compiled into the tree")
     parser.add_argument("--configure", action="store_true", help="configure the build tree first when it does not exist")
@@ -507,6 +530,18 @@ def main():
     if not (CATALOG / "catalog.json").is_file():
         sys.exit("no %s: the avatar catalogs are the cna-avatar-assets Git submodule; run "
                  "git submodule update --init modules/gamer-services/assets/avatars" % (CATALOG / "catalog.json"))
+    if args.static:
+        failed = False
+        for name, stage in (("catalog", stage_catalog), ("docs", stage_docs), ("visual metadata", stage_visual_metadata)):
+            problems, summary = stage()
+            failed |= bool(problems)
+            print("  %-22s %s  %s" % (name, "FAIL" if problems else "PASS", summary))
+            for problem in problems:
+                print("      - " + problem)
+        print("Avatar v3 static acceptance %s" % ("FAILED" if failed else "PASSED"))
+        return 1 if failed else 0
+    if args.build is None:
+        parser.error("a build tree is required (or --static)")
     build = args.build.resolve()
     out = (args.out or build / "avatar-acceptance").resolve()
     tests, program = build / "CnaTests", build / "cna_avatar_review"

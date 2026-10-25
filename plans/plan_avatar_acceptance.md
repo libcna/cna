@@ -280,7 +280,7 @@ revision 5, the serialization format and the public API stay as they are; no art
 | AVH-01 | Source and build provenance | done |
 | AVH-02 | Expected test identities, exit status | done |
 | AVH-03 | Visual manifest reproduced and checked against the catalog | done |
-| AVH-04 | Documentation at revision 5, consistency check without a build | |
+| AVH-04 | Documentation at revision 5, consistency check without a build | done |
 | AVH-05 | Size, link-footprint, load-time and cache-lifetime measurements | |
 | AVH-06 | Gamer Services service validation and end-to-end persistence | |
 | AVH-07 | Final acceptance matrix and full CTest suite | |
@@ -338,3 +338,19 @@ catalog.json, a dropped job, emptied and lost coverage, a description naming cat
 and a resized golden, an added coverage tag the regeneration does not make). The only change to
 the checked-in data is the new `catalogSha256` line; the 36 goldens are unchanged. OPENGLES3's
 `check` and `GamerServices_AvatarVisualRegression` pass (worst mean 0.043/255, block 1).
+
+## AVH-04 documentation
+
+The docs stage checked 16 claims in three documents and never read `link-size-architecture.md`,
+which still gave the catalog "at revision 4" twice, or the visual-regression paragraph, which says
+"eight face presets" where the manifest's views use nine. It now checks 20 claims in four documents,
+a claim that occurs several times at every occurrence (the link-size page's two), and the visual
+paragraph against the regression manifest and script (36 views, nine described and three random
+avatars, `--random 3 --seed 2026`, nine face presets); with the old text it fails on exactly those
+three statements. Fixed: the link-size page's two revisions, the face-preset count, and
+`LinkFootprint.cmake`'s "~13 MB" comment (revision 1's size; it now names no figure). `--static` runs
+what needs no build (catalog, docs, the visual manifest's metadata from AVH-03) and is the CTest
+entry `GamerServices_AvatarAcceptanceStatic` (labels `avatar`, `configuration`, 0.3 s). The library
+size the pages state (22.3 MB) needs a build and is checked with the measurements (AVH-05).
+Limitations item 33's revision 4 review is dated history and stays; AVH-07 brings its current
+evidence up to date.
