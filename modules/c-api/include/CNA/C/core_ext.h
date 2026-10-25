@@ -622,7 +622,7 @@ CNA_C_API CNA_Result cna_graphics_renderer_copy_available_ext(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
  *
  * An identity that is enumerated is not a support claim: this is how a caller finds out which of
- * the 46 identities this particular build can actually produce.
+ * CNA's public renderer identities this particular build can actually produce.
  */
 CNA_C_API CNA_Result cna_graphics_renderer_get_is_available_ext(
     CNA_GraphicsRendererType type,
