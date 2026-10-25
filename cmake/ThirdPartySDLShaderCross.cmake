@@ -71,6 +71,11 @@ function(cna_configure_sdl_shadercross)
     set(SDLSHADERCROSS_CLI OFF CACHE BOOL "" FORCE)
     set(SDLSHADERCROSS_INSTALL OFF CACHE BOOL "" FORCE)
     set(SDLSHADERCROSS_TESTS OFF CACHE BOOL "" FORCE)
+    # Upstream (main is still this pin) exports SDL3_shadercross-static into its build tree even
+    # with SDLSHADERCROSS_INSTALL=OFF, and CMake refuses that export unless every target it links is
+    # exported too: SPIRV-Cross and, in a build directory inside the CNA tree, CNA's own
+    # $<BUILD_INTERFACE:> policy targets (cmake/BuildPerformance.cmake), which are defined only
+    # after this runs. The patch guards the export with SDLSHADERCROSS_INSTALL instead.
     set(_cna_sdl_shadercross_patch
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/patches/sdl-shadercross-1ff05bec-disable-unused-export.patch")
     set(_cna_sdl_shadercross_patch_script

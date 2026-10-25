@@ -166,7 +166,7 @@ CATEGORIES = (
     Category("scripts", "Scripts", "`scripts/`, `loc.sh`"),
     Category("ci", "CI", "`.github/`"),
     Category("spikes", "Spikes", "`spikes/` (existence-gate probes)"),
-    Category("patches", "Third-party patches", "`cmake/patches/*.patch` (CNA's patches to FNA3D, MojoShader, SDL_shadercross, ...)"),
+    Category("patches", "Third-party patches", "`cmake/patches/*.patch` (CNA's patches to SDL3 and SDL_shadercross)"),
     Category("docs", "Documentation & plans", "`docs/`, `plans/`, `misc/`, `remediation/`, root `*.md`, `.claude/`"),
     Category("other", "Other", "anything not matched above (dotfiles, licences, Doxyfile)"),
     Category("vendored", "Vendored third-party", "`third_party/{cgltf,dr_libs,enet,stb}` (committed copies)", first_party=False),
