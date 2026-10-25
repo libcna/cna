@@ -7,6 +7,7 @@
  ],
  "catalogVersion": 3,
  "catalogRevision": 5,
+ "catalogSha256": "d736f3c1f534ff428b4dc0b382b1adf4f3d2f4810a3571f13d093ab522ae6d7d",
  "goldenRenderer": "SOFTWARE",
  "jobs": [
   {

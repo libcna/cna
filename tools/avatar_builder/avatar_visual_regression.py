@@ -9,18 +9,25 @@ canonical renderer, SOFTWARE.
     $R --exec python3 tools/avatar_builder/avatar_visual_regression.py check --program $P [--renderer OPENGL33]
     $R --exec python3 tools/avatar_builder/avatar_visual_regression.py update --program $P     # SOFTWARE only
     python3 tools/avatar_builder/avatar_visual_regression.py manifest --program $P             # rewrite manifest.json
+    python3 tools/avatar_builder/avatar_visual_regression.py manifest --check --program $P     # is it reproducible?
 
 `regression/manifest.json` is a cna_avatar_review job list generated from AVATARS and VIEWS below
-(descriptions as bytes, cameras resolved), so checking needs only Pillow (generating it, numpy). `check` fails
-when the program fails, when any job is missing, when the manifest no longer covers REQUIRED, or
-when a render differs from its golden by more than the renderer's tolerance: SOFTWARE is compared
-strictly, a GPU renderer within the differences rasterizers and drivers legitimately have. A
-failure writes golden | render | difference sheets and report.json to --out.
+(descriptions as bytes, cameras resolved) and the newest catalog, whose version, revision and
+catalog.json SHA-256 it records. `manifest --check` regenerates it and fails unless the result is
+byte for byte the checked-in file. `check` first verifies the manifest against its sources (the
+catalog it names is the current one, every view of VIEWS is a job of that name, the goldens are
+exactly the jobs' and of the manifest's size, it covers REQUIRED), and by default regenerates it
+too (numpy; `--no-reproduce` leaves that to a separate `manifest --check`); it fails when the
+program fails, when any job is missing, or when a render differs from its golden by more than the
+renderer's tolerance: SOFTWARE is compared strictly, a GPU renderer within the differences
+rasterizers and drivers legitimately have. A failure writes golden | render | difference sheets
+and report.json to --out.
 
 After an intentional art change (a catalog revision), regenerate the manifest if items or framing
 changed, run `update` on SOFTWARE, look at every changed golden, and commit them with the change.
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -318,7 +325,68 @@ def build_manifest(program):
         j["covers"] = sorted(tags)
         jobs.append(j)
     return {"size": SIZE, "background": review.BACKGROUND, "catalogVersion": version, "catalogRevision": manifest["revision"],
-            "goldenRenderer": CANONICAL, "jobs": jobs}
+            "catalogSha256": catalog_digest(version), "goldenRenderer": CANONICAL, "jobs": jobs}
+
+
+def catalog_digest(version):
+    return hashlib.sha256((CATALOGS / ("v%d" % version) / "catalog.json").read_bytes()).hexdigest()
+
+
+def stale(data):
+    """How the checked-in manifest and goldens disagree with their sources (empty when they agree)."""
+    import avatar_review as review
+    from PIL import Image
+    problems = []
+    versions = sorted(int(p.name[1:]) for p in CATALOGS.glob("v*") if (p / "catalog.json").is_file())
+    newest = versions[-1] if versions else None
+    catalog = json.loads((CATALOGS / ("v%d" % newest) / "catalog.json").read_text()) if newest else {}
+    made_for = (data.get("catalogVersion"), data.get("catalogRevision"), data.get("catalogSha256"))
+    current = (newest, catalog.get("revision"), catalog_digest(newest) if newest else None)
+    if made_for != current:
+        problems.append("the manifest was made for catalog v%s revision %s (catalog.json %s), the checkout has v%s revision %s (%s): "
+                        "regenerate it (manifest), then update and review the goldens" % (
+                            made_for[0], made_for[1], str(made_for[2])[:12], current[0], current[1], str(current[2])[:12]))
+    if (data.get("size"), data.get("background"), data.get("goldenRenderer")) != (SIZE, review.BACKGROUND, CANONICAL):
+        problems.append("the manifest's size, background or golden renderer (%s, %s, %s) is not this script's (%s, %s, %s)" % (
+            data.get("size"), data.get("background"), data.get("goldenRenderer"), SIZE, review.BACKGROUND, CANONICAL))
+    jobs = [j["name"] for j in data["jobs"]]
+    if len(set(jobs)) != len(jobs):
+        problems.append("the manifest names a job twice: %s" % sorted({n for n in jobs if jobs.count(n) > 1}))
+    if len(jobs) != len(VIEWS):
+        problems.append("the manifest has %d jobs, VIEWS %d views" % (len(jobs), len(VIEWS)))
+    for j in data["jobs"]:
+        if not j.get("covers") or not j.get("description"):
+            problems.append("%s states no coverage or no description" % j["name"])
+        elif newest and j["description"][16:20] != newest.to_bytes(2, "little").hex():
+            # Bytes 8-9 of a description name its catalog version (little-endian).
+            problems.append("%s describes an avatar of another catalog version" % j["name"])
+    goldens = {g.stem for g in GOLDEN.glob("*.png")}
+    for name in sorted(goldens - set(jobs)):
+        problems.append("golden/%s.png belongs to no job (a renamed or removed view)" % name)
+    for name in sorted(set(jobs) - goldens):
+        problems.append("%s has no golden" % name)
+    for name in sorted(goldens & set(jobs)):
+        with Image.open(GOLDEN / (name + ".png")) as image:
+            if image.size != (SIZE, SIZE):
+                problems.append("golden/%s.png is %dx%d, the manifest's size %d" % (name, image.width, image.height, SIZE))
+    missing = coverage(data["jobs"])
+    if missing:
+        problems.append("the manifest no longer covers: " + ", ".join(sorted(missing)))
+    return problems
+
+
+def reproduced(program):
+    """Differences between the checked-in manifest and the one AVATARS, VIEWS and the catalog generate."""
+    data = build_manifest(program)
+    text = json.dumps(data, indent=1) + "\n"
+    if text == MANIFEST.read_text():
+        return []
+    old = json.loads(MANIFEST.read_text())
+    changed = [key for key in data if key != "jobs" and data[key] != old.get(key)]
+    jobs = {j["name"]: j for j in old["jobs"]}
+    changed += ["job %s" % j["name"] for j in data["jobs"] if jobs.get(j["name"]) != j]
+    changed += ["job %s (gone)" % name for name in jobs if name not in {j["name"] for j in data["jobs"]}]
+    return ["regenerating the manifest does not reproduce the checked-in file: %s" % (", ".join(changed[:12]) or "formatting")]
 
 
 def coverage(jobs):
@@ -389,6 +457,12 @@ def sheet(golden, image, path):
 
 
 def cmd_manifest(args):
+    if args.check:
+        problems = reproduced(args.program) + stale(json.loads(MANIFEST.read_text()))
+        for problem in problems:
+            print("  - " + problem)
+        print("manifest %s" % ("FAILED" if problems else "reproduced byte for byte, consistent with the catalog and the goldens"))
+        return 1 if problems else 0
     data = build_manifest(args.program)
     missing = coverage(data["jobs"])
     if missing:
@@ -399,6 +473,9 @@ def cmd_manifest(args):
 
 
 def cmd_update(args):
+    problems = stale(json.loads(MANIFEST.read_text()))
+    if any(p.startswith("the manifest") for p in problems):
+        sys.exit("regenerate the manifest before capturing goldens:\n  " + "\n  ".join(problems))
     out = Path(args.out)
     code, log, drew = render(args.program, args.renderer or CANONICAL, MANIFEST, out)
     if code != 0:
@@ -421,10 +498,7 @@ def cmd_update(args):
 def cmd_check(args):
     data = json.loads(MANIFEST.read_text())
     out = Path(args.out) / (args.renderer or "default")
-    failures = []
-    missing = coverage(data["jobs"])
-    if missing:
-        failures.append("the manifest no longer covers: " + ", ".join(sorted(missing)))
+    failures = stale(data) + ([] if args.no_reproduce else reproduced(args.program))
     code, log, renderer = render(args.program, args.renderer, MANIFEST, out)
     if code != 0:
         failures.append("cna_avatar_review exited %d: %s" % (code, " | ".join(l for l in log.splitlines() if "[FAIL]" in l)[:600]))
@@ -475,6 +549,10 @@ def main():
         if name != "manifest":
             p.add_argument("--renderer", help="CNA_GRAPHICS_RENDERER for a multi-renderer build (default: its default)")
             p.add_argument("--out", default="avatar-visual-regression", help="where renders, report and failure sheets go")
+        if name == "check":
+            p.add_argument("--no-reproduce", action="store_true", help="do not regenerate the manifest (a separate manifest --check does)")
+        if name == "manifest":
+            p.add_argument("--check", action="store_true", help="regenerate and compare with the checked-in manifest; write nothing")
         p.set_defaults(fn=fn)
     args = parser.parse_args()
     sys.exit(args.fn(args) or 0)

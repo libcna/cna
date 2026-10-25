@@ -31,6 +31,10 @@ Stages, each of which must pass:
   ctest      once, with the default renderer: the avatar CTest entries outside CnaTests (the EasyGL
              avatar render, the C API avatar smokes, the link-footprint gates); each must be
              registered and pass
+  visual manifest
+             once: avatar_visual_regression.py manifest --check -- regenerating the job list from its
+             sources reproduces the checked-in manifest byte for byte, the manifest names the current
+             catalog (version, revision, catalog.json SHA-256), and the goldens are exactly its jobs'
   visual     per renderer that draws, avatar_visual_regression.py check against the goldens
 
   source end HEAD and the working tree are what they were when the build ran; a commit that only
@@ -445,10 +449,23 @@ def stage_ctest(build, out):
     return problems, "%d/%d passed (%s)" % (sum(1 for n in names if status.get(n) == "run"), len(names), ", ".join(names))
 
 
+def stage_visual_manifest(program, renderer, out):
+    log = out / "visual-manifest.log"
+    result = private([sys.executable, str(HERE / "avatar_visual_regression.py"), "manifest", "--check", "--program", str(program)],
+                     renderer, log, 1800)
+    text = result.stdout + result.stderr
+    manifest = json.loads((HERE / "regression" / "manifest.json").read_text())
+    problems = [] if result.returncode == 0 else ["manifest --check exited %d (%s): %s" % (
+        result.returncode, log, " | ".join(l.strip() for l in text.splitlines() if l.strip().startswith("- "))[:800])]
+    return problems, "%d jobs for catalog v%d revision %d (catalog.json %s): %s" % (
+        len(manifest["jobs"]), manifest["catalogVersion"], manifest["catalogRevision"], manifest.get("catalogSha256", "?")[:12],
+        "reproduced byte for byte" if not problems else "not reproduced")
+
+
 def stage_visual(program, renderer, out):
     log = out / ("visual-%s.log" % renderer)
-    result = private([sys.executable, str(HERE / "avatar_visual_regression.py"), "check", "--program", str(program), "--renderer", renderer,
-                      "--out", str(out / "visual")], renderer, log, 1800)
+    result = private([sys.executable, str(HERE / "avatar_visual_regression.py"), "check", "--no-reproduce", "--program", str(program),
+                      "--renderer", renderer, "--out", str(out / "visual")], renderer, log, 1800)
     text = result.stdout + result.stderr
     summary = next((l for l in text.splitlines() if l.startswith("avatar visual regression on")), "no summary")
     problems = [] if result.returncode == 0 else ["visual regression failed on %s (%s): %s" % (
@@ -539,6 +556,11 @@ def main():
         print("  %-22s SKIPPED BY REQUEST" % "generator")
     else:
         record("generator", stage_generator(out))
+    if "visual" in args.skip:
+        results.append({"stage": "visual manifest", "passed": None, "summary": "left out (--skip visual)", "problems": []})
+        print("  %-22s SKIPPED BY REQUEST" % "visual manifest")
+    else:
+        record("visual manifest", stage_visual_manifest(program, default, out))
     required = set()
     record("identities", stage_identities(tests, out, required))
     for renderer in renderers:

@@ -279,7 +279,7 @@ revision 5, the serialization format and the public API stay as they are; no art
 |---|---|---|
 | AVH-01 | Source and build provenance | done |
 | AVH-02 | Expected test identities, exit status | done |
-| AVH-03 | Visual manifest reproduced and checked against the catalog | |
+| AVH-03 | Visual manifest reproduced and checked against the catalog | done |
 | AVH-04 | Documentation at revision 5, consistency check without a build | |
 | AVH-05 | Size, link-footprint, load-time and cache-lifetime measurements | |
 | AVH-06 | Gamer Services service validation and end-to-end persistence | |
@@ -320,3 +320,21 @@ unregistered CTest entry) and failed the stage; `--write-expected` reproduces th
 byte. `AFailedGpuUploadFailsEveryDrawCleanlyRatherThanHalfBuilding` skips on every renderer of
 today (none refuses a vertex buffer): it stays allowed, and is the one required test that runs
 nowhere.
+
+## AVH-03 visual manifest
+
+`check` compared renders with goldens and the stored coverage tags with `REQUIRED`, but never asked
+whether the manifest was still what its sources make: its `catalogRevision` was written and never
+read, a hand-edited tag or a stale golden file passed, and nothing showed that regenerating it gave
+the same file. Regenerating it at HEAD did reproduce it byte for byte (39 s). Now the manifest also
+records `catalogSha256` (catalog.json's); `stale()` fails a manifest made for another catalog
+version, revision or catalog.json, other size/background/golden renderer, a job count other than
+`VIEWS`', a job without coverage or of another catalog version, a golden that belongs to no job, a
+job without a golden, and a golden of another size; `manifest --check` regenerates and fails unless
+the result is byte for byte the file. `check` runs both (`--no-reproduce` leaves the regeneration
+to a separate `manifest --check`, which the acceptance runs once as `visual manifest`); `update`
+refuses while the manifest is stale. Each fault was injected and failed (revision 4, another
+catalog.json, a dropped job, emptied and lost coverage, a description naming catalog 2, an extra
+and a resized golden, an added coverage tag the regeneration does not make). The only change to
+the checked-in data is the new `catalogSha256` line; the 36 goldens are unchanged. OPENGLES3's
+`check` and `GamerServices_AvatarVisualRegression` pass (worst mean 0.043/255, block 1).

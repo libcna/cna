@@ -340,9 +340,15 @@ SOFTWARE, the canonical renderer. `GamerServices_AvatarVisualRegression` (labels
 `visual`) draws them with the build's default renderer and compares each with its golden: SOFTWARE
 strictly, every other renderer within the differences measured between renderers (`TOLERANCES` in
 `avatar_visual_regression.py`), writing golden/render/difference sheets for what fails. It fails as
-well when a view is missing or the manifest stops covering the list above. After an intentional
-art change, regenerate with `avatar_visual_regression.py manifest` if items or framing moved, then
-`update` on SOFTWARE, and look at every golden that changed before committing it.
+well when a view is missing or the manifest stops covering the list above, and when the manifest
+is not what its sources make: it records the catalog version, revision and `catalog.json` SHA-256
+it was generated from, which must be the checkout's; every view in the script is one job of that
+name, the goldens are exactly the jobs' and of the manifest's size; and regenerating it from the
+script's avatars and views, the catalog and `CreateRandom` (`manifest --check`) reproduces the
+file byte for byte, coverage tags included. After an intentional art change (any change to
+`catalog.json` counts), regenerate with `avatar_visual_regression.py manifest`, then `update` on
+SOFTWARE (refused while the manifest is stale), and look at every golden that changed before
+committing it.
 
 **Acceptance.** One command says whether Avatar v3 is whole in a build tree:
 
