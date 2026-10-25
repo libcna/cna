@@ -138,7 +138,7 @@ container's resource constraints.
 ## What is still not implemented on Android
 
 - Real declination-based `Compass.TrueHeading` (needs `System.Device.Location`, a
-  separate, unstarted plan — see `docs/location-future-plans/plan.md`).
+  separate, unstarted plan — see `docs/location-future-plan.md`).
 - **Corrected 2026-07-18 (independent re-verification of `audit_devices.md` finding
   `DEV-AUD-003`) — this line previously claimed no remap existed at all for any of
   `Motion`'s vector fields, which was stale/false:** `Task MOTION-012` (2026-07-16)

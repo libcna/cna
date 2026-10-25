@@ -203,7 +203,7 @@ namespace Microsoft::Devices::Sensors::Detail
             // never fabricated from an assumed declination -- true heading
             // requires geomagnetic declination data from a location source,
             // which does not exist in this codebase (System.Device.Location
-            // is out of scope; see docs/location-future-plans/plan.md). This is
+            // is out of scope; see docs/location-future-plan.md). This is
             // the same honest limitation
             // docs/devices-native-backend-design.md's Android Compass
             // section documents.
