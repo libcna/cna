@@ -135,9 +135,8 @@ stay in `modules/content-pipeline`). What remains needs a host this machine does
 three Windows/XNA platform validations (003, 101, 152). The museum's reruns of
 2026-10-25 against `9d49828f4` are in `../museum-simulator/docs/CNA_FINDINGS.md`: every finding it
 can run here is verified fixed or documented, the ThreadSanitizer races and ENet's UBSan shift
-included (a `-fsanitize=thread,undefined` museum tree: no report). One stays open there: the Android
-emulator's Float16 readback (`53292f147`) is unverified because this machine has no `/dev/kvm` at
-the moment (`sudo modprobe kvm_amd`, then the museum's `tools/android_run.sh rv-capabilities`).
+included (a `-fsanitize=thread,undefined` museum tree: no report), and so is the Android emulator's
+Float16 readback (`53292f147`: the half-float target reads 2.0). None stays open there.
 The museum repair log `CNA_MUSEUM_REPAIR_HANDOFF.md` was removed then; it is in Git history
 (`git show 9d49828f4:CNA_MUSEUM_REPAIR_HANDOFF.md`).
 Triaged, not a defect: in `cmake-build-multi`, `cna_c_api_effect_smoke` run with
