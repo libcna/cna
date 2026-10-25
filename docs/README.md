@@ -160,6 +160,9 @@ documentation-accuracy pass; check each file's own date before relying on it.
 `devices-thread-safety.md`, `cna-devices-camera-design.md`, `location-future-plan.md` — not in
 scope for the 2026-07-11 Graphics documentation-accuracy pass; check each file's own date.
 
+- **[`location-proposal.md`](location-proposal.md)** — the proposal, with the owner's decisions of
+  2026-10-25, for location support through `System.Device.Location`; nothing is implemented yet.
+
 ## Other
 
 - [`renderer-expansion-candidates.md`](renderer-expansion-candidates.md) — research only, never a

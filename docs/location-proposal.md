@@ -2,7 +2,7 @@
 
 **Status: proposal with the owner's decisions taken (2026-10-25); nothing implemented.** It
 replaces the five-line TODO that used to be this file, and it extends
-[`docs/location-future-plan.md`](../docs/location-future-plan.md), which records where location
+[`location-future-plan.md`](location-future-plan.md), which records where location
 support belongs and why. The decisions are listed at the end; the sections below already follow
 them.
 
@@ -175,7 +175,7 @@ later, so its Windows Phone compatibility layer would provide the types itself o
 | LOC-8 | Core Location backend; needs the Apple machine. |
 | LOC-9 | Windows `Geolocator` backend (MSVC/clang-cl). |
 | LOC-10 | Optional: compass declination, C API routes, CNA.NET. |
-| LOC-11 | Merge this proposal and `docs/location-future-plan.md` into one `docs/location.md`. |
+| LOC-11 | Merge this proposal (`docs/location-proposal.md`) and `docs/location-future-plan.md` into one `docs/location.md`. |
 
 ## Decisions (owner, 2026-10-25)
 
