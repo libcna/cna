@@ -143,8 +143,8 @@ TEST(WebGPUCompiledEffectTest, RealXna4GameEffectsWithShaderModel1PixelShadersPa
     if (RendererOf(device) == nullptr)
         GTEST_SKIP() << "this build did not select the WebGPU renderer";
     // plans/plan_webgpu.md WEBGPU-166: these two failed to PARSE at all until CNA's
-    // mojoshader-6333f74-spirv-texcrd.patch, and then produced an illegal entry-point interface
-    // until mojoshader-6333f74-spirv-ps1x-interface.patch. They are the regression guard for both.
+    // libcna/mojoshader spirv-texcrd commit, and then produced an illegal entry-point interface
+    // until its spirv-ps1x-interface commit. They are the regression guard for both.
     for (const char* name : {"racing-shadow-map-xna4.fxb", "racing-normal-mapping-xna4.fxb"})
     {
         // These two are extracted game content, so they live with the fixtures rather than with

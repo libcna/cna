@@ -25,8 +25,8 @@
 // tests use its OpenGL/D3D11 drivers, never SPIR-V, and CNA's own stock SDL_GPU shaders are
 // hand-written SPIR-V that never goes through MOJOSHADER_compileEffect at all. This mode is what
 // isolated the FX-071 all-black golden-pixel result to two register-count/float-count unit
-// mismatches in CNA's own MojoShader Effect-parser-robustness patch (see
-// cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch) rather than a CNA renderer bug
+// mismatches in CNA's own MojoShader Effect-parser-robustness fix (the libcna/mojoshader
+// effect-parser-robustness commit, then a patch) rather than a CNA renderer bug
 // or an upstream MojoShader defect -- with zero CNA renderer code anywhere in this path.
 //
 // PROBE_TECHNIQUE / PROBE_PASS environment variables select a technique/pass other than 0/0, which

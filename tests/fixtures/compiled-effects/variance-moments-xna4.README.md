@@ -12,7 +12,7 @@ the texture in sampler 0, and the test sets `Weight` and `Offset`. It averages t
 Vector2 render target, as willcraftia's LiSPSM demo blurs its variance shadow map. Direct3D 9
 sampled a Vector2 texture at full 32-bit precision; read at fp16, moments near 1 lose the
 difference between depth squared and the square of depth that a variance shadow map is made of
-(cna-cs CSX-136, `mojoshader-6333f74-glsles3-sampler-precision.patch`).
+(cna-cs CSX-136, the libcna/mojoshader `glsles3-sampler-precision` commit).
 
 - Size: 720 bytes
 - SHA-256: `f1828e7eb9d2b2fa432f23dc941886b53aae2c011f28f14263b572435872d5d4`

@@ -23,8 +23,8 @@
 //     interface used to be counted from one and emitted from both. A repeated <id> is two
 //     arguments at one Location to a consumer.
 //
-// Both are fixed in cmake/patches/mojoshader-6333f74-spirv-pointcoord-existence.patch and
-// mojoshader-6333f74-spirv-entry-interface-unique.patch. Before them, 6 of the 27 committed passes
+// Both are fixed in libcna/mojoshader's spirv-pointcoord-existence and spirv-entry-interface-unique
+// commits (once patches under cmake/patches/). Before them, 6 of the 27 committed passes
 // produced a fragment module WebGPU refused with "Multiple bindings at location 1 are present",
 // and all 6 also carried a zeroed version word.
 
