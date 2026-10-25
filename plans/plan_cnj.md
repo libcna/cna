@@ -185,7 +185,7 @@
 > after both fixes: 4408 tests, 4406 passed, same 2 pre-existing skips, 0 failures.
 >
 > Turns [`cnj.md`](../misc/cnj.md)'s design into a phased, numbered task list (`CNB-1`, `CNB-2`, ...),
-> mirroring how [`plan_xnb.md`](plan_xnb.md) turned [`../misc/xnb.md`](../misc/xnb.md) into concrete tasks. Read
+> mirroring how [`plan_xnb.md`](plan_xnb.md) turned `misc/xnb.md` (removed 2026-10-25; Git history) into concrete tasks. Read
 > `cnj.md` first — this file assumes its design decisions (resolution order, envelope shape,
 > `sourceFile`, `RegisterCnjLoader<T>`) as given and does not re-argue them.
 >
@@ -777,7 +777,7 @@ Full-suite regression: EasyGL `CnaTests` (direct binary invocation) **4843/4845 
 ## Relationship to other plan files
 
 - **`cnj.md`** — the design this plan implements; read it first.
-- **`../misc/xnb.md`/`plan_xnb.md`** — the alternative, not-adopted (binary `.xnb` reader) strategy; CNB-30
+- **`misc/xnb.md` (removed 2026-10-25; Git history)/`plan_xnb.md`** — the alternative, not-adopted (binary `.xnb` reader) strategy; CNB-30
   is the task that formally records `.cnj`'s adoption status relative to it.
 - **`docs/model-content-pipeline-support.md`** — documents `ModelTypeReader`'s current FNA-fidelity
   gaps and test-coverage gap; CNB-19/CNB-21 are the tasks that touch it.

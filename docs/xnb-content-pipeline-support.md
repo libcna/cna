@@ -4,7 +4,13 @@ Covers CNA's real, binary-`.xnb`-compatible content loader (`Microsoft::Xna::Fra
 ContentManager`/`ContentReader`/`ContentTypeReaderManager`, plus the individual readers under
 `CNA::Internal::Xnb`) — the closing documentation task for `plans/plan_xnb.md`'s Phase G (XNB-45),
 written once Phase A through Phase G's other tasks (XNB-42/42A/43/44/46) had landed. See
-`../misc/xnb.md` for the original design rationale and `plans/plan_xnb.md` for the full, numbered task history.
+`plans/plan_xnb.md` for the full, numbered task history.
+
+A `.xnb` file is not a source asset in a wrapper. It is the XNA Content Pipeline's serialized object
+graph: a table of type readers, then a root object, then shared resources that earlier nodes refer
+back to. .NET finds each reader by resolving its type name through reflection, which C++ does not
+have, so CNA keeps a registry of readers, each registered by hand under its normalized .NET type
+name; a game registers its own readers the same way (see "Custom readers" below).
 
 This is **CNA's second, independent content format** alongside `.cnj` (see `cnj.md`) and the older,
 CNA-original `.model.json` loose-file format (see `docs/model-content-pipeline-support.md`, which

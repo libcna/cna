@@ -68,8 +68,9 @@
 > Phase B3 has also grown new scope: a `ContentManager` startup content-manifest scan (internal perf
 > cache + a public introspection API + the `.xnb` reader-name inventory), see that phase below.
 
-> Companion task list to [`../misc/xnb.md`](../misc/xnb.md) (the narrative research/design document — read that
-> first for *why* each phase is shaped this way). This file turns that plan into concrete,
+> Companion task list to `misc/xnb.md`, the narrative design document. It was removed on 2026-10-25,
+> once every phase it describes had landed or been cancelled; Git history keeps it, and the current
+> reference is [`../docs/xnb-content-pipeline-support.md`](../docs/xnb-content-pipeline-support.md). This file turns that plan into concrete,
 > numbered tasks (`XNB-1`, `XNB-2`, ...) the same way `plan_graphics.md` tracks graphics work.
 > **Nothing here is implemented yet — every row starts `⬜`.** "Top quality" (broad real-world
 > `.xnb` compatibility, hardened against malformed/adversarial files, full XNA-vs-MonoGame-variant
@@ -704,8 +705,9 @@ entirely the second one.
 
 ## Relationship to other plan files
 
-- [`../misc/xnb.md`](../misc/xnb.md) — the narrative design document this task list is derived from; read it for
-  *why*, not just *what*.
+- `misc/xnb.md` — the narrative design document this task list was derived from; removed on
+  2026-10-25 (Git history). [`../docs/xnb-content-pipeline-support.md`](../docs/xnb-content-pipeline-support.md)
+  is the current reference.
 - [`plan_graphics.md`](plan_graphics.md) Phase 74 — compiled `.fx` shader bytecode via MojoShader;
   related but independent (see `../misc/xnb.md`'s own "Effect/compiled shader bytecode" section). Phase E's
   stock-effect readers (XNB-32) deliberately avoid needing Phase 74 at all; the general `EffectReader`

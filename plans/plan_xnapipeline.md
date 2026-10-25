@@ -94,7 +94,7 @@ against it.
 | `cna-content --format cnb|xnb` | No `--format` option exists. Usage is `build <src> -o <out> [--config] [--workers] [--explain] [--quiet]`. |
 | Independent Python XNB conformance parser | No Python file in the tree mentions XNB. |
 | CNA-generated XNB fixtures | Every `.xnb` in `tests/assets/` is externally produced (1 genuine XNA 4.0, 14 MonoGame). |
-| `docs/xnb-interoperability.md`, `../misc/xnb.md` XNB-writer content, `plans/plan_xnapipeline.md` | `docs/xnb-interoperability.md` and this plan did not exist. `../misc/xnb.md` documents the reader. |
+| `docs/xnb-interoperability.md`, `../misc/xnb.md` XNB-writer content, `plans/plan_xnapipeline.md` | `docs/xnb-interoperability.md` and this plan did not exist. `misc/xnb.md` documented the reader; it was removed on 2026-10-25 (Git history), and `docs/xnb-content-pipeline-support.md` documents it now. |
 | Primitive/collection/graphics/media **writers** | No XNB writer of any kind. The only XNB-emitting code was hand-rolled `MakeTexture2DXnb()`-style helpers **inside test files**. |
 
 ### 0.2 Verified present (and reused by this plan)
