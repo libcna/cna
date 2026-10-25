@@ -42,8 +42,8 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   709/0/7/3. The only remaining campaign actions are the three native-Windows checks and the
   consumer-owned museum reruns described under "Exact next task".
 - Consumer intake, museum `docs/CNA_FINDINGS.md` Open section (2026-10-24): every entry was checked
-  against HEAD; most were already fixed and await museum reruns (the list and evidence are at the
-  top of `CNA_MUSEUM_REPAIR_HANDOFF.md`). Fixed here: MouseState/GamePadState text as XNA's IL
+  against HEAD; the museum reran them all on 2026-10-25 against `9d49828f4` and moved each one it
+  verified to its "Fixed in CNA" section (see "Exact next task"). Fixed here: MouseState/GamePadState text as XNA's IL
   formats it (`0ef875619`), six Pipeline Workshop divergences 3/4/5/10/11/12 (`889a31be4`), TaskItem
   equality (`48a5c75eb`), the unsigned ENet fragment bitmaps (`03b92269c`), a readable refused
   vertex type (`a80534927`), the WAV/devices.h and content-task link documentation (`acc2ee55b`,
@@ -132,9 +132,10 @@ The museum Pipeline Workshop items are all answered: 1 (build-wide nested names,
 `419723275`), 9 (`bbed8c61e` on Sharp Runtime `f990d074`, measured against
 genuine XNA, demos `9598b43`) and 16 (owner: the documentation half is enough; the task sources
 stay in `modules/content-pipeline`). What remains needs a host this machine does not have: the
-three Windows/XNA platform validations (003, 101, 152) and the museum's own reruns of the entries
-listed at the top of `CNA_MUSEUM_REPAIR_HANDOFF.md`, which can start now that everything is
-published.
+three Windows/XNA platform validations (003, 101, 152)<<MUSEUM-REMAINS>>. The museum's reruns of
+2026-10-25 against `9d49828f4` are in `../museum-simulator/docs/CNA_FINDINGS.md`: <<MUSEUM-SUMMARY>>
+The museum repair log `CNA_MUSEUM_REPAIR_HANDOFF.md` was removed then; it is in Git history
+(`git show 9d49828f4:CNA_MUSEUM_REPAIR_HANDOFF.md`).
 Triaged, not a defect: in `cmake-build-multi`, `cna_c_api_effect_smoke` run with
 `CNA_GRAPHICS_RENDERER=WEBGPU` fails its stage 3 because a WEBGPU effect on the WEBGPU-76 WGSL
 contract has no cube sampler and refuses one with `NotSupportedException`
@@ -146,7 +147,7 @@ the same stage creating textures, an expected STUB artefact.
 Consumer-only work still matters. cna-engine's `upstream-issues.md` reports UP-001, UP-006, UP-018,
 UP-019 and UP-020 resolved; its UP-002 (CNAEXT on C++ spellings of implicit XNA semantics) is
 answered by `99b54079e` in `docs/migration-guide.md` and awaits cna-engine's own reading. The
-museum's `docs/CNA_FINDINGS.md` Open section still lists every entry until the museum reruns it; the
+museum has rerun its findings (above); the
 consumers also need to know that `new PresentationParameters()` is now XNA's 0x0 full-screen value,
 so a device built from it directly must state a size. Do not claim UBSan/TSan/hardware/service
 validation when its required tree or hardware is absent.
@@ -165,10 +166,6 @@ history preserve measurement history. Do not let an issue disappear from either 
 
 Repository state last reconciled: **2026-10-24** (`next`, `96577db26`). The last full test run is
 the checkpoint identified above; do not upgrade later focused evidence into a full claim.
-
-Owner-requested museum repair intake (2026-10-22), focused validation and next task:
-[`CNA_MUSEUM_REPAIR_HANDOFF.md`](CNA_MUSEUM_REPAIR_HANDOFF.md). This is additional
-consumer evidence, not a claim that the full 2026-10-14 checkpoint was rerun.
 
 ## 1. Project summary
 
@@ -304,6 +301,12 @@ None open (reconciled 2026-10-24).
   render target preferring Alpha8 falls back to `Color` as XNA's preferred-format rule allows
   (`GraphicsCapabilityFloatRenderTargetTests.cpp`). Alpha is kept; the one-byte-per-pixel storage
   is not (`Color` is four). How the Xbox 360 allocated an Alpha8 target was never captured.
+- `FNA3D` refuses a `PbrEffect` or `SkinnedPbrEffect` draw whose vertex declaration has no
+  `TANGENT0` with `System::NotSupportedException` (`FNA3D-MISSING-STOCK-INPUT`,
+  `modules/renderers/fna3d/src/Fna3dDraw.cpp`) wherever FNA3D picks its SDL_GPU or Direct3D 11
+  driver, which cannot build a pipeline with a missing input; its OpenGL driver and every other
+  renderer supply the GL neutral tangent (`91612a0a3`). Measured by the museum's `rv-shading` on
+  RADV, 2026-10-25.
 - Online sessions and invitations are native-only; a browser build refuses them explicitly
   (`docs/browser-network-readiness.md`, `docs/gamer-services-known-limitations.md` §26).
 - `DIRECTX9` is validated under Wine (+DXVK) only, and `SDL_GPU`'s Direct3D 12 backend under Wine

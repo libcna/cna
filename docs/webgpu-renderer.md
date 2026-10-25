@@ -3,9 +3,10 @@
 ## Status
 
 The museum's October 2026 follow-up found browser optional-format and canvas-lifetime defects,
-plus additional graphics gaps requiring investigation. Current repair status is tracked in
-`CNA_MUSEUM_REPAIR_HANDOFF.md` and the top of `plans/plan_webgpu.md`; older validation results
-below describe their tested configurations, not a claim that these newer findings are resolved.
+missing vertex texture fetch and a surface-free start. All are repaired or documented, and the
+museum's reruns of 2026-10-25 (WEBGPU on the GPU through a headless Weston, and the browser build)
+confirm them (`../museum-simulator/docs/CNA_FINDINGS.md`). The top of `plans/plan_webgpu.md` holds
+the current status; older validation results below describe their tested configurations.
 
 The WebGPU renderer was activated by the project owner on **2026-07-12** and has been a **supported
 CNA graphics renderer** (`GraphicsRendererMaturity::Supported`) since 2026-10-17 -- one of the project's 10 public renderer identities, native (wgpu-native)
@@ -1402,7 +1403,9 @@ layouts without requiring `Float32Filterable`. Filtering float32 compiled sample
 optional feature and otherwise throws `NotSupportedException`. Float cubes remain refused because
 their transfer path has not been generalized. The browser shader translation maps TEXLDL's
 explicit level to WGSL `textureSampleLevel`; unsupported image-operand combinations still refuse.
-See `CNA_MUSEUM_REPAIR_HANDOFF.md` for measured runtime coverage, not a blanket platform claim.
+Measured coverage: native Linux (lavapipe and the museum's RADV run of its `vertextexture` fixture),
+not a blanket platform claim; the repair evidence is in Git history
+(`git show 9d49828f4:CNA_MUSEUM_REPAIR_HANDOFF.md`).
 
 (Per-target `multiSampleCount` on `RenderTarget2D` and `RenderTargetCube` was on this list until
 `WEBGPU-165`; see *Per-target MultiSampleCount* above.)

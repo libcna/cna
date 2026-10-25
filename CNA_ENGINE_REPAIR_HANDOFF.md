@@ -14,7 +14,8 @@ The related museum C/C++ runtime repair is published as
 89fb1493f7ffc89460a3bbe8d92fec4a660c0fe7. Both assembly/logger link orders pass,
 14 native CTests pass, and installed/relocated shared/static C clients pass.
 Full C demo outcomes remain unchanged (SOFTWARE168PASS/9FAIL; GLES169PASS/8FAIL).
-Exact evidence and limitations are in CNA_MUSEUM_REPAIR_HANDOFF.md. No active heavy
+Exact evidence and limitations are in the removed CNA_MUSEUM_REPAIR_HANDOFF.md
+(`git show 9d49828f4:CNA_MUSEUM_REPAIR_HANDOFF.md`). No active heavy
 job remains. UP-001 now has the installed C++ module package described below;
 the earlier C-adapter repair alone did not supply those targets.
 The chronological notes below retain earlier failures and intermediate checkpoints.
@@ -99,8 +100,8 @@ MinGW and WebAssembly producer trees; the latter two are configure-only checks.
 No engine/extended/museum source or pin was changed. Inherited content ownership,
 ISSUE-113, storage and their tests remain dirty and excluded from this commit.
 No active build/test/push process remains at this checkpoint. Next: the museum's
-HttpNotificationChannel open-error and false-positive send findings (intake below
-in CNA_MUSEUM_REPAIR_HANDOFF.md); the current Open section has been re-read and the
+HttpNotificationChannel open-error and false-positive send findings (that intake is in
+Git history, `git show 9d49828f4:CNA_MUSEUM_REPAIR_HANDOFF.md`); the current Open section has been re-read and the
 published package is ready for engine/extended-owned consumer revalidation;
 the cna-demos campaign still has unfinished findings and is not complete.
 

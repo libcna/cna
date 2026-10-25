@@ -13,9 +13,9 @@ gate and premature DeviceReset event before repair. Failed Reset now immediately
 loss recovery; shared viewport refresh and success notification wait for recovery, and
 native SetViewport/Present cannot follow the failure. All five focused DirectX9 tests
 pass under Wine/DXVK3.1.1; 103 presentation/reset/viewport tests on each of SOFTWARE,
-OPENGLES3, OPENGL33, WEBGPU and SDL_GPU retain their baseline passes/skips. See
-`CNA_MUSEUM_REPAIR_HANDOFF.md` for exact counts and evidence. This is not a real-Windows
-or whole-suite validation claim.
+OPENGLES3, OPENGL33, WEBGPU and SDL_GPU retain their baseline passes/skips. The exact counts
+and evidence are in the removed museum repair log (`git show 9d49828f4:CNA_MUSEUM_REPAIR_HANDOFF.md`).
+This is not a real-Windows or whole-suite validation claim.
 
 ## Scope and causes
 

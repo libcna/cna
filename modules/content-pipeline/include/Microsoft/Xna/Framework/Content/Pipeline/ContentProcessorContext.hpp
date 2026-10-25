@@ -97,6 +97,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         /**
          * @brief Adds a dependency to the specified file: the asset is rebuilt when it changes.
          *
+         * CNA keeps every dependency inside the build's source roots: a file that resolves outside
+         * them is refused with PipelineException, as XNA refuses a path it cannot use. XNA itself
+         * records an absolute path outside its source directory as it is.
+         *
          * @param filename Name of the asset file.
          */
         virtual void AddDependency(const std::string& filename) = 0;

@@ -9,7 +9,8 @@ the GL neutral input; canonical48/60-byte streams retain resident storage. Shade
 are unchanged. The Linux/Vulkan PbrVertexContract_SDL_GPU test passes20 exact pixel
 comparisons across user/buffered/indexed draws and reordered/padded records with offsets;
 existing rigid/skinned/instanced PBR examples pass. No new D3D12/Metal runtime claim.
-See CNA_MUSEUM_REPAIR_HANDOFF.md for complete evidence and consumer revalidation status.
+The complete evidence is in the removed museum repair log (`git show 9d49828f4:CNA_MUSEUM_REPAIR_HANDOFF.md`); the museum's
+own revalidation is in `../museum-simulator/docs/CNA_FINDINGS.md`.
 
 > **Renderer note (2026-10-14).** Since CNA's own `VULKAN`, `DIRECTX11` and `METAL` renderers were
 > retired on 2026-10-13 (`docs/removed-renderers.md`), `SDL_GPU` is CNA's modern native path and

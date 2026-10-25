@@ -37,5 +37,6 @@ During the museum investigation, the pre-repair existing regression
 also failed this observer: free preceded the lock_guard destructor in Poll. Both
 observations are in the campaign reports `repair-museum-avatar-mutex-before-v1.log`
 and `-v2.log`. This proves a CNA lifetime defect, **not** that it caused the museum's
-one historical crash inside Mesa. The full `gs-avatar` reproduction and its
-sanitizer results must be recorded separately in `CNA_MUSEUM_REPAIR_HANDOFF.md`.
+one historical crash inside Mesa. The museum did not reproduce that crash in 40 more
+`gs-avatar` press-all runs under glibc's heap checking at `9d49828f4`
+(`../museum-simulator/docs/CNA_FINDINGS.md`).
