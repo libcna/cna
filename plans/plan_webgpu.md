@@ -35,7 +35,7 @@ that only external-platform work remains.
   Chrome passes the same20 with optional tier1 features enabled and absent, no validation errors.
   Existing rigid/skinned/instanced PBR examples and helper ASan/UBSan checks pass. Details and
   residual FNA3D SDLGPU missing-tangent refusal are in the removed museum repair log
-  (`git show 9d49828f4:CNA_MUSEUM_REPAIR_HANDOFF.md`); the refusal is listed in `handoff.md` §5.3.
+  (`git show 9d49828f4:CNA_MUSEUM_REPAIR_HANDOFF.md`); the refusal is listed in `handoff.md` §5.2.
 - Vertex texture fetch/float storage (museum B8, 2026-10-23): the four missing pieces were the
   ordinary Single/Vector4 format verdict, explicit vertex-sampler refusal, empty group0 bindings
   and the WGSL translator's missing TEXLDL. Native tests now pass through both SPIR-V and WGSL,

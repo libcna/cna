@@ -132,8 +132,11 @@ The museum Pipeline Workshop items are all answered: 1 (build-wide nested names,
 `419723275`), 9 (`bbed8c61e` on Sharp Runtime `f990d074`, measured against
 genuine XNA, demos `9598b43`) and 16 (owner: the documentation half is enough; the task sources
 stay in `modules/content-pipeline`). What remains needs a host this machine does not have: the
-three Windows/XNA platform validations (003, 101, 152)<<MUSEUM-REMAINS>>. The museum's reruns of
-2026-10-25 against `9d49828f4` are in `../museum-simulator/docs/CNA_FINDINGS.md`: <<MUSEUM-SUMMARY>>
+three Windows/XNA platform validations (003, 101, 152). The museum's reruns of
+2026-10-25 against `9d49828f4` are in `../museum-simulator/docs/CNA_FINDINGS.md`: every finding it
+can run here is verified fixed or documented, except two still open there, the ThreadSanitizer and
+UBSan reruns (a build-tsan tree is being built) and the Android emulator's Float16 readback (this
+machine has no `/dev/kvm` at the moment).
 The museum repair log `CNA_MUSEUM_REPAIR_HANDOFF.md` was removed then; it is in Git history
 (`git show 9d49828f4:CNA_MUSEUM_REPAIR_HANDOFF.md`).
 Triaged, not a defect: in `cmake-build-multi`, `cna_c_api_effect_smoke` run with
@@ -364,6 +367,13 @@ Behaviour CNA does not own, measured and reported rather than worked around.
     `System::NotSupportedException` while `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4
     and the plural cube-face `RenderTargetSemantics` cases skip on that refusal); HEADLESS accepts
     them. A capability boundary. SDL_GPU binds them since `51fb39d5a` (DC-R1).
+- **LeakSanitizer reports leaks in FNA3D's MojoShader and in the pinned SDL** (measured 2026-10-22/23
+  during the museum repairs): MojoShader's SPIR-V emitter leaks its attribute fixups
+  (`spv_add_attrib_fixup`, `profiles/mojoshader_profile_spirv.c`) on every stock-effect compilation
+  (8,792 bytes in 513 allocations for a device alone), and SDL leaks about 50 KB in about 910
+  allocations from initialization to destruction with no CNA code linked (lavapipe and RADV). CNA
+  suppresses neither, and FNA3D's and MojoShader's own rules forbid AI-authored fixes there, so an
+  FNA3D or SDL_GPU sanitizer run does not end at exit 0 under LeakSanitizer.
 - **`DIRECTX9` under Wine with DXVK 2.6.0: `DirectX9_CompiledEffects` hangs or aborts in DXVK's
   device teardown; DXVK 3.1.1 does not** (measured 2026-10-17, `cmake-build-mingw`, Release,
   `CNA_DIRECTX9_COMPILED_EFFECTS=ON`). Its 31 gtests were run 30 times on each version in one Wine
