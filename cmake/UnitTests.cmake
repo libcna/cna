@@ -1656,13 +1656,16 @@ if(CNA_BUILD_TESTS)
 
     # 2026-10-26 dependency audit C-05: the Android SDL patch makes a relative directory fall back
     # to the APK's assets again; SDL's own function, before and after it, on the host with Android's
-    # services stubbed.
-    add_test(NAME CnaSdlAndroidAssetEnumeration
-        COMMAND ${CMAKE_COMMAND}
-            -DCNA_SOURCE_DIR=${CMAKE_SOURCE_DIR}
-            -DCNA_WORK_DIR=${CMAKE_BINARY_DIR}/CnaSdlAndroidAssetEnumeration
-            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/SdlAndroidAssetEnumerationCase.cmake)
-    set_tests_properties(CnaSdlAndroidAssetEnumeration PROPERTIES LABELS "platform;configuration")
+    # services stubbed. It compiles SDL's POSIX code with the host's cc and lists a host path as
+    # Android's absolute one, so only a POSIX host can run it.
+    if(NOT CMAKE_HOST_WIN32)
+        add_test(NAME CnaSdlAndroidAssetEnumeration
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+                -DCNA_WORK_DIR=${CMAKE_BINARY_DIR}/CnaSdlAndroidAssetEnumeration
+                -P ${CMAKE_SOURCE_DIR}/cmake/Tests/SdlAndroidAssetEnumerationCase.cmake)
+        set_tests_properties(CnaSdlAndroidAssetEnumeration PROPERTIES LABELS "platform;configuration")
+    endif()
 
     # plans/plan_native_platform_validation.md NPV-0131: which test binary the platform ctest
     # entries below (CnaPlatform*) run. CnaTests by default. A build that compiles only the

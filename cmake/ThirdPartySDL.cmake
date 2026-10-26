@@ -35,9 +35,11 @@ include("${CMAKE_CURRENT_LIST_DIR}/SdlPrebuiltFingerprint.cmake")
 # CNA fixes carried on top of the vendored revision (third_party/SDL, pinned at SDL main
 # 86296ac8f01597076979630667472a846b04ce46, 2026-05-15 -- recorded with its tree in
 # cmake/VendoredSources.cmake), applied in this order to a staged copy of the
-# source -- never to third_party/SDL itself. Each is needed only on one platform, so it is carried only
-# there and leaves every other platform's build manifest unchanged; on desktop Linux, Windows, macOS
-# and Android SDL is built exactly as upstream ships it.
+# source -- never to third_party/SDL itself. Each is carried only on the platforms that need it and
+# leaves every other platform's build manifest unchanged: the two Emscripten patches in the browser,
+# the UIKit one on iOS, the asset-enumeration one on Android, and the Vulkan mipmap one wherever the
+# Vulkan backend is built (desktop Linux, Windows, Android). On macOS SDL is built exactly as
+# upstream ships it.
 #
 # The pin is the first upstream commit with both Vulkan GPU fixes CNA used to carry as patches on
 # cbe3fbe9 -- the Vulkan backend of SDL_gpu is what CNA's SDL_GPU renderer and FNA3D's SDL_GPU driver
