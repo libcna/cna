@@ -234,7 +234,7 @@ of them and must admit 0.50.0 before it moves its pin. CNA `main`/`develop` are 
 refuses. The archived bindings in `cna-lab` stay pinned to older ABIs and are not maintained.
 
 **Dependencies.** FNA3D and MojoShader are CNA's forks, `libcna/FNA3D` and `libcna/mojoshader`,
-pinned at `74698f735a43` / `6584088934d0` on their `cna` branches (`docs/fna3d-renderer.md`). Both
+pinned at `aa3139087e69` / `bbee0a5fab1f` on their `cna` branches (`docs/fna3d-renderer.md`). Both
 carry the fixes for the 2026-10-26 dependency audit (reports in
 `/rv/tmp/cna-dep-migration-codex-audit-2026-10-26/reports/`; each fix names its finding in a
 `CNA-Audit-Finding:` trailer, CNA's own in its commit subject) and regression suites of their own:
@@ -247,12 +247,15 @@ display: run them through the private runner). SDL is `86296ac8` with four CNA p
 `docs/xna-content-pipeline-parity-report.md`, `docs/gltf-limitations.md`. No further formats are
 planned.
 
-**Tests.** GoogleTest under CTest; `ctest -N` in a build tree gives its count. At the FNA3D pin
-`74698f735a43` (2026-10-26, end of the dependency-audit remediation), `cmake-build-multi`'s
+**Tests.** GoogleTest under CTest; `ctest -N` in a build tree gives its count. At the FNA3D pins
+`74698f735a43` and `aa3139087e69` (2026-10-26, end of the dependency-audit remediation), `cmake-build-multi`'s
 `CnaTests` with the audit's graphics filter ran 1,649 tests with no failure on each of `OPENGLES3`,
 `OPENGL33`, `WEBGPU`, `SOFTWARE`, `SDL_GPU` (Vulkan) and `FNA3D` with its OpenGL and its SDL_GPU
 driver (the audit had measured 15 to 25 failures each, all fixed or test defects); its network filter
-574/574 and the platform suites 1,553 on X11 and 1,553 on Wayland, none failed. Latest full Debug
+574/574 and the platform suites 1,553 on X11 and 1,553 on Wayland, none failed. Cross builds at
+`aa3139087e69`: `cmake-build-mingw` under Wine with DXVK 3.1.1 ran `DirectX9CompiledEffect*` 31/32
+(one declared skip); the Emscripten `cna_webgpu_compiled_effect_page` passed 21/21 in headless
+Chrome; Android x86_64 (NDK 29) built SDL with its patches and `cna_platform`, not run. Latest full Debug
 runs, 2026-10-17 at the end of the handoff 5.1 stabilization pass (branch `stabilization`, worktree
 `cna-stab`), through the private runner on RADV: `cmake-build-multi` (`OPENGLES3` default with
 `OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`; C API) 11,433 tests, 1
@@ -367,9 +370,7 @@ None open (reconciled 2026-10-24).
   measure whether it differs.
 - **MojoShader SPIR-V gaps** (FNA3D's SDL_GPU driver, CNA's SDL_GPU and WEBGPU compiled effects):
   ps_1_4 `BEM` and `TEXDEPTH` refuse by name ("unimplemented in spirv profile"); GLSL implements
-  both. A vs_1_x/vs_2_x `oPts` is a user varying rather than `PointSize`/`gl_PointSize`, and its `oFog`
-  is FOG1, which no pixel FOG0 input links to (fixed on libcna/mojoshader `bbee0a5`, not yet pinned).
-  `MOJOSHADER_cloneEffect` asserts on an effect with no technique.
+  both. `MOJOSHADER_cloneEffect` asserts on an effect with no technique.
 
 ### 5.3 External and driver limitations
 
