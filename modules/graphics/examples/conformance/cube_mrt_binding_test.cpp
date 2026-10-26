@@ -185,9 +185,12 @@ class CubeMrtBindingTest final : public Game
         const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
             VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
         });
+        // Past the targets' edges, so that the triangle's only edge inside them is the diagonal:
+        // XNA's integer pixel centres leave an edge that ends exactly on a multisampled target's
+        // border half covered (spikes/xna-msaa-pixel-center-spike/).
         const ClipVertex quad[6] = {
-            {-1.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f},
-            {-1.0f, -1.0f, 0.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, -1.0f, 0.0f},
+            {-3.0f, 3.0f, 0.0f}, {3.0f, 3.0f, 0.0f}, {-3.0f, -3.0f, 0.0f},
+            {-3.0f, -3.0f, 0.0f}, {3.0f, 3.0f, 0.0f}, {3.0f, -3.0f, 0.0f},
         };
         dev.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(quad), 0,
                                triangle ? 1 : 2, declaration);

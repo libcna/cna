@@ -492,13 +492,16 @@ class SdlGpuRenderTargetCubeMsaaMipTest final : public Game
         effect.setFogEnabledProperty(false);
         effect.Apply();
 
+        // The quad overhangs the face by a full target on every side, with the texture
+        // coordinates extended to match: on a multisampled face XNA's integer pixel centres
+        // leave the samples of an edge that ends exactly on the face's border half uncovered.
         const VertexPositionTexture vertices[6] = {
-            {Vector3(-1.f,  1.f, 0.f), Vector2(0.f, 0.f)},
-            {Vector3( 1.f, -1.f, 0.f), Vector2(1.f, 1.f)},
-            {Vector3(-1.f, -1.f, 0.f), Vector2(0.f, 1.f)},
-            {Vector3(-1.f,  1.f, 0.f), Vector2(0.f, 0.f)},
-            {Vector3( 1.f,  1.f, 0.f), Vector2(1.f, 0.f)},
-            {Vector3( 1.f, -1.f, 0.f), Vector2(1.f, 1.f)},
+            {Vector3(-3.f,  3.f, 0.f), Vector2(-1.f, -1.f)},
+            {Vector3( 3.f, -3.f, 0.f), Vector2( 2.f,  2.f)},
+            {Vector3(-3.f, -3.f, 0.f), Vector2(-1.f,  2.f)},
+            {Vector3(-3.f,  3.f, 0.f), Vector2(-1.f, -1.f)},
+            {Vector3( 3.f,  3.f, 0.f), Vector2( 2.f, -1.f)},
+            {Vector3( 3.f, -3.f, 0.f), Vector2( 2.f,  2.f)},
         };
         device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 2);
     }

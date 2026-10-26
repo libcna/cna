@@ -94,11 +94,12 @@ class RenderTargetOwnMsaaTest final : public CNA::Examples::PixelTestGame
         fx.Apply();
 
         const Color white(255, 255, 255, 255);
-        // An exact y=x diagonal cannot distinguish the valid 2x sample pattern
-        // (0.25,0.25)/(0.75,0.75): both samples lie on the edge and resolve identically.
-        // NDC x=1/kSize maps to the middle of texel kSize/2, separating those samples
-        // without changing the coverage thresholds or the single-sample control.
-        constexpr float edgeX = 1.0f / kSize;
+        // The vertical edge runs through the centre of texel kSize/2, between the left and the
+        // right samples of every pattern -- 2x's (0.25,0.25)/(0.75,0.75) included, which an exact
+        // y=x diagonal cannot separate. XNA puts a texel's centre on its integer coordinate,
+        // also on a multisampled target (spikes/xna-msaa-pixel-center-spike/), so that centre
+        // is NDC x=0; the half-integer one, NDC x=1/kSize, lies beyond both 2x samples there.
+        constexpr float edgeX = 0.0f;
         const VertexPositionColor triangle[3] = {
             { Vector3(-1.0f,  1.0f, 0.0f), white },
             { Vector3(edgeX,  1.0f, 0.0f), white },
