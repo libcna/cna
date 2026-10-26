@@ -76,6 +76,13 @@ function(cna_configure_sdl_shadercross)
     # exported too: SPIRV-Cross and, in a build directory inside the CNA tree, CNA's own
     # $<BUILD_INTERFACE:> policy targets (cmake/BuildPerformance.cmake), which are defined only
     # after this runs. The patch guards the export with SDLSHADERCROSS_INSTALL instead.
+    #
+    # Making that export succeed instead (2026-10-26 audit C-04) would mean CNA exporting the
+    # whole closure from its build tree -- SPIRV-Cross and those private policy targets, whose set
+    # and links vary per platform and configuration -- for a file nobody reads; overriding
+    # export() itself would reach every other project in the build. So the patch stays, applied
+    # only to this build tree's clone or a staged copy, with its result verified
+    # (cmake/SdlShadercrossPatch.cmake).
     set(_cna_sdl_shadercross_patch
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/patches/sdl-shadercross-1ff05bec-disable-unused-export.patch")
     set(_cna_sdl_shadercross_patch_script
@@ -90,19 +97,17 @@ function(cna_configure_sdl_shadercross)
                       "-DCNA_SDL_SHADERCROSS_PATCH_FILE=${_cna_sdl_shadercross_patch}"
                       -P "${_cna_sdl_shadercross_patch_script}")
 
-    # CMake's documented source override bypasses all download/update/patch steps. Apply the same
-    # idempotent patch explicitly so offline and local-source builds have identical semantics.
+    # CMake's documented source override bypasses all download/update/patch steps, and the
+    # directory it names is the developer's: it is never patched in place (2026-10-26 dependency
+    # audit C-04). A patched copy is staged in the build tree instead, and this function -- only
+    # this function, through a normal variable -- points FetchContent at the copy.
     if(FETCHCONTENT_SOURCE_DIR_CNA_SDL_SHADERCROSS_SOURCE)
-        execute_process(
-            COMMAND "${CMAKE_COMMAND}"
-                    "-DCNA_SDL_SHADERCROSS_PATCH_FILE=${_cna_sdl_shadercross_patch}"
-                    -P "${_cna_sdl_shadercross_patch_script}"
-            WORKING_DIRECTORY "${FETCHCONTENT_SOURCE_DIR_CNA_SDL_SHADERCROSS_SOURCE}"
-            RESULT_VARIABLE _cna_sdl_shadercross_patch_result)
-        if(NOT _cna_sdl_shadercross_patch_result EQUAL 0)
-            message(FATAL_ERROR
-                "CNA: failed to ensure the SDL_shadercross integration patch is applied")
-        endif()
+        include("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/SdlShadercrossPatch.cmake")
+        cna_sdl_shadercross_stage_source(_cna_sdl_shadercross_staged
+            SOURCE "${FETCHCONTENT_SOURCE_DIR_CNA_SDL_SHADERCROSS_SOURCE}"
+            DESTINATION "${FETCHCONTENT_BASE_DIR}/cna_sdl_shadercross_source-staged"
+            PATCH "${_cna_sdl_shadercross_patch}")
+        set(FETCHCONTENT_SOURCE_DIR_CNA_SDL_SHADERCROSS_SOURCE "${_cna_sdl_shadercross_staged}")
     endif()
     FetchContent_MakeAvailable(cna_sdl_shadercross_source)
 
