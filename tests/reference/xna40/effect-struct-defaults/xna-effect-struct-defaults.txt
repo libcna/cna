@@ -1,0 +1,12 @@
+FORMAT=xnb built by the XNA Content Pipeline
+LIGHTING_CLASS=Struct
+LIGHTING_TYPE=Void
+LIGHTING_MEMBERS=3
+MEMBER Intensity class=Scalar rows=1 columns=1 elements=0
+MEMBER Direction class=Vector rows=1 columns=3 elements=0
+MEMBER Thresholds class=Scalar rows=1 columns=1 elements=2
+INTENSITY=0.5
+DIRECTION=0.6,0.7,0.8
+THRESHOLD0=0.9
+THRESHOLD1=1
+RESULT=ok

@@ -894,20 +894,21 @@ TEST(Fna3dCompiledEffectTest, SyntheticFixtureReflectsAnnotationsTechniquesAndEx
     ASSERT_EQ(lightingMembers.getCountProperty(), 3);
     EXPECT_FLOAT_EQ(lightingMembers["Intensity"]->GetValueSingle(), 0.5f);
     const auto direction = lightingMembers["Direction"]->GetValueVector3();
-    // The pinned FNA/MojoShader parser copies only the array member's two source rows into the
-    // padded struct storage. CNA deliberately exposes that storage with the Effect Framework's
-    // float4 member stride; plans/plan_fx.md records this measured divergence from FNA's tighter
-    // public member offsets. Keep this synthetic fixture aligned with that established contract.
+    // Every member keeps its declared default, in the Effect Framework's float4 member stride,
+    // as genuine XNA 4.0 reads this structure (CompiledStructDefaultsMatchGenuineXna). This
+    // expectation used to be (0.6, 0, 0) and thresholds of 0: MojoShader skipped the defaults of
+    // non-array members and copied the array's two rows onto them (2026-10-26 audit A2v2 A-09,
+    // fixed in libcna/mojoshader), and the test had been aligned with that result.
     EXPECT_FLOAT_EQ(direction.X, 0.6f);
-    EXPECT_FLOAT_EQ(direction.Y, 0.0f);
-    EXPECT_FLOAT_EQ(direction.Z, 0.0f);
+    EXPECT_FLOAT_EQ(direction.Y, 0.7f);
+    EXPECT_FLOAT_EQ(direction.Z, 0.8f);
     auto* thresholds = lightingMembers["Thresholds"];
     ASSERT_NE(thresholds, nullptr);
     ASSERT_EQ(thresholds->getElementsProperty().getCountProperty(), 2);
     const auto thresholdValues = thresholds->GetValueSingleArray(2);
     ASSERT_EQ(thresholdValues.size(), 2u);
-    EXPECT_FLOAT_EQ(thresholdValues[0], 0.0f);
-    EXPECT_FLOAT_EQ(thresholdValues[1], 0.0f);
+    EXPECT_FLOAT_EQ(thresholdValues[0], 0.9f);
+    EXPECT_FLOAT_EQ(thresholdValues[1], 1.0f);
     thresholds->getElementsProperty()[1]->SetValue(1.25f);
     EXPECT_FLOAT_EQ(thresholds->GetValueSingleArray(2)[1], 1.25f);
 
@@ -1580,6 +1581,49 @@ TEST(Fna3dCompiledEffectTest, ContentManagerLoadsXnbEffectAndRendersIt)
     EXPECT_NEAR(pixel.getRProperty(), 40, 2);
     EXPECT_NEAR(pixel.getGProperty(), 80, 2);
     EXPECT_NEAR(pixel.getBProperty(), 230, 2);
+}
+
+// A structure's member defaults are what genuine XNA 4.0 reads. The XNB is XNA's own Content
+// Pipeline build of tests/assets/xna40/source/fx_struct_defaults.fx -- the struct shape of
+// CnaConformanceEffect.fx's Lighting -- and the expected values are XNA's measured answer,
+// tests/reference/xna40/effect-struct-defaults/xna-effect-struct-defaults.txt
+// (tools/xna-oracle/EffectStructDefaultsOracle.cs). 2026-10-26 audit A2v2 A-09.
+TEST(Fna3dCompiledEffectTest, CompiledStructDefaultsMatchGenuineXna)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Content;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    const std::filesystem::path source = CNA::TestSupport::RepositoryRoot() /
+        "tests/reference/xna40/effect-struct-defaults/effect_fx_struct_defaults.xnb";
+    ASSERT_TRUE(std::filesystem::exists(source)) << source;
+
+    BuiltInReaderScope readers;
+    ScratchContentRoot contentRoot;
+    std::filesystem::copy_file(source, contentRoot.GetPath() / "struct_defaults.xnb");
+    ContentManager content(nullptr, contentRoot.GetPath().string());
+    content.setGraphicsDevice(device);
+    const auto effect = content.Load<std::shared_ptr<Effect>>("struct_defaults");
+    ASSERT_NE(effect, nullptr);
+
+    auto* lighting = effect->getParametersProperty()["Lighting"];
+    ASSERT_NE(lighting, nullptr);
+    EXPECT_EQ(lighting->getParameterClassProperty(), EffectParameterClass::Struct);
+    auto& members = lighting->getStructureMembersProperty();
+    ASSERT_EQ(members.getCountProperty(), 3);
+    EXPECT_FLOAT_EQ(members["Intensity"]->GetValueSingle(), 0.5f);
+    const Vector3 direction = members["Direction"]->GetValueVector3();
+    EXPECT_FLOAT_EQ(direction.X, 0.6f);
+    EXPECT_FLOAT_EQ(direction.Y, 0.7f);
+    EXPECT_FLOAT_EQ(direction.Z, 0.8f);
+    auto* thresholds = members["Thresholds"];
+    ASSERT_NE(thresholds, nullptr);
+    ASSERT_EQ(thresholds->getElementsProperty().getCountProperty(), 2);
+    EXPECT_FLOAT_EQ(thresholds->getElementsProperty()[0]->GetValueSingle(), 0.9f);
+    EXPECT_FLOAT_EQ(thresholds->getElementsProperty()[1]->GetValueSingle(), 1.0f);
 }
 
 TEST(Fna3dCompiledEffectTest, InvalidBytecodeReturnsMojoShaderDiagnostics)

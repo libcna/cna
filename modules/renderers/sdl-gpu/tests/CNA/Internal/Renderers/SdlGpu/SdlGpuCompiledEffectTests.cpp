@@ -610,7 +610,8 @@ TEST(SdlGpuCompiledEffectDrawTest, RendersTheAppliedPassesExpectedPixelsIntoARen
     // independently verified against CnaConformanceEffect.fx's own arithmetic via a standalone,
     // CNA-code-free probe (tools/graphics/mojoshader_sdlgpu_probe --render): a 1x1 white FxTexture
     // sampled and multiplied through MainPixelShader's Tint/Gain/Lighting-preshader chain lands on
-    // (3,6,10,13), and FlatPixelShader's Tint*Weights[1] preshader lands on (20,41,61,82).
+    // (6,13,19,26) -- see the P0 expectation below -- and FlatPixelShader's Tint*Weights[1]
+    // preshader lands on (20,41,61,82).
     GraphicsDevice device;
     SdlGpuRenderer* renderer = RendererOf(device);
     if (renderer == nullptr) GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
@@ -678,12 +679,17 @@ TEST(SdlGpuCompiledEffectDrawTest, RendersTheAppliedPassesExpectedPixelsIntoARen
     };
 
     // Technique 0 pass 0 (P0): MainVertexShader/MainPixelShader -- samples FxTexture, and its
-    // preshader combines the Lighting struct's Intensity/Thresholds[0] via saturate().
+    // preshader combines the Lighting struct's Intensity/Thresholds[0] via saturate(). With the
+    // struct's compiled defaults as genuine XNA 4.0 reads them, Intensity 0.5 and Thresholds[0]
+    // 0.9 (tests/reference/xna40/effect-struct-defaults/), that factor is saturate(1.4) = 1:
+    // 255 * Tint (0.1, 0.2, 0.3, 0.4) * Gain 0.25 = (6, 13, 19, 26). The (3, 6, 10, 13) this used
+    // to expect was MojoShader dropping the non-array members' defaults, which made the factor
+    // 0.5 (2026-10-26 dependency audit A2v2 A-09).
     const Color mainPixel = drawQuadAndReadCentre(0, 0, "P0/MainPixelShader");
-    EXPECT_NEAR(mainPixel.getRProperty(), 3, 3);
-    EXPECT_NEAR(mainPixel.getGProperty(), 6, 3);
-    EXPECT_NEAR(mainPixel.getBProperty(), 10, 3);
-    EXPECT_NEAR(mainPixel.getAProperty(), 13, 3);
+    EXPECT_NEAR(mainPixel.getRProperty(), 6, 3);
+    EXPECT_NEAR(mainPixel.getGProperty(), 13, 3);
+    EXPECT_NEAR(mainPixel.getBProperty(), 19, 3);
+    EXPECT_NEAR(mainPixel.getAProperty(), 26, 3);
 
     // Technique 1 pass 0 (P1): MainVertexShader/FlatPixelShader -- no sampling at all, its
     // preshader combines the Tint and Weights[2] array parameters via a single MUL_SCALAR.

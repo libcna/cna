@@ -259,6 +259,29 @@ namespace
         EXPECT_EQ(actual.getAProperty(), OracleInt(*expected, "a")) << where << " alpha";
     }
 
+    // Where FNA renders a pass differently from XNA, XNA wins (CLAUDE.md). The FNA oracle stays a
+    // record of what FNA draws; this is the one pass it gets wrong.
+    //
+    // CnaConformanceEffect.fxb FirstTechnique/P0 returns sampled * Tint * Gain *
+    // saturate(Lighting.Intensity + Lighting.Thresholds[0]). FNA's MojoShader dropped the defaults
+    // of the struct's non-array members and copied the array's onto them (2026-10-26 audit A2v2
+    // A-09), so FNA multiplies by saturate(0.5 + 0) = 0.5. Genuine XNA 4.0 reads Thresholds[0] as
+    // 0.9 (tests/reference/xna40/effect-struct-defaults/xna-effect-struct-defaults.txt), so the
+    // factor is saturate(1.4) = 1 and every channel doubles: (160, 80, 40, 255) / 255 *
+    // (0.1, 0.2, 0.3, 0.4) * 0.25 * 1 = (4.0, 4.0, 3.0, 25.5) / 255.
+    const JsonValue* XnaOverride(const std::string& effect, const std::string& technique,
+                                 const std::string& pass)
+    {
+        static const JsonValue conformanceP0 = CNA::Internal::ParseJson(
+            R"({"changedPixelCount": 64,
+                "upperLeft": {"r": 4, "g": 4, "b": 3, "a": 26},
+                "center": {"r": 4, "g": 4, "b": 3, "a": 26},
+                "lowerRight": {"r": 4, "g": 4, "b": 3, "a": 26}})");
+        if (effect == "CnaConformanceEffect.fxb" && technique == "FirstTechnique" && pass == "P0")
+            return &conformanceP0;
+        return nullptr;
+    }
+
     void ExpectPassMatches(const std::array<Color, kTargetSize * kTargetSize>& pixels,
                            const JsonValue& oracle, const std::string& where)
     {
@@ -341,8 +364,10 @@ TEST(Fna3dEffectPixelOracleTest, EveryCompilerProducedPassMatchesFnaPixels)
 
                 const std::string where = effectEntry.key + " " + techniqueEntry.key + "/" +
                     passEntry.key;
+                const JsonValue* xna =
+                    XnaOverride(effectEntry.key, techniqueEntry.key, passEntry.key);
                 ExpectPassMatches(RenderPass(device, pass, declaration, vertices),
-                                  passEntry.value, where);
+                                  xna != nullptr ? *xna : passEntry.value, where);
                 ++passIndex;
                 ++comparedPasses;
             }

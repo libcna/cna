@@ -1,0 +1,15 @@
+{
+ "cases": [
+  {
+   "case": "effect/fx_struct_defaults",
+   "importer": "EffectImporter",
+   "platform": "Windows",
+   "processor": "EffectProcessor",
+   "profile": "HiDef",
+   "source": "source/fx_struct_defaults.fx"
+  }
+ ],
+ "comment": "2026-10-26 dependency audit A2v2 A-09: genuine XNA builds a structure parameter shaped like CnaConformanceEffect.fx's Lighting (tests/assets/xna40/source/fx_struct_defaults.fx); tools/xna-oracle/EffectStructDefaultsOracle.cs then reads the defaults XNA itself loads from it. The result is tests/reference/xna40/effect-struct-defaults/.",
+ "format": "CNA.XnaDifferential.Corpus",
+ "version": 1
+}
