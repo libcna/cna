@@ -234,12 +234,14 @@ of them and must admit 0.50.0 before it moves its pin. CNA `main`/`develop` are 
 refuses. The archived bindings in `cna-lab` stay pinned to older ABIs and are not maintained.
 
 **Dependencies.** FNA3D and MojoShader are CNA's forks, `libcna/FNA3D` and `libcna/mojoshader`,
-pinned at `aa3139087e69` / `bbee0a5fab1f` on their `cna` branches (`docs/fna3d-renderer.md`). Both
+pinned at `d6090fab7f66` / `83f2c4f8f95e` on their `cna` branches (`docs/fna3d-renderer.md`). Both
 carry the fixes for the 2026-10-26 dependency audit (reports in
-`/rv/tmp/cna-dep-migration-codex-audit-2026-10-26/reports/`; each fix names its finding in a
-`CNA-Audit-Finding:` trailer, CNA's own in its commit subject) and regression suites of their own:
+`/rv/tmp/cna-dep-migration-codex-audit-2026-10-26/reports/`) and for the independent review of those
+fixes the same day (`/rv/tmp/cna-audit-remediation-codex-review-2026-10-26/raw/`, passes R1-R4;
+each fix names its finding in a `CNA-Audit-Finding:` trailer, CNA's own in its commit subject) and
+regression suites of their own:
 `tests/cna` in each, built with `-DMOJOSHADER_CNA_TESTS=ON` / `-DFNA3D_CNA_TESTS=ON` (FNA3D's need a
-display: run them through the private runner). SDL is `86296ac8` with four CNA patches
+display: run them through the private runner). SDL is `86296ac8` with five CNA patches
 (`cmake/ThirdPartySDL.cmake`), ENet upstream master `5a9c537`.
 
 **Content.** XNB readers (including LZX), CNA's `.cnb`/`.cnj`, direct glTF 2.0 loading, the
@@ -247,16 +249,28 @@ display: run them through the private runner). SDL is `86296ac8` with four CNA p
 `docs/xna-content-pipeline-parity-report.md`, `docs/gltf-limitations.md`. No further formats are
 planned.
 
-**Tests.** GoogleTest under CTest; `ctest -N` in a build tree gives its count. At the FNA3D pins
-`74698f735a43` and `aa3139087e69` (2026-10-26, end of the dependency-audit remediation), `cmake-build-multi`'s
-`CnaTests` with the audit's graphics filter ran 1,649 tests with no failure on each of `OPENGLES3`,
+**Tests.** GoogleTest under CTest; `ctest -N` in a build tree gives its count. At the FNA3D pin
+`d6090fab7f66` (2026-10-26, end of the dependency-audit remediation and its review),
+`cmake-build-multi`'s `CnaTests` with the audit's graphics filter plus `XnaMultisamplePixelCenter*`
+and `GltfRendererPbrFallbackPolicy*` ran 1,683 tests with no failure on each of `OPENGLES3`,
 `OPENGL33`, `WEBGPU`, `SOFTWARE`, `SDL_GPU` (Vulkan) and `FNA3D` with its OpenGL and its SDL_GPU
-driver (the audit had measured 15 to 25 failures each, all fixed or test defects); its network filter
-574/574 and the platform suites 1,553 on X11 and 1,553 on Wayland, none failed. Cross builds at
-`aa3139087e69`: `cmake-build-mingw` under Wine with DXVK 3.1.1 ran `DirectX9CompiledEffect*` 31/32
-(one declared skip); the Emscripten `cna_webgpu_compiled_effect_page` passed 21/21 in headless
-Chrome; Android x86_64 (NDK 29) built SDL with its patches and `cna_platform`, not run. Latest full Debug
-runs, 2026-10-17 at the end of the handoff 5.1 stabilization pass (branch `stabilization`, worktree
+driver (`SDL_GPU` and FNA3D's SDL_GPU driver again after SDL patch 0005; the audit had measured 6
+failures on `SDL_GPU` and 15 to 25 on each of the others, all fixed or test defects); its network
+filter 574/574 and the platform suites 1,553 on X11 and 1,553 on Wayland, none failed. The family
+example suites of the renderers B2-04 changed, each in its own default tree (Release; `FNA3D` at
+`d6090fab7f66`, the others at `aa3139087e69` with MojoShader `bbee0a5fab1f`): `FNA3D`
+63/63; `SDL_GPU` 65 selected (MSAA, render-target, cube, readback, effect and
+`SdlGpu_TextureDefragment`), every pixel check passes, two debug-layer assertions need a Debug tree;
+`WEBGPU` 41/41, `SOFTWARE` 34/34; `render_target_own_msaa` and `cube_mrt_binding` pass on all five
+families. Fork
+suites: MojoShader `tests/cna` 16/16 normal and under ASan+UBSan+LSan, with its 14 SDL_GPU device
+cases on RADV; FNA3D `tests/cna` 16 (19 with `TRACING_SUPPORT`) under ASan+UBSan on OpenGL, OpenGL
+ES 3 and SDL_GPU. Cross builds at `d6090fab7f66`: `cmake-build-mingw` under Wine with DXVK 3.1.1
+ran `DirectX9CompiledEffect*` 31/32 (one declared skip) and `XnaMultisamplePixelCenter*` /
+`RenderTargetReadbackLayout*` 5/6 (one declared skip) on `DIRECTX9`; the Emscripten
+`cna_webgpu_compiled_effect_page` passed 21/21 in headless Chrome; Android was not rebuilt at this
+pin (at `aa3139087e69` Android x86_64, NDK 29, built SDL with its patches and `cna_platform`, not
+run). Latest full Debug runs, 2026-10-17 at the end of the handoff 5.1 stabilization pass (branch `stabilization`, worktree
 `cna-stab`), through the private runner on RADV: `cmake-build-multi` (`OPENGLES3` default with
 `OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`; C API) 11,433 tests, 1
 failed (`EasyGL_Conformance_render_target_own_msaa`, §5.3), 195 skipped;
@@ -368,9 +382,34 @@ None open (reconciled 2026-10-24).
   runs that settled pixel centres on this machine go through DXVK. Interpolated attributes are
   therefore evaluated 1/128 pixel off D3D9's centre. Native Direct3D 9 was not available to
   measure whether it differs.
+- **Pixel centres of lines and points.** The XNA correction above moves triangles only, in every
+  FNA3D driver; lines and points are drawn at the host's half-integer centres. The MSAA measurement
+  that extended the correction to multisampled targets (B2-04) drew triangles, so nothing measured
+  says what XNA does for lines and points there.
 - **MojoShader SPIR-V gaps** (FNA3D's SDL_GPU driver, CNA's SDL_GPU and WEBGPU compiled effects):
   ps_1_4 `BEM` and `TEXDEPTH` refuse by name ("unimplemented in spirv profile"); GLSL implements
   both. `MOJOSHADER_cloneEffect` asserts on an effect with no technique.
+- **MojoShader FOG outside lane x** (all profiles): a vs_3_0 FOG declared alone in a lane other
+  than x (`dcl_fog o1.y`) is still written from source lane x, and for a FOG packed with another
+  semantic in a lane other than x the profiles disagree (HLSL, desktop GLSL and SPIR-V take its
+  first lane as a scalar, Metal and GLSL ES copy the vec4 lane for lane); what Direct3D 9 does was
+  not measured. SPIR-V declares FOG as a float output while a pixel shader's FOG input is a vec4,
+  packed or not; whether Vulkan's interface matching accepts that is unverified. FXC-built shaders
+  put FOG in x. The ARB1 profile still names oFog/oPts FOG1/PSIZE2 (no CNA path uses ARB1).
+- **FNA3D OpenGL ES 3 readback** reads RGBA8, the float formats, and any other format only where
+  the implementation's own read layout is the format's; it refuses the rest by name, and always
+  `ColorSrgbEXT`, which ES 3 decodes to linear as it reads. On Mesa 25.0.7 (radeonsi) Rg32 and
+  `ColorBgraEXT` are refused that way. Desktop GL reads every uncompressed format.
+- **SDL_shadercross initialization is the application's** (MojoShader's SDL_GPU glue): the glue
+  calls neither `SDL_ShaderCross_Init()` nor `_Quit()`, which act on the whole process without
+  reference counting, so DXBC is offered only after the application initialized ShaderCross
+  (`mojoshader.h`). CNA's SDL_GPU renderer does; a standalone FNA3D build with
+  `MOJOSHADER_STATIC_SPIRVCROSS` must. That static selector has no retained test: the only static
+  SDL_shadercross package on this machine was built without DXC and its package config requires
+  DirectXShaderCompiler anyway.
+- **A shared SDL prebuilt can change under a running build** when a tree with another manifest
+  rebuilds it (2026-10-26 review R3-01/R4-01; the watched stamp protects only the next build). Give
+  such a tree its own `CNA_SDL_PREBUILT_ROOT` (`docs/development-environment.md`).
 
 ### 5.3 External and driver limitations
 
@@ -378,9 +417,10 @@ Behaviour CNA does not own, measured and reported rather than worked around.
 
 - **Conformance programs on drivers and capability boundaries** (`*_Conformance_*`,
   `modules/graphics/examples/conformance/`, measured 2026-10-15/17):
-  - EasyGL: a `RenderTarget2D` requested and applied at 2x resolves with no partially covered edge
-    texel (`render_target_own_msaa` D); 4x resolves as expected, so this is the GL driver's 2x
-    sample pattern meeting the probe's edge. It is the one failure of the `cmake-build-multi` run.
+  - `render_target_own_msaa` D (2x) failed on EasyGL in 2026-10-17's run and on SDL_GPU and FNA3D
+    once B2-04 gave multisampled targets XNA's integer pixel centres: its edge sat at the
+    half-integer centre, beyond both 2x samples. The edge now runs through the integer centre and D
+    passes on EasyGL, SDL_GPU, WEBGPU, SOFTWARE and FNA3D (2026-10-26).
   - FNA3D: `SkinnedEffect.VertexColorEnabled` is ignored outright (B equals A) and saturates before
     the fold; its back buffer keeps a 3, 5 or 7 sample request unrounded while its render targets
     round it down; `GraphicsDeviceManager`'s default `Depth24` request is not applied in
@@ -397,9 +437,11 @@ Behaviour CNA does not own, measured and reported rather than worked around.
   repairs): about 50 KB in about 910 allocations from initialization to destruction with no CNA code
   linked (lavapipe and RADV), so an SDL_GPU sanitizer run does not end at exit 0 under
   LeakSanitizer; CNA suppresses none of it. The MojoShader SPIR-V attribute-fixup leak measured then
-  (8,792 bytes in 513 allocations per device) and FNA3D's SDL_GPU device-array leak are fixed on
-  the forks (2026-10-26; the owner authorized fork changes that day); FNA3D's and MojoShader's
-  `tests/cna` suites run leak-free under AddressSanitizer.
+  (8,792 bytes in 513 allocations per device), FNA3D's SDL_GPU device-array and vertex-binding
+  cache leaks, and the dumpspirv and trace-lock leaks are fixed on the forks (2026-10-26; the owner
+  authorized fork changes that day). MojoShader's `tests/cna` runs leak-free under
+  AddressSanitizer; FNA3D's does on OpenGL and OpenGL ES 3, and on SDL_GPU every remaining report
+  is SDL's own (X11/xkb and Vulkan ICD initialization reached through device creation).
 - **`DIRECTX9` under Wine with DXVK 2.6.0: `DirectX9_CompiledEffects` hangs or aborts in DXVK's
   device teardown; DXVK 3.1.1 does not** (measured 2026-10-17, `cmake-build-mingw`, Release,
   `CNA_DIRECTX9_COMPILED_EFFECTS=ON`). Its 31 gtests were run 30 times on each version in one Wine
