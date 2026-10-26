@@ -107,6 +107,15 @@ function(cna_sdl_prebuilt_is_current out_var reason_var)
     set(${reason_var} "" PARENT_SCOPE)
 endfunction()
 
+# Every tree on the machine shares one install per prebuilt root, and another tree's configure may
+# rebuild it for a different manifest. Making the stamp an input of this tree's own configure means
+# its next build re-runs that configure first, which compares the manifests again and rebuilds the
+# install this tree accepted, instead of linking the other tree's (2026-10-26 dependency audit
+# C-08). Only a rebuild rewrites the stamp, so trees with the same manifest are never disturbed.
+function(cna_sdl_prebuilt_watch stamp)
+    set_property(DIRECTORY "${CMAKE_SOURCE_DIR}" APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${stamp}")
+endfunction()
+
 # Copies <source> to <destination> and applies <patches> there, in order. The vendored tree itself
 # is never modified, so a checkout stays pristine and every build tree reads the same bytes.
 #

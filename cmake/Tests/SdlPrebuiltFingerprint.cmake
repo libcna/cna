@@ -215,5 +215,39 @@ if(NOT _manifest STREQUAL _plain OR _manifest MATCHES "toolchain")
 endif()
 message(STATUS "ok: a native manifest is unchanged by the toolchain fields")
 
+# 18. Another tree rebuilding the shared install rewrites its stamp; a tree that watches the stamp
+#     re-runs its configure on its next build instead of linking that install unnoticed
+#     (2026-10-26 dependency audit C-08). Needs a generator that can say whether it would rerun.
+find_program(_ninja ninja)
+if(_ninja)
+    set(_tree "${_work}/watching-tree")
+    set(_shared_stamp "${_work}/shared-root/fixture.cna-build-manifest.txt")
+    file(WRITE "${_shared_stamp}" "manifest A\n")
+    file(WRITE "${_tree}/src/CMakeLists.txt"
+        "cmake_minimum_required(VERSION 3.20)\nproject(watch NONE)\n"
+        "include(\"${CNA_SOURCE_DIR}/cmake/SdlPrebuiltFingerprint.cmake\")\n"
+        "cna_sdl_prebuilt_watch(\"${_shared_stamp}\")\n")
+    execute_process(COMMAND "${CMAKE_COMMAND}" -S "${_tree}/src" -B "${_tree}/build" -G Ninja
+        "-DCMAKE_MAKE_PROGRAM=${_ninja}" RESULT_VARIABLE _rc OUTPUT_QUIET)
+    if(NOT _rc EQUAL 0)
+        message(FATAL_ERROR "SdlPrebuiltFingerprint: the watching fixture tree did not configure")
+    endif()
+    execute_process(COMMAND "${_ninja}" -C "${_tree}/build" -n OUTPUT_VARIABLE _plan)
+    if(_plan MATCHES "Re-running CMake")
+        message(FATAL_ERROR "SdlPrebuiltFingerprint: a freshly configured tree wants to reconfigure")
+    endif()
+    # Another tree's configure: a later timestamp and another manifest.
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep 1)
+    file(WRITE "${_shared_stamp}" "manifest B\n")
+    execute_process(COMMAND "${_ninja}" -C "${_tree}/build" -n OUTPUT_VARIABLE _plan)
+    if(NOT _plan MATCHES "Re-running CMake")
+        message(FATAL_ERROR
+            "SdlPrebuiltFingerprint: a tree did not notice its SDL install being rebuilt:\n${_plan}")
+    endif()
+    message(STATUS "ok: a rebuilt shared install makes the other tree reconfigure")
+else()
+    message(STATUS "skipped: no ninja, so case 18 cannot ask whether a tree would reconfigure")
+endif()
+
 file(REMOVE_RECURSE "${_work}")
 message(STATUS "SdlPrebuiltFingerprint: all cases passed")
