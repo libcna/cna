@@ -1506,13 +1506,19 @@ TEST(Fna3dCompiledEffectTest, SelectedCompiledEffectUnlocksInstancedDrawing)
     // FNA3D refuses an instanced draw while a stock effect is selected, because no stock effect
     // declares a per-instance vertex input. A compiled Effect is precisely the case real XNA
     // requires for hardware instancing, so selecting one has to reach the native instanced draw.
-    BasicEffect stock(device);
-    stock.setWorldProperty(Matrix::getIdentityProperty());
-    stock.setViewProperty(Matrix::getIdentityProperty());
-    stock.setProjectionProperty(Matrix::getIdentityProperty());
-    stock.Apply();
-    EXPECT_THROW(device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1, 2),
-                 std::runtime_error);
+    // The refusal is FNA3D's own: every other renderer instances through its stock effects, so
+    // that half is asked only of FNA3D, while the compiled half holds for every renderer.
+    if (dynamic_cast<const CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(&device.GetRenderer()))
+    {
+        BasicEffect stock(device);
+        stock.setWorldProperty(Matrix::getIdentityProperty());
+        stock.setViewProperty(Matrix::getIdentityProperty());
+        stock.setProjectionProperty(Matrix::getIdentityProperty());
+        stock.Apply();
+        EXPECT_THROW(
+            device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1, 2),
+            std::runtime_error);
+    }
 
     Effect compiled(device, LoadStockEffect("BasicEffect.fxb"));
     compiled.getParametersProperty()["WorldViewProj"]->SetValue(Matrix::getIdentityProperty());
@@ -1700,6 +1706,8 @@ TEST(Fna3dCompiledEffectTest, SingleVertexTextureAndSamplerReachTheDraw)
     using namespace Microsoft::Xna::Framework::Graphics;
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters::CreateWindowedEXT(800, 480));
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectVertexTextureContract(device, SurfaceFormat::Single);
 }
 
@@ -1738,6 +1746,18 @@ TEST(Fna3dCompiledEffectTest, SingleCubePreservesFloatValuesAcrossFacesAndMips)
     using namespace Microsoft::Xna::Framework::Graphics;
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters::CreateWindowedEXT(800, 480));
+    // FNA3D stores Single cubes, and so does any renderer whose cube classifier says Supported;
+    // SDL_GPU and WEBGPU declare no Single cube storage and refuse it at construction, which is
+    // their capability answer rather than a result. FNA3D itself is never excused.
+    using CNA::Internal::Renderers::RendererFormatVerdict;
+    if (dynamic_cast<const CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(&device.GetRenderer()) ==
+            nullptr &&
+        device.GetRenderer().ClassifyTextureCubeFormatEXT(static_cast<int>(SurfaceFormat::Single)) !=
+            RendererFormatVerdict::Supported)
+    {
+        GTEST_SKIP() << "the active renderer, " << device.GetGraphicsRendererName()
+                     << ", declares no Single TextureCube storage";
+    }
     TextureCube texture(device, 4, true, SurfaceFormat::Single);
     for (int face = 0; face < 6; ++face)
         for (int level = 0; level < 3; ++level)
