@@ -390,7 +390,7 @@ None open (reconciled 2026-10-24).
   says what XNA does for lines and points there.
 - **MojoShader SPIR-V gaps** (FNA3D's SDL_GPU driver, CNA's SDL_GPU and WEBGPU compiled effects):
   ps_1_4 `BEM` and `TEXDEPTH` refuse by name ("unimplemented in spirv profile"); GLSL implements
-  both. `MOJOSHADER_cloneEffect` asserts on an effect with no technique.
+  both.
 - **MojoShader FOG and other vertex semantics** (after the review's fixes): FOG in any lane, alone
   or packed, translates in every profile, and SPIR-V's vertex and pixel FOG interfaces match in
   type; GLSL ES and Metal place FOG lanes positionally, so a vertex/pixel pair declaring FOG in
@@ -410,8 +410,16 @@ None open (reconciled 2026-10-24).
 - **FNA3D pixel-store state**: readbacks and uploads save and restore every pack/unpack value they
   set, so another user of the context keeps its own; an upload therefore makes six
   `glGetIntegerv` calls, each a synchronization point under Mesa's glthread.
-- **FNA3D tracing with several devices** shares one trace session among overlapping devices; a
-  second device's SwapBuffers with its own window override still trips the tracer's assertion.
+- **FNA3D tracing with several devices** shares one trace session among overlapping devices
+  without telling them apart: the second device's creation is not recorded and its calls replay on
+  the first device's state (2026-10-26 review R9-02), and its SwapBuffers with its own window
+  override still trips the tracer's assertion. Trace one device at a time.
+- **MojoShader's D3D11 glue** (FNA3D's D3D11 driver; found in the review's third round, not
+  fixed): a ps_3_0 register packing semantics that the vertex shader writes to separate registers
+  (FOG in `o1.x`, TEXCOORD0 in `o2.yzw`, read together from `v0`) produces HLSL naming a member
+  that does not exist and fails to compile -- also before the review (R9-01); and the integer
+  input-layout rewrite finds a semantic by substring, so `DEPTH1` can match an earlier `DEPTH10`
+  and swap their integer/float declarations (R9-03). CNA's committed effects contain neither.
 - **SDL_shadercross initialization is the application's** (MojoShader's SDL_GPU glue): the glue
   calls neither `SDL_ShaderCross_Init()` nor `_Quit()`, which act on the whole process without
   reference counting, so DXBC is offered only after the application initialized ShaderCross

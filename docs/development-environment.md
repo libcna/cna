@@ -90,8 +90,8 @@ git submodule update --init --recursive   # an existing clone, and after a pull 
   `*_COMPILED_EFFECTS` options (`FETCHCONTENT_SOURCE_DIR_FNA3D`), and SDL_shadercross for
   `SDL_GPU` on Windows and Apple targets.
 - Third-party code is built as upstream ships it, with three exceptions, each explained where it
-  is applied: SDL carries two Emscripten-only patches, one iOS-only and one Android-only patch
-  (`cmake/ThirdPartySDL.cmake`), SDL_shadercross one build-integration patch
+  is applied: SDL carries two Emscripten-only patches, one iOS-only and one Android-only patch, and
+  one Vulkan-backend patch for every build that has that backend (`cmake/ThirdPartySDL.cmake`), SDL_shadercross one build-integration patch
   (`cmake/ThirdPartySDLShaderCross.cmake`), and FNA3D and MojoShader carry CNA's fixes as commits on
   the libcna forks. The submodules, ENet (upstream master, see `cmake/ThirdPartyENet.cmake`), cgltf
   1.15 and dr_libs are upstream revisions unchanged; `third_party/stb` holds FNA3D's copies of
