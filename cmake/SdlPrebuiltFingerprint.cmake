@@ -38,20 +38,31 @@ function(cna_sdl_source_tree_hash out_var source_dir)
 endfunction()
 
 # The settings a toolchain decides, as "<variable>=<value>" for cna_sdl_build_manifest's SETTINGS:
-# the flags and target it initializes, the system and sysroot it names, the platform and ABI of an
-# Android or Apple SDK. They are read from the calling scope, where the toolchain set them -- also
-# when a file the toolchain includes did, which the toolchain file's own hash cannot see.
+# the flags it initializes -- for every configuration and for Release, which the SDL sub-builds
+# use -- the target, system and sysroot it names, the platform and ABI of an Android or Apple SDK.
+# They are read from the calling scope, where the toolchain set them -- also when a file the
+# toolchain includes did, which the toolchain file's own hash cannot see. Nothing CMake itself
+# fills in later is read (CMAKE_C_COMPILER, for one, is cached only once some project enables C,
+# so the next configure would see a value the first did not), and runs of whitespace count as one,
+# so a parent that enabled C, which appends to the *_INIT flags, describes the same toolchain.
 function(cna_sdl_toolchain_settings out_var)
     set(_settings "")
     foreach(_variable IN ITEMS
             CMAKE_SYSTEM_NAME CMAKE_SYSTEM_PROCESSOR CMAKE_SYSTEM_VERSION CMAKE_SYSROOT
-            CMAKE_C_COMPILER CMAKE_C_COMPILER_TARGET CMAKE_CXX_COMPILER_TARGET
+            CMAKE_C_COMPILER_TARGET CMAKE_CXX_COMPILER_TARGET
             CMAKE_C_FLAGS_INIT CMAKE_CXX_FLAGS_INIT
+            CMAKE_C_FLAGS_RELEASE_INIT CMAKE_CXX_FLAGS_RELEASE_INIT
             CMAKE_EXE_LINKER_FLAGS_INIT CMAKE_SHARED_LINKER_FLAGS_INIT CMAKE_MODULE_LINKER_FLAGS_INIT
+            CMAKE_EXE_LINKER_FLAGS_RELEASE_INIT CMAKE_SHARED_LINKER_FLAGS_RELEASE_INIT
+            CMAKE_MODULE_LINKER_FLAGS_RELEASE_INIT
             CMAKE_ANDROID_ARCH_ABI CMAKE_ANDROID_API ANDROID_ABI ANDROID_PLATFORM ANDROID_STL
             CMAKE_OSX_SYSROOT CMAKE_OSX_ARCHITECTURES CMAKE_OSX_DEPLOYMENT_TARGET)
         if(DEFINED ${_variable})
-            list(APPEND _settings "${_variable}=${${_variable}}")
+            string(REGEX REPLACE "[ \t\r\n]+" " " _value "${${_variable}}")
+            string(STRIP "${_value}" _value)
+            if(NOT _value STREQUAL "")
+                list(APPEND _settings "${_variable}=${_value}")
+            endif()
         endif()
     endforeach()
     set(${out_var} "${_settings}" PARENT_SCOPE)

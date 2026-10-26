@@ -230,6 +230,35 @@ cna_sdl_toolchain_settings(_settings)
 cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
     TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
 _expect_current(FALSE "a sysroot changed in a file the toolchain includes forces a rebuild")
+# The Release flags the SDL sub-builds use (2026-10-26 remediation review R8-02).
+file(WRITE "${_abi}" "set(CMAKE_C_FLAGS_INIT \"-m64\")\nset(CMAKE_SYSROOT /fixture/sysroot-A)\nset(CMAKE_C_FLAGS_RELEASE_INIT \"-m64\")\n")
+include("${_toolchain}")
+cna_sdl_toolchain_settings(_settings)
+cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
+    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
+file(WRITE "${_stamp}" "${_manifest}")
+file(WRITE "${_abi}" "set(CMAKE_C_FLAGS_INIT \"-m64\")\nset(CMAKE_SYSROOT /fixture/sysroot-A)\nset(CMAKE_C_FLAGS_RELEASE_INIT \"-m32\")\n")
+include("${_toolchain}")
+cna_sdl_toolchain_settings(_settings)
+cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
+    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
+_expect_current(FALSE "a Release ABI flag edited in a file the toolchain includes forces a rebuild")
+# What CMake fills in itself must not: a C compiler cached once some project enabled C, and the
+# whitespace enabling C adds to the *_INIT flags (R8-03).
+file(WRITE "${_abi}" "set(CMAKE_C_FLAGS_INIT \"-m64\")\nset(CMAKE_SYSROOT /fixture/sysroot-A)\n")
+include("${_toolchain}")
+unset(CMAKE_C_FLAGS_RELEASE_INIT)
+cna_sdl_toolchain_settings(_settings)
+cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
+    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
+file(WRITE "${_stamp}" "${_manifest}")
+set(CMAKE_C_COMPILER /fixture/bin/cc)
+set(CMAKE_C_FLAGS_INIT " -m64 ")
+cna_sdl_toolchain_settings(_settings)
+cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
+    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
+_expect_current(TRUE "a C compiler CMake cached later and padded *_INIT flags leave the install current")
+unset(CMAKE_C_COMPILER)
 unset(CMAKE_C_FLAGS_INIT)
 unset(CMAKE_SYSROOT)
 
