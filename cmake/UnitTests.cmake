@@ -1592,6 +1592,16 @@ if(CNA_BUILD_TESTS)
             -P ${CMAKE_SOURCE_DIR}/cmake/Tests/SdlPrebuiltFingerprint.cmake)
     set_tests_properties(CnaSdlPrebuiltFingerprint PROPERTIES LABELS "platform;configuration")
 
+    # 2026-10-26 dependency audit C-01: the FNA3D repository/commit pair of a build tree follows
+    # CNA's pin only while it is CNA's own default, and moves as one pair. Pure CMake, on a fixture.
+    add_test(NAME CnaFna3dSourcePin
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DCNA_WORK_DIR=${CMAKE_BINARY_DIR}/CnaFna3dSourcePin
+            "-DCNA_GENERATOR=${CMAKE_GENERATOR}"
+            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/Fna3dSourcePinCase.cmake)
+    set_tests_properties(CnaFna3dSourcePin PROPERTIES LABELS "configuration")
+
     # plans/plan_native_platform_validation.md NPV-0131: which test binary the platform ctest
     # entries below (CnaPlatform*) run. CnaTests by default. A build that compiles only the
     # platform module's tests -- CI's SDL-free cell builds the focused CnaPlatformModuleTests,

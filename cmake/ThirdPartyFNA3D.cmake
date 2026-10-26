@@ -34,36 +34,15 @@ include_guard(GLOBAL)
 # deliberately: FNA3D's driver list and FNA3D_* ABI move between releases, and
 # modules/renderers/fna3d/effects/ holds stock-effect binaries whose MojoShader parse path must keep
 # matching the pinned library.
-set(_cna_fna3d_default_repository "https://github.com/libcna/FNA3D.git")
-set(_cna_fna3d_default_tag "a78cbed4a29e28a128480b954f2a5edffcbc6d1e")
-# A build tree keeps the defaults of the CNA revision that first configured it. A cached value that
-# is one of CNA's own former defaults follows the current one; any other value is a developer's
-# override and is kept. Until the forks the defaults were upstream FNA3D at 3240147, which this file
-# then patched -- fetched as it is now, that revision would build without CNA's fixes.
-foreach(_cna_fna3d_setting IN ITEMS REPOSITORY TAG)
-    string(TOLOWER "${_cna_fna3d_setting}" _cna_fna3d_setting_lower)
-    set(_cna_fna3d_former_defaults "${_CNA_FNA3D_DEFAULT_GIT_${_cna_fna3d_setting}}")
-    if(_cna_fna3d_setting STREQUAL "REPOSITORY")
-        list(APPEND _cna_fna3d_former_defaults "https://github.com/FNA-XNA/FNA3D.git")
-    else()
-        list(APPEND _cna_fna3d_former_defaults "3240147")
-    endif()
-    get_property(_cna_fna3d_setting_type CACHE CNA_FNA3D_GIT_${_cna_fna3d_setting} PROPERTY TYPE)
-    if(_cna_fna3d_setting_type STREQUAL "STRING"
-       AND CNA_FNA3D_GIT_${_cna_fna3d_setting} IN_LIST _cna_fna3d_former_defaults
-       AND NOT CNA_FNA3D_GIT_${_cna_fna3d_setting} STREQUAL _cna_fna3d_default_${_cna_fna3d_setting_lower})
-        message(STATUS "CNA: CNA_FNA3D_GIT_${_cna_fna3d_setting} follows the new default "
-            "(${CNA_FNA3D_GIT_${_cna_fna3d_setting}} -> ${_cna_fna3d_default_${_cna_fna3d_setting_lower}})")
-        set_property(CACHE CNA_FNA3D_GIT_${_cna_fna3d_setting} PROPERTY VALUE
-            "${_cna_fna3d_default_${_cna_fna3d_setting_lower}}")
-    endif()
-    set(_CNA_FNA3D_DEFAULT_GIT_${_cna_fna3d_setting} "${_cna_fna3d_default_${_cna_fna3d_setting_lower}}"
-        CACHE INTERNAL "CNA's own default for CNA_FNA3D_GIT_${_cna_fna3d_setting}")
-endforeach()
-set(CNA_FNA3D_GIT_REPOSITORY "${_cna_fna3d_default_repository}"
-    CACHE STRING "FNA3D repository fetched for the FNA3D graphics renderer (CNA's fork)")
-set(CNA_FNA3D_GIT_TAG "${_cna_fna3d_default_tag}"
-    CACHE STRING "Pinned FNA3D commit used by the FNA3D graphics renderer")
+#
+# A build tree keeps the defaults of the CNA revision that first configured it; CNA's own defaults
+# follow this pin, as one pair, and a developer's choice is never replaced. Until the forks the
+# defaults were upstream FNA3D at 3240147, which this file then patched -- fetched as it is now,
+# that revision would build without CNA's fixes. cmake/Fna3dSourcePin.cmake has the rules.
+include("${CMAKE_CURRENT_LIST_DIR}/Fna3dSourcePin.cmake")
+cna_fna3d_select_source_pin(
+    DEFAULT_REPOSITORY "https://github.com/libcna/FNA3D.git"
+    DEFAULT_TAG "a78cbed4a29e28a128480b954f2a5edffcbc6d1e")
 
 # A FETCHCONTENT_SOURCE_DIR_FNA3D checkout is built as it is. Say so when it is not the pinned
 # commit, or has local changes in FNA3D or its MojoShader submodule, because no step here brings
