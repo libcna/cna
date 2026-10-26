@@ -233,12 +233,26 @@ added the two `cna_skinned_model_ext_{get,set}_part_diffuse_color_at` routes. CN
 of them and must admit 0.50.0 before it moves its pin. CNA `main`/`develop` are the v0.1.0 release (ABI 0.46.0), which CNA.NET
 refuses. The archived bindings in `cna-lab` stay pinned to older ABIs and are not maintained.
 
+**Dependencies.** FNA3D and MojoShader are CNA's forks, `libcna/FNA3D` and `libcna/mojoshader`,
+pinned at `74698f735a43` / `6584088934d0` on their `cna` branches (`docs/fna3d-renderer.md`). Both
+carry the fixes for the 2026-10-26 dependency audit (reports in
+`/rv/tmp/cna-dep-migration-codex-audit-2026-10-26/reports/`; each fix names its finding in a
+`CNA-Audit-Finding:` trailer, CNA's own in its commit subject) and regression suites of their own:
+`tests/cna` in each, built with `-DMOJOSHADER_CNA_TESTS=ON` / `-DFNA3D_CNA_TESTS=ON` (FNA3D's need a
+display: run them through the private runner). SDL is `86296ac8` with four CNA patches
+(`cmake/ThirdPartySDL.cmake`), ENet upstream master `5a9c537`.
+
 **Content.** XNB readers (including LZX), CNA's `.cnb`/`.cnj`, direct glTF 2.0 loading, the
 `cna-content` build tool and the XNA Content Pipeline façade: `docs/content-pipeline.md`,
 `docs/xna-content-pipeline-parity-report.md`, `docs/gltf-limitations.md`. No further formats are
 planned.
 
-**Tests.** GoogleTest under CTest; `ctest -N` in a build tree gives its count. Latest full Debug
+**Tests.** GoogleTest under CTest; `ctest -N` in a build tree gives its count. At the FNA3D pin
+`74698f735a43` (2026-10-26, end of the dependency-audit remediation), `cmake-build-multi`'s
+`CnaTests` with the audit's graphics filter ran 1,649 tests with no failure on each of `OPENGLES3`,
+`OPENGL33`, `WEBGPU`, `SOFTWARE`, `SDL_GPU` (Vulkan) and `FNA3D` with its OpenGL and its SDL_GPU
+driver (the audit had measured 15 to 25 failures each, all fixed or test defects); its network filter
+574/574 and the platform suites 1,553 on X11 and 1,553 on Wayland, none failed. Latest full Debug
 runs, 2026-10-17 at the end of the handoff 5.1 stabilization pass (branch `stabilization`, worktree
 `cna-stab`), through the private runner on RADV: `cmake-build-multi` (`OPENGLES3` default with
 `OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`; C API) 11,433 tests, 1
@@ -345,6 +359,17 @@ None open (reconciled 2026-10-24).
   their own; delete and relink them before reading the suite. Seen on 2026-10-13 in
   `cmake-build-multi` after the link-boundary work's virtual-function additions: 237 bogus
   failures from 1,245 stale executables.
+- **Pixel-centre bias.** Every renderer moves 3D triangles 63/128 of a pixel, not 1/2, to emulate
+  Direct3D 9's integer pixel centres (2026-10-26 audit B2-07). The 1/128 keeps a fill edge that
+  falls exactly on a host sample on XNA's side; it is the value DXVK itself applies, and the XNA 4.0
+  runs that settled pixel centres on this machine go through DXVK. Interpolated attributes are
+  therefore evaluated 1/128 pixel off D3D9's centre. Native Direct3D 9 was not available to
+  measure whether it differs.
+- **MojoShader SPIR-V gaps** (FNA3D's SDL_GPU driver, CNA's SDL_GPU and WEBGPU compiled effects):
+  ps_1_4 `BEM` and `TEXDEPTH` refuse by name ("unimplemented in spirv profile"); GLSL implements
+  both. A vs_1_x/vs_2_x `oPts` is a user varying rather than `PointSize`/`gl_PointSize`, and its `oFog`
+  is FOG1, which no pixel FOG0 input links to (fixed on libcna/mojoshader `bbee0a5`, not yet pinned).
+  `MOJOSHADER_cloneEffect` asserts on an effect with no technique.
 
 ### 5.3 External and driver limitations
 
@@ -367,13 +392,13 @@ Behaviour CNA does not own, measured and reported rather than worked around.
     `System::NotSupportedException` while `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4
     and the plural cube-face `RenderTargetSemantics` cases skip on that refusal); HEADLESS accepts
     them. A capability boundary. SDL_GPU binds them since `51fb39d5a` (DC-R1).
-- **LeakSanitizer reports leaks in FNA3D's MojoShader and in the pinned SDL** (measured 2026-10-22/23
-  during the museum repairs): MojoShader's SPIR-V emitter leaks its attribute fixups
-  (`spv_add_attrib_fixup`, `profiles/mojoshader_profile_spirv.c`) on every stock-effect compilation
-  (8,792 bytes in 513 allocations for a device alone), and SDL leaks about 50 KB in about 910
-  allocations from initialization to destruction with no CNA code linked (lavapipe and RADV). CNA
-  suppresses neither, and FNA3D's and MojoShader's own rules forbid AI-authored fixes there, so an
-  FNA3D or SDL_GPU sanitizer run does not end at exit 0 under LeakSanitizer.
+- **LeakSanitizer reports leaks in the pinned SDL** (measured 2026-10-22/23 during the museum
+  repairs): about 50 KB in about 910 allocations from initialization to destruction with no CNA code
+  linked (lavapipe and RADV), so an SDL_GPU sanitizer run does not end at exit 0 under
+  LeakSanitizer; CNA suppresses none of it. The MojoShader SPIR-V attribute-fixup leak measured then
+  (8,792 bytes in 513 allocations per device) and FNA3D's SDL_GPU device-array leak are fixed on
+  the forks (2026-10-26; the owner authorized fork changes that day); FNA3D's and MojoShader's
+  `tests/cna` suites run leak-free under AddressSanitizer.
 - **`DIRECTX9` under Wine with DXVK 2.6.0: `DirectX9_CompiledEffects` hangs or aborts in DXVK's
   device teardown; DXVK 3.1.1 does not** (measured 2026-10-17, `cmake-build-mingw`, Release,
   `CNA_DIRECTX9_COMPILED_EFFECTS=ON`). Its 31 gtests were run 30 times on each version in one Wine

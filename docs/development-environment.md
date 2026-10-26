@@ -87,6 +87,18 @@ git submodule update --init --recursive   # an existing clone, and after a pull 
   the libcna forks. The submodules, ENet (upstream master, see `cmake/ThirdPartyENet.cmake`), cgltf
   1.15 and dr_libs are upstream revisions unchanged; `third_party/stb` holds FNA3D's copies of
   `stb_image.h` and `stb_image_write.h`, also unchanged.
+- Configure checks that the sources it builds are the pinned ones, read-only: `third_party/SDL` and
+  `third_party/SDL_mixer` against the revisions `cmake/VendoredSources.cmake` records -- a stale
+  submodule, or a source archive without `.git`, by its tree id -- with
+  `CNA_VENDORED_SOURCE_CHECK=ON|WARN|OFF`; and a FetchContent-populated FNA3D checkout and its
+  MojoShader submodule against the pin, refused when they drift unless
+  `CNA_FNA3D_ALLOW_SOURCE_DRIFT=ON`. A `FETCHCONTENT_SOURCE_DIR_FNA3D` checkout is only reported.
+  An old tree whose `_deps/fna3d-src` still holds the former configure-time patches stops there:
+  delete `_deps/fna3d-*` and configure again.
+- The forks' own regression suites live in their `tests/cna` (`-DMOJOSHADER_CNA_TESTS=ON`,
+  `-DFNA3D_CNA_TESTS=ON`; FNA3D's open a window, so run them through
+  `tools/platform/run_gpu_tests_private.sh --exec ctest --test-dir <build>`). Run both before moving
+  the FNA3D pin.
 
 ## Optional native features
 

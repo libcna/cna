@@ -71,25 +71,32 @@ OpenGL and SDL_GPU/Vulkan drivers; this is not a new Windows or Apple qualificat
 Both forks exist only to carry CNA's fixes as ordinary commits on a `cna` branch; their default
 branches (`master`, `main`) mirror upstream. Upstream accepts no AI-written code, so the fixes are
 not offered there. Both are linked statically into CNA only: they add entry points
-(`FNA3D_SetXnaPixelCenterEXT`, `MOJOSHADER_glProgram*Info`, the `MOJOSHADER_sdl*` hooks), render-state
-values and fields of public structures (`MOJOSHADER_attribute`, `MOJOSHADER_effectState`), so neither
-is ABI-compatible with an upstream shared library.
+(`FNA3D_SetXnaPixelCenterEXT`, `FNA3D_SetLegacyBumpMapEnvEXT`, `MOJOSHADER_glProgram*Info`, the
+`MOJOSHADER_sdl*` hooks), render-state values and fields of public structures
+(`MOJOSHADER_attribute`, `MOJOSHADER_effectState`), so neither is ABI-compatible with an upstream
+shared library.
 
 - **libcna/FNA3D** `cna`: the XNA/Direct3D 9 pixel-centre entry point (OpenGL, D3D11 and SDL_GPU
   drivers), OpenGL multisampled-target readback and cube mipmap resolve (FNA3D-54), per-call GL and
   MojoShader context activation for several live devices (FNA3D-51), the SDL_GPU multisampled cube
-  face (FNA3D-56) — and the MojoShader submodule switched to the fork.
+  face (FNA3D-56) — and the MojoShader submodule switched to the fork. Since the 2026-10-26
+  dependency audit also: bounded, format-exact GetData on all three drivers, VFACE's XNA sign,
+  `FNA3D_SetLegacyBumpMapEnvEXT`, Depth vertex usage, disposal at device destruction, tracing of
+  the extension entry points, the installed `mojoshader.h` and package, a working
+  `MOJOSHADER_STATIC_SPIRVCROSS`, and its own regression tests (`tests/cna`).
 - **libcna/mojoshader** `cna`: 133 commits — malformed-bytecode hardening of the Effect and
   preshader parsers, Direct3D 9 shader-model validation, GLSL/GLSL ES, SPIR-V and Metal profile
   fixes (TEXCRD, vertex colour clamp, pixel centres, centroid, predication, precision), the SDL_GPU
   adapter hooks (static SDL_shadercross, SPIR-V transform, program identity, colour-target count)
   and the D3D11 bound-shader lifetime. Each commit names the CNA patch it was and the CNA commit that
-  introduced it (`CNA-Patch:` trailer).
+  introduced it (`CNA-Patch:` trailer). One further commit adds the owner's `AGENTS.md` and
+  `CLAUDE.md`. After the 26.10 merge come the 2026-10-26 audit's fixes, each naming its finding
+  (`CNA-Audit-Finding:` trailer), and the fork's regression tests (`tests/cna`).
 
-Their commits before the upstream merges (`f4bef618d2c2` and `e6d80c19b3f6`) are byte-identical
-in their tracked sources to what CNA's former configure-time patch series (137 files under
-`cmake/patches/`) produced from FNA3D `3240147` and MojoShader `6333f74`; the merges are separate
-commits on top. The MojoShader merge keeps CNA's `printFloat` (a superset of upstream's 32-bit
+Before the upstream merges (`f4bef618d2c2` and `e6d80c19b3f6`), every source file of the two forks
+is identical to what CNA's former configure-time patch series (137 files under `cmake/patches/`)
+produced from FNA3D `3240147` and MojoShader `6333f74`; MojoShader's branch differs from that
+result only by those two instruction files. The merges are separate commits on top. The MojoShader merge keeps CNA's `printFloat` (a superset of upstream's 32-bit
 `long` fix) and takes upstream's HLSL `BLENDWEIGHT` pixel input.
 
 **Following upstream.** In a clone of each fork, add upstream as a remote, merge its default
@@ -105,7 +112,7 @@ GL compiled-effect suites (`Fna3dCompiledEffect*`, `SdlGpuCompiledEffect*`, `Web
 `CompiledEffect*`, `MojoShader*`, `RenderTargetSemantics.*`) per renderer, with `FNA3D_FORCE_DRIVER`
 set to `OpenGL` and to `SDLGPU`, plus `cna_mojoshader_effect_probe` and `CnaFna3dSamplerLifetimeTests`
 (see [Runtime renderer selection](runtime-renderer-selection.md) for running one multi-renderer
-tree per renderer).
+tree per renderer), and each fork's own `tests/cna` (`docs/development-environment.md`).
 
 FNA3D's own API design is XNA 4.0: `FNA3D_DrawIndexedPrimitives`, `FNA3D_SetBlendState`,
 `FNA3D_VerifySampler`, `FNA3D_SetRenderTargets`, `FNA3D_ResolveTarget` and the rest map to
