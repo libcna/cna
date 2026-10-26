@@ -1,6 +1,6 @@
 # SkinnedEffect Exactness Support Matrix
 
-Phase 46 (`plans/plan_graphics.md` Tasks 401–410) audited and pixel-verified `SkinnedEffect` conformance
+Phase 46 (graphics Tasks 401–410) audited and pixel-verified `SkinnedEffect` conformance
 against FNA. This document summarizes the findings and closes the phase.
 
 ---
@@ -158,4 +158,4 @@ Phase 46 opened 3 new tracked tasks (all from Task 401's opener audit):
   `>=2`/`>=4` conditionals, matching FNA's real `Skin(vin, boneCount)` behavior of only summing the
   first `boneCount` weight/index pairs. See `NEXT.md` §3.
 
-This closes Phase 46 (`plans/plan_graphics.md` Tasks 401–410) in full.
+This closes Phase 46 (graphics Tasks 401–410) in full.

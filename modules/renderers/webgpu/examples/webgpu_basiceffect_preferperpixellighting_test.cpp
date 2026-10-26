@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 1105 (plans/plan_graphics.md Phase 80): WebGPURenderer real per-vertex-lit shader
+// graphics Task 1105 (Phase 80): WebGPURenderer real per-vertex-lit shader
 // (GetOrCreatePipelineLitTextured3DVertexLit) + BasicEffect.PreferPerPixelLighting dispatch.
 //
 // Same discriminating scene as EasyGL's own PreferPerPixelLighting test

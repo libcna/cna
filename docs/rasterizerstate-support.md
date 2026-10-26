@@ -1,6 +1,6 @@
 # RasterizerState Support Matrix
 
-Phase 38 (`plans/plan_graphics.md` Tasks 321–330) audited and pixel-verified `RasterizerState`
+Phase 38 (graphics Tasks 321–330) audited and pixel-verified `RasterizerState`
 conformance against FNA. This document summarizes the findings.
 
 ---

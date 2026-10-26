@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SDLGPU-64 / plans/plan_graphics.md 1119: every `SamplerState` field supplied to
+// SDLGPU-64 / graphics row 1119: every `SamplerState` field supplied to
 // `SpriteBatch::Begin` must reach the sprite draw. FNA's `SpriteBatch.PrepRenderState` assigns the
 // complete state to `GraphicsDevice.SamplerStates[0]`; the assignment is also observable after the
 // batch. CNA formerly forwarded only filter and U/V address modes through `ISpriteBatchRenderer`,

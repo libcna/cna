@@ -2176,7 +2176,7 @@ namespace CNA::Internal::Renderers::EasyGL
         }
     }
 
-    // plans/plan_graphics.md Task 863: same shape as BindTextureCube(), but for a sampler3D --
+    // graphics Task 863: same shape as BindTextureCube(), but for a sampler3D --
     // ITexture3DRenderer is its own interface (not a subtype of ITextureRenderer), so this can't
     // just overload/reuse BindTexture() at the call site.
     void EasyGLEffectRenderer::BindTexture3D(int unit, ITexture3DRenderer* texture)
@@ -8970,7 +8970,7 @@ namespace CNA::Internal::Renderers::EasyGL
         CNA_RENDER_LOG("lit+textured3D ready loc_wvp=" << prog_lit_textured_.loc_wvp);
     }
 
-    // Task 1102 (plans/plan_graphics.md Phase 80 / plans/plan_dx9.md Divergence 1): real XNA's
+    // graphics Task 1102 (Phase 80 / plans/plan_dx9.md Divergence 1): real XNA's
     // BasicEffect/SkinnedEffect default to PreferPerPixelLighting=false, which selects a
     // per-vertex-lit shader family (VSBasicVertexLighting*) -- lighting is computed ONCE per
     // vertex and Gouraud-interpolated across the triangle, not re-evaluated per fragment.
@@ -9145,7 +9145,7 @@ namespace CNA::Internal::Renderers::EasyGL
         CNA_RENDER_LOG("skinned3D ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
     }
 
-    // Task 1102b (plans/plan_graphics.md Phase 80 / plans/plan_dx9.md Divergence 1): SkinnedEffect's own
+    // graphics Task 1102b (Phase 80 / plans/plan_dx9.md Divergence 1): SkinnedEffect's own
     // per-vertex-lit sibling, mirroring Task 1102's EnsureLit3DVertexLitProgram() for BasicEffect
     // exactly -- same technique (move FNA's Lighting.fxh ComputeLights() Blinn-Phong math from the
     // fragment stage into the vertex stage, Gouraud-interpolate the result via varyings, keep the

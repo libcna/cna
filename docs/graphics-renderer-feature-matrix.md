@@ -250,13 +250,13 @@ Fixed since this section was originally written (2026-07-15):
   not a DXVK/environment limitation. See `NEXT.md` §4 and `src/Graphics/Renderers/D3D9/
   D3D9EffectDraw.cpp`'s `ResolveD3D9TextureEXT`/`ResolveD3D9TextureCubeEXT`.
 - ~~`PreferPerPixelLighting` and real specular highlights are structurally unreachable~~ — **fixed
-  2026-07-16** (`plans/plan_graphics.md` Phase 80, Task 1101): `GpuDrawParams::preferPerPixelLighting`/
+  2026-07-16** (graphics Phase 80, Task 1101): `GpuDrawParams::preferPerPixelLighting`/
   `specularEnabled` are now real fields (Task 1100), read by this renderer's dispatch instead of
   hardcoded `false`. 4 of the 5 `PixelLighting` bytecode variants `D9-73` had flagged as diverging
   from Microsoft's own shipped bytes are now oracle-proven pixel-perfect; the 5th (untextured
   `VSBasicPixelLighting`) remains permanently unreachable, blocked by the same missing Position-only
   vertex layout as the untextured vertex-lit bucket — unrelated to this fix. This was also the
-  project-wide "Divergence 1" every other CNA renderer shared; `plans/plan_graphics.md` Phase 80 has since
+  project-wide "Divergence 1" every other CNA renderer shared; graphics Phase 80 has since
   fixed EasyGL and WebGPU (`BasicEffect`-only) too. Software subsequently gained
   distinct per-vertex/per-pixel classic lighting in `SOFTWARE-113` and `SOFTWARE-115`; the old
   no-lighting statement is retained here only as the historical state when this D3D9 note landed.

@@ -61,7 +61,7 @@ Task 276 confirmed (via a failing-then-fixed test) that this exact bug shape —
 allocates GPU storage past level 0, so a sub-image write to `level>0` silently goes nowhere" —
 is real for `EasyGLTextureCubeRenderer`. The EasyGL `Texture3D` cell has the **identical code
 shape**, so the same failure is highly likely there, but only the one cell was actually reproduced
-with a test and fixed. Tracked as `plans/plan_graphics.md` Task 862.
+with a test and fixed. Tracked as graphics Task 862.
 
 ---
 

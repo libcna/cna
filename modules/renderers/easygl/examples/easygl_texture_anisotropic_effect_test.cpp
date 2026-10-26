@@ -2,7 +2,7 @@
 // Task 299: verify anisotropic filtering caps and fallback on a 3D stock effect
 // (DualTextureEffect).
 //
-// Audit findings this task confirmed via code reading (see plans/plan_graphics.md Task 299 for the
+// Audit findings this task confirmed via code reading (see graphics Task 299 for the
 // full writeup): EasyGL's TextureFilter::Anisotropic silently falls back to plain trilinear
 // filtering with NO anisotropic effect at all (the underlying easy-gl library has no anisotropy
 // support whatsoever).

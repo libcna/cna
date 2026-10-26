@@ -1,6 +1,6 @@
 # DualTextureEffect Exactness Support Matrix
 
-Phase 44 (`plans/plan_graphics.md` Tasks 381–390) audited and pixel-verified `DualTextureEffect`
+Phase 44 (graphics Tasks 381–390) audited and pixel-verified `DualTextureEffect`
 conformance against FNA. This document summarizes the findings and closes the phase.
 
 ---
@@ -114,4 +114,4 @@ Legend: ✅ verified working · ❌ confirmed not implemented.
   `VSDualTextureVc`/`VSDualTextureVcNoFog` shader variants) — a genuinely new multi-shader-file
   feature addition, not fixed here.
 
-This closes Phase 44 (`plans/plan_graphics.md` Tasks 381–390) in full.
+This closes Phase 44 (graphics Tasks 381–390) in full.

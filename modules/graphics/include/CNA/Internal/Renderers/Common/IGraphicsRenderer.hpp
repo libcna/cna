@@ -952,7 +952,7 @@ namespace CNA::Internal::Renderers
         /// simultaneously, since they occupy distinct binding targets; the shader's own sampler
         /// type (`sampler2D` vs `samplerCube`) determines which one is actually sampled.
         virtual void BindTextureCube(int unit, ITextureCubeRenderer* texture) {}
-        /// plans/plan_graphics.md Task 863: binds a volume texture to the given sampler unit (0-based),
+        /// graphics Task 863: binds a volume texture to the given sampler unit (0-based),
         /// for a custom shader that declares a `sampler3D` uniform. Same reasoning as
         /// `BindTextureCube()` above -- `ITexture3DRenderer` is its own interface, not a subtype of
         /// `ITextureRenderer`, and GL allows a 2D/cube/3D texture bound to the same unit

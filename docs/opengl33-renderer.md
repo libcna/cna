@@ -42,10 +42,10 @@ context, GL 3.3.
     running the exact same 6 binaries under `OPENGLES3` for direct comparison — they fail
     identically there too**:
     `cna_oracle_render_easygl`, `cna_test_avatar_tint_routing` (documented pre-existing bug,
-    `plans/plan_graphics.md` Task 1115 — a real `AvatarRenderer` tint-doubling defect, unrelated to GL
+    graphics Task 1115 — a real `AvatarRenderer` tint-doubling defect, unrelated to GL
     profile), `cna_test_easygl_graphicsdevicemanager_vsync`,
     `cna_test_easygl_graphicsdevice_reference_stencil` (also a documented pre-existing gap,
-    `plans/plan_graphics.md` Task 872), `cna_test_easygl_mrt`.
+    graphics Task 872), `cna_test_easygl_mrt`.
   - **1 failure was real and `OPENGL33`-specific — root-caused and fixed as `GLB-40`** (not the
     shader-compile-failure explanation first guessed, which turned out wrong — see below).
     `cna_test_easygl_shipgame_particle_shader` uses a `GL_POINTS`/`gl_PointSize`/`gl_PointCoord`

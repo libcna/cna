@@ -287,21 +287,15 @@ TEST(PartialTextureTransfer, ATexture3DSubBoxChangesOnlyItself)
     }
 }
 
-// THE RENDER-TARGET HALF IS ABSENT ON PURPOSE, and this is the finding it cost.
+// THE RENDER-TARGET HALF LIVES ELSEWHERE.
 //
 // `Texture2D::SetData` takes a read-modify-write route through `renderer_->GetData()` when a
 // partial level-0 update arrives with no CPU shadow to merge into, and for a plain `Texture2D` that
 // situation THROWS by design ("partial update requires CPU-side pixel storage"). So the route is
-// reachable only through a render target -- and writing that test showed that **`SetData` on a
-// `RenderTarget2D` is silently discarded, on EasyGL and WebGPU alike, for a partial rectangle AND
-// for a whole level.** Neither renderer overrides `ITextureRenderer::UpdatePixels` on its
-// render-target class, and the base declares it with an empty body, so the merged pixels the shared
-// layer carefully assembles are handed to a no-op. Measured: after `SetData`, the target still
-// reads back what was RENDERED into it, and nothing throws.
-//
-// Recorded as `plans/plan_graphics.md` row 1118 rather than asserted here. A test that pinned the
-// current behaviour would be asserting the defect as correct, and one that pinned the right
-// behaviour would be permanently red -- so this file steers around it and names the row, the same
-// way `parity_basic_effect_vertex_color` steers around row 1116. The readback HALF of that route is
-// covered and does work: `NpotTexture.*RenderTarget*` reads rendered content back through the
-// renderer at three sizes.
+// reachable only through a render target. Writing that test here first showed `SetData` on a
+// `RenderTarget2D` being silently discarded on EasyGL and WebGPU (graphics row 1118, closed
+// 2026-10-14): every renderer's render-target class now overrides `UpdatePixels`, and
+// `RenderTargetUploadRoundTripTests` pins the contract -- an accepted `SetData`, whole level or
+// partial rectangle, reaches the surface `GetData` reads, or the renderer refuses it. The readback
+// half is also covered by `NpotTexture.*RenderTarget*`, which reads rendered content back through
+// the renderer at three sizes.

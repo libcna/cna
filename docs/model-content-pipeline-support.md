@@ -1,12 +1,12 @@
 # Model loading and content pipeline: support and limitations
 
 Covers `Microsoft::Xna::Framework::Graphics::Model` (and its `ModelMesh`/`ModelMeshPart`/
-`ModelBone`/collection types): its runtime API, which Phase 49 (Tasks 431-440, `plans/plan_graphics.md`)
+`ModelBone`/collection types): its runtime API, which Phase 49 (graphics Tasks 431-440)
 audited line by line against FNA, and the content loaders that build a `Model` from files.
 
 ## `Model`'s runtime API: fully audited, FNA-faithful
 
-Tasks 431-439 (see `plans/plan_graphics.md` for full detail) confirmed `Model`/`ModelMesh`/
+Graphics Tasks 431-439 (full detail in Git history) confirmed `Model`/`ModelMesh`/
 `ModelMeshPart`/`ModelBone` + all 4 collection types match FNA's property/method surface and
 behavior closely, real bugs found and fixed along the way:
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 1102b (plans/plan_graphics.md Phase 80 / plans/plan_dx9.md Divergence 1): SkinnedEffect pixel test --
+// graphics Task 1102b (Phase 80 / plans/plan_dx9.md Divergence 1): SkinnedEffect pixel test --
 // PreferPerPixelLighting genuinely selects between two different lighting evaluations (EasyGL
 // renderer), mirroring Task 1102's BasicEffect test exactly.
 //

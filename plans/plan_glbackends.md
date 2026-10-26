@@ -278,7 +278,7 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
 > `highp`/`mediump` finding). **`GLB-22` upgraded from a 7-binary sample to the full registered
 > suite, all 241 `cna_easygl_test` binaries, built and run for real**: originally `235/241 pass,
 > 0 crash, 6 fail`. 5 of the 6 failures were confirmed pre-existing (identical failure under
-> `OPENGLES`, including 2 already-documented bugs, `plan_graphics.md` Tasks 1115/872). The 6th
+> `OPENGLES`, including 2 already-documented bugs, graphics Tasks 1115/872). The 6th
 > (`cna_test_easygl_shipgame_particle_shader`) was real and `OPENGL33`-specific — root-caused
 > (missing `glEnable(GL_VERTEX_PROGRAM_POINT_SIZE)` for `gl_PointSize`-driven point-sprite
 > rendering, **not** the shader-compile-failure explanation first guessed here, which was verified

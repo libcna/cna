@@ -1354,7 +1354,7 @@ TEST(SpriteBatchSortModeTest, FrontToBackSortsByAscendingLayerDepth)
     Texture2D tex = Texture2D::CreateWithRendererForTests(4, 4,
         std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&texRenderer, [](auto*) {}));
 
-    // plans/plan_graphics.md's own Task 164 example depths (0.5, 0.1, 0.9), deliberately submitted out
+    // graphics Task 164's example depths (0.5, 0.1, 0.9), deliberately submitted out
     // of order. Each dest-rect X coordinate (50/10/90) mirrors its own depth*100, purely as a
     // human-readable marker for which recorded call came from which Draw() call.
     batch.Begin(SpriteSortMode::FrontToBack, BlendState::AlphaBlend);

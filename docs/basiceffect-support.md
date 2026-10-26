@@ -1,6 +1,6 @@
 # BasicEffect Exactness Support Matrix
 
-Phase 42 (`plans/plan_graphics.md` Tasks 361–370) audited and pixel-verified `BasicEffect` conformance
+Phase 42 (graphics Tasks 361–370) audited and pixel-verified `BasicEffect` conformance
 against FNA. This document summarizes the findings and closes the phase.
 
 ---
@@ -197,4 +197,4 @@ Phase 42 opened 2 new tracked tasks, both since closed:
 - ~~**Task 886**~~ — **fixed.** Real specular highlights (`SpecularColor`/`SpecularPower`) now
   implemented.
 
-This closes Phase 42 (`plans/plan_graphics.md` Tasks 361–370) in full.
+This closes Phase 42 (graphics Tasks 361–370) in full.

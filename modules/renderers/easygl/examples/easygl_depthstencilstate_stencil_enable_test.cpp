@@ -14,7 +14,7 @@
 //      StencilPass=Replace, ReferenceStencil=0), in the background colour -- this establishes a
 //      known baseline explicitly via a real draw, NOT via GraphicsDevice::Clear(), because
 //      GraphicsDevice::Clear ignores ClearOptions::Stencil entirely on every renderer (confirmed
-//      while writing this test, tracked as a new Task 871 -- see plans/plan_graphics.md). Depth
+//      while writing this test, tracked as graphics Task 871). Depth
 //      testing is disabled for every draw in this test (DepthBufferEnable=false throughout) to
 //      isolate stencil behaviour from the already-tracked depth-compare bug (Task 870).
 //   2. Each column's LEFT half gets a second stamp: stencil=1 (same Always/Replace pattern),

@@ -1530,9 +1530,10 @@ worth catching and a whole-suite total would hide it.
 **`SpriteBatch` wireframes too, and that is a deliberate divergence from the reference renderer**
 (`WEBGPU-154`, 2026-09-06). A sprite is two triangles, XNA's `FillMode` is a `RasterizerState` field
 that applies to every primitive the device rasterizes, and `SpriteBatch.Begin` assigns the device's
-`RasterizerState` -- so a batch begun with a `WireFrame` state must draw outlines. EasyGL fills
-instead (measured 576/576 pixels, four ways, recorded as `plans/plan_graphics.md` row 1115), and this
-renderer does not copy that: where FNA and XNA disagree, XNA wins, and this row's acceptance is that
+`RasterizerState` -- so a batch begun with a `WireFrame` state must draw outlines. EasyGL filled
+instead when this was written (measured 576/576 pixels, four ways, graphics row 1115; EasyGL's
+wireframe has since moved to native polygon mode, SOFTWARE-178), and this renderer does not copy
+that: where FNA and XNA disagree, XNA wins, and this row's acceptance is that
 no route accepts a wireframe request and draws a filled polygon.
 
 Mechanically it costs nothing per sprite. One shared 12-entry `uint16` line list is created on the

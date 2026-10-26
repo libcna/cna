@@ -6,7 +6,7 @@
 > [`shader-effect-vs-fx-bytecode.md`](shader-effect-vs-fx-bytecode.md); do not use the milestones
 > below as current implementation status.
 
-Task 352 (`plans/plan_graphics.md`, Phase 41) decided CNA's policy for XNA/FNA compiled effect
+Task 352 (graphics Phase 41) decided CNA's policy for XNA/FNA compiled effect
 bytecode — the binary blob XNA's Content Pipeline `EffectProcessor` produces from a `.fx` HLSL
 source file, and the same blob a real XNA/FNA game embeds as a compiled `Effect` resource:
 **full support**. This document records the research behind that decision and the phased
@@ -99,8 +99,8 @@ WebGPU renderer (Phases 56–69), which is why it gets its own dedicated phase a
 
 ## Phase 74 task breakdown
 
-See `plans/plan_graphics.md` Phase 74 for the authoritative, tracked task list (Tasks 10200–10208).
-Summary:
+The original task list was graphics Phase 74 (Tasks 10200–10208); its rows are superseded by
+[`plans/plan_fx.md`](../plans/plan_fx.md) and survive in Git history. Summary:
 
 1. Vendor MojoShader as a `third_party/mojoshader` submodule + `cmake/ThirdPartyMojoShader.cmake`
    + `THIRD_PARTY_NOTICES.md` entry.
@@ -121,5 +121,5 @@ Summary:
    distinct blocker, not incidental — tracked as its own task rather than assumed solvable inline).
 8. Developer documentation covering the full feature once implemented.
 
-Each task's exact wording and scope lives in `plans/plan_graphics.md` — this document exists to carry
-the reasoning that produced that list, not to duplicate it verbatim.
+Each task's exact wording and scope lived in the graphics plan's Phase 74 — this document exists to
+carry the reasoning that produced that list, not to duplicate it verbatim.

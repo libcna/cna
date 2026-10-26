@@ -2060,7 +2060,7 @@ namespace CNA::Internal::Renderers::EasyGL
         }
         /** @brief `glReadPixels` from the target's framebuffer. @return True. */
         [[nodiscard]] bool ReadsBackRenderTargetsEXT() const override { return true; }
-        /// VULKAN-164: plans/plan_graphics.md Task 863 gave this renderer
+        /// VULKAN-164: graphics Task 863 gave this renderer
         /// `BindTexture3D`, and `EasyGL_ShaderEffect_Texture3D` reads two different slices of one
         /// bound volume through a `sampler3D`.
         [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override { return true; }

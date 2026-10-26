@@ -1241,7 +1241,7 @@ TEST_F(TextureCubeTest, DoubleDisposeDoesNotThrow)
 }
 
 // -----------------------------------------------------------------------
-// TextureCollection assignment / Texture base class (plans/plan_graphics.md Task 863)
+// TextureCollection assignment / Texture base class (graphics Task 863)
 //
 // Before Task 863, TextureCube inherited GraphicsResource directly (not Texture), so it could
 // never be stored in a TextureCollection (std::vector<Texture*>) at all -- a TextureCube* could

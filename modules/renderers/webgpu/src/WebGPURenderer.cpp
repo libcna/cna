@@ -6885,7 +6885,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             device_, "CNA WebGPU LitTextured3D Instanced WGSL", webgpu_shaders::kLitTextured,
             InstancedWgslShapeEXT::Rigid, "LitTextured3D", webgpu_shaders::kShadowSampling);
 
-        // Task 1105 (plans/plan_graphics.md Phase 80): real per-vertex-lit sibling -- identical
+        // graphics Task 1105 (Phase 80): real per-vertex-lit sibling -- identical
         // Blinn-Phong math to shaderSource above (FNA's Lighting.fxh ComputeLights()), moved from
         // fs_main into vs_main and passed onward as litRGB/specularRGB varyings (WGSL naturally
         // interpolates any @location(n) VertexOutput field across the triangle -- this alone is

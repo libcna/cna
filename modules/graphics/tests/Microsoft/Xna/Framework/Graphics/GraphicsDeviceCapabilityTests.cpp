@@ -413,7 +413,7 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 //     EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::WireFrame));
 //
 // in a file that is compiled once per renderer and gated on nothing. It encoded ONE renderer's
-// documented gap -- EasyGL's "GLES3 has no polygon mode" entry in plans/plan_graphics.md's XNA 4.0
+// documented gap -- EasyGL's "GLES3 has no polygon mode" entry in the graphics plan's XNA 4.0
 // coverage table -- as though every renderer shared it, and therefore failed on Software, Headless,
 // bgfx, WebGPU, Vulkan and SDL_GPU. It could never pass falsely, so it hid nothing; it was simply
 // a standing red in six principal suites.

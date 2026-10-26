@@ -1,6 +1,6 @@
 # FNA reference-app generator
 
-Task 471 (`plans/plan_graphics.md` Phase 53, "FNA comparison harness"). A small C# console app that
+Task 471 (graphics Phase 53, "FNA comparison harness"). A small C# console app that
 references the real FNA.dll and emits selected reference values as JSON, so CNA's own C++ tests
 can eventually diff against ground truth produced by *running* FNA itself, not just reading its
 source. Not part of the CNA C++ build; never run by CNA at runtime.
@@ -58,7 +58,7 @@ render+present+readback cycle), which needs a native `FNA3D` shared library not 
 sandbox and with its own multi-layer dependency chain (a separately-uninitialized nested
 `MojoShader` submodule inside `lib/FNA3D`, plus unresolved SDL2/SDL3 linkage) — a substantially
 larger undertaking than every other task in this phase, deferred rather than attempted blind. See
-`plans/plan_graphics.md` Tasks 474/475/477/478 for the full investigation.
+graphics Tasks 474/475/477/478 for the full investigation.
 
 Task 476 (`ViewportReference.cs`) is done: `Viewport.Project`/`Unproject`, genuinely tractable
 without a `GraphicsDevice` (a plain value struct, pure `Matrix`/`Vector3` math). Covers 3

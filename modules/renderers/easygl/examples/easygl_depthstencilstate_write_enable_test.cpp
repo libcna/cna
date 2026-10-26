@@ -12,8 +12,8 @@
 //   - If B's write happened anyway (bug: write-disable ignored), the buffer holds B's 0.2. C's
 //     compare is 0.5 < 0.2 -> FAILS -> centre stays GREEN (B's colour, drawn on top of A).
 // C is deliberately NOT drawn at the same depth as A: a renderer that hardcodes a strict Less
-// compare instead of FNA's actual LessEqual default (the retired VULKAN renderer did -- see
-// plans/plan_graphics.md) would fail an equal-depth C regardless of B's write behaviour, making the
+// compare instead of FNA's actual LessEqual default (the retired VULKAN renderer did) would
+// fail an equal-depth C regardless of B's write behaviour, making the
 // test unable to distinguish the two cases. An in-between depth is unambiguous under either a
 // strict or inclusive compare.
 //

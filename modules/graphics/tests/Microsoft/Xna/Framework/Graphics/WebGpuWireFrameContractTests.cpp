@@ -815,10 +815,10 @@ namespace
     /// WEBGPU-154: the SpriteBatch route. Added when the row's remaining half was settled: a
     /// sprite is two triangles like any other quad, and XNA's FillMode is a RasterizerState field
     /// that applies to every primitive the device rasterizes, so a WireFrame sprite must be an
-    /// outline. The reference renderer fills instead (measured 576/576 pixels, four ways) --
-    /// recorded in plans/plan_graphics.md rather than copied here, because "where FNA and XNA
-    /// disagree, XNA wins" and this row's own acceptance is that no route accepts a wireframe
-    /// request and draws a filled polygon.
+    /// outline. The reference renderer filled instead when this was written (measured 576/576
+    /// pixels, four ways); this test does not copy that, because "where FNA and XNA disagree, XNA
+    /// wins" and this row's own acceptance is that no route accepts a wireframe request and draws
+    /// a filled polygon.
     ///
     /// The RasterizerState is passed to Begin() explicitly, and that is XNA's semantic rather than
     /// a convenience: SpriteBatch.Begin ASSIGNS the device's RasterizerState -- resolving null to

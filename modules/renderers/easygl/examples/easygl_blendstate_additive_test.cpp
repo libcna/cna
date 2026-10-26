@@ -11,7 +11,7 @@
 //   B = 0
 //
 // This test also catches Task 868's defect class (a blend state that ignores the requested
-// factors — see plans/plan_graphics.md), unlike Task 305's NonPremultiplied test, which a hardcoded
+// factors), unlike Task 305's NonPremultiplied test, which a hardcoded
 // equation passes by coincidence. Task 868's hardcoded equation uses InverseSourceAlpha for the
 // destination factor; at alpha=255 that evaluates to (1 - 1) = 0, meaning the destination would be
 // completely dropped instead of fully added. That gives a WRONG G of ~100 (source only) instead of

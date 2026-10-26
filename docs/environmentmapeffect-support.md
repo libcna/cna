@@ -1,6 +1,6 @@
 # EnvironmentMapEffect Exactness Support Matrix
 
-Phase 45 (`plans/plan_graphics.md` Tasks 391–400) audited and pixel-verified `EnvironmentMapEffect`
+Phase 45 (graphics Tasks 391–400) audited and pixel-verified `EnvironmentMapEffect`
 conformance against FNA. This document summarizes the findings and closes the phase.
 
 ---
@@ -190,4 +190,4 @@ Phase 45 opened 2 new tracked tasks:
   now scaled by combined texture×diffuse alpha, the other half of the
   `envmap = ... * color.a` formula Task 395's specular-only fix didn't cover.
 
-This closes Phase 45 (`plans/plan_graphics.md` Tasks 391–400) in full.
+This closes Phase 45 (graphics Tasks 391–400) in full.

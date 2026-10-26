@@ -1,6 +1,6 @@
 # DepthStencilState Support Matrix
 
-Phase 37 (`plans/plan_graphics.md` Tasks 311–320) audited and pixel-verified `DepthStencilState`
+Phase 37 (graphics Tasks 311–320) audited and pixel-verified `DepthStencilState`
 conformance against FNA. This document summarizes the findings.
 
 ---

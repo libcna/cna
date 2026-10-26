@@ -15,7 +15,7 @@
 // Happy-path SetData/GetData round-trip coverage also lives in the shared renderer contracts and
 // EasyGL pixel-readback integration tests.
 //
-// plans/plan_graphics.md Task 863: Texture3D now inherits Texture (matching FNA), instead of
+// graphics Task 863: Texture3D now inherits Texture (matching FNA), instead of
 // GraphicsResource directly, so it can be assigned into GraphicsDevice.Textures/VertexTextures
 // (a TextureCollection, which stores Texture* slots) -- previously a compile-time impossibility.
 // See the "TextureCollection assignment / Texture base class (Task 863)" section below.
@@ -855,7 +855,7 @@ TEST_F(Texture3DTest, DoubleDisposeDoesNotThrow)
 }
 
 // -----------------------------------------------------------------------
-// TextureCollection assignment / Texture base class (plans/plan_graphics.md Task 863)
+// TextureCollection assignment / Texture base class (graphics Task 863)
 //
 // Before Task 863, Texture3D inherited GraphicsResource directly (not Texture), so it could
 // never be stored in a TextureCollection (std::vector<Texture*>) at all -- a Texture3D* could

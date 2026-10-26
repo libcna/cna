@@ -1,6 +1,6 @@
 # SpriteFont Support and Limitations
 
-Phase 48 (`plans/plan_graphics.md` Tasks 421–430) audited `SpriteFont` against FNA's own `SpriteFont.cs`
+Phase 48 (graphics Tasks 421–430) audited `SpriteFont` against FNA's own `SpriteFont.cs`
 and pixel-verified `SpriteBatch::DrawString` rendering on EasyGL (Tasks 424–429). This document
 summarizes the findings, the content-loading model, and known limitations, and closes the phase.
 
@@ -131,4 +131,4 @@ Legend: ✅ verified working · ❌ confirmed not implemented/not representable.
   `[Flags]` enum. Not scoped to this phase; would need `SpriteEffects` operator overloads plus a
   4th `axisDir`/`axisIsMirrored` table entry in `SpriteBatch.cpp` if ever prioritized.
 
-This closes Phase 48 (`plans/plan_graphics.md` Tasks 421–430) in full.
+This closes Phase 48 (graphics Tasks 421–430) in full.

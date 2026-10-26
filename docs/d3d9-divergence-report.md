@@ -217,7 +217,7 @@ imperceptible) vs "large" (`>3`) differing pixels, plus the location/values of t
 delta, to distinguish genuinely different root causes rather than reporting one flat "21 fail"
 number. **None of these were investigated further or fixed, per this task's own explicit rule** —
 each is logged here with its observed evidence and a best-guess cause for whoever picks up the
-matching `plans/plan_graphics.md` item next.
+matching graphics-plan item next.
 
 **Pattern A — boundary/edge-only divergence, 17 scenes.** Every differing pixel sits in a thin band
 at a primitive's silhouette edge; the interior is bit-exact in every one of these. Values toggle
@@ -274,7 +274,7 @@ vertex's near-pure color — right at the sharp apex tip).
 
 **Pattern C — real, large, whole-primitive divergence, 2 scenes.** These are not edge noise or
 rounding — the two are genuinely, visibly wrong across nearly the entire primitive, and are the
-real, concrete "opens a `plans/plan_graphics.md` bug" result this task's own notes predicted:
+real, concrete "opens a graphics-plan bug" result this task's own notes predicted:
 
 - **`fog_gradient_quad`** (23,716/65,536 differing; 23,410 of those `>3`). The scene is deliberately
   built (`FogStart=0`, `FogEnd=-1`, negative on purpose — see the scene file's own extensive
@@ -314,7 +314,7 @@ real, concrete "opens a `plans/plan_graphics.md` bug" result this task's own not
 This measurement cost nothing beyond reusing existing tooling, and it did exactly what `D9-A6`'s own
 notes predicted: it converted a standing assumption ("EasyGL is probably close to XNA-correct,
 nobody has actually measured it") into a real number (10/31 pixel-perfect, three named, evidenced
-divergence patterns for the rest) and surfaced two concrete, previously-unmeasured `plans/plan_graphics.md`
+divergence patterns for the rest) and surfaced two concrete, previously-unmeasured graphics-plan
 candidates (`fog_gradient_quad`'s negative-`FogEnd` handling, `envmap_fresnel_quad`'s Fresnel
 interpolation) plus one systemic rasterization-boundary gap (Pattern A, 17 scenes) — all **logged
 here, not fixed**, per this task's own explicit scope boundary.

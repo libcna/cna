@@ -1,6 +1,6 @@
 # AlphaTestEffect Exactness Support Matrix
 
-Phase 43 (`plans/plan_graphics.md` Tasks 371–380) audited and pixel-verified `AlphaTestEffect`
+Phase 43 (graphics Tasks 371–380) audited and pixel-verified `AlphaTestEffect`
 conformance against FNA. This document summarizes the findings and closes the phase.
 
 ---
@@ -85,4 +85,4 @@ match that result.**
 
 Legend: ✅ verified working.
 
-This closes Phase 43 (`plans/plan_graphics.md` Tasks 371–380) in full.
+This closes Phase 43 (graphics Tasks 371–380) in full.

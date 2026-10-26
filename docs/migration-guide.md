@@ -1,6 +1,6 @@
 # Migration guide: porting an XNA 4.0 / FNA game to CNA
 
-**Written for Task 486 (`plans/plan_graphics.md` Phase 54).** This is a practical guide for someone who
+**Written for Task 486 (graphics Phase 54).** This is a practical guide for someone who
 already has an XNA 4.0 or FNA game and wants to know: can I bring this to CNA, what needs to
 change, and what doesn't work yet. It draws conclusions from `docs/graphics-renderer-feature-matrix.md`
 (Task 451), `CHECKLIST.md`'s deviation table and `handoff.md` §5 for a practical audience — see

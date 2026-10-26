@@ -208,8 +208,8 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void SetTexture(int unit, TextureCube& texture);
 
         /**
-         * @brief plans/plan_graphics.md Task 863: binds a volume (3D) texture to an additional sampler
-         * unit, for a custom shader that declares a `sampler3D` uniform.
+         * @brief Binds a volume (3D) texture to an additional sampler unit, for a custom
+         * shader that declares a `sampler3D` uniform.
          *
          * SDL_GPU source GLSL uses fragment `layout(set=2,binding=unit) uniform sampler3D`,
          * or portable `set=1,binding=8+unit`, with units 0..3. Unsupported layouts are

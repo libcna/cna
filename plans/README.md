@@ -49,7 +49,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 
 ## Graphics architecture and effects
 
-- [`plan_graphics.md`](plan_graphics.md) — graphics API and shared implementation work.
+- `plan_graphics.md` — the original graphics API backlog (Tasks 1–1120 in Phases 1–83, written
+  for SDL_Renderer, EasyGL, Vulkan and Bgfx). Every row was done, withdrawn with a retired
+  renderer, or superseded (compiled effects by `plan_fx.md`, samples by `cna-samples/plan.md`),
+  and the plan was deleted on 2026-10-26 (Git history only). Comments elsewhere cite its rows as
+  "graphics Task N" or "graphics row N".
 - [`plan_glbackends.md`](plan_glbackends.md) — OpenGL backend restructuring.
 - [`plan_fna3d.md`](plan_fna3d.md) — FNA3D renderer integration.
 - [`plan_fx.md`](plan_fx.md) — compiled XNA effect bytecode.

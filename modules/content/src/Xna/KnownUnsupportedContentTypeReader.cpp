@@ -14,7 +14,7 @@ namespace Microsoft::Xna::Framework::Content
             {
                 case UnsupportedContentReaderReason::CompiledPlatformShaderBytecode:
                     return "compiled platform shader bytecode is not supported; "
-                           "see plans/plan_xnb.md XNB-32A and plans/plan_graphics.md Phase 74";
+                           "see docs/fx-compiled-effects.md";
                 default:
                     return "reason unspecified";
             }

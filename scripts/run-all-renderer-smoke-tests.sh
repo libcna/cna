@@ -148,7 +148,7 @@ for renderer in "${RENDERERS[@]}"; do
     fi
 
     # `-k` keeps going past the one already-known, unrelated cna_demo_xact
-    # Content-copy build error (see plans/plan_graphics.md) -- that target
+    # Content-copy build error -- that target
     # is irrelevant to the smoke tests below, so a non-zero exit here is not
     # by itself treated as "renderer unavailable"; ctest is the real signal.
     cmake --build "${dir}" -j4 -- -k

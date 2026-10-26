@@ -1656,7 +1656,7 @@ status. This unblocked the build/test run needed to close out Phase 12/13/14's v
   - **Build:** every target builds cleanly except `cna_demo_xact`, which fails at its
     Content-copy step - a pre-existing, already-documented issue
     (`scripts/run-all-backend-smoke-tests.sh`'s own comment references it, "see
-    NEXT.md/plan_graphics.md"), unrelated to anything in this plan (XACT audio content, not
+    NEXT.md" and the graphics plan), unrelated to anything in this plan (XACT audio content, not
     Net/GamerServices/Avatar). Not caused by this pass.
   - **Tests:** 4884/4935 passed (99%), 51 failed. Investigated by category, not assumed benign -
     every distinct failing test suite was re-run standalone/serially to check root cause:

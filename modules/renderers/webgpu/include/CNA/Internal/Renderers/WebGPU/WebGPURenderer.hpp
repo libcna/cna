@@ -4843,7 +4843,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
             int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
-            /// Task 1105 (plans/plan_graphics.md Phase 80): true selects the per-vertex-lit sibling
+            /// graphics Task 1105 (Phase 80): true selects the per-vertex-lit sibling
             /// pipeline/shader (XNA's real BasicEffect.PreferPerPixelLighting==false default);
             /// false keeps the existing per-pixel-lit one. Computed once at queue time from
             /// GpuDrawParams::lightingEnabled/preferPerPixelLighting -- irrelevant when lighting

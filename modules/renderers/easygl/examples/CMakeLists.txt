@@ -761,7 +761,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_ShaderEffect_TextureCube COMMAND cna_test_easygl_shadereffect_texturecube
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_graphics.md Task 863: Texture3D now inherits Texture (matching FNA), and
+        # graphics Task 863: Texture3D now inherits Texture (matching FNA), and
         # ShaderEffect::SetTexture(int, Texture3D&)/IEffectRenderer::BindTexture3D() let a custom
         # shader sample a real sampler3D uniform -- same shape as Task 1081's TextureCube proof
         # above, adapted to a volume texture.

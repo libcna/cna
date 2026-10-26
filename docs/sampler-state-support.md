@@ -5,7 +5,7 @@
 > trilinear, §7) are fixed (2026-07-09); §6/§7 describe them as found. See `handoff.md` §5 for
 > current status.
 
-Phase 35 (`plans/plan_graphics.md` Tasks 291–300) audited and pixel-verified `SamplerState` and texture
+Phase 35 (graphics Tasks 291–300) audited and pixel-verified `SamplerState` and texture
 sampling conformance against FNA. This document summarizes the findings.
 
 ---

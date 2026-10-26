@@ -8,7 +8,7 @@
 // Caveat carried from Task 304/868 (history): the retired VULKAN renderer's ApplyBlendState ignored
 // every blend-factor/function request and hardcoded one equation whose COLOR-channel factors
 // (SourceAlpha/InverseSourceAlpha) match NonPremultiplied's by coincidence, so a passing Vulkan
-// result was never evidence that Task 868 was fixed. See plans/plan_graphics.md Task 868.
+// result was never evidence that Task 868 was fixed. See graphics Task 868.
 //
 // Source colour: Color(255, 0, 0, 128) — RAW (non-premultiplied) red at ~50% opacity. Background:
 // green (0,255,0,255).

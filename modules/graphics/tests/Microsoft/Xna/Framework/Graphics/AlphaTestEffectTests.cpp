@@ -7,7 +7,7 @@
 //
 // Task 376 extends this file with a direct, GPU-independent lock-in of the
 // ReferenceAlpha 0-255-int -> 0-1-float scaling formula (a common bug
-// source per plans/plan_graphics.md's own note), including out-of-range inputs.
+// source), including out-of-range inputs.
 
 #include <gtest/gtest.h>
 
