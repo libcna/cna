@@ -20,10 +20,12 @@
 // the texels must also hold the clear colour itself, and each cube face is cleared to its own
 // colour so that a read of the wrong face shows. The destination starts out filled with the guard
 // byte too, and no clear colour here encodes to it, so a read that wrote nothing fails instead of
-// passing as uniform.
+// passing as uniform -- and, because CNA hands a renderer its own zero-filled scratch, every
+// payload must hold something other than zeros too, which no clear colour here encodes to.
 
 #include <gtest/gtest.h>
 
+#include "CNA/RendererCapabilityProfile.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -98,9 +100,16 @@ namespace
         }
         buffer.resize(bytes);
         bool untouched = true;
-        for (const std::uint8_t byte : buffer) untouched = untouched && byte == kGuard;
+        bool zero = true;
+        for (const std::uint8_t byte : buffer)
+        {
+            untouched = untouched && byte == kGuard;
+            zero = zero && byte == 0;
+        }
         if (untouched)
             ADD_FAILURE() << where << ": GetData left all " << bytes << " destination bytes unwritten";
+        else if (zero)
+            ADD_FAILURE() << where << ": GetData returned only zeros, which no clear here encodes to";
         return buffer;
     }
 
@@ -154,21 +163,12 @@ namespace
         device.SetRenderTarget(nullptr);
     }
 
+    /// Whether this renderer declares render-target readback. What it declares decides, never a
+    /// failed read: that would turn a regression into a skip.
     bool ReadsTargetsBack(GraphicsDevice& device)
     {
-        try
-        {
-            RenderTarget2D probe(device, 1, 1, false, SurfaceFormat::Color, DepthFormat::None);
-            ClearTarget(device, probe);
-            std::uint8_t texel[4] = {kGuard, kGuard, kGuard, kGuard};
-            probe.GetData(texel, 4);
-            // A renderer that accepts the read but returns no pixels has no readback either.
-            return texel[0] != kGuard || texel[1] != kGuard || texel[2] != kGuard;
-        }
-        catch (...)
-        {
-            return false;
-        }
+        return device.GetRendererFeatureSupportEXT(CNA::RendererFeature::RenderTargetReadback) ==
+               CNA::RendererFeatureSupport::Supported;
     }
 }
 
@@ -300,8 +300,9 @@ TEST(RenderTargetReadbackLayoutTest, CubeFacesReadBackTightly)
             ++checked;
             const SurfaceFormat format = target->getFormatProperty();
             const std::size_t texelBytes = static_cast<std::size_t>(Texture::GetFormatSizeEXT(format));
-            // Face f is cleared to (f/8, 0.5, 1 - f/8): six distinct colours.
-            const auto faceRed = [](int f) { return static_cast<float>(f) / 8.0f; };
+            // Face f is cleared to ((f + 1)/8, 0.5, 1 - f/8): six distinct colours, none of
+            // them zero in any channel a one-channel format keeps.
+            const auto faceRed = [](int f) { return static_cast<float>(f + 1) / 8.0f; };
             const auto faceBlue = [](int f) { return 1.0f - static_cast<float>(f) / 8.0f; };
             for (int f = 0; f < 6; ++f)
             {

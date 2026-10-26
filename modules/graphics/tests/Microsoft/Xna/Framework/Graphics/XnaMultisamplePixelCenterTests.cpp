@@ -11,13 +11,14 @@
 // half-integer convention, half a pixel away from XNA's picture.
 //
 // The single-sampled draw is the control: both conventions cover every pixel of the full quad and
-// exactly the first four columns of the half one. A renderer without a 3D pipeline, one that
-// cannot read a target back, or one that grants neither 4 nor 8 samples has nothing to answer and
-// skips; any other failure to draw or read is a failure.
+// exactly the first four columns of the half one. A renderer that declares no 3D pipeline or no
+// render-target readback, or grants neither 4 nor 8 samples, has nothing to answer and skips; for
+// every other one any failure to draw or read, or a wrong pixel, is a failure.
 
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererCapabilityProfile.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -114,27 +115,16 @@ namespace
                             << Picture(red);
     }
 
-    /// A HiDef device, or the reason this renderer has nothing to answer.
+    /// A HiDef device, or the reason this renderer has nothing to answer -- decided by what it
+    /// declares, never by a failure, which would turn a regression into a skip.
     std::string Prepare(GraphicsDevice& device)
     {
         device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
         if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
             return "this renderer has no 3D pipeline";
-        try
-        {
-            RenderTarget2D probe(device, 1, 1, false, SurfaceFormat::Color, DepthFormat::None);
-            device.SetRenderTarget(&probe);
-            device.Clear(Color(0, 0, 0, 255));
-            device.SetRenderTarget(nullptr);
-            Color pixel = Color::White;
-            probe.GetData(&pixel, 1);
-            if (pixel != Color(0, 0, 0, 255)) return "this renderer returns no render-target pixels";
-        }
-        catch (const std::exception&)
-        {
-            device.SetRenderTarget(nullptr);
-            return "this renderer cannot read a render target back";
-        }
+        if (device.GetRendererFeatureSupportEXT(CNA::RendererFeature::RenderTargetReadback) !=
+            CNA::RendererFeatureSupport::Supported)
+            return "this renderer declares no render-target readback";
         return {};
     }
 }
