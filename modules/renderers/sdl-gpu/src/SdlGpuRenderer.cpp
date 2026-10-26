@@ -12880,10 +12880,15 @@ namespace CNA::Internal::Renderers::SdlGpu
     bool SdlGpuRenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                                 void* data, int dataLength) const
     {
-        // ITextureCubeRenderer's public transfer contract is tightly packed RGBA8. CNA's current
-        // TextureCube surface has no typed float/half/Rgba64 overload, so never expose native bytes
-        // through that Color-shaped virtual.
+        // GetData is the Color-shaped virtual: tightly packed RGBA8. Every other format reads
+        // through GetDataBytesEXT below.
         if (state_->surfaceFormat != static_cast<int>(SurfaceFormat::Color)) return false;
+        return GetNativeDataEXT(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool SdlGpuRenderTargetCubeRenderer::GetDataBytesEXT(int face, int level, int x, int y, int w,
+                                                        int h, void* data, int dataLength) const
+    {
         return GetNativeDataEXT(face, level, x, y, w, h, data, dataLength);
     }
 

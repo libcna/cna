@@ -2440,7 +2440,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // prefiltered-specular cube is rendered face by face into float storage, and a cube
         // that reported HdrBlendable while holding 8-bit texels would make every
         // image-based-lighting product quietly wrong.
-        if (!MapRenderTargetColorFormatEXT(surfaceFormat, colorFormat_))
+        declaredFormatIsNative_ = MapRenderTargetColorFormatEXT(surfaceFormat, colorFormat_);
+        if (!declaredFormatIsNative_)
             colorFormat_ = owner_->surfaceFormat_;
         if (colorFormat_ == WGPUTextureFormat_Undefined)
             throw std::runtime_error("CNA WebGPU: cannot create a RenderTargetCube before the "
@@ -2654,6 +2655,23 @@ namespace CNA::Internal::Renderers::WebGPU
     bool WebGPURenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                                 void* data, int dataLength) const
     {
+        return ReadFaceEXT(face, level, x, y, w, h, data, dataLength, false);
+    }
+
+    bool WebGPURenderTargetCubeRenderer::GetDataBytesEXT(int face, int level, int x, int y, int w,
+                                                        int h, void* data, int dataLength) const
+    {
+        // A target that fell back to the swap-chain format holds Color texels, not the declared
+        // ones; refusing is what keeps TextureCube::GetData from returning converted bytes.
+        if (!declaredFormatIsNative_)
+            return false;
+        return ReadFaceEXT(face, level, x, y, w, h, data, dataLength, true);
+    }
+
+    bool WebGPURenderTargetCubeRenderer::ReadFaceEXT(int face, int level, int x, int y, int w,
+                                                    int h, void* data, int dataLength,
+                                                    bool declaredBytes) const
+    {
         // As above -- a silent `return` was converted into a fabricated face.
         if (owner_ == nullptr || w <= 0 || h <= 0 || data == nullptr)
             return false;
@@ -2681,7 +2699,12 @@ namespace CNA::Internal::Renderers::WebGPU
             owner_->RenderPendingDrawsToRenderTargetCubeFace(
                 const_cast<WebGPURenderTargetCubeRenderer*>(this), owner_->currentRenderTargetCubeFaceIndex_);
 
-        const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(levelSize) * 4u);
+        // Color reads four RGBA8 bytes per texel; declared-format bytes are the attachment's own.
+        const int texelBytes = declaredBytes ? BytesPerTexelEXT(colorFormat_) : 4;
+        if (texelBytes == 0)
+            return false;
+        const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(levelSize) *
+                                                  static_cast<std::uint32_t>(texelBytes));
         const std::uint64_t bufferSize = static_cast<std::uint64_t>(bytesPerRow) * static_cast<std::uint64_t>(levelSize);
 
         WGPUBufferDescriptor bufferDescriptor{};
@@ -2738,7 +2761,8 @@ namespace CNA::Internal::Renderers::WebGPU
         const bool isBgra = (colorFormat_ == WGPUTextureFormat_BGRA8Unorm ||
                              colorFormat_ == WGPUTextureFormat_BGRA8UnormSrgb);
         auto* out = static_cast<std::uint8_t*>(data);
-        const std::size_t requiredLength = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+        const std::size_t requiredLength = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) *
+                                           static_cast<std::size_t>(texelBytes);
         // This branch used to memset the caller's destination to zero and return as
         // if the readback had succeeded. Report the failure instead.
         if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength ||
@@ -2747,6 +2771,18 @@ namespace CNA::Internal::Renderers::WebGPU
             wgpuBufferUnmap(readbackBuffer);
             wgpuBufferRelease(readbackBuffer);
             return false;
+        }
+        if (declaredBytes)
+        {
+            const std::size_t rowBytes = static_cast<std::size_t>(w) * texelBytes;
+            for (int row = 0; row < h; ++row)
+                std::memcpy(out + static_cast<std::size_t>(row) * rowBytes,
+                            mapped + static_cast<std::size_t>(y + row) * bytesPerRow +
+                                static_cast<std::size_t>(x) * texelBytes,
+                            rowBytes);
+            wgpuBufferUnmap(readbackBuffer);
+            wgpuBufferRelease(readbackBuffer);
+            return true;
         }
         for (int row = 0; row < h; ++row)
         {

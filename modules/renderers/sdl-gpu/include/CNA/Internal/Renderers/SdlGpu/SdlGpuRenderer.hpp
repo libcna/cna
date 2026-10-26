@@ -980,6 +980,25 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT [[nodiscard]] bool GetNativeDataEXT(
             int face, int level, int x, int y, int w, int h,
             void* data, int dataLength) const;
+        /**
+         * @brief Reads one face's declared-format texels, which `TextureCube::GetData` asks for
+         *        every format but Color.
+         *
+         * Each render-target format's native storage has its declared format's own byte layout
+         * (`TryGetRenderTargetFormatInfo`), so the native bytes are the declared texels.
+         *
+         * @param face Cube face index, zero through five.
+         * @param level Mip level to read.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Destination for tightly packed declared-format texels.
+         * @param dataLength Available destination bytes.
+         * @return True only when the complete region was copied.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const override;
 
         /** @brief Returns the single-sample, sampleable cube texture. CNAEXT — internal use only. */
         CNAEXT [[nodiscard]] SDL_GPUTexture* CubeTexture() const { return state_->cubeTexture; }

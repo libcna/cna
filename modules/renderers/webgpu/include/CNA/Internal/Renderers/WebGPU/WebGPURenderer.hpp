@@ -584,6 +584,26 @@ namespace CNA::Internal::Renderers::WebGPU
         /// it had succeeded -- the same fabrication the shared layer was doing, one level down.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Reads one face's declared-format texels, which `TextureCube::GetData` asks for
+         *        every format but Color.
+         *
+         * Only a target whose colour attachment stores the declared format itself
+         * (`MapRenderTargetColorFormatEXT`) answers; its texels are copied at that format's width
+         * with no conversion.
+         *
+         * @param face Cube face index, zero through five.
+         * @param level Mip level to read.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Destination for tightly packed declared-format texels.
+         * @param dataLength Available destination bytes.
+         * @return True only when the complete region was copied.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const override;
 
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
         /// The whole-cube sampling view (all 6 layers) -- IWebGPUCubeSamplable's contract.
@@ -629,6 +649,13 @@ namespace CNA::Internal::Renderers::WebGPU
         /// constructor comment) -- captured so GetData() can decide whether a BGRA->RGBA byte
         /// swap is needed, exactly like WebGPURenderTargetRenderer::colorFormat_'s identical role.
         WGPUTextureFormat colorFormat_ = WGPUTextureFormat_Undefined;
+        /// True when colorFormat_ is the requested SurfaceFormat's own storage, false when it
+        /// fell back to the swap-chain format (Color).
+        bool declaredFormatIsNative_ = false;
+        /// GetData's and GetDataBytesEXT's shared readback: RGBA8 Color texels, or the colour
+        /// attachment's own texels at their own width when @p declaredBytes.
+        [[nodiscard]] bool ReadFaceEXT(int face, int level, int x, int y, int w, int h,
+                                       void* data, int dataLength, bool declaredBytes) const;
         WGPUTexture texture_ = nullptr;
         WGPUTextureView cubeView_ = nullptr;
         /// Keeps texture_/cubeView_ — the pair EnvironmentMapEffect samples — alive
