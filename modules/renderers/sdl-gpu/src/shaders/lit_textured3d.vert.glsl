@@ -13,6 +13,7 @@ layout(location = 3) out vec3  fragWorldPos;
 layout(location = 4) out vec4 fragFog;    // xyz=FogColor, w=keep-factor
 layout(location = 5) out vec3 fragVertexLit;
 layout(location = 6) out vec3 fragVertexSpecular;
+layout(location = 7) out vec3 fragVertexColor;
 
 layout(set = 1, binding = 0) uniform PC {
     mat4  mvp;
@@ -82,6 +83,7 @@ void main() {
     vec3 lightSum = pc.ambientColor + NdotL0 * pc.light0Diffuse
                     + NdotL1 * lp.light1Diffuse_pad.xyz + NdotL2 * lp.light2Diffuse_pad.xyz;
     vec3 vertexColor = (pc.vertexColorEnabled > 0.5) ? inColor.rgb : vec3(1.0);
+    fragVertexColor = vertexColor;
     fragVertexLit = clamp((lightSum * pc.diffuseColor.rgb + lp.emissiveColor_pad.xyz)
                           * vertexColor, 0.0, 1.0);
     vec3 h0 = safeNormalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, lp.specularColorPower.w);

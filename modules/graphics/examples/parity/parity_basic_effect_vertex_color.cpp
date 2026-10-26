@@ -17,6 +17,8 @@
 //   2  texture          -> DiffuseColor * texture
 //   3  both             -> DiffuseColor * texture * vertexColor
 //   4  the clamp        -> a product past 1.0 saturates, it does not wrap
+//   5  lit, per vertex  -> (DiffuseColor * light + EmissiveColor) * vertexColor
+//   6  lit, per pixel   -> the same product through the per-pixel shader
 //
 // The vertex colour is (255, 128, 64): three DIFFERENT channels, so a renderer that multiplied by
 // luminance, or swizzled, produces a colour no expected value matches. A white vertex colour would
@@ -46,7 +48,9 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <vector>
@@ -56,7 +60,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kColumns = 5;
+    constexpr int kColumns = 7;
     constexpr int kCell = 64;
     constexpr int kWidth = kColumns * kCell;
     constexpr int kHeight = 64;
@@ -69,6 +73,8 @@ namespace
     const Color kVertexColor(255, 128, 64, 255);
     /// Likewise: no two channels alike, and none of them 0 or 255.
     const Color kTexel(128, 192, 64, 255);
+    /// Emissive in red and green for the lit columns, past 1.0 once the full light is added.
+    constexpr float kEmissive = 0.9f;
 }
 
 /// WEBGPU-173: VertexColorEnabled and TextureEnabled are independent gates, and the product clamps.
@@ -102,8 +108,11 @@ protected:
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.Clear(kClearColor);
 
-        const auto drawColumn = [&](int column, bool vertexColor, bool textured, bool clampLeg)
+        enum class Lit { Off, Clamp, VertexColorPerVertex, VertexColorPerPixel };
+        const auto drawColumn = [&](int column, bool vertexColor, bool textured, Lit lit)
         {
+            const bool clampLeg = lit == Lit::Clamp;
+            const bool lighting = lit != Lit::Off;
             BasicEffect effect(device);
             effect.setWorldProperty(Matrix::getIdentityProperty());
             effect.setViewProperty(Matrix::getIdentityProperty());
@@ -114,23 +123,19 @@ protected:
             // CPU (`EffectHelpers.SetMaterialColor`), so emissive DOES apply on that path; it is
             // left at zero here for clarity, not because it would be ignored.
             //
-            // The clamp leg also leaves the VERTEX COLOUR OFF, and that is not a simplification.
-            // It is steering around a SHARED CNA DEFECT this fixture found: on the LIT
-            // vertex-colour path, `EmissiveColor` is dropped entirely. FNA's own
+            // The lit vertex-colour columns are the other path, where the SHADER must add
+            // `EmissiveColor` after the light sum and before the vertex colour multiplies in:
             // `VSBasicVertexLightingVc` is `ComputeCommonVSOutputWithLighting(...)` -- whose
             // `Lighting.fxh` line 43 is `... * DiffuseColor.rgb + EmissiveColor` -- followed by
-            // `vout.Diffuse *= vin.Color`, so XNA's answer is `(diffuse + emissive) * vertexColor`.
-            // Measured here, EasyGL and WebGPU BOTH return `diffuse * vertexColor`: for this leg's
-            // inputs XNA gives green 243 and both renderers give 128. WebGPU is not cloning an
-            // EasyGL bug -- both already have it -- so this fixture records the defect rather than
-            // asserting the broken behaviour as correct, and `plans/plan_graphics.md` carries the
-            // row. Asserting the XNA answer here would paint both renderers red and make the
-            // fixture useless as a regression gate for everything else it covers.
-            effect.setLightingEnabledProperty(clampLeg);
+            // `vout.Diffuse *= vin.Color`, and the per-pixel shader multiplies the vertex colour
+            // into the whole lit bracket. Either way XNA's answer is
+            // `(diffuse * light + emissive) * vertexColor`; a renderer that drops the emissive term
+            // on this path reads green 128 instead of 243.
+            effect.setLightingEnabledProperty(lighting);
             effect.setEmissiveColorProperty(Vector3::Zero);
-            if (clampLeg)
+            if (lighting)
             {
-                effect.setPreferPerPixelLightingProperty(false);
+                effect.setPreferPerPixelLightingProperty(lit == Lit::VertexColorPerPixel);
                 effect.setAmbientLightColorProperty(Vector3::Zero);
                 effect.setSpecularColorProperty(Vector3::Zero);
                 effect.DirectionalLight0.setEnabledProperty(true);
@@ -148,9 +153,10 @@ protected:
             // BLUE is held at 0.25 on purpose, as the control that proves saturation is per channel
             // rather than the whole fragment being driven to white. A wrap or a signed overflow
             // produces something dark instead.
-            effect.setDiffuseColorProperty(clampLeg ? Vector3(1.0f, 1.0f, 0.25f)
-                                                    : Vector3(0.8f, 0.8f, 0.8f));
-            if (clampLeg) effect.setEmissiveColorProperty(Vector3(0.9f, 0.9f, 0.0f));
+            effect.setDiffuseColorProperty(clampLeg   ? Vector3(1.0f, 1.0f, 0.25f)
+                                           : lighting ? Vector3::One
+                                                      : Vector3(0.8f, 0.8f, 0.8f));
+            if (lighting) effect.setEmissiveColorProperty(Vector3(kEmissive, kEmissive, 0.0f));
 
             const auto corners = grid.QuadCorners(column, 0);
             struct Vertex { float x, y, z, nx, ny, nz; std::uint32_t color; float u, v; };
@@ -181,11 +187,13 @@ protected:
             device.SetVertexBuffer(nullptr);
         };
 
-        drawColumn(0, /*vertexColor=*/false, /*textured=*/false, /*clampLeg=*/false);
-        drawColumn(1, /*vertexColor=*/true,  /*textured=*/false, /*clampLeg=*/false);
-        drawColumn(2, /*vertexColor=*/false, /*textured=*/true,  /*clampLeg=*/false);
-        drawColumn(3, /*vertexColor=*/true,  /*textured=*/true,  /*clampLeg=*/false);
-        drawColumn(4, /*vertexColor=*/false, /*textured=*/false, /*clampLeg=*/true);
+        drawColumn(0, /*vertexColor=*/false, /*textured=*/false, Lit::Off);
+        drawColumn(1, /*vertexColor=*/true,  /*textured=*/false, Lit::Off);
+        drawColumn(2, /*vertexColor=*/false, /*textured=*/true,  Lit::Off);
+        drawColumn(3, /*vertexColor=*/true,  /*textured=*/true,  Lit::Off);
+        drawColumn(4, /*vertexColor=*/false, /*textured=*/false, Lit::Clamp);
+        drawColumn(5, /*vertexColor=*/true,  /*textured=*/false, Lit::VertexColorPerVertex);
+        drawColumn(6, /*vertexColor=*/true,  /*textured=*/false, Lit::VertexColorPerPixel);
 
         // The expected products, computed here rather than written as constants, so the expectation
         // is the FORMULA and not a value copied out of a passing run.
@@ -210,6 +218,20 @@ protected:
         ExpectAverage("TextureEnabled multiplies the texel in", grid.Interior(2, 0),
                       expectedTexture, 3);
         ExpectAverage("both gates on: all three factors", grid.Interior(3, 0), expectedBoth, 3);
+
+        // A fully lit white surface plus emissive, times the vertex colour, saturated per channel:
+        // (255, 243, 64) for this file's vertex colour and kEmissive 0.9.
+        const auto litChannel = [](float emissive, int vertexChannel)
+        {
+            return std::min(255, static_cast<int>(std::lround((1.0f + emissive) * vertexChannel)));
+        };
+        const Color expectedLitVertex(litChannel(kEmissive, kVertexColor.getRProperty()),
+                                      litChannel(kEmissive, kVertexColor.getGProperty()),
+                                      litChannel(0.0f, kVertexColor.getBProperty()), 255);
+        ExpectAverage("lit per vertex: EmissiveColor joins the light sum before the vertex colour",
+                      grid.Interior(5, 0), expectedLitVertex, 3);
+        ExpectAverage("lit per pixel: EmissiveColor joins the light sum before the vertex colour",
+                      grid.Interior(6, 0), expectedLitVertex, 3);
 
         // The gates are INDEPENDENT: each column differs from every neighbour it should differ
         // from. Without this, a renderer that always multiplied could still hit three of the four

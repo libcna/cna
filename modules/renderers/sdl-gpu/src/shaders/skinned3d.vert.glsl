@@ -18,6 +18,8 @@ layout(location = 3) out vec3 fragWorldPos;
 layout(location = 4) out vec4 fragFog;    // xyz=FogColor, w=keep-factor
 layout(location = 5) out vec3 fragVertexLit;
 layout(location = 6) out vec3 fragVertexSpecular;
+// lit_textured3d.frag.glsl's per-pixel emissive term reads it; this layout has no colour element.
+layout(location = 7) out vec3 fragVertexColor;
 
 // 72 * mat4 = 4608 bytes -- too large for SDL_gpu's measured 4096-byte pushed-uniform limit.
 // A 288x1 RGBA32F texture stores the same column-major palette as four adjacent texels per matrix.
@@ -99,6 +101,7 @@ void main() {
     fragNormal = normalize(skinNormalMatrix * (mat3(skinMat) * inNormal));
     fragWorldPos = (lp.world * skinnedPos).xyz;
     fragTint = pc.diffuseColor;
+    fragVertexColor = vec3(1.0);
     vec3 N = fragNormal;
     vec3 E = safeNormalize(lp.eyePos_weightsPerVertex.xyz - fragWorldPos);
     vec3 nL0 = safeNormalize(pc.light0Dir);

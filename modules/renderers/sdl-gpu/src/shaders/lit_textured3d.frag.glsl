@@ -7,6 +7,7 @@ layout(location = 3) in vec3  fragWorldPos;
 layout(location = 4) in vec4 fragFog;
 layout(location = 5) in vec3 fragVertexLit;
 layout(location = 6) in vec3 fragVertexSpecular;
+layout(location = 7) in vec3 fragVertexColor;
 
 layout(location = 0) out vec4 outColor;
 
@@ -97,7 +98,9 @@ void main() {
                                 + spec2 * lp.light2Specular_pad.xyz) * lp.specularColorPower.xyz * shadow;
             // EmissiveColor is added after the light-sum*DiffuseColor multiply, not scaled by it
             // (matches FNA's Lighting.fxh: result.Diffuse = sum*DiffuseColor + EmissiveColor).
-            vec3 lit = lightSum * fragTint.rgb + lp.emissiveColor_pad.xyz;
+            // fragTint already carries the vertex colour; XNA's per-pixel Vc shaders multiply it
+            // into that whole bracket, emissive included, so the emissive term takes it too.
+            vec3 lit = lightSum * fragTint.rgb + lp.emissiveColor_pad.xyz * fragVertexColor;
             color = vec4(lit, fragTint.a) * tex;
             color.rgb *= CnaCascadeDebugTint(fragWorldPos);
             // Specular is added after the texture*diffuse multiply, scaled by the resulting alpha
