@@ -59,9 +59,9 @@ OpenGL and SDL_GPU/Vulkan drivers; this is not a new Windows or Apple qualificat
 | Field | Value |
 |---|---|
 | Repository | CNA's fork https://github.com/libcna/FNA3D (upstream https://github.com/FNA-XNA/FNA3D) |
-| Pinned revision | `aa3139087e69ffcd360b1d2c406bc9f70ec09a3c` on the fork's `cna` branch: release **26.08** (`32401479a3ab`) plus CNA's commits, merged with release **26.10** (`62a41708e975`), then the 2026-10-26 dependency audit's fixes |
+| Pinned revision | `d6090fab7f663176b33d2336a3c5984d2203bdc8` on the fork's `cna` branch: release **26.08** (`32401479a3ab`) plus CNA's commits, merged with release **26.10** (`62a41708e975`), then the 2026-10-26 dependency audit's fixes and those of its review |
 | License | zlib |
-| Vendored submodule | MojoShader from CNA's fork https://github.com/libcna/mojoshader (upstream https://github.com/icculus/mojoshader), `bbee0a5fab1f` on its `cna` branch: `6333f74` plus CNA's commits, merged with upstream `main` `ad5dff8` (the revision 26.10 pins), then the 2026-10-26 audit's fixes; built from FNA3D's own CMake |
+| Vendored submodule | MojoShader from CNA's fork https://github.com/libcna/mojoshader (upstream https://github.com/icculus/mojoshader), `83f2c4f8f95e` on its `cna` branch: `6333f74` plus CNA's commits, merged with upstream `main` `ad5dff8` (the revision 26.10 pins), then the 2026-10-26 audit's and review's fixes; built from FNA3D's own CMake |
 | Dependencies | **SDL 3.2.0 or newer, and nothing else** — the very SDL3 CNA already vendors |
 | Integration | `cmake/ThirdPartyFNA3D.cmake`, FetchContent at the pin (`CNA_FNA3D_GIT_REPOSITORY`, `CNA_FNA3D_GIT_TAG`), built as a static archive; nothing is patched at configure time |
 | Offline builds | `-DFETCHCONTENT_SOURCE_DIR_FNA3D=/path/to/FNA3D`: a clone of the fork at the pin with its MojoShader submodule initialized (`git submodule update --init`). Configure warns when that checkout is at another commit or has local changes, and builds it as it is |
@@ -83,7 +83,14 @@ shared library.
   dependency audit also: bounded, format-exact GetData on all three drivers, VFACE's XNA sign,
   `FNA3D_SetLegacyBumpMapEnvEXT`, Depth vertex usage, disposal at device destruction, tracing of
   the extension entry points, the installed `mojoshader.h` and package, a working
-  `MOJOSHADER_STATIC_SPIRVCROSS`, and its own regression tests (`tests/cna`).
+  `MOJOSHADER_STATIC_SPIRVCROSS`, and its own regression tests (`tests/cna`). Its review the same
+  day added: readbacks that restore the context's pack state, OpenGL ES 3 reads in the
+  implementation's own layout where that is the format's (`ColorSrgbEXT` is refused there: ES 3
+  decodes sRGB to linear as it reads), SDL_GPU downloads copying only their rectangle and a
+  checked `ReadBackbuffer`, pipeline-cache keys packed unsigned (blend states differing only in a
+  blend function or the multisample mask no longer share one), freed SDL_GPU vertex-binding
+  cache, dumpspirv effect table and trace lock, and tests for the backbuffer, Depth usage, the
+  installed package, SDL 2 replay and trace round trips.
 - **libcna/mojoshader** `cna`: 133 commits — malformed-bytecode hardening of the Effect and
   preshader parsers, Direct3D 9 shader-model validation, GLSL/GLSL ES, SPIR-V and Metal profile
   fixes (TEXCRD, vertex colour clamp, pixel centres, centroid, predication, precision), the SDL_GPU
@@ -300,18 +307,20 @@ transfer, readback and content-loader route has not been promoted as one verifie
 `FNA3D-52` deliberately opened only the independently proven signed-normalized formats rather
 than using the sample failures as a reason to advertise every lower-level FNA3D format.
 
-### Backbuffer readback quirk (upstream, worked around here)
+### Backbuffer readback quirk (upstream; fixed in the fork, still worked around here)
 
-`FNA3D_ReadBackbuffer`'s **sub-rectangle** origin is not the same on every driver: the OpenGL
-driver forwards `(x, y)` straight to `glReadPixels`, whose origin is the bottom-left, and only
-then flips the returned rows — so a full-frame read comes back correctly top-row-first while a
+Upstream's `FNA3D_ReadBackbuffer` **sub-rectangle** origin is not the same on every driver: the
+OpenGL driver forwards `(x, y)` straight to `glReadPixels`, whose origin is the bottom-left, and
+only then flips the returned rows — so a full-frame read comes back correctly top-row-first while a
 sub-rectangle read comes back from the mirrored row range. The D3D11 driver, routing through
 `GetTextureData2D`, uses the top-left origin. This was measured, not inferred:
 `fna3d-spike/fna3d_sprite_spike.c` renders a quad at rows 12–35, finds it there in a full-frame
-read, and gets the cleared colour from the equivalent sub-rectangle read.
+read, and gets the cleared colour from the equivalent sub-rectangle read. The fork converts the
+rectangle to GL's rows (2026-10-26 audit B2-10; `tests/cna/backbuffer_tests.c`).
 
 CNA's contract is unambiguous ("x, y are top-left in game coordinates"), so `Fna3dRenderer`
-reads the whole backbuffer — which every driver agrees is top-row-first — and crops in CNA.
+reads the whole backbuffer — which every driver returns top-row-first, fixed or not — and crops
+in CNA.
 Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only.
 
 ### Texture upload ordering (upstream, reported)

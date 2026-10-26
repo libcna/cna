@@ -30,10 +30,10 @@
 include_guard(GLOBAL)
 
 # libcna/FNA3D `cna`: FNA3D 26.08 (32401479a3ab) with CNA's four FNA3D commits, merged with release
-# 26.10 (62a41708e975), then the fixes for the 2026-10-26 dependency audit (a78cbed..aa3139087e69);
-# the MojoShader submodule at libcna/mojoshader bbee0a5fab1f (MojoShader 6333f74 with CNA's 133
-# commits, merged with upstream main ad5dff8, the revision 26.10 pins, then that audit's fixes and the
-# fork's regression tests in tests/cna). Bump
+# 26.10 (62a41708e975), then the fixes for the 2026-10-26 dependency audit and its review
+# (a78cbed..d6090fab7f66); the MojoShader submodule at libcna/mojoshader 83f2c4f8f95e (MojoShader
+# 6333f74 with CNA's 133 commits, merged with upstream main ad5dff8, the revision 26.10 pins, then
+# that audit's and review's fixes and the fork's regression tests in tests/cna). Bump
 # deliberately: FNA3D's driver list and FNA3D_* ABI move between releases, and
 # modules/renderers/fna3d/effects/ holds stock-effect binaries whose MojoShader parse path must keep
 # matching the pinned library.
@@ -45,7 +45,7 @@ include_guard(GLOBAL)
 include("${CMAKE_CURRENT_LIST_DIR}/Fna3dSourcePin.cmake")
 cna_fna3d_select_source_pin(
     DEFAULT_REPOSITORY "https://github.com/libcna/FNA3D.git"
-    DEFAULT_TAG "aa3139087e69ffcd360b1d2c406bc9f70ec09a3c")
+    DEFAULT_TAG "d6090fab7f663176b33d2336a3c5984d2203bdc8")
 
 # Every configure compares the checkout with the pin, read-only: FNA3D's HEAD, the MojoShader
 # commit it records against MojoShader's own HEAD, and local changes in either. A
