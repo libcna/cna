@@ -9942,39 +9942,11 @@ namespace CNA::Internal::Renderers::EasyGL
         // row-vector WVP by this clip-space translation produces clip.xy += offset * clip.w.
         int viewportX = 0, viewportY = 0, viewportWidth = 0, viewportHeight = 0;
         GetGlViewport(viewportX, viewportY, viewportWidth, viewportHeight);
-        // Not while the destination is multisampled.
-        //
-        // The correction above is a GEOMETRY translation, and that is only equivalent to what it
-        // means at ONE sample per pixel. There it decides which side of the fill edge the pixel
-        // CENTRE lands on, and 63/128 is deliberately just under half a pixel so the centre stays
-        // covered -- that margin is the whole design. At four samples the outer sample positions
-        // sit at a quarter of a pixel, inside that margin, so the same translation also removes
-        // coverage: the outermost row and column lose two of four samples and the corner three of
-        // four, measured as exactly 1/2 and exactly 1/4 of the expected colour.
-        //
-        // Suppressing it here keeps the correction doing the job it was tuned for and stops it
-        // doing one it was not. The cost is real and deliberate: geometry differs by ~0.49px
-        // between a multisampled destination and a single-sampled one, so a game toggling MSAA
-        // sees a sub-pixel shift. The alternative was to weaken four fixtures that seven renderers
-        // share, only one of which applies this correction at all.
-        bool multisampledDestination = false;
-        if (bound_)
-        {
-            if (bound_->rt2D != nullptr && bound_->rt2D->GetMultiSampleCount() > 0)
-                multisampledDestination = true;
-            if (bound_->cube != nullptr && bound_->cube->GetMultiSampleCount() > 0)
-                multisampledDestination = true;
-            for (int slot = 0; slot < bound_->mrtCount; ++slot)
-            {
-                const EasyGLMrtBindingEXT& target =
-                    bound_->mrt[static_cast<std::size_t>(slot)];
-                if ((target.rt2D != nullptr && target.rt2D->GetMultiSampleCount() > 0) ||
-                    (target.cube != nullptr && target.cube->GetMultiSampleCount() > 0))
-                    multisampledDestination = true;
-            }
-        }
+        // Multisampled destinations too: XNA keeps Direct3D 9's integer centres there, so a quad
+        // covering a 4x target exactly leaves its first row and column half covered
+        // (spikes/xna-msaa-pixel-center-spike/, 2026-10-26 dependency audit B2-04).
         Matrix xnaPixelCenter = Matrix::getIdentityProperty();
-        if (viewportWidth > 0 && viewportHeight > 0 && !multisampledDestination)
+        if (viewportWidth > 0 && viewportHeight > 0)
         {
             const float pixelCenterScale = XnaPixelCenterScaleForDraw();
             xnaPixelCenter = Matrix::CreateTranslation(

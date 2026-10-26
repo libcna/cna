@@ -701,7 +701,6 @@ namespace CNA::Internal::Renderers::Software
         {
             float x = 0.0f, y = 0.0f, width = 0.0f, height = 0.0f;
             float minDepth = 0.0f, maxDepth = 1.0f;
-            bool multisampledDestination = false;
         };
 
         /// Converts one clip-space vertex into a screen-space RasterVertex: perspective divide, the
@@ -766,26 +765,36 @@ namespace CNA::Internal::Renderers::Software
             return out;
         }
 
+        /// SOFTWARE-131: XNA 4.0's Direct3D 9 raster coordinates place pixel centers at integer
+        /// screen coordinates. This CPU rasterizer samples in the conventional corner-origin space
+        /// at pixel + 0.5, so 3D geometry moves by Wine/MonoGame/EasyGL's established 63/128 of a
+        /// pixel. Staying just below one half selects the XNA side of exact fill edges after finite
+        /// subpixel precision instead of leaving the result on the tie.
+        constexpr float kXnaPixelCenterOffset = 63.0f / 128.0f;
+
+        /// Applies that move in clip space, before clipping -- clip.xy += offset * clip.w, the
+        /// translation EasyGL post-multiplies into its WVP -- so the clip volume, and with it the
+        /// target's edge, stays where it is. Moving the clipped vertices in window space instead
+        /// moved the clip boundary along with them: a primitive crossing the left or top edge of a
+        /// multisampled target then left that edge's outer samples uncovered, which XNA covers.
+        /// A multisampled destination is corrected like any other, since XNA keeps integer centres
+        /// there (spikes/xna-msaa-pixel-center-spike/, 2026-10-26 dependency audit B2-04;
+        /// SOFTWARE-134 had left it uncorrected).
+        ClipVertex ToXnaPixelCenter(ClipVertex cv, const ViewportTransform& vp)
+        {
+            if (vp.width > 0.0f)
+                cv.x += (2.0f * kXnaPixelCenterOffset / vp.width) * cv.w;
+            if (vp.height > 0.0f)
+                cv.y -= (2.0f * kXnaPixelCenterOffset / vp.height) * cv.w;
+            return cv;
+        }
+
+        /// The 3D routes' conversion of a vertex that ToXnaPixelCenter already moved: coverage
+        /// samples at pixel + 0.5, and a line's attributes at the Direct3D pixel centre that
+        /// corresponds to (pixel + 63/128).
         RasterVertex ClipVertexToRasterVertex(const ClipVertex& cv, const ViewportTransform& vp)
         {
-            // SOFTWARE-131: XNA 4.0's Direct3D 9 raster coordinates place pixel centers at integer
-            // screen coordinates. This CPU rasterizer samples in the conventional corner-origin
-            // space at pixel + 0.5, so translate geometry by Wine/MonoGame/EasyGL's established
-            // 63/128-pixel amount. Staying just below one half selects the XNA side of exact fill
-            // edges after finite subpixel precision instead of leaving the result on the tie.
-            // SOFTWARE-134: the single-sample correction is deliberately absent
-            // from multisampled destinations. Moving four subpixel sample locations by
-            // almost half a pixel drops three samples at the outer corner and two on each outer
-            // edge. EasyGL established the same distinction against the shared render-target
-            // readback corpus; XNA's measured one-pixel triangle remains protected on ordinary
-            // single-sample destinations.
-            constexpr float kXnaPixelCenterOffset = 63.0f / 128.0f;
-            const float pixelCenterOffset =
-                vp.multisampledDestination ? 0.0f : kXnaPixelCenterOffset;
-            const float interpolationCenterOffset =
-                vp.multisampledDestination ? 0.5f : kXnaPixelCenterOffset;
-            return ClipVertexToRasterVertexWithOffset(
-                cv, vp, pixelCenterOffset, interpolationCenterOffset);
+            return ClipVertexToRasterVertexWithOffset(cv, vp, 0.0f, kXnaPixelCenterOffset);
         }
 
         /// SOFTWARE-338: SpriteBatch's existing screen-space route already aligns rectangle edges
@@ -6664,7 +6673,7 @@ namespace CNA::Internal::Renderers::Software
             return;
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
-                                    vpMinDepth, vpMaxDepth, fb.multiSampleCount > 1};
+                                    vpMinDepth, vpMaxDepth};
 
         // SOFTWARE-338: apply FNA's inlined SpriteBatch orthographic projection after the caller's
         // full homogeneous transform. This keeps transformed Z/W observable and leaves viewport
@@ -6947,7 +6956,7 @@ namespace CNA::Internal::Renderers::Software
         GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
-                                    vpMinDepth, vpMaxDepth, fb.multiSampleCount > 1};
+                                    vpMinDepth, vpMaxDepth};
         // Effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
         // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
@@ -6971,6 +6980,8 @@ namespace CNA::Internal::Renderers::Software
                 cv[k] = BuildPositionColorClipVertex(raw, combined);
             }
 
+            for (ClipVertex& vertex : cv)
+                vertex = ToXnaPixelCenter(vertex, vpT);
             std::array<ClipVertex, kMaxClippedTriangleVertices> clipped{};
             const int clippedCount = ClipTriangleToFrustum(cv, clipped);  // SOFTWARE-106
             if (clippedCount == 0)
@@ -7036,7 +7047,7 @@ namespace CNA::Internal::Renderers::Software
         GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
-                                    vpMinDepth, vpMaxDepth, fb.multiSampleCount > 1};
+                                    vpMinDepth, vpMaxDepth};
         // Effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
         // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
@@ -7063,6 +7074,8 @@ namespace CNA::Internal::Renderers::Software
                 cv[k] = BuildPositionColorClipVertex(raw, combined);
             }
 
+            for (ClipVertex& vertex : cv)
+                vertex = ToXnaPixelCenter(vertex, vpT);
             std::array<ClipVertex, kMaxClippedTriangleVertices> clipped{};
             const int clippedCount = ClipTriangleToFrustum(cv, clipped);  // SOFTWARE-106
             if (clippedCount == 0)
@@ -7166,7 +7179,7 @@ namespace CNA::Internal::Renderers::Software
         GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
-                                    vpMinDepth, vpMaxDepth, fb.multiSampleCount > 1};
+                                    vpMinDepth, vpMaxDepth};
         // Effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
         // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
@@ -7227,7 +7240,8 @@ namespace CNA::Internal::Renderers::Software
             if (primitive == PrimitiveType::PointListEXT)
             {
                 const CombinedVertexReader raw = fetchVertex(i);
-                const ClipVertex cv = BuildGenericClipVertex(raw, stride, combined, params);
+                const ClipVertex cv =
+                    ToXnaPixelCenter(BuildGenericClipVertex(raw, stride, combined, params), vpT);
                 if (IsInsideClipVolume(cv))
                 {
                     const RasterVertex vertex = ClipVertexToRasterVertex(cv, vpT);
@@ -7249,6 +7263,8 @@ namespace CNA::Internal::Renderers::Software
                     fetchVertex(first), stride, combined, params);
                 ClipVertex b = BuildGenericClipVertex(
                     fetchVertex(first + 1), stride, combined, params);
+                a = ToXnaPixelCenter(a, vpT);
+                b = ToXnaPixelCenter(b, vpT);
                 if (ClipLineToFrustum(a, b))
                 {
                     const RasterVertex firstVertex = ClipVertexToRasterVertex(a, vpT);
@@ -7293,6 +7309,8 @@ namespace CNA::Internal::Renderers::Software
                 cv[k] = BuildGenericClipVertex(raw, stride, combined, params);
             }
 
+            for (ClipVertex& vertex : cv)
+                vertex = ToXnaPixelCenter(vertex, vpT);
             std::array<ClipVertex, kMaxClippedTriangleVertices> clipped{};
             const int clippedCount = ClipTriangleToFrustum(cv, clipped);  // SOFTWARE-106
             if (clippedCount == 0)
@@ -7427,7 +7445,7 @@ namespace CNA::Internal::Renderers::Software
         GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
-                                    vpMinDepth, vpMaxDepth, fb.multiSampleCount > 1};
+                                    vpMinDepth, vpMaxDepth};
         // Effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
         // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
@@ -7495,7 +7513,8 @@ namespace CNA::Internal::Renderers::Software
             if (primitive == PrimitiveType::PointListEXT)
             {
                 const CombinedVertexReader raw = fetchVertex(i);
-                const ClipVertex cv = BuildGenericClipVertex(raw, stride, combined, params);
+                const ClipVertex cv =
+                    ToXnaPixelCenter(BuildGenericClipVertex(raw, stride, combined, params), vpT);
                 if (IsInsideClipVolume(cv))
                 {
                     const RasterVertex vertex = ClipVertexToRasterVertex(cv, vpT);
@@ -7517,6 +7536,8 @@ namespace CNA::Internal::Renderers::Software
                     fetchVertex(first), stride, combined, params);
                 ClipVertex b = BuildGenericClipVertex(
                     fetchVertex(first + 1), stride, combined, params);
+                a = ToXnaPixelCenter(a, vpT);
+                b = ToXnaPixelCenter(b, vpT);
                 if (ClipLineToFrustum(a, b))
                 {
                     const RasterVertex firstVertex = ClipVertexToRasterVertex(a, vpT);
@@ -7561,6 +7582,8 @@ namespace CNA::Internal::Renderers::Software
                 cv[k] = BuildGenericClipVertex(raw, stride, combined, params);
             }
 
+            for (ClipVertex& vertex : cv)
+                vertex = ToXnaPixelCenter(vertex, vpT);
             std::array<ClipVertex, kMaxClippedTriangleVertices> clipped{};
             const int clippedCount = ClipTriangleToFrustum(cv, clipped);  // SOFTWARE-106
             if (clippedCount == 0)

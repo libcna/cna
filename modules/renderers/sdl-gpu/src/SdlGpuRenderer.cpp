@@ -4952,16 +4952,6 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     Matrix SdlGpuRenderer::ApplyXnaPixelCenter(const Matrix& wvp) const
     {
-        bool multisampledDestination =
-            currentRenderTarget_ == nullptr && currentRenderTargetCube_ == nullptr &&
-            backbufferSampleCount_ != SDL_GPU_SAMPLECOUNT_1;
-        if (currentRenderTarget_ != nullptr)
-            multisampledDestination =
-                currentRenderTarget_->State()->sampleCount != SDL_GPU_SAMPLECOUNT_1;
-        else if (currentRenderTargetCube_ != nullptr)
-            multisampledDestination =
-                currentRenderTargetCube_->State()->sampleCount != SDL_GPU_SAMPLECOUNT_1;
-
         const int width = viewportSet_ ? viewportW_
             : currentRenderTarget_ != nullptr ? currentRenderTarget_->GetWidth()
             : currentRenderTargetCube_ != nullptr ? currentRenderTargetCube_->GetSize()
@@ -4970,12 +4960,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             : currentRenderTarget_ != nullptr ? currentRenderTarget_->GetHeight()
             : currentRenderTargetCube_ != nullptr ? currentRenderTargetCube_->GetSize()
             : physicalHeight_;
-        if (multisampledDestination || width <= 0 || height <= 0)
+        if (width <= 0 || height <= 0)
             return wvp;
 
-        // XNA 4.0 inherits Direct3D 9's integer window-pixel centres. SDL_gpu's Vulkan path uses
-        // the modern half-integer convention, so move geometry just under half a pixel right and
-        // down. The 63/64 margin is EasyGL's measured Wine/MonoGame-compatible correction: it
+        // XNA 4.0 inherits Direct3D 9's integer window-pixel centres, on a multisampled target as
+        // well (spikes/xna-msaa-pixel-center-spike/, 2026-10-26 dependency audit B2-04). SDL_gpu's
+        // Vulkan path uses the modern half-integer convention, so move geometry just under half a
+        // pixel right and down. The 63/64 margin is EasyGL's measured Wine/MonoGame-compatible correction: it
         // avoids placing an edge exactly on the opposite tie while preserving XNA's top-left rule.
         constexpr float kPixelCenterScale = 63.0f / 64.0f;
         return wvp * Matrix::CreateTranslation(
@@ -9997,11 +9988,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                     {
                         // A compiled vertex shader computes its own clip position, so XNA's integer
                         // pixel centres (ApplyXnaPixelCenter) move the viewport instead, by the
-                        // same 63/128 px, for filled primitives at one sample -- FNA3D's SDL_GPU
-                        // driver's correction for the same MojoShader output.
+                        // same 63/128 px, for filled primitives at any sample count -- FNA3D's
+                        // SDL_GPU driver's correction for the same MojoShader output.
                         const bool filled = c.topology == SDL_GPU_PRIMITIVETYPE_TRIANGLELIST ||
                                             c.topology == SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
-                        if (filled && sampleCount == SDL_GPU_SAMPLECOUNT_1)
+                        if (filled)
                         {
                             ApplyViewportForRef(pass, ref, static_cast<int>(viewportSize[0]),
                                                 static_cast<int>(viewportSize[1]), 63.0f / 128.0f);

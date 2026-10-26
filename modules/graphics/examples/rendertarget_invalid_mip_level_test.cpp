@@ -390,9 +390,9 @@ class RenderTargetInvalidMipLevelTest : public Game
 
         dev.SetRenderTarget(&rt);
         dev.Clear(kBase);
-        DrawFlatQuad(dev, kTL, -1.f,  0.f,  0.f,  1.f);
-        DrawFlatQuad(dev, kTR,  0.f,  0.f,  1.f,  1.f);
-        DrawFlatQuad(dev, kBL, -1.f, -1.f,  0.f,  0.f);
+        DrawFlatQuad(dev, kTL, -2.f,  0.f,  0.f,  2.f);
+        DrawFlatQuad(dev, kTR,  0.f,  0.f,  2.f,  2.f);
+        DrawFlatQuad(dev, kBL, -2.f, -2.f,  0.f,  0.f);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
     }
 
@@ -1388,9 +1388,9 @@ class RenderTargetInvalidMipLevelTest : public Game
             bindings.emplace_back(b.get());
             dev.SetRenderTargets(bindings);
             dev.Clear(kBase);
-            DrawFlatQuad(dev, kTL, -1.f,  0.f,  0.f,  1.f);
-            DrawFlatQuad(dev, kTR,  0.f,  0.f,  1.f,  1.f);
-            DrawFlatQuad(dev, kBL, -1.f, -1.f,  0.f,  0.f);
+            DrawFlatQuad(dev, kTL, -2.f,  0.f,  0.f,  2.f);
+            DrawFlatQuad(dev, kTR,  0.f,  0.f,  2.f,  2.f);
+            DrawFlatQuad(dev, kBL, -2.f, -2.f,  0.f,  0.f);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         }
         catch (const std::exception& e)

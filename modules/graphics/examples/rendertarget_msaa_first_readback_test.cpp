@@ -247,8 +247,11 @@ namespace
      * @brief True when (@p x, @p y) is far enough from a quadrant SEAM to be free of MSAA blend.
      *
      * Only the two interior seams (x = w/2, y = h/2) are excluded. The target's OUTER border is
-     * deliberately NOT excluded: every quad spans its half of NDC exactly, so the outermost pixel
-     * row and column are fully covered and resolve to the flat quadrant colour. Excluding them too
+     * deliberately NOT excluded: every outer quad edge lies past the target's edge, so the outermost
+     * pixel row and column are fully covered and resolve to the flat quadrant colour. (A quad that
+     * ended exactly on the edge would leave XNA's first row and column half covered on a
+     * multisampled target: its integer pixel centres put half their samples outside --
+     * spikes/xna-msaa-pixel-center-spike/.) Excluding them too
      * -- the first spelling of this predicate -- made the `final row` rectangle check vacuous,
      * because every texel in row h-1 was skipped and a check with nothing to compare passes.
      */
@@ -348,9 +351,9 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         if (clear) dev.Clear(kBase);
         if (geometry)
         {
-            DrawFlatQuad(dev, kTL, -1.f,  0.f,  0.f,  1.f);
-            DrawFlatQuad(dev, kTR,  0.f,  0.f,  1.f,  1.f);
-            DrawFlatQuad(dev, kBL, -1.f, -1.f,  0.f,  0.f);
+            DrawFlatQuad(dev, kTL, -2.f,  0.f,  0.f,  2.f);
+            DrawFlatQuad(dev, kTR,  0.f,  0.f,  2.f,  2.f);
+            DrawFlatQuad(dev, kBL, -2.f, -2.f,  0.f,  0.f);
         }
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
     }

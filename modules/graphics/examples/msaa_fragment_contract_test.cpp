@@ -150,9 +150,10 @@ class MsaaFragmentContractTest final : public Game
 
     void DrawDepthGradientWireframe(GraphicsDevice& device, const Color& color)
     {
+        // The bottom edge lies off a row boundary, as DrawLine's callers place their lines.
         const VertexPositionColor vertices[3] = {
-            {Vector3(-0.75f, 0.0f, 0.0f), color},
-            {Vector3( 0.75f, 0.0f, 1.0f), color},
+            {Vector3(-0.75f, 0.0625f, 0.0f), color},
+            {Vector3( 0.75f, 0.0625f, 1.0f), color},
             {Vector3( 0.0f, 0.75f, 1.0f), color},
         };
         effect_->Apply();
@@ -283,12 +284,14 @@ class MsaaFragmentContractTest final : public Game
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
 
-        // On an 8-pixel target, NDC y=-0.05 maps to screen y=4.2. The standard 4x
-        // D3D pattern has one sample above that boundary in pixel row 4; a regular
-        // quarter-pixel 2x2 grid has none.
+        // On an 8-pixel target, NDC y=-0.05 maps to window y=4.2. XNA keeps Direct3D 9's integer
+        // pixel centres on a multisampled target (spikes/xna-msaa-pixel-center-spike/), so pixel
+        // row 4's samples of the standard rotated 4x pattern sit at 3.625, 3.875, 4.125 and 4.375:
+        // three above that boundary; a regular quarter-pixel 2x2 grid would put two there (4.2 is
+        // between its 3.75 and 4.25). Under half-integer centres the pattern would give one.
         DrawHorizontalSlab(device, kFullGreen, -0.05f);
         const Color result = FinishAndRead(device, 4, 4);
-        Check(result.getRProperty() == 0 && NearByte(result.getGProperty(), 64) &&
+        Check(result.getRProperty() == 0 && NearByte(result.getGProperty(), 191) &&
                   result.getBProperty() == 0 && result.getAProperty() == 255,
               "4x MSAA uses the standard rotated sample pattern at a 0.2-pixel boundary: " +
                   Text(result));
@@ -346,7 +349,10 @@ class MsaaFragmentContractTest final : public Game
             device.setRasterizerStateProperty(rasterizer);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
-            DrawLine(device, kFullGreen, 0.0f, 0.5f);
+            // NDC y=0.0625 is window y=3.75: a one-pixel line there splits its samples 3/1 between
+            // rows 3 and 4 under either pixel-centre convention, whereas a line on a row boundary
+            // falls wholly into one row under XNA's integer centres.
+            DrawLine(device, kFullGreen, 0.0625f, 0.5f);
             return FinishAndReadAll(device);
         };
         const auto independentlySampledLine = renderLine(true);
@@ -443,7 +449,7 @@ class MsaaFragmentContractTest final : public Game
             if (wireframe)
                 DrawDepthGradientWireframe(device, kFullGreen);
             else
-                DrawDepthGradientLine(device, kFullGreen, 0.0f);
+                DrawDepthGradientLine(device, kFullGreen, 0.0625f);  // off a row boundary, as above
             if (overlayDepth)
             {
                 RasterizerState solid;
@@ -455,6 +461,9 @@ class MsaaFragmentContractTest final : public Game
             return FinishAndReadAll(device);
         };
 
+        // The witness is a pixel where the overlay hides some, but not all, of the samples the line
+        // covers: at least one covered sample in front (green), fewer than all of them. Depth
+        // evaluated once per pixel would keep either every covered sample or none.
         const auto lineCoverage = render(false, false);
         const auto linePixels = render(false, true);
         bool lineWitness = false;
@@ -464,9 +473,10 @@ class MsaaFragmentContractTest final : public Game
                 const Color& coverage = lineCoverage[
                     static_cast<std::size_t>(y * kTargetSize + x)];
                 const Color& pixel = linePixels[static_cast<std::size_t>(y * kTargetSize + x)];
-                if (NearByte(coverage.getGProperty(), 127) &&
-                    NearByte(pixel.getRProperty(), 191) &&
-                    NearByte(pixel.getGProperty(), 64))
+                const int covered = coverage.getGProperty();
+                const int inFront = pixel.getGProperty();
+                if (covered >= 127 - 3 && inFront >= 64 - 3 && inFront <= covered - 64 + 3 &&
+                    pixel.getRProperty() >= 64 - 3)
                 {
                     lineWitness = true;
                     break;
@@ -493,9 +503,11 @@ class MsaaFragmentContractTest final : public Game
             for (int x = 1; x <= 6; ++x)
             {
                 const std::size_t index = static_cast<std::size_t>(y * kTargetSize + x);
-                if (NearByte(wireframeCoverage[index].getGProperty(), 127) &&
-                    NearByte(wireframePixels[index].getRProperty(), 191) &&
-                    NearByte(wireframePixels[index].getGProperty(), 64))
+                // As for the line: some, but not all, of the covered samples stay in front.
+                const int covered = wireframeCoverage[index].getGProperty();
+                const int inFront = wireframePixels[index].getGProperty();
+                if (covered >= 127 - 3 && inFront >= 64 - 3 && inFront <= covered - 64 + 3 &&
+                    wireframePixels[index].getRProperty() >= 64 - 3)
                 {
                     wireframeWitness = true;
                     break;

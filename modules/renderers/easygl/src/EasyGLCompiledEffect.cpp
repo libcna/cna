@@ -1366,26 +1366,11 @@ namespace CNA::Internal::Renderers::EasyGL
         // the XNA texel centres without that translation. Applying it there shifts every
         // postprocess lookup by almost half a pixel, accumulating across render-target hops.
         // The SpriteBatch-only slot-zero override identifies that route without naming a game.
-        // Multisampled destinations still suppress the ordinary-draw correction too.
+        // A multisampled destination is corrected as well: XNA keeps integer centres there too
+        // (spikes/xna-msaa-pixel-center-spike/, 2026-10-26 dependency audit B2-04).
         int viewportX = 0, viewportY = 0, viewportW = 0, viewportH = 0;
         device.get_viewport(viewportX, viewportY, viewportW, viewportH);
-        bool multisampledDestination = false;
-        if (bound_)
-        {
-            if (bound_->rt2D != nullptr && bound_->rt2D->GetMultiSampleCount() > 0)
-                multisampledDestination = true;
-            if (bound_->cube != nullptr && bound_->cube->GetMultiSampleCount() > 0)
-                multisampledDestination = true;
-            for (int slot = 0; slot < bound_->mrtCount; ++slot)
-            {
-                const EasyGLMrtBindingEXT& target = bound_->mrt[static_cast<std::size_t>(slot)];
-                if ((target.rt2D != nullptr && target.rt2D->GetMultiSampleCount() > 0) ||
-                    (target.cube != nullptr && target.cube->GetMultiSampleCount() > 0))
-                    multisampledDestination = true;
-            }
-        }
-        const bool correctPixelCenter = !multisampledDestination &&
-                                        spriteBatchSlotZeroTexture == nullptr;
+        const bool correctPixelCenter = spriteBatchSlotZeroTexture == nullptr;
         const float pixelCenterX = viewportW > 0 && correctPixelCenter
             ? XnaPixelCenterScaleForDraw() / static_cast<float>(viewportW)
             : 0.0f;

@@ -232,9 +232,10 @@ fixed from the descriptor's own request.
   only for the internal routes that bind no public buffer (SpriteBatch, `DrawUser*`).
 - Blend / depth-stencil / rasterizer / sampler state, colour write masks, multisample mask, blend
   factor, standalone reference stencil, scissor and viewport.
-- XNA/D3D9 integer pixel centres for ordinary single-sample triangle draws across FNA3D's
-  OpenGL, SDL_GPU and D3D11 drivers. SpriteBatch explicitly keeps its own projection convention;
-  point, line and multisample draws remain unshifted (`MSR-034`).
+- XNA/D3D9 integer pixel centres for ordinary triangle draws across FNA3D's OpenGL, SDL_GPU and
+  D3D11 drivers, multisampled destinations included: XNA 4.0 keeps integer centres there too
+  (`spikes/xna-msaa-pixel-center-spike/`). SpriteBatch explicitly keeps its own projection
+  convention; point and line draws remain unshifted (`MSR-034`).
 - 2D `SpriteBatch` through the stock `SpriteEffect` or every pass of a compiled custom effect:
   tint, source rectangles, rotation about a scaled origin, both flips, layer depth, sampler filter
   and address modes, Immediate flushing; large batches are split at 16,384 quads before their

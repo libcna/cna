@@ -287,8 +287,10 @@ namespace
      * free of any multisample blend.
      *
      * Only the two interior seams are excluded. The image's OUTER border is deliberately NOT
-     * excluded: every quad spans its half of NDC exactly, so the outermost pixel row and column are
-     * fully covered and resolve to the flat quadrant colour. Excluding them too would make a
+     * excluded: every outer quad edge lies past the target's edge, so the outermost pixel row and
+     * column are fully covered and resolve to the flat quadrant colour (a quad ending exactly on the
+     * edge leaves XNA's first row and column half covered on a multisampled target --
+     * spikes/xna-msaa-pixel-center-spike/). Excluding them too would make a
      * `final row` rectangle check vacuous -- every texel skipped, and a check with nothing to
      * compare passes.
      */
@@ -448,9 +450,9 @@ class RenderTargetMsaaMipReadbackTest : public Game
 
         dev.SetRenderTarget(&rt);
         dev.Clear(kBase);
-        DrawFlatQuad(dev, kTL, -1.f,  0.f,  0.f,  1.f);
-        DrawFlatQuad(dev, kTR,  0.f,  0.f,  1.f,  1.f);
-        DrawFlatQuad(dev, kBL, -1.f, -1.f,  0.f,  0.f);
+        DrawFlatQuad(dev, kTL, -2.f,  0.f,  0.f,  2.f);
+        DrawFlatQuad(dev, kTR,  0.f,  0.f,  2.f,  2.f);
+        DrawFlatQuad(dev, kBL, -2.f, -2.f,  0.f,  0.f);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
     }
 
@@ -1335,9 +1337,9 @@ class RenderTargetMsaaMipReadbackTest : public Game
         bindings.emplace_back(b.get());
         dev.SetRenderTargets(bindings);
         dev.Clear(kBase);
-        DrawFlatQuad(dev, kTL, -1.f,  0.f,  0.f,  1.f);
-        DrawFlatQuad(dev, kTR,  0.f,  0.f,  1.f,  1.f);
-        DrawFlatQuad(dev, kBL, -1.f, -1.f,  0.f,  0.f);
+        DrawFlatQuad(dev, kTL, -2.f,  0.f,  0.f,  2.f);
+        DrawFlatQuad(dev, kTR,  0.f,  0.f,  2.f,  2.f);
+        DrawFlatQuad(dev, kBL, -2.f, -2.f,  0.f,  0.f);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
         ReadWholeLevel(*a, 0, "I1 MRT attachment 0 level 0");
@@ -1406,7 +1408,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
         dev.setDepthStencilStateProperty(DepthStencilState::None);
         dev.SetRenderTarget(cube.get(), CubeMapFace::PositiveX);
         dev.Clear(kBase);
-        DrawFlatQuad(dev, kTL, -1.f, 0.f, 0.f, 1.f);
+        DrawFlatQuad(dev, kTL, -2.f, 0.f, 0.f, 2.f);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
         const int count = (kRT / 2) * (kRT / 2);

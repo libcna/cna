@@ -964,8 +964,10 @@ can execute an opcode and still accept invalid classic bytecode.
 - **Classic line coverage and varying positions are independent** (`SOFTWARE-346`). The 63/128
   geometry translation used to emulate D3D9 integer-centred coverage stays paired with the CPU
   diamond at `pixel+0.5`, but non-MSAA line colors/UVs/depth now evaluate at the equivalently shifted
-  logical D3D pixel centre. SpriteBatch and multisampled geometry keep their ordinary half-pixel
-  varying location. Red-to-blue horizontal and 45-degree Microsoft XNA probes are now byte-exact;
+  logical D3D pixel centre. SpriteBatch keeps its ordinary half-pixel varying location; since the
+  2026-10-26 dependency audit (B2-04) multisampled 3D geometry is corrected like single-sampled
+  geometry, in clip space before clipping, because XNA keeps integer centres on a multisampled
+  target too (`spikes/xna-msaa-pixel-center-spike/`). Red-to-blue horizontal and 45-degree Microsoft XNA probes are now byte-exact;
   a public LineList regression pins five exact bytes and the excluded endpoint.
 - **Triangle interpolation keeps its measured hardware-precision model** (`SOFTWARE-347`). Reusing
   the line-specific logical centre reduced one aggregate image-difference count but broke 180

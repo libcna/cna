@@ -12674,18 +12674,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (viewportWidth <= 0 || viewportHeight <= 0)
             return Matrix::getIdentityProperty();
 
-        // The rule, for the reason, and the reason both other renderers
-        // state: at one sample the correction decides which side of the fill edge the pixel CENTRE
-        // lands on and the sub-half-pixel margin keeps it covered; at four samples the outer
-        // sample positions sit a quarter of a pixel out, inside that margin, so the same
-        // translation starts REMOVING coverage from the outermost row and column.
-        const bool multisampledDestination =
-            currentRenderTarget_ != nullptr    ? currentRenderTarget_->GetMultiSampleCount() > 1
-            : currentRenderTargetCubeFace_ != nullptr
-                                               ? currentRenderTargetCubeFace_->GetMultiSampleCount() > 1
-                                               : sampleCount_ > 1;
-        if (multisampledDestination)
-            return Matrix::getIdentityProperty();
+        // A multisampled destination is corrected as well: XNA keeps Direct3D 9's integer centres
+        // there too (spikes/xna-msaa-pixel-center-spike/, 2026-10-26 dependency audit B2-04).
 
         // XNA row-vector order: post-multiplying the WVP by this gives clip.xy += offset * clip.w.
         // The signs are EasyGL's unchanged, and they transfer directly: WebGPU's clip space is
