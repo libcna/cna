@@ -69,6 +69,15 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     list(APPEND CNA_SDL3_PATCHES
         "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-86296ac8-0003-uikit-scene-window-frame.patch")
 endif()
+# SDL_SYS_EnumerateDirectory decides whether a failed opendir() may fall back to the APK's assets
+# by looking at the path it has already expanded under internal storage, which is always absolute,
+# so since e1fa336ac a relative directory that exists only among the assets ("./Content", the "./"
+# Sdl3FileSystem::GetBasePath returns for TitleLocation.Path plus a folder) no longer enumerates
+# (2026-10-26 dependency audit C-05). SDL main still does so (checked 2026-10-26 at 52289a276).
+if(ANDROID)
+    list(APPEND CNA_SDL3_PATCHES
+        "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-86296ac8-0004-android-relative-asset-enumeration.patch")
+endif()
 set(_cna_sdl_wayland_build_capable OFF)
 if(EMSCRIPTEN)
     if(CNA_ENABLE_EMSCRIPTEN_THREADS)

@@ -1,0 +1,28 @@
+From: Robert Vokac <robertvokac@robertvokac.com>
+Date: Mon, 26 Oct 2026 14:00:00 +0100
+Subject: [PATCH] android: fall back to the APK's assets for a relative
+ directory again
+
+SDL_SYS_EnumerateDirectory expands a relative path under the app's internal
+storage before opening it, and since e1fa336ac it decides whether opendir()'s
+failure may fall back to the asset tree by looking at that expanded path. It
+is always absolute by then, so a relative directory that exists only among
+the APK's assets ("./Content", TitleLocation.Path's "./" plus a folder) no
+longer enumerates at all; only an explicit "assets://" URL still does. The
+decision now looks at the caller's path, as it did before, and the asset
+lookup still receives the relative part.
+
+Not an upstream commit: SDL main still tests the expanded path (checked
+2026-10-26 at 52289a276). Carried by CNA (2026-10-26 dependency audit, C-05).
+---
+--- a/src/filesystem/posix/SDL_sysfsops.c
++++ b/src/filesystem/posix/SDL_sysfsops.c
+@@ -97,7 +97,7 @@
+     DIR *dir = opendir(pathwithsep);
+     if (!dir) {
+ #ifdef SDL_PLATFORM_ANDROID  // Maybe it's an asset... that didn't use an "assets://" URL?
+-        if (*pathwithsep != '/') {  // don't fall back to asset tree for absolute paths, in case opendir() failed for other reasons, like opendir("/") returning EACCES.
++        if (*path != '/') {  // don't fall back to asset tree for absolute paths, in case opendir() failed for other reasons, like opendir("/") returning EACCES. The caller's path: pathwithsep is already absolute when a relative path was expanded under internal storage.
+             const bool retval = Android_JNI_EnumerateAssetDirectory(pathwithsep + extralen, cb, userdata);
+             SDL_free(pathwithsep);
+             return retval;
