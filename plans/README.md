@@ -54,6 +54,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - `plan_missing.md` — XNA-MISSING-001..020, the 160 runtime members that took coverage from 3,467
   to 3,627/3,627 (closed 2026-09-21; deleted on 2026-10-26, Git history only). The live figure is
   [`../docs/xna-4-runtime-member-coverage.md`](../docs/xna-4-runtime-member-coverage.md).
+- `plan_xna_runtime_surface.md` — XNA-ENUM-001 (331/331 runtime types, the nested enumerators) and
+  XNA-MEMBER-001/002 (the 3,463/3,627 member baseline and its first four fixes), all complete on
+  2026-09-20; deleted on 2026-10-26 (Git history only). See
+  [`../docs/xna-4-enumerator-reference.md`](../docs/xna-4-enumerator-reference.md) and
+  [`../docs/xna-4-runtime-member-coverage-baseline.md`](../docs/xna-4-runtime-member-coverage-baseline.md).
 
 ## Graphics architecture and effects
 

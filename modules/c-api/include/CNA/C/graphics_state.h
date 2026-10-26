@@ -56,6 +56,8 @@ typedef uint32_t CNA_BlendFunction;
 #define CNA_BLEND_FUNCTION_SUBTRACT UINT32_C(1)
 /** @brief Subtracts source from destination. */
 #define CNA_BLEND_FUNCTION_REVERSE_SUBTRACT UINT32_C(2)
+/* MAX and MIN keep their published values; C++ BlendFunction uses XNA's Min = 3, Max = 4, and the
+ * C API converts between them by name. */
 /** @brief Selects the component-wise maximum. */
 #define CNA_BLEND_FUNCTION_MAX UINT32_C(3)
 /** @brief Selects the component-wise minimum. */
