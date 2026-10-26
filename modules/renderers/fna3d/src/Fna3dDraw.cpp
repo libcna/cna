@@ -830,10 +830,11 @@ namespace CNA::Internal::Renderers::Fna3d
                                            ? params.iblPrefilteredMipCount : 1),
                     params.iblIntensity, 0.0f
                 };
-                // The VFACE sign of a glTF (counter-clockwise) front face. FNA3D's OpenGL driver
-                // reports gl_FrontFacing, positive there; its SDL_GPU driver reports Direct3D's
-                // VFACE, positive on the clockwise front face, as DIRECTX9 does. A mirroring World
-                // reverses the on-screen winding and with it the sign.
+                // The VFACE sign of a glTF (counter-clockwise) front face. Every FNA3D driver
+                // reports Direct3D's VFACE, positive on the clockwise front face, as DIRECTX9 does
+                // (the OpenGL driver flips gl_FrontFacing to it since the 2026-10-26 audit, D-01),
+                // so a glTF front face is negative. A mirroring World reverses the on-screen
+                // winding and with it the sign.
                 float doubleSidedOrientation = 0.0f;
                 if (params.pbrDoubleSided)
                 {
@@ -841,8 +842,7 @@ namespace CNA::Internal::Renderers::Fna3d
                         world.M11 * (world.M22 * world.M33 - world.M23 * world.M32) -
                         world.M12 * (world.M21 * world.M33 - world.M23 * world.M31) +
                         world.M13 * (world.M21 * world.M32 - world.M22 * world.M31);
-                    const float frontFace = driverIsOpenGl_ ? 1.0f : -1.0f;
-                    doubleSidedOrientation = determinant < 0.0f ? -frontFace : frontFace;
+                    doubleSidedOrientation = determinant < 0.0f ? 1.0f : -1.0f;
                 }
                 const float doubleSidedParams[4] = {
                     doubleSidedOrientation, 0.0f, 0.0f, 0.0f

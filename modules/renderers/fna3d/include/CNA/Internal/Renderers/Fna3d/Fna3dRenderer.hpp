@@ -1833,8 +1833,7 @@ namespace CNA::Internal::Renderers::Fna3d
         /// input the declaration lacks -- FNA3D's OpenGL driver does; its SDL_GPU and Direct3D 11
         /// drivers fail the pipeline instead, so a stock draw missing an input is refused first.
         bool driverDefaultsMissingVertexInputs_ = false;
-        /// Whether FNA3D selected its OpenGL driver, whose VFACE is gl_FrontFacing rather than
-        /// Direct3D's clockwise-positive sign.
+        /// Whether FNA3D selected its OpenGL driver, the one with glSampleMaski.
         bool driverIsOpenGl_ = false;
         int maxTextureSlots_ = 0;
         int maxVertexTextureSlots_ = 0;

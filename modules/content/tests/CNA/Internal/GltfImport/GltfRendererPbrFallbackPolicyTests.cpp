@@ -1329,9 +1329,9 @@ TEST(GltfRendererPbrFallbackPolicy, Fna3dFlipsDoubleSidedPbrTangentBasis)
         << "both FNA3D PBR shaders must reverse the tangent basis from VFACE";
 }
 
-// DIRECTX9 compiles the same two PBR sources into embedded vs_3_0/ps_3_0 bytecode; its double-sided
-// sign has the opposite convention to FNA3D's, because Direct3D's VFACE is positive on its own
-// clockwise front face, glTF's back face (DirectX9_Pbr_DoubleSided measures it under DXVK).
+// DIRECTX9 compiles the same two PBR sources into embedded vs_3_0/ps_3_0 bytecode; Direct3D's VFACE
+// is positive on its own clockwise front face, glTF's back face (DirectX9_Pbr_DoubleSided measures it
+// under DXVK), the sign every FNA3D driver reports too.
 TEST(GltfRendererPbrFallbackPolicy, DirectX9FlipsDoubleSidedPbrTangentBasis)
 {
     const std::string source = RendererSlotText(
