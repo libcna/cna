@@ -140,6 +140,24 @@ namespace
             return CNA::Internal::Renderers::GraphicsRendererRegistry::Default().type;
         }
 
+        /// The renderer a default-constructed device resolves to: the one CNA_GRAPHICS_RENDERER
+        /// names, if any, otherwise Built(). A multi-renderer build is run with every compiled-in
+        /// renderer selected in turn, so a test about "the device's renderer" asks the selection.
+        [[nodiscard]] static GraphicsRendererType Selected()
+        {
+            return GraphicsRendererSelection::GetSelected();
+        }
+
+        /// The video-subsystem references @p device holds on its own behalf: one when its
+        /// renderer's descriptor needs the subsystem, none for a windowless renderer (SOFTWARE,
+        /// HEADLESS, STUB). Asked of the live device, never of the build default.
+        [[nodiscard]] static int VideoReferencesOf(const GraphicsDevice& device)
+        {
+            const auto* descriptor = CNA::Internal::Renderers::GraphicsRendererRegistry::Find(
+                device.GetGraphicsRendererType());
+            return descriptor != nullptr && descriptor->needsVideoSubsystem ? 1 : 0;
+        }
+
         /// A compiled-in renderer that genuinely wants the video subsystem, if this build has one.
         ///
         /// The reference multi set (HEADLESS;SOFTWARE;STUB) deliberately has none -- that is what
@@ -188,8 +206,7 @@ TEST_F(GraphicsDeviceSubsystemLifecycleTest, ADisposedDeviceHasReturnedEveryVide
     GraphicsDevice device;
     const int whileDeviceLives = platform.Outstanding(PlatformSubsystem::Video);
     const int releasesBeforeDispose = platform.Released(PlatformSubsystem::Video);
-    const int deviceVideoReferences =
-        CNA::Internal::Renderers::GraphicsRendererRegistry::Default().needsVideoSubsystem ? 1 : 0;
+    const int deviceVideoReferences = VideoReferencesOf(device);
     device.Dispose();
 
     EXPECT_EQ(whileDeviceLives - deviceVideoReferences,
@@ -240,8 +257,10 @@ TEST_F(GraphicsDeviceSubsystemLifecycleTest, AFailedConstructionLeavesNoOutstand
     PrimeAdapterVideoPin();
 
     // Fallback is off, so this is the documented hard failure of design decision 6 -- and the
-    // partially-initialised device still has to give back whatever it took.
-    ForceInitFailure(Built());
+    // partially-initialised device still has to give back whatever it took. The failure is forced
+    // on the renderer the device will actually try; forcing it on Built() while another renderer
+    // is selected would let construction succeed and prove nothing.
+    ForceInitFailure(Selected());
     EXPECT_THROW({ GraphicsDevice device; }, std::exception);
 
     // The process-wide adapter cache may acquire its one independent pin during the attempted
@@ -337,8 +356,6 @@ TEST_F(GraphicsDeviceSubsystemLifecycleTest, RepeatedDeviceLifetimesDoNotAccumul
     CountingPlatform platform(CNA::Platform::PlatformFactory::Create());
     const CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
     PrimeAdapterVideoPin();
-    const int deviceVideoReferences =
-        CNA::Internal::Renderers::GraphicsRendererRegistry::Default().needsVideoSubsystem ? 1 : 0;
     std::optional<int> steadyOutstanding;
 
     // Three lifetimes rather than one: a leak of one reference per device is invisible in a single
@@ -349,6 +366,7 @@ TEST_F(GraphicsDeviceSubsystemLifecycleTest, RepeatedDeviceLifetimesDoNotAccumul
     {
         GraphicsDevice device;
         const int whileDeviceLives = platform.Outstanding(PlatformSubsystem::Video);
+        const int deviceVideoReferences = VideoReferencesOf(device);
         device.Dispose();
         const int afterDispose = platform.Outstanding(PlatformSubsystem::Video);
         EXPECT_EQ(whileDeviceLives - deviceVideoReferences, afterDispose)
@@ -376,8 +394,7 @@ TEST_F(GraphicsDeviceSubsystemLifecycleTest, DisposingTwiceReleasesTheSubsystemO
 
     GraphicsDevice device;
     const int whileDeviceLives = platform.Outstanding(PlatformSubsystem::Video);
-    const int deviceVideoReferences =
-        CNA::Internal::Renderers::GraphicsRendererRegistry::Default().needsVideoSubsystem ? 1 : 0;
+    const int deviceVideoReferences = VideoReferencesOf(device);
     device.Dispose();
     const int released = platform.Released(PlatformSubsystem::Video);
     EXPECT_EQ(whileDeviceLives - deviceVideoReferences,
