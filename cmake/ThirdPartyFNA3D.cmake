@@ -102,13 +102,31 @@ function(cna_configure_mojoshader)
 
     # FNA3D defaults to a shared library. CNA links every renderer's dependencies statically into
     # the one executable, so force a static archive for the duration of the fetch and put the
-    # variable back afterwards -- FNA3D's own cmake_minimum_required(3.10) puts CMP0077 in OLD
-    # mode, where option() overrides a plain normal variable, so the cache entry is the only
-    # reliable lever here.
-    set(_cna_fna3d_saved_shared "${BUILD_SHARED_LIBS}")
-    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    # variable back afterwards exactly as it was (2026-10-26 dependency audit C-07). Both levers are
+    # needed: FNA3D's own cmake_minimum_required(3.10) puts CMP0077 in OLD mode, where its option()
+    # replaces a plain normal variable with a new ON cache entry, or takes its own default over an
+    # untyped one -- so a typed cache entry has to exist; and under CMP0126 NEW a caller's normal
+    # BUILD_SHARED_LIBS=ON hides that entry -- so a normal variable is set in this function's scope,
+    # which FNA3D's directory inherits and the caller never sees.
+    if(DEFINED CACHE{BUILD_SHARED_LIBS})
+        set(_cna_fna3d_shared_cached TRUE)
+        set(_cna_fna3d_shared_value "$CACHE{BUILD_SHARED_LIBS}")
+        get_property(_cna_fna3d_shared_type CACHE BUILD_SHARED_LIBS PROPERTY TYPE)
+        get_property(_cna_fna3d_shared_help CACHE BUILD_SHARED_LIBS PROPERTY HELPSTRING)
+    else()
+        set(_cna_fna3d_shared_cached FALSE)
+    endif()
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
+    set(BUILD_SHARED_LIBS OFF)
     FetchContent_MakeAvailable(fna3d)
-    set(BUILD_SHARED_LIBS "${_cna_fna3d_saved_shared}" CACHE BOOL "" FORCE)
+    if(_cna_fna3d_shared_cached)
+        set_property(CACHE BUILD_SHARED_LIBS PROPERTY VALUE "${_cna_fna3d_shared_value}")
+        set_property(CACHE BUILD_SHARED_LIBS PROPERTY TYPE "${_cna_fna3d_shared_type}")
+        set_property(CACHE BUILD_SHARED_LIBS PROPERTY HELPSTRING "${_cna_fna3d_shared_help}")
+    else()
+        unset(BUILD_SHARED_LIBS CACHE)
+    endif()
+    unset(BUILD_SHARED_LIBS)
 
     find_package(Git QUIET)
     if(FETCHCONTENT_SOURCE_DIR_FNA3D)

@@ -1623,6 +1623,17 @@ if(CNA_BUILD_TESTS)
             -P ${CMAKE_SOURCE_DIR}/cmake/Tests/Fna3dSourceCheckCase.cmake)
     set_tests_properties(CnaFna3dSourceCheck PROPERTIES LABELS "configuration" TIMEOUT 300)
 
+    # 2026-10-26 dependency audit C-07: FNA3D is a static archive whatever BUILD_SHARED_LIBS the
+    # including project has, and BUILD_SHARED_LIBS is restored exactly. A fake FNA3D through the
+    # real module, configure only.
+    add_test(NAME CnaFna3dDependencyShape
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DCNA_WORK_DIR=${CMAKE_BINARY_DIR}/CnaFna3dDependencyShape
+            "-DCNA_GENERATOR=${CMAKE_GENERATOR}"
+            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/Fna3dDependencyShapeCase.cmake)
+    set_tests_properties(CnaFna3dDependencyShape PROPERTIES LABELS "configuration" TIMEOUT 300)
+
     # plans/plan_native_platform_validation.md NPV-0131: which test binary the platform ctest
     # entries below (CnaPlatform*) run. CnaTests by default. A build that compiles only the
     # platform module's tests -- CI's SDL-free cell builds the focused CnaPlatformModuleTests,
