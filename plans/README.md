@@ -9,7 +9,6 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 
 ## Coordination and architecture
 
-- [`plan.md`](plan.md) — cross-cutting and deferred work.
 - [`plan_postaudit.md`](plan_postaudit.md) — post-audit development work.
 - [`MODULARIZATION_PLAN.md`](MODULARIZATION_PLAN.md) — library modularization.
 - [`plan_platform.md`](plan_platform.md) — platform abstraction.

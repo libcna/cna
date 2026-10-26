@@ -41,6 +41,15 @@ environment/session.
 | `demo_input` builds + runs crash-free | `timeout 4 ./cna_demo_input` — window created, EasyGL/OpenGL ES 3.2 initialized, no crash | **Pass** (no crash; layout **not** visually verified — no screenshot tool) |
 | Czech/multi-byte + astral text decoding | Bridge decode tests incl. a Czech string (`žluťoučký`) and an astral emoji surrogate pair (task 807/852) | **Pass** (UTF-8→UTF-16 decode) |
 
+> **Superseded (2026-10-26):** the two `SetPosition` unit tests in the first two rows no longer
+> exist. PLAT-66 (`a452cea9f`, platform-neutral coordinate conversion) replaced them with
+> `CoordinateTransformPreservesLetterboxOffsetAndInverse` in
+> `modules/input/tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`, which checks the
+> letterbox offset and the inverse round trip on canned platform services instead of a real
+> `SDL_Renderer` window. Its viewport is 1:1 with the logical size, so a scale other than 1 is no
+> longer covered by an input test. The a-0001 decision record (`plans/plan.md`) was removed on
+> 2026-10-26 and survives in Git history.
+
 ### Not verified — hardware-gated (task 851)
 
 These are **implemented and FNA-faithful in code, but hardware-unverified** (no controller was
