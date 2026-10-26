@@ -234,10 +234,11 @@ of them and must admit 0.50.0 before it moves its pin. CNA `main`/`develop` are 
 refuses. The archived bindings in `cna-lab` stay pinned to older ABIs and are not maintained.
 
 **Dependencies.** FNA3D and MojoShader are CNA's forks, `libcna/FNA3D` and `libcna/mojoshader`,
-pinned at `d6090fab7f66` / `83f2c4f8f95e` on their `cna` branches (`docs/fna3d-renderer.md`). Both
+pinned at `10f650b9d0f6` / `03b686fe1a33` on their `cna` branches (`docs/fna3d-renderer.md`). Both
 carry the fixes for the 2026-10-26 dependency audit (reports in
 `/rv/tmp/cna-dep-migration-codex-audit-2026-10-26/reports/`) and for the independent review of those
-fixes the same day (`/rv/tmp/cna-audit-remediation-codex-review-2026-10-26/raw/`, passes R1-R4;
+fixes the same day (`/rv/tmp/cna-audit-remediation-codex-review-2026-10-26/raw/`, passes R1-R4,
+R5-R8 and R9-R10 in three rounds;
 each fix names its finding in a `CNA-Audit-Finding:` trailer, CNA's own in its commit subject) and
 regression suites of their own:
 `tests/cna` in each, built with `-DMOJOSHADER_CNA_TESTS=ON` / `-DFNA3D_CNA_TESTS=ON` (FNA3D's need a
@@ -250,22 +251,23 @@ display: run them through the private runner). SDL is `86296ac8` with five CNA p
 planned.
 
 **Tests.** GoogleTest under CTest; `ctest -N` in a build tree gives its count. At the FNA3D pin
-`d6090fab7f66` (2026-10-26, end of the dependency-audit remediation and its review),
+`10f650b9d0f6` (2026-10-26, end of the dependency-audit remediation and its review),
 `cmake-build-multi`'s `CnaTests` with the audit's graphics filter plus `XnaMultisamplePixelCenter*`
 and `GltfRendererPbrFallbackPolicy*` ran 1,683 tests with no failure on each of `OPENGLES3`,
 `OPENGL33`, `WEBGPU`, `SOFTWARE`, `SDL_GPU` (Vulkan) and `FNA3D` with its OpenGL and its SDL_GPU
-driver (`SDL_GPU` and FNA3D's SDL_GPU driver again after SDL patch 0005; the audit had measured 6
-failures on `SDL_GPU` and 15 to 25 on each of the others, all fixed or test defects); its network
+driver (the audit had measured 6 failures on `SDL_GPU` and 15 to 25 on each of the others, all
+fixed or test defects); its network
 filter 574/574 and the platform suites 1,553 on X11 and 1,553 on Wayland, none failed. The family
 example suites of the renderers B2-04 changed, each in its own default tree (Release; `FNA3D` at
-`d6090fab7f66`, the others at `aa3139087e69` with MojoShader `bbee0a5fab1f`): `FNA3D`
+`10f650b9d0f6`, the others at `aa3139087e69` with MojoShader `bbee0a5fab1f`): `FNA3D`
 63/63; `SDL_GPU` 65 selected (MSAA, render-target, cube, readback, effect and
 `SdlGpu_TextureDefragment`), every pixel check passes, two debug-layer assertions need a Debug tree;
 `WEBGPU` 41/41, `SOFTWARE` 34/34; `render_target_own_msaa` and `cube_mrt_binding` pass on all five
 families. Fork
-suites: MojoShader `tests/cna` 16/16 normal and under ASan+UBSan+LSan, with its 14 SDL_GPU device
-cases on RADV; FNA3D `tests/cna` 16 (19 with `TRACING_SUPPORT`) under ASan+UBSan on OpenGL, OpenGL
-ES 3 and SDL_GPU. Cross builds at `d6090fab7f66`: `cmake-build-mingw` under Wine with DXVK 3.1.1
+suites: MojoShader `tests/cna` 16/16 normal and under clang ASan+UBSan+LSan with no check excluded,
+with its 14 SDL_GPU device cases on RADV; FNA3D `tests/cna` 21 (27 with `TRACING_SUPPORT`) under
+ASan+UBSan on OpenGL, OpenGL ES 3 and SDL_GPU, and its eight executables on D3D11 under Wine with
+DXVK 3.1.1. Cross builds at `10f650b9d0f6`: `cmake-build-mingw` under Wine with DXVK 3.1.1
 ran `DirectX9CompiledEffect*` 31/32 (one declared skip) and `XnaMultisamplePixelCenter*` /
 `RenderTargetReadbackLayout*` 5/6 (one declared skip) on `DIRECTX9`; the Emscripten
 `cna_webgpu_compiled_effect_page` passed 21/21 in headless Chrome; Android was not rebuilt at this
@@ -389,24 +391,35 @@ None open (reconciled 2026-10-24).
 - **MojoShader SPIR-V gaps** (FNA3D's SDL_GPU driver, CNA's SDL_GPU and WEBGPU compiled effects):
   ps_1_4 `BEM` and `TEXDEPTH` refuse by name ("unimplemented in spirv profile"); GLSL implements
   both. `MOJOSHADER_cloneEffect` asserts on an effect with no technique.
-- **MojoShader FOG outside lane x** (all profiles): a vs_3_0 FOG declared alone in a lane other
-  than x (`dcl_fog o1.y`) is still written from source lane x, and for a FOG packed with another
-  semantic in a lane other than x the profiles disagree (HLSL, desktop GLSL and SPIR-V take its
-  first lane as a scalar, Metal and GLSL ES copy the vec4 lane for lane); what Direct3D 9 does was
-  not measured. SPIR-V declares FOG as a float output while a pixel shader's FOG input is a vec4,
-  packed or not; whether Vulkan's interface matching accepts that is unverified. FXC-built shaders
-  put FOG in x. The ARB1 profile still names oFog/oPts FOG1/PSIZE2 (no CNA path uses ARB1).
-- **FNA3D OpenGL ES 3 readback** reads RGBA8, the float formats, and any other format only where
-  the implementation's own read layout is the format's; it refuses the rest by name, and always
-  `ColorSrgbEXT`, which ES 3 decodes to linear as it reads. On Mesa 25.0.7 (radeonsi) Rg32 and
-  `ColorBgraEXT` are refused that way. Desktop GL reads every uncompressed format.
+- **MojoShader FOG and other vertex semantics** (after the review's fixes): FOG in any lane, alone
+  or packed, translates in every profile, and SPIR-V's vertex and pixel FOG interfaces match in
+  type; GLSL ES and Metal place FOG lanes positionally, so a vertex/pixel pair declaring FOG in
+  different lanes behaves differently there than in the other profiles (not measured on Direct3D 9).
+  A vs_3_0 PSIZE alone in a lane other than x is still narrowed to x. HLSL refuses FOG, SAMPLE and
+  TESSFACTOR vertex inputs (FNA3D's D3D11 table also names Sample `SV_SampleIndex`, invalid as a
+  vertex input), and the D3D11 glue's integer-format rewrite looks for `PSIZE0` while HLSL emits
+  `PSIZE`. The ARB1 profile still names oFog/oPts FOG1/PSIZE2 and binds no pixel FOG input (no CNA
+  path uses ARB1). Vulkan pipeline creation and GL program linking of FOG pairs were not run;
+  spirv-val and interface-type comparison were.
+- **FNA3D OpenGL ES 3 readback** reads RGBA8, `ColorSrgbEXT` (stored as `GL_SRGB8_ALPHA8` since the
+  review; the unsized format FNA3D used before was refused by ES 3 at upload, so such a texture
+  never had storage), the float formats, and any other format only where the implementation's own
+  read layout is the format's; it refuses the rest by name. On Mesa 25.0.7 (radeonsi) Rgba1010102,
+  Rgba64, ByteEXT and UShortEXT read, Rg32 and `ColorBgraEXT` are refused for their layout.
+  Desktop GL reads every uncompressed format.
+- **FNA3D pixel-store state**: readbacks and uploads save and restore every pack/unpack value they
+  set, so another user of the context keeps its own; an upload therefore makes six
+  `glGetIntegerv` calls, each a synchronization point under Mesa's glthread.
+- **FNA3D tracing with several devices** shares one trace session among overlapping devices; a
+  second device's SwapBuffers with its own window override still trips the tracer's assertion.
 - **SDL_shadercross initialization is the application's** (MojoShader's SDL_GPU glue): the glue
   calls neither `SDL_ShaderCross_Init()` nor `_Quit()`, which act on the whole process without
   reference counting, so DXBC is offered only after the application initialized ShaderCross
-  (`mojoshader.h`). CNA's SDL_GPU renderer does; a standalone FNA3D build with
-  `MOJOSHADER_STATIC_SPIRVCROSS` must. That static selector has no retained test: the only static
-  SDL_shadercross package on this machine was built without DXC and its package config requires
-  DirectXShaderCompiler anyway.
+  (`mojoshader.h`); FNA3D's SDL_GPU driver forwards DXBC to SDL when it is offered. CNA's SDL_GPU
+  renderer initializes ShaderCross; a standalone FNA3D build with `MOJOSHADER_STATIC_SPIRVCROSS`
+  must. FNA3D's test of that selector links a stand-in static package (archive shape, C++ runtime),
+  not the real one: the only static SDL_shadercross package on this machine was built without DXC
+  and its package config requires DirectXShaderCompiler anyway.
 - **A shared SDL prebuilt can change under a running build** when a tree with another manifest
   rebuilds it (2026-10-26 review R3-01/R4-01; the watched stamp protects only the next build). Give
   such a tree its own `CNA_SDL_PREBUILT_ROOT` (`docs/development-environment.md`).
