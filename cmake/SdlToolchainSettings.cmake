@@ -4,9 +4,13 @@
 # Run as its own `cmake -P` process, so it sees exactly what the toolchain -- and every file it
 # includes -- sets, and nothing a configure adds afterwards: no language is enabled here, so
 # CMake's own compiler defaults and the compilers it resolves never enter, whichever languages the
-# configuring project had enabled when it asked. Values are printed byte for byte.
+# configuring project had enabled when it asked. Values are printed byte for byte, except that "%"
+# and ";" are written as "%25" and "%3B", so a list value stays one record.
 #
 #   cmake -DCNA_SDL_TOOLCHAIN=<file> -P cmake/SdlToolchainSettings.cmake
+
+# The policies of a project that requires CNA's minimum, as the toolchain sees them in a configure.
+cmake_minimum_required(VERSION 3.20)
 
 if(NOT DEFINED CNA_SDL_TOOLCHAIN OR NOT EXISTS "${CNA_SDL_TOOLCHAIN}")
     message(FATAL_ERROR "SdlToolchainSettings.cmake: CNA_SDL_TOOLCHAIN does not name a file")
@@ -22,9 +26,15 @@ foreach(_variable IN ITEMS
         CMAKE_EXE_LINKER_FLAGS_INIT CMAKE_SHARED_LINKER_FLAGS_INIT CMAKE_MODULE_LINKER_FLAGS_INIT
         CMAKE_EXE_LINKER_FLAGS_RELEASE_INIT CMAKE_SHARED_LINKER_FLAGS_RELEASE_INIT
         CMAKE_MODULE_LINKER_FLAGS_RELEASE_INIT
+        CMAKE_C_FLAGS CMAKE_CXX_FLAGS CMAKE_C_FLAGS_RELEASE CMAKE_CXX_FLAGS_RELEASE
+        CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_MODULE_LINKER_FLAGS
+        CMAKE_EXE_LINKER_FLAGS_RELEASE CMAKE_SHARED_LINKER_FLAGS_RELEASE
+        CMAKE_MODULE_LINKER_FLAGS_RELEASE
         CMAKE_ANDROID_ARCH_ABI CMAKE_ANDROID_API ANDROID_ABI ANDROID_PLATFORM ANDROID_STL
         CMAKE_OSX_SYSROOT CMAKE_OSX_ARCHITECTURES CMAKE_OSX_DEPLOYMENT_TARGET)
     if(DEFINED ${_variable})
-        message(NOTICE "cna-toolchain-setting: ${_variable}=${${_variable}}")
+        string(REPLACE "%" "%25" _value "${${_variable}}")
+        string(REPLACE ";" "%3B" _value "${_value}")
+        message(NOTICE "cna-toolchain-setting: ${_variable}=${_value}")
     endif()
 endforeach()

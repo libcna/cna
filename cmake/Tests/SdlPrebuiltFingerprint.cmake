@@ -242,8 +242,34 @@ foreach(_edit IN ITEMS
     _toolchain_manifest(_manifest "${_changed}")
     _expect_current(FALSE "${_what} edited in a file the toolchain includes forces a rebuild")
 endforeach()
+# Final flags a toolchain sets directly, as the Android NDK's does (R11-03).
+_toolchain_manifest(_manifest "set(CMAKE_C_FLAGS_RELEASE \"-DFIXTURE_ABI=64\")\n")
+file(WRITE "${_stamp}" "${_manifest}")
+_toolchain_manifest(_manifest "set(CMAKE_C_FLAGS_RELEASE \"-DFIXTURE_ABI=32\")\n")
+_expect_current(FALSE "a final Release flag edited in a file the toolchain includes forces a rebuild")
+# A list-valued -D argument reaches the evaluation whole, and a list value stays one record (R11-02);
+# IN_LIST works as in a project (R11-01's policy case).
+set(_arch_text "if(\"arm64\" IN_LIST CMAKE_OSX_ARCHITECTURES)\n  set(CMAKE_C_FLAGS_RELEASE_INIT \"-DFIXTURE_ARM=1\")\nendif()\nset(CMAKE_OSX_SYSROOT \"a;b\")\n")
+file(WRITE "${_abi}" "${_arch_text}")
+cna_sdl_toolchain_settings(_settings "${_toolchain}" "-DCMAKE_OSX_ARCHITECTURES=x86_64;arm64")
+cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
+    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
+if(NOT _manifest MATCHES "toolchain-setting CMAKE_C_FLAGS_RELEASE_INIT=-DFIXTURE_ARM=1\n" OR
+   NOT _manifest MATCHES "toolchain-setting CMAKE_OSX_SYSROOT=a%3Bb\n")
+    message(FATAL_ERROR "SdlPrebuiltFingerprint: a list-valued argument or setting was split:\n${_manifest}")
+endif()
+message(STATUS "ok: a list-valued -D argument and a list setting each stay whole")
+# A toolchain that cannot be evaluated outside a project records why, the same way every time.
+_toolchain_manifest(_manifest "add_compile_options(-DFIXTURE)\n")
+_toolchain_manifest(_again "add_compile_options(-DFIXTURE)\n")
+if(NOT _manifest MATCHES "toolchain-setting unavailable=" OR NOT _manifest STREQUAL _again)
+    message(FATAL_ERROR "SdlPrebuiltFingerprint: an unevaluable toolchain is not recorded stably:\n${_manifest}")
+endif()
+message(STATUS "ok: an unevaluable toolchain is recorded as such, stably")
 # What the configuring project's scope holds -- a C compiler CMake cached once some project enabled
 # C, the defaults enabling C adds to the *_INIT flags -- changes nothing.
+_toolchain_manifest(_manifest "${_base}")
+file(WRITE "${_stamp}" "${_manifest}")
 set(CMAKE_C_COMPILER /usr/bin/cc)
 set(CMAKE_C_FLAGS_RELEASE_INIT "-m64 -O3 -DNDEBUG")
 set(CMAKE_C_FLAGS_INIT " -m64 ")

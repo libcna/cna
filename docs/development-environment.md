@@ -48,7 +48,9 @@ cache directory the configure output names (other build trees use it too) and re
 Wayland packages below are the exception, because they select a different key.
 
 Each install records the manifest it was built from (source tree, CNA's patches, configure
-arguments, toolchain file and the settings it decides), and a configure rebuilds it when its own
+arguments, toolchain file and the settings it decides -- read by evaluating the toolchain in a
+`cmake -P` process; a toolchain that cannot be evaluated outside a project draws a configure
+warning, and edits to the files it includes then do not rebuild SDL), and a configure rebuilds it when its own
 manifest differs; every build tree also watches that record, so its next build reconfigures when
 another tree has rebuilt the install. That protects a build that starts afterwards, not one already
 running: two trees whose manifests differ -- other configure arguments, another toolchain -- must

@@ -44,8 +44,11 @@ endfunction()
 # hash cannot see. cmake/SdlToolchainSettings.cmake evaluates the toolchain in a `cmake -P`
 # process of its own, so the answer does not depend on which languages the configuring project
 # had enabled (enabling one adds CMake's defaults to these variables and caches a compiler) and
-# keeps every value byte for byte. A toolchain that cannot be evaluated outside a project records
-# that it could not, the same way every time. Without a toolchain file the list is empty.
+# keeps every value byte for byte. A toolchain that cannot be evaluated outside a project (one that
+# calls a configure-only command such as add_compile_options) records why, the same way every time,
+# and the configure warns that edits to the files it includes will not rebuild SDL; its own
+# content, the arguments and the resolved compiler still do. Without a toolchain file the list is
+# empty.
 #
 # cna_sdl_toolchain_settings(<out-var> <toolchain-file> [<arg>...]): the "-D<name>=<value>"
 # arguments among <arg> -- the ones the SDL sub-build gets, such as Android's ANDROID_ABI, which a
@@ -53,11 +56,17 @@ endfunction()
 function(cna_sdl_toolchain_settings out_var toolchain_file)
     set(_settings "")
     set(_defines "")
-    foreach(_arg IN LISTS ARGN)
-        if(_arg MATCHES "^-D[A-Za-z_][A-Za-z0-9_]*(:[A-Z]+)?=")
-            list(APPEND _defines "${_arg}")
-        endif()
-    endforeach()
+    # ARGV<n>, not ARGN: an argument holding a list (CMAKE_OSX_ARCHITECTURES=x86_64;arm64) stays one.
+    if(ARGC GREATER 2)
+        math(EXPR _last "${ARGC} - 1")
+        foreach(_index RANGE 2 ${_last})
+            set(_arg "${ARGV${_index}}")
+            if(_arg MATCHES "^-D[A-Za-z_][A-Za-z0-9_]*(:[A-Z]+)?=")
+                string(REPLACE ";" "\\;" _arg "${_arg}")
+                list(APPEND _defines "${_arg}")
+            endif()
+        endforeach()
+    endif()
     if(NOT toolchain_file STREQUAL "")
         execute_process(
             COMMAND "${CMAKE_COMMAND}" ${_defines} "-DCNA_SDL_TOOLCHAIN=${toolchain_file}"
@@ -66,7 +75,13 @@ function(cna_sdl_toolchain_settings out_var toolchain_file)
             OUTPUT_VARIABLE _stdout
             ERROR_VARIABLE _stderr)
         if(NOT _result EQUAL 0)
-            list(APPEND _settings "unavailable=the toolchain cannot be evaluated outside a project")
+            string(REGEX MATCH "CMake Error[^\n]*\n[^\n]*" _why "${_stderr}")
+            string(REGEX REPLACE "[ \t\n]+" " " _why "${_why}")
+            message(WARNING "CNA: the toolchain ${toolchain_file} cannot be evaluated outside a "
+                "project (${_why}), so editing a file it includes will not rebuild the vendored "
+                "SDL; edit the toolchain file itself, or delete the SDL install, after such a change.")
+            string(REPLACE ";" "%3B" _why "${_why}")
+            list(APPEND _settings "unavailable=${_why}")
         else()
             string(REPLACE ";" "\\;" _stderr "${_stderr}")
             string(REPLACE "\n" ";" _lines "${_stderr}")
