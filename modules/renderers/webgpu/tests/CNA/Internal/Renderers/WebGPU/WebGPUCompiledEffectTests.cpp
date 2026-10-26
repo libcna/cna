@@ -504,8 +504,10 @@ TEST(WebGPUCompiledEffectDrawTest, SharedRasterInputContract)
 }
 
 // The contract's TEXBEM and TEXBEML legs run first and must pass. Its last leg is ps_1_4 BEM,
-// which MojoShader's SPIR-V profile cannot express, so that effect refuses by name instead of
-// drawing without the matrix; a route that starts drawing it fails here and belongs in the contract.
+// which MojoShader's SPIR-V profile cannot express, so on a SPIR-V route that effect refuses by
+// name instead of drawing without the matrix. A GLSL route (FNA3D's OpenGL driver, EasyGL, which
+// this shared wrapper also runs on whatever renderer the device selected) draws it, and the
+// contract's own pixel checks then hold its BEM leg to the destination stage's matrix.
 TEST(WebGPUCompiledEffectDrawTest, SharedLegacyBumpEnvironmentContract)
 {
     GraphicsDevice device;
@@ -514,7 +516,6 @@ TEST(WebGPUCompiledEffectDrawTest, SharedLegacyBumpEnvironmentContract)
     try
     {
         CNA::TestSupport::RunCompiledEffectLegacyBumpEnvironmentContract(device);
-        ADD_FAILURE() << "ps_1_4 BEM drew instead of refusing";
     }
     catch (const std::exception& error)
     {
