@@ -205,62 +205,53 @@ cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch
     TOOLCHAIN_FILE "${_toolchain}" COMPILER "Clang 18.1.0 /fixture/ndk-r27/bin/clang++")
 _expect_current(FALSE "another resolved compiler forces a rebuild")
 
-# 16b. A toolchain whose settings come from a file it includes: editing only that file (an ABI flag)
-#      leaves the toolchain file's hash and the compiler as they were, and must still force a
-#      rebuild (2026-10-26 remediation review R3-02). The settings are read the way production reads
-#      them, after evaluating the toolchain.
+# 16b. A toolchain whose settings come from a file it includes: editing only that file leaves the
+#      toolchain file's hash and the resolved CXX compiler as they were, and must still force a
+#      rebuild -- an ABI flag, a Release flag, a sysroot, the C compiler (2026-10-26 remediation
+#      review R3-02, R8-02, R10-01), each value byte for byte, so two sysroots differing only in a
+#      space differ too (R10-02). The settings come from a `cmake -P` evaluation of the toolchain,
+#      exactly as production reads them, so nothing in the configuring scope changes them (R10-03).
 set(_abi "${_work}/abi.cmake")
 file(WRITE "${_toolchain}" "include(\"${_abi}\")\n")
-file(WRITE "${_abi}" "set(CMAKE_C_FLAGS_INIT \"-m64\")\nset(CMAKE_SYSROOT /fixture/sysroot-A)\n")
-include("${_toolchain}")
-cna_sdl_toolchain_settings(_settings)
-cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
-    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
+function(_toolchain_manifest out abi_text)
+    file(WRITE "${_abi}" "${abi_text}")
+    cna_sdl_toolchain_settings(_settings "${_toolchain}")
+    cna_sdl_build_manifest(_m NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
+        TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
+    set(${out} "${_m}" PARENT_SCOPE)
+endfunction()
+set(_base "set(CMAKE_C_FLAGS_INIT \"-m64\")\nset(CMAKE_SYSROOT \"/fixture/SDK name\")\nset(CMAKE_C_COMPILER /fixture/bin/gcc)\nset(CMAKE_C_FLAGS_RELEASE_INIT \"-m64\")\n")
+_toolchain_manifest(_manifest "${_base}")
+if(NOT _manifest MATCHES "toolchain-setting CMAKE_SYSROOT=/fixture/SDK name\n")
+    message(FATAL_ERROR "SdlPrebuiltFingerprint: the toolchain's settings were not recorded:\n${_manifest}")
+endif()
 file(WRITE "${_stamp}" "${_manifest}")
+_toolchain_manifest(_manifest "${_base}")
 _expect_current(TRUE "toolchain with included settings, unchanged, reuses the install")
-file(WRITE "${_abi}" "set(CMAKE_C_FLAGS_INIT \"-m32\")\nset(CMAKE_SYSROOT /fixture/sysroot-A)\n")
-include("${_toolchain}")
-cna_sdl_toolchain_settings(_settings)
-cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
-    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
-_expect_current(FALSE "an ABI flag edited in a file the toolchain includes forces a rebuild")
-file(WRITE "${_abi}" "set(CMAKE_C_FLAGS_INIT \"-m64\")\nset(CMAKE_SYSROOT /fixture/sysroot-B)\n")
-include("${_toolchain}")
-cna_sdl_toolchain_settings(_settings)
-cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
-    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
-_expect_current(FALSE "a sysroot changed in a file the toolchain includes forces a rebuild")
-# The Release flags the SDL sub-builds use (2026-10-26 remediation review R8-02).
-file(WRITE "${_abi}" "set(CMAKE_C_FLAGS_INIT \"-m64\")\nset(CMAKE_SYSROOT /fixture/sysroot-A)\nset(CMAKE_C_FLAGS_RELEASE_INIT \"-m64\")\n")
-include("${_toolchain}")
-cna_sdl_toolchain_settings(_settings)
-cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
-    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
-file(WRITE "${_stamp}" "${_manifest}")
-file(WRITE "${_abi}" "set(CMAKE_C_FLAGS_INIT \"-m64\")\nset(CMAKE_SYSROOT /fixture/sysroot-A)\nset(CMAKE_C_FLAGS_RELEASE_INIT \"-m32\")\n")
-include("${_toolchain}")
-cna_sdl_toolchain_settings(_settings)
-cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
-    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
-_expect_current(FALSE "a Release ABI flag edited in a file the toolchain includes forces a rebuild")
-# What CMake fills in itself must not: a C compiler cached once some project enabled C, and the
-# whitespace enabling C adds to the *_INIT flags (R8-03).
-file(WRITE "${_abi}" "set(CMAKE_C_FLAGS_INIT \"-m64\")\nset(CMAKE_SYSROOT /fixture/sysroot-A)\n")
-include("${_toolchain}")
-unset(CMAKE_C_FLAGS_RELEASE_INIT)
-cna_sdl_toolchain_settings(_settings)
-cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
-    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
-file(WRITE "${_stamp}" "${_manifest}")
-set(CMAKE_C_COMPILER /fixture/bin/cc)
+foreach(_edit IN ITEMS
+        "CMAKE_C_FLAGS_INIT \"-m64\"|CMAKE_C_FLAGS_INIT \"-m32\"|an ABI flag"
+        "CMAKE_C_FLAGS_RELEASE_INIT \"-m64\"|CMAKE_C_FLAGS_RELEASE_INIT \"-m32\"|a Release ABI flag"
+        "/fixture/SDK name|/fixture/SDK-B|a sysroot"
+        "/fixture/SDK name|/fixture/SDK  name|a sysroot differing in a space"
+        "/fixture/bin/gcc|/fixture/bin/clang|the C compiler")
+    string(REPLACE "|" ";" _edit "${_edit}")
+    list(GET _edit 0 _from)
+    list(GET _edit 1 _to)
+    list(GET _edit 2 _what)
+    string(REPLACE "${_from}" "${_to}" _changed "${_base}")
+    _toolchain_manifest(_manifest "${_changed}")
+    _expect_current(FALSE "${_what} edited in a file the toolchain includes forces a rebuild")
+endforeach()
+# What the configuring project's scope holds -- a C compiler CMake cached once some project enabled
+# C, the defaults enabling C adds to the *_INIT flags -- changes nothing.
+set(CMAKE_C_COMPILER /usr/bin/cc)
+set(CMAKE_C_FLAGS_RELEASE_INIT "-m64 -O3 -DNDEBUG")
 set(CMAKE_C_FLAGS_INIT " -m64 ")
-cna_sdl_toolchain_settings(_settings)
-cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
-    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
-_expect_current(TRUE "a C compiler CMake cached later and padded *_INIT flags leave the install current")
+_toolchain_manifest(_manifest "${_base}")
+_expect_current(TRUE "the configuring project's own language state leaves the install current")
 unset(CMAKE_C_COMPILER)
+unset(CMAKE_C_FLAGS_RELEASE_INIT)
 unset(CMAKE_C_FLAGS_INIT)
-unset(CMAKE_SYSROOT)
 
 # 17. Without a toolchain file the manifest has no toolchain lines, so native installs built before
 #     these fields existed stay current.

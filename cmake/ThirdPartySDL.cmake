@@ -548,7 +548,7 @@ function(_cna_ensure_sdl_dep)
     # content, the compiler it resolved to (CXX: always enabled here, unlike C) and the settings it
     # decided. The compiler launcher is left out on purpose: ccache changes how long a build takes,
     # never what it produces.
-    cna_sdl_toolchain_settings(_toolchain_settings)
+    cna_sdl_toolchain_settings(_toolchain_settings "${_cna_sdl_toolchain}" ${_base_args} ${_A_CMAKE_ARGS})
     cna_sdl_build_manifest(_manifest
         NAME    "${_A_NAME}"
         SOURCE  "${_A_SOURCE}"

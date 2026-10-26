@@ -38,33 +38,45 @@ function(cna_sdl_source_tree_hash out_var source_dir)
 endfunction()
 
 # The settings a toolchain decides, as "<variable>=<value>" for cna_sdl_build_manifest's SETTINGS:
-# the flags it initializes -- for every configuration and for Release, which the SDL sub-builds
-# use -- the target, system and sysroot it names, the platform and ABI of an Android or Apple SDK.
-# They are read from the calling scope, where the toolchain set them -- also when a file the
-# toolchain includes did, which the toolchain file's own hash cannot see. Nothing CMake itself
-# fills in later is read (CMAKE_C_COMPILER, for one, is cached only once some project enables C,
-# so the next configure would see a value the first did not), and runs of whitespace count as one,
-# so a parent that enabled C, which appends to the *_INIT flags, describes the same toolchain.
-function(cna_sdl_toolchain_settings out_var)
+# its compilers and the flags it initializes -- for every configuration and for Release, which the
+# SDL sub-builds use -- the target, system and sysroot it names, the platform and ABI of an Android
+# or Apple SDK; also when a file the toolchain includes set them, which the toolchain file's own
+# hash cannot see. cmake/SdlToolchainSettings.cmake evaluates the toolchain in a `cmake -P`
+# process of its own, so the answer does not depend on which languages the configuring project
+# had enabled (enabling one adds CMake's defaults to these variables and caches a compiler) and
+# keeps every value byte for byte. A toolchain that cannot be evaluated outside a project records
+# that it could not, the same way every time. Without a toolchain file the list is empty.
+#
+# cna_sdl_toolchain_settings(<out-var> <toolchain-file> [<arg>...]): the "-D<name>=<value>"
+# arguments among <arg> -- the ones the SDL sub-build gets, such as Android's ANDROID_ABI, which a
+# toolchain reads -- reach the evaluation too.
+function(cna_sdl_toolchain_settings out_var toolchain_file)
     set(_settings "")
-    foreach(_variable IN ITEMS
-            CMAKE_SYSTEM_NAME CMAKE_SYSTEM_PROCESSOR CMAKE_SYSTEM_VERSION CMAKE_SYSROOT
-            CMAKE_C_COMPILER_TARGET CMAKE_CXX_COMPILER_TARGET
-            CMAKE_C_FLAGS_INIT CMAKE_CXX_FLAGS_INIT
-            CMAKE_C_FLAGS_RELEASE_INIT CMAKE_CXX_FLAGS_RELEASE_INIT
-            CMAKE_EXE_LINKER_FLAGS_INIT CMAKE_SHARED_LINKER_FLAGS_INIT CMAKE_MODULE_LINKER_FLAGS_INIT
-            CMAKE_EXE_LINKER_FLAGS_RELEASE_INIT CMAKE_SHARED_LINKER_FLAGS_RELEASE_INIT
-            CMAKE_MODULE_LINKER_FLAGS_RELEASE_INIT
-            CMAKE_ANDROID_ARCH_ABI CMAKE_ANDROID_API ANDROID_ABI ANDROID_PLATFORM ANDROID_STL
-            CMAKE_OSX_SYSROOT CMAKE_OSX_ARCHITECTURES CMAKE_OSX_DEPLOYMENT_TARGET)
-        if(DEFINED ${_variable})
-            string(REGEX REPLACE "[ \t\r\n]+" " " _value "${${_variable}}")
-            string(STRIP "${_value}" _value)
-            if(NOT _value STREQUAL "")
-                list(APPEND _settings "${_variable}=${_value}")
-            endif()
+    set(_defines "")
+    foreach(_arg IN LISTS ARGN)
+        if(_arg MATCHES "^-D[A-Za-z_][A-Za-z0-9_]*(:[A-Z]+)?=")
+            list(APPEND _defines "${_arg}")
         endif()
     endforeach()
+    if(NOT toolchain_file STREQUAL "")
+        execute_process(
+            COMMAND "${CMAKE_COMMAND}" ${_defines} "-DCNA_SDL_TOOLCHAIN=${toolchain_file}"
+                -P "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/SdlToolchainSettings.cmake"
+            RESULT_VARIABLE _result
+            OUTPUT_VARIABLE _stdout
+            ERROR_VARIABLE _stderr)
+        if(NOT _result EQUAL 0)
+            list(APPEND _settings "unavailable=the toolchain cannot be evaluated outside a project")
+        else()
+            string(REPLACE ";" "\\;" _stderr "${_stderr}")
+            string(REPLACE "\n" ";" _lines "${_stderr}")
+            foreach(_line IN LISTS _lines)
+                if(_line MATCHES "^cna-toolchain-setting: (.*)$")
+                    list(APPEND _settings "${CMAKE_MATCH_1}")
+                endif()
+            endforeach()
+        endif()
+    endif()
     set(${out_var} "${_settings}" PARENT_SCOPE)
 endfunction()
 
