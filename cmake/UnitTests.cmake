@@ -1654,6 +1654,16 @@ if(CNA_BUILD_TESTS)
             -P ${CMAKE_SOURCE_DIR}/cmake/Tests/SdlShadercrossPatchCase.cmake)
     set_tests_properties(CnaSdlShadercrossPatch PROPERTIES LABELS "configuration")
 
+    # 2026-10-26 dependency audit C-05: the Android SDL patch makes a relative directory fall back
+    # to the APK's assets again; SDL's own function, before and after it, on the host with Android's
+    # services stubbed.
+    add_test(NAME CnaSdlAndroidAssetEnumeration
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DCNA_WORK_DIR=${CMAKE_BINARY_DIR}/CnaSdlAndroidAssetEnumeration
+            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/SdlAndroidAssetEnumerationCase.cmake)
+    set_tests_properties(CnaSdlAndroidAssetEnumeration PROPERTIES LABELS "platform;configuration")
+
     # plans/plan_native_platform_validation.md NPV-0131: which test binary the platform ctest
     # entries below (CnaPlatform*) run. CnaTests by default. A build that compiles only the
     # platform module's tests -- CI's SDL-free cell builds the focused CnaPlatformModuleTests,
