@@ -1,0 +1,40 @@
+From: Robert Vokac <robertvokac@robertvokac.com>
+Date: Mon, 26 Oct 2026 18:00:00 +0100
+Subject: [PATCH] GPU: clamp each Vulkan mip level's blit extent to one texel
+
+VULKAN_GenerateMipmaps sized each level's blit as width >> level and
+height >> level, so in a non-square chain the shorter side reached 0
+before the last level: generating the mips of an 8x2 texture blitted an
+8x0 region into level 2 and a 0x0 one into level 3, which writes nothing
+and leaves those levels as they were (zero for a fresh render target).
+Levels are at least one texel per side, as D3D12_GenerateMipmaps already
+clamps them with SDL_max(..., 1).
+
+Not an upstream commit: SDL main still sizes them unclamped (checked
+2026-10-26 at 52289a276). Carried by CNA (2026-10-26 remediation review:
+FNA3D's SDL_GPU driver resolves mipmapped render targets with
+SDL_GenerateMipmapsForGPUTexture).
+---
+--- a/src/gpu/vulkan/SDL_gpu_vulkan.c
++++ b/src/gpu/vulkan/SDL_gpu_vulkan.c
+@@ -9305,16 +9305,16 @@
+             blit.srcOffsets[0].y = 0;
+             blit.srcOffsets[0].z = depth;
+ 
+-            blit.srcOffsets[1].x = container->header.info.width >> (level - 1);
+-            blit.srcOffsets[1].y = container->header.info.height >> (level - 1);
++            blit.srcOffsets[1].x = SDL_max(container->header.info.width >> (level - 1), 1);
++            blit.srcOffsets[1].y = SDL_max(container->header.info.height >> (level - 1), 1);
+             blit.srcOffsets[1].z = depth + 1;
+ 
+             blit.dstOffsets[0].x = 0;
+             blit.dstOffsets[0].y = 0;
+             blit.dstOffsets[0].z = depth;
+ 
+-            blit.dstOffsets[1].x = container->header.info.width >> level;
+-            blit.dstOffsets[1].y = container->header.info.height >> level;
++            blit.dstOffsets[1].x = SDL_max(container->header.info.width >> level, 1);
++            blit.dstOffsets[1].y = SDL_max(container->header.info.height >> level, 1);
+             blit.dstOffsets[1].z = depth + 1;
+ 
+             blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;

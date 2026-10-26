@@ -78,6 +78,15 @@ if(ANDROID)
     list(APPEND CNA_SDL3_PATCHES
         "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-86296ac8-0004-android-relative-asset-enumeration.patch")
 endif()
+# VULKAN_GenerateMipmaps sizes each level's blit as width >> level and height >> level, so in a
+# non-square chain the shorter side reaches 0 first and those levels are never written (an 8x2
+# render target's levels 2 and 3 stay zero); D3D12 clamps them to one texel. FNA3D's SDL_GPU driver
+# resolves mipmapped render targets through it (2026-10-26 remediation review). SDL main still
+# does not clamp (checked 2026-10-26 at 52289a276). Every build with the Vulkan backend.
+if(NOT EMSCRIPTEN AND NOT APPLE)
+    list(APPEND CNA_SDL3_PATCHES
+        "${CMAKE_CURRENT_LIST_DIR}/patches/sdl-86296ac8-0005-vulkan-mipmap-level-extent.patch")
+endif()
 set(_cna_sdl_wayland_build_capable OFF)
 if(EMSCRIPTEN)
     if(CNA_ENABLE_EMSCRIPTEN_THREADS)
