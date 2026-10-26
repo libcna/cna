@@ -1,6 +1,7 @@
 # plans/plan_sdlgpu_modern_graphics.md SMG-0039: the persistent SDL install is reused only while
-# its build manifest matches, so a changed vendored source, a changed CNA patch series or changed
-# configure arguments cannot leave an old library linked under a tree that claims the new one.
+# its build manifest matches, so a changed vendored source, a changed CNA patch series, changed
+# configure arguments or a changed toolchain cannot leave an old library linked under a tree that
+# claims the new one.
 #
 # Drives the real functions cmake/ThirdPartySDL.cmake uses, on a small fixture instead of SDL
 # itself -- the decision is the same, and a real SDL rebuild would cost minutes per case.
@@ -181,6 +182,38 @@ if(EXISTS "${_staged}")
     message(FATAL_ERROR "SdlPrebuiltFingerprint: a failed staging left ${_staged} behind")
 endif()
 message(STATUS "ok: a non-applying patch is refused and leaves nothing staged")
+
+# 15. A cross build's toolchain file edited in place -- same path, another compiler (2026-10-26
+#     dependency audit C-09): the path in ARGS is unchanged, the content is not.
+set(_toolchain "${_work}/toolchain.cmake")
+file(WRITE "${_toolchain}" "set(CMAKE_C_COMPILER /fixture/compiler-A)\n")
+set(_tc_args ${_args} "-DCMAKE_TOOLCHAIN_FILE=${_toolchain}")
+set(_compiler "GNU 14.2.0 /fixture/bin/c++")
+file(WRITE "${_lib}" "old library\n")
+cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
+    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}")
+file(WRITE "${_stamp}" "${_manifest}")
+_expect_current(TRUE "toolchain build with unchanged inputs reuses the install")
+file(WRITE "${_toolchain}" "set(CMAKE_C_COMPILER /fixture/compiler-B)\n")
+cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
+    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}")
+_expect_current(FALSE "toolchain file edited in place forces a rebuild")
+
+# 16. The same toolchain file resolving to another compiler (an SDK or NDK chosen from outside it).
+file(WRITE "${_toolchain}" "set(CMAKE_C_COMPILER /fixture/compiler-A)\n")
+cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
+    TOOLCHAIN_FILE "${_toolchain}" COMPILER "Clang 18.1.0 /fixture/ndk-r27/bin/clang++")
+_expect_current(FALSE "another resolved compiler forces a rebuild")
+
+# 17. Without a toolchain file the manifest has no toolchain lines, so native installs built before
+#     these fields existed stay current.
+cna_sdl_build_manifest(_plain NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_args})
+cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_args}
+    TOOLCHAIN_FILE "" COMPILER "${_compiler}")
+if(NOT _manifest STREQUAL _plain OR _manifest MATCHES "toolchain")
+    message(FATAL_ERROR "SdlPrebuiltFingerprint: a native manifest records a toolchain:\n${_manifest}")
+endif()
+message(STATUS "ok: a native manifest is unchanged by the toolchain fields")
 
 file(REMOVE_RECURSE "${_work}")
 message(STATUS "SdlPrebuiltFingerprint: all cases passed")

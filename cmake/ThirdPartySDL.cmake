@@ -458,6 +458,7 @@ function(_cna_ensure_sdl_dep)
         "-DCMAKE_BUILD_TYPE=Release"
         "-DCMAKE_INSTALL_PREFIX=${_prefix}"
     )
+    set(_cna_sdl_toolchain "")
     if(CMAKE_TOOLCHAIN_FILE)
         # plans/plan_apple_m4.md AM4-105: a relative toolchain path (the documented
         # -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake) reaches this variable resolved on a
@@ -523,13 +524,17 @@ function(_cna_ensure_sdl_dep)
         endif()
     endif()
 
-    # The manifest covers what decides the library's content. The compiler launcher is left out on
-    # purpose: ccache changes how long a build takes, never what it produces.
+    # The manifest covers what decides the library's content, including the toolchain file's
+    # content and the compiler it resolved to (CXX: always enabled here, unlike C). The compiler
+    # launcher is left out on purpose: ccache changes how long a build takes, never what it
+    # produces.
     cna_sdl_build_manifest(_manifest
         NAME    "${_A_NAME}"
         SOURCE  "${_A_SOURCE}"
         PATCHES ${_A_PATCHES}
-        ARGS    ${_base_args} ${_A_CMAKE_ARGS})
+        ARGS    ${_base_args} ${_A_CMAKE_ARGS}
+        TOOLCHAIN_FILE "${_cna_sdl_toolchain}"
+        COMPILER "${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} ${CMAKE_CXX_COMPILER}")
     set(_stamp "${CNA_SDL_PREBUILT_ROOT}/${_A_NAME}.cna-build-manifest.txt")
     string(SHA256 _manifest_id "${_manifest}")
     string(SUBSTRING "${_manifest_id}" 0 16 _manifest_id)

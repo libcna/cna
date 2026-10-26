@@ -7,8 +7,8 @@
 # the new one -- a validation that proves nothing.
 #
 # Each dependency therefore records, next to its install, the manifest of everything that went into
-# it: the content of its source tree, the content of every patch applied on top, and the CMake
-# arguments it was configured with. The install is reused only when the recorded manifest equals the
+# it: the content of its source tree, the content of every patch applied on top, the CMake
+# arguments it was configured with, and the content of its toolchain file. The install is reused only when the recorded manifest equals the
 # one computed now. Nothing here is specific to one dependency or one patch.
 #
 # Included by cmake/ThirdPartySDL.cmake, and by cmake/Tests/SdlPrebuiltFingerprint.cmake, which
@@ -37,12 +37,20 @@ function(cna_sdl_source_tree_hash out_var source_dir)
     set(${out_var} "${_tree_hash}" PARENT_SCOPE)
 endfunction()
 
-# cna_sdl_build_manifest(<out-var> NAME <n> SOURCE <dir> [PATCHES <file>...] [ARGS <arg>...])
+# cna_sdl_build_manifest(<out-var> NAME <n> SOURCE <dir> [PATCHES <file>...] [ARGS <arg>...]
+#                        [TOOLCHAIN_FILE <file> [COMPILER <identity>]])
 #
 # Patches are listed in application order, by file name and content hash: reordering, renaming,
 # editing, adding or removing one each changes the manifest.
+#
+# A toolchain file is named in ARGS by its path only, and editing it in place -- another compiler,
+# sysroot or ABI flag -- would leave the manifest as it was (2026-10-26 dependency audit C-09). So
+# its content hash is recorded too, and with it the compiler identity the toolchain resolved to in
+# this configure (id, version, path), which also changes when a toolchain picks its SDK or NDK from
+# outside the file. Files a toolchain includes are covered only through that identity. Without a
+# toolchain file neither line is written, so a native manifest is exactly what it was before.
 function(cna_sdl_build_manifest out_var)
-    cmake_parse_arguments(_M "" "NAME;SOURCE" "PATCHES;ARGS" ${ARGN})
+    cmake_parse_arguments(_M "" "NAME;SOURCE;TOOLCHAIN_FILE;COMPILER" "PATCHES;ARGS" ${ARGN})
     cna_sdl_source_tree_hash(_source_hash "${_M_SOURCE}")
     set(_manifest "schema ${CNA_SDL_PREBUILT_MANIFEST_SCHEMA}\n")
     string(APPEND _manifest "name ${_M_NAME}\n")
@@ -58,6 +66,17 @@ function(cna_sdl_build_manifest out_var)
     foreach(_arg IN LISTS _M_ARGS)
         string(APPEND _manifest "arg ${_arg}\n")
     endforeach()
+    if(DEFINED _M_TOOLCHAIN_FILE AND NOT _M_TOOLCHAIN_FILE STREQUAL "")
+        if(EXISTS "${_M_TOOLCHAIN_FILE}")
+            file(SHA256 "${_M_TOOLCHAIN_FILE}" _toolchain_hash)
+        else()
+            set(_toolchain_hash "absent")
+        endif()
+        string(APPEND _manifest "toolchain-sha256 ${_toolchain_hash}\n")
+        if(DEFINED _M_COMPILER AND NOT _M_COMPILER STREQUAL "")
+            string(APPEND _manifest "toolchain-compiler ${_M_COMPILER}\n")
+        endif()
+    endif()
     set(${out_var} "${_manifest}" PARENT_SCOPE)
 endfunction()
 
