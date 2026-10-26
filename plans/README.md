@@ -51,6 +51,9 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_xnb.md`](plan_xnb.md) — XNB content pipeline.
 - [`plan_xnapipeline.md`](plan_xnapipeline.md) — native XNB output (closed; external verification rows only).
 - [`plan_xnapipeline_parity.md`](plan_xnapipeline_parity.md) — TRUE XNA 4.0 Content Pipeline public API + input-format parity, measured against the genuine SDK.
+- `plan_missing.md` — XNA-MISSING-001..020, the 160 runtime members that took coverage from 3,467
+  to 3,627/3,627 (closed 2026-09-21; deleted on 2026-10-26, Git history only). The live figure is
+  [`../docs/xna-4-runtime-member-coverage.md`](../docs/xna-4-runtime-member-coverage.md).
 
 ## Graphics architecture and effects
 

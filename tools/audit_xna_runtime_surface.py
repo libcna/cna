@@ -5,6 +5,11 @@ The source corpus is Microsoft's XNA 4.0 XML documentation, not FNA. The
 Content.Pipeline assembly is a build-time tool and is excluded. All runtime
 T: entries are counted, including nested and generic types. Member shapes
 come from matching Microsoft DLL metadata and CNA public Clang ASTs.
+
+Do not edit CNA headers while the audit runs: its Clang pass walks 331 types
+over several minutes, so an edit landing mid-run is picked up for some types
+and not others. Attribute a change between two runs by diffing the
+`xna_signature` classifications in the JSON, not the summary counters.
 """
 
 from __future__ import annotations
