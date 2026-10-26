@@ -47,6 +47,15 @@ it, so install the SDL packages before the first configure. If you add one after
 cache directory the configure output names (other build trees use it too) and reconfigure. The
 Wayland packages below are the exception, because they select a different key.
 
+Each install records the manifest it was built from (source tree, CNA's patches, configure
+arguments, toolchain file and the settings it decides), and a configure rebuilds it when its own
+manifest differs; every build tree also watches that record, so its next build reconfigures when
+another tree has rebuilt the install. That protects a build that starts afterwards, not one already
+running: two trees whose manifests differ -- other configure arguments, another toolchain -- must
+not share an install root while one of them builds, or the running build can compile and link
+against the other tree's SDL. Give such a tree a root of its own with
+`-DCNA_SDL_PREBUILT_ROOT=<dir>`; trees with the same manifest share one safely.
+
 ## Sibling checkouts and submodules
 
 ```bash

@@ -801,20 +801,20 @@ namespace CNA::Internal::Renderers::Fna3d
             return;
         }
 
-        // FNA3D_ReadBackbuffer's sub-rectangle origin is NOT the same on every driver: the OpenGL
-        // driver forwards (x, y) straight to glReadPixels, whose origin is the BOTTOM-left of the
-        // backbuffer, and only afterwards flips the returned rows -- so a full-frame read comes
-        // back correctly top-row-first while a sub-rectangle read comes back from the mirrored
-        // row range. The D3D11 driver, which routes the read through GetTextureData2D, uses the
-        // top-left origin instead. Measured, not assumed: fna3d-spike/fna3d_sprite_spike.c
-        // renders a quad at rows 12..35 and a full-frame read finds it there, while the
-        // equivalent sub-rectangle read returns the cleared colour.
+        // FNA3D_ReadBackbuffer's sub-rectangle origin used to differ between drivers: upstream's
+        // OpenGL driver forwards (x, y) straight to glReadPixels, whose origin is the BOTTOM-left
+        // of the backbuffer, and only afterwards flips the returned rows, so a sub-rectangle read
+        // came back from the mirrored row range (measured with fna3d-spike/fna3d_sprite_spike.c),
+        // while the D3D11 driver used the top-left origin. The libcna fork converts the rectangle
+        // to GL's rows since the 2026-10-26 dependency audit (B2-10), so at the current pin every
+        // driver takes a top-left rectangle.
         //
         // CNA's own contract is unambiguous ("x, y are top-left in game coordinates") and shared
-        // pixel tests depend on it, so this reads the whole backbuffer -- which every driver
-        // agrees is top-row-first -- and crops the requested rectangle out of it. Readback is
-        // already a full CPU/GPU sync point that FNA3D documents as screenshot-only, so the extra
-        // bandwidth buys driver-independent correctness at a cost nothing hot pays.
+        // pixel tests depend on it. This still reads the whole backbuffer -- which every driver,
+        // fixed or not, returns top-row-first -- and crops the requested rectangle out of it, so a
+        // build against an FNA3D without that fix stays correct. Readback is already a full CPU/GPU
+        // sync point that FNA3D documents as screenshot-only, so the extra bandwidth costs nothing
+        // hot.
         const int backbufferWidth = presentation_.backBufferWidth;
         const int backbufferHeight = presentation_.backBufferHeight;
         if (backbufferWidth <= 0 || backbufferHeight <= 0)
