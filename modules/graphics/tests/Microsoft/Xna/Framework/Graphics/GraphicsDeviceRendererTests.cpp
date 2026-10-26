@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include "CNA/GraphicsRendererSelection.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -9,16 +10,27 @@
 
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 
+// The free functions name the build's compile-time DEFAULT renderer; the device names the one it
+// was created with (docs/runtime-renderer-selection.md, "Which accessor answers which question").
+// The two coincide whenever the default is the selected renderer -- always in a single-renderer
+// build. A multi-renderer build may be run with CNA_GRAPHICS_RENDERER naming another one, and the
+// device must then report that renderer, not the default.
 TEST(GraphicsDeviceRendererTest, GetGraphicsRendererTypeMatchesFreeFunction)
 {
     GraphicsDevice gd;
-    EXPECT_EQ(gd.GetGraphicsRendererType(), CNA::getCurrentGraphicsRendererType());
+    const CNA::GraphicsRendererType selected = CNA::GraphicsRendererSelection::GetSelected();
+    EXPECT_EQ(gd.GetGraphicsRendererType(), selected);
+    if (selected == CNA::getCurrentGraphicsRendererType())
+        EXPECT_EQ(gd.GetGraphicsRendererType(), CNA::getCurrentGraphicsRendererType());
 }
 
 TEST(GraphicsDeviceRendererTest, GetGraphicsRendererNameMatchesFreeFunction)
 {
     GraphicsDevice gd;
-    EXPECT_EQ(gd.GetGraphicsRendererName(), CNA::getCurrentGraphicsRendererName());
+    const CNA::GraphicsRendererType selected = CNA::GraphicsRendererSelection::GetSelected();
+    EXPECT_EQ(gd.GetGraphicsRendererName(), CNA::getGraphicsRendererName(selected));
+    if (selected == CNA::getCurrentGraphicsRendererType())
+        EXPECT_EQ(gd.GetGraphicsRendererName(), CNA::getCurrentGraphicsRendererName());
 }
 
 TEST(GraphicsDeviceRendererTest, GetGraphicsRendererNameIsNotEmpty)
