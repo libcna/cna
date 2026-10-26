@@ -14,8 +14,9 @@ light, fog and skinning. Optional maps receive explicit white or flat-normal fal
 and BRDF-LUT equation used by EasyGL, Software and WebGPU, including explicit roughness mip LOD.
 
 Double-sided materials reverse the complete tangent basis on a back face, including under a
-mirroring World transform; the face sign is the driver's (`gl_FrontFacing` on OpenGL, Direct3D's
-clockwise-positive `VFACE` on SDL_GPU). A zero normal or tangent falls back as EasyGL's does.
+mirroring World transform; every FNA3D driver hands the shader Direct3D 9's clockwise-positive
+`VFACE` (OpenGL flips `gl_FrontFacing` to it since the 2026-10-26 audit, D-01; D3D11 takes
+clockwise front faces since its review, R8-01). A zero normal or tangent falls back as EasyGL's does.
 Material maps independently select UV0 or UV1 before their own affine
 texture transform. The CNA-owned compiled effects sample the shared directional/cascaded,
 point-cube and spot-map shadow contract across Basic, Skinned, PBR and SkinnedPBR. Custom shader
@@ -59,9 +60,9 @@ OpenGL and SDL_GPU/Vulkan drivers; this is not a new Windows or Apple qualificat
 | Field | Value |
 |---|---|
 | Repository | CNA's fork https://github.com/libcna/FNA3D (upstream https://github.com/FNA-XNA/FNA3D) |
-| Pinned revision | `d6090fab7f663176b33d2336a3c5984d2203bdc8` on the fork's `cna` branch: release **26.08** (`32401479a3ab`) plus CNA's commits, merged with release **26.10** (`62a41708e975`), then the 2026-10-26 dependency audit's fixes and those of its review |
+| Pinned revision | `10f650b9d0f6bb0e6f3f9378833fbd807dfe8cde` on the fork's `cna` branch: release **26.08** (`32401479a3ab`) plus CNA's commits, merged with release **26.10** (`62a41708e975`), then the 2026-10-26 dependency audit's fixes and those of its review |
 | License | zlib |
-| Vendored submodule | MojoShader from CNA's fork https://github.com/libcna/mojoshader (upstream https://github.com/icculus/mojoshader), `83f2c4f8f95e` on its `cna` branch: `6333f74` plus CNA's commits, merged with upstream `main` `ad5dff8` (the revision 26.10 pins), then the 2026-10-26 audit's and review's fixes; built from FNA3D's own CMake |
+| Vendored submodule | MojoShader from CNA's fork https://github.com/libcna/mojoshader (upstream https://github.com/icculus/mojoshader), `03b686fe1a33` on its `cna` branch: `6333f74` plus CNA's commits, merged with upstream `main` `ad5dff8` (the revision 26.10 pins), then the 2026-10-26 audit's and review's fixes; built from FNA3D's own CMake |
 | Dependencies | **SDL 3.2.0 or newer, and nothing else** — the very SDL3 CNA already vendors |
 | Integration | `cmake/ThirdPartyFNA3D.cmake`, FetchContent at the pin (`CNA_FNA3D_GIT_REPOSITORY`, `CNA_FNA3D_GIT_TAG`), built as a static archive; nothing is patched at configure time |
 | Offline builds | `-DFETCHCONTENT_SOURCE_DIR_FNA3D=/path/to/FNA3D`: a clone of the fork at the pin with its MojoShader submodule initialized (`git submodule update --init`). Configure warns when that checkout is at another commit or has local changes, and builds it as it is |
