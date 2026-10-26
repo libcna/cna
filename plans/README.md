@@ -14,9 +14,10 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_platform.md`](plan_platform.md) — platform abstraction.
 - [`plan_apple.md`](plan_apple.md) — macOS and iOS platform support.
 - [`plan_runtimerenderer.md`](plan_runtimerenderer.md) — runtime graphics-renderer selection.
-- [`plan_sdl3free.md`](plan_sdl3free.md) — historical SDL3-independent migration plan; its SDL2
-  route was superseded by native backends and retired on 2026-10-04, and those native backends
-  were retired in turn on 2026-10-06.
+- `plan_sdl3free.md` — historical SDL3-independent migration plan; its SDL2 route was superseded
+  by native backends and retired on 2026-10-04, and those native backends were retired in turn on
+  2026-10-06. Deleted on 2026-10-26 (Git history only); the SDL-free configurations that remain
+  are described in [`../docs/platform-abstraction.md`](../docs/platform-abstraction.md).
 - `plan_modern.md` — the former `CNA::Graphics` modern engine layer; that layer was removed in the
   2026-09 scope reduction and the plan was deleted on 2026-10-11 (Git history only). The surviving
   extension module is described in [`../docs/cnaext-engine-layer.md`](../docs/cnaext-engine-layer.md).
