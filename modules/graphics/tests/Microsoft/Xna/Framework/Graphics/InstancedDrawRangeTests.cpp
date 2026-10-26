@@ -672,6 +672,14 @@ namespace
             if (!device.SupportsCapability(GraphicsCapability::Instancing))
                 GTEST_SKIP() << "Renderer reports GraphicsCapability::Instancing = false: hardware "
                                 "instancing is unavailable on this renderer profile";
+            // Every draw here goes through BasicEffect, and FNA3D's Instancing answer is about a
+            // compiled Effect whose vertex shader declares the instance stream: it refuses an
+            // instanced draw through a stock effect by design (docs/fna3d-renderer.md), so this
+            // file's stock-instancing contract is outside its scope. The compile-time gate below
+            // names only the DEFAULT, so in a multi-renderer build the renderer is asked here.
+            if (CNA_RENDERER_IS(Fna3d))
+                GTEST_SKIP() << "FNA3D refuses stock-effect instancing; its instanced draws are "
+                                "covered through compiled effects (Fna3dCompiledEffectTest)";
         }
 
         void RequireInstancedRendering()
