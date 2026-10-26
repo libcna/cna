@@ -5508,7 +5508,7 @@ namespace CNA::Internal::Renderers::WebGPU
         std::unique_ptr<WebGPUTextureRenderer> pbrDefaultWhiteTexture_;
         std::unique_ptr<WebGPUTextureRenderer> pbrDefaultFlatNormalTexture_;
 
-        /// plans/plan_graphics_shared_cleanup.md GSC-0004 / plans/plan_vulkan_parity.md VKPAR-0004:
+        /// plans/plan_graphics_shared_cleanup.md GSC-0004 / Vulkan parity VKPAR-0004:
         /// Microsoft XNA 4.0 reads an unbound stock-effect texture as opaque black, measured
         /// through tools/xna-oracle and checked in as tools/xna-oracle/reference/null-texture/.
         /// This renderer bound the neutral-white `tex * colour` identity everywhere, which is

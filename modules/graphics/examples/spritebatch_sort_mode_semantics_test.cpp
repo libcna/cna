@@ -53,7 +53,7 @@
 //     unstable `Array.Sort` quicksort, which swaps two equal keys, so two overlapping sprites that
 //     share one texture come out REVERSED and the first-issued one wins (plans/plan_software.md
 //     SOFTWARE-354, recovered from XNA's IL; this said `std::stable_sort` and "the second one wins"
-//     until plans/plan_vulkan_parity.md VKPAR-0022).
+//     until Vulkan parity VKPAR-0022).
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"

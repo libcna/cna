@@ -11,10 +11,12 @@ holds the whole implementation (`git show <commit>^:modules/renderers/<family>/.
 `git checkout <commit>^ -- modules/renderers/<family>`). The retired renderers'
 own plans have left the tree -- those of the 2026-09-28, 2026-10-06 and 2026-10-13 retirements
 with their renderers, the older ones in the 2026-10-11 documentation cleanup -- and live in git
-history, with one deliberate exception: `plans/plan_vulkan_parity.md` stays, under a History
-banner, because the XNA-measured shared contracts it settled still apply to the surviving
-renderers. What git does *not* preserve is the third-party project each renderer
-wrapped, so every entry records the exact dependency it was pinned to. That pairing — CNA's code in
+history. `plans/plan_vulkan_parity.md` stayed longest, for the XNA-measured shared contracts it
+settled, and was deleted on 2026-10-26: each of those contracts has its own owner now (GSC-0002 and
+GSC-0004 in `plans/plan_graphics_shared_cleanup.md`, channel expansion in `tools/xna-oracle/`, test
+display isolation in `plans/plan_gpu_test_isolation.md`). What git does *not* preserve is the
+third-party project each renderer wrapped, so every entry records the exact dependency it was
+pinned to. That pairing — CNA's code in
 git history, the dependency's coordinates here — is the archive.
 
 Standalone probes for retired renderers were also removed from the current `spikes/` tree. Their

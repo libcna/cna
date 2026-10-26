@@ -1,4 +1,4 @@
-// plans/plan_vulkan_parity.md VKPAR-0014: what the real XNA 4.0 runtime returns for the channels a
+// Vulkan parity VKPAR-0014: what the real XNA 4.0 runtime returns for the channels a
 // SurfaceFormat does not store.
 //
 // ClassicTextureFormatTests.PointSamplingExpandsChannelsAndPreservesDeclaredRanges asserts that a
@@ -101,7 +101,7 @@ public class FormatExpansionOracle : Game
 
         var dev = GraphicsDevice;
         var lines = new List<string>();
-        lines.Add("# plans/plan_vulkan_parity.md VKPAR-0014 -- measured on the real XNA 4.0 runtime.");
+        lines.Add("# Vulkan parity VKPAR-0014 -- measured on the real XNA 4.0 runtime.");
         lines.Add("# 1x1 texture of the named SurfaceFormat, SpriteBatch(PointClamp, BlendState.Opaque)");
         lines.Add("# into an 8x8 SurfaceFormat.Color RenderTarget2D, centre pixel read back.");
         lines.Add("# format|r,g,b,a   (or 'unsupported: <reason>')");

@@ -15991,7 +15991,7 @@ namespace
 
     void WebGPURenderer::EnsureClassicNullTextures()
     {
-        // plans/plan_graphics_shared_cleanup.md GSC-0004 / plans/plan_vulkan_parity.md VKPAR-0004.
+        // plans/plan_graphics_shared_cleanup.md GSC-0004 / Vulkan parity VKPAR-0004.
         // The same 1x1 lazy pattern as EnsurePbrDefaultTextures() above, with XNA's value instead
         // of glTF's: BasicEffect with TextureEnabled, SkinnedEffect, AlphaTestEffect, both
         // DualTextureEffect slots and both EnvironmentMapEffect slots all sample (0,0,0,255) when

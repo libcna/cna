@@ -257,7 +257,7 @@ same preset with `-gline-tables-only`.
 
 ## Shared runtime library
 
-`CNA_SHARED_LIBRARY` (`plans/plan_vulkan_parity.md` VKPAR-0017) links the CNA runtime into one shared
+`CNA_SHARED_LIBRARY` (Vulkan parity VKPAR-0017) links the CNA runtime into one shared
 library, `libcna.so`, instead of statically into every executable that links `CNA`.
 
 **Why.** Every test and example is its own executable. Linked statically, each carried the whole

@@ -13,7 +13,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 # the graphics module's examples directory.
 include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 
-# plans/plan_vulkan_parity.md VKPAR-0003, the same RTR-P9-13 rule as the EasyGL block: these
+# Vulkan parity VKPAR-0003, the same RTR-P9-13 rule as the EasyGL block: these
 # TUs include the renderer-private CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp and
 # assert the HEADLESS renderer's behaviour, but they run against whatever renderer the build
 # DEFAULTS to -- so this block exists only when HEADLESS is the default. CNA_GRAPHICS_RENDERER

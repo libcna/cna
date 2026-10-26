@@ -67,7 +67,7 @@ protected:
         // Task the SpriteFont lookup fix made the constructor refuse a defaultCharacter absent from the
         // character list. plans/plan_software.md SOFTWARE-353 then recovered what XNA does: its
         // internal (content) constructor stores the value unchecked, and only the PUBLIC setter
-        // validates. plans/plan_vulkan_parity.md VKPAR-0022 moved this leg to that contract.
+        // validates. Vulkan parity VKPAR-0022 moved this leg to that contract.
         {
             bool ctorThrew = false;
             bool kept = false;

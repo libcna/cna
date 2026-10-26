@@ -81,7 +81,7 @@ namespace
             return static_cast<System::IO::intcs>(bytes_.size());
         }
 
-        // plans/plan_vulkan_parity.md VKPAR-0025: seekable, because XNA refuses an image stream
+        // Vulkan parity VKPAR-0025: seekable, because XNA refuses an image stream
         // that is not (plans/plan_software.md SOFTWARE-305).
         [[nodiscard]] bool getCanSeekProperty() const override { return true; }
         [[nodiscard]] System::IO::intcs getPositionProperty() const override { return position_; }

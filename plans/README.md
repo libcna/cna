@@ -78,8 +78,12 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   and its report. [`../docs/renderer-registry.md`](../docs/renderer-registry.md) is the canonical
   list of the 10 identities that remain; [`../docs/removed-renderers.md`](../docs/removed-renderers.md)
   records all 41 retired ones.
-- [`plan_vulkan_parity.md`](plan_vulkan_parity.md) — history only: the Vulkan hardware-parity
-  ledger, kept for its XNA-measured shared contracts after `VULKAN` was retired on 2026-10-13.
+- `plan_vulkan_parity.md` — VKPAR-0001..0029, the Vulkan hardware-parity ledger (Radeon 780M,
+  closed 2026-09-21; `VULKAN` retired 2026-10-13). Deleted on 2026-10-26 (Git history only); its
+  shared contracts live in [`plan_graphics_shared_cleanup.md`](plan_graphics_shared_cleanup.md)
+  (GSC-0002, GSC-0004), [`../tools/xna-oracle/README.md`](../tools/xna-oracle/README.md) and
+  [`plan_gpu_test_isolation.md`](plan_gpu_test_isolation.md). Comments cite its rows as
+  "Vulkan parity VKPAR-NNNN".
 - [`plan_dx9.md`](plan_dx9.md) — Direct3D 9.
 - [`plan_headless.md`](plan_headless.md) — headless rendering.
 - [`plan_sdlgpu.md`](plan_sdlgpu.md) — SDL GPU.

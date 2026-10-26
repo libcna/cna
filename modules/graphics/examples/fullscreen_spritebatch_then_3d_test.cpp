@@ -146,7 +146,7 @@ public:
     FullscreenSpriteThen3DTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // plans/plan_vulkan_parity.md VKPAR-0018: this test uses a HiDef-only feature
+        // Vulkan parity VKPAR-0018: this test uses a HiDef-only feature
         // (GetBackBufferData, volume textures, multiple render targets, separate alpha blending,
         // mipmapped non-power-of-two surfaces, occlusion queries or float targets), and CNA
         // enforces XNA's Reach profile, which GraphicsDeviceManager defaults to -- so under Reach

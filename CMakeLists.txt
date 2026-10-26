@@ -43,7 +43,7 @@ if(EMSCRIPTEN AND CNA_ENABLE_EMSCRIPTEN_THREADS)
         "Build Emscripten targets with shared-memory pthread support" FORCE)
 endif()
 
-# plans/plan_vulkan_parity.md VKPAR-0017: link the CNA runtime into ONE shared library, libcna.so,
+# Vulkan parity VKPAR-0017: link the CNA runtime into ONE shared library, libcna.so,
 # instead of statically into every executable.
 #
 # Measured on cmake-build-vulkan (Debug, 2026-09-21): 798 test/example executables, each carrying a

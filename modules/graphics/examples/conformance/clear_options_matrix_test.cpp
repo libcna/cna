@@ -104,7 +104,7 @@ namespace
     constexpr float kBaselineDepth = 0.23f;
     constexpr float kRequestedDepth = 0.67f;
     constexpr float kSingleColorDepth = 0.73f;
-    // plans/plan_vulkan_parity.md VKPAR-0022: what Clear(Color) actually clears depth to. Microsoft
+    // Vulkan parity VKPAR-0022: what Clear(Color) actually clears depth to. Microsoft
     // XNA uses 1.0 whatever the viewport says (plans/plan_software.md SOFTWARE-334); FNA uses
     // Viewport.MaxDepth, which is what this file expected. The restricted viewport below still sets
     // MaxDepth to kSingleColorDepth, so the two rules land on opposite sides of the probes.
@@ -510,7 +510,7 @@ class GraphicsDeviceClearOptionsTest final : public Game
         device.setBlendStateProperty(BlendState::Opaque);
         DrawRect(device, StencilPassRect(width, height), width, height, 0.5f, kBlue);
 
-        // plans/plan_vulkan_parity.md VKPAR-0022: a copy, not the bound object. XNA makes a
+        // Vulkan parity VKPAR-0022: a copy, not the bound object. XNA makes a
         // state object immutable once a device has bound it (plans/plan_software.md
         // SOFTWARE-232), so the reject leg needs a state of its own.
         DepthStencilState stencilReject(stencilTest);

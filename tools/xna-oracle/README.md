@@ -100,7 +100,7 @@ wine "$CSC" /nologo /target:exe /platform:x86 /out:Oracle.exe \
   /r:"$(winepath -w $(find $GAC -name Microsoft.Xna.Framework.Graphics.dll | head -1))" \
   Oracle.cs
 
-wine Oracle.exe scenes/colored3d.scene xna_out.png
+../platform/run_gpu_tests_private.sh --exec wine Oracle.exe scenes/colored3d.scene xna_out.png
 ```
 
 **This `csc.exe` targets .NET Framework 4.0-era C# — no expression-bodied members (`=>` on a
@@ -180,13 +180,13 @@ wine "$CSC" /nologo /target:exe /platform:x86 /out:FormatExpansionOracle.exe \
   /r:"$(winepath -w $(find $GAC -name Microsoft.Xna.Framework.Game.dll     | head -1))" \
   /r:"$(winepath -w $(find $GAC -name Microsoft.Xna.Framework.Graphics.dll | head -1))" \
   FormatExpansionOracle.cs
-DISPLAY=:0 wine FormatExpansionOracle.exe out.txt
+../platform/run_gpu_tests_private.sh --exec wine FormatExpansionOracle.exe out.txt
 ```
 
 The captured result is `reference/format-expansion/xna-format-expansion.txt`, and the rule it
 establishes is: **a colour channel the format does not store samples as 1.0, a missing alpha samples
-as 1.0, and `Alpha8` is the one exception at `(0, 0, 0, A)`.** `plans/plan_vulkan_parity.md`
-VKPAR-0014 is where it was used.
+as 1.0, and `Alpha8` is the one exception at `(0, 0, 0, A)`.** Vulkan parity VKPAR-0014
+(2026-09-21) is where it was used.
 
 ## Status
 

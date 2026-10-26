@@ -6,8 +6,9 @@
 > (`docs/removed-renderers.md`); those numbers are history, and `plans/plan_vulkan_modern_graphics.md`,
 > cited by the second pass, is in Git history only.
 
-A small infrastructure workstream, opened by the owner right after `plans/plan_vulkan_parity.md` was
-integrated (`47d8c4631`). Two lessons from that workstream, both outside Vulkan itself:
+A small infrastructure workstream, opened by the owner right after the Vulkan parity workstream
+(VKPAR, now in Git history) was integrated (`47d8c4631`). Two lessons from that workstream, both
+outside Vulkan itself:
 
 * a test must provably **reach its assertions** — 103 Vulkan example tests had aborted before their
   first check for two days, and nobody noticed because an abort reads as "known red";
@@ -84,7 +85,7 @@ socket is not in this runtime directory, and disables winedbg's modal crash dial
 ## GTI-0003 — the dead WebGPU and SDL_GPU tests
 
 `SOFTWARE-213` made `GetBackBufferData` throw under the Reach profile (XNA's rule) and the renderer example
-suites were not carried across; `plans/plan_vulkan_parity.md` VKPAR-0006 fixed 104 Vulkan tests and
+suites were not carried across; Vulkan parity VKPAR-0006 fixed 104 Vulkan tests and
 measured the rest: **WebGPU 32, SDL_GPU 3** example tests still read the back buffer without asking for
 HiDef, so they abort before their first check.
 
@@ -124,7 +125,7 @@ is unchanged: 319 passed / 51 failed, the same set as before.
 
 ## GTI-0005 — correction: two validation claims had nothing to measure
 
-`plans/plan_vulkan_parity.md` reported **zero validation messages** for the SDL-free X11 path
+The Vulkan parity workstream reported **zero validation messages** for the SDL-free X11 path
 (`cmake-build-multi`) and for the native Wayland path (`cmake-build-wayland`). Both trees are
 **RelWithDebInfo** — `NDEBUG` — so `VulkanRenderer` never loaded the layer there and "zero" measured
 nothing. The rendering results stand; the validation claim did not, until now.

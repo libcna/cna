@@ -101,7 +101,7 @@ int main()
 
         // plans/plan_gpu_test_isolation.md GTI-0003: GetBackBufferData is HiDef-only (SOFTWARE-213
         // enforces XNA's rule), so under the default Reach profile this test aborted before its
-        // first check -- the defect plans/plan_vulkan_parity.md VKPAR-0006 fixed in 104 Vulkan
+        // first check -- the defect VKPAR-0006 fixed in 104 Vulkan
         // tests.
         // Reach was incidental here: nothing below is a Reach-specific claim, and
         // Color and every depth format this test requests are valid in HiDef.

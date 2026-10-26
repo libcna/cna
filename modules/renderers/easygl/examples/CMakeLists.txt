@@ -35,7 +35,7 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 # (OPENGLES3/OPENGL33) -- WEBGL2 is already excluded by the NOT EMSCRIPTEN guard below, matching
 # its Emscripten-only gate in RendererSelection.cmake.
 #
-# plans/plan_vulkan_parity.md VKPAR-0016: the GL profile must be the build's DEFAULT renderer, not
+# Vulkan parity VKPAR-0016: the GL profile must be the build's DEFAULT renderer, not
 # merely one of CNA_GRAPHICS_RENDERERS. These tests assert EasyGL's contracts but run whatever
 # renderer the binary selects by default, and modules/renderers/CMakeLists.txt then re-pointed
 # CNA_GRAPHICS_RENDERER to the family being ENTERED (it no longer does) -- so the former check was
@@ -697,7 +697,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # the retired modern DirectX renderers, with EasyGL as the independent implementation
         # control.
         #
-        # plans/plan_vulkan_parity.md VKPAR-0003: this TU names itself from the PROJECT-WIDE
+        # Vulkan parity VKPAR-0003: this TU names itself from the PROJECT-WIDE
         # CNA_RENDERER_<X> macro and #errors for anything but EasyGL, so it needs a GL
         # profile to be the build's default -- which this block's own gate already requires.
         cna_easygl_test(cna_test_easygl_shader_effect_reflection

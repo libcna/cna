@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_vulkan_parity.md VKPAR-0017: the CNA runtime as one shared library.
+# Vulkan parity VKPAR-0017: the CNA runtime as one shared library.
 #
 # With CNA_SHARED_LIBRARY=ON the `CNA` umbrella stops handing its static archives to every
 # executable. Instead:

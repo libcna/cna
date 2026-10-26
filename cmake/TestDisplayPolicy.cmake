@@ -6,7 +6,7 @@
 #     ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
 # and ctest applies that per test, overriding whatever DISPLAY the caller exported. The default used
 # to be ":0" -- on a developer machine, the live desktop -- so a plain `ctest` opened hundreds of
-# windows on the owner's screen (plans/plan_vulkan_parity.md VKPAR-0015 records it happening).
+# windows on the owner's screen (Vulkan parity VKPAR-0015 recorded it happening).
 #
 # The policy now:
 #   * CNA_TEST_DISPLAY defaults to EMPTY. A test then carries no DISPLAY at all and inherits the

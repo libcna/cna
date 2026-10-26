@@ -440,7 +440,7 @@ set(_cna_runtime_parts
 if(NOT CNA_SHARED_LIBRARY)
     target_link_libraries(CNA INTERFACE ${_cna_runtime_parts})
 else()
-    # plans/plan_vulkan_parity.md VKPAR-0017: every compiled-in renderer family, not only the
+    # Vulkan parity VKPAR-0017: every compiled-in renderer family, not only the
     # default. Statically they reach executables through cna_graphics_core's private link, so the
     # static umbrella above is left exactly as it was; inside libcna.so they must be named, because
     # tests call renderer internals directly and the library has to export them.

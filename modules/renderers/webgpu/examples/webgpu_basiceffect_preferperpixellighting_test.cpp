@@ -199,7 +199,7 @@ public:
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         // plans/plan_gpu_test_isolation.md GTI-0003: GetBackBufferData is HiDef-only (SOFTWARE-213
         // enforces XNA's rule), so under the default Reach profile this test aborted before its
-        // first check -- the defect plans/plan_vulkan_parity.md VKPAR-0006 fixed in 104 Vulkan
+        // first check -- the defect VKPAR-0006 fixed in 104 Vulkan
         // tests.
         gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
