@@ -24,7 +24,8 @@
 # existing checkout (CMake's own built-in per-dependency override, so no CNA-specific variable is
 # needed): a clone of the fork at CNA_FNA3D_GIT_TAG with its MojoShader submodule initialized
 # (git submodule update --init). A checkout at another revision is reported, not refused -- that is
-# how a fork change is tried before the pin moves.
+# how a fork change is tried before the pin moves. A checkout FetchContent populated itself is held
+# to the pin instead: cmake/Fna3dSourceCheck.cmake compares it on every configure.
 
 include_guard(GLOBAL)
 
@@ -44,38 +45,14 @@ cna_fna3d_select_source_pin(
     DEFAULT_REPOSITORY "https://github.com/libcna/FNA3D.git"
     DEFAULT_TAG "a78cbed4a29e28a128480b954f2a5edffcbc6d1e")
 
-# A FETCHCONTENT_SOURCE_DIR_FNA3D checkout is built as it is. Say so when it is not the pinned
-# commit, or has local changes in FNA3D or its MojoShader submodule, because no step here brings
-# it to the pin any more. Read-only: a shared checkout may not be writable.
-function(_cna_fna3d_report_source_override source_dir)
-    find_package(Git QUIET)
-    if(NOT GIT_EXECUTABLE OR NOT EXISTS "${source_dir}/.git")
-        message(STATUS "CNA: FNA3D source ${source_dir} is not a git checkout; built as it is")
-        return()
-    endif()
-    execute_process(
-        COMMAND "${GIT_EXECUTABLE}" -C "${source_dir}" rev-parse HEAD
-        OUTPUT_VARIABLE _head OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-    execute_process(
-        COMMAND "${GIT_EXECUTABLE}" -C "${source_dir}" rev-parse --verify --quiet
-                "${CNA_FNA3D_GIT_TAG}^{commit}"
-        OUTPUT_VARIABLE _pin OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-    execute_process(
-        COMMAND "${GIT_EXECUTABLE}" --no-optional-locks -C "${source_dir}" status --porcelain
-        OUTPUT_VARIABLE _changes OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-    if(_head STREQUAL "" OR NOT _head STREQUAL _pin)
-        message(WARNING
-            "CNA: FETCHCONTENT_SOURCE_DIR_FNA3D=${source_dir} is at '${_head}', not the pinned "
-            "CNA_FNA3D_GIT_TAG=${CNA_FNA3D_GIT_TAG} of ${CNA_FNA3D_GIT_REPOSITORY}. It is built as "
-            "it is; CNA no longer patches FNA3D or MojoShader at configure time.")
-    endif()
-    if(NOT _changes STREQUAL "")
-        string(REPLACE "\n" "; " _changes "${_changes}")
-        message(WARNING
-            "CNA: FETCHCONTENT_SOURCE_DIR_FNA3D=${source_dir} has local changes (${_changes}). "
-            "They are built as they are.")
-    endif()
-endfunction()
+# Every configure compares the checkout with the pin, read-only: FNA3D's HEAD, the MojoShader
+# commit it records against MojoShader's own HEAD, and local changes in either. A
+# FETCHCONTENT_SOURCE_DIR_FNA3D checkout is reported; a FetchContent-populated one is refused unless
+# this option says otherwise (2026-10-26 dependency audit D-03/D-04).
+include("${CMAKE_CURRENT_LIST_DIR}/Fna3dSourceCheck.cmake")
+option(CNA_FNA3D_ALLOW_SOURCE_DRIFT
+    "Build a FetchContent-populated FNA3D checkout that is not at CNA_FNA3D_GIT_TAG, has a MojoShader other than the one it records, or has local changes, with a warning instead of an error"
+    OFF)
 
 # plans/plan_fx.md FX-061/FX-062/FX-063/FX-065: fetches the pin and publishes `cna_mojoshader` alone --
 # the Effect Framework parser plus the OpenGL, SDL_GPU and D3D11 adapters, with no FNA3D linked.
@@ -133,20 +110,24 @@ function(cna_configure_mojoshader)
     FetchContent_MakeAvailable(fna3d)
     set(BUILD_SHARED_LIBS "${_cna_fna3d_saved_shared}" CACHE BOOL "" FORCE)
 
+    find_package(Git QUIET)
     if(FETCHCONTENT_SOURCE_DIR_FNA3D)
-        _cna_fna3d_report_source_override("${fna3d_SOURCE_DIR}")
+        set(_cna_fna3d_source_mode OVERRIDE)
+    else()
+        set(_cna_fna3d_source_mode PINNED)
     endif()
+    cna_fna3d_verify_source(
+        SOURCE_DIR  "${fna3d_SOURCE_DIR}"
+        TAG         "${CNA_FNA3D_GIT_TAG}"
+        REPOSITORY  "${CNA_FNA3D_GIT_REPOSITORY}"
+        MODE        ${_cna_fna3d_source_mode}
+        ALLOW_DRIFT "${CNA_FNA3D_ALLOW_SOURCE_DRIFT}"
+        GIT         "${GIT_EXECUTABLE}")
 
     if(NOT TARGET FNA3D)
         message(FATAL_ERROR
             "CNA: fetched FNA3D at ${fna3d_SOURCE_DIR} but no FNA3D target was defined -- the pin "
             "CNA_FNA3D_GIT_TAG=${CNA_FNA3D_GIT_TAG} may not be an FNA3D checkout.")
-    endif()
-    if(NOT EXISTS "${fna3d_SOURCE_DIR}/MojoShader/mojoshader.h")
-        message(FATAL_ERROR
-            "CNA: fetched FNA3D at ${fna3d_SOURCE_DIR} but MojoShader/mojoshader.h is missing -- "
-            "the MojoShader submodule was not initialized. For an offline checkout supplied via "
-            "-DFETCHCONTENT_SOURCE_DIR_FNA3D, run: git submodule update --init.")
     endif()
 
     if(_cna_mojoshader_without_sdl AND TARGET mojoshader)
