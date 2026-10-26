@@ -435,16 +435,17 @@ CNA therefore translates fragment shaders at `highp`
 
 Found on `NormalMappingSample_4_0` (`plans/plan_fx.md` FX-121).
 
-### 10.4 Vertex colour output clamping on the GL ES profiles
+### 10.4 Vertex colour output clamping in the GLSL profiles
 
 Direct3D 9 clamps a vertex shader's colour output registers (`oD0`, `oD1`) to [0,1] **before**
 the rasterizer interpolates them. A shader that computes a lighting sum can and often does
 exceed 1 at a vertex, and D3D9 therefore interpolates from the clamped value, not the raw one.
 
-MojoShader's desktop GLSL path inherits that behavior without asking: it writes `gl_FrontColor`,
-which GL clamps by default. The GLSL ES profiles have no `gl_FrontColor` and fall through to a
-plain varying, which nothing clamps — so the raw value is interpolated and saturated per
-fragment instead. The two are not the same picture:
+MojoShader's GLSL ES profiles have no `gl_FrontColor` and fall through to a plain varying, which
+nothing clamps — so the raw value is interpolated and saturated per fragment instead. The desktop
+profiles write `gl_FrontColor`, which a compatibility context is specified to clamp, yet FNA3D's
+OpenGL driver drew BasicEffect's lit colour unclamped on Mesa 25 (2026-10-14), and a core context
+has no such clamp. The two are not the same picture:
 
 ```text
 vertex colours 1.24 and 0.40, interpolated across a triangle
@@ -454,9 +455,10 @@ vertex colours 1.24 and 0.40, interpolated across a triangle
 ```
 
 On a low-poly mesh that flat region is large and obvious. CNA restores the clamp
-(libcna/mojoshader `vertex-color-clamp`) at the end of the generated
-`main()`, for the ES profiles only; the desktop profiles are left alone because GL already does
-it there.
+(libcna/mojoshader `vertex-color-clamp`) where the generated vertex shader's outputs become final,
+for every GLSL profile, desktop and ES alike: at the end of `main()`, or, when an explicit `ret`
+ends `main()` ahead of its subroutines, in an epilogue function defined once every colour register
+those subroutines write is known.
 
 Found on `PerPixelLightingSample_4_0` (`plans/plan_fx.md` FX-122). The tell was that red and
 green matched the original exactly and only blue differed, and only where blue would exceed 1.
