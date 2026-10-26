@@ -59,9 +59,9 @@ OpenGL and SDL_GPU/Vulkan drivers; this is not a new Windows or Apple qualificat
 | Field | Value |
 |---|---|
 | Repository | CNA's fork https://github.com/libcna/FNA3D (upstream https://github.com/FNA-XNA/FNA3D) |
-| Pinned revision | `a78cbed4a29e28a128480b954f2a5edffcbc6d1e` on the fork's `cna` branch: release **26.08** (`32401479a3ab`) plus CNA's commits, merged with release **26.10** (`62a41708e975`) |
+| Pinned revision | `74698f735a4362e6dfe81d615f9c9bcb6af1f6b0` on the fork's `cna` branch: release **26.08** (`32401479a3ab`) plus CNA's commits, merged with release **26.10** (`62a41708e975`), then the 2026-10-26 dependency audit's fixes |
 | License | zlib |
-| Vendored submodule | MojoShader from CNA's fork https://github.com/libcna/mojoshader (upstream https://github.com/icculus/mojoshader), `8b4c92e9813` on its `cna` branch: `6333f74` plus CNA's commits, merged with upstream `main` `ad5dff8` (the revision 26.10 pins); built from FNA3D's own CMake |
+| Vendored submodule | MojoShader from CNA's fork https://github.com/libcna/mojoshader (upstream https://github.com/icculus/mojoshader), `6584088934d0` on its `cna` branch: `6333f74` plus CNA's commits, merged with upstream `main` `ad5dff8` (the revision 26.10 pins), then the 2026-10-26 audit's fixes; built from FNA3D's own CMake |
 | Dependencies | **SDL 3.2.0 or newer, and nothing else** — the very SDL3 CNA already vendors |
 | Integration | `cmake/ThirdPartyFNA3D.cmake`, FetchContent at the pin (`CNA_FNA3D_GIT_REPOSITORY`, `CNA_FNA3D_GIT_TAG`), built as a static archive; nothing is patched at configure time |
 | Offline builds | `-DFETCHCONTENT_SOURCE_DIR_FNA3D=/path/to/FNA3D`: a clone of the fork at the pin with its MojoShader submodule initialized (`git submodule update --init`). Configure warns when that checkout is at another commit or has local changes, and builds it as it is |
