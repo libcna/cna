@@ -7,8 +7,9 @@
 # Every case configures cmake/Tests/Fna3dSourcePinFixture in a build directory of its own and
 # reads back the pair it ended with. Build trees left by earlier CNA revisions are reproduced by
 # running those revisions' verbatim cache statements first. The current module is driven with
-# made-up pins, so nothing here depends on today's pin; two cases use cmake/ThirdPartyFNA3D.cmake
-# itself. No network access, no compiler.
+# made-up pins, so nothing here depends on today's pin; the cases at the end run
+# cmake/ThirdPartyFNA3D.cmake itself, against the pin read from its text. No network access, no
+# compiler.
 #
 #   cmake -DCNA_SOURCE_DIR=<repo> -DCNA_WORK_DIR=<dir> -P cmake/Tests/Fna3dSourcePinCase.cmake
 
@@ -171,15 +172,45 @@ _configure(rev13d0 module "${_fork}" "${_tag_b}")
 _expect("13d0ed91a tree, pin bump: follows" PIN "${_fork}" "${_tag_b}" QUIET
     SAYS "CNA_FNA3D_GIT_TAG ${_tag_13d0} -> ${_tag_b}")
 
-# The real module, whatever its pin is today.
-_configure(real-fresh real "" "")
-_expect("cmake/ThirdPartyFNA3D.cmake, fresh" PIN "${_recorded_repository}" "${_recorded_tag}" QUIET)
-if(_recorded_tag STREQUAL "")
-    _fail("cmake/ThirdPartyFNA3D.cmake, fresh" "no default recorded")
+# The real module, whatever its pin is today. What it should end with is read from its own text,
+# not from what it records, so the production call -- not only the helper -- is what is tested
+# (2026-10-26 remediation review R4-02): with the module of 1f4ce5d78 restored these cases fail.
+# (Both spellings the module has stated its pin in are read, so that restoring an older module
+# makes these cases fail on what it does rather than on how it is written.)
+file(READ "${CNA_SOURCE_DIR}/cmake/ThirdPartyFNA3D.cmake" _real_module)
+if(_real_module MATCHES "DEFAULT_REPOSITORY \"([^\"]+)\"[ \t\r\n]+DEFAULT_TAG \"([0-9a-f]+)\"")
+    set(_real_repository "${CMAKE_MATCH_1}")
+    set(_real_tag "${CMAKE_MATCH_2}")
+elseif(_real_module MATCHES "set\\(_cna_fna3d_default_repository \"([^\"]+)\"\\)[ \t\r\n]+set\\(_cna_fna3d_default_tag \"([0-9a-f]+)\"\\)")
+    set(_real_repository "${CMAKE_MATCH_1}")
+    set(_real_tag "${CMAKE_MATCH_2}")
+else()
+    message(FATAL_ERROR "Fna3dSourcePinCase: cannot read the pin from cmake/ThirdPartyFNA3D.cmake")
 endif()
+string(LENGTH "${_real_tag}" _real_tag_length)
+if(NOT _real_repository STREQUAL _fork OR NOT _real_tag_length EQUAL 40)
+    _fail("cmake/ThirdPartyFNA3D.cmake" "pins ${_real_repository} at ${_real_tag}, not the fork at a full SHA")
+endif()
+
+_configure(real-fresh real "" "")
+_expect("cmake/ThirdPartyFNA3D.cmake, fresh" PIN "${_real_repository}" "${_real_tag}" QUIET)
 _configure(real-13d0 13d0ed91a "" "")
 _configure(real-13d0 real "" "")
-_expect("cmake/ThirdPartyFNA3D.cmake over a 13d0ed91a tree" PIN "${_recorded_repository}" "${_recorded_tag}" QUIET)
+_expect("cmake/ThirdPartyFNA3D.cmake over a 13d0ed91a tree" PIN "${_real_repository}" "${_real_tag}" QUIET)
+_configure(real-prefork prefork "" "")
+_configure(real-prefork real "" "")
+_expect("cmake/ThirdPartyFNA3D.cmake over a pre-fork tree: the pair moves together"
+    PIN "${_real_repository}" "${_real_tag}" QUIET)
+_configure(real-old-sha real "" "" "-DCNA_FNA3D_GIT_TAG:STRING=${_tag_81ab}")
+_expect("cmake/ThirdPartyFNA3D.cmake keeps a typed old SHA" PIN "${_real_repository}" "${_tag_81ab}"
+    WARNS "${_not_pin}")
+_configure(real-old-sha real "" "")
+_expect("... on the next configure too" PIN "${_real_repository}" "${_tag_81ab}" WARNS "${_not_pin}")
+_configure(real-upstream real "" "" "-DCNA_FNA3D_GIT_REPOSITORY=${_upstream}")
+_expect("cmake/ThirdPartyFNA3D.cmake refuses upstream FNA3D with the fork's commit"
+    FAILS "is upstream FNA3D")
+_configure(real-upstream real "" "")
+_expect("... and still refuses it on the next configure" FAILS "is upstream FNA3D")
 
 # --- an explicit upstream repository with CNA's (fork-only) commit -----------------------------
 _configure(upstream-untyped module "${_repo_a}" "${_tag_a}" "-DCNA_FNA3D_GIT_REPOSITORY=${_upstream}")
