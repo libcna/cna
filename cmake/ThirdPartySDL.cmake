@@ -534,16 +534,18 @@ function(_cna_ensure_sdl_dep)
     endif()
 
     # The manifest covers what decides the library's content, including the toolchain file's
-    # content and the compiler it resolved to (CXX: always enabled here, unlike C). The compiler
-    # launcher is left out on purpose: ccache changes how long a build takes, never what it
-    # produces.
+    # content, the compiler it resolved to (CXX: always enabled here, unlike C) and the settings it
+    # decided. The compiler launcher is left out on purpose: ccache changes how long a build takes,
+    # never what it produces.
+    cna_sdl_toolchain_settings(_toolchain_settings)
     cna_sdl_build_manifest(_manifest
         NAME    "${_A_NAME}"
         SOURCE  "${_A_SOURCE}"
         PATCHES ${_A_PATCHES}
         ARGS    ${_base_args} ${_A_CMAKE_ARGS}
         TOOLCHAIN_FILE "${_cna_sdl_toolchain}"
-        COMPILER "${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} ${CMAKE_CXX_COMPILER}")
+        COMPILER "${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} ${CMAKE_CXX_COMPILER}"
+        SETTINGS ${_toolchain_settings})
     set(_stamp "${CNA_SDL_PREBUILT_ROOT}/${_A_NAME}.cna-build-manifest.txt")
     string(SHA256 _manifest_id "${_manifest}")
     string(SUBSTRING "${_manifest_id}" 0 16 _manifest_id)

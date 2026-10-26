@@ -37,8 +37,28 @@ function(cna_sdl_source_tree_hash out_var source_dir)
     set(${out_var} "${_tree_hash}" PARENT_SCOPE)
 endfunction()
 
+# The settings a toolchain decides, as "<variable>=<value>" for cna_sdl_build_manifest's SETTINGS:
+# the flags and target it initializes, the system and sysroot it names, the platform and ABI of an
+# Android or Apple SDK. They are read from the calling scope, where the toolchain set them -- also
+# when a file the toolchain includes did, which the toolchain file's own hash cannot see.
+function(cna_sdl_toolchain_settings out_var)
+    set(_settings "")
+    foreach(_variable IN ITEMS
+            CMAKE_SYSTEM_NAME CMAKE_SYSTEM_PROCESSOR CMAKE_SYSTEM_VERSION CMAKE_SYSROOT
+            CMAKE_C_COMPILER CMAKE_C_COMPILER_TARGET CMAKE_CXX_COMPILER_TARGET
+            CMAKE_C_FLAGS_INIT CMAKE_CXX_FLAGS_INIT
+            CMAKE_EXE_LINKER_FLAGS_INIT CMAKE_SHARED_LINKER_FLAGS_INIT CMAKE_MODULE_LINKER_FLAGS_INIT
+            CMAKE_ANDROID_ARCH_ABI CMAKE_ANDROID_API ANDROID_ABI ANDROID_PLATFORM ANDROID_STL
+            CMAKE_OSX_SYSROOT CMAKE_OSX_ARCHITECTURES CMAKE_OSX_DEPLOYMENT_TARGET)
+        if(DEFINED ${_variable})
+            list(APPEND _settings "${_variable}=${${_variable}}")
+        endif()
+    endforeach()
+    set(${out_var} "${_settings}" PARENT_SCOPE)
+endfunction()
+
 # cna_sdl_build_manifest(<out-var> NAME <n> SOURCE <dir> [PATCHES <file>...] [ARGS <arg>...]
-#                        [TOOLCHAIN_FILE <file> [COMPILER <identity>]])
+#                        [TOOLCHAIN_FILE <file> [COMPILER <identity>] [SETTINGS <var=value>...]])
 #
 # Patches are listed in application order, by file name and content hash: reordering, renaming,
 # editing, adding or removing one each changes the manifest.
@@ -47,10 +67,12 @@ endfunction()
 # sysroot or ABI flag -- would leave the manifest as it was (2026-10-26 dependency audit C-09). So
 # its content hash is recorded too, and with it the compiler identity the toolchain resolved to in
 # this configure (id, version, path), which also changes when a toolchain picks its SDK or NDK from
-# outside the file. Files a toolchain includes are covered only through that identity. Without a
-# toolchain file neither line is written, so a native manifest is exactly what it was before.
+# outside the file, and the settings the toolchain decided (cna_sdl_toolchain_settings), which also
+# change when a file the toolchain includes is edited -- an ABI flag or a sysroot in a shared
+# settings file. Without a toolchain file none of these lines is written, so a native manifest is
+# exactly what it was before.
 function(cna_sdl_build_manifest out_var)
-    cmake_parse_arguments(_M "" "NAME;SOURCE;TOOLCHAIN_FILE;COMPILER" "PATCHES;ARGS" ${ARGN})
+    cmake_parse_arguments(_M "" "NAME;SOURCE;TOOLCHAIN_FILE;COMPILER" "PATCHES;ARGS;SETTINGS" ${ARGN})
     cna_sdl_source_tree_hash(_source_hash "${_M_SOURCE}")
     set(_manifest "schema ${CNA_SDL_PREBUILT_MANIFEST_SCHEMA}\n")
     string(APPEND _manifest "name ${_M_NAME}\n")
@@ -76,6 +98,9 @@ function(cna_sdl_build_manifest out_var)
         if(DEFINED _M_COMPILER AND NOT _M_COMPILER STREQUAL "")
             string(APPEND _manifest "toolchain-compiler ${_M_COMPILER}\n")
         endif()
+        foreach(_setting IN LISTS _M_SETTINGS)
+            string(APPEND _manifest "toolchain-setting ${_setting}\n")
+        endforeach()
     endif()
     set(${out_var} "${_manifest}" PARENT_SCOPE)
 endfunction()

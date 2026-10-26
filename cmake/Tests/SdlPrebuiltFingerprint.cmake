@@ -205,11 +205,39 @@ cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch
     TOOLCHAIN_FILE "${_toolchain}" COMPILER "Clang 18.1.0 /fixture/ndk-r27/bin/clang++")
 _expect_current(FALSE "another resolved compiler forces a rebuild")
 
+# 16b. A toolchain whose settings come from a file it includes: editing only that file (an ABI flag)
+#      leaves the toolchain file's hash and the compiler as they were, and must still force a
+#      rebuild (2026-10-26 remediation review R3-02). The settings are read the way production reads
+#      them, after evaluating the toolchain.
+set(_abi "${_work}/abi.cmake")
+file(WRITE "${_toolchain}" "include(\"${_abi}\")\n")
+file(WRITE "${_abi}" "set(CMAKE_C_FLAGS_INIT \"-m64\")\nset(CMAKE_SYSROOT /fixture/sysroot-A)\n")
+include("${_toolchain}")
+cna_sdl_toolchain_settings(_settings)
+cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
+    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
+file(WRITE "${_stamp}" "${_manifest}")
+_expect_current(TRUE "toolchain with included settings, unchanged, reuses the install")
+file(WRITE "${_abi}" "set(CMAKE_C_FLAGS_INIT \"-m32\")\nset(CMAKE_SYSROOT /fixture/sysroot-A)\n")
+include("${_toolchain}")
+cna_sdl_toolchain_settings(_settings)
+cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
+    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
+_expect_current(FALSE "an ABI flag edited in a file the toolchain includes forces a rebuild")
+file(WRITE "${_abi}" "set(CMAKE_C_FLAGS_INIT \"-m64\")\nset(CMAKE_SYSROOT /fixture/sysroot-B)\n")
+include("${_toolchain}")
+cna_sdl_toolchain_settings(_settings)
+cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_tc_args}
+    TOOLCHAIN_FILE "${_toolchain}" COMPILER "${_compiler}" SETTINGS ${_settings})
+_expect_current(FALSE "a sysroot changed in a file the toolchain includes forces a rebuild")
+unset(CMAKE_C_FLAGS_INIT)
+unset(CMAKE_SYSROOT)
+
 # 17. Without a toolchain file the manifest has no toolchain lines, so native installs built before
 #     these fields existed stay current.
 cna_sdl_build_manifest(_plain NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_args})
 cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_args}
-    TOOLCHAIN_FILE "" COMPILER "${_compiler}")
+    TOOLCHAIN_FILE "" COMPILER "${_compiler}" SETTINGS "CMAKE_C_FLAGS_INIT=-m64")
 if(NOT _manifest STREQUAL _plain OR _manifest MATCHES "toolchain")
     message(FATAL_ERROR "SdlPrebuiltFingerprint: a native manifest records a toolchain:\n${_manifest}")
 endif()
