@@ -128,6 +128,19 @@ function(cna_configure_mojoshader)
     endif()
     unset(BUILD_SHARED_LIBS)
 
+    # FetchContent_Declare(EXCLUDE_FROM_ALL) reaches add_subdirectory() only from CMake 3.28, and
+    # not at all when a dependency provider populates FNA3D; CNA supports 3.20. Exclude the
+    # directory itself, which every supported CMake honours, so a configuration that wants only
+    # MojoShader never builds FNA3D as part of `all` -- the FNA3D renderer still gets it as a link
+    # dependency of cna_fna3d (2026-10-26 dependency audit C-06).
+    if(TARGET FNA3D)
+        get_target_property(_cna_fna3d_directory FNA3D SOURCE_DIR)
+        get_target_property(_cna_fna3d_imported FNA3D IMPORTED)
+        if(_cna_fna3d_directory AND NOT _cna_fna3d_imported)
+            set_property(DIRECTORY "${_cna_fna3d_directory}" PROPERTY EXCLUDE_FROM_ALL TRUE)
+        endif()
+    endif()
+
     find_package(Git QUIET)
     if(FETCHCONTENT_SOURCE_DIR_FNA3D)
         set(_cna_fna3d_source_mode OVERRIDE)

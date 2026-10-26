@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: MS-PL
 #
-# 2026-10-26 dependency audit, finding C-07: how cna_configure_mojoshader() adds FNA3D to the
-# build. FNA3D is a static archive whatever BUILD_SHARED_LIBS the including project has -- also a
-# normal variable under CMP0126 NEW, which hides a cache entry -- and the variable is put back
-# exactly as it was, cache entry, type, docstring and absence included.
+# 2026-10-26 dependency audit, findings C-06 and C-07: how cna_configure_mojoshader() adds FNA3D to
+# the build.
+#   C-07  FNA3D is a static archive whatever BUILD_SHARED_LIBS the including project has -- also a
+#         normal variable under CMP0126 NEW, which hides a cache entry -- and the variable is put
+#         back exactly as it was, cache entry, type, docstring and absence included.
+#   C-06  FNA3D's directory stays out of `all` even where FetchContent_Declare(EXCLUDE_FROM_ALL)
+#         does not reach add_subdirectory(): CMake before 3.28, or a dependency provider. The
+#         provider here adds the directory the way FetchContent_MakeAvailable did before 3.28.
 #
 # A fake FNA3D source tree (shaped like the real CMakeLists.txt, including its option(
 # BUILD_SHARED_LIBS ... ON) under cmake_minimum_required(3.10)) is configured through the real
@@ -60,6 +64,21 @@ if(DEFINED CACHE{BUILD_SHARED_LIBS})
 endif()
 file(WRITE \"\${CMAKE_BINARY_DIR}/shape.txt\"
     \"type=\${_type}\\nexcluded=\${_excluded}\\ncache=\${_cache}\\nvisible=\${BUILD_SHARED_LIBS}\\n\")
+")
+
+# CMake before 3.28 added a FetchContent dependency with a plain add_subdirectory(); so does a
+# dependency provider that populates it itself.
+set(_provider "${_w}/provider.cmake")
+file(WRITE "${_provider}" "include(FetchContent)
+macro(cna_fixture_provide method name)
+    if(\"\${name}\" STREQUAL \"fna3d\")
+        add_subdirectory(\"${_fake}\" \"\${CMAKE_BINARY_DIR}/_deps/fna3d-build\")
+        FetchContent_SetPopulated(fna3d SOURCE_DIR \"${_fake}\"
+            BINARY_DIR \"\${CMAKE_BINARY_DIR}/_deps/fna3d-build\")
+    endif()
+endmacro()
+cmake_language(SET_DEPENDENCY_PROVIDER cna_fixture_provide
+    SUPPORTED_METHODS FETCHCONTENT_MAKEAVAILABLE_SERIAL)
 ")
 
 set(_generator "")
@@ -120,6 +139,11 @@ _shape("normal variable ON under CMP0126 NEW: FNA3D static, no cache entry creat
 math(EXPR _failures "${_failures} + ${_failures_here}")
 _shape("normal variable ON under CMP0126 OLD: FNA3D static, no cache entry created" normal-old
     STATIC_LIBRARY TRUE absent ON "${_override}" -DFIXTURE_NORMAL_SHARED=ON)
+math(EXPR _failures "${_failures} + ${_failures_here}")
+
+_shape("FNA3D added without EXCLUDE_FROM_ALL (pre-3.28 FetchContent, a provider): still out of all"
+    provider STATIC_LIBRARY TRUE absent ""
+    "-DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=${_provider}" -DCNA_FNA3D_ALLOW_SOURCE_DRIFT=ON)
 math(EXPR _failures "${_failures} + ${_failures_here}")
 
 if(_failures GREATER 0)
