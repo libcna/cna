@@ -125,11 +125,55 @@ struct CapabilityExpectation
 // "native-only" half of that sentence: browser WebGPU still ingests WGSL and nothing else, but CNA
 // now translates this route's SPIR-V into WGSL, so an Emscripten build configures the option and
 // answers true here for the same reason a native one does.
-#if defined(CNA_RENDERER_FNA3D) || defined(CNA_RENDERER_SDL_GPU) && defined(CNA_SDL_GPU_COMPILED_EFFECTS) || defined(CNA_RENDERER_EASYGL) && defined(CNA_EASYGL_COMPILED_EFFECTS) || defined(CNA_RENDERER_SOFTWARE) && defined(CNA_SOFTWARE_COMPILED_EFFECTS) || defined(CNA_RENDERER_WEBGPU) && defined(CNA_WEBGPU_COMPILED_EFFECTS) || defined(CNA_RENDERER_DIRECTX9) && defined(CNA_DIRECTX9_COMPILED_EFFECTS)
-constexpr bool kExpectCompiledEffects = true;
+//
+// Keyed on the SELECTED renderer, like ExpectedCapabilities() above. This was one `#if` over the
+// default's CNA_RENDERER_<X> macro, which in a multi-renderer build asserted the default's answer
+// for whichever renderer CNA_GRAPHICS_RENDERER selected. The per-family CNA_*_COMPILED_EFFECTS
+// options are project-wide definitions, so each arm sees its own family's option whether or not
+// that family is the default.
+[[nodiscard]] inline bool ExpectCompiledEffects()
+{
+    using CNA::GraphicsRendererType;
+    switch (CNA::GraphicsRendererSelection::GetSelected())
+    {
+        case GraphicsRendererType::Fna3d:
+            return true;
+        case GraphicsRendererType::SdlGpu:
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+            return true;
 #else
-constexpr bool kExpectCompiledEffects = false;
+            return false;
 #endif
+        case GraphicsRendererType::OpenGLES3:
+        case GraphicsRendererType::OpenGL33:
+        case GraphicsRendererType::WebGL2:
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+            return true;
+#else
+            return false;
+#endif
+        case GraphicsRendererType::Software:
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+            return true;
+#else
+            return false;
+#endif
+        case GraphicsRendererType::WebGPU:
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+            return true;
+#else
+            return false;
+#endif
+        case GraphicsRendererType::DirectX9:
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+            return true;
+#else
+            return false;
+#endif
+        default:
+            return false;
+    }
+}
 
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
 {
@@ -275,7 +319,7 @@ TEST(GraphicsDeviceCapabilityTest, SupportsCompiledEffectsOnlyOnCompletedBackend
 {
     GraphicsDevice gd;
     EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::CompiledEffects),
-              kExpectCompiledEffects);
+              ExpectCompiledEffects());
 }
 
 // MSAA/anisotropic filtering are genuinely device/driver-dependent on GPU renderers. Software's
