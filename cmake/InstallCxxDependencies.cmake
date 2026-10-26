@@ -4,10 +4,28 @@ function(cna_install_cxx_dependencies)
     # Private compiled dependencies travel with the SDK, rather than referring
     # back to this build's archives. Retain upstream export names; changing them
     # would also alter any upstream export set configured in the same project.
+    #
+    # FNA3D's target exists whenever MojoShader does -- both come from the one FNA3D checkout,
+    # cmake/ThirdPartyFNA3D.cmake -- but only the FNA3D renderer (cna_fna3d) links it, or
+    # cna_mojoshader on an FNA3D revision without a separate mojoshader archive. Bundling it
+    # anyway made cna_cpp_sdk compile FNA3D, which needs SDL, in an SDL-free compiled-Effect
+    # configuration (2026-10-26 dependency audit C-02).
+    set(_cna_bundle_fna3d FALSE)
+    if(TARGET cna_fna3d)
+        set(_cna_bundle_fna3d TRUE)
+    elseif(TARGET cna_mojoshader)
+        get_target_property(_cna_mojoshader_links cna_mojoshader INTERFACE_LINK_LIBRARIES)
+        if("FNA3D" IN_LIST _cna_mojoshader_links)
+            set(_cna_bundle_fna3d TRUE)
+        endif()
+    endif()
     foreach(_target IN ITEMS enet draco_static FNA3D mojoshader easy-gl meta-gl
             SDL3_shadercross-static spirv-cross-core spirv-cross-glsl spirv-cross-hlsl
             spirv-cross-msl spirv-cross-c)
         if(NOT TARGET ${_target})
+            continue()
+        endif()
+        if(_target STREQUAL "FNA3D" AND NOT _cna_bundle_fna3d)
             continue()
         endif()
         set_property(GLOBAL APPEND PROPERTY CNA_CXX_BUNDLED_TARGETS "${_target}")
