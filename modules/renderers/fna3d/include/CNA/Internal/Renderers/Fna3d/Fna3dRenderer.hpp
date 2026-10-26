@@ -1784,6 +1784,10 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_RasterizerState rasterizerState_{};
         std::array<FNA3D_SamplerState, 16> samplerStates_{};
         std::array<FNA3D_SamplerState, 4> vertexSamplerStates_{};
+        /// Bump-environment texture-stage state (TEXBEM, TEXBEML, BEM) compiled passes assigned;
+        /// device state that persists across passes, as XNA's does. The FNA3D driver keeps its own
+        /// copy, set from this one through FNA3D_SetLegacyBumpMapEnvEXT.
+        std::array<CompiledEffectLegacyBumpMapEnvState, 16> legacyBumpMapEnvs_{};
         // Native textures currently verified at each stage. Compiled Effect parameters follow
         // FNA semantics: a null texture parameter leaves the slot unchanged while still allowing
         // the pass to update that slot's sampler state.

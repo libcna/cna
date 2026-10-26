@@ -296,6 +296,22 @@ namespace CNA::Internal::Renderers::Fna3d
         }
         MojoShaderEffect::TranslateRenderStates(stateChanges_, deviceState, changes);
 
+        // The translation reports BUMPENVMAT/BUMPENVLSCALE/BUMPENVLOFFSET assignments separately;
+        // they reach the driver only through FNA3D's extension (2026-10-26 dependency audit D-02:
+        // TEXBEM sampled with a zero matrix on both FNA3D drivers before it existed).
+        MojoShaderEffect::ApplyLegacyBumpMapEnvChanges(renderer_.legacyBumpMapEnvs_,
+                                                       changes.legacyBumpMapEnvs);
+        for (const CompiledEffectLegacyBumpMapEnvChange& change : changes.legacyBumpMapEnvs)
+        {
+            if (change.slot >= renderer_.legacyBumpMapEnvs_.size()) continue;
+            const CompiledEffectLegacyBumpMapEnvState& state =
+                renderer_.legacyBumpMapEnvs_[change.slot];
+            FNA3D_SetLegacyBumpMapEnvEXT(device_, static_cast<std::int32_t>(change.slot),
+                                         state.matrix[0], state.matrix[1], state.matrix[2],
+                                         state.matrix[3], state.luminanceScale,
+                                         state.luminanceOffset);
+        }
+
         // CNA's GraphicsDevice publishes pixel sampler state to the renderer at draw time and has
         // no vertex-stage path at all, so the native binding still happens here. The published
         // changes are what make the same state observable through the XNA API.
