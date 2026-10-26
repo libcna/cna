@@ -1634,6 +1634,16 @@ if(CNA_BUILD_TESTS)
             -P ${CMAKE_SOURCE_DIR}/cmake/Tests/Fna3dDependencyShapeCase.cmake)
     set_tests_properties(CnaFna3dDependencyShape PROPERTIES LABELS "configuration" TIMEOUT 300)
 
+    # 2026-10-26 dependency audit C-03: third_party/SDL and SDL_mixer are checked against the
+    # pinned revisions before SDL is built -- a submodule against its gitlink, a plain copy or a
+    # source archive by tree id. Fixture repositories, then this checkout's own directories.
+    add_test(NAME CnaVendoredSourceCheck
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DCNA_WORK_DIR=${CMAKE_BINARY_DIR}/CnaVendoredSourceCheck
+            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/VendoredSourceCheckCase.cmake)
+    set_tests_properties(CnaVendoredSourceCheck PROPERTIES LABELS "platform;configuration" TIMEOUT 300)
+
     # plans/plan_native_platform_validation.md NPV-0131: which test binary the platform ctest
     # entries below (CnaPlatform*) run. CnaTests by default. A build that compiles only the
     # platform module's tests -- CI's SDL-free cell builds the focused CnaPlatformModuleTests,

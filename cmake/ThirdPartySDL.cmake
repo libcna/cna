@@ -2,6 +2,16 @@ include_guard(GLOBAL)
 
 option(CNA_USE_SYSTEM_SDL "Use system SDL packages instead of vendored submodules" OFF)
 
+# third_party/SDL and third_party/SDL_mixer are built as they are, so before that they are checked
+# against the revisions CNA pins (cmake/VendoredSourceCheck.cmake, cmake/VendoredSources.cmake): a
+# stale submodule left by `git pull` without `git submodule update`, or a plain copy of other
+# sources, stops the configure (2026-10-26 dependency audit C-03). WARN only warns; OFF skips the
+# check, for building other SDL sources on purpose.
+set(CNA_VENDORED_SOURCE_CHECK "ON" CACHE STRING
+    "Check the vendored SDL/SDL_mixer sources against CNA's pinned revisions: ON (refuse a mismatch), WARN or OFF")
+set_property(CACHE CNA_VENDORED_SOURCE_CHECK PROPERTY STRINGS ON WARN OFF)
+include("${CMAKE_CURRENT_LIST_DIR}/VendoredSourceCheck.cmake")
+
 # Keep configure-time vendored builds bounded as well as the top-level `cmake --build` invocation.
 # A bare `cmake --build --parallel` defers to the build tool's unrestricted default and can exceed
 # the requested CPU limit even when the caller passed `-j2` to the parent build.
@@ -23,7 +33,8 @@ endif()
 include("${CMAKE_CURRENT_LIST_DIR}/SdlPrebuiltFingerprint.cmake")
 
 # CNA fixes carried on top of the vendored revision (third_party/SDL, pinned at SDL main
-# 86296ac8f01597076979630667472a846b04ce46, 2026-05-15), applied in this order to a staged copy of the
+# 86296ac8f01597076979630667472a846b04ce46, 2026-05-15 -- recorded with its tree in
+# cmake/VendoredSources.cmake), applied in this order to a staged copy of the
 # source -- never to third_party/SDL itself. Each is needed only on one platform, so it is carried only
 # there and leaves every other platform's build manifest unchanged; on desktop Linux, Windows, macOS
 # and Android SDL is built exactly as upstream ships it.
@@ -264,6 +275,22 @@ function(cna_configure_vendored_sdl)
                 "nested submodules, so --recursive only "
                 "adds a much slower, unnecessary fetch)")
         endif()
+    endforeach()
+
+    # The sources must also be the pinned revisions: the existence check above accepts any.
+    include("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/VendoredSources.cmake")
+    find_package(Git QUIET)
+    foreach(_dep IN ITEMS SDL SDL_mixer)
+        cna_vendored_source_check(
+            NAME         ${_dep}
+            SOURCE_DIR   "${_tp}/${_dep}"
+            SUPERPROJECT "${CMAKE_CURRENT_SOURCE_DIR}"
+            MODE         "${CNA_VENDORED_SOURCE_CHECK}"
+            COMMIT       "${CNA_VENDORED_SOURCE_${_dep}_COMMIT}"
+            TREE         "${CNA_VENDORED_SOURCE_${_dep}_TREE}"
+            GITLINKS     ${CNA_VENDORED_SOURCE_${_dep}_GITLINKS}
+            SCRATCH_DIR  "${CMAKE_BINARY_DIR}/CMakeFiles/cna-vendored-source-check"
+            GIT          "${GIT_EXECUTABLE}")
     endforeach()
 
     set(_prefix    "${CNA_SDL_PREBUILT_ROOT}/install")
