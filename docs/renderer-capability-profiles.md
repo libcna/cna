@@ -27,7 +27,7 @@ not-yet-defined behavior.
 
 Ordinals are never reused. The four identities that described the retired modern GPU layer
 (`ComputeShaders` 18, `ComputeImageBinding` 19, `IndirectDrawing` 20, `GpuTimers` 23) were removed
-with that layer (`plans/plan_modern_retirement.md`); their numbers are permanently reserved, so
+with that layer (MRT, 2026-10-13); their numbers are permanently reserved, so
 every surviving feature keeps the value it had and the C ABI constants did not move. The same holds
 for the retired limit ordinals and the three retired storage format-usage bits below.
 

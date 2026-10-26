@@ -70,7 +70,7 @@ updated baseline.
 
 ### Previous ABI 0.47.0
 
-The ABI was **0.47.0** (`plans/plan_modern_retirement.md` `MRT-008`). It
+The ABI was **0.47.0** (MRT-008, 2026-10-13). It
 **removes the C surface of the retired modern GPU layer**: the capability identities
 `CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS` (`17`) and `CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW`
 (`18`) with their `_FLAG_` bits, so `CNA_GRAPHICS_CAPABILITY_MAXIMUM` moves from `18` to `16`

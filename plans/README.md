@@ -20,6 +20,10 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - `plan_modern.md` — the former `CNA::Graphics` modern engine layer; that layer was removed in the
   2026-09 scope reduction and the plan was deleted on 2026-10-11 (Git history only). The surviving
   extension module is described in [`../docs/cnaext-engine-layer.md`](../docs/cnaext-engine-layer.md).
+- `plan_modern_retirement.md` — MRT-001..012, the 2026-10-13 removal of the modern GPU layer
+  (compute, storage, texture arrays, indirect draw, GPU timers; C ABI 0.47.0, see
+  [`../docs/c-api/ABI_VERSIONING.md`](../docs/c-api/ABI_VERSIONING.md)); all done, deleted on
+  2026-10-26 (Git history only).
 - [`plan_diagnostics.md`](plan_diagnostics.md) — renderer-independent diagnostics, profiling,
   bounded recording, and the Inspector provider boundary.
 - [`plan_inspector.md`](plan_inspector.md) — optional authenticated agent, compact protocol,

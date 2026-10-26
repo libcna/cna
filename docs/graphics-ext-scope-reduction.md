@@ -59,9 +59,9 @@ include the removed `GltfMaterialBridge`. CNB maintains its own `CnbMaterial` da
 `PbrEffect`/`SkinnedPbrEffect` effect kinds; CNJ-to-CNB maps those names independently.
 
 Renderer production implementations were left intact at the time. Their compute/storage,
-texture-array, indirect-draw and timestamp operations were removed afterwards, end to end, by
-`plans/plan_modern_retirement.md` (2026-10-13); render-target, cube-map, shader-dialect and PBR
-operations remain renderer capabilities. Two core graphics
+texture-array, indirect-draw and timestamp operations were removed afterwards, end to end (MRT,
+2026-10-13; C ABI 0.47.0 in [`c-api/ABI_VERSIONING.md`](c-api/ABI_VERSIONING.md)); render-target,
+cube-map, shader-dialect and PBR operations remain renderer capabilities. Two core graphics
 exemptions used only by the old engine were also removed: the float-filtering bypass and the
 oversized render-target scope. XNA profile rules now apply uniformly. Engine-only renderer
 examples and tests that instantiated deleted graphics-extension resources were removed.

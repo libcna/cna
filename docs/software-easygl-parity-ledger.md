@@ -687,7 +687,7 @@ is necessary because the enum cannot truthfully change when an application switc
 | `HalfFloatTextureLinearFiltering` | true (derived) | `HalfVector4LinearFilteringMatchesTheAdvertisedCapability` produces the midpoint purple result | truthful after SOFTWARE-190 |
 
 The `ComputeShaders` and `IndirectDraw` capabilities this table once listed as "honest false" no
-longer exist: the modern GPU layer they described was retired (`plans/plan_modern_retirement.md`).
+longer exist: the modern GPU layer they described was retired (MRT, 2026-10-13).
 
 ### Inherited/default renderer-method audit
 

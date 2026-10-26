@@ -1331,7 +1331,7 @@ differently. That is rounding, not divergence.
 The general-purpose modern GPU layer that workstream also implemented here — compute shaders,
 storage buffers and textures, the `Texture2DArray` facade, GPU timers and indirect draws over
 those resources — was retired together with its common interfaces
-(`plans/plan_modern_retirement.md`); nothing below describes it. What this renderer supports of
+(MRT, 2026-10-13); nothing below describes it. What this renderer supports of
 CNA's graphics extensions:
 
 * **Shader packages in WGSL.** Every stock shader package carries a WGSL variant, generated from
