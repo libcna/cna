@@ -7,15 +7,20 @@
 // a two-byte HalfSingle array), left GL_PACK_ALIGNMENT at four (an odd-width one- or two-byte
 // format's rows padded past a tight buffer) and computed mip sizes without the clamp to one texel
 // (level 2 of an 8x2 target came out 2x0, a zero-byte temporary buffer for a 2x1 read). Those were
-// writes past the destination, so every read here goes into a buffer with guard bytes behind the
-// exact length and checks that they are untouched -- which needs no out-of-bounds write to
-// succeed: an implementation that writes too much fails on the guard instead of crashing.
+// writes past the destination. Every read here goes into a buffer with guard bytes behind the
+// exact length and checks that they are untouched. That guards what CNA copies into the caller's
+// array; a renderer reads into CNA's own exactly sized scratch first, whose bounds the forks'
+// tests/cna suites and AddressSanitizer runs check.
 //
 // Render targets, because their content lives only on the GPU: a plain Texture2D's GetData is
 // served from CNA's own upload copy and would never reach a renderer's readback. A target cleared
 // to one colour holds one texel value everywhere, so a read whose rows came back displaced or
 // padded shows up as texels that differ from their neighbours, without the test having to know
-// how each renderer quantizes the colour into each format.
+// how each renderer quantizes the colour into each format; for Color, whose quantization XNA fixes,
+// the texels must also hold the clear colour itself, and each cube face is cleared to its own
+// colour so that a read of the wrong face shows. The destination starts out filled with the guard
+// byte too, and no clear colour here encodes to it, so a read that wrote nothing fails instead of
+// passing as uniform.
 
 #include <gtest/gtest.h>
 
@@ -67,7 +72,8 @@ namespace
         return "SurfaceFormat " + std::to_string(static_cast<int>(format));
     }
 
-    /// A read of @p bytes into a guarded buffer; returns the payload, checks the guard.
+    /// A read of @p bytes into a guarded buffer; returns the payload, checks the guard and that the
+    /// read wrote the payload at all.
     template <typename Read>
     std::vector<std::uint8_t> GuardedRead(std::size_t bytes, const std::string& where, Read read)
     {
@@ -91,6 +97,10 @@ namespace
             }
         }
         buffer.resize(bytes);
+        bool untouched = true;
+        for (const std::uint8_t byte : buffer) untouched = untouched && byte == kGuard;
+        if (untouched)
+            ADD_FAILURE() << where << ": GetData left all " << bytes << " destination bytes unwritten";
         return buffer;
     }
 
@@ -107,6 +117,20 @@ namespace
                               << " differs from texel 0 (displaced or padded rows)";
                 return;
             }
+        }
+    }
+
+    /// A Color texel read back after a clear to (r, g, b, 1): each channel within rounding.
+    void ExpectColor(const std::vector<std::uint8_t>& texels, float r, float g, float b,
+                     const std::string& where)
+    {
+        if (texels.size() < 4) return;
+        const float expected[4] = {r * 255.0f, g * 255.0f, b * 255.0f, 255.0f};
+        for (int channel = 0; channel < 4; ++channel)
+        {
+            EXPECT_NEAR(static_cast<float>(texels[static_cast<std::size_t>(channel)]),
+                        expected[channel], 1.0f)
+                << where << ": channel " << channel << " is not the clear colour";
         }
     }
 
@@ -136,9 +160,10 @@ namespace
         {
             RenderTarget2D probe(device, 1, 1, false, SurfaceFormat::Color, DepthFormat::None);
             ClearTarget(device, probe);
-            std::uint8_t texel[4] = {};
+            std::uint8_t texel[4] = {kGuard, kGuard, kGuard, kGuard};
             probe.GetData(texel, 4);
-            return true;
+            // A renderer that accepts the read but returns no pixels has no readback either.
+            return texel[0] != kGuard || texel[1] != kGuard || texel[2] != kGuard;
         }
         catch (...)
         {
@@ -173,6 +198,7 @@ TEST(RenderTargetReadbackLayoutTest, OddWidthTargetsReadBackTightlyInEveryFormat
                 target.GetData(data, n);
             });
             ExpectUniform(all, texelBytes, where + " whole");
+            if (format == SurfaceFormat::Color) ExpectColor(all, 0.75f, 0.5f, 0.25f, where + " whole");
 
             // A rectangle off the origin, one texel narrower and shorter where the size allows.
             const Rectangle rect(width > 1 ? 1 : 0, height > 1 ? 1 : 0,
@@ -198,12 +224,14 @@ TEST(RenderTargetReadbackLayoutTest, NonSquareMipLevelsKeepAtLeastOneTexelPerSid
     if (!ReadsTargetsBack(device))
         GTEST_SKIP() << "this renderer cannot read render targets back";
 
+    int checked = 0;
     for (const SurfaceFormat requested : {SurfaceFormat::Color, SurfaceFormat::HalfSingle,
                                           SurfaceFormat::Bgr565, SurfaceFormat::Vector4})
     {
         if (!UsableTargetFormat(device, requested)) continue;
         for (const auto [width, height] : {std::pair{8, 2}, std::pair{2, 8}})
         {
+            ++checked;
             RenderTarget2D target(device, width, height, true, requested, DepthFormat::None);
             const SurfaceFormat format = target.getFormatProperty();
             const std::size_t texelBytes = static_cast<std::size_t>(Texture::GetFormatSizeEXT(format));
@@ -223,6 +251,7 @@ TEST(RenderTargetReadbackLayoutTest, NonSquareMipLevelsKeepAtLeastOneTexelPerSid
                     texelBytes * static_cast<std::size_t>(w * h), where,
                     [&](std::uint8_t* data, int n) { target.GetData(level, &rect, data, 0, n); });
                 ExpectUniform(texels, texelBytes, where);
+                if (format == SurfaceFormat::Color) ExpectColor(texels, 0.75f, 0.5f, 0.25f, where);
                 if (w > 1 || h > 1)
                 {
                     // ...and a one-texel rectangle at the far corner of the level.
@@ -234,6 +263,7 @@ TEST(RenderTargetReadbackLayoutTest, NonSquareMipLevelsKeepAtLeastOneTexelPerSid
             }
         }
     }
+    EXPECT_GT(checked, 0) << "no mipmapped render-target format could be read back";
 }
 
 // Each face is read on its own and fits its own destination, odd sizes included.
@@ -244,6 +274,7 @@ TEST(RenderTargetReadbackLayoutTest, CubeFacesReadBackTightly)
     if (!ReadsTargetsBack(device))
         GTEST_SKIP() << "this renderer cannot read render targets back";
 
+    int checked = 0;
     for (const SurfaceFormat requested : {SurfaceFormat::Color, SurfaceFormat::HalfSingle,
                                           SurfaceFormat::Bgra4444, SurfaceFormat::Vector4})
     {
@@ -258,17 +289,25 @@ TEST(RenderTargetReadbackLayoutTest, CubeFacesReadBackTightly)
             }
             catch (const std::exception& error)
             {
-                // A renderer may refuse a cube target of this format; that is not a readback fault.
-                GTEST_LOG_(INFO) << FormatName(requested) << " cube refused: " << error.what();
+                // A renderer may refuse a cube target of a narrower format; that is not a
+                // readback fault. HiDef guarantees a Color one.
+                if (requested == SurfaceFormat::Color)
+                    ADD_FAILURE() << "Color cube " << size << " refused: " << error.what();
+                else
+                    GTEST_LOG_(INFO) << FormatName(requested) << " cube refused: " << error.what();
                 continue;
             }
+            ++checked;
             const SurfaceFormat format = target->getFormatProperty();
             const std::size_t texelBytes = static_cast<std::size_t>(Texture::GetFormatSizeEXT(format));
+            // Face f is cleared to (f/8, 0.5, 1 - f/8): six distinct colours.
+            const auto faceRed = [](int f) { return static_cast<float>(f) / 8.0f; };
+            const auto faceBlue = [](int f) { return 1.0f - static_cast<float>(f) / 8.0f; };
             for (int f = 0; f < 6; ++f)
             {
                 const auto face = static_cast<CubeMapFace>(f);
                 device.SetRenderTarget(target.get(), face);
-                device.Clear(0.25f, 0.5f, 0.75f, 1.0f);
+                device.Clear(faceRed(f), 0.5f, faceBlue(f), 1.0f);
             }
             device.SetRenderTarget(nullptr);
             for (int f = 0; f < 6; ++f)
@@ -280,6 +319,8 @@ TEST(RenderTargetReadbackLayoutTest, CubeFacesReadBackTightly)
                     texelBytes * static_cast<std::size_t>(size * size), where,
                     [&](std::uint8_t* data, int n) { target->GetData(face, data, n); });
                 ExpectUniform(texels, texelBytes, where);
+                if (format == SurfaceFormat::Color)
+                    ExpectColor(texels, faceRed(f), 0.5f, faceBlue(f), where);
                 const Rectangle rect(1, 1, size - 1, size - 2);
                 const auto sub = GuardedRead(
                     texelBytes * static_cast<std::size_t>(rect.Width * rect.Height),
@@ -287,9 +328,12 @@ TEST(RenderTargetReadbackLayoutTest, CubeFacesReadBackTightly)
                         target->GetData(face, 0, &rect, data, 0, n);
                     });
                 ExpectUniform(sub, texelBytes, where + " rect");
+                if (format == SurfaceFormat::Color)
+                    ExpectColor(sub, faceRed(f), 0.5f, faceBlue(f), where + " rect");
             }
         }
     }
+    EXPECT_GT(checked, 0) << "no cube render target could be read back";
 }
 
 // Reading the same target again returns the same bytes and stays inside its buffer.
