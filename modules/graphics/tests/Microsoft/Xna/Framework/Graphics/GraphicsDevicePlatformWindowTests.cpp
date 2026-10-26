@@ -223,8 +223,13 @@ protected:
 TEST_F(GraphicsDeviceWindowDescriptionTest,
        XnaOwnedWindowIsNonResizableFromCreation)
 {
-    const auto& descriptor =
-        CNA::Internal::Renderers::GraphicsRendererRegistry::Default();
+    // The renderer the device will try, not the build default: a multi-renderer build may be run
+    // with CNA_GRAPHICS_RENDERER naming a windowless one, and forcing the default's failure then
+    // lets a device construct without any window to observe.
+    const auto* selected = CNA::Internal::Renderers::GraphicsRendererRegistry::Find(
+        CNA::GraphicsRendererSelection::GetSelected());
+    ASSERT_NE(selected, nullptr);
+    const auto& descriptor = *selected;
     if (!descriptor.needsWindow)
     {
         GTEST_SKIP() << descriptor.name << " does not create a platform window";
