@@ -9,9 +9,8 @@
 // These tests pin both halves of that contract, which no single-renderer suite exercised:
 //   * a reconstructed wrapper reads its own cached pixels rather than delegating to a renderer
 //     that cannot serve them;
-//   * a full-level SetData on any ordinary texture detaches by building a fresh renderer, so an
-//     upload can never be published through a shared cached renderer into an unrelated wrapper
-//     (the CNB-33 aliasing CnjCacheIsolationTests pins, reached here from the Texture2D side);
+//   * a full-level SetData reuses a unique renderer, but detaches from a shared cached renderer
+//     so an upload cannot reach an unrelated wrapper (the CNB-33 aliasing contract);
 //   * a real RenderTarget2D keeps the opposite semantics unchanged -- in-place renderer update,
 //     no retained shadow.
 
@@ -78,6 +77,24 @@ TEST_F(Texture2DCacheReconstructionTest, OrdinaryTextureRoundTripsThroughItsCpuS
     std::vector<Color> out(in.size(), Color(0, 0, 0, 0));
     ASSERT_NO_THROW(tex.GetData(out.data(), static_cast<int>(out.size())));
     EXPECT_EQ(out, in);
+}
+
+TEST_F(Texture2DCacheReconstructionTest, RepeatedFullUploadsReuseAnUnsharedRenderer)
+{
+    Texture2D tex(gd, kW, kH);
+    const auto originalRenderer = tex.GetRendererWeak();
+    ASSERT_FALSE(originalRenderer.expired());
+
+    for (const int base : {10, 20, 30})
+    {
+        const auto in = Pattern(base);
+        tex.SetData(in.data(), static_cast<int>(in.size()));
+        EXPECT_EQ(originalRenderer.lock(), tex.GetRendererWeak().lock());
+
+        std::vector<Color> out(in.size(), Color(0, 0, 0, 0));
+        tex.GetData(out.data(), static_cast<int>(out.size()));
+        EXPECT_EQ(out, in);
+    }
 }
 
 // (2) ordinary texture cache reconstruction -> GetData. Before the fix this delegated to the

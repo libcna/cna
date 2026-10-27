@@ -716,19 +716,21 @@ namespace Microsoft::Xna::Framework::Graphics
         // turn its render-target renderer into an ordinary Texture2D renderer and leave its cached
         // IRenderTargetRenderer pointer dangling. Update the existing level-0 resource instead.
         //
-        // This in-place update must stay confined to render targets. An ordinary
-        // Texture2D's renderer is shareable -- ContentManager hands the same ITextureRenderer to
-        // every cached value copy -- so updating it in place would publish this upload to every
-        // other holder of that texture, which is exactly
-        // the aliasing CnjCacheIsolationTests pins (plans/plan_cnj.md CNB-33). Building a fresh renderer
-        // detaches this wrapper, which is what a full-level upload has always done here.
-        if (renderer_ && gpuOnlyContent_)
+        // Ordinary textures may share a renderer with cached value copies. Update a unique,
+        // single-level renderer in place; a shared renderer still needs a detached replacement.
+        if (renderer_ && (gpuOnlyContent_ || (levelCount_ == 1 && renderer_.use_count() == 1)))
         {
             renderer_->UpdatePixels(img.pixels.data(), width * 4);
-            // Subsequent draws change the target surface directly, so retain no stale CPU
-            // upload shadow that could mask real target readback or generated descendants.
-            cpuPixels_.reset();
-            extraMipLevels_.reset();
+            if (gpuOnlyContent_)
+            {
+                // Target readback must observe its live surface, not an upload shadow.
+                cpuPixels_.reset();
+                extraMipLevels_.reset();
+                return;
+            }
+            cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
+            renderer_->ShareCpuPixels(cpuPixels_);
+            MaybeFreeCpuPixels();
             return;
         }
 
