@@ -95,6 +95,7 @@
 // Exit code 0 = all checks PASS, 1 = any FAIL or CRASH.
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/ShaderDialectEXT.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
@@ -191,17 +192,14 @@ namespace
     /**
      * @brief Whether a custom `ShaderEffect` can be bound to a 3D draw on this renderer.
      *
-     * SDL_GPU routes a custom effect through `SpriteBatch` only (`SetCustomEffect` lives on its
-     * sprite renderer and the pipeline override is carried on `SpriteCommand`); its stock 3D paths
-     * have no custom-shader slot at all. That is a real, pre-existing capability boundary of the
-     * renderer, not something the render-target-as-effect-texture fix introduced or should paper over — so leg C1 exercises a
-     * custom effect on the route that HAS one, and says so rather than skipping silently.
+     * EasyGL binds a custom effect on its 3D paths. SDL_GPU routes custom effects through
+     * SpriteBatch only; the remaining renderer families need their own measured 3D contract.
      */
     constexpr bool kCustomEffectIn3D =
-#if defined(CNA_RENDERER_SDL_GPU)
-        false;
+#if defined(CNA_RENDERER_EASYGL)
+        true;
 #else
-        false;   // conservatively declared everywhere; C1's SpriteBatch custom-effect leg still runs
+        false;
 #endif
 
     /**
@@ -1185,6 +1183,89 @@ class RenderTargetEffectSourceTest : public Game
             if (!RequireReadable(r, "C1 SpriteBatch")) return;
             CheckExact(r, std::string("C1 SpriteBatch consumes a ") +
                           (side == 0 ? "render target" : "Texture2D control"), PatternColor);
+        }
+
+        if (kCustomEffectIn3D)
+        {
+            const char* header = dev.GetShaderDialectEXT() == CNA::ShaderDialectEXT::GlslDesktop
+                ? "#version 330 core\n"
+                : "#version 300 es\nprecision highp float;\n";
+            ShaderEffect effect(dev,
+                std::string(header) + R"(
+layout(location = 0) in vec3 aPosition;
+layout(location = 1) in vec2 aTexCoord;
+out vec2 vTexCoord;
+void main() { gl_Position = vec4(aPosition, 1.0); vTexCoord = aTexCoord; }
+)",
+                std::string(header) + R"(
+in vec2 vTexCoord;
+out vec4 fragColor;
+uniform sampler2D texture1;
+uniform float uScale;
+uniform vec4 uRtFlipV;
+void main() {
+    vec2 uv = vec2(vTexCoord.x, mix(vTexCoord.y, 1.0 - vTexCoord.y, uRtFlipV.x));
+    fragColor = texture(texture1, uv) * uScale;
+}
+)");
+            if (!effect.IsEffectValid())
+            {
+                check(false, "C1 3D custom ShaderEffect compiles: " + effect.GetCompileErrorEXT());
+                return;
+            }
+
+            auto draw3D = [&](Texture2D& source, float scale) -> Readback
+            {
+                RenderTarget2D dst(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                                   RenderTargetUsage::DiscardContents);
+                dev.SetRenderTarget(&dst);
+                ResetState(dev);
+                dev.Clear(Color(0, 0, 0, 255));
+                effect.Apply();
+                effect.SetTexture(0, source);
+                effect.SetUniformFloat("uScale", scale);
+                VertexPositionTexture quad[6];
+                FillQuad(quad);
+                dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+                dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+                return ReadWhole(dst, kPW, kPH);
+            };
+
+            Readback control = draw3D(patternTex_, 1.0f);
+            Readback scaledControl = draw3D(patternTex_, 0.5f);
+            RenderTarget2D source(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                                  RenderTargetUsage::DiscardContents);
+            ProduceInto(dev, source, patternTex_);
+            Readback scaledTarget = draw3D(source, 0.5f);
+            if (!RequireReadable(control, "C1 3D custom control") ||
+                !RequireReadable(scaledControl, "C1 3D custom scaled control") ||
+                !RequireReadable(scaledTarget, "C1 3D custom render target"))
+                return;
+
+            int mismatches = 0;
+            std::string firstMismatch;
+            for (int y = 0; y < kPH; ++y)
+                for (int x = 0; x < kPW; ++x)
+                    if (!Same(scaledControl.at(x, y), scaledTarget.at(x, y)))
+                    {
+                        ++mismatches;
+                        if (firstMismatch.empty())
+                            firstMismatch = " first at (" + std::to_string(x) + "," +
+                                            std::to_string(y) + ") texture=" +
+                                            ColorText(scaledControl.at(x, y)) + " target=" +
+                                            ColorText(scaledTarget.at(x, y));
+                    }
+            check(mismatches == 0,
+                  "C1 3D custom ShaderEffect samples a render target like a Texture2D (" +
+                  std::to_string(kPW * kPH - mismatches) + "/" + std::to_string(kPW * kPH) + ")" +
+                  firstMismatch);
+            check(scaledControl.at(kPW - 1, 0).getRProperty() <
+                  control.at(kPW - 1, 0).getRProperty(),
+                  "C1 3D custom ShaderEffect applies its non-identity uniform");
+
+            // The source pair below uses Vulkan GLSL and cannot compile on EasyGL; its custom
+            // SpriteBatch path has a separate EasyGL_ShaderEffect_GLSL fixture.
+            return;
         }
 
         // A custom effect resolves its sprite source through the very same resolver, so a render
@@ -2228,7 +2309,7 @@ protected:
                     onlyLeg_.empty() ? "" : (", leg " + onlyLeg_).c_str());
         std::fflush(stdout);
 
-        if (!kCustomEffectIn3D)
+        if (std::string(kRendererName) == "SDL_GPU")
             info(std::string("D legs: ") + kRendererName + " has no custom-effect slot on its stock "
                  "3D paths (a custom ShaderEffect is a SpriteBatch route there) -- leg C1 exercises "
                  "a custom effect on the route that has one");

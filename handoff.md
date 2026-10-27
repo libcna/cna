@@ -33,6 +33,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- `cna-rts` consumer intake (2026-10-27, `plans/plan_cna_rts.md`): its September findings on
+  render-target PNG/JPEG saves, EasyGL shader-dialect reporting and raw Color texture uploads are
+  already answered by the current CNA code. The EasyGL render-target effect-source C1 fixture now
+  exercises a real custom 3D shader, its `uRtFlipV` row correction, and ordinary-texture versus
+  render-target pixels (4/4 focused checks; full registered fixture passed). The consumer's first
+  100k draw exposed its default Reach profile, whose 65,535-instance limit matches Microsoft XNA
+  4.0; `cna-rts` now selects HiDef and saves screenshots directly from its RenderTarget2D. Its
+  private-GPU 10k/100k/1M sweep completes with one draw call per scale, and the 10k/100k/1M
+  deterministic worker-count checks match.
 - The final cna-demos handoff audit (2026-10-24) reconciled the repair matrix's third
   platform-pending row: ISSUE-152 now uses the same
   `RESOLVED_PENDING_PLATFORM_VALIDATION` status and structured `PENDING_NATIVE_WINDOWS`
