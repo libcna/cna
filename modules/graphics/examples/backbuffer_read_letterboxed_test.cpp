@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 // cna-killer KF-6: GetBackBufferData addresses the back buffer, which XNA keeps at the
-// PresentationParameters size whatever the window does. EasyGL draws the back buffer scaled into
-// the window's drawable (Letterbox by default), but read it back 1:1 from the drawable at the back
-// buffer's coordinates -- so once the window no longer had the back buffer's size (a user resize,
-// a window the screen could not fit, a display scale of 2) the read returned the letterbox bars,
-// a different part of the picture, or zeros past the drawable's edge.
+// PresentationParameters size whatever the window does. A renderer draws the back buffer scaled
+// into the window's drawable (Letterbox by default); EasyGL, SDL_GPU and WebGPU all read it back
+// 1:1 from the drawable at the back buffer's coordinates at one time -- so once the window no
+// longer had the back buffer's size (a user resize, a window the screen could not fit, a display
+// scale of 2) the read returned the letterbox bars, a different part of the picture, or zeros past
+// the drawable's edge. GraphicsDevice now maps the read through the presentation rectangle.
 //
 // A 320x240 back buffer in a window resized to 640x360: the picture is scaled by 1.5 and centred
 // with 80-pixel bars. The left half is drawn red over a green clear; the whole back buffer is

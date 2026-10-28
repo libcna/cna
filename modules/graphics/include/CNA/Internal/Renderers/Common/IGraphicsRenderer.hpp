@@ -2471,9 +2471,9 @@ namespace CNA::Internal::Renderers
         virtual std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) = 0;
         virtual std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() = 0;
 
-        /// Reads the rendered backbuffer pixels for the given region into @p pixels (RGBA8).
-        /// @p x, @p y are top-left in game coordinates; @p pixels must hold w*h*4 bytes.
-        /// Default implementation throws — override in renderers that support readback.
+        /// Reads the rendered backbuffer pixels for the given region into @p pixels (RGBA8, w*h*4).
+        /// @p x, @p y are top-left in drawable pixels, where GetDefaultViewportRect() places the
+        /// logical back buffer (GraphicsDevice maps onto them). Default implementation throws.
         virtual void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
         {
             throw std::runtime_error("ReadBackbuffer: not implemented in this renderer");

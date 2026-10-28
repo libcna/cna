@@ -344,7 +344,7 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   and sets the state unconditionally. Microsoft XNA's `Microphone.Start` hands the native start's
   error code to `Helpers.ThrowExceptionFromErrorCode`, so a failed start throws there, and XNA
   wins. Found 2026-10-28 by reading XNA's decompiled source (former AUD-13-001); not yet pinned by
-  a test. Everything else on this list was fixed by 2026-10-24.
+  a test.
 - `CnaGraphicsTests.exe` on `DIRECTX9` (`cmake-build-mingw`, Wine with DXVK 3.1.1, eight shards,
   2026-10-28) fails three cases that also fail on `ed724c017` without that day's null-texture
   change: `PresentationLifecycle.EveryPresentIntervalRoundTripsThroughReset` and
@@ -354,6 +354,17 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   `ShadowTargetOrientation/2.RenderedUpperHalfOccluderShadowsOnlyUpperHalf` (`PbrEffect`), where
   DirectX9 refuses the 68-byte PBR vertex layout ("stride 68 has no matching CNA vertex layout,
   expected 48 or 60"). The shards last passed 2,688/2,688 under DXVK 2.6.0 (see §2); not bisected.
+- `WEBGPU` fails two shared presentation programs it is not registered for, which EasyGL and
+  `SDL_GPU` pass (`cmake-build-multi` run with `CNA_GRAPHICS_RENDERER=WEBGPU`, 2026-10-28):
+  `presentation_mode_contract_test.cpp` under Letterbox and Overscan, where a sprite covering the
+  40x40 logical canvas after a mid-frame `SetPresentationMode` lands unscaled (40x40 at the
+  letterbox origin instead of filling 96x96), and `spritebatch_presentation_test.cpp`'s two
+  Deferred batches under different custom viewports, which both read black. Not investigated.
+- `WebGPU_BindingCost` aborts with "The texture resource is in use." (`cmake-build-webgpu`,
+  2026-10-28): `webgpu_binding_cost_test.cpp`'s `DrawRenderTargets` calls `SetData` on a texture
+  the previous SpriteBatch left in `Textures[0]`, which `Texture.cpp` refuses as XNA does
+  (SOFTWARE-246). The test needs to unbind the slot first; the other 187 `WebGPU` tests pass. When
+  it began to fail is not bisected.
 
 ### 5.2 Limitations
 

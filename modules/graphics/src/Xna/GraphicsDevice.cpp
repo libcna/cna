@@ -5156,6 +5156,62 @@ namespace Microsoft::Xna::Framework::Graphics
         GetBackBufferDataCore(rect, data, startIndex, elementCount, 4u, true);
     }
 
+    namespace
+    {
+        /// Reads the logical back-buffer region (x, y, w, h) into @p pixels (RGBA8, top row first).
+        /// IGraphicsRenderer::ReadBackbuffer reads drawable pixels, the surface the renderer draws
+        /// the back buffer into through GetDefaultViewportRect(). Where that rectangle is not the
+        /// logical size (Letterbox, Overscan, Stretch, a display scale of 2), each back-buffer pixel
+        /// is gathered from the drawable pixel it is presented on, in one read of the covered
+        /// region; where they agree, the plain 1:1 read runs (cna-killer KF-6).
+        void ReadBackBufferThroughPresentation(CNA::Internal::Renderers::IGraphicsRenderer& renderer,
+                                               const CNA::Platform::IPlatformWindow* window,
+                                               int x, int y, int w, int h, std::uint8_t* pixels)
+        {
+            int logicalWidth = 0;
+            int logicalHeight = 0;
+            renderer.GetViewportSize(logicalWidth, logicalHeight);
+            CNA::Internal::Graphics::PresentationRect presentation{0, 0, logicalWidth, logicalHeight};
+            renderer.GetDefaultViewportRect(presentation.x, presentation.y, presentation.width,
+                                            presentation.height);
+            if (logicalWidth <= 0 || logicalHeight <= 0 || presentation.width <= 0 ||
+                presentation.height <= 0 ||
+                (presentation.x == 0 && presentation.y == 0 && presentation.width == logicalWidth &&
+                 presentation.height == logicalHeight))
+            {
+                renderer.ReadBackbuffer(x, y, w, h, pixels);
+                return;
+            }
+
+            CNA::Platform::WindowSize drawable;
+            if (window != nullptr)
+                drawable = window->GetPixelSize();
+            const std::vector<int> columns = CNA::Internal::Graphics::PresentedPixelSpan(
+                x, w, logicalWidth, presentation.x, presentation.width, drawable.width);
+            const std::vector<int> rows = CNA::Internal::Graphics::PresentedPixelSpan(
+                y, h, logicalHeight, presentation.y, presentation.height, drawable.height);
+            const auto [minColumn, maxColumn] = std::minmax_element(columns.begin(), columns.end());
+            const auto [minRow, maxRow] = std::minmax_element(rows.begin(), rows.end());
+            const int readWidth = *maxColumn - *minColumn + 1;
+            const int readHeight = *maxRow - *minRow + 1;
+            std::vector<std::uint8_t> region(
+                static_cast<std::size_t>(readWidth) * static_cast<std::size_t>(readHeight) * 4u);
+            renderer.ReadBackbuffer(*minColumn, *minRow, readWidth, readHeight, region.data());
+            for (std::size_t j = 0; j < rows.size(); ++j)
+            {
+                const std::size_t sourceRow = static_cast<std::size_t>(rows[j] - *minRow);
+                for (std::size_t i = 0; i < columns.size(); ++i)
+                {
+                    const std::size_t sourceColumn = static_cast<std::size_t>(columns[i] - *minColumn);
+                    std::memcpy(pixels + (j * columns.size() + i) * 4u,
+                                region.data() + (sourceRow * static_cast<std::size_t>(readWidth) +
+                                                 sourceColumn) * 4u,
+                                4u);
+                }
+            }
+        }
+    }
+
     void GraphicsDevice::GetBackBufferDataCore(
         const Rectangle* rect, void* data, int startIndex, int elementCount,
         std::size_t elementSizeInBytes, bool colorObjects)
@@ -5262,7 +5318,8 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<uint8_t> buf(pixelCount * 4u);
         {
             const auto contextLease = AcquireRendererThreadContextLease();
-            renderer_->ReadBackbuffer(x, y, w, h, buf.data());
+            ReadBackBufferThroughPresentation(*renderer_, platformWindow_.get(), x, y, w, h,
+                                              buf.data());
         }
         if (!colorObjects)
         {

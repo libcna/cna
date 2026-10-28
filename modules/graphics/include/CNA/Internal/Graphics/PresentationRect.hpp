@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <algorithm>
 #include <cmath>
+#include <vector>
 
 /**
  * @file
@@ -90,5 +92,52 @@ namespace CNA::Internal::Graphics
         mapped.width = static_cast<int>(std::lround(right)) - mapped.x;
         mapped.height = static_cast<int>(std::lround(bottom)) - mapped.y;
         return mapped;
+    }
+
+    /**
+     * @brief The drawable pixel each logical back-buffer column (or row) is presented on.
+     *
+     * `GraphicsDevice.GetBackBufferData` addresses the back buffer at its own size, which XNA
+     * keeps whatever the window does, while a renderer draws it into the drawable through the
+     * presentation rectangle (Letterbox scales and centres it, a display scale of 2 doubles it).
+     * Each logical pixel is read from the drawable pixel its centre lands on: exact for any
+     * picture at a scale of 1 and for flat areas at any scale. Call it once per axis.
+     *
+     * The span is `first, first + 1, ...` unchanged when the presentation agrees with the logical
+     * size on this axis. Otherwise every coordinate is clamped into the drawable, so the part of
+     * an Overscan picture that was cropped away reads the nearest presented edge.
+     *
+     * @param first         First logical column (or row) of the span.
+     * @param count         Number of logical columns (or rows).
+     * @param logicalSize   Logical width (or height), from `GetViewportSize()`.
+     * @param presentOrigin Presentation rectangle's x (or y), from `GetDefaultViewportRect()`.
+     * @param presentSize   Presentation rectangle's width (or height).
+     * @param drawableSize  Drawable width (or height) in pixels; 0 when it is not known.
+     * @return One drawable coordinate per logical one, @p count entries.
+     */
+    [[nodiscard]] inline std::vector<int> PresentedPixelSpan(int first,
+                                                             int count,
+                                                             int logicalSize,
+                                                             int presentOrigin,
+                                                             int presentSize,
+                                                             int drawableSize)
+    {
+        std::vector<int> span(static_cast<std::size_t>(std::max(0, count)));
+        const bool identity = logicalSize <= 0 || presentSize <= 0 ||
+                              (presentOrigin == 0 && presentSize == logicalSize);
+        for (std::size_t i = 0; i < span.size(); ++i)
+        {
+            const int logical = first + static_cast<int>(i);
+            if (identity)
+            {
+                span[i] = logical;
+                continue;
+            }
+            const double centre = (static_cast<double>(logical) + 0.5) * presentSize / logicalSize;
+            const int presented = presentOrigin + static_cast<int>(std::floor(centre));
+            span[i] = drawableSize > 0 ? std::clamp(presented, 0, drawableSize - 1)
+                                       : std::max(presented, 0);
+        }
+        return span;
     }
 }

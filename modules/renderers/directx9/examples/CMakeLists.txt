@@ -49,6 +49,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_SpriteBatchPresentation
         COMMAND ${_directx9_presentation_cmd} TIMEOUT 30 LABELS "DIRECTX9")
 
+    # cna-killer KF-6: GetBackBufferData reads the back buffer, not the scaled window drawable.
+    cna_directx9_test(cna_test_directx9_backbuffer_read_letterboxed
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_read_letterboxed_test.cpp)
+    cna_directx9_ctest_command(_directx9_backbuffer_read_cmd cna_test_directx9_backbuffer_read_letterboxed)
+    cna_register_renderer_test(NAME DirectX9_BackBufferRead_Letterboxed
+        COMMAND ${_directx9_backbuffer_read_cmd} TIMEOUT 60 LABELS "DIRECTX9")
+
     cna_directx9_test(cna_test_directx9_resize_state directx9_resize_state_test.cpp)
     cna_directx9_ctest_command(_directx9_resize_state_cmd cna_test_directx9_resize_state)
     cna_register_renderer_test(NAME DirectX9_ResizeStateAndMotion

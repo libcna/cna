@@ -111,6 +111,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_BlendFactor_DeferredDraw COMMAND cna_test_webgpu_blendfactor_deferred
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # cna-killer KF-6: GetBackBufferData reads the back buffer, not the scaled window drawable.
+    cna_webgpu_test(cna_test_webgpu_backbuffer_read_letterboxed
+                    ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_read_letterboxed_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_BackBufferRead_Letterboxed COMMAND cna_test_webgpu_backbuffer_read_letterboxed
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Phase 63: DrawPrimitivesEx/DrawIndexedPrimitivesEx real GpuDrawParams dispatch (stride 16).
     cna_webgpu_test(cna_test_webgpu_drawprimitivesex webgpu_drawprimitivesex_test.cpp)
     cna_register_renderer_test(NAME WebGPU_DrawPrimitivesEx COMMAND cna_test_webgpu_drawprimitivesex

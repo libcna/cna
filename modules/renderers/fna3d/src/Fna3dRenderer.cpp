@@ -811,8 +811,8 @@ namespace CNA::Internal::Renderers::Fna3d
         // to GL's rows since the 2026-10-26 dependency audit (B2-10), so at the current pin every
         // driver takes a top-left rectangle.
         //
-        // CNA's own contract is unambiguous ("x, y are top-left in game coordinates") and shared
-        // pixel tests depend on it. This still reads the whole backbuffer -- which every driver,
+        // CNA's own contract is unambiguous (x, y are the top-left of the region) and shared pixel
+        // tests depend on it. This still reads the whole backbuffer -- which every driver,
         // fixed or not, returns top-row-first -- and crops the requested rectangle out of it, so a
         // build against an FNA3D without that fix stays correct. Readback is already a full CPU/GPU
         // sync point that FNA3D documents as screenshot-only, so the extra bandwidth costs nothing

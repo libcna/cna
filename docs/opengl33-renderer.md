@@ -97,5 +97,6 @@ reports for a frame after a resize, a minimize or a fullscreen change, or when a
 binds it between frames (cna-killer KF-6). With multisampling on the offscreen buffer is
 multisampled and the blit resolves it. `GetBackBufferData` reads it at the back buffer's own size:
 when the presentation rectangle is not the logical size (Letterbox bars, Stretch, a display scale
-of 2), each back-buffer pixel is read from the pixel it is presented on. The web keeps drawing into
-the window's surface, whose canvas CNA sizes itself.
+of 2), `GraphicsDevice` reads each back-buffer pixel from the drawable pixel it is presented on, the
+same for every renderer. The web keeps drawing into the window's surface, whose canvas CNA sizes
+itself.

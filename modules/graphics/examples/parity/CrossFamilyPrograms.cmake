@@ -22,9 +22,6 @@
 #     _sampler_max_mip_level for the mip fields, shader_effect_per_unit_sampler_test.cpp for W.
 #   * shader_effect_per_unit_sampler_test.cpp feeds precompiled SPIR-V, which only SDL_GPU consumes;
 #     on EasyGL the effect does not compile and a leg would pass on an undrawn pixel.
-#   * spritebatch_presentation_test.cpp (FULLSCREEN-001) reads CNA's internal presentation path and
-#     fails most legs on EasyGL (measured 2026-10-14, not investigated); its second family is
-#     SDL_GPU, where it passes.
 #
 # A program that a family cannot execute for a stated capability reason exits 77 itself; an entry
 # is never dropped from a family because it fails there -- a failure is a defect, recorded in
@@ -330,6 +327,8 @@ function(cna_register_cross_family_programs)
         SOURCE "renderers/easygl/examples/easygl_gltf_context_loss_test.cpp" TIMEOUT 900 SOURCE_ROOT_WORKING_DIRECTORY)
     cna_cross_family_program(NAME PresentationModeContract FAMILIES SDL_GPU
         SOURCE "graphics/examples/presentation_mode_contract_test.cpp" TIMEOUT 300)
+    cna_cross_family_program(NAME BackBufferRead_Letterboxed FAMILIES SDL_GPU
+        SOURCE "graphics/examples/backbuffer_read_letterboxed_test.cpp")
     cna_cross_family_program(NAME SwapIntervalForwarding FAMILIES SDL_GPU
         SOURCE "graphics/examples/swap_interval_forwarding_contract_test.cpp")
     cna_cross_family_program(NAME MSAA_4x_Readback FAMILIES SDL_GPU
@@ -376,7 +375,7 @@ function(cna_register_cross_family_programs)
         SOURCE "graphics/examples/skinnedeffect_fog_test.cpp")
     cna_cross_family_program(NAME ViewSpaceFogContract FAMILIES EASYGL SDL_GPU
         SOURCE "graphics/examples/viewspace_fog_test.cpp")
-    cna_cross_family_program(NAME SpriteBatch_Presentation FAMILIES SDL_GPU
+    cna_cross_family_program(NAME SpriteBatch_Presentation FAMILIES EASYGL SDL_GPU
         SOURCE "graphics/examples/spritebatch_presentation_test.cpp" TIMEOUT 30)
     cna_cross_family_program(NAME BlendFactor_DeferredDraw FAMILIES EASYGL SDL_GPU
         SOURCE "graphics/examples/blendfactor_deferred_draw_test.cpp" TIMEOUT 30)

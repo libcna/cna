@@ -1156,7 +1156,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         # cna-killer KF-6: GetBackBufferData reads the back buffer, not the scaled window drawable.
         cna_easygl_test(cna_test_easygl_backbuffer_read_letterboxed
-                        easygl_backbuffer_read_letterboxed_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_read_letterboxed_test.cpp)
         cna_register_renderer_test(NAME EasyGL_BackBufferRead_Letterboxed COMMAND cna_test_easygl_backbuffer_read_letterboxed
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         # cna-killer KF-16: GL work issued from Update() must reach the device.

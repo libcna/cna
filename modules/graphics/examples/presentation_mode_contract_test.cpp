@@ -129,23 +129,8 @@ class PresentationModeContractTest final : public Game
 
         std::vector<std::uint8_t> pixels(
             static_cast<std::size_t>(physicalWidth) * physicalHeight * 4u, 0);
-#if defined(CNA_RENDERER_EASYGL)
-        // EasyGL's ReadBackbuffer samples logical coordinates (since cna-killer KF-6). Select identity presentation geometry for this fixture's physical-surface
-        // observation, then restore the mode.
-        renderer.SetPresentationMode(static_cast<int>(CnaPresentationMode::NativeBackBuffer));
-        try
-        {
-            renderer.ReadBackbuffer(0, 0, physicalWidth, physicalHeight, pixels.data());
-        }
-        catch (...)
-        {
-            renderer.SetPresentationMode(static_cast<int>(mode));
-            throw;
-        }
-        renderer.SetPresentationMode(static_cast<int>(mode));
-#else
+        // The renderer's ReadBackbuffer reads drawable pixels, which is what this fixture observes.
         renderer.ReadBackbuffer(0, 0, physicalWidth, physicalHeight, pixels.data());
-#endif
         return WhiteBox(pixels, physicalWidth, physicalHeight);
     }
 
