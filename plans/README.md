@@ -71,6 +71,13 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   owners are generated in [`../docs/c-api/COVERAGE.md`](../docs/c-api/COVERAGE.md), permanent
   contracts are indexed by [`../docs/c-api/README.md`](../docs/c-api/README.md), and release
   readiness is in [`../docs/c-api/RELEASE_GATE.md`](../docs/c-api/RELEASE_GATE.md).
+- `plan_capi_smoke_stability.md` (CSS-1..6), `plan_capi_coverage_audit.md` and
+  `plan_capi_coverage_tooling_cleanup.md` (CTC-1..10) — the 2026-09-18 C API series: the
+  process-exit lifetime fix and smoke repairs, the backlog audit, and the coverage tooling that
+  made the gates truthful. All done; deleted on 2026-10-28 (Git history only). The fixes carry
+  their reasons in the code, the tooling in `tools/c-api/generate_coverage_inventory.py` and
+  `test_coverage_scope.py`, and the live backlog is
+  [`../docs/c-api/COVERAGE.md`](../docs/c-api/COVERAGE.md).
 - `plan_bindings_upstream.md` — measured XNA/FNA decisions and binding findings from the 2026-09
   campaign; deleted on 2026-10-28 (Git history only). Permanent decisions are in
   [`../docs/xna-fna-behavior-decisions.md`](../docs/xna-fna-behavior-decisions.md), current binding

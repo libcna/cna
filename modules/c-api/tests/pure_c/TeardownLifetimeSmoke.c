@@ -8,7 +8,7 @@
  * destructor is assumed at the ABI boundary". A caller that honours that is the *explicit* path.
  * A caller that does not still returns from main, and the library must not die on the way out --
  * the handle leaks, which is the documented consequence, and nothing else happens. That is the
- * *fallback* path, and until plans/plan_capi_smoke_stability.md CSS-3 it crashed: the handle
+ * *fallback* path, and until C API smoke stability CSS-3 it crashed: the handle
  * registry is a static constructed before the statics a Game's own construction creates, so
  * reverse-order destruction always left ~Game reading a freed vector (ASan: heap-use-after-free
  * at UninstallPlatform).

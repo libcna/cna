@@ -19,7 +19,7 @@ namespace CNA::Platform {
         // records and the C API handle registry proved again: whatever installed or pinned a
         // platform can be destroyed at ANY point of process teardown, including from a later
         // static's destructor, and must still find this state alive. ~Game reaches all of it
-        // through SetCurrentPlatform on its way out (plans/plan_capi_smoke_stability.md CSS-2).
+        // through SetCurrentPlatform on its way out (C API smoke stability CSS-2).
         // Explicit teardown is unaffected -- ResetCurrentPlatform still destroys the lazily
         // created default deterministically; what
         // goes away is only the implicit destruction of one never-reset default at process exit,

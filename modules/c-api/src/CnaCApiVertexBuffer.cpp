@@ -589,7 +589,7 @@ private:
  * byte that copies `vertexCount` single bytes at `vertexStride` spacing instead of the
  * `vertexCount * vertexStride` contiguous bytes this ABI documents, and it also loses the raw
  * route's vertex-boundary check and its zero-count no-op (see
- * plans/plan_capi_smoke_stability.md CSS-4). The raw routes are what the header already promises.
+ * C API smoke stability CSS-4). The raw routes are what the header already promises.
  */
 [[nodiscard]] CNA_Result RequireDynamicForOptions(
     const VertexBufferResource& resource,

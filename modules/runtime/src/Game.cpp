@@ -190,7 +190,7 @@ namespace Microsoft::Xna::Framework
         // second, so ~Game read a freed vector at exit: AddressSanitizer reported
         // heap-use-after-free at UninstallPlatform's std::find, freed by this vector's own
         // destructor under __run_exit_handlers, for every C API smoke test that left a game handle
-        // alive (plans/plan_capi_smoke_stability.md CSS-2). That ordering is not a race that
+        // alive (C API smoke stability CSS-2). That ordering is not a race that
         // sometimes loses -- it is fixed and always wrong -- and it cannot be corrected by
         // reordering, because the registry has to exist before the object it is about to store.
         // Never destroying these makes UninstallPlatform valid at any point of process teardown.
