@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cabi.md CABI-14: load the built module and call into it.
+// C ABI CABI-14: load the built module and call into it.
 //
 // Two things are checked here. That the module instantiates and a call reaches compiled C and comes
 // back with the right answer -- the first thing cna-ts needs to trust. And, since CABI-29, that the

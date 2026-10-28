@@ -1490,7 +1490,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Raises ContentLost on every tracked resource whose contents a reset destroys.
          *
          * Called only from the renderer-reported device-reset transition. See
-         * plans/plan_cabi.md CABI-15 for why it is not called from GraphicsDevice::Reset.
+         * C ABI CABI-15 for why it is not called from GraphicsDevice::Reset.
          */
         CNAEXT void NotifyContentLostResourcesEXT();
 

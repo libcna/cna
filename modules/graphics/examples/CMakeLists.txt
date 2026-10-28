@@ -28,7 +28,7 @@ if(CNA_BUILD_EXAMPLES)
     target_link_libraries(cna_demo_renderer_selection PRIVATE CNA)
     cna_link_sharp_runtime(cna_demo_renderer_selection PRIVATE)
 
-    # ---- Standalone-device probe (plans/plan_cabi.md CABI-10) -----------------
+    # ---- Standalone-device probe (C ABI CABI-10) -----------------
     add_executable(cna_standalone_device_probe standalone_device_probe.cpp)
     target_link_libraries(cna_standalone_device_probe PRIVATE CNA)
     cna_link_sharp_runtime(cna_standalone_device_probe PRIVATE)
@@ -38,7 +38,7 @@ if(CNA_BUILD_EXAMPLES)
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
     endif()
 
-    # ---- Content-lost probe (plans/plan_cabi.md CABI-15) ----------------------
+    # ---- Content-lost probe (C ABI CABI-15) ----------------------
     add_executable(cna_content_lost_probe content_lost_probe.cpp)
     target_link_libraries(cna_content_lost_probe PRIVATE CNA)
     cna_link_sharp_runtime(cna_content_lost_probe PRIVATE)

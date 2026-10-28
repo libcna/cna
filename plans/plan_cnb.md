@@ -1382,8 +1382,9 @@ header** could plausibly cause. It does not: regenerating the inventory and diff
 committed `docs/c-api/COVERAGE.md` shows the snapshot is missing **twenty-two `CNA/Content/Cnb/`
 headers plus `ReflectiveTypeReader.hpp`** — every one of them added by `CNBF-001`–`CNBF-113` and
 `SAMPLE-044`, none by this pass. `CnjCanonicalRead.hpp` is under `CNA/Internal/` and is correctly
-excluded from the scan. The inventory belongs to the C-ABI campaign (`plans/plan_cabi.md`), was
-already stale before this pass, and is deliberately not regenerated here.
+excluded from the scan. The inventory belongs to the C API coverage tooling
+(`docs/c-api/COVERAGE.md`), was already stale before this pass, and is deliberately not regenerated
+here.
 
 ### 17.3 Verification at the end of `CNBF-122`
 
@@ -1417,7 +1418,7 @@ and again it does not. Regenerating the inventory and diffing it against the com
 `CNBF-001`–`CNBF-113` added and the snapshot never had. This pass adds no module public header at
 all: `tools/common/CnaToolAtomicWrite.hpp` lives under `tools/`, which the generator does not scan
 (verified: the regenerated inventory contains no mention of it). The regenerated file was **not**
-committed — it belongs to `plans/plan_cabi.md`.
+committed — it belongs to the C API coverage tooling.
 
 **Seventeen new tests, thirteen of them verified to fail with the fix backed out.** The back-out was
 done in three passes — one patch disabling all six code changes at once, one restoring

@@ -303,7 +303,7 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Counts decoded frames, so a caller can tell a new frame from the same one again.
          *
-         * plans/plan_cabi.md CABI-9. GetTexture() hands back the same single frameTexture_ every
+         * C ABI CABI-9. GetTexture() hands back the same single frameTexture_ every
          * time, so pointer identity answers nothing: two calls against one undecoded frame look
          * exactly like two calls across a frame advance. This increments only where a frame is
          * actually decoded into the texture, which is the question a consumer is really asking.

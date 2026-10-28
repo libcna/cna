@@ -92,6 +92,12 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   their reasons in the code, the tooling in `tools/c-api/generate_coverage_inventory.py` and
   `test_coverage_scope.py`, and the live backlog is
   [`../docs/c-api/COVERAGE.md`](../docs/c-api/COVERAGE.md).
+- `plan_cabi.md` — the cross-binding C ABI correctness milestone (`CABI-1`..`CABI-49`, ABI
+  0.8-0.9, 2026-08/09); deleted on 2026-10-28 (Git history only). Its contracts are in
+  [`../docs/c-api/`](../docs/c-api/README.md) (wasm artifact, ContentLost, owned devices, video
+  frames); the `Present` overload's C route is planned in
+  [`../docs/c-api/COVERAGE.md`](../docs/c-api/COVERAGE.md) (`CBIND-127`). Comments cite its rows
+  as "C ABI CABI-N".
 - `plan_bindings_upstream.md` — measured XNA/FNA decisions and binding findings from the 2026-09
   campaign; deleted on 2026-10-28 (Git history only). Permanent decisions are in
   [`../docs/xna-fna-behavior-decisions.md`](../docs/xna-fna-behavior-decisions.md), current binding

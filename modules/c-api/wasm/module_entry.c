@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MS-PL */
 
 /*
- * plans/plan_cabi.md CABI-14: the wasm module's translation unit.
+ * C ABI CABI-14: the wasm module's translation unit.
  *
  * Emscripten links a *program*, so the module needs one even though nothing here is called:
  * --no-entry says there is no main, and every route the module exposes comes from the static

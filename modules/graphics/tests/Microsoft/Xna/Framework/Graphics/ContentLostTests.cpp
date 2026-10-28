@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-// plans/plan_cabi.md CABI-28: coverage for the ContentLost contract on the default-pool resources.
+// C ABI CABI-28: coverage for the ContentLost contract on the default-pool resources.
 //
 // This file exists because the contract had none. CABI-15 made the event real -- CNA raises it on
 // the renderers whose API can actually lose a device -- and nothing anywhere asserted a single part

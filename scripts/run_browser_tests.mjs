@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Runs a built Emscripten test page in a real headless browser and reports its result.
 //
-// plans/plan_cabi.md CABI-37/CABI-39 -- the C ABI's own browser probe
+// C ABI CABI-37/CABI-39 -- the C ABI's own browser probe
 // (modules/c-api/wasm/browser_probe.html), registered as the ctest CApi_WasmBrowserProbe, runs
 // through this script. It was first written for the PixiJS renderer's pixel suite
 // (plans/plan_pixijs.md PIXIJS-85, a renderer retired on 2026-09-17 -- see
@@ -111,7 +111,7 @@ async function main() {
     // Lets a build system ask "can this machine run these pages?" using the *same* resolution the
     // run itself uses. A gate with its own separate search can be narrower than the runner and
     // report a skip where the test would have passed, which is exactly what happened to
-    // CApi_WasmBrowserProbe (plans/plan_cabi.md CABI-39).
+    // CApi_WasmBrowserProbe (C ABI CABI-39).
     if (buildDir === '--check-playwright') {
         try {
             loadPlaywright();

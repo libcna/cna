@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MS-PL
 """Emit the Emscripten -sEXPORTED_FUNCTIONS list for the C ABI.
 
-plans/plan_cabi.md CABI-14. The ELF build declares its surface with a pattern --
+C ABI CABI-14. The ELF build declares its surface with a pattern --
 `cna_*` is public, everything else local (`cmake/CnaCApiExports.map`). wasm-ld has no
 counterpart: Emscripten needs every exported name spelled out, and anything missing from the list
 is simply absent from the module, with no diagnostic at build time.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-// plans/plan_cabi.md CABI-10: can two independently owned GraphicsDevices exist at once?
+// C ABI CABI-10: can two independently owned GraphicsDevices exist at once?
 //
 // fixcnats.md Phase 5 asks whether CNA can create a GraphicsDevice outside a Game, and forbids
 // answering with a half-working constructor. XNA's own constructor shape already exists here --

@@ -108,7 +108,7 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Whether playback has begun, which is what locks the 3D-versus-pan choice.
          *
-         * plans/plan_cabi.md CABI-25. XNA calls this `isPacketSubmitted`: before the packet is
+         * C ABI CABI-25. XNA calls this `isPacketSubmitted`: before the packet is
          * submitted (before the first Play) the instance switches freely between Apply3D and Pan,
          * and afterwards whichever was chosen is fixed -- the other one throws
          * InvalidOperationException. Stop clears it, so a stopped instance can be re-aimed.

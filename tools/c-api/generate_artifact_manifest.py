@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MS-PL
 """Describe one built C ABI artifact precisely enough that a consumer can tell two apart.
 
-plans/plan_cabi.md CABI-11. The language bindings currently pin a hand-retained experimental
+C ABI CABI-11. The language bindings currently pin a hand-retained experimental
 library by revision and hash written down in prose. That answers "which file is this" and nothing
 else: not which renderer it was built with, not which audio backend, not whether the compiler that
 produced it is one anybody else has.

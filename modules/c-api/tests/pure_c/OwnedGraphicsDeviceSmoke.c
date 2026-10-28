@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MS-PL */
 
 /*
- * plans/plan_cabi.md CABI-13: a GraphicsDevice the caller creates outside any Game.
+ * C ABI CABI-13: a GraphicsDevice the caller creates outside any Game.
  *
  * Every other route hands out the Game's device, borrowed for a callback. cna-cs records the
  * consequence: every cross-device test emits not-run(CNA-ABI-has-one-game-owned-device), because

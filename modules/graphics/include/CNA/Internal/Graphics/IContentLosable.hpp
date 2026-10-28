@@ -6,7 +6,7 @@ namespace CNA::Internal::Graphics
     /**
      * @brief Implemented by the resource types whose contents a device reset can destroy.
      *
-     * plans/plan_cabi.md CABI-15. XNA raises ContentLost on the default-pool resources -- dynamic
+     * C ABI CABI-15. XNA raises ContentLost on the default-pool resources -- dynamic
      * vertex/index buffers and render targets -- when a device is reset out from under them. CNA
      * has that event for real on the renderers whose API can lose a device (DirectX9, for example);
      * the other families never report one and so never raise this.

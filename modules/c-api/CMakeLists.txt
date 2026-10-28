@@ -10,7 +10,7 @@ function(cna_c_api_enable_strict_warnings target)
     endif()
 endfunction()
 
-# plans/plan_cabi.md CABI-14: SHARED under Emscripten means a PIC *side module*, which is neither
+# C ABI CABI-14: SHARED under Emscripten means a PIC *side module*, which is neither
 # what a wasm consumer wants nor linkable here -- the vendored SDL3 is built non-PIC, so wasm-ld
 # refuses its relocations outright. A wasm consumer wants an ESM factory plus a .wasm, which is a
 # static library linked into a module target (cna_c_api_wasm, below).
@@ -96,7 +96,7 @@ set_target_properties(cna_c_api PROPERTIES
     INSTALL_RPATH "$ORIGIN"
 )
 
-# plans/plan_cabi.md CABI-12: Emscripten satisfies UNIX AND NOT APPLE, and then wasm-ld rejects
+# C ABI CABI-12: Emscripten satisfies UNIX AND NOT APPLE, and then wasm-ld rejects
 # both of these -- they are ELF symbol-visibility mechanisms with no wasm counterpart
 # ("unknown argument: --exclude-libs"). A wasm build controls its surface with
 # -sEXPORTED_FUNCTIONS instead, so the export list is declared there rather than lost.
@@ -117,7 +117,7 @@ elseif(APPLE)
         LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CnaCApiExports.darwin.txt")
 endif()
 
-# ---- Wasm module (plans/plan_cabi.md CABI-14) --------------------------------------------
+# ---- Wasm module (C ABI CABI-14) --------------------------------------------
 # The consumable artifact for a browser: an ES module factory plus a .wasm, exporting the same
 # routes the ELF build publishes through its version script. The export list is generated from the
 # headers rather than maintained beside them -- a name missing from -sEXPORTED_FUNCTIONS is simply

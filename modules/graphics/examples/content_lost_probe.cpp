@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-// plans/plan_cabi.md CABI-15: does ContentLost actually reach the resources a reset destroys?
+// C ABI CABI-15: does ContentLost actually reach the resources a reset destroys?
 //
 // The event fires only where a renderer reports a real device reset, and the families that can
 // (DirectX9, for example) are not built here. So this drives the same entry point the

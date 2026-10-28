@@ -143,6 +143,12 @@ Two payload decisions are deliberate limitations, not omissions:
   reported as presence only. The resource `Name` is a canonical string and is passed as a
   callback-scoped UTF-8 view.
 
+Neither payload can therefore tie an event to a C handle. Doing so would need a stable opaque
+lifecycle ID assigned in the native `GraphicsResource` base object, carried by both events,
+queryable from every graphics-resource handle and defined across C++ copy and move -- and, because
+both structures are published at version 1, an additive versioned extension rather than a resize
+(CABI-45, deferred as a design question).
+
 A subscription is an owned handle. It does **not** block `cna_game_destroy`: destroying the game
 disposes the device — which is exactly when a `Disposing` subscriber wants to be called — and the
 runtime then invalidates every live subscription before the device object goes away. Surviving

@@ -1168,7 +1168,7 @@ namespace Microsoft::Xna::Framework::Audio
         {
             // XNA reaches its native Apply3D with a count of zero and surfaces whatever XACT
             // returns; that outcome is not established here, so the refusal is explicit rather
-            // than guessed at. See plans/plan_cabi.md CABI-6.
+            // than guessed at. See C ABI CABI-6.
             throw System::ArgumentOutOfRangeException(
                 "listenerCount", "At least one AudioListener is required.");
         }
