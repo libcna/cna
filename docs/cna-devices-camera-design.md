@@ -7,7 +7,7 @@ polling, format negotiation and capture through `IPlatformCameraProvider` and
 `IPlatformCamera`; SDL3 details live only in `modules/platform/src/Sdl3/Sdl3Camera.*`.
 
 **Why `Camera` is last, not first:** every other `CNA::Devices` capability (Phases
-1-3, all closed — see `plans/plan_cna_devices.md`) was a thin, mostly-synchronous wrapper
+1-3, `DEVICES-CNA-001`..`009`, all closed) was a thin, mostly-synchronous wrapper
 around 1-15 SDL3 functions. `Camera` is different in three ways simultaneously:
 asynchronous permission state, poll-based (not push-based) frame delivery, and a
 mandatory bridge into this engine's own graphics-texture system. Any one of these

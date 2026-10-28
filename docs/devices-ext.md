@@ -85,5 +85,6 @@ Reopen one only for a concrete need.
 
 ## History
 
-Task records are in `plans/plan_cna_devices.md` (`DEVICES-CNA-000`..`012`). The original
-analysis that proposed this layer was the root `noxna_devices.md`; Git history keeps it.
+The layer was built on 2026-07-07 as `DEVICES-CNA-000`..`012`; their plan,
+`plans/plan_cna_devices.md`, was deleted on 2026-10-28, and it and the original analysis that
+proposed the layer, the root `noxna_devices.md`, are in Git history only.

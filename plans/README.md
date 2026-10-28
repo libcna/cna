@@ -68,7 +68,9 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   [`../CHECKLIST.md`](../CHECKLIST.md); open audio defects and limitations are in
   [`../handoff.md`](../handoff.md) §5.
 - [`plan_devices.md`](plan_devices.md) — XNA devices and sensors.
-- [`plan_cna_devices.md`](plan_cna_devices.md) — `CNA::Devices` extensions.
+- `plan_cna_devices.md` — `CNA::Devices` extensions (`DEVICES-CNA-000`..`012`, 2026-07-07), all
+  closed; deleted on 2026-10-28 (Git history only). The module, its rules and every capability are
+  in [`../docs/devices-ext.md`](../docs/devices-ext.md).
 - [`plan_input.md`](plan_input.md) — input compatibility and stabilization.
 - `plan_keyboard_device_emulation.md` — INPUT-EMU-001/002, the off-by-default keyboard-driven
   accelerometer, window orientation and player-one GamePad (2026-09-28, 2026-10-03); deleted on
