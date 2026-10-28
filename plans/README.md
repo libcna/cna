@@ -147,6 +147,12 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   [`plan_gpu_test_isolation.md`](plan_gpu_test_isolation.md). Comments cite its rows as
   "Vulkan parity VKPAR-NNNN".
 - [`plan_dx9.md`](plan_dx9.md) — Direct3D 9.
+- `plan_fullscreen_regressions.md` (`FULLSCREEN-001`) and `plan_directx9_fullscreen_motion.md`
+  (`FULLSCREEN-002`) — fullscreen presentation and DirectX9 loss/reset recovery found in Mobile
+  Eggbert, 2026-09-28 (museum follow-up 2026-10-22); their Vulkan and Canvas parts went with those
+  renderers. Deleted on 2026-10-28 (Git history only); the DirectX9 contract is pinned by
+  `directx9_frame_recovery_test.cpp`, `directx9_resize_state_test.cpp` and
+  `spritebatch_presentation_test.cpp`.
 - [`plan_headless.md`](plan_headless.md) — headless rendering.
 - [`plan_sdlgpu.md`](plan_sdlgpu.md) — SDL GPU.
 - [`plan_software.md`](plan_software.md) — CPU software rasterizer.
