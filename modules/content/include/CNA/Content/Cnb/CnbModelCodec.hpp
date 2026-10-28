@@ -11,7 +11,7 @@
 
 namespace CNA::Content::Cnb
 {
-    /** @brief Chunk identifiers defined by the `Model` asset schema (plans/plan_cnb.md `CNBF-071`). */
+    /** @brief Chunk identifiers defined by the `Model` asset schema (`CNBF-071`). */
     namespace CnbModelChunk
     {
         /** @brief `MDLH` -- flags and the counts every other chunk is cross-checked against. Mandatory, one. */
@@ -74,7 +74,7 @@ namespace CNA::Content::Cnb
 
     /**
      * @brief Encodes a decoded model description as a complete `.cnb` byte image
-     *        (plans/plan_cnb.md `CNBF-071`).
+     *        (`CNBF-071`).
      *
      * Vertex, index and morph data become their own chunks, aligned so a future memory-mapped
      * reader can address them directly; every descriptor table is a flat fixed-stride array;

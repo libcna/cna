@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-H013: `cna_tool_cnb_info`, the offline `.cnb` inspector and validator.
+// CNBF-H013: `cna_tool_cnb_info`, the offline `.cnb` inspector and validator.
 //
 // Two jobs, and the second is the one that earns the tool its place:
 //
@@ -20,8 +20,8 @@
 // prints comes from the container. That is a design check as much as a feature: anything this tool
 // cannot report is something the container failed to make self-describing.
 //
-// One thing it CANNOT do, stated because the opposite was once written down (plans/plan_cnb.md
-// CNBF-121): inspect a compressed `.cnb` without that codec. `CnbDocument::Parse()` refuses an
+// One thing it CANNOT do, stated because the opposite was once written down
+// (CNBF-121): inspect a compressed `.cnb` without that codec. `CnbDocument::Parse()` refuses an
 // unimplemented codec while reading the table of contents, before any chunk is decoded, so a build
 // without libzstd cannot open a Zstandard-compressed file at all. `CMET` and `XREF` are stored
 // uncompressed for size and speed, not to make codec-free inspection possible; that would need a
@@ -128,7 +128,7 @@ int main(int argc, char** argv)
             }
         }
 
-        // plans/plan_cnb.md CNBF-121: stored and logical size are separate columns, and the codec
+        // CNBF-121: stored and logical size are separate columns, and the codec
         // is named. With one "size" column a compressed chunk reported its packed length, so the
         // only tool that can describe a `.cnb` could not show that compression was in use at all,
         // nor by how much -- exactly the question the per-chunk `compression` field exists to

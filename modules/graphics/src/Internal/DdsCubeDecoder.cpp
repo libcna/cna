@@ -15,7 +15,7 @@ namespace CNA::Internal::Graphics
     namespace
     {
         // FNA's Texture.ParseDDS constants. Moved here verbatim from TextureCube.cpp along with
-        // the parsing that uses them (plans/plan_cnb.md CNBF-113); not one value was changed, because
+        // the parsing that uses them (CNBF-113); not one value was changed, because
         // the point of the move was to share the existing decoder, not to write a new one.
         constexpr std::uint32_t kDdsMagic        = 0x20534444;
         constexpr std::uint32_t kDdsHeaderSize   = 124;
@@ -32,7 +32,7 @@ namespace CNA::Internal::Graphics
         constexpr std::uint32_t kFourCcDxt5      = 0x35545844;
         // DDSCAPS2_CUBEMAP_POSITIVEX .. _NEGATIVEZ, contiguous from bit 10. This decoder reads six
         // faces unconditionally, so a file that declares only some of them is describing a
-        // different image than the one that will be read out of it (plans/plan_cnb.md CNBF-116).
+        // different image than the one that will be read out of it (CNBF-116).
         constexpr std::uint32_t kDdscaps2CubemapAllFaces = 0xFC00;
         // Every caps2 bit this decoder can account for. Anything else -- DDSCAPS2_VOLUME above
         // all -- changes what the payload after the header means.
@@ -70,7 +70,7 @@ namespace CNA::Internal::Graphics
         // Texture.CalculateDDSLevelSize. RGB888 DDS levels are tightly packed pixels; their masks,
         // rather than a guessed platform byte order, choose Rgb24 or Bgr24.
         //
-        // Computed in std::uint64_t rather than int (plans/plan_cnb.md CNBF-116). The block-count
+        // Computed in std::uint64_t rather than int (CNBF-116). The block-count
         // rounding `(w + 3) / 4` overflows a signed int for a width near INT32_MAX -- which is
         // undefined behaviour, not a large answer -- and the product with the block size overflows
         // long before that, producing a SMALL value that then passes the "is this many bytes still
@@ -89,8 +89,8 @@ namespace CNA::Internal::Graphics
             return ((width + 3u) / 4u) * ((height + 3u) / 4u) * blockSize;
         }
 
-        /// Refuses a header whose decoded size cannot even be counted (plans/plan_cnb.md
-        /// `CNBF-122`). Unreachable while the dimension ceiling stands; present so that raising
+        /// Refuses a header whose decoded size cannot even be counted
+        /// (`CNBF-122`). Unreachable while the dimension ceiling stands; present so that raising
         /// that ceiling produces a refusal rather than a wrapped total that passes the budget.
         [[noreturn]] void Overflow(const std::string& where)
         {
@@ -130,7 +130,7 @@ namespace CNA::Internal::Graphics
         }
 
         // Read as the unsigned fields the format defines, and narrowed only after every bound
-        // below has been applied (plans/plan_cnb.md CNBF-116). Casting straight to int made
+        // below has been applied (CNBF-116). Casting straight to int made
         // 0xFFFFFFFF read as -1 and 0x7FFFFFFF read as two billion, and the arithmetic that
         // followed was signed.
         const std::uint32_t height = ReadU32LE(data + 12);
@@ -254,7 +254,7 @@ namespace CNA::Internal::Graphics
                 std::to_string(width) + "-texel face has at most " + std::to_string(maxLevels));
         }
 
-        // plans/plan_cnb.md CNBF-122: the aggregate DECODED size, computed from the validated
+        // CNBF-122: the aggregate DECODED size, computed from the validated
         // header alone before a single output vector is allocated and before any block is
         // decompressed. The dimension ceiling bounds ONE level of ONE face; six faces times a
         // whole mip chain is 8 times that at the same dimension, which at 16384 texels is about

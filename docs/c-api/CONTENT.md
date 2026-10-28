@@ -250,7 +250,7 @@ with `CNA_RESULT_IO` rather than being read by the wrong reader.
 ## The CNB content format is not reachable from this ABI yet
 
 CNA has a second compiled content format beside `.xnb`: **CNB** (`CNA::Content::Cnb`,
-`plans/plan_cnb.md`), a CNA-native container with its own schemas for textures, sprite fonts,
+`docs/cnb-format.md`), a CNA-native container with its own schemas for textures, sprite fonts,
 sound effects, media, curves, animation clips and models, its own compiler front ends
 (`cna_tool_source_to_cnb`, `cna_tool_cnj_to_cnb`, `cna_tool_gltf_to_cnb`) and its own
 `ContentManager` tier.

@@ -12,7 +12,7 @@ namespace CNA::Content::Cnb
 {
     /**
      * @brief Chunk identifiers defined by the `Song` and `Video` asset schemas
-     *        (plans/plan_cnb.md `CNBF-103B`).
+     *        (`CNBF-103B`).
      */
     namespace CnbMediaChunk
     {

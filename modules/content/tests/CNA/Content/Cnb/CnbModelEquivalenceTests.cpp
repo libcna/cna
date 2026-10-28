@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-075 (Phase E): the test that justifies the whole Model schema.
+// CNBF-075 (Phase E): the test that justifies the whole Model schema.
 //
 // It takes a REAL asset -- a real glTF fixture from the committed conformance corpus, converted by
 // the real cna_tool_gltf_to_cnj into a .cnj plus its binary sidecars -- compiles that into one
@@ -521,7 +521,7 @@ TEST(CnbModelEquivalenceTest, ARepresentativeSliceOfTheCorpusLoadsIdenticallyBot
 
 TEST(CnbModelEquivalenceTest, TheCompilerRefusesAModelUsingMaterialVariants)
 {
-    // plans/plan_cnb.md decision D9 puts glTF material variants outside the v1 Model schema. A
+    // docs/cnb-format.md decision D9 puts glTF material variants outside the v1 Model schema. A
     // compiler that quietly dropped them would turn a selectable multi-material asset into a
     // single-material one with no diagnostic, so it refuses by name instead.
     const std::filesystem::path corpus = std::filesystem::path("tests") / "assets" / "gltf";
@@ -544,7 +544,7 @@ TEST(CnbModelEquivalenceTest, TheCompilerRefusesAModelUsingMaterialVariants)
     {
         const std::string message = e.what();
         EXPECT_NE(message.find("material variant"), std::string::npos) << message;
-        EXPECT_NE(message.find("plans/plan_cnb.md"), std::string::npos) << message;
+        EXPECT_NE(message.find("docs/cnb-format.md"), std::string::npos) << message;
     }
 }
 

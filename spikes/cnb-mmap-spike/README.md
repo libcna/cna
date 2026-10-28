@@ -1,6 +1,6 @@
 # Would memory-mapping a `.cnb` make loading faster?
 
-`plans/plan_cnb.md` `CNBF-108`. The probe that answered **no**, and found the real bottleneck
+`CNBF-108`. The probe that answered **no**, and found the real bottleneck
 while doing it.
 
 ## What it proved

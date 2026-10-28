@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-102: the SpriteFont schema.
+// CNBF-102: the SpriteFont schema.
 //
 // A SpriteFont is an atlas plus four parallel tables, and the interesting failures are all in the
 // relationships between them rather than in any one table: arrays that disagree in length, a

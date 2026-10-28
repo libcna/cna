@@ -1,6 +1,6 @@
 # atomic-replace-spike
 
-`plans/plan_cnb.md` `CNBF-123`. Two probes that answer, by measurement rather than by reading,
+`CNBF-123`. Two probes that answer, by measurement rather than by reading,
 whether `tools/common/CnaToolAtomicWrite.hpp` actually does what it says on Windows.
 
 `CNBF-122` introduced that header with a comment claiming `std::filesystem::rename` "on every

@@ -13,7 +13,7 @@
 > public XNA type this plan adds is a façade, adapter, base-class compatibility layer or strongly
 > typed view over that engine. **No second pipeline, no second writer**: `plan_xnapipeline.md` §0
 > records what that mistake cost once, and `XnbArchitectureUniquenessTest` fails if a superseded
-> path returns. CNB (`plan_cnb.md`) is never weakened for XNB; the runtime XNB reader
+> path returns. CNB (`docs/cnb-format.md`) is never weakened for XNB; the runtime XNB reader
 > (`plan_xnb.md`) is not reopened; shader *compilation* stays with `plan_fx.md`.
 >
 > **Task IDs.** `XNAPP-###`, three digits, allocated in phase ranges (§32). Never reuse an ID;

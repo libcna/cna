@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// plans/plan_cnb.md CNBF-120: strict numeric parsing for CNA's content-tool command lines.
+// CNBF-120: strict numeric parsing for CNA's content-tool command lines.
 //
 // Header-only and shared by the tools rather than repeated in each of them, because the previous
 // per-tool `std::stoul`/`std::stof` calls were the same four defects written twice:

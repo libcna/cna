@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-090: keeps `docs/cnb-format.md` and the implementation from drifting apart.
+// CNBF-090: keeps `docs/cnb-format.md` and the implementation from drifting apart.
 //
 // A format specification that merely describes what someone believed the code did is worse than
 // no specification, because it will be trusted. This suite asserts the document's own numbers
@@ -145,7 +145,7 @@ TEST(CnbSpecConformanceTest, TheDocumentedAssetTypeIdentifiersMatchTheImplementa
     // written, whether or not a given build implements it.
     ExpectSpecContains(spec, "| 2 | Zstandard | **implemented**");
     ExpectSpecContains(spec, "checksum` covers the **stored** bytes");
-    // plans/plan_cnb.md CNBF-121: three statements the document got wrong before CNBF-105's
+    // CNBF-121: three statements the document got wrong before CNBF-105's
     // compression landed, or asserted the opposite of. Pinned here so they cannot drift back.
     ExpectSpecContains(spec, "0 = none, 2 = Zstandard");
     ExpectSpecContains(spec, "the chunk's **logical** size; equal to `storedSize` exactly when");
@@ -404,7 +404,7 @@ TEST(CnbSpecConformanceTest, TheAnnotatedHexExampleMatchesTheBytesTheWriterProdu
 
 TEST(CnbSpecConformanceTest, TheDocumentedCustomTypeRuleIsTheOneTheCodeEnforces)
 {
-    // plans/plan_cnb.md CNBF-H002/CNBF-H011. Textual scraping alone would let the document and the
+    // CNBF-H002/CNBF-H011. Textual scraping alone would let the document and the
     // implementation drift together, so each clause below is asserted against BEHAVIOUR as well as
     // against the sentence that promises it.
     const std::string spec = ReadSpec();
@@ -483,7 +483,7 @@ TEST(CnbSpecConformanceTest, TheDocumentedParentBeforeChildRuleIsTheOneTheCodeEn
 
 TEST(CnbSpecConformanceTest, TheDocumentedDispatchOrderIsTheOneTheCodeFollows)
 {
-    // plans/plan_cnb.md CNBF-H018. §7 now spells out the dispatch sequence, including the part that
+    // CNBF-H018. §7 now spells out the dispatch sequence, including the part that
     // is easy to get wrong when reading the code: the registry lookup happens BEFORE the
     // custom-name checks, so an unregistered custom identifier is reported as an unknown type
     // rather than as a name mismatch. Asserted behaviourally, because a sequence stated only in
@@ -525,7 +525,7 @@ TEST(CnbSpecConformanceTest, TheDocumentedDispatchOrderIsTheOneTheCodeFollows)
 
 TEST(CnbSpecConformanceTest, TheDocumentedFloatContractIsTheOneTheCodeEnforces)
 {
-    // plans/plan_cnb.md CNBF-H019. §2.1 makes three claims that the code must actually honour: the
+    // CNBF-H019. §2.1 makes three claims that the code must actually honour: the
     // representation is checked at COMPILE time, the container stores bit patterns verbatim
     // without canonicalising, and -0.0 is distinguishable from +0.0 in the bytes.
     const std::string spec = ReadSpec();
@@ -556,7 +556,7 @@ TEST(CnbSpecConformanceTest, TheDocumentedFloatContractIsTheOneTheCodeEnforces)
 
 TEST(CnbSpecConformanceTest, TheDocumentedTextureFormatTableMatchesTheImplementation)
 {
-    // plans/plan_cnb.md CNBF-101A-fmt. These numbers are in shipped files the moment a texture is
+    // CNBF-101A-fmt. These numbers are in shipped files the moment a texture is
     // compiled, and §16.4's whole point is that they cannot be derived from SurfaceFormat. So the
     // table is checked row by row against the code rather than trusted to stay in step.
     const std::string spec = ReadSpec();
@@ -623,7 +623,7 @@ TEST(CnbSpecConformanceTest, TheDocumentedTextureShapeRulesAreTheOnesTheCodeEnfo
 
 TEST(CnbSpecConformanceTest, TheDocumentDistinguishesSchemaFromProducerSupport)
 {
-    // plans/plan_cnb.md CNBF-109..113. "Supported" was one word covering four different claims,
+    // CNBF-109..113. "Supported" was one word covering four different claims,
     // and conflating them is how the tree ended up with ten schemas and three compilable types.
     // §15.1 keeps them apart; this pins that it still does, and that the one real gap is named.
     const std::string spec = ReadSpec();

@@ -818,7 +818,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto* raw = reinterpret_cast<const uint8_t*>(buf.data());
         const auto rawLen = buf.size();
 
-        // plans/plan_cnb.md CNBF-113: parsing and conversion live in the pure-CPU
+        // CNBF-113: parsing and conversion live in the pure-CPU
         // CNA::Internal::Graphics::DecodeDdsCube component so both this run-time route and the
         // headless CNB compiler share one implementation. The prefix keeps every diagnostic naming
         // this API rather than the helper.

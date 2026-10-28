@@ -29,11 +29,11 @@ namespace CNA::Content::Cnb
 
     /**
      * @brief Reads a `Model` `.cnj` document, and every binary sidecar it names, into the neutral
-     *        CnbModelData the compiler then encodes (plans/plan_cnb.md `CNBF-073`).
+     *        CnbModelData the compiler then encodes (`CNBF-073`).
      *
      * This is the compiler's own front end, and it is the one place in the CNB implementation that
      * re-reads a `.cnj` shape rather than going through the runtime reader that already
-     * understands it. That is deliberate and its reasons are recorded in `plans/plan_cnb.md`
+     * understands it. That is deliberate and its reasons are recorded in `docs/cnb-format.md`
      * decision `D9`: `ModelTypeReader` builds real `VertexBuffer`/`IndexBuffer`/`Effect` objects as
      * it parses, so reusing it would require a `GraphicsDevice` -- and compiling content must not
      * need a window, a GPU or a renderer. The drift risk that creates is pinned by
@@ -41,7 +41,7 @@ namespace CNA::Content::Cnb
      * resulting models.
      *
      * Deliberately refused rather than silently dropped: material variants
-     * (`materialVariantNames`/`variantOf`/`materialVariant`). See `plans/plan_cnb.md` decision `D9`
+     * (`materialVariantNames`/`variantOf`/`materialVariant`). See `docs/cnb-format.md` decision `D9`
      * for why they are out of the v1 Model schema.
      *
      * @param cnjPath     Filesystem path of the `Model` `.cnj` document.

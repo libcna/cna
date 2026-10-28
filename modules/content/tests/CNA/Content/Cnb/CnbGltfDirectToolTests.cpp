@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-106: direct glTF -> .cnb.
+// CNBF-106: direct glTF -> .cnb.
 //
 // The property that matters is not "the tool runs". It is that the direct route and the two-step
 // route produce the SAME BYTES -- because the requirement behind this task was never a second
@@ -259,7 +259,7 @@ TEST(CnbGltfDirectToolTest, KeepCnjReportsAFailedCopyInsteadOfSucceeding)
 
 TEST(CnbGltfDirectToolTest, AFailingRunPreservesAnExistingOutputAndLeavesNoPartialFile)
 {
-    // plans/plan_cnb.md CNBF-122. The tool wrote each .cnb by opening the destination with the
+    // CNBF-122. The tool wrote each .cnb by opening the destination with the
     // implicit `trunc`, so the previous build's output was gone the moment the file was opened
     // rather than when the new one was finished. It now writes a sibling temporary and renames it.
     //

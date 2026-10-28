@@ -128,7 +128,7 @@ namespace Microsoft::Xna::Framework::Content
         };
 
         // ---------------------------------------------------------------------------
-        // Compiled .cnb SoundEffect loader (plans/plan_cnb.md CNBF-103A)
+        // Compiled .cnb SoundEffect loader (CNBF-103A)
         //
         // Boxed as a shared_ptr rather than by value, and not for the reason Texture3D is:
         // SoundEffect is MOVE-ONLY, and std::any requires its contained type to be copy
@@ -209,7 +209,7 @@ namespace Microsoft::Xna::Framework::Content
             return LoadXnbAsset<Audio::SoundEffect>(xnbBytes, xnbCandidate, assetName);
         }
 
-        // plans/plan_cnb.md CNBF-103A. This tier was MISSING: because SoundEffect has its own
+        // CNBF-103A. This tier was MISSING: because SoundEffect has its own
         // Load<> specialisation, it never ran the generic template's .cnb step, so a
         // SoundEffect.cnb would have fallen straight through to the loose-file reader and the
         // documented precedence (xnb > cnb > literal > cnj > loose) would have held for every

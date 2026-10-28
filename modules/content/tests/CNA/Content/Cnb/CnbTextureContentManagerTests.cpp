@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-101A/B/C: the texture schemas as seen from the outside.
+// CNBF-101A/B/C: the texture schemas as seen from the outside.
 //
 // CnbTextureCodecTests covers bytes-in/bytes-out. This file covers the half that needs a real
 // GraphicsDevice: that a texture .cnb actually reaches ContentManager::Load<T>(), produces a

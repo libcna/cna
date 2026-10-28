@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-H013: the `.cnb` inspector's contract, which is its stdout and its exit code
+// CNBF-H013: the `.cnb` inspector's contract, which is its stdout and its exit code
 // -- neither of which a library call exercises, so the real executable is spawned.
 //
 // The tool matters beyond convenience: `--refs` is how a build script asks what a compiled asset
@@ -79,8 +79,8 @@ namespace
     ///
     /// @p alsoStderr folds the tool's diagnostics into the same capture. Off by default, so the
     /// output-shape assertions below stay about stdout alone; a test aimed at a REFUSAL turns it
-    /// on, because the reason a refusal gives is the thing being tested (plans/plan_cnb.md
-    /// `CNBF-121`).
+    /// on, because the reason a refusal gives is the thing being tested
+    /// (`CNBF-121`).
     int RunInfo(const std::vector<std::string>& args, std::string& output,
                 bool alsoStderr = false)
     {

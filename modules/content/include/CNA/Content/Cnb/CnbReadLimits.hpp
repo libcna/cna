@@ -6,7 +6,7 @@
 namespace CNA::Content::Cnb
 {
     /**
-     * @brief Sanity bounds consulted by every count-driven `.cnb` read (plans/plan_cnb.md `CNBF-003`).
+     * @brief Sanity bounds consulted by every count-driven `.cnb` read (`CNBF-003`).
      *
      * A correctly bounds-checked binary reader can still be told, by one corrupted or adversarial
      * count field, to allocate an enormous buffer before any further validation gets a chance to
@@ -31,7 +31,7 @@ namespace CNA::Content::Cnb
          * @brief Largest total of every chunk's **logical** (post-decompression) size, in bytes.
          *
          * The per-chunk ceilings alone do not bound a file's total expansion
-         * (plans/plan_cnb.md `CNBF-114`). `maxChunkSize` caps one chunk and `maxChunkCount` caps how
+         * (`CNBF-114`). `maxChunkSize` caps one chunk and `maxChunkCount` caps how
          * many there are, so their product -- 24 PiB at the defaults -- is what a reader without
          * this limit would be willing to allocate for a file of a few kilobytes of individually
          * legal compressed frames. Every chunk counts toward the total, compressed or not, so the

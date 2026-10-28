@@ -70,7 +70,7 @@ namespace CNA::Content::Cnb
         }
 
         /// Records a file whose contents are now inside the `.cnb`, under the name the `.cnj`
-        /// itself used (plans/plan_cnb.md `CNBF-118`).
+        /// itself used (`CNBF-118`).
         ///
         /// `CnjToCnbResult::absorbedFiles` documents "paths as they were written in the source
         /// `.cnj`", and this used to record `filename()` instead -- so `art/hero.png` and
@@ -259,7 +259,7 @@ namespace CNA::Content::Cnb
 
         const std::string json = ReadWholeTextFile(cnjPath);
         const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
-        // plans/plan_cnb.md CNBF-118: the ceiling is PER TYPE, and it is the same ceiling that
+        // CNBF-118: the ceiling is PER TYPE, and it is the same ceiling that
         // type's runtime `.cnj` reader applies.
         //
         // A flat ceiling of 2 was applied to every type, and it was only ever right for `Model` --
@@ -335,7 +335,7 @@ namespace CNA::Content::Cnb
             return result;
         }
 
-        // plans/plan_cnb.md CNBF-111. Everything below is compiled through the headless pure-data
+        // CNBF-111. Everything below is compiled through the headless pure-data
         // importers: no GraphicsDevice, no audio device. A texture .cnj names an image, a
         // SpriteFont .cnj names an atlas, a SoundEffect .cnj names a WAV -- and each of those is
         // resolved with the SAME containment rule the runtime readers use, so a compiler cannot be

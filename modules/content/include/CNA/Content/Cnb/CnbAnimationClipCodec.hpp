@@ -15,7 +15,7 @@ namespace CNA::Content::Cnb
 {
     /**
      * @brief Chunk identifiers defined by the `AnimationClip` asset schema
-     *        (plans/plan_cnb.md `CNBF-050`).
+     *        (`CNBF-050`).
      */
     namespace CnbAnimationClipChunk
     {

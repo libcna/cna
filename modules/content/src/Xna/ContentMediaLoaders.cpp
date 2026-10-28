@@ -120,7 +120,7 @@ namespace Microsoft::Xna::Framework::Content
 
 
         // ---------------------------------------------------------------------------
-        // Compiled .cnb Song and Video loaders (plans/plan_cnb.md CNBF-103B)
+        // Compiled .cnb Song and Video loaders (CNBF-103B)
         //
         // Both are metadata plus a streaming reference, so what these do is resolve the reference
         // to a real path and hand it to the runtime type's trusted-metadata constructor. The

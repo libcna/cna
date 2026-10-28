@@ -190,8 +190,8 @@ namespace Microsoft::Xna::Framework::Content
             }
         }
 
-        // Applies a colour key already read by CNA::Internal::ReadCnjColorKey (plans/plan_cnb.md
-        // CNBF-118). The reading of the member itself lives there, shared with the .cnj -> .cnb
+        // Applies a colour key already read by CNA::Internal::ReadCnjColorKey
+        // (CNBF-118). The reading of the member itself lives there, shared with the .cnj -> .cnb
         // compiler, so the two routes cannot disagree about which pixels a document keys out.
         void ApplyColorKey(Graphics::Texture2D& texture, const std::array<std::uint8_t, 3>& colorKey)
         {
@@ -312,7 +312,7 @@ namespace Microsoft::Xna::Framework::Content
                 throw ContentLoadException(
                     "The .cnb texture '" + assetName + "' offers only " + offered +
                     ", and this build can upload none of them. CNB texture schema 1 encodes Rgba8; "
-                    "see plans/plan_cnb.md CNBF-101A.");
+                    "see docs/cnb-format.md §16.");
             }
             return data.representations[index];
         }

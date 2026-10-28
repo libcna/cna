@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-108: would memory-mapping a .cnb actually make loading faster?
+// CNBF-108: would memory-mapping a .cnb actually make loading faster?
 //
 // The task says to benchmark before implementing, and names the reason to be sceptical: a
 // VertexBuffer still has to be uploaded CPU->GPU, so mmap is not automatically zero-copy to the

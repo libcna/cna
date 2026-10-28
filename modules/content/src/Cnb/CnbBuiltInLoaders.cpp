@@ -21,7 +21,7 @@ namespace CNA::Content
         // each construct a runtime object needing a GraphicsDevice or the ContentManager itself,
         // so they register from ContentManager::RegisterBuiltinLoaders() where those helpers live.
         // This function is therefore NOT "every built-in", and its documentation says so
-        // (plans/plan_cnb.md CNBF-119).
+        // (CNBF-119).
         RegisterBuiltIn(Cnb::CnbAssetTypeId::Curve, "Microsoft.Xna.Framework.Curve",
                         [](const Cnb::CnbDocument& document,
                            Microsoft::Xna::Framework::Content::ContentManager&,

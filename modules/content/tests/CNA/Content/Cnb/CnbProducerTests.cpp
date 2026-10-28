@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-109/110/111/112: the CNB producer paths.
+// CNBF-109/110/111/112: the CNB producer paths.
 //
 // A codec round trip proves a codec talks to itself. These tests prove the PRODUCERS are useful:
 // a real PNG becomes a Texture2D someone can load and get the same pixels from, a real WAV becomes
@@ -855,7 +855,7 @@ TEST(CnbProducerTest, OddSizedChunksAreWalkedThroughTheirRiffPadByte)
 // plans/plan_xna_sample_xnb_sweep.md XNASWEEP-192: the RIFF header's declared length bounds
 // nothing, and the four values it refuses are the only four. Measured on the genuine `WavImporter`
 // (tests/reference/xna40/audio/audio-content-oracle.json, `wav/riff-size` and
-// `wav/riff-size-threshold`), which is what replaced the stricter reading `plans/plan_cnb.md`
+// `wav/riff-size-threshold`), which is what replaced the stricter reading
 // CNBF-117 chose before it had been measured. SAMPLE-145's six `Whoosh` WAVs are the corpus's own
 // case: each declares a length 68 bytes short of the file, exactly the `smpl` chunk somebody
 // inserted after that length was computed, and XNA built all six.
@@ -989,7 +989,7 @@ TEST(CnbProducerTest, ExtensibleFormatIsAcceptedOnlyForARealKsDataFormatSubtype)
 
 TEST(CnbProducerTest, AnExtensibleFmtMustDeclareAnExtensionThatFitsInsideItsChunk)
 {
-    // plans/plan_cnb.md CNBF-122. `chunkSize >= 40` proves the 22 extension bytes this importer
+    // CNBF-122. `chunkSize >= 40` proves the 22 extension bytes this importer
     // READS are present; it says nothing about the length the header itself declares. A cbSize of
     // 4000 in a 40-byte 'fmt ' describes 4018 bytes of WAVEFORMATEXTENSIBLE that are not there,
     // and every other field in that same header was then believed.
@@ -1018,7 +1018,7 @@ TEST(CnbProducerTest, AnExtensibleFmtMustDeclareAnExtensionThatFitsInsideItsChun
 
 TEST(CnbProducerTest, ADeclaredSmplLoopTableMustFitTheSmplChunk)
 {
-    // plans/plan_cnb.md CNBF-122. Only the FIRST loop entry is consumed, so only the first was
+    // CNBF-122. Only the FIRST loop entry is consumed, so only the first was
     // required to fit -- but the loop count is read out of the same header whose first entry is
     // then believed, and a count the chunk cannot hold means the two disagree. Checking one number
     // and not the other is how a plausible wrong loop region survives.

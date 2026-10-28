@@ -191,7 +191,7 @@ namespace CNA::Content::Cnb
         CnbByteReader toc(tocBytes, tocWhere, limits);
         doc.chunks_.reserve(chunkCount);
         std::uint64_t previousOffset = 0u;
-        // plans/plan_cnb.md CNBF-114. Accumulated as the entries are read, so the aggregate is known
+        // CNBF-114. Accumulated as the entries are read, so the aggregate is known
         // before a single byte is allocated for any chunk's contents. Every entry counts, whatever
         // its codec: for an uncompressed file the sum is bounded by the file's own size anyway
         // (chunks do not overlap), and keeping the rule uniform means there is one invariant to
@@ -230,7 +230,7 @@ namespace CNA::Content::Cnb
                     entryWhere + " (" + ChunkIdToString(entry.type) +
                     ") has a non-zero reserved field.");
             }
-            // plans/plan_cnb.md CNBF-105. A codec this build does not implement is refused here,
+            // CNBF-105. A codec this build does not implement is refused here,
             // by name, exactly as every codec was before one landed -- so a build without the
             // library behaves as it always did rather than failing somewhere further in.
             entry.compression = static_cast<CnbCompression>(compression);
@@ -305,7 +305,7 @@ namespace CNA::Content::Cnb
             // Through CheckedAdd, and against a configured ceiling, because neither of the
             // per-entry limits bounds this: `maxChunkCount * maxChunkSize` is 24 PiB at the
             // defaults, which is what a few kilobytes of individually legal compressed frames
-            // could otherwise ask a reader to allocate (plans/plan_cnb.md CNBF-114).
+            // could otherwise ask a reader to allocate (CNBF-114).
             totalUncompressed =
                 CheckedAdd(totalUncompressed, entry.uncompressedSize,
                            where + " total unpacked chunk size");

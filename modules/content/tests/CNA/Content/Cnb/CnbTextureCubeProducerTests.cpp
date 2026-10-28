@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-113: the TextureCube producer, and the shared DDS decoder it required.
+// CNBF-113: the TextureCube producer, and the shared DDS decoder it required.
 //
 // Correctness here is asserted against the DECODER'S CPU OUTPUT, not against GPU readback. Cube
 // mip readback is not available on every renderer, so a test that only checked GetData() would be

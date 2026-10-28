@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-120: cna_tool_source_to_cnb, exercised as the real executable.
+// CNBF-120: cna_tool_source_to_cnb, exercised as the real executable.
 //
 // It was the only CNB tool with no test wiring at all, so nothing had ever run the program: its
 // argument handling, its exit codes and the files it leaves behind were entirely unexercised. That
@@ -477,7 +477,7 @@ namespace
 
 TEST(CnbSourceToolTest, AFailingRunLeavesAnExistingOutputByteIdenticalAndNoTemporary)
 {
-    // plans/plan_cnb.md CNBF-122. The tool opened its destination with the implicit `trunc`, so
+    // CNBF-122. The tool opened its destination with the implicit `trunc`, so
     // the previous build's output was destroyed at the moment the file was opened rather than at
     // the moment the new one was complete. It now writes a sibling temporary and renames it, so
     // the visible result is the complete new file or the untouched old one.
@@ -627,7 +627,7 @@ TEST(CnbSourceToolTest, WriteFileAtomicallyPreservesTheDestinationWhenItCannotFi
 
 TEST(CnbSourceToolTest, WriteFileAtomicallyStepsOverATakenTemporaryNameWithoutClobberingIt)
 {
-    // plans/plan_cnb.md CNBF-123. The helper walks 64 candidate temporary names and takes the
+    // CNBF-123. The helper walks 64 candidate temporary names and takes the
     // first free one, and the create is EXCLUSIVE so that "is this free?" and "claim it" are one
     // operation. Two things follow that were asserted nowhere: a file already sitting on the first
     // candidate name must survive untouched, and the write must still succeed by moving on.

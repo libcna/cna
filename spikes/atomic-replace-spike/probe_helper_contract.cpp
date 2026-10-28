@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-123: run tools/common/CnaToolAtomicWrite.hpp's OWN contract on Windows.
+// CNBF-123: run tools/common/CnaToolAtomicWrite.hpp's OWN contract on Windows.
 //
 // This compiles the real header -- not a copy of it, not a description of it -- for a Windows
 // target and exercises every clause of WriteFileAtomically()'s documented contract. The Windows

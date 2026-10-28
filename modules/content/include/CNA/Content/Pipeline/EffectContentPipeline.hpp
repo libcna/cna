@@ -101,7 +101,7 @@ namespace CNA::Content::Pipeline
      * @brief Registers the compiled-effect source route.
      *
      * Only the XNB writer is registered for it, and deliberately so: the CNB container has no
-     * `Effect` schema (`plans/plan_cnb.md` reserves the identifier and explains why -- CNA has
+     * `Effect` schema (`docs/cnb-format.md` §15 reserves the identifier and says why -- CNA has
      * many renderers, and a `.cnb` carrying one API's shader bytecode would be useless on the
      * others). A `.cnb` build of a `.fxb` therefore fails to resolve a writer rather than
      * producing a file no renderer could use.

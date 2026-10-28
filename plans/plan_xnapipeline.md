@@ -11,8 +11,8 @@
 >   (importer → processor → writer → **CNB**), including the CLI, incremental manifests and the
 >   `.cna-content.json` project format. This plan **extends** that pipeline with a second output
 >   format; it does not fork it.
-> * [`plan_cnb.md`](plan_cnb.md) owns the frozen native CNB format. XNB compatibility must never
->   weaken or constrain CNB.
+> * [`docs/cnb-format.md`](../docs/cnb-format.md) specifies the frozen native CNB format. XNB
+>   compatibility must never weaken or constrain CNB.
 > * [`plan_fx.md`](plan_fx.md) owns CNA's FX/effect infrastructure. Effect **bytecode
 >   serialization** belongs here; **shader compilation** stays there.
 >
@@ -450,7 +450,7 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 |---|---|---|
 | `XNAP-01` | Audit HEAD against the reported baseline; record what exists and what does not (§0). | [x] |
 | `XNAP-02` | Extract and record the verified reader-name/type-table evidence from every committed fixture (§2.5). | [x] |
-| `XNAP-03` | Create this plan as the authoritative living record, with explicit boundaries against `plan_xnb.md`, `plan_content_pipeline.md`, `plan_cnb.md`, `plan_fx.md`. | [x] |
+| `XNAP-03` | Create this plan as the authoritative living record, with explicit boundaries against `plan_xnb.md`, `plan_content_pipeline.md`, `plan_cnb.md` (deleted on 2026-10-28; CNB is `docs/cnb-format.md`), `plan_fx.md`. | [x] |
 | `XNAP-04` | Record and maintain the exact test baseline (§0.4), separating pre-existing environmental failures from regressions. | [x] |
 | `XNAP-05` | Audit the environment for an XNA 4.0 oracle; record the negative result honestly (§0.3). | [x] |
 
@@ -658,7 +658,7 @@ Microsoft's legacy `fxc` at profile `fx_2_0`, and it cannot be vendored here.
   texture and refuses a compressed `textureFormat` with a message naming the configuration that
   would provide one, rather than quietly writing uncompressed pixels.
 * **A block-compressed texture has no `.cnb`.** CNB texture schema 1 is frozen to `Rgba8`
-  (`plans/plan_cnb.md` `CNBF-101A`). A CNB build that asks for compression keeps the uncompressed
+  (`CNBF-101A`). A CNB build that asks for compression keeps the uncompressed
   pixels and says so through the pipeline's warning channel; it does not fail the build over a
   format the other container would have accepted. `ContentProcessorContext::OutputFormat()` was
   added so a processor can see the difference and take a documented fallback rather than failing

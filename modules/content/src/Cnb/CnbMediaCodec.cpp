@@ -40,7 +40,7 @@ namespace CNA::Content::Cnb
                 Fail(label, "names an empty media file reference.");
             }
             // The schema specifies both of these (docs/cnb-format.md §19.1), and both were
-            // written and neither was read back (plans/plan_cnb.md `CNBF-119`). `flags` is
+            // written and neither was read back (`CNBF-119`). `flags` is
             // reserved, so a set bit means the file was written to a schema this build does not
             // know. `expectedAssetTypeId` must be Invalid because the target is a media file on
             // disk -- an .ogg, an .mp4 -- not a CNA asset with a CNB type identifier; a file

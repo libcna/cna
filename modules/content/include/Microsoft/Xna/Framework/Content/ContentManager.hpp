@@ -504,7 +504,7 @@ namespace Microsoft::Xna::Framework::Content
 
         /**
          * @brief CNAEXT: registers a loader for a game-defined `.cnb` asset type
-         *        (plans/plan_cnb.md `CNBF-082`).
+         *        (`CNBF-082`).
          *
          * CNB's extension model is deliberately much smaller than XNB's: a `.cnb` header carries
          * one `u32` asset type identifier, and this call says which C++ type that identifier
@@ -523,7 +523,7 @@ namespace Microsoft::Xna::Framework::Content
          * types whose 31-bit hashes collide from decoding each other's content.
          *
          * **The identifier must be in the custom range** (`>= 0x80000000`), which is what
-         * `CnbAssetTypeIdFromName()` mints (plans/plan_cnb.md `CNBF-119`). A game extension has no
+         * `CnbAssetTypeIdFromName()` mints (`CNBF-119`). A game extension has no
          * business claiming `Texture2D`'s identifier or one of the range CNA has reserved for its
          * own future types: the built-in loaders are installed by `ContentManager` itself, and
          * whether a game's factory or CNA's ended up in the table would have depended on which ran
@@ -533,7 +533,7 @@ namespace Microsoft::Xna::Framework::Content
          *
          * There is also no way *around* this call: `CnbLoaderRegistry::Register()` applies the
          * same rule, and CNA's own built-in route is private to `CnbLoaderRegistry` and reachable
-         * only by `ContentManager` (plans/plan_cnb.md `CNBF-122`).
+         * only by `ContentManager` (`CNBF-122`).
          *
          * @param assetTypeId       The identifier written into the `.cnb` header. Must be a custom
          *                          identifier, `CnbAssetTypeId::CustomRangeFirst` or above.
@@ -556,7 +556,7 @@ namespace Microsoft::Xna::Framework::Content
             }
             // The custom-range rule itself is enforced once, by CnbLoaderRegistry::Register(),
             // which is the game-extension route and accepts nothing else -- there is deliberately
-            // no second copy of it here (plans/plan_cnb.md `CNBF-119`, `CNBF-122`).
+            // no second copy of it here (`CNBF-119`, `CNBF-122`).
             CNA::Content::CnbLoaderRegistry::Register(
                 assetTypeId, canonicalTypeName,
                 [factory](const CNA::Content::Cnb::CnbDocument& document, ContentManager& cm,
@@ -632,7 +632,7 @@ namespace Microsoft::Xna::Framework::Content
             }
 
             // .cnb ranks immediately below .xnb and above everything CNA can compile FROM
-            // (plans/plan_cnb.md CNBF-081, decision D8): a `.cnb` is CNA's own compiled artifact, so
+            // (CNBF-081, decision D8): a `.cnb` is CNA's own compiled artifact, so
             // it must win over the loose `.cnj`/native sources it was produced from, while still
             // yielding to a genuine externally-produced `.xnb`. Like the `.xnb` tier above it,
             // this sits ahead of the per-T reader lookup, because a `.cnb` is self-describing --
@@ -768,10 +768,10 @@ namespace Microsoft::Xna::Framework::Content
 
         /**
          * @brief Loads @p assetName from the compiled `.cnb` file at @p cnbPath
-         *        (plans/plan_cnb.md `CNBF-081`).
+         *        (`CNBF-081`).
          *
          * The container is parsed and fully validated first (`CnbDocument::Parse` enforces every
-         * structural invariant in `plans/plan_cnb.md` §4), then the loader registered for the file's
+         * structural invariant in `docs/cnb-format.md` §12.2), then the loader registered for the file's
          * own asset type identifier produces the object.
          *
          * @tparam T       Requested asset type; must match exactly what the registered loader
@@ -796,7 +796,7 @@ namespace Microsoft::Xna::Framework::Content
             // Through ResolveForDocument's checks rather than a bare numeric lookup: for a CUSTOM
             // asset type the identifier is only a 31-bit hash, so a numeric match does not prove
             // the file is that type. The resolver additionally requires the file's own canonical type
-            // name to equal the registered one (plans/plan_cnb.md CNBF-H002). It hands back a COPY of
+            // name to equal the registered one (CNBF-H002). It hands back a COPY of
             // the loader, so nothing that registers or withdraws a loader on another thread can
             // pull it out from under the call below (CNBF-H003).
             const CNA::Content::CnbLoaderRegistry::LoaderFn loader =

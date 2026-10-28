@@ -22,7 +22,7 @@ namespace CNA::Content
     namespace
     {
         /// Who a registration belongs to. A file-local detail: the CNA/game boundary is a
-        /// compile-time one (plans/plan_cnb.md `CNBF-122`), so this never appears in the public
+        /// compile-time one (`CNBF-122`), so this never appears in the public
         /// header and no caller can name it -- which is exactly what stops a game asking for
         /// `CnaBuiltIn`.
         enum class Ownership
@@ -108,7 +108,7 @@ namespace CNA::Content
     namespace
     {
         /// The one implementation both registration routes share. `ownership` is decided by WHICH
-        /// entry point was called, never by the caller (plans/plan_cnb.md `CNBF-122`).
+        /// entry point was called, never by the caller (`CNBF-122`).
         /// `onlyWhileDeclared` installs a declared built-in only if it is still declared and not
         /// removed, checked under the same lock as the installation: a Remove() between a separate
         /// check and the installation would be undone by it.
@@ -128,7 +128,7 @@ namespace CNA::Content
                 throw std::invalid_argument(who + ": canonicalTypeName must not be empty.");
             }
             if (!loader) { throw std::invalid_argument(who + ": loader must not be empty."); }
-            // plans/plan_cnb.md CNBF-119/CNBF-122: the identifier RANGE and the entry point have to
+            // CNBF-119/CNBF-122: the identifier RANGE and the entry point have to
             // agree before anything else is considered. CNA assigns and freezes
             // 0x00000001-0x3FFFFFFF and reserves 0x40000000-0x7FFFFFFF for itself; a game mints one
             // at 0x80000000 or above with CnbAssetTypeIdFromName(). The two routes partition the

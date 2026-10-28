@@ -12,7 +12,7 @@ namespace CNA::Content::Cnb
 {
     /**
      * @brief Emits `.cnb` primitives in their canonical little-endian encoding
-     *        (plans/plan_cnb.md `CNBF-007`).
+     *        (`CNBF-007`).
      *
      * The exact counterpart of CnbByteReader: integers are decomposed into individual bytes rather
      * than `memcpy`'d, and floats go through `std::bit_cast` to an integer first, so the bytes

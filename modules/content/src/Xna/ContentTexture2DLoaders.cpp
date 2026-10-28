@@ -128,7 +128,7 @@ namespace Microsoft::Xna::Framework::Content
                         path, cm.getRootDirectoryProperty(), envelope.sourceFile);
                 Graphics::Texture2D result = cm.Load<Graphics::Texture2D>(resolved.logicalName);
 
-                // plans/plan_cnb.md CNBF-118: through the shared canonical reader, not a substring
+                // CNBF-118: through the shared canonical reader, not a substring
                 // scan with std::stoi. The scan found "colorKey" anywhere in the file including
                 // inside another string, read digits without checking they belonged to an array,
                 // and threw std::out_of_range rather than a ContentLoadException on a large
@@ -148,7 +148,7 @@ namespace Microsoft::Xna::Framework::Content
 
 
         // ---------------------------------------------------------------------------
-        // Compiled .cnb texture loaders (plans/plan_cnb.md CNBF-101A/B/C)
+        // Compiled .cnb texture loaders (CNBF-101A/B/C)
         //
         // Same split as the Model loader above: the bytes-to-CnbTextureData half is in
         // modules/content/src/Cnb/CnbTextureCodec.cpp and needs no GraphicsDevice, and only the

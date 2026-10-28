@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-072 (Phase E tests): the Model asset schema's encode/decode half, which is
+// CNBF-072 (Phase E tests): the Model asset schema's encode/decode half, which is
 // deliberately free of any GraphicsDevice so the whole compiled-Model contract can be tested with
 // no display, no renderer and no GPU. Round trip first, then the compiled-shape invariants the
 // format exists for (declared geometry sizes, interned strings, deduplicated materials, external
@@ -810,7 +810,7 @@ TEST(CnbModelCodecTest, DecoderRejectsAnOutOfRangeAlphaModeOrTexCoordSet)
 }
 
 // --------------------------------------------------------------------------------------------
-// Schema-level allocation ceilings (plans/plan_cnb.md CNBF-092 review)
+// Schema-level allocation ceilings (CNBF-092 review)
 // --------------------------------------------------------------------------------------------
 
 TEST(CnbModelCodecTest, DecoderRefusesAMorphTargetCountAboveTheSchemaCeiling)

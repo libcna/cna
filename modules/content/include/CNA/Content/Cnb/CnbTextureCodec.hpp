@@ -15,7 +15,7 @@ namespace CNA::Content::Cnb
 {
     /**
      * @brief Chunk identifiers shared by the `Texture2D`, `TextureCube` and `Texture3D` schemas
-     *        (plans/plan_cnb.md `CNBF-101A`, `CNBF-101B`, `CNBF-101C`).
+     *        (`CNBF-101A`, `CNBF-101B`, `CNBF-101C`).
      *
      * The three asset types differ only in how the header's `faceCount` and `depth` are
      * constrained, so they share one chunk layout rather than repeating it three times. The asset
@@ -243,7 +243,7 @@ namespace CNA::Content::Cnb
 
     /**
      * @brief Appends a 2D texture's `TEXH`/`TEXR`/`TEXD` chunks to a document being written for a
-     *        *different* asset type (plans/plan_cnb.md `CNBF-102`).
+     *        *different* asset type (`CNBF-102`).
      *
      * This is what lets `SpriteFont` embed its glyph atlas without a second copy of the texture
      * layout: the atlas is stored with exactly the chunks, strides, alignment and validation a

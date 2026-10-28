@@ -1,6 +1,6 @@
 # Memory-mapped `.cnb` access: what the benchmark said, and why the answer was "no"
 
-`plans/plan_cnb.md` `CNBF-108`. Measured 2026-08-27 on the development machine (AMD, NVMe,
+`CNBF-108`. Measured 2026-08-27 on the development machine (AMD, NVMe,
 Debian 13, gcc `-O2`). Reproduction recipe in §5.
 
 The task was: *"The `alignment` field and 16-byte geometry alignment exist for it. But a

@@ -498,7 +498,7 @@ namespace CNA::Internal
                 }
 
                 // Through std::strtod with an explicit range check rather than std::stod
-                // (plans/plan_cnb.md `CNBF-118`). `1e400` is valid JSON number GRAMMAR, and
+                // (`CNBF-118`). `1e400` is valid JSON number GRAMMAR, and
                 // std::stod answers it by throwing std::out_of_range -- an exception type nothing
                 // in the content pipeline catches, so it escaped past every
                 // `catch (const ContentLoadException&)` a game has. RFC 8259 §6 explicitly allows

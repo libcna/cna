@@ -1,6 +1,6 @@
 # CNB chunk compression: what the measurements actually say
 
-`plans/plan_cnb.md` `CNBF-105`. Measured 2026-08-27 on the development machine
+`CNBF-105`. Measured 2026-08-27 on the development machine
 (AMD, NVMe, Debian 13, gcc, `-O2`). Every number here is reproducible with the recipe in §5.
 
 The task was written as "measure before choosing, and the honest answer may be *not worth it*".

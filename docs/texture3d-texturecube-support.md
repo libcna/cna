@@ -113,7 +113,7 @@ compressed blocks to a real compressed GPU format. That is a deliberate deviatio
 compressed-texture transfers, but this portable stream route still normalizes its supported source
 encodings before upload.
 
-Since `plans/plan_cnb.md` `CNBF-113`, the parsing and decompression live in
+Since `CNBF-113`, the parsing and decompression live in
 `CNA::Internal::Graphics::DecodeDdsCube` — a pure-CPU component needing no `GraphicsDevice` — and
 `DDSFromStreamEXT` is a thin consumer that decodes and uploads. The same decoder is what lets the
 headless CNB content compiler produce a `TextureCube.cnb`. Behaviour is unchanged in both

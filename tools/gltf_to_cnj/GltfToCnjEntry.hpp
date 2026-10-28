@@ -25,7 +25,7 @@ namespace CNA::Tools::Gltf
 
     /**
      * @brief Runs the glTF -> `.cnj` conversion that `cna_tool_gltf_to_cnj` performs
-     *        (plans/plan_cnb.md `CNBF-106`).
+     *        (`CNBF-106`).
      *
      * Declared so a second front-end can reuse the **same orchestration**, in the same translation
      * unit, rather than growing a second interpretation of glTF. That is the whole architectural

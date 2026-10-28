@@ -488,14 +488,14 @@ namespace CNA::Content::Cnb
         CnbModelFromCnjResult result;
         std::set<std::string> externalReferences;
 
-        // plans/plan_cnb.md CNBF-084: material variants are outside the v1 Model schema. Refusing by
+        // CNBF-084: material variants are outside the v1 Model schema. Refusing by
         // name beats compiling an asset into something quietly less capable than its source.
         if (root.FindMember("materialVariantNames") != nullptr)
         {
             throw ContentLoadException(
                 "cnj-to-cnb: Model '" + cnjPath + "' uses glTF material variants "
                 "('materialVariantNames'), which the CNB v1 Model schema does not express. See "
-                "plans/plan_cnb.md decision D9.");
+                "docs/cnb-format.md decision D9.");
         }
 
         // --- bones ---------------------------------------------------------------------------
@@ -700,7 +700,7 @@ namespace CNA::Content::Cnb
                 throw ContentLoadException(
                     "cnj-to-cnb: Model '" + cnjPath + "' has a mesh entry using glTF material "
                     "variants, which the CNB v1 Model schema does not express. See "
-                    "plans/plan_cnb.md decision D9.");
+                    "docs/cnb-format.md decision D9.");
             }
 
             const std::string vertFile = StringField(entry, "vertices", cnjPath);

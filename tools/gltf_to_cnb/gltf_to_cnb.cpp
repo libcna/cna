@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-106: direct glTF -> .cnb compilation.
+// CNBF-106: direct glTF -> .cnb compilation.
 //
 // The architectural requirement here is negative: this tool must NOT be a second interpretation of
 // glTF. It links the content library's shared glTF-to-CNJ orchestration, so the two formats cannot
@@ -72,7 +72,7 @@ namespace
         std::filesystem::path path_;
     };
 
-    // plans/plan_cnb.md CNBF-122: all-or-nothing. This used to open the destination with the
+    // CNBF-122: all-or-nothing. This used to open the destination with the
     // implicit `trunc`, so a failure anywhere after that point -- a full disk, a throwing
     // encoder, a killed process -- left a truncated file where a finished asset used to be, newer
     // than its inputs and therefore invisible to an incremental build.
@@ -116,7 +116,7 @@ int main(int argc, char** argv)
         if (arg == "--quiet") { quiet = true; continue; }
         if (arg == "--unit-scale" && i + 1 < argc)
         {
-            // plans/plan_cnb.md CNBF-120: std::stof consumed a PREFIX, so "1.0abc" was 1.0 and
+            // CNBF-120: std::stof consumed a PREFIX, so "1.0abc" was 1.0 and
             // "0.01m" was 0.01; it also accepts "nan" and "inf", either of which would multiply
             // every position and bone translation in the model into a value nothing can render.
             // Zero and negatives are refused too: a zero scale collapses the model to a point and
@@ -151,7 +151,7 @@ int main(int argc, char** argv)
     outputDir = positional[1];
     baseName = positional[2];
 
-    // plans/plan_cnb.md CNBF-120: baseName becomes part of every output file name and of the
+    // CNBF-120: baseName becomes part of every output file name and of the
     // staging directory's name, so it has to be ONE filename component. A separator would write
     // outside outputDir, and "." or ".." would name a directory rather than an asset -- neither
     // was checked, and the staging directory's name was built from it before anything else ran.

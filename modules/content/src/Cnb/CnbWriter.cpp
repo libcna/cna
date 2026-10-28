@@ -75,7 +75,7 @@ namespace CNA::Content::Cnb
                 "CnbWriter: chunk alignment must be a power of two no greater than " +
                 std::to_string(limits_.maxChunkAlignment) + ".");
         }
-        // plans/plan_cnb.md CNBF-115: CMET and XREF belong to the container, and the writer emits
+        // CNBF-115: CMET and XREF belong to the container, and the writer emits
         // each of them at most once, from SetMetadata()/SetExternalReferences(). Letting a schema
         // add one as an ordinary chunk would produce a file with two of a singleton the reader
         // requires to be unique -- accepted by Build() and refused by Parse(), which is exactly the
@@ -99,7 +99,7 @@ namespace CNA::Content::Cnb
         std::vector<PendingChunk> all;
         all.reserve(chunks_.size() + 2u);
 
-        // plans/plan_cnb.md CNBF-122: maxStringBytes and maxArrayElementCount are NOT schema-only
+        // CNBF-122: maxStringBytes and maxArrayElementCount are NOT schema-only
         // limits -- the container reads CMET's two names, XREF's count and every XREF name through
         // the same bounded CnbByteReader. A writer that ignores them here produces a CMET its own
         // Parse() refuses, which is the asymmetry this whole rule exists to remove.
@@ -151,7 +151,7 @@ namespace CNA::Content::Cnb
                     throw ContentLoadException(
                         "CnbWriter: external reference flags are reserved and must be zero.");
                 }
-                // plans/plan_cnb.md CNBF-115: the SAME rule the reader applies, from the same
+                // CNBF-115: the SAME rule the reader applies, from the same
                 // function. Before this the reader refused names the writer would happily emit, so
                 // an encoder could produce a file its own decoder rejected.
                 requireStringFits(ref.logicalName, "external reference name");
@@ -195,7 +195,7 @@ namespace CNA::Content::Cnb
 
     std::vector<std::uint8_t> CnbWriter::Build() const
     {
-        // plans/plan_cnb.md CNBF-H002: a custom asset type is identified by a 31-bit hash, so the load
+        // CNBF-H002: a custom asset type is identified by a 31-bit hash, so the load
         // path proves identity by comparing the file's canonical type name against the registered
         // one -- which it can only do if the file carries that name. Refusing here means a file
         // that could never be loaded cannot be produced in the first place, which is a much better
@@ -223,7 +223,7 @@ namespace CNA::Content::Cnb
             throw ContentLoadException("CnbWriter: too many chunks to encode.");
         }
         const auto chunkCount = static_cast<std::uint32_t>(all.size());
-        // plans/plan_cnb.md CNBF-122: from here on the writer applies the SAME limits the reader
+        // CNBF-122: from here on the writer applies the SAME limits the reader
         // does, in the same order, so a file Build() returns is a file Parse() opens. The chunk
         // count and the aggregate LOGICAL size are both checked before anything is compressed or
         // laid out, because both are known from the pending list alone and neither depends on the

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-H007: golden binary conformance vectors.
+// CNBF-H007: golden binary conformance vectors.
 //
 // CnbSpecConformanceTests.cpp pins the DOCUMENT to the implementation by reading
 // docs/cnb-format.md and comparing its numbers against the code. That catches a document that
@@ -588,7 +588,7 @@ TEST(CnbGoldenVectorTest, TheModelVectorsGeometryChunksAreAlignedAsDocumented)
 
 // --------------------------------------------------------------------------------------------
 // TextureCube: the texture shape whose payload ORDER and descriptor tiling are load-bearing
-// (plans/plan_cnb.md CNBF-101B)
+// (CNBF-101B)
 // --------------------------------------------------------------------------------------------
 
 namespace

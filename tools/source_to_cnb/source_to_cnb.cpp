@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-109/CNBF-110/CNBF-112: compile a source file straight into a `.cnb`.
+// CNBF-109/CNBF-110/CNBF-112: compile a source file straight into a `.cnb`.
 //
 // One front end rather than one executable per asset type. What the input IS decides what comes
 // out, because that is already unambiguous from the extension, and seven near-identical programs
@@ -33,7 +33,7 @@
 
 namespace
 {
-    // plans/plan_cnb.md CNBF-122: all-or-nothing. This used to open the destination with the
+    // CNBF-122: all-or-nothing. This used to open the destination with the
     // implicit `trunc`, so a failure anywhere after that point -- a full disk, a throwing
     // encoder, a killed process -- left a truncated file where a finished asset used to be, newer
     // than its inputs and therefore invisible to an incremental build.
@@ -112,7 +112,7 @@ int main(int argc, char** argv)
     bool quiet = false;
     bool haveFps = false;
     // Which options were actually given, so one that does not apply to the chosen kind can be
-    // refused rather than silently ignored (plans/plan_cnb.md CNBF-120): --color-key on a WAV, or
+    // refused rather than silently ignored (CNBF-120): --color-key on a WAV, or
     // --fps on a PNG, means the caller believes something about the output that is not true.
     bool sawDurationMs = false;
     bool sawSoundtrack = false;
@@ -134,8 +134,8 @@ int main(int argc, char** argv)
             else if (arg == "--stream") { stream = next("--stream"); }
             else if (arg == "--title") { title = next("--title"); }
             else if (arg == "--frame-size") { frameSize = next("--frame-size"); }
-            // Every numeric option goes through the shared strict parsers (plans/plan_cnb.md
-            // CNBF-120). std::stoul("12abc") is 12, std::stoul("-1") is the largest unsigned
+            // Every numeric option goes through the shared strict parsers
+            // (CNBF-120). std::stoul("12abc") is 12, std::stoul("-1") is the largest unsigned
             // value, an over-range result was truncated by the narrowing cast that followed, and
             // std::stof accepts "nan" and "inf" -- so a typo in a build script used to compile
             // successfully with a number nobody wrote.
@@ -252,7 +252,7 @@ int main(int argc, char** argv)
             }
         }
 
-        // plans/plan_cnb.md CNBF-120: an option that does not apply to the chosen kind is a
+        // CNBF-120: an option that does not apply to the chosen kind is a
         // refusal, not something to ignore. Silently dropping --color-key on a WAV, or --fps on a
         // PNG, leaves the caller believing something about the output that is not true -- and a
         // build script that mixed up two invocations would never find out.

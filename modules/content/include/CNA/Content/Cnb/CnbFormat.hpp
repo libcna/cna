@@ -10,7 +10,7 @@
 
 namespace CNA::Content::Cnb
 {
-    // --- The floating-point representation contract (plans/plan_cnb.md `CNBF-H019`) -------------
+    // --- The floating-point representation contract (`CNBF-H019`) -------------
     //
     // `docs/cnb-format.md` §2 defines `f32` and `f64` as IEEE-754 binary32 and binary64. That is a
     // promise about the BYTES IN THE FILE, so a platform that cannot produce them must fail to
@@ -63,7 +63,7 @@ namespace CNA::Content::Cnb
                   "on this platform bit_cast<uint64_t>(1.0) is not binary64's 0x3FF0000000000000.");
 
     /**
-     * @brief Byte-level constants of the `.cnb` container (plans/plan_cnb.md `CNBF-005`).
+     * @brief Byte-level constants of the `.cnb` container (`CNBF-005`).
      *
      * The authoritative description of every field is `docs/cnb-format.md`; the values here and
      * that document are kept in step by `CnbSpecConformanceTests.cpp`.
@@ -217,7 +217,7 @@ namespace CNA::Content::Cnb
 
     /**
      * @brief Stable numeric identifiers for the asset a `.cnb` file holds
-     *        (plans/plan_cnb.md decision `D6`).
+     *        (docs/cnb-format.md decision `D6`).
      *
      * `0x00000001`-`0x3FFFFFFF` are CNA built-in types and are frozen once CNB v1 ships.
      * `0x40000000`-`0x7FFFFFFF` are reserved for future CNA use. `0x80000000`-`0xFFFFFFFF` belong
@@ -310,7 +310,7 @@ namespace CNA::Content::Cnb
 
     /**
      * @brief Describes why @p logicalName is not a legal `.cnb` external-reference name, or
-     *        returns an empty string when it is (plans/plan_cnb.md `CNBF-115`).
+     *        returns an empty string when it is (`CNBF-115`).
      *
      * **The single definition of the rule, applied on both sides of the format.** An `XREF` name
      * goes straight into `ContentManager`'s path resolution, so the reader has always refused a

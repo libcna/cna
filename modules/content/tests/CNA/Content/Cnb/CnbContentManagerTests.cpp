@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-081/CNBF-082/CNBF-083 (Phase G tests): ContentManager's `.cnb` tier.
+// CNBF-081/CNBF-082/CNBF-083 (Phase G tests): ContentManager's `.cnb` tier.
 //
 // The centrepiece is the resolution-order suite. `docs/cnj-format.md`'s resolution order fixes an existing,
 // dated, deliberately-chosen precedence (.xnb outranks everything, .cnj outranks native), and
@@ -622,7 +622,7 @@ namespace
 
     static_assert(!BuiltInRouteIsReachable<CnbLoaderRegistry>::value,
                   "CnbLoaderRegistry's built-in registration route must not be reachable from "
-                  "outside CNA (plans/plan_cnb.md CNBF-122). Making it public would let game code "
+                  "outside CNA (CNBF-122). Making it public would let game code "
                   "claim a built-in identifier before any ContentManager exists.");
 
     // The same detector, shown to have teeth: a class whose equivalent member IS public makes it

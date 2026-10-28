@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-H006: the compiler's strictness contract against malformed binary sidecars.
+// CNBF-H006: the compiler's strictness contract against malformed binary sidecars.
 //
 // The `.cnj` sidecars carry no length fields, no element widths and no magic of their own -- the
 // runtime reader derives all of that by dividing a file's byte length and, where the division does
@@ -839,7 +839,7 @@ TEST(CnbCompilerStrictnessTest, TheCompilerAndTheRuntimeAgreeOnEveryMalformedDoc
 
 TEST(CnbCompilerStrictnessTest, ASpriteFontsCharacterMapIsValidatedIdenticallyByBothRoutes)
 {
-    // plans/plan_cnb.md CNBF-122. EncodeSpriteFontToCnb()'s ValidateFont() has always required a
+    // CNBF-122. EncodeSpriteFontToCnb()'s ValidateFont() has always required a
     // strictly ascending character map and a defaultCharacter drawn from it -- SpriteFont
     // binary-searches the map, so an unsorted or duplicated one silently returns the wrong glyph,
     // and a defaultCharacter with no glyph is a substitution that can never be made. The shared

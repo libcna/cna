@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// plans/plan_cnb.md CNBF-122: one durable way for a content tool to produce its output file.
+// CNBF-122: one durable way for a content tool to produce its output file.
 //
 // Header-only, and shared rather than copied, for the same reason CnaToolNumericArgs.hpp is: the
 // rule below is one rule, and two implementations of it would drift.
@@ -14,7 +14,7 @@
 // temporary and renaming it over the destination makes the visible result all-or-nothing: either
 // the complete new file or the untouched old one, never a prefix of the new one.
 //
-// plans/plan_cnb.md CNBF-123 audited the publication step itself, which CNBF-122 performed with
+// CNBF-123 audited the publication step itself, which CNBF-122 performed with
 // std::filesystem::rename under a comment asserting it "replaces the existing file in one step" on
 // every platform CNA targets. That was an assertion rather than a measurement, and its two halves
 // are not equally safe:
@@ -138,7 +138,7 @@ namespace CNA::Tools
 
         /**
          * @brief A newly created, exclusively owned file, written through the platform's own
-         *        primitive (plans/plan_cnb.md `CNBF-123`).
+         *        primitive (`CNBF-123`).
          *
          * Exists because `std::ofstream` cannot do the one thing this needs on both platforms:
          * **create a file only if that name is free**. `std::ios::noreplace` is the standard way to
@@ -292,7 +292,7 @@ namespace CNA::Tools
 
         /**
          * @brief Publishes @p temporary as @p destination in one step, replacing an existing
-         *        @p destination (plans/plan_cnb.md `CNBF-123`).
+         *        @p destination (`CNBF-123`).
          *
          * The whole platform surface of this header is this one function. Everything above it --
          * choosing a temporary name, writing, checking the close -- is portable; only the final
@@ -399,7 +399,7 @@ namespace CNA::Tools
     }
 
     /**
-     * @brief Writes @p bytes to @p destination all-or-nothing (plans/plan_cnb.md `CNBF-122`).
+     * @brief Writes @p bytes to @p destination all-or-nothing (`CNBF-122`).
      *
      * The bytes go to a temporary file **in the destination's own directory** -- a sibling, so the
      * publication that follows stays within one filesystem and is therefore a rename rather than a
@@ -407,7 +407,7 @@ namespace CNA::Tools
      * destination. Only then is it published over @p destination by
      * Detail::ReplaceFileAtomically(), which replaces an existing destination in one step on both
      * of CNA's platform families and says there exactly how it does so
-     * (plans/plan_cnb.md `CNBF-123`).
+     * (`CNBF-123`).
      *
      * On **any** failure the temporary file is removed and @p destination is left exactly as it
      * was: an existing output from a previous build survives a failed one, and no partial file is

@@ -81,7 +81,7 @@ else()
 endif()
 option(CNA_USE_SYSTEM_DRACO "Use a system Draco package instead of CNA's pinned submodule" OFF)
 
-# plans/plan_cnb.md CNBF-105: optional Zstandard for compressed .cnb chunks.
+# CNBF-105: optional Zstandard for compressed .cnb chunks.
 #
 # AUTO (the default) enables it when the system library is present and stays silent when it is
 # not; ON demands it; OFF omits it. Absent, the reader refuses a compressed chunk with a message

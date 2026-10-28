@@ -11,7 +11,7 @@ namespace CNA::Internal::Graphics
 {
     /**
      * @brief A DDS cube map decoded to plain RGBA8 bytes on the CPU
-     *        (plans/plan_cnb.md `CNBF-113`).
+     *        (`CNBF-113`).
      *
      * Faces are indexed in the on-disk DDS order, which is also `CubeMapFace`'s order:
      * `+X, -X, +Y, -Y, +Z, -Z`. Within a face the levels are ordered mip 0 first, each half the
@@ -41,7 +41,7 @@ namespace CNA::Internal::Graphics
 
     /**
      * @brief Default ceiling on the **total** RGBA8 bytes a decoded cube map may occupy
-     *        (plans/plan_cnb.md `CNBF-122`).
+     *        (`CNBF-122`).
      *
      * The dimension ceiling alone does not bound this. A cube map is six faces and a face is a
      * whole mip chain, so at the 16384-texel maximum the decoded result is
@@ -62,7 +62,7 @@ namespace CNA::Internal::Graphics
 
     /**
      * @brief Decodes a supported cube-map DDS image into RGBA8, entirely on the CPU
-     *        (plans/plan_cnb.md `CNBF-113`, samples `SAMPLE-152`).
+     *        (`CNBF-113`, samples `SAMPLE-152`).
      *
      * **Needs no `GraphicsDevice`, no renderer, no window and no GPU readback.** That is the whole
      * reason it exists as a separate component: this logic used to sit inside
@@ -74,14 +74,14 @@ namespace CNA::Internal::Graphics
      * channel. The 24-bit forms are expanded to RGBA8 with opaque alpha; their DDS channel masks
      * determine the byte order. DX10 headers, other packed layouts, and HDR variants are refused.
      *
-     * **Every header number is bounded before it is used** (plans/plan_cnb.md `CNBF-116`). The
+     * **Every header number is bounded before it is used** (`CNBF-116`). The
      * dimension ceiling is 16384 texels, which is what `DecodedDdsCube::width` and the RGBA output
      * length can represent rather than a preference; the mip count may not exceed the chain the
      * face's own size allows; and a cube map must declare all six `DDSCAPS2_CUBEMAP_*` face bits,
      * because six faces are read whether or not they were declared. Each of those is a refusal,
      * not a repair: a clamped header would produce a plausible wrong image.
      *
-     * **The decoded output is budgeted as well as the input** (plans/plan_cnb.md `CNBF-122`). The
+     * **The decoded output is budgeted as well as the input** (`CNBF-122`). The
      * aggregate RGBA8 length of all six faces and every mip level is computed in `std::uint64_t`
      * from the validated header alone -- before a single output vector is allocated and before any
      * block is decompressed -- and refused if it exceeds @p maxDecodedBytes. Without it a

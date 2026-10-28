@@ -13,7 +13,7 @@ namespace CNA::Content::Cnb
 {
     /**
      * @brief The neutral, fully decoded description of a compiled `.cnb` `Model`
-     *        (plans/plan_cnb.md `CNBF-070`).
+     *        (`CNBF-070`).
      *
      * This is the seam between the three pieces of the Model pipeline, and it exists so that none
      * of them has to know about the others' representations:
@@ -32,7 +32,7 @@ namespace CNA::Content::Cnb
      * External assets -- textures, and an effect named by asset path -- are held as *logical asset
      * names*, not embedded bytes. A texture shared by a hundred models stays one shared asset that
      * `ContentManager` loads once; embedding a copy per model would defeat its cache and bloat
-     * every file (plans/plan_cnb.md decision `D8`).
+     * every file (docs/cnb-format.md decision `D8`).
      */
 
     /** @brief One node of a compiled model's scene graph. */

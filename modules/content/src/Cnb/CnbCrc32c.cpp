@@ -5,7 +5,7 @@
 #include <array>
 #include <cstring>
 
-// plans/plan_cnb.md CNBF-108. CRC-32C is not a detail of loading a `.cnb` -- it IS most of the
+// CNBF-108. CRC-32C is not a detail of loading a `.cnb` -- it IS most of the
 // cost of it. Measured on a 32 MiB file (docs/cnb-mmap-measurements.md): reading the whole file
 // takes 7 ms and verifying it took 62 ms, so verification was nine times the I/O it protects.
 //

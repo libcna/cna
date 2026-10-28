@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-105: does chunk compression earn its place in CNB?
+// CNBF-105: does chunk compression earn its place in CNB?
 //
 // The task says to measure before choosing, so this measures. For each real CNB payload it
 // reports the compressed size, the compression cost and -- the number that actually decides it --

@@ -6,10 +6,19 @@
 every constant in §3, §4 and §7 below is asserted against the code, and §14's hex dump is
 regenerated and byte-compared.
 
-* The original architectural proposal, `misc/cnb.md`, was removed on 2026-10-25 (Git history keeps
-  it); `plans/plan_cnb.md` §2 records what was adopted, changed and rejected from it.
-* The engineering record — audit, decisions, rejected alternatives, task status — is
-  `plans/plan_cnb.md`.
+* **What is frozen.** The container byte format (§3–§6), the asset-type identifier ranges and a
+  custom type's serialized identity (§7) and every implemented schema version are v1-stable: a
+  `.cnb` written today stays readable by a future CNA, and new behaviour arrives as a new schema
+  version (§11.2). Two neighbouring things are deliberately **not** promised: the C++ custom-loader
+  API (`CnbLoaderRegistry`) may still change shape, and the producers' and the inspector's command
+  lines are not a compatibility interface — except `cna_tool_cnb_info --refs`' one-name-per-line
+  output, which is meant for build scripts.
+* The design decisions behind the container, with the alternatives each one rejected, are
+  Appendix A; the numbered invariants the reader enforces are §12.2.
+* The engineering record, `CNBF-001`..`CNBF-123` and the hardening rows `CNBF-H001`..`H020`
+  (2026-08-26/27), was `plans/plan_cnb.md`, deleted on 2026-10-28; it and the original proposal,
+  `misc/cnb.md` (removed on 2026-10-25), are in Git history only. Source comments cite the `CNBF-*`
+  task IDs, which no other part of the tree uses.
 * This file is the authoritative description of the format.
 
 ---
@@ -1051,6 +1060,45 @@ a `.cnj` can express is refused:
 A `Model`'s part count is bounded by a stronger check still: it must equal the number of `MVTX` and
 `MIDX` chunks the file actually holds, which the table-of-contents limit already caps.
 
+### 12.2 The invariants, numbered
+
+The complete list `CnbDocument::Parse()` enforces, in the order it checks them. Each has its own
+negative test in `CnbContainerTests.cpp`, which builds a *valid* file and then breaks exactly that
+one thing, so "the reader rejected it" can never be confused with "the fixture was never valid".
+
+1. file ≥ 64 bytes and ≤ `limits.maxFileSize`
+2. magic == `43 4E 42 1A`
+3. `containerMajor == 1`
+4. `headerFlags == 0`, `reserved[16] == 0`
+5. `headerChecksum` matches CRC-32C of bytes `[0,44)`
+6. `fileSize` == actual byte count
+7. `chunkCount <= limits.maxChunkCount`
+8. `tocOffset >= 64`, `tocOffset + 48*chunkCount` computed overflow-safe, `<= fileSize`
+9. `tocChecksum` matches CRC-32C of the TOC bytes
+10. per entry: `compression` names a codec this build implements; `storedSize ==
+    uncompressedSize` when that codec is `None`; `alignment` is a power of two in `[1, 4096]`;
+    `reserved == 0` (since `CNBF-105`, which implemented Zstandard as codec 2; before it every
+    non-zero codec was rejected)
+11. per entry: `offset + storedSize` overflow-safe and `<= fileSize`; `offset % alignment == 0`;
+    `storedSize <= limits.maxChunkSize`
+12. TOC sorted by ascending `offset`
+13. header, TOC and all non-empty chunk ranges are pairwise disjoint and, together with zero-filled
+    gaps, cover `[0, fileSize)` (§4.1, including its tolerated end-of-file zero padding)
+14. every chunk's `checksum` matches CRC-32C of its stored bytes
+15. every chunk carrying `Mandatory` must be understood by the reader
+16. `assetTypeId != 0`; `assetSchemaVersion` within the reader's supported range for that type
+17. schema-declared singleton chunks appear exactly once
+18. every `String` length ≤ `limits.maxStringBytes`, is well-formed UTF-8 (no overlong forms, no
+    surrogates, no > U+10FFFF), and fits inside its chunk
+19. every count × element-size product is computed overflow-safe and must match the chunk's exact
+    remaining length where the schema says so
+20. every intra-file index (TOC index, string index, `XREF` index, bone parent, track key range) is
+    range-checked before use
+21. the sum of every chunk's `uncompressedSize` is computed overflow-safe and is at most
+    `limits.maxTotalUncompressedSize` (since `CNBF-114`)
+22. every `XREF` logical name is non-empty, well-formed UTF-8, relative, `/`-separated and free of
+    `..` segments — checked by the same function the writer applies (one rule since `CNBF-115`)
+
 ---
 
 ## 13. Determinism
@@ -1131,8 +1179,8 @@ chunk occupies no bytes and takes no part in the layout partition.
 
 ## 15. Not implemented in v1
 
-Recorded so the boundary is a decision rather than an omission. Each is tracked in
-`plans/plan_cnb.md`.
+Recorded so the boundary is a decision rather than an omission. The task IDs are the ones source
+comments cite.
 
 **Read this list against §15.1.** "Implemented" is four separate claims — a wire schema, a runtime
 loader, a writer API, and a command-line producer — and this document has previously blurred them.
@@ -1140,7 +1188,9 @@ A type can be fully readable at runtime and still have no supported way to *prod
 
 * The `Effect` schema. Its identifier is frozen; its layout is not designed, and deliberately so:
   CNA has many renderers, and a `.cnb` carrying one API's shader bytecode would be useless on the
-  others. It waits for the shader pipeline and renderer abstraction to settle.
+  others. Its eventual shape is metadata, parameters and per-profile shader payloads (GLSL, SPIR-V,
+  DXIL, MSL …) or a CNA intermediate form, and it waits for the shader pipeline and renderer
+  abstraction to settle (`CNBF-104`).
 * **Embedded** audio or video streams. §19 stores a reference, by design.
 * Block-compressed texture **payloads**. §16 defines the identifiers and the multi-representation
   structure that carries them, and the reader accepts a file that uses them, but no writer in this
@@ -1152,7 +1202,15 @@ A type can be fully readable at runtime and still have no supported way to *prod
   went into hardware CRC-32C instead and made the same load 6.4× faster. See
   `docs/cnb-mmap-measurements.md`, including what would change the answer. The `alignment` field
   keeps its meaning regardless.
-* A package format bundling many assets. That would be a different format.
+* A package format bundling many assets (`.cnapak`, `CNBF-107`). That would be a different format
+  and a separate project; one `.cnb` stays one logical asset (Appendix A, D8).
+* **Load time** has never been measured, and no claim is made about it. What was measured is the
+  property CNB was built for: compiling a glTF-derived `.cnj` Model into one `.cnb` takes it from
+  four or five files and opens per load to one or two. **Byte size** is not a measured win on small
+  assets — on fixtures of a handful of vertices the 64-byte header, 48 bytes per chunk and the
+  368-byte material record dominate, and two of five such fixtures grew. On a geometry-dominated
+  model the geometry chunks are the bytes the sidecars held, so the difference converges to the
+  JSON descriptor that is no longer there; that larger measurement has not been taken.
 
 ### 15.1 Four different meanings of "supported"
 
@@ -1190,6 +1248,18 @@ values guessed from the file.
 | `cna_tool_gltf_to_cnb` | `.gltf`/`.glb` | `Model.cnb`, byte-identical to the two-step route |
 | `cna_tool_source_to_cnb` | PNG/JPEG/… , DDS, WAV, and media files | `Texture2D`/`TextureCube`/`SoundEffect`/`Song`/`Video` `.cnb` |
 | `cna_tool_cnb_info` | any `.cnb` | nothing; inspects and validates |
+
+`cna_tool_gltf_to_cnb` still stages a `.cnj` and its sidecars in a temporary directory it removes,
+compiled from `gltf_to_cnj.cpp` itself, so the two routes share one interpretation of glTF and a
+test requires their bytes to be identical. Collapsing that staging step into an in-memory
+canonical form (`CNBF-106B`) was deliberately not done: the conversion writes its sidecars from a
+dozen call sites, so hoisting them changes the `.cnj` path — the very reference
+`CnbModelEquivalenceTest` compares the `.cnb` path against — and doing both at once would change
+the oracle and the thing under test together. No output depends on it.
+
+The compiler's own readers of the `.clip.bin`, `.skeleton.bin` and `_morph.bin` sidecars assume
+little-endian, where the runtime `.cnj` readers use the host's native order. That is identical on
+every target CNA supports and is recorded as a difference rather than an accident.
 
 Every one of them is **headless and deterministic**: no `GraphicsDevice`, no audio device, no
 clock, no randomness. Given identical source bytes, options and logical name, each produces
@@ -1493,3 +1563,173 @@ only one that can refuse it — and it would otherwise divide badly inside a pla
 and `Video`'s constructors take a signed 32-bit millisecond count: a larger value would arrive
 negative and every later `Duration`/`PlayPosition` comparison would read backwards. `INT32_MAX`
 milliseconds is about 24.8 days, so nothing real is refused.
+
+---
+
+## Appendix A. Design decisions
+
+The container's decisions, numbered as source comments cite them ("decision D9"), each with the
+alternatives it rejected. The original proposal they answer, `misc/cnb.md`, is in Git history.
+
+### D1 — Chunked container, little-endian, no host-ABI dependency
+
+`.cnb` is a fixed 64-byte header, a table of contents of fixed 48-byte entries, and chunk payloads.
+Nothing in the format depends on `sizeof` a C++ type, struct padding, `std::type_index`, or the host
+endianness: every field is read and written byte-by-byte through
+`CnbByteReader`/`CnbByteWriter`, which assemble/disassemble integers from individual `std::uint8_t`
+values. Floats go through `std::bit_cast<float, std::uint32_t>` of an explicitly little-endian
+`u32`, so a big-endian host produces and consumes identical bytes.
+
+**Rejected:** big-endian or a runtime-selectable endianness (every CNA target — x86-64, aarch64,
+wasm32 — is little-endian; a byte-order flag is untestable dead weight); a text/JSON container
+(that is `.cnj`, which continues to exist); MessagePack/CBOR (a generic object encoding is exactly
+the "binary JSON" outcome the original proposal warned against and buys nothing over a typed
+descriptor table).
+
+### D2 — 64-byte header
+
+§3 has the byte table. Design points:
+
+* magic is `43 4E 42 1A` — `"CNB"` plus `0x1A` (DOS EOF), which stops `type`/`cat` mid-file and is
+  the same trick PNG uses;
+* every multi-byte field is naturally aligned inside the header, so a zero-copy reader could
+  overlay it on a little-endian host;
+* `headerChecksum` (CRC-32C of bytes `[0,44)`) and `tocChecksum` (CRC-32C of the TOC bytes) are
+  verified **before any offset in them is trusted**;
+* 16 reserved bytes, required to be zero, so a v1 reader rejects a file using a field it cannot see;
+* `fileSize` must equal the real file size — the check that stops every "declared length larger
+  than the file" attack at the door (`.xnb` had to gain exactly this check after the fact,
+  `XNB-43`).
+
+### D3 — 48-byte TOC entry, TOC ordered by offset
+
+`{ type:u32, flags:u32, offset:u64, storedSize:u64, uncompressedSize:u64, checksum:u32,
+compression:u32, alignment:u32, reserved:u32 }`. All naturally aligned. TOC entries **must** be
+sorted by ascending `offset`, which makes overlap detection a single linear pass and makes writing
+deterministic by construction. The reader's region partition (§4.1) then subsumes overlap,
+past-the-end, trailing-junk and hidden-padding checks in one invariant.
+
+**Rejected:** TOC at end-of-file (single-pass streaming writing is irrelevant — CNB files are built
+in memory), and an unordered TOC (would need O(n log n) sorting inside the reader on
+attacker-controlled data before any bound is known).
+
+### D4 — Duplicate chunk types are legal; chunks are referenced by per-type ordinal
+
+The original proposal sketched `VB00`, `VB01`, `MORPH00`. That caps a model at 100 primitives and
+puts an index inside a type identifier. Instead: any chunk type may appear more than once, in file
+order, and one chunk refers to another by its **ordinal within its own chunk type** — "the 3rd
+`MVTX` chunk", not "TOC entry 7". A raw TOC index was considered and rejected: it would silently
+shift whenever a container-level chunk (`CMET`, `XREF`) is added or removed ahead of the payload
+chunks, which is precisely the kind of coupling a self-describing format should not have. A
+per-type ordinal is stable under any such insertion and is validated against
+`CnbDocument::FindAll(type).size()` before use.
+
+A schema declares which of *its* chunk types are singletons; `CnbDocument::RequireSingle()`
+enforces that. The identifier rules themselves are §5.
+
+### D5 — CRC-32C, not CRC-32
+
+Both are a 1 KiB table and ~40 lines; neither adds a dependency. CRC-32C (Castagnoli, reflected
+poly `0x82F63B78`) is chosen because it has a strictly better minimum Hamming distance over the
+payload sizes CNB actually stores and because SSE4.2 and the ARMv8 CRC32 extension accelerate it
+without changing a byte of the format. The implementation folds in software everywhere and, where
+the instruction is detected at run time, in hardware (`CNBF-108-crc`); every path produces
+identical output. Known-answer test: `"123456789"` ⇒ `0xE3069283`.
+
+Checksums detect **accidental** corruption only; CNB has no authenticity story and must not be
+presented as having one.
+
+**Rejected:** no checksum at all (the `_morph.bin` experience showed silent misparse is the real
+failure mode); SHA-256/BLAKE3 (cryptographic cost for a non-cryptographic goal); Adler-32 (much
+weaker on short chunks).
+
+### D6 — `u32` asset type ids
+
+The original proposal suggested `u64`. `u32` is used instead: it keeps the header at 64 bytes with
+room to spare, and 2³¹ custom ids is far more than a content pipeline will ever mint. §7 has the
+ranges. A custom id is `FNV-1a-32(name) | 0x80000000`, i.e. 31 usable bits; collision behaviour is
+enforced rather than hoped for, by the loader registry and the `CMET` canonical name (§7).
+
+**Rejected:** `std::type_index` (not a serialisation ABI — its value is not stable across
+processes, let alone builds); assembly-qualified strings (that is the XNB complexity CNB exists to
+avoid); pure hashing with no reserved range (built-ins would be unstable if a name were ever
+tidied).
+
+### D7 — Unknown chunks and versions
+
+* `containerMajor != 1` ⇒ reject.
+* `containerMinor > 0` ⇒ **accept**; minor bumps are additive-only by definition.
+* Any bit set in `headerFlags` or a non-zero reserved byte ⇒ reject (a v1 reader cannot know what it
+  would be agreeing to).
+* Unknown chunk type with `CnbChunkFlags::Mandatory` set ⇒ reject, naming the type.
+* Unknown chunk type without it ⇒ skipped.
+* A `compression` codec this build does not implement ⇒ reject with the codec id named, while the
+  table of contents is read and before any chunk is decoded — so a compressed file cannot be
+  inspected at all without its codec. (Until `CNBF-105` added Zstandard as codec 2, this read
+  "`compression != 0` ⇒ reject".)
+* `assetSchemaVersion` outside `[1, maxSupportedForThatType]` ⇒ reject.
+* Duplicate of a schema-declared singleton chunk ⇒ reject.
+
+### D8 — One `.cnb` = one logical asset; external references stay external
+
+The optional container-level `XREF` chunk is a flat table of
+`{flags:u32, expectedAssetTypeId:u32, logicalName:String}` entries (§5.1). A schema refers to
+another asset by **index into `XREF`**, never by an inline path string, so:
+
+* every external dependency of an asset is discoverable without understanding the schema
+  (`cna_tool_cnb_info --refs`), and
+* `ContentManager`'s cache and sharing keep working — a texture referenced by a hundred models is
+  still loaded once.
+
+The reader validates each `logicalName` (invariant 22); `ContentManager`'s own containment checks
+still run afterwards, as defence in depth. Packaging many assets into one file is out of scope —
+that would be `.cnapak`, a different format (§15).
+
+### D9 — Model support: scope, and why the reader lives where it lives
+
+The `.cnj` Model reader interleaved JSON parsing with runtime `Model` construction across about
+1,100 lines and shared helpers with the runtime glTF reader. Three options were considered:
+
+1. **One shared builder for the `.cnj` and `.cnb` paths, extracted first.** Architecturally the
+   right end state, but surgery on the file with the largest test surface in the repository before
+   the format had proven itself — and the brief was explicit: add CNB, do not use it as an excuse
+   to redesign unrelated content infrastructure.
+2. **Duplicate the builder in a new module.** Guarantees drift between two model builders.
+3. **Chosen:** the CNB *codec* (bytes ⇄ a plain, schema-shaped `CnbModelData` struct) lives in
+   `modules/content/src/Cnb/CnbModelCodec.cpp` and is unit-testable with no `GraphicsDevice`; the
+   *adapter* that turns a decoded `CnbModelData` into a runtime `Model` lives beside its `.cnj`
+   sibling in `modules/content/src/Xna/ContentModelLoaders.cpp`, reusing the existing resource,
+   vertex-buffer, index-widening, bounds and punctual-light helpers instead of copying them.
+
+Option 1 then followed in two steps: the part effect and material state became
+`BuildPartEffectEXT`, and `CNBF-100` gave all three front-ends — `.cnj`, `.cnb` and the runtime
+glTF reader — one neutral `ModelPartGeometryEXT` and one `BuildModelMeshPartGeometryEXT()`, with
+`CnbSharedModelBuilderTests` counting the construction steps in the source so a duplicate cannot
+regrow. One asymmetry is kept on purpose: a `.cnb` supplies its primitive count, already
+cross-checked against the topology by the decoder (`CNBF-H012`). `SkinnedModelEXT` is a different
+asset type and keeps its own path.
+
+**Model v1 schema scope** (everything the compiler can express *and* the reader can honour):
+bone hierarchy, per-part geometry (vertex bytes + declared stride/count, index bytes + declared
+element size/count, primitive topology), part→mesh grouping and parent-bone attachment, the stock
+effect selection, the full PBR scalar set, per-slot sampler state, texture/effect external
+references, morph targets incl. the tangent deltas and the weight track, the skeleton (all four
+matrix blocks), embedded animation clips, and punctual lights. Material *variants* and the glTF
+import report stay out (§11.1): both are authoring or diagnostic concerns rather than runtime
+geometry, and the compiler refuses the former by name rather than dropping it silently.
+
+### D10 — Asset types, and the order they came in
+
+`Curve` and `AnimationClip` proved the container end to end on real CNA types with real
+`ContentManager` integration; `Model` was the milestone that justified the format. Every other
+built-in identifier was reserved and frozen first and given a schema only after the container had
+proven itself — "do not implement dozens of asset types before the container architecture has
+proven itself". All of them except `Effect` have one now (§15.1); the textures shipped the
+multi-representation structure that reservation predicted (§16).
+
+### D11 — Determinism
+
+The writer takes no wall-clock, no RNG, no pointer values, no environment. Chunks are emitted in
+the order the schema encoder adds them; the TOC is written in that same order (which is also
+ascending-offset order); alignment padding is zero-filled. The `CMET` chunk carries only
+input-derived strings. §13 states the guarantee and how it is asserted.

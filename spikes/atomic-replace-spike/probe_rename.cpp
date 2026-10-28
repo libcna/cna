@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-123: what does std::filesystem::rename ACTUALLY do on Windows when the
+// CNBF-123: what does std::filesystem::rename ACTUALLY do on Windows when the
 // destination already exists?
 //
 // tools/common/CnaToolAtomicWrite.hpp published its output with std::filesystem::rename and a

@@ -15,7 +15,7 @@
 
 namespace CNA::Content::Cnb
 {
-    /** @brief Chunk identifiers defined by the `SpriteFont` asset schema (plans/plan_cnb.md `CNBF-102`). */
+    /** @brief Chunk identifiers defined by the `SpriteFont` asset schema (`CNBF-102`). */
     namespace CnbSpriteFontChunk
     {
         /** @brief `FONT` -- glyph count, spacing and the default character. Mandatory, exactly one. */

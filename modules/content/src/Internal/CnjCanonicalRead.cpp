@@ -616,7 +616,7 @@ namespace CNA::Internal
             font.glyphs.push_back(std::move(out));
         }
 
-        // plans/plan_cnb.md CNBF-122: the two rules SpriteFont's own lookup depends on, applied
+        // CNBF-122: the two rules SpriteFont's own lookup depends on, applied
         // here so the runtime .cnj reader and the .cnj -> .cnb compiler decide identically.
         // EncodeSpriteFontToCnb()/ValidateFont() have always refused both, and nothing on the
         // runtime side did -- so a document the compiler rejected could still be loaded, which is

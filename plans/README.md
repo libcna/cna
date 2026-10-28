@@ -126,6 +126,12 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   architecture is in [`../docs/binding.md`](../docs/binding.md), and current defects are only in
   [`../handoff.md`](../handoff.md) §5.1.
 - [`plan_cnj.md`](plan_cnj.md) — `.cnj` content format.
+- `plan_cnb.md` — the engineering record of CNB, the compiled binary content format
+  (`CNBF-001`..`CNBF-123`, `CNBF-H001`..`H020`, 2026-08-26/27); deleted on 2026-10-28 (Git
+  history only). The format, its numbered reader invariants (§12.2), what is deliberately not
+  implemented (`Effect` `CNBF-104`, `.cnapak` `CNBF-107`, §15) and its design decisions D1–D11
+  (Appendix A) are in [`../docs/cnb-format.md`](../docs/cnb-format.md); comments cite the
+  `CNBF-*` IDs bare.
 - [`plan_gltf.md`](plan_gltf.md) — glTF import correctness.
 - [`plan_xnb.md`](plan_xnb.md) — XNB content pipeline.
 - [`plan_xnapipeline.md`](plan_xnapipeline.md) — native XNB output (closed; external verification rows only).

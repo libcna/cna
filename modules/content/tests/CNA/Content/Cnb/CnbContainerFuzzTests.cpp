@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-034: deterministic, whole-container fuzzing.
+// CNBF-034: deterministic, whole-container fuzzing.
 //
 // The negative tests elsewhere in this directory each break one invariant on purpose, which proves
 // the checks that exist work. This proves something different and harder: that no combination of

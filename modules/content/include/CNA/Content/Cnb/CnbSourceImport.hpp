@@ -17,7 +17,7 @@ namespace CNA::Content::Cnb
 {
     /**
      * @brief Headless, deterministic import of source files into the codecs' own data types
-     *        (plans/plan_cnb.md `CNBF-109`/`CNBF-110`).
+     *        (`CNBF-109`/`CNBF-110`).
      *
      * Everything here is **pure data**. A content compiler must not need a `GraphicsDevice`, an
      * audio device, a window or a renderer: it runs on a build machine, in a container, in CI. So
@@ -83,7 +83,7 @@ namespace CNA::Content::Cnb
 
     /**
      * @brief Decodes a DDS cube map into a `TextureCube` description
-     *        (plans/plan_cnb.md `CNBF-113`).
+     *        (`CNBF-113`).
      *
      * Goes through `CNA::Internal::Graphics::DecodeDdsCube`, which is the **same** decoder
      * `TextureCube::DDSFromStreamEXT` uses — it was extracted out of that function precisely so a
@@ -144,7 +144,7 @@ namespace CNA::Content::Cnb
      * A `smpl` chunk's first loop entry becomes the sound's loop region, using the same rules the
      * runtime applies, so a looping WAV compiles to a looping `.cnb`. Every read of that entry is
      * bounded by the `smpl` chunk's own payload: a chunk declaring a loop it has no room for is
-     * refused rather than completed from whatever follows it (plans/plan_cnb.md `CNBF-117`).
+     * refused rather than completed from whatever follows it (`CNBF-117`).
      *
      * Integers are decoded from their bytes rather than by copying into a host integer, so the
      * result does not depend on the machine's byte order; the RIFF form's declared length bounds

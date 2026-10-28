@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-116: the shared DDS cube decoder against headers written to break it.
+// CNBF-116: the shared DDS cube decoder against headers written to break it.
 //
 // This decoder sits under two callers -- TextureCube::DDSFromStreamEXT at run time and the CNB
 // TextureCube producer at compile time -- and both of them are handed files by someone else. The
@@ -142,7 +142,7 @@ TEST(DdsCubeDecoderTest, TheLargestRepresentableDimensionIsStillAccepted)
     // The ceiling must not be lower than it claims. A 16384-texel face is refused only for being
     // truncated -- the header itself is legal -- which proves the dimension check let it through.
     //
-    // The budget has to be lifted for this one (plans/plan_cnb.md CNBF-122): six 16384-texel faces
+    // The budget has to be lifted for this one (CNBF-122): six 16384-texel faces
     // decode to 6 GiB even at a single mip level, which the DEFAULT budget refuses before the
     // payload is looked at. Isolating the dimension check is exactly what an injected budget is
     // for -- and the two layers are asserted in order, one test each, rather than one standing in

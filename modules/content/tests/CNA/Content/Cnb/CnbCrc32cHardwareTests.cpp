@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-108: the hardware CRC-32C path.
+// CNBF-108: the hardware CRC-32C path.
 //
 // A faster checksum that computes a different number is not a faster checksum, it is a corrupted
 // format. Every existing .cnb carries CRCs produced by the table implementation, so the only thing

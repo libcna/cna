@@ -36,7 +36,7 @@ namespace CNA::Content::Cnb
         /// Builds the single-entry XREF table both schemas use for their media file.
         ///
         /// The name is checked against the container's own rule (CnbLogicalNameProblem, the same
-        /// function CnbDocument and CnbWriter call -- plans/plan_cnb.md CNBF-115) rather than
+        /// function CnbDocument and CnbWriter call -- CNBF-115) rather than
         /// against a copy of it. This schema's reference comes straight from a compiler's command
         /// line, which is exactly where a traversal would enter, and the message names the media
         /// reference rather than an anonymous XREF row so the user learns which argument was wrong.

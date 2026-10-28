@@ -1,4 +1,4 @@
-# plans/plan_cnb.md CNBF-106: direct glTF -> .cnb compilation.
+# CNBF-106: direct glTF -> .cnb compilation.
 #
 # CP-009 moved the same implementation behind CNA::Content so this focused legacy front end and
 # cna-content share one linked copy. A second glTF parser is the failure mode this avoids.

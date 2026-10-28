@@ -105,7 +105,7 @@ namespace Microsoft::Xna::Framework::Content
                 CNA::Internal::ValidateCnjEnvelope(envelope, "SpriteFont", path);
                 RejectSourceFileForSelfContainedCnj(envelope, "SpriteFont", path);
 
-                // plans/plan_cnb.md CNBF-118: read through the shared canonical reader rather than
+                // CNBF-118: read through the shared canonical reader rather than
                 // by scanning the document text. The scan found "glyphs" anywhere including inside
                 // a string, counted braces without knowing about string literals, read
                 // `JsonIntArray4` without checking the array's length or its elements' types, and
@@ -150,7 +150,7 @@ namespace Microsoft::Xna::Framework::Content
 
 
         // ---------------------------------------------------------------------------
-        // Compiled .cnb SpriteFont loader (plans/plan_cnb.md CNBF-102)
+        // Compiled .cnb SpriteFont loader (CNBF-102)
         //
         // The atlas is EMBEDDED rather than XREF'd, so this needs no second asset load: the font
         // and its atlas arrive in one file, and the atlas is built with the same code path a

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-103B: the Song and Video schemas.
+// CNBF-103B: the Song and Video schemas.
 //
 // These two are deliberately NOT built like SoundEffect. A sound effect owns its samples; a song
 // or a video can be hundreds of megabytes and wants streaming, seeking and buffering, so the .cnb

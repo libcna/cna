@@ -1095,7 +1095,7 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         // ---------------------------------------------------------------------------
-        // The shared model mesh builder (plans/plan_cnb.md CNBF-100)
+        // The shared model mesh builder (CNBF-100)
         //
         // Three front-ends produce a Model: the runtime glTF reader, the .cnj reader and the .cnb
         // decoder. They parse completely different things, but the moment each of them holds raw
@@ -1364,7 +1364,7 @@ namespace Microsoft::Xna::Framework::Content
          * @brief Resolves one of a mesh part's material texture fields to a logical asset name
          *        ContentManager can load, returning empty when that slot is unused.
          *
-         * @note CNAEXT -- plans/plan_cnb.md `CNBF-074`. Introduced when the compiled `.cnb` Model path
+         * @note CNAEXT -- `CNBF-074`. Introduced when the compiled `.cnb` Model path
          * needed the same effect construction the `.cnj` path already had: the two differ only in
          * how they arrive at these eight names, so resolving through one callback and sharing
          * everything after it is what keeps one effect/material policy instead of two.
@@ -4070,7 +4070,7 @@ namespace Microsoft::Xna::Framework::Content
 
 
         // ---------------------------------------------------------------------------
-        // Compiled .cnb Model loader (plans/plan_cnb.md CNBF-074)
+        // Compiled .cnb Model loader (CNBF-074)
         //
         // The bytes-to-CnbModelData half lives in modules/content/src/Cnb/CnbModelCodec.cpp and
         // needs no GraphicsDevice at all. What lives here is only the step that turns that plain
@@ -4078,7 +4078,7 @@ namespace Microsoft::Xna::Framework::Content
         // helpers the .cnj reader above already has -- ModelResources, BuildVertexBufferFromRawBytes,
         // IndicesFromBytes, WidenedIndicesEXT, AppendPositionsForMeshBoundsEXT and, most
         // importantly, BuildPartEffectEXT, which is now the single effect/material policy both
-        // paths go through. See plans/plan_cnb.md decision D9 for why the split falls here.
+        // paths go through. See docs/cnb-format.md decision D9 for why the split falls here.
         // ---------------------------------------------------------------------------
 
         Matrix MatrixFromCnbEXT(const std::array<float, 16>& m)

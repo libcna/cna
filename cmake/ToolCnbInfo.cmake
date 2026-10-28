@@ -1,4 +1,4 @@
-# plans/plan_cnb.md CNBF-H013: the offline .cnb inspector and validator. A developer content tool, so
+# CNBF-H013: the offline .cnb inspector and validator. A developer content tool, so
 # built unconditionally like cna_tool_gltf_to_cnj and cna_tool_cnj_to_cnb whose wiring this mirrors.
 # It links CNA only for the container reader -- no GraphicsDevice is ever constructed, so inspecting
 # an asset needs no window, GPU or renderer.

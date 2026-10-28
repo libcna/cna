@@ -9,7 +9,7 @@ namespace CNA::Content::Cnb
 {
     /**
      * @brief Computes the CRC-32C (Castagnoli) checksum used by every `.cnb` header, table of
-     *        contents and chunk (plans/plan_cnb.md `CNBF-002`).
+     *        contents and chunk (`CNBF-002`).
      *
      * Reflected polynomial `0x82F63B78` (normal form `0x1EDC6F41`), initial register
      * `0xFFFFFFFF`, reflected input and output, final XOR `0xFFFFFFFF` -- the same parameter set
@@ -49,7 +49,7 @@ namespace CNA::Content::Cnb
 
     /**
      * @brief CNAEXT: whether this process is folding CRC-32C with a hardware instruction
-     *        (plans/plan_cnb.md `CNBF-108`).
+     *        (`CNBF-108`).
      *
      * Detected once at runtime, not chosen at build time, so one binary runs on a machine with the
      * instruction and one without. Exposed for tests and diagnostics: the *result* is identical

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-061/CNBF-062/CNBF-064 (Phase D tests): the .cnj -> .cnb content compiler,
+// CNBF-061/CNBF-062/CNBF-064 (Phase D tests): the .cnj -> .cnb content compiler,
 // exercised both as a library call and as the real cna_tool_cnj_to_cnb executable
 // (CNA_CNJ_TO_CNB_TOOL_PATH, baked in by cmake/UnitTests.cmake).
 //
@@ -97,7 +97,7 @@ namespace
     }
 
     /// Every entry of `dir`, sorted, so a leftover `.cnatmp-*` shows up as itself rather than as
-    /// an absence (plans/plan_cnb.md `CNBF-123`).
+    /// an absence (`CNBF-123`).
     std::vector<std::string> EntryNames(const std::filesystem::path& dir)
     {
         std::vector<std::string> names;

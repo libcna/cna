@@ -95,7 +95,7 @@ namespace CNA::Content::Cnb
     {
         // The order matters only for which message a caller sees first; every one of these is a
         // refusal. Kept as one function so a reader, a writer and a media codec cannot drift apart
-        // about what a legal reference looks like (plans/plan_cnb.md CNBF-115).
+        // about what a legal reference looks like (CNBF-115).
         if (logicalName.empty()) { return "is empty"; }
         if (!CnbByteReader::IsWellFormedUtf8(logicalName))
         {

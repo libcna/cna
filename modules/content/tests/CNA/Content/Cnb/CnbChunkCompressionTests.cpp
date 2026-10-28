@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-105: opt-in per-chunk compression.
+// CNBF-105: opt-in per-chunk compression.
 //
 // The measurement that justified this is in docs/cnb-compression-measurements.md. What is tested
 // here is the part a benchmark cannot check: that turning it on changes nothing a reader can

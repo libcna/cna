@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-103A: the SoundEffect schema.
+// CNBF-103A: the SoundEffect schema.
 //
 // The interesting failures in an audio asset are the ones that surface at PLAYBACK time on
 // someone else's machine rather than at load: a loop region reaching past the end of the sound, a

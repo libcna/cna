@@ -9,7 +9,7 @@
 namespace CNA::Content::Cnb
 {
     /**
-     * @brief The pixel format identifiers a `.cnb` texture stores (plans/plan_cnb.md `CNBF-101A-fmt`).
+     * @brief The pixel format identifiers a `.cnb` texture stores (`CNBF-101A-fmt`).
      *
      * This enumeration exists **instead of** serializing
      * `Microsoft::Xna::Framework::Graphics::SurfaceFormat` directly, and the reason is worth

@@ -59,8 +59,8 @@
 > `905be872ee5f098f90cfcee7f484dca8136cd33e`. Those commits were not merged or rewritten; the
 > established combined baseline remains the topology under review here.
 >
-> **Boundary:** this plan owns the build-time CNA Content Pipeline. `plans/plan_cnb.md` remains the
-> engineering record for the frozen CNB compiled format. The pipeline consumes the existing CNB
+> **Boundary:** this plan owns the build-time CNA Content Pipeline. `docs/cnb-format.md` is the
+> specification of the frozen CNB compiled format. The pipeline consumes the existing CNB
 > codec APIs; it does not reopen CNB design.
 >
 > **Stability labels:** CLI behavior and byte equivalence become stable only when their tasks say
@@ -139,11 +139,12 @@ The two local-`next` commits beyond the branch were `PLAT-1` generated-plan main
 forbids merging and asks not to disturb an existing content-pipeline branch unnecessarily, so the
 branch stays at its verified CNB-complete existing base.
 
-`plans/plan_cnb.md` section 16.2 confirms ten implemented/frozen asset schemas with runtime loaders
+`docs/cnb-format.md` §15.1 confirms ten implemented/frozen asset schemas with runtime loaders
 and producers: Texture2D, Texture3D, TextureCube, SpriteFont, Model, AnimationClip, Curve,
 SoundEffect, Song and Video. Effect remains intentionally absent. `docs/cnb-format.md` is the
 implemented byte specification; `misc/cnb.md`, the historical rationale, was removed on 2026-10-25
-(Git history; `plans/plan_cnb.md` §2 records what was taken from it).
+(Git history, as is the CNB engineering record `plans/plan_cnb.md`, deleted on 2026-10-28;
+`docs/cnb-format.md` Appendix A keeps its design decisions).
 
 No frozen definition or existing CNB byte is expected to change in this project.
 
@@ -1156,7 +1157,7 @@ carrying forward task-local results:
   FFmpeg, audio-device or `ContentManager::Load` dependency. No private staging directories were
   left under the tested temporary root.
 * `next...content-pipeline-next` changes no frozen codec, container/schema definition, asset/chunk
-  identifier, CRC implementation, golden vector, `plans/plan_cnb.md`, or atomic publication helper.
+  identifier, CRC implementation, golden vector, CNB specification, or atomic publication helper.
   Built-in writers still delegate to the existing ten typed encoders, and every final producer
   still reaches the one shared atomic publication implementation.
 

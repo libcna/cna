@@ -11,7 +11,7 @@
 
 namespace CNA::Content::Cnb
 {
-    /** @brief Chunk identifiers defined by the `Curve` asset schema (plans/plan_cnb.md `CNBF-040`). */
+    /** @brief Chunk identifiers defined by the `Curve` asset schema (`CNBF-040`). */
     namespace CnbCurveChunk
     {
         /** @brief `CRVH` -- loop behaviour and the key count. Mandatory, exactly one. */

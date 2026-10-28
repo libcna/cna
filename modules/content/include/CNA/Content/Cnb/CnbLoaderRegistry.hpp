@@ -15,7 +15,7 @@ namespace CNA::Content
 {
     /**
      * @brief The process-wide table mapping a `.cnb` file's numeric asset type to the code that
-     *        turns that file into a runtime object (plans/plan_cnb.md `CNBF-080`).
+     *        turns that file into a runtime object (`CNBF-080`).
      *
      * This is CNB's whole extension mechanism, and it is deliberately far smaller than XNB's. A
      * `.cnb` file says which asset type it holds as one `u32`; the loader registered for that
@@ -61,7 +61,7 @@ namespace CNA::Content
          * and its reserved range (`0x40000000`-`0x7FFFFFFF`) belong to CNA, and there is
          * deliberately **no parameter** by which a caller can claim one: the built-in route is the
          * private RegisterBuiltIn(), reachable only by `ContentManager`
-         * (plans/plan_cnb.md `CNBF-122`).
+         * (`CNBF-122`).
          *
          * That the boundary is a *compile-time* one matters. While it was an ownership argument on
          * this function, a game could pass the built-in value, register its own factory under a
@@ -138,7 +138,7 @@ namespace CNA::Content
 
         /**
          * @brief Resolves the loader that may decode @p document, proving identity as well as
-         *        matching the number (plans/plan_cnb.md `CNBF-H002`).
+         *        matching the number (`CNBF-H002`).
          *
          * For a **built-in** asset type the numeric identifier is authoritative: CNA assigns those
          * itself and they are frozen, so a match is a proof of identity and the file's optional
@@ -164,7 +164,7 @@ namespace CNA::Content
          * @brief Registers the built-in loaders that need nothing but their own codec: `Curve` and
          *        `AnimationClip`.
          *
-         * **Not every built-in type** (plans/plan_cnb.md `CNBF-119`) -- the name is inherited from
+         * **Not every built-in type** (`CNBF-119`) -- the name is inherited from
          * when those were the only two. The other eight built-in loaders (`Model`, `Texture2D`,
          * `TextureCube`, `Texture3D`, `SpriteFont`, `SoundEffect`, `Song`, `Video`) are registered
          * by `ContentManager::RegisterBuiltinLoaders()` instead, because each of them constructs a
@@ -180,7 +180,7 @@ namespace CNA::Content
     private:
         /**
          * @brief Registers one of **CNA's own** built-in loaders. Not reachable by a game
-         *        (plans/plan_cnb.md `CNBF-122`).
+         *        (`CNBF-122`).
          *
          * The counterpart of Register(), and the reason that one needs no ownership argument. It
          * accepts a built-in or reserved identifier and refuses a custom one, so the two routes
@@ -232,7 +232,7 @@ namespace CNA::Content
         /// installs the loader of the type it loads first.
         [[nodiscard]] static LoaderFn ResolveRegisteredForDocument(const Cnb::CnbDocument& document);
 
-        // The compile-time half of the CNA/game boundary (plans/plan_cnb.md `CNBF-122`).
+        // The compile-time half of the CNA/game boundary (`CNBF-122`).
         // ContentManager registers the eight built-in loaders that need a GraphicsDevice or the
         // manager itself, so it -- and nothing else -- reaches RegisterBuiltIn().
         friend class Microsoft::Xna::Framework::Content::ContentManager;

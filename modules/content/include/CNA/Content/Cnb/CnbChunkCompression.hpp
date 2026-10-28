@@ -11,7 +11,7 @@
 namespace CNA::Content::Cnb
 {
     /**
-     * @brief Chunk compression for `.cnb` (plans/plan_cnb.md `CNBF-105`).
+     * @brief Chunk compression for `.cnb` (`CNBF-105`).
      *
      * Compression is **opt-in and off by default**, and that is a measured decision rather than
      * caution: `docs/cnb-compression-measurements.md` records roughly half off a texture payload,

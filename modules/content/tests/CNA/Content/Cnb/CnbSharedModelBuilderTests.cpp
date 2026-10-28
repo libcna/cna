@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-100: the shared .cnj/.cnb/glTF model mesh builder.
+// CNBF-100: the shared .cnj/.cnb/glTF model mesh builder.
 //
 // Two kinds of test here, and they defend different things.
 //

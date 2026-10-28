@@ -77,7 +77,7 @@ TEST_F(CnjSpriteFontTest, LoadsRealCnjFixture)
     // The glyphs are in ascending character order -- U+003F '?' then U+0041 'A'. This fixture
     // used to list 'A' first, which SpriteFont's binary search cannot look up correctly and which
     // EncodeSpriteFontToCnb() has always refused; the shared canonical reader now refuses it too,
-    // so the two routes agree (plans/plan_cnb.md CNBF-122).
+    // so the two routes agree (CNBF-122).
     WriteFile(root.path() / "arial.cnj", R"({
         "cnjVersion": 1,
         "type": "SpriteFont",
@@ -108,7 +108,7 @@ TEST_F(CnjSpriteFontTest, LoadsRealCnjFixture)
 // A defaultCharacter absent from the glyph list must be rejected, not silently
 // accepted and left to invoke UB the first time MeasureString/DrawString needed the fallback.
 //
-// plans/plan_cnb.md CNBF-122 moved the refusal earlier and made it shared. It used to come from
+// CNBF-122 moved the refusal earlier and made it shared. It used to come from
 // SpriteFont's constructor as a System::ArgumentException, which the `.cnj` -> `.cnb` compiler --
 // which constructs no SpriteFont -- never reached; the document is now refused by the canonical
 // reader BOTH routes call, as a ContentLoadException. `CnbCompilerStrictnessTests` asserts the
@@ -140,7 +140,7 @@ TEST_F(CnjSpriteFontTest, DefaultCharacterAbsentFromGlyphsThrows)
     EXPECT_THROW(cm.Load<SpriteFont>("badDefault"), ContentLoadException);
 }
 
-// plans/plan_cnb.md CNBF-122: the other half of the runtime side of the equivalence. An unsorted
+// CNBF-122: the other half of the runtime side of the equivalence. An unsorted
 // or duplicated character map is what SpriteFont's binary search cannot survive, and the runtime
 // accepted both while EncodeSpriteFontToCnb() refused them -- so a font that compiled nowhere
 // still loaded here.

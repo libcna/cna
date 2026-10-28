@@ -108,7 +108,7 @@ namespace Microsoft::Xna::Framework::Content
                 CNA::Internal::ValidateCnjEnvelope(envelope, "Texture3D", path);
                 RejectSourceFileForSelfContainedCnj(envelope, "Texture3D", path);
 
-                // plans/plan_cnb.md CNBF-118: one canonical reading of these four members, shared
+                // CNBF-118: one canonical reading of these four members, shared
                 // with the .cnj -> .cnb compiler. Previously each route cast numberValue straight
                 // to int -- so 3.7 became 3, 1e400 was undefined behaviour, and the two routes
                 // could accept different documents.

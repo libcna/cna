@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-H001..CNBF-H005: the regression suite for the hardening pass.
+// CNBF-H001..CNBF-H005: the regression suite for the hardening pass.
 //
 // Each test here exists because a specific defect was found in the CNB implementation by review
 // rather than by a failing test, which means the suite that was supposed to defend that property

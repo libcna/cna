@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-101A/B/C: the Texture2D, TextureCube and Texture3D schemas.
+// CNBF-101A/B/C: the Texture2D, TextureCube and Texture3D schemas.
 //
 // The three asset types share one chunk layout, so the tests are written to prove that sharing is
 // safe rather than to repeat themselves: each type is exercised for the constraint only it has

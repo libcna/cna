@@ -972,7 +972,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   fixture case, isolated from the broader MEDIA-100/98 tests for a focused regression guard.
 
 - [x] **MEDIA-120 — Full Media-namespace headless-safety pass.** Confirm every new test added in this
-  phase runs correctly under `SDL_VIDEODRIVER=dummy` where applicable (matching `plan_cnb.md`'s
+  phase runs correctly under `SDL_VIDEODRIVER=dummy` where applicable (matching the CNB work's
   headless-CI precedent), and grep the **full** `CnaTests` log for `FAILED` (not a truncated tail) to
   confirm zero regressions introduced by any Phase 6 addition before moving to Phase 7.
   *Verified:* full-suite regression run against the real display (per §2's corrected methodology,

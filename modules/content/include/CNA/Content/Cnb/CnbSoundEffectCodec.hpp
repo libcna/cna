@@ -11,7 +11,7 @@
 namespace CNA::Content::Cnb
 {
     /**
-     * @brief The sample formats a `.cnb` sound effect stores (plans/plan_cnb.md `CNBF-103A`).
+     * @brief The sample formats a `.cnb` sound effect stores (`CNBF-103A`).
      *
      * A serialization enum of CNB's own, for the same reason `CnbTextureFormat` is one: a file
      * format must not depend on the declaration order of a runtime enumeration, and no audio

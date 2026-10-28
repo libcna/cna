@@ -13,7 +13,7 @@
 namespace CNA::Content::Cnb
 {
     /**
-     * @brief Builds a complete, valid `.cnb` byte image (plans/plan_cnb.md `CNBF-009`).
+     * @brief Builds a complete, valid `.cnb` byte image (`CNBF-009`).
      *
      * The writer is deterministic by construction: it reads no clock, no random source and no
      * pointer value, it emits chunks in the order they were added, it lays the table of contents
@@ -24,7 +24,7 @@ namespace CNA::Content::Cnb
      * The container-level `CMET` and `XREF` chunks are always emitted first, ahead of the schema's
      * own chunks, regardless of when they were set. Schemas must therefore address each other's
      * chunks by ordinal within a chunk type (`CnbDocument::FindAll`), never by table-of-contents
-     * index -- see `plans/plan_cnb.md` decision `D4`.
+     * index -- see `docs/cnb-format.md` decision `D4`.
      */
     class CnbWriter
     {
@@ -50,7 +50,7 @@ namespace CNA::Content::Cnb
          * is a 31-bit hash of the type name, so the load path proves identity by comparing
          * @p assetTypeName against the name the loader was registered under. Build() refuses a
          * custom-typed file that has no name, or whose name does not hash to the declared
-         * identifier (plans/plan_cnb.md `CNBF-H002`).
+         * identifier (`CNBF-H002`).
          *
          * Both strings are derived from the compiler's inputs, so setting them does not compromise
          * determinism.
@@ -66,7 +66,7 @@ namespace CNA::Content::Cnb
          * Each name is validated when Build() assembles the file, against the container's own
          * rule -- `CnbLogicalNameProblem()`, the same function the reader applies (relative,
          * `/`-separated, well-formed UTF-8, no `..` segment). Sharing the rule is what stops the
-         * writer producing a file its own reader would refuse (plans/plan_cnb.md `CNBF-115`).
+         * writer producing a file its own reader would refuse (`CNBF-115`).
          *
          * @param references The assets this file refers to by logical name, in the order the
          *                   schema's own indices expect.
@@ -80,7 +80,7 @@ namespace CNA::Content::Cnb
          * emits each of them at most once, from SetMetadata() and SetExternalReferences(), and a
          * schema adding one as an ordinary chunk would produce a file carrying two of a singleton
          * the reader requires to be unique -- accepted by Build() and refused by
-         * CnbDocument::Parse() (plans/plan_cnb.md `CNBF-115`).
+         * CnbDocument::Parse() (`CNBF-115`).
          *
          * @param type      The chunk's four-character identifier; every byte must be printable
          *                  ASCII, and it must not be a container-defined identifier.
@@ -102,7 +102,7 @@ namespace CNA::Content::Cnb
 
         /**
          * @brief Compresses this document's schema chunks with @p codec
-         *        (plans/plan_cnb.md `CNBF-105`).
+         *        (`CNBF-105`).
          *
          * **Off by default, and that is a measured default rather than a cautious one.**
          * `docs/cnb-compression-measurements.md` records roughly half off a texture payload, three
@@ -119,7 +119,7 @@ namespace CNA::Content::Cnb
          * is pure overhead on a chunk that small.
          *
          * That is **not** enough to let a build without the codec inspect such a file
-         * (plans/plan_cnb.md `CNBF-121`): CnbDocument::Parse() refuses an unimplemented codec while
+         * (`CNBF-121`): CnbDocument::Parse() refuses an unimplemented codec while
          * reading the table of contents, long before any chunk is decoded, so a compressed `.cnb`
          * cannot be opened at all without the codec. Reading a compressed file's identity without
          * one would need a metadata-only parser, which does not exist.
@@ -132,7 +132,7 @@ namespace CNA::Content::Cnb
 
         /**
          * @brief Bounds the file this writer will produce, so it cannot exceed what a reader with
-         *        @p limits will open (plans/plan_cnb.md `CNBF-122`).
+         *        @p limits will open (`CNBF-122`).
          *
          * Build() applies these the way `CnbDocument::Parse()` applies its own: the number of
          * chunks against `maxChunkCount`, each chunk's stored and logical size against
@@ -170,12 +170,12 @@ namespace CNA::Content::Cnb
          * Every file this returns is loadable by CnbDocument::Parse(): the external-reference
          * names, the chunk identifiers and the custom-type rule are all checked here or at the
          * call that supplied them, so the writer has no path to a file its own reader refuses
-         * (plans/plan_cnb.md `CNBF-115`).
+         * (`CNBF-115`).
          *
          * That guarantee is bounded by SetLimits() as well as by the format: a document whose
          * chunks are individually legal but whose aggregate logical size, chunk count or finished
          * length exceeds the configured reader limits is refused here rather than at load time
-         * (plans/plan_cnb.md `CNBF-122`).
+         * (`CNBF-122`).
          *
          * @return The complete file bytes.
          * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the result would

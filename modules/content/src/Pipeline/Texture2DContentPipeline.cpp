@@ -1405,7 +1405,7 @@ namespace CNA::Content::Pipeline
         {
             if (context.OutputFormat() != ContentOutputFormat::Xnb)
             {
-                // CNB texture schema 1 is frozen to Rgba8 (plans/plan_cnb.md CNBF-101A), so the
+                // CNB texture schema 1 is frozen to Rgba8 (CNBF-101A), so the
                 // compressed representation has nowhere to go in a .cnb. Building the asset
                 // uncompressed and saying so beats failing a whole build over a format the
                 // other container would have accepted.

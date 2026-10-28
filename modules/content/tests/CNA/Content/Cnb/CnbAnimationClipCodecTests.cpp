@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-051/CNBF-052 (Phase C tests): the AnimationClip asset schema -- round trip,
+// CNBF-051/CNBF-052 (Phase C tests): the AnimationClip asset schema -- round trip,
 // determinism, the flat-key-array invariant that makes it a compiled representation, and one
 // negative test per way the three chunks can disagree with each other.
 

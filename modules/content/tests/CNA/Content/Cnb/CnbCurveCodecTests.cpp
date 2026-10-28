@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-041/CNBF-042 (Phase B tests): the Curve asset schema. Round trip and
+// CNBF-041/CNBF-042 (Phase B tests): the Curve asset schema. Round trip and
 // determinism first, then one negative test per way a Curve .cnb can be malformed -- each built
 // by taking a valid file and breaking exactly one thing.
 

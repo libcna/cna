@@ -12,7 +12,7 @@ namespace CNA::Content::Cnb
 {
     /**
      * @brief A bounded, little-endian cursor over one region of a `.cnb` file
-     *        (plans/plan_cnb.md `CNBF-006`).
+     *        (`CNBF-006`).
      *
      * Every read is checked against the region's end before a byte is touched, and every failure
      * is a `ContentLoadException` naming the region, the offset and how many bytes were wanted --

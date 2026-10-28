@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// Shared DDS cube-map fixture builder (plans/plan_cnb.md `CNBF-113`).
+// Shared DDS cube-map fixture builder (`CNBF-113`).
 //
 // Extracted from TextureCubeTests.cpp so the CNB producer tests build the SAME bytes the runtime
 // DDS tests do. Two hand-built DDS writers would be two definitions of "a valid cube map", and the

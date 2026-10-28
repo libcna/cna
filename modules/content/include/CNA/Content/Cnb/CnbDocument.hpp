@@ -13,7 +13,7 @@
 
 namespace CNA::Content::Cnb
 {
-    /** @brief One parsed table-of-contents entry (plans/plan_cnb.md `CNBF-008`). */
+    /** @brief One parsed table-of-contents entry (`CNBF-008`). */
     struct CnbChunkEntry
     {
         /** @brief The chunk's four-character identifier. */
@@ -34,7 +34,7 @@ namespace CNA::Content::Cnb
          * Equal to @ref storedSize exactly when @ref compression is `CnbCompression::None`, which
          * the reader requires; for a compressed chunk it is the size the stored frame must expand
          * to, and the sum of it across every chunk is bounded by
-         * `CnbReadLimits::maxTotalUncompressedSize` (plans/plan_cnb.md `CNBF-114`).
+         * `CnbReadLimits::maxTotalUncompressedSize` (`CNBF-114`).
          */
         std::uint64_t uncompressedSize = 0u;
 
@@ -100,7 +100,7 @@ namespace CNA::Content::Cnb
          *
          * **Load-bearing for a custom asset type, diagnostic for a built-in one.** The asymmetry
          * is deliberate and is the whole of CNB's custom-type collision defence
-         * (`docs/cnb-format.md` §5.1/§7, plans/plan_cnb.md `CNBF-H002`):
+         * (`docs/cnb-format.md` §5.1/§7, `CNBF-H002`):
          *
          * - A **built-in** identifier is assigned by CNA and frozen, so the header's number is
          *   already a proof of identity. This string is then only ever used to make an error
@@ -125,9 +125,9 @@ namespace CNA::Content::Cnb
     };
 
     /**
-     * @brief A parsed, fully validated `.cnb` container (plans/plan_cnb.md `CNBF-008`).
+     * @brief A parsed, fully validated `.cnb` container (`CNBF-008`).
      *
-     * Parse() applies every container invariant listed in `plans/plan_cnb.md` §4 -- magic, versions,
+     * Parse() applies every container invariant listed in `docs/cnb-format.md` §12.2 -- magic, versions,
      * reserved-field zeroing, both structural checksums, every chunk checksum, overflow-safe
      * offset arithmetic, alignment, table-of-contents ordering, exact non-overlapping coverage of
      * the file, and zeroed alignment padding -- before any accessor can hand out a byte. A
@@ -277,7 +277,7 @@ namespace CNA::Content::Cnb
          * Decoded during Parse(), not on first use: a document is fully immutable once it exists,
          * which is what makes it safe to hand the same document to two threads and what lets the
          * loader registry consult the type name from a `const` context without a data race
-         * (plans/plan_cnb.md `CNBF-H004`).
+         * (`CNBF-H004`).
          *
          * This is not merely provenance for a custom asset type: `CnbMetadata::assetTypeName` is
          * checked against the registered canonical name before dispatch. See CnbMetadata.
@@ -337,7 +337,7 @@ namespace CNA::Content::Cnb
         void DecodeMetadata();
         void DecodeExternalReferences();
 
-        /// Expands every compressed chunk once, at parse time (plans/plan_cnb.md `CNBF-105`).
+        /// Expands every compressed chunk once, at parse time (`CNBF-105`).
         ///
         /// Eagerly rather than on first access, for two reasons. A caller of ChunkData() gets a
         /// span with the same meaning it always had -- the chunk's logical bytes -- so no existing
@@ -351,7 +351,7 @@ namespace CNA::Content::Cnb
         /// chunk was decompressed; ChunkData() serves every other chunk straight from `bytes_`.
         ///
         /// The engaged/disengaged state is tracked explicitly rather than inferred from an empty
-        /// vector (plans/plan_cnb.md `CNBF-114`): a compressed chunk whose LOGICAL size is zero
+        /// vector (`CNBF-114`): a compressed chunk whose LOGICAL size is zero
         /// expands to no bytes at all, so an emptiness test would have sent ChunkData() back to
         /// `bytes_` and handed out the stored compressed frame as if it were the chunk's contents.
         std::vector<std::optional<std::vector<std::uint8_t>>> expanded_;

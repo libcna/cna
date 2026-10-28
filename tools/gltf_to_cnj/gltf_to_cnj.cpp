@@ -1694,7 +1694,7 @@ namespace
 
 namespace CNA::Tools::Gltf
 {
-    // plans/plan_cnb.md CNBF-106. The one named entry point into this file's orchestration, so
+    // CNBF-106. The one named entry point into this file's orchestration, so
     // cna_tool_gltf_to_cnb can run EXACTLY this code rather than a second interpretation of glTF.
     // Both CNB front ends call this one linked implementation, which makes "both formats read glTF
     // the same way" true by construction instead of by testing.

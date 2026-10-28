@@ -1,6 +1,6 @@
 # CNB chunk compression measurement
 
-`plans/plan_cnb.md` `CNBF-105`. The probe that decided whether CNB should have a codec at all.
+`CNBF-105`. The probe that decided whether CNB should have a codec at all.
 
 ## What it proved
 

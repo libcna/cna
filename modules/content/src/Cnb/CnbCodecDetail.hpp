@@ -103,7 +103,7 @@ namespace CNA::Content::Cnb::MediaCodecDetail
     /** @brief The largest VideoSoundtrackType value (Music, Dialog, MusicAndDialog). */
     inline constexpr std::uint32_t kMaxSoundtrackType = 2u;
 
-    /// Largest duration either schema may carry, in milliseconds (plans/plan_cnb.md `CNBF-119`).
+    /// Largest duration either schema may carry, in milliseconds (`CNBF-119`).
     ///
     /// The wire field is a `u32` and `Song`'s and `Video`'s constructors both take an `intcs`, so
     /// a duration above `INT32_MAX` is not a long song -- it is a negative one once it reaches the

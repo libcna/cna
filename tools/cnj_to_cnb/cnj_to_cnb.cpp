@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-063 (Phase D): the offline `.cnj` -> `.cnb` content compiler.
+// CNBF-063 (Phase D): the offline `.cnj` -> `.cnb` content compiler.
 //
 // Deliberately a thin shell over CNA::Content::Cnb::CompileCnjToCnb: everything worth testing
 // lives in the library, where a unit test can reach it without spawning a process, and this file
@@ -83,7 +83,7 @@ int main(int argc, char** argv)
         const CNA::Content::Cnb::CnjToCnbResult result =
             CNA::Content::Cnb::CompileCnjToCnb(input, contentRoot, logicalName);
 
-        // plans/plan_cnb.md CNBF-123: published all-or-nothing, through the same helper
+        // CNBF-123: published all-or-nothing, through the same helper
         // cna_tool_source_to_cnb and cna_tool_gltf_to_cnb already use. This was the last CNB
         // producer opening its destination with `trunc`, which destroys the previous build's
         // output at the moment the file is OPENED rather than when the new one is complete -- and

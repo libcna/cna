@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnb.md CNBF-020..CNBF-033 (Phase A tests): the CNB container's positive contract and,
+// CNBF-020..CNBF-033 (Phase A tests): the CNB container's positive contract and,
 // far more importantly, one dedicated negative test per container invariant listed in
-// plans/plan_cnb.md §4. Every negative test builds a *valid* file first and then breaks exactly one
+// docs/cnb-format.md §12.2. Every negative test builds a *valid* file first and then breaks exactly one
 // invariant, so "the reader rejected it" can never be confused with "the fixture was never valid".
 // Where breaking an invariant would also invalidate a checksum, the affected checksums are
 // recomputed, so the test really does exercise the invariant it names rather than the checksum
@@ -1154,7 +1154,7 @@ TEST(CnbContainerTest, EveryShapeOfWriterCallsAnEncoderMakesProducesALoadableFil
     // calls succeeds, the bytes it produced parse.
     //
     // This is deliberately no longer named as if it proved Build() -> Parse() symmetry in general
-    // (plans/plan_cnb.md CNBF-122): it varies the document's shape and not its SIZE, so it says
+    // (CNBF-122): it varies the document's shape and not its SIZE, so it says
     // nothing about the reader's count and size limits. Those are the next test's subject, and
     // until CNBF-122 the writer did not enforce them at all.
     struct Shape

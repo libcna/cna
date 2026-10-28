@@ -24,7 +24,7 @@ namespace CNA::Internal
 
     /**
      * @brief The one canonical reading of the `.cnj` fragments more than one code path consumes
-     *        (plans/plan_cnb.md `CNBF-118`).
+     *        (`CNBF-118`).
      *
      * A `.cnj` document is read in two places: by `ContentManager`'s runtime type readers, and by
      * the `.cnj` -> `.cnb` compiler. Two hand-written readings of the same document are two answers
@@ -247,7 +247,7 @@ namespace CNA::Internal
      *
      * **The two semantic rules `SpriteFont` itself depends on are enforced here**, so the runtime
      * `.cnj` reader and the `.cnj` -> `.cnb` compiler reach the same verdict on the same document
-     * (plans/plan_cnb.md `CNBF-122`). `SpriteFont` looks a character up by **binary search**, so an
+     * (`CNBF-122`). `SpriteFont` looks a character up by **binary search**, so an
      * unsorted or duplicated character map does not fail loudly -- it silently returns the wrong
      * glyph, or none; and a `defaultCharacter` absent from the map is a fallback that cannot be
      * taken. `EncodeSpriteFontToCnb()` has always refused both, so before this a document the

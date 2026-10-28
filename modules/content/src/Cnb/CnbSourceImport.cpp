@@ -34,7 +34,7 @@ namespace CNA::Content::Cnb
         }
 
         // RIFF integers are little-endian by definition, so they are assembled from individual
-        // bytes rather than memcpy'd into a host integer (plans/plan_cnb.md CNBF-117). A memcpy
+        // bytes rather than memcpy'd into a host integer (CNBF-117). A memcpy
         // decodes correctly only on a little-endian host: on a big-endian one every field --
         // channel count, sample rate, every chunk length -- came out byte-swapped, so a perfectly
         // ordinary WAV would have been refused or, worse, accepted with a nonsense sample rate.
@@ -215,7 +215,7 @@ namespace CNA::Content::Cnb
         // 68 bytes short of the file, which is exactly the `smpl` chunk somebody inserted after
         // that length was computed, and XNA built all six
         // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-192`). This replaces the stricter reading
-        // `plans/plan_cnb.md` CNBF-117 chose before the importer had been measured.
+        // CNBF-117 chose before the importer had been measured.
         const std::uint32_t riffSize = ReadU32(wavBytes, 4u);
         if (riffSize < 4u)
         {
@@ -304,7 +304,7 @@ namespace CNA::Content::Cnb
                         FailWav(origin, "is WAVE_FORMAT_EXTENSIBLE but declares an extension size "
                                         "of " + std::to_string(cbSize) + " bytes; 22 is required.");
                     }
-                    // plans/plan_cnb.md CNBF-122: cbSize is the extension's DECLARED length, and
+                    // CNBF-122: cbSize is the extension's DECLARED length, and
                     // the 18 bytes of WAVEFORMATEX in front of it plus that length must fit inside
                     // the chunk that carries them. `chunkSize >= 40` above only proves the 22 bytes
                     // this decoder READS are present; a cbSize of 4000 in a 40-byte 'fmt ' is a
@@ -363,7 +363,7 @@ namespace CNA::Content::Cnb
                     const std::uint32_t loops = ReadU32(wavBytes, start + 28u);
                     if (loops != 0u)
                     {
-                        // plans/plan_cnb.md CNBF-122: the WHOLE declared loop table must fit, not
+                        // CNBF-122: the WHOLE declared loop table must fit, not
                         // just the first entry this importer consumes. A count of 1000 in a
                         // 60-byte 'smpl' is a header that disagrees with its own chunk, and the
                         // first entry's Start/End are read out of that same header -- so believing
