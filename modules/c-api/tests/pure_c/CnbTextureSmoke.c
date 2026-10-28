@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 /*
- * plans/plan_binding.md CBIND-108 -- the `.cnb` texture pixel formats and the Texture2D /
+ * C API task CBIND-108 -- the `.cnb` texture pixel formats and the Texture2D /
  * TextureCube / Texture3D schemas.
  *
  * Like the document suite this builds what it then reads, so the encoder and the decoder are

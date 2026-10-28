@@ -1,4 +1,4 @@
-# plan_binding.md CBIND-042B: the experimental release gate.
+# C API task CBIND-042B: the experimental release gate.
 #
 # A release gate written as prose is a list of things somebody once believed. This one is a
 # declaration plus a measurement, and the job fails when they disagree in either direction:

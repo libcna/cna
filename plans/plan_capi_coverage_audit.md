@@ -99,7 +99,7 @@ A green but meaningless coverage gate is worse than a red honest one.
 The audit is done when every number above is reproduced from the tree, the 9,499/12,733 divergence
 is explained rather than regenerated away, all 3,007 rows are partitioned into meaningful
 categories, genuinely missing bindings are counted as unique logical APIs, the `PbrMaterial`
-ambiguity is root-caused to a source-of-truth error, and the trustworthiness of `plan_binding.md`,
+ambiguity is root-caused to a source-of-truth error, and the trustworthiness of the coverage model,
 `COVERAGE.md` and the limitations generator is stated without softening.
 
 The findings were recorded in `docs/c-api/COVERAGE_AUDIT.md`, removed on 2026-10-11 once superseded

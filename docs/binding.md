@@ -477,8 +477,8 @@ CNA.NET's API verification does.
 - [`c-api/README.md`](c-api/README.md) — the C API: purpose, coverage, naming, hard boundaries.
 - [`c-api/CONSUMING.md`](c-api/CONSUMING.md) — building a program against an installed CNA.
 - [`c-api/LIMITATIONS.md`](c-api/LIMITATIONS.md) — what the ABI does not cover yet.
-- [`../plans/plan_binding.md`](../plans/plan_binding.md) — the C ABI implementation plan and its
-  release gate.
+- [`c-api/COVERAGE.md`](c-api/COVERAGE.md) — generated public-surface coverage and the current
+  planned owners; [`c-api/RELEASE_GATE.md`](c-api/RELEASE_GATE.md) — release readiness.
 - [`xna-fna-behavior-decisions.md`](xna-fna-behavior-decisions.md) — measured XNA/FNA decisions
   and the binding findings that established them.
 - [`libcna/cna-dotnet`](https://github.com/libcna/cna-dotnet) — CNA.NET, its

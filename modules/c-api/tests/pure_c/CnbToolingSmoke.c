@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 /*
- * plans/plan_binding.md CBIND-111 -- the `.cnb` loader registry and the two compilation front ends.
+ * C API task CBIND-111 -- the `.cnb` loader registry and the two compilation front ends.
  *
  * This is the one part of the CNB surface a C application uses as a **tool** rather than as a
  * runtime: it turns source files into `.cnb` bytes on a build machine, and it is the extension

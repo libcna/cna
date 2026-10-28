@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 /*
- * plans/plan_binding.md CBIND-107 -- the `.cnb` document, its bounded cursor and the two writers.
+ * C API task CBIND-107 -- the `.cnb` document, its bounded cursor and the two writers.
  *
  * The suite needs no fixture file, and that is deliberate: it **builds** a container with the
  * writer and then parses it back, so the two ends of the format are checked against each other

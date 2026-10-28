@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 /*
- * plans/plan_binding.md CBIND-106 -- the `.cnb` container's identities, checksums, arithmetic,
+ * C API task CBIND-106 -- the `.cnb` container's identities, checksums, arithmetic,
  * read limits and chunk compression.
  *
  * This family owns no handle and needs no game, so the whole suite is a plain `main()`. What it

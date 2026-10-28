@@ -4,7 +4,7 @@
 """Regression tests for the C API coverage scope, ownership and rule-resolution model.
 
 Every test here exists because the corresponding defect actually shipped and stayed in the tree
-long enough to be believed (`plans/plan_binding.md` CBIND-126):
+long enough to be believed (C API task CBIND-126):
 
 * the Content Pipeline became its own module and 2,554 declarations silently became the property of
   a task closed on 2026-08-16;
@@ -238,70 +238,47 @@ class InternalPathsAreExcludedInEveryCapitalization(unittest.TestCase):
             self.assertNotIn("internal", segments, f"{header} is implementation detail")
 
 
-class UnfinishedWorkNamesAnUnfinishedTask(unittest.TestCase):
-    """The CBIND-044 regression: `owner_task()` must not end at a completed task."""
+class PlannedWorkHasExactOwnerMetadata(unittest.TestCase):
+    """The planned mapping rows and their human owner metadata are one exact set."""
 
-    def test_the_last_resort_owner_is_not_a_completed_task(self) -> None:
-        statuses = gci.parse_plan_task_status(gci.repository_root())
-        self.assertIn(
-            gci.UNMAPPED_RUNTIME_SURFACE_TASK,
-            statuses,
-            "the last-resort owner must have a row in the plan",
-        )
-        self.assertNotEqual(
-            statuses[gci.UNMAPPED_RUNTIME_SURFACE_TASK],
-            "complete",
-            "a finished task cannot own declarations that nothing binds",
+    def setUp(self) -> None:
+        root = gci.repository_root()
+        self.owners = gci.load_planned_owners(
+            root / "tools" / "c-api" / "coverage_mappings.json"
         )
 
-    def test_no_ownership_table_routes_unfinished_work_to_a_finished_task(self) -> None:
-        # The real invariant behind the incident, over the tables that can actually answer: every
-        # task `owner_task()` is able to name must be one the plan still records as open. Asserting
-        # the fallback constant against itself, as an earlier version of this test did, stays green
-        # with the entire scope model deleted.
-        statuses = gci.parse_plan_task_status(gci.repository_root())
-        reachable = {gci.UNMAPPED_RUNTIME_SURFACE_TASK}
-        for table in (
-            gci.SYMBOL_OWNER_OVERRIDES,
-            gci.B12_SLICE_OWNERS,
-            gci.B11_SLICE_OWNERS,
-            gci.B10_SLICE_OWNERS,
-            gci.CNAEXT_SLICE_OWNERS,
-        ):
-            reachable.update(table.values())
-        # A slice table may still name a finished task for a slice with nothing left open; what it
-        # may not do is name one for a slice REOPENED_SLICES has not taken over. That combination is
-        # what `validate_planned_row_owners` catches per run, and this catches it in the data.
-        for key in gci.REOPENED_SLICES:
-            self.assertNotIn(
-                key,
-                {k for table in (gci.B12_SLICE_OWNERS, gci.B11_SLICE_OWNERS,
-                                 gci.B10_SLICE_OWNERS, gci.CNAEXT_SLICE_OWNERS)
-                 for k in table
-                 if statuses.get(table[k]) != "complete"},
-                f"{key} is reopened but its slice table already names an open task",
-            )
-        self.assertNotEqual(
-            statuses.get(gci.UNMAPPED_RUNTIME_SURFACE_TASK),
-            "complete",
-            "the last-resort owner must be an unfinished task",
-        )
-
-    def test_a_completed_task_owning_a_planned_row_fails_the_gate(self) -> None:
-        statuses = gci.parse_plan_task_status(gci.repository_root())
-        finished = next(
-            (task for task, state in statuses.items() if state == "complete"), None
-        )
-        if finished is None:
-            self.skipTest("the plan records no completed task to build the fixture from")
-        mappings = {
+    @staticmethod
+    def mapping(task: str) -> dict[str, gci.Mapping]:
+        return {
             "x": gci.Mapping(
-                mapping="m", tests="t", status="planned", task=finished, rule_id=None
+                mapping="m", tests="t", status="planned", task=task, rule_id=None
             )
         }
+
+    def test_the_last_resort_owner_is_declared(self) -> None:
+        self.assertIn(
+            gci.UNMAPPED_RUNTIME_SURFACE_TASK,
+            self.owners,
+            "the last-resort owner must have planned_owners metadata",
+        )
+
+    def test_an_unregistered_planned_owner_fails_the_gate(self) -> None:
+        task = "CBIND-DOES-NOT-EXIST"
         with self.assertRaises(RuntimeError) as raised:
-            gci.validate_planned_row_owners(gci.repository_root(), mappings)
-        self.assertIn(finished, str(raised.exception))
+            gci.validate_planned_row_owners(self.mapping(task), self.owners)
+        self.assertIn(task, str(raised.exception))
+
+    def test_stale_owner_metadata_fails_the_gate(self) -> None:
+        task = next(iter(self.owners))
+        with self.assertRaises(RuntimeError) as raised:
+            gci.validate_planned_row_owners({}, {task: self.owners[task]})
+        self.assertIn(task, str(raised.exception))
+
+    def test_matching_owner_metadata_passes(self) -> None:
+        task = next(iter(self.owners))
+        gci.validate_planned_row_owners(
+            self.mapping(task), {task: self.owners[task]}
+        )
 
 
 class RuleOwnershipIsPerSymbol(unittest.TestCase):

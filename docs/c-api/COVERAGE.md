@@ -14,6 +14,21 @@ No symbol counts as implemented merely because a related C operation exists.
 
 Snapshot: **466 headers**, **8134 symbols**, **7033 implemented**, **15 partial**, **633 planned**, **453 not applicable**. Explicitly excluded headers: **406**.
 
+## Planned coverage work
+
+The mapping is the status record: an owner is open exactly while at least one symbol is
+`planned` under it. Titles and completion rules come from `planned_owners` in
+`tools/c-api/coverage_mappings.json`; counts are measured from the inventory.
+
+| Owner | Symbols | Work | Completion rule |
+|---|---:|---|---|
+| `CBIND-117` | 134 | Decide the runtime C boundary for Model-v2 and CNB CPU APIs | Map the remaining runtime-adjacent Model-v2/CNB declarations through C-native routes, or record reviewed dispositions without exposing C++ RTTI, templates, filesystem objects or exceptions. |
+| `CBIND-120` | 3 | Map or disposition the texture profile-format queries | Provide C-native texture, cube and render-target legality queries with strict-C evidence, or record reviewed dispositions for all three declarations. |
+| `CBIND-121` | 1 | Map or disposition reflective shared-resource fields | Provide a C-native shared-resource field declaration with deferred-fixup, lifetime and malformed-index evidence, or record a reviewed disposition. |
+| `CBIND-122` | 2 | Map or disposition type-erased ContentReader loading seams | Resolve ReadAsset and ReadExternalReference with strict-C type-identity, malformed-reader and lifetime evidence, or record reviewed internal-only dispositions. |
+| `CBIND-125` | 5 | Map or disposition inheritance-aware reflective readers | Design a C-native abstract/concrete reader contract with dispatch, malformed-type, inheritance and lifetime evidence, or record reviewed dispositions. |
+| `CBIND-127` | 488 | Cover the unmapped runtime surface in linked modules | Add C-native routes with behavior, ownership, lifetime and ABI evidence, or record reviewed dispositions, until no runtime declaration remains planned under this owner. |
+
 ## Out of runtime C API scope
 
 Real public C++ surface the runtime C ABI deliberately does not expose. These headers are
@@ -26,7 +41,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/design` | 16 | design-time type converters are not linked by the runtime C ABI |
 | `modules/diagnostics` | 2 | the optional profiler interface has no C ABI routes |
 | `modules/inspector` | 3 | the optional inspector agent and protocol have no C ABI routes |
-| `modules/phone` | 11 | CBIND-117, owner decision 2026-09-18: `Microsoft::Phone::{Shell,Notification}` is the Windows Phone 7 application-lifecycle and push-notification API, not XNA 4.0. Nothing in the repository links `cna_phone`, and no plan row promises it C parity |
+| `modules/phone` | 11 | CBIND-117, owner decision 2026-09-18: `Microsoft::Phone::{Shell,Notification}` is the Windows Phone 7 application-lifecycle and push-notification API, not XNA 4.0. Nothing in the repository links `cna_phone`, and no coverage owner promises it C parity |
 | `modules/platform` | 28 | CBIND-047, owner decision 2026-08-16: the platform abstraction is the substrate the C ABI is built on, not a surface it exposes. Its public headers are its internal contract -- the renderers and the runtime are its consumers, not applications -- and IPlatform deals in C++ interfaces, unique_ptr ownership and virtual dispatch that have no C form |
 | `modules/renderers/**` | 56 | renderer implementations are hidden behind `IGraphicsRenderer` by project policy; a C caller selects a renderer by identity (`CNA_GraphicsRendererType`) and never names an implementation |
 | `modules/audio` internal/detail paths | 11 | implementation detail: a path segment is `Internal` or `Detail` |
@@ -44,7 +59,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `e4b14a6d01e4f21c8fa6b442a0b593e7a0a4d83ec8c2ec86ff1cebd5e37feecb`.
+Full inventory SHA-256: `c476dcbf15af361bd6e9d8a516652ee969de8d5a8dbc645a4338cd5f1a433405`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:

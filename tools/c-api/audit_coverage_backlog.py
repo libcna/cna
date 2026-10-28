@@ -31,7 +31,7 @@ need no work; H2 is correspondingly a lower bound. The verdicts themselves now l
 ``tools/c-api/coverage_mappings.json``, which is evidence rather than inference.
 
 The export probe is a heuristic and is documented as one. It was calibrated against a case the
-plan already recorded an answer for -- ``CBIND-080``, which ``plans/plan_binding.md`` records as
+campaign already recorded an answer for -- ``CBIND-080``, which the historical ledger records as
 "it needed no new C code" -- and it independently returns zero genuinely-missing rows for that
 task. Three naming conventions had to be taught to it before it did: ``Dispose`` is bound as
 ``_destroy``, digits break naive snake_case (``RenderTarget2D`` -> ``render_target2d``), and a few
@@ -226,13 +226,15 @@ def main() -> int:
         xml_directory = gci.run_doxygen(root, headers, Path(temporary))
         symbols = gci.parse_symbols(root, xml_directory, headers)
     mappings = gci.map_symbols(symbols, rules)
+    planned_owners = gci.load_planned_owners(
+        root / "tools" / "c-api" / "coverage_mappings.json"
+    )
+    gci.validate_planned_row_owners(mappings, planned_owners)
 
     baseline = json.loads((root / "tools" / "c-api" / "abi_baseline.json").read_text())
     probe = ExportProbe(baseline["exports"])
 
     planned = [s for s in symbols if mappings[s.identity].status == "planned"]
-    plan_status = gci.parse_plan_task_status(root)
-
     rows: defaultdict[str, list[gci.Symbol]] = defaultdict(list)
     reasons: dict[str, str] = {}
     for symbol in planned:
@@ -253,10 +255,8 @@ def main() -> int:
 
     print(f"public C++ symbols     : {len(symbols)}")
     print(f"planned rows           : {len(planned)}")
-    complete = {t for t, s in plan_status.items() if s == "complete"}
-    owned = [s for s in planned if mappings[s.identity].task in complete]
-    print(f"  owned by ✅ tasks    : {len(owned)}")
-    print(f"  owned by open tasks  : {len(planned) - len(owned)}")
+    print(f"  declared owner rows  : {len(planned)}")
+    print("  unregistered rows    : 0")
 
     print(f"\n{'category':64}{'rows':>7}{'logical':>9}")
     for category in ORDER:
@@ -266,21 +266,10 @@ def main() -> int:
         print(f"{category:64}{len(group):>7}{len({logical_identity(s) for s in group}):>9}")
     print(f"{'TOTAL':64}{len(planned):>7}")
 
-    print(f"\n{'category':64}{'rows':>7}{'logical':>9}   (rows owned by ✅ tasks only)")
-    owned_ids = {s.identity for s in owned}
-    for category in ORDER:
-        group = [s for s in rows.get(category, []) if s.identity in owned_ids]
-        if not group:
-            continue
-        print(f"{category:64}{len(group):>7}{len({logical_identity(s) for s in group}):>9}")
-    print(f"{'TOTAL':64}{len(owned):>7}")
-
     print("\nownership of planned rows, by task:")
     per_task = Counter(mappings[s.identity].task for s in planned)
     for task, count in per_task.most_common():
-        mark = {"complete": "✅", "in progress": "🟨", "not started": "⬜"}.get(
-            plan_status.get(task, ""), "??")
-        print(f"  {task:12} {mark}  {count:5} row(s)")
+        print(f"  {task:12} ⬜  {count:5} row(s)  {planned_owners[task]['title']}")
     return 0
 
 

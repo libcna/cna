@@ -1,12 +1,11 @@
-# plan_binding.md CBIND-042A: the known-limitations matrix as a gate.
+# C API task CBIND-042A: the known-limitations matrix as a gate.
 #
 # A limitations document is the one document a consumer reads to decide whether an ABI can carry
 # their program, and the one most likely to rot, because nothing breaks when it goes stale. This job
 # enforces the three rules that keep it true:
 #
 #   * every unmapped reason falls under a declared theme -- no silent "other" bucket;
-#   * no deferral names a task the plan records as finished -- "planned in CBIND-035" stops being a
-#     plan the moment CBIND-035 closes, and becomes an omission wearing a plan's clothes;
+#   * planned owner metadata exactly matches the owners derived from the coverage inventory;
 #   * the counts come from the inventory rather than from prose.
 #
 # Build-free, like the coverage and compatibility gates, so it runs on every push.
@@ -25,7 +24,6 @@ on:
       - 'tools/c-api/coverage_mappings.json'
       - 'tools/c-api/generate_coverage_inventory.py'
       - 'tools/c-api/generate_limitations.py'
-      - 'plans/plan_binding.md'
       - '.github/workflows/c-api-limitations.yml'
   pull_request:
     branches: [next, develop, main]
@@ -38,7 +36,6 @@ on:
       - 'tools/c-api/coverage_mappings.json'
       - 'tools/c-api/generate_coverage_inventory.py'
       - 'tools/c-api/generate_limitations.py'
-      - 'plans/plan_binding.md'
   workflow_dispatch:
 
 concurrency:
@@ -76,8 +73,8 @@ jobs:
         run: python3 tools/c-api/generate_limitations.py --check
 
       # A gate that cannot fail is not a gate. This perturbs one approved partial mapping with a
-      # deferral to a closed task and requires the generated inventory analysis to reject it.
-      - name: Prove the gate rejects a deferral to a closed task
+      # deferral to an undeclared owner and requires the generated inventory analysis to reject it.
+      - name: Prove the gate rejects a deferral to an undeclared owner
         run: |
           set -euo pipefail
           cp tools/c-api/coverage_mappings.json /tmp/coverage_mappings.json.orig
@@ -98,7 +95,7 @@ jobs:
           python3 tools/c-api/generate_limitations.py --check || status=$?
           cp /tmp/coverage_mappings.json.orig tools/c-api/coverage_mappings.json
           if [ "$status" -eq 0 ]; then
-            echo "::error::the limitations check accepted a deferral to a finished task" >&2
+            echo "::error::the limitations check accepted a deferral to an undeclared owner" >&2
             exit 1
           fi
           echo "the gate rejected the stale deferral, as it must"

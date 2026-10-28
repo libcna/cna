@@ -1,4 +1,4 @@
-# plan_binding.md CBIND-043: the C API coverage matrix as a gate.
+# C API task CBIND-043: the C API coverage matrix as a gate.
 #
 # The coverage inventory is generated from every public Microsoft/** and CNA/** header in the
 # repository. Its value is entirely in being CURRENT. Only its compact summary and full-inventory
@@ -23,7 +23,6 @@ on:
       - 'docs/c-api/COVERAGE.md'
       - 'tools/c-api/coverage_mappings.json'
       - 'tools/c-api/generate_coverage_inventory.py'
-      - 'plans/plan_binding.md'
       - '.github/workflows/c-api-coverage-gate.yml'
   pull_request:
     branches: [next, develop, main]
@@ -33,7 +32,6 @@ on:
       - 'docs/c-api/COVERAGE.md'
       - 'tools/c-api/coverage_mappings.json'
       - 'tools/c-api/generate_coverage_inventory.py'
-      - 'plans/plan_binding.md'
   workflow_dispatch:
 
 concurrency:

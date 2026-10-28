@@ -274,4 +274,5 @@ That the rest is unbound is a **scheduling** decision recorded on 2026-08-28, no
 the format has no C form. The remaining declarations are counted in [`COVERAGE.md`](COVERAGE.md) as
 `planned` — deliberately not as `not-applicable`, which would say something false — they are why
 [`RELEASE_GATE.md`](RELEASE_GATE.md) reads *Not ready*, and
-`plans/plan_binding.md` Phase B10 (`CBIND-109`–`CBIND-112`) is the sized backlog that binds them.
+the planned-owner table in [`COVERAGE.md`](COVERAGE.md) is the sized backlog. Historical C API
+tasks `CBIND-109`–`CBIND-112` remain in Git history.

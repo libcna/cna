@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MS-PL */
 
 /*
- * plans/plan_binding.md CBIND-113 -- so a failing C API suite says which stage failed.
+ * C API task CBIND-113 -- so a failing C API suite says which stage failed.
  *
  * `CBIND-101` closed on fifteen serial runs that produced a single occurrence, and the complete
  * capture of that occurrence was the renderer banner and nothing else: the suite reported only

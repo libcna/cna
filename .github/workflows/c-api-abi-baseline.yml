@@ -1,4 +1,4 @@
-# plan_binding.md CBIND-039: the ABI layout and export baseline as a gate.
+# C API task CBIND-039: the ABI layout and export baseline as a gate.
 #
 # A stable ABI is a promise about numbers nobody reads: struct sizes, field offsets, scalar widths,
 # constant values, exported symbol names. The hand-written assertion walls pin the ones each slice

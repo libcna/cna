@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// plans/plan_binding.md CBIND-090. The independent oracle for cna_cube_lut_parse.
+// C API task CBIND-090. The independent oracle for cna_cube_lut_parse.
 //
 // CBIND-040B's rule: an oracle that mirrors the implementation agrees with its mistakes, so this
 // one is deliberately a *different algorithm* running in the opposite direction. The parser

@@ -44,8 +44,8 @@ probe. The complete storage module adds owned storage devices, containers and fi
 count/copy directory and file listings and synchronous equivalents of the canonical fake-async
 selector and container pairs. Exact support is recorded in [`COVERAGE.md`](COVERAGE.md) and
 omissions in [`LIMITATIONS.md`](LIMITATIONS.md). It is not complete public CNA coverage. The contract in
-this directory is binding on implementation until the release gate in
-[`../../plans/plan_binding.md`](../../plans/plan_binding.md) is complete.
+this directory is binding on implementation; [`RELEASE_GATE.md`](RELEASE_GATE.md) records when its
+measured release criteria are complete.
 
 ## Purpose
 
@@ -109,6 +109,37 @@ python3 tools/c-api/generate_coverage_inventory.py --approve-rule-symbols
 
 This is a separate mode on purpose. The routine `--write` a developer runs to refresh the inventory
 must not be able to widen a rule's authority (CBIND-050).
+
+### Admitting a new C route
+
+Before adding a family or function, establish:
+
+1. the concrete C use case and canonical CNA C++ operation;
+2. a signature made only of fixed-width values, POD structures, handles and C callbacks;
+3. ownership, nullability, parent lifetime and thread affinity;
+4. representations for text, collections, buffers, paths, streams, callbacks and errors;
+5. exception translation that exposes no C++ or Sharp Runtime type;
+6. renderer/platform capability behavior;
+7. whether an existing C representation already expresses the same operation;
+8. whether the change is additive under the current ABI versioning rules.
+
+Do not map language mechanics merely because Doxygen reports them. Prefer an existing C
+representation when it already carries the same data, and collapse overloads only when the
+canonical implementation itself collapses them. Read the implementation as well as the header;
+validation order, clamps, ownership and no-op behavior are often visible only there.
+
+Every new route needs all applicable layers in the same change:
+
+- real-C header compilation and a strict-C call through the public library;
+- semantic adapter coverage, including conversion and exception behavior;
+- null, invalid, stale, wrong-kind, buffer, encoding, enum and lifetime refusals;
+- a real renderer observation for any draw claim;
+- ABI/export/layout/version evidence.
+
+Regenerate coverage after the change and verify that the implemented delta matches the reviewed
+symbols. `planned_owners` in `tools/c-api/coverage_mappings.json` contains only live owner metadata;
+the generated [`COVERAGE.md`](COVERAGE.md) is the current backlog and measured count. Completed
+campaign chronology belongs in Git history, not in a second status document.
 
 ## Public naming and language baseline
 

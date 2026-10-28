@@ -3996,7 +3996,7 @@ namespace {
     // unreadable file and the importer translates only its own two checks. Left alone, the
     // firewall would answer CNA_RESULT_INTERNAL -- "a bug in CNA" -- for a caller whose file is
     // simply not there. The C layer answers the documented contract instead; the canonical gap
-    // is recorded in plans/plan_binding.md rather than patched here.
+    // is recorded in the CBIND mapping history rather than patched here.
     try {
         return CreateTextureData(Cnb::ImportImageAsCnbTexture2D(pathText, native), outTexture);
     } catch (const Microsoft::Xna::Framework::Content::ContentLoadException&) {

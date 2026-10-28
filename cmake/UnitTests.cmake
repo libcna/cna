@@ -239,7 +239,7 @@ if(CNA_BUILD_TESTS)
     # Likewise the link-footprint consumers (cmake/Tests/LinkFootprint.cmake).
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/link_footprint/.*\\.cpp$")
 
-    # plans/plan_binding.md CBIND-033: the C API module owns its own test executables
+    # C API task CBIND-033: the C API module owns its own test executables
     # (modules/c-api/CMakeLists.txt) and none of its C++ translation units is a GTest unit --
     # HandleRegistryTest.cpp and BoundaryDetailTest.cpp define their own main(), and
     # AbiHeaderCpp.cpp is a pure ABI compile check linked into cna_c_api_abi_smoke. Letting the

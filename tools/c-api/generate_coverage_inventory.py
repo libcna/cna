@@ -30,6 +30,7 @@ from typing import Iterable
 
 
 SCHEMA_VERSION = 1
+PLANNED_OWNER_PATTERN = re.compile(r"CBIND-[0-9A-Za-z]+")
 # plans/plan_apple_m4.md AM4-160: the approval pins below are content IDs of the declarations
 # Doxygen 1.9.x reports, and Doxygen is not a stable parser across releases. 1.18 (Homebrew's)
 # reports a second copy of every Vector3/Matrix/Quaternion overload and a Microsoft::Devices::
@@ -122,7 +123,7 @@ MODULE_SCOPE: dict[str, tuple[str, str]] = {
         Scope.OUT_OF_SCOPE,
         "CBIND-117, owner decision 2026-09-18: `Microsoft::Phone::{Shell,Notification}` is the "
         "Windows Phone 7 application-lifecycle and push-notification API, not XNA 4.0. Nothing in "
-        "the repository links `cna_phone`, and no plan row promises it C parity",
+        "the repository links `cna_phone`, and no coverage owner promises it C parity",
     ),
 }
 
@@ -728,6 +729,30 @@ def load_rules(path: Path) -> list[Rule]:
     return rules
 
 
+def load_planned_owners(path: Path) -> dict[str, dict[str, str]]:
+    """Load the human metadata for the exact task ids that may own planned rows."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("schema_version") != SCHEMA_VERSION:
+        raise RuntimeError(f"Unsupported coverage mapping schema in {path}.")
+    raw_owners = payload.get("planned_owners")
+    if not isinstance(raw_owners, dict):
+        raise RuntimeError(f"Coverage mappings in {path} have no planned_owners object.")
+    owners: dict[str, dict[str, str]] = {}
+    for task, raw in raw_owners.items():
+        if not isinstance(task, str) or not PLANNED_OWNER_PATTERN.fullmatch(task):
+            raise RuntimeError(f"Invalid planned owner id {task!r} in {path}.")
+        if not isinstance(raw, dict):
+            raise RuntimeError(f"Planned owner {task} must be an object in {path}.")
+        title = raw.get("title")
+        acceptance = raw.get("acceptance")
+        if not isinstance(title, str) or not title.strip():
+            raise RuntimeError(f"Planned owner {task} has no title in {path}.")
+        if not isinstance(acceptance, str) or not acceptance.strip():
+            raise RuntimeError(f"Planned owner {task} has no acceptance rule in {path}.")
+        owners[task] = {"title": title.strip(), "acceptance": acceptance.strip()}
+    return owners
+
+
 def approve_rule_symbols(
     path: Path,
     usage: dict[str, list[str]],
@@ -804,12 +829,12 @@ def approve_rule_symbols(
 
 # CBIND-079, 2026-08-26: the CNAEXT engine layer and a post-merge tail of ordinary XNA symbols
 # reopened the coverage matrix, and every row they left behind still named `CBIND-035` -- a task
-# plans/plan_binding.md records as complete. A finished task cannot own unfinished work: a matrix
+# the historical ledger recorded as complete. A finished task cannot own unfinished work: a matrix
 # that says so is how 1,414 unmapped symbols hid behind a green tick for a week. The reopened rows
 # are partitioned here onto the Phase B9 slices that actually own them, keyed by module and header
 # stem so the assignment is greppable from either direction. `validate_planned_row_owners` below
-# turns the invariant this restores -- no completed task owns a planned row -- into a gate that
-# fails rather than a convention that erodes.
+# turns the invariant this restores -- every planned row has a declared current owner -- into a
+# gate that fails rather than a convention that erodes.
 CNAEXT_SLICE_OWNERS: dict[str, str] = {
     # CBIND-080 -- 15 rows
     "graphics/DynamicIndexBuffer": "CBIND-080",
@@ -1003,12 +1028,12 @@ B12_SLICE_OWNERS: dict[str, str] = {
 # CBIND-126, 2026-09-18. `owner_task()` used to end in `return "CBIND-044"`. A default that names a
 # real task is not a default -- it is a silent, wrong answer, and it stayed wrong for a fortnight:
 # 2,554 `content-pipeline` and 57 `phone` declarations were reported as missing C bindings owned by
-# a task the plan records as closed since 2026-08-16.
+# a task the historical campaign closed on 2026-08-16.
 #
 # `owner_task()` is consulted for exactly one kind of row: a runtime-public declaration that no
 # mapping rule claims -- that is, unfinished work. So the answer of last resort must be a task that
 # is *unfinished*, and it is named once, here, rather than left to whichever branch falls through.
-# `validate_planned_row_owners` still fails if this task is ever recorded complete while rows remain,
+# `validate_planned_row_owners` still fails if this task's metadata disappears while rows remain,
 # and `validate_module_scope` stops the gate before a new module can quietly arrive in this bucket.
 #
 # The slice tables above remain the historical record of which phase bound what. They are consulted
@@ -1070,7 +1095,7 @@ def owner_task(symbol: Symbol) -> str:
     # The graphics module used to split here between CBIND-034 and CBIND-035 by matching the type
     # name. Both tasks closed, so the split answered "which phase would have bound this" -- history,
     # not ownership -- for 74 declarations that nothing binds today. It is removed rather than
-    # repointed: the phases it named are in the plan, and the live owner is the same one every other
+    # repointed: the phases it named are historical, and the live owner is the same one every other
     # module's unbound surface has.
     return UNMAPPED_RUNTIME_SURFACE_TASK
 
@@ -1461,10 +1486,14 @@ def render_summary_markdown(
     excluded: list[Path],
     symbols: list[Symbol],
     mappings: dict[str, Mapping],
+    planned_owners: dict[str, dict[str, str]],
     full_inventory_sha256: str,
 ) -> str:
     """Render the small tracked record; the complete row matrix stays a build artifact."""
     status_counts = Counter(mappings[symbol.identity].status for symbol in symbols)
+    planned_counts = Counter(
+        mapping.task for mapping in mappings.values() if mapping.status == "planned"
+    )
     module_headers: Counter[str] = Counter()
     module_symbols: Counter[str] = Counter()
     module_statuses: dict[str, Counter[str]] = defaultdict(Counter)
@@ -1494,6 +1523,20 @@ def render_summary_markdown(
         f"**{status_counts['implemented']} implemented**, **{status_counts['partial']} partial**, "
         f"**{status_counts['planned']} planned**, **{status_counts['not-applicable']} not applicable**. "
         f"Explicitly excluded headers: **{len(excluded)}**.",
+        "",
+        "## Planned coverage work",
+        "",
+        "The mapping is the status record: an owner is open exactly while at least one symbol is",
+        "`planned` under it. Titles and completion rules come from `planned_owners` in",
+        "`tools/c-api/coverage_mappings.json`; counts are measured from the inventory.",
+        "",
+        "| Owner | Symbols | Work | Completion rule |",
+        "|---|---:|---|---|",
+        *[
+            f"| `{task}` | {planned_counts[task]} | {markdown_escape(metadata['title'])} | "
+            f"{markdown_escape(metadata['acceptance'])} |"
+            for task, metadata in sorted(planned_owners.items())
+        ],
         "",
         "## Out of runtime C API scope",
         "",
@@ -1548,69 +1591,30 @@ def render_summary_markdown(
     return "\n".join(lines)
 
 
-PLAN_PATH = Path("plans/plan_binding.md")
-PLAN_STATUS_MARKS = {"\u2705": "complete", "\U0001f7e8": "in progress", "\u2b1c": "not started"}
-
-
-def parse_plan_task_status(root: Path) -> dict[str, str]:
-    """Read every `| CBIND-… | … | <mark> | … |` row in the plan and return id -> status.
-
-    The plan's task tables do not all carry the same columns -- some phases add a row-count
-    column between the subject and the status -- so the status is found by looking for the one
-    cell that is exactly a status mark rather than by counting columns.
-    """
-    statuses: dict[str, str] = {}
-    plan = root / PLAN_PATH
-    if not plan.is_file():
-        return statuses
-    for line in plan.read_text(encoding="utf-8").splitlines():
-        if not line.startswith("| CBIND-"):
-            continue
-        cells = [cell.strip() for cell in line.split("|")]
-        task = cells[1]
-        marks = [cell for cell in cells[2:] if cell in PLAN_STATUS_MARKS]
-        if len(marks) != 1:
-            continue
-        statuses[task] = PLAN_STATUS_MARKS[marks[0]]
-    return statuses
-
-
-# CBIND-079, 2026-08-26. The invariant this enforces is narrow and specific: a task the plan
-# records as complete may not own a `planned` row. It is not "no planned row may exist" -- Phase
-# B9 opens 1,451 of them on purpose, and a gate that forbade them would simply be switched off.
-#
-# The state it forbids is the one that actually happened. `CBIND-035` closed, four merges grew the
-# tracked surface, `owner_task()` kept attributing the new unmapped symbols to it by module, and
-# for a week COVERAGE.md asserted that a finished task owned 1,414 unfinished symbols while
-# `## Current status` read "0 planned" and RELEASE_GATE.md read "Not ready". Nothing was lying;
-# three documents were each locally consistent and nobody re-read them together. This makes the
-# combination fail instead.
-def validate_planned_row_owners(root: Path, mappings: dict[str, Mapping]) -> None:
-    statuses = parse_plan_task_status(root)
-    if not statuses:
-        return
-    finished: Counter[str] = Counter()
-    unknown: Counter[str] = Counter()
-    for mapping in mappings.values():
-        if mapping.status != "planned":
-            continue
-        status = statuses.get(mapping.task)
-        if status is None:
-            unknown[mapping.task] += 1
-        elif status == "complete":
-            finished[mapping.task] += 1
-    problems: list[str] = []
-    for task, count in sorted(finished.items()):
-        problems.append(
-            f"  {task} is recorded complete in {PLAN_PATH} but owns {count} planned row(s)"
-        )
-    for task, count in sorted(unknown.items()):
-        problems.append(f"  {task} owns {count} planned row(s) but has no row in {PLAN_PATH}")
+# CBIND-079 originally compared planned rows with status marks in a Markdown plan. The mapping is
+# now the status record itself: a task is open exactly while at least one symbol is `planned` under
+# it. `planned_owners` supplies human metadata and must equal that derived task set, so neither a
+# forgotten owner nor stale "open" prose can silently survive.
+def validate_planned_row_owners(
+    mappings: dict[str, Mapping], planned_owners: dict[str, dict[str, str]]
+) -> None:
+    counts = Counter(
+        mapping.task for mapping in mappings.values() if mapping.status == "planned"
+    )
+    missing = sorted(set(counts) - set(planned_owners))
+    stale = sorted(set(planned_owners) - set(counts))
+    problems = [
+        f"  {task} owns {counts[task]} planned row(s) but has no planned_owners metadata"
+        for task in missing
+    ]
+    problems.extend(
+        f"  {task} is declared in planned_owners but owns no planned row" for task in stale
+    )
     if problems:
         raise RuntimeError(
-            "A planned row names a task that cannot own it. Unfinished work must name an "
-            "unfinished task: either open a task for these symbols and point owner_task() at "
-            "it, or map them.\n" + "\n".join(problems)
+            "Planned coverage work and its owner metadata differ. Add metadata for a live owner, "
+            "or remove an owner only after every one of its rows is mapped or dispositioned:\n"
+            + "\n".join(problems)
         )
 
 
@@ -1669,6 +1673,7 @@ def build_inventory(
     rules_path = root / "tools" / "c-api" / "coverage_mappings.json"
     headers, excluded = discover_headers(root)
     rules = load_rules(rules_path)
+    planned_owners = load_planned_owners(rules_path)
     with tempfile.TemporaryDirectory(prefix="cna-c-api-coverage-") as temporary:
         xml_directory = run_doxygen(root, headers, Path(temporary))
         symbols = parse_symbols(root, xml_directory, headers)
@@ -1678,7 +1683,7 @@ def build_inventory(
         validate_approval_pins(symbols, rules, mappings)
         validate_inventory(headers, excluded, symbols, mappings)
         validate_reopened_slices(symbols, mappings)
-        validate_planned_row_owners(root, mappings)
+        validate_planned_row_owners(mappings, planned_owners)
     return headers, excluded, symbols, mappings, usage
 
 
@@ -1764,8 +1769,9 @@ def main() -> int:
         )
     full_rendered = render_full_markdown(headers, excluded, symbols, mappings)
     full_sha256 = hashlib.sha256(full_rendered.encode("utf-8")).hexdigest()
+    planned_owners = load_planned_owners(rules_path)
     rendered = render_summary_markdown(
-        headers, excluded, symbols, mappings, full_sha256
+        headers, excluded, symbols, mappings, planned_owners, full_sha256
     )
 
     summary = Counter(mapping.status for mapping in mappings.values())

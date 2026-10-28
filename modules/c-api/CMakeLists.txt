@@ -746,7 +746,7 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_error_smoke)
     add_test(NAME CApi_ErrorSmoke COMMAND cna_c_api_error_smoke)
 
-    # plans/plan_binding.md CBIND-067: every CNA_Bool input refuses a byte outside {0, 1}.
+    # C API task CBIND-067: every CNA_Bool input refuses a byte outside {0, 1}.
     #
     # Generated from the public headers by tools/c-api/generate_bool_contract_test.py, because
     # 94 hand-written assertions would leave the guarantee exactly as fragile as the one they
@@ -2112,7 +2112,7 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/platform/include
     )
     target_link_libraries(cna_c_api_handle_registry_test PRIVATE
-        # plans/plan_binding.md CBIND-084A. CNA_CNAEXT reaches this target through
+        # C API task CBIND-084A. CNA_CNAEXT reaches this target through
         # cna_build_config, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
         # which means the engine layer's include path has to reach it too. Linking cna_graphics_ext
         # is what supplies it, and it also keeps this target catching the same exceptions the
@@ -2152,7 +2152,7 @@ if(CNA_BUILD_TESTS)
     # throws whose constructors are not header-only, so proving their conversion needs those modules on the
     # link line.
     target_link_libraries(cna_c_api_boundary_detail_test PRIVATE
-        # plans/plan_binding.md CBIND-084A. CNA_CNAEXT reaches this target through
+        # C API task CBIND-084A. CNA_CNAEXT reaches this target through
         # cna_build_config, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
         # which means the engine layer's include path has to reach it too. Linking cna_graphics_ext
         # is what supplies it, and it also keeps this target catching the same exceptions the
@@ -2197,7 +2197,7 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/platform/include
     )
     target_link_libraries(cna_c_api_utf8_oracle_test PRIVATE
-        # plans/plan_binding.md CBIND-084A. CNA_CNAEXT reaches this target through
+        # C API task CBIND-084A. CNA_CNAEXT reaches this target through
         # cna_build_config, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
         # which means the engine layer's include path has to reach it too. Linking cna_graphics_ext
         # is what supplies it, and it also keeps this target catching the same exceptions the
@@ -2297,7 +2297,7 @@ if(CNA_BUILD_TESTS)
     # a sanitizer; the default 1500 s ctest timeout is generous, but say so rather than rely on it.
     set_tests_properties(CApi_Utf8Oracle PROPERTIES TIMEOUT 900)
 
-    # plans/plan_binding.md CBIND-101. Every registration above that names a video driver at all
+    # C API task CBIND-101. Every registration above that names a video driver at all
     # names it for a reason, and those are left exactly as they are. What this loop settles is the
     # rest: a test that names none inherits ctest's own environment, which on a developer machine is
     # the live desktop session -- a shared, externally mutated resource the suite does not own, and

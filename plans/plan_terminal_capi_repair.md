@@ -167,7 +167,7 @@ Fixing it exposed a **second, far larger pre-existing failure** that the first h
 
 ```
 A planned row names a task that cannot own it.
-  CBIND-044 is recorded complete in plans/plan_binding.md but owns 2611 planned row(s)
+  CBIND-044 had been recorded complete but owned 2611 planned row(s)
   CBIND-035 ... 198   CBIND-080 ... 44   CBIND-084 ... 38   CBIND-036 ... 32
   CBIND-093 ... 20    CBIND-037 ... 19   CBIND-034 ... 17   CBIND-104 ... 15
   ... 14 completed tasks, ~3 000 rows in total
@@ -189,7 +189,7 @@ document can be regenerated without publishing a stack trace. The failure itself
 still exits non-zero.
 
 This is not a stale rule and not a tool defect: it is ~3 000 public C++ symbols with no C mapping,
-whose rows name tasks `plans/plan_binding.md` records as finished, while that plan has **zero** open
+whose rows named tasks the old CBIND ledger recorded as finished, while that ledger had **zero** open
 `CBIND` tasks. The generator names the only two repairs — bind the symbols, or open a task that owns
 them — and both are owner decisions about project status rather than mechanical repairs, so neither
 is taken here.

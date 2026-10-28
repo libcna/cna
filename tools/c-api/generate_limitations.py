@@ -11,8 +11,8 @@ Three rules keep the result honest:
 
 * **Every unmapped reason must fall under a declared theme.** A reason nobody classified fails the
   run rather than landing in a silent "other" bucket, which is how a limitations document rots.
-* **A deferral may not name a closed task as its owner.** "Planned in CBIND-035" stops being a plan
-  the moment CBIND-035 closes; from then on it is an omission wearing a plan's clothes.
+* **A deferral may name only a declared planned owner.** "Planned in CBIND-035" is not a plan when
+  CBIND-035 owns no planned coverage rows; from then on it is an omission wearing a task id.
 * **The counts come from the inventory, not from prose.** A limitation nobody re-counted is a
   limitation nobody re-checked.
 """
@@ -29,9 +29,9 @@ from pathlib import Path
 import generate_coverage_inventory as coverage_inventory
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PLAN_PATH = REPO_ROOT / "plans/plan_binding.md"
 DECLARATION_PATH = Path(__file__).resolve().parent / "limitations.json"
 COMPATIBILITY_PATH = Path(__file__).resolve().parent / "compatibility_matrix.json"
+MAPPINGS_PATH = Path(__file__).resolve().parent / "coverage_mappings.json"
 DOC_PATH = REPO_ROOT / "docs" / "c-api" / "LIMITATIONS.md"
 
 
@@ -61,33 +61,12 @@ def read_rows() -> tuple[list[dict], dict[str, int]]:
 
 
 def open_tasks() -> set[str]:
-    """Task ids the plan still records as unfinished.
-
-    CBIND-126: this used to match `| CBIND-nnn | <one cell> | ⬜` directly, which assumed the status
-    is always the second cell after the id. Every backlog phase from B7 onward adds a row-count
-    column between them, and 🟨 was never matched at all -- so the set came back **empty**, and the
-    two checks below, both of which exist to catch a deferral whose owner is finished, silently
-    passed for every input. The coverage generator already solved this by finding the one cell that
-    is a status mark rather than counting columns; use that parser rather than a second one that can
-    drift from it again.
-    """
-    statuses = coverage_inventory.parse_plan_task_status(REPO_ROOT)
-    return {task for task, status in statuses.items() if status != "complete"}
-
-
-def plan_task_status(task: str) -> str | None:
-    """The plan's recorded status for a task, or None when the plan has no readable row for it.
-
-    `parse_plan_task_status` skips a `| CBIND-… |` row that does not carry exactly one status mark,
-    so absence means "the parser could not read it", which is not the same claim as "finished".
-    Reporting the first as the second is how a diagnostic sends somebody to look at the wrong thing.
-    """
-    return coverage_inventory.parse_plan_task_status(REPO_ROOT).get(task)
+    """Task ids whose metadata exactly matches the inventory's planned owners."""
+    return set(coverage_inventory.load_planned_owners(MAPPINGS_PATH))
 
 
 def unowned_reason(task: str) -> str:
-    return ("which the plan records as finished" if plan_task_status(task) == "complete"
-            else "which has no readable row in the plan")
+    return f"which is not declared in {MAPPINGS_PATH.name}'s planned_owners"
 
 
 def classify(mapping: str, themes: list[dict]) -> str | None:
@@ -122,9 +101,6 @@ def short_symbol(symbol: str) -> str:
     return "::".join(parts[-2:]) if len(parts) > 1 else text
 
 
-MAPPINGS_PATH = Path(__file__).resolve().parent / "coverage_mappings.json"
-
-
 def rule_dispositions() -> dict[str, dict]:
     """The recorded disposition of every partial rule, keyed by its mapping text."""
     rules = json.loads(MAPPINGS_PATH.read_text(encoding="utf-8"))["rules"]
@@ -150,8 +126,8 @@ def analyze() -> dict:
                     f"a partial mapping still defers to {task}, {unowned_reason(task)}: "
                     f"{entry['mapping'][:90]}")
 
-    # The same rule one level up: an open decision whose owner is a finished task is nobody's.
-    # A decision with no live owner is not deferred, it is dropped.
+    # The same rule one level up: an open decision whose owner is absent from the exact planned
+    # owner set is nobody's. A decision with no live owner is not deferred, it is dropped.
     for entry in declaration["environment"]:
         owner = entry.get("owner", "")
         if re.fullmatch(r"CBIND-[0-9A-Za-z]+", owner) and owner not in live:

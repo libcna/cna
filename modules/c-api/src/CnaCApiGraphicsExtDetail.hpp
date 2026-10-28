@@ -14,7 +14,7 @@ namespace CNA::C::Detail {
 /**
  * @brief The runtime resource behind a `CNA_AsciiPostProcessEffectHandle`.
  *
- * `plans/plan_binding.md` `CBIND-089D`. This lived in an anonymous namespace inside
+ * C API task `CBIND-089D`. This lived in an anonymous namespace inside
  * `CnaCApiGraphicsExt.cpp` until the ASCII **pass** needed to hand out a borrowed effect from a
  * different translation unit. Two units that create or read the same `ObjectKind` must agree on
  * the resource type it was registered with: declaring a second, locally-defined struct would

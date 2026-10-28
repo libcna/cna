@@ -26,9 +26,9 @@ content manager for the asset by name.
 
 So a C application can **compile source files into `.cnb`**, build a file and parse one back, walk
 its table of contents, read any chunk's bytes, check its metadata and external references, encode or
-decode any asset type the format defines, and teach CNA about an asset type of its own.
-`plans/plan_binding.md` Phase B10 is the backlog for the rest, and `docs/c-api/CONTENT.md` records
-the consequence from the `ContentManager` side.
+decode any asset type the format defines, and teach CNA about an asset type of its own. The
+generated [`COVERAGE.md`](COVERAGE.md) planned-owner table is the backlog for the rest, and
+[`CONTENT.md`](CONTENT.md) records the consequence from the `ContentManager` side.
 
 ## Handles, and the parts that have none
 

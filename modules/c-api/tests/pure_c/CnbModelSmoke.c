@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 /*
- * plans/plan_binding.md CBIND-109 -- the `.cnb` model schema.
+ * C API task CBIND-109 -- the `.cnb` model schema.
  *
  * The model is the one asset whose C shape is a decision rather than a transcription: the
  * canonical description is a graph of nested vectors, and this ABI reaches it through a single

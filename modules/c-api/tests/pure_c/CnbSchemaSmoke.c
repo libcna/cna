@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 /*
- * plans/plan_binding.md CBIND-110 -- the `.cnb` sprite-font, sound-effect, song, video, curve and
+ * C API task CBIND-110 -- the `.cnb` sprite-font, sound-effect, song, video, curve and
  * animation-clip schemas.
  *
  * Five schemas share one suite because what has to be proved about them is the same shape, and

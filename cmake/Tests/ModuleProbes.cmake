@@ -303,7 +303,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         set_tests_properties(PostProcessShaderPackageReproducibility PROPERTIES
             SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
 
-        # plans/plan_binding.md CBIND-043: the C API coverage matrix is a GATE, not a report.
+        # C API task CBIND-043: the coverage matrix is a GATE, not a report.
         #
         # The complete inventory is generated from every public Microsoft/** and CNA/** header.
         # Its compact tracked summary carries counts and a hash, so a new public C++ symbol without
@@ -317,7 +317,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_coverage_inventory.py" --check)
 
-        # plans/plan_binding.md CBIND-126: the model underneath that gate.
+        # C API task CBIND-126: the model underneath that gate.
         #
         # CApiCoverageMatrix above proves the tracked summary matches the tree; it cannot prove the
         # tree was measured correctly. These are fixture tests for the scope, ownership and rule
@@ -329,7 +329,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/test_coverage_scope.py")
 
-        # plans/plan_binding.md CBIND-038: the pure-C compatibility matrix, also a gate.
+        # C API task CBIND-038: the pure-C compatibility matrix, also a gate.
         #
         # The declaration and the published matrix must not drift apart, for the same reason the
         # coverage matrix must not: a matrix is read as evidence, so one that lags its declaration
@@ -350,7 +350,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_compatibility_matrix.py" --run)
 
-        # plans/plan_binding.md CBIND-042A: the known-limitations matrix, generated from the same
+        # C API task CBIND-042A: the known-limitations matrix, generated from the same
         # inventory the coverage gate checks.
         #
         # A limitations document is the one document a consumer reads to decide whether to adopt an
@@ -365,7 +365,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_limitations.py" --check)
 
-        # plans/plan_binding.md CBIND-064: the export count that appears in PROSE, which no gate read.
+        # C API task CBIND-064: the export count that appears in PROSE, which no gate read.
         #
         # `abi_baseline.json` measures how many `cna_*` symbols the library exports, and
         # CApiAbiBaseline fails when that changes without review. Four sentences repeat the number
@@ -381,7 +381,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_doc_export_counts.py" --check)
 
-        # plans/plan_binding.md CBIND-065: does anything actually CALL each route?
+        # C API task CBIND-065: does anything actually CALL each route?
         #
         # The coverage matrix answers a different question -- it maps every public C++ symbol to a
         # C route and to a *rule's* test description, so a rule covering twenty symbols credits its
@@ -398,7 +398,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_route_test_coverage.py" --check)
 
-        # plans/plan_binding.md CBIND-067: the generated CNA_Bool contract test must not go stale.
+        # C API task CBIND-067: the generated CNA_Bool contract test must not go stale.
         #
         # The test itself compiles and runs beside the other smoke tests; this checks that the
         # checked-in file still matches what the headers say, so a route declared with a new flag
@@ -417,7 +417,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/test_generate_routes.py")
 
-        # plans/plan_binding.md CBIND-042B: the experimental release gate.
+        # C API task CBIND-042B: the experimental release gate.
         #
         # A release gate written as prose is a list of things somebody once believed. This one is a
         # declaration plus a measurement, and the check fails when they disagree **in either
@@ -449,7 +449,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                 ENVIRONMENT "CNA_DOXYGEN=${CNA_C_API_DOXYGEN}")
         endif()
 
-        # plans/plan_binding.md CBIND-039: the ABI layout and export baseline.
+        # C API task CBIND-039: the ABI layout and export baseline.
         #
         # A generated probe reports what the compiler *actually* laid out -- every struct size,
         # alignment and field offset, every scalar typedef's width, every constant's value -- and it

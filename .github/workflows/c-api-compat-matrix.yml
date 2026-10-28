@@ -1,4 +1,4 @@
-# plan_binding.md CBIND-038: the pure-C compatibility matrix as a gate.
+# C API task CBIND-038: the pure-C compatibility matrix as a gate.
 #
 # The C ABI's whole point is that a C program can consume it. That claim is only worth as much as
 # the set of compilers it has actually been put through, so this job puts every public header

@@ -66,7 +66,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   [`../docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md),
   deployment is in [`../docs/gamer-services-server.md`](../docs/gamer-services-server.md), and
   consumer sample status is in [`cna-samples/plan.md`](../../cna-samples/plan.md).
-- [`plan_binding.md`](plan_binding.md) — native C API and stable C ABI.
+- `plan_binding.md` — native C API/C ABI campaign (`CBIND-000`–`CBIND-153`) and its historical
+  phase ledger; deleted on 2026-10-28 (Git history only). Current measured coverage and planned
+  owners are generated in [`../docs/c-api/COVERAGE.md`](../docs/c-api/COVERAGE.md), permanent
+  contracts are indexed by [`../docs/c-api/README.md`](../docs/c-api/README.md), and release
+  readiness is in [`../docs/c-api/RELEASE_GATE.md`](../docs/c-api/RELEASE_GATE.md).
 - `plan_bindings_upstream.md` — measured XNA/FNA decisions and binding findings from the 2026-09
   campaign; deleted on 2026-10-28 (Git history only). Permanent decisions are in
   [`../docs/xna-fna-behavior-decisions.md`](../docs/xna-fna-behavior-decisions.md), current binding

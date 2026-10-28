@@ -8,7 +8,7 @@ as for Linux. Audio, input and sensors on Android are covered in `docs/devices-a
 ## Verified
 
 - NDK cross-builds of CNA and its C API (NDK 29, `x86_64`, `android-24`,
-  `cmake-build-android-x86_64`; `plans/plan_binding.md` CBIND-136).
+  `cmake-build-android-x86_64`; C API task CBIND-136).
 - Running on an x86_64 emulator: cna-cs samples (AimingSample, SimpleAnimation, ColorReplacement,
   SnowShovel) draw as on the desktop, portrait games in portrait, and Android's Back press reaches
   them (CBIND-137..139).

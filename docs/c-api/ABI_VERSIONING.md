@@ -436,7 +436,7 @@ the identity range -- the reason `CNA_GRAPHICS_RENDERER_MAXIMUM` still may not b
 value below this names a live backend".
 
 `0.21.0` added the small public-API tail introduced by SAMPLE-060/061, from
-`plans/plan_binding.md` `CBIND-124`: `cna_environment_get_device_type` with its two fixed device
+C API task `CBIND-124`: `cna_environment_get_device_type` with its two fixed device
 identities, and the count/copy pair for an object dictionary's retained logical managed type name.
 All three routes are additive. The type-name pair matters because a content-loaded model tag can
 now preserve a closed generic identity such as `Dictionary<string, List<Vector3>>`; it is not the
@@ -456,7 +456,7 @@ against `CNA_GRAPHICS_RENDERER_MAXIMUM` (the ceiling moved). `docs/removed-rende
 each identity, its retired number, what it proved and the pinned dependency it wrapped.
 
 `0.19.0` added **`Load<Model>`** and the **`Tag` its processor wrote**, from
-`plans/plan_binding.md` `CBIND-118`: three routes and no new structures or handle kinds. This is the
+C API task `CBIND-118`: three routes and no new structures or handle kinds. This is the
 version that makes every other model route reachable for content -- before it a C game could build a
 model but never open one -- and with it `TrianglePickingSample`'s shape works end to end: load the
 model, take `cna_model_get_content_tag_dictionary_ext`, read the `BoundingSphere` and the
@@ -468,7 +468,7 @@ dispatches on a reflective reader's shape, so a type registered with
 with `CNA_RESULT_IO` instead of differing only cosmetically.
 
 `0.18.0` added the **`Dictionary<string, object>` a content processor writes** and
-the **reference-shaped reflective reader**, from `plans/plan_binding.md` `CBIND-116`: fifteen routes
+the **reference-shaped reflective reader**, from C API task `CBIND-116`: fifteen routes
 over one new handle kind (`CNA_ObjectDictionaryHandle`), the `CNA_ObjectDictionaryValueKind`
 identity and one versioned structure (`CNA_ObjectDictionaryEntry`). With it a C application reads
 the side data a custom `ContentProcessor` ships beside an asset -- a `BoundingSphere`, a
@@ -483,24 +483,24 @@ C++ type an entry ends up holding on the paths C can reach, because a dictionary
 through type-erased dispatch either way -- the container that refuses the wrong shape is
 `ModelReader`'s tag path, which C cannot reach.
 
-`0.17.0` added the **reflective content readers** from `plans/plan_binding.md`
+`0.17.0` added the **reflective content readers** from C API task
 `CBIND-105`: ten routes over one new handle kind (`CNA_ReflectiveTypeReaderBuilderHandle`), the
 `CNA_ContentFieldKind` identity and two callback types. With it a game can declare a reflectively
 serialized `.xnb` type's field list from C and have CNA read it.
 
-`0.16.0` added the **graphics tail** from `plans/plan_binding.md` `CBIND-104`: five
+`0.16.0` added the **graphics tail** from C API task `CBIND-104`: five
 routes — the options-carrying raw vertex upload in both its whole-buffer and windowed forms, the
 `EffectMaterial` retained-texture pair, and the flag that says whether an occlusion query's pixel
 count is a tally or a boolean. No new structures and no new handle kinds.
 
 `0.15.0` added the `.cnb` **loader registry and the two compilation front ends** from
-`plans/plan_binding.md` `CBIND-111`: twenty-eight `cna_cnb_*` routes over two new handle kinds
+C API task `CBIND-111`: twenty-eight `cna_cnb_*` routes over two new handle kinds
 (`CNA_CnbLoaderHandle`, `CNA_CnjToCnbResultHandle`), the `CNA_CnbLoaderCallback` extension point by
 which a game teaches CNA about an asset type CNA does not know, and one versioned structure. **With
 it a C application is a content compiler**: image, DDS, WAV and `.cnj` in, `.cnb` out.
 
 `0.14.0` added the `.cnb` **sprite-font, sound-effect, song, video, curve and
-animation-clip** schemas from `plans/plan_binding.md` `CBIND-110`: forty-one `cna_cnb_*` routes over
+animation-clip** schemas from C API task `CBIND-110`: forty-one `cna_cnb_*` routes over
 three new handle kinds (`CNA_CnbSpriteFontDataHandle`, `CNA_CnbSoundEffectDataHandle`,
 `CNA_CnbAnimationClipHandle`), the `CNA_CnbAudioFormat` identity with its six frozen wire values,
 three versioned structures, and the four schemas' chunk identifiers and strides. Three of the six
@@ -594,7 +594,7 @@ reviewed incompatible change rather than an additive patch to `0.7.0`.
 `0.7.0` added the six PBR and morph-target routes from `CBIND-078`; `0.6.0` standardized empty
 shader-source refusal in `CBIND-075`; `0.5.0` added the portable native-window handle routes from
 `CBIND-072`; and `0.4.0` added `cna_content_manager_register_cnj_loader_ext`. `0.1.0` was the
-initial version, while `0.2.0` added the routes recorded in `plans/plan_binding.md` CBIND-054 through
+initial version, while `0.2.0` added the routes recorded in C API tasks CBIND-054 through
 CBIND-058, every one of them additive. `0.3.0` was **not** additive and that is why the minor moved:
 `CBIND-067` made all 94 routes taking a `CNA_Bool` refuse a byte outside {0, 1}, where 66 of them
 used to accept one. A caller that passed only `CNA_FALSE` and `CNA_TRUE` -- what this document has
