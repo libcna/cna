@@ -31,6 +31,12 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   separate bridge/browser UI, security, tests, and performance validation.
 - [`cna-samples/plan.md`](../../cna-samples/plan.md) — authoritative sample coverage,
   cross-repository gap fixes and native/web verification work.
+- `plan_cna_rts.md` — RTS-001/RTS-002, the 2026-10-27 `cna-rts` consumer validation and
+  HiDef/direct-screenshot repair; deleted on 2026-10-28 (Git history only). Consumer-owned
+  evidence and the remaining optional raw-upload cleanup are in
+  [`cna-rts/missing.md`](https://github.com/libcnalab/cna-rts/blob/develop/missing.md). CNA retains
+  its render-target effect-source
+  [regression fixture](../modules/graphics/examples/rendertarget_effect_source_test.cpp).
 
 ## XNA subsystems, content, and ABI
 

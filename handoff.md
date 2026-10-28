@@ -39,7 +39,8 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   single-level texture renderer for full `SetData` while preserving copy isolation for shared
   renderers. The Texture2D slice passes 55/55, benchmark CTest 10/10, and both 300-frame GPU runs
   complete on the private display.
-- `cna-rts` consumer intake (2026-10-27, `plans/plan_cna_rts.md`): its September findings on
+- `cna-rts` consumer intake (RTS-001/RTS-002, 2026-10-27; CNA commit `3b43bd868`, consumer commit
+  `5b5dc24`): its September findings on
   render-target PNG/JPEG saves, EasyGL shader-dialect reporting and raw Color texture uploads are
   already answered by the current CNA code. The EasyGL render-target effect-source C1 fixture now
   exercises a real custom 3D shader, its `uRtFlipV` row correction, and ordinary-texture versus
