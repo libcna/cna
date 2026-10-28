@@ -430,7 +430,7 @@ if(CNA_BUILD_TESTS)
         # CNBF-120: CnbSourceToolTests.cpp spawns cna_tool_source_to_cnb the same
         # way, so it is excluded on exactly the same platforms and for exactly the same reasons.
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Cnb/CnbSourceToolTests\\.cpp$")
-        # plans/plan_content_pipeline.md CP-006: this test spawns cna-content to exercise its real
+        # Content Pipeline CP-006: this test spawns cna-content to exercise its real
         # filesystem publication and process exit contract.
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Pipeline/ContentPipelineCliTests\\.cpp$")
     endif()
@@ -1030,7 +1030,7 @@ if(CNA_BUILD_TESTS)
     endif()
 
     if(TARGET cna_content_tool)
-        # plans/plan_content_pipeline.md CP-006: run the real unified front end as a subprocess.
+        # Content Pipeline CP-006: run the real unified front end as a subprocess.
         add_dependencies(${CNA_TEST_OBJECT_TARGET_content} cna_content_tool)
         target_compile_definitions(${CNA_TEST_OBJECT_TARGET_content} PRIVATE
             CNA_CONTENT_TOOL_PATH="$<TARGET_FILE:cna_content_tool>"
@@ -1048,7 +1048,7 @@ if(CNA_BUILD_TESTS)
             CNA_TOOLS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools"
         )
 
-        # plans/plan_content_pipeline.md CP-014: prove the public CMake helper itself delegates to
+        # Content Pipeline CP-014: prove the public CMake helper itself delegates to
         # the real CLI and preserves its logical/output tree and manifest. A target-platform tool
         # cannot execute on the host, so cross configurations compile the guarded test but do not
         # instantiate this native build fixture.

@@ -7,7 +7,7 @@
 > **Boundary with the existing plans.**
 > * [`plan_xnb.md`](plan_xnb.md) owns the **runtime XNB reader** (`ContentManager::Load<T>()` from
 >   `.xnb`). That work is complete for its declared scope and is **not** reopened here.
-> * [`plan_content_pipeline.md`](plan_content_pipeline.md) owns the build-time pipeline
+> * [`docs/content-pipeline.md`](../docs/content-pipeline.md) describes the build-time pipeline
 >   (importer → processor → writer → **CNB**), including the CLI, incremental manifests and the
 >   `.cna-content.json` project format. This plan **extends** that pipeline with a second output
 >   format; it does not fork it.
@@ -450,7 +450,7 @@ Legend: `[ ]` open · `[x]` complete · `[~]` partially complete (detail in the 
 |---|---|---|
 | `XNAP-01` | Audit HEAD against the reported baseline; record what exists and what does not (§0). | [x] |
 | `XNAP-02` | Extract and record the verified reader-name/type-table evidence from every committed fixture (§2.5). | [x] |
-| `XNAP-03` | Create this plan as the authoritative living record, with explicit boundaries against `plan_xnb.md`, `plan_content_pipeline.md`, `plan_cnb.md` (deleted on 2026-10-28; CNB is `docs/cnb-format.md`), `plan_fx.md`. | [x] |
+| `XNAP-03` | Create this plan as the authoritative living record, with explicit boundaries against `plan_xnb.md`, `plan_content_pipeline.md`, `plan_cnb.md` (both deleted on 2026-10-28; the pipeline is `docs/content-pipeline.md`, CNB is `docs/cnb-format.md`), `plan_fx.md`. | [x] |
 | `XNAP-04` | Record and maintain the exact test baseline (§0.4), separating pre-existing environmental failures from regressions. | [x] |
 | `XNAP-05` | Audit the environment for an XNA 4.0 oracle; record the negative result honestly (§0.3). | [x] |
 

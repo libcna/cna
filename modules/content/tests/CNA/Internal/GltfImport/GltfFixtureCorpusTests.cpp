@@ -1784,7 +1784,7 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     // splices the extensions object and the extensionsUsed list into the middle of one document, so
     // as with the UV-channel builder above, the literal openings exceed the document count.
     //
-    // 280 -> 281 is plans/plan_content_pipeline.md CP-009's Model glTF pipeline slice, and the
+    // 280 -> 281 is Content Pipeline CP-009's Model glTF pipeline slice, and the
     // decision is the same one the entry above records: a **loader-machinery probe**, not a
     // conformance statement about an asset. The document lives in GltfUriContainmentTests.cpp and
     // is never imported -- it is parsed only to feed CollectExternalUriDependenciesEXT, and what

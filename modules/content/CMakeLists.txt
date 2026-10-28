@@ -1,7 +1,7 @@
 file(GLOB_RECURSE CNA_CONTENT_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 
 cna_add_module(cna_content Content ${CNA_CONTENT_SOURCES})
-# plans/plan_content_pipeline.md CP-009: the equivalence-hardened glTF -> CNJ orchestration is
+# Content Pipeline CP-009: the equivalence-hardened glTF -> CNJ orchestration is
 # still physically owned by the legacy tool while it is migrated. Compile that one implementation
 # into the content library with only its CLI/oracle entry points suppressed; both cna-content and
 # cna_tool_gltf_to_cnb then call the same linked implementation instead of compiling private copies.

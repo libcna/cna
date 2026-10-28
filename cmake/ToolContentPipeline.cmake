@@ -1,4 +1,4 @@
-# plans/plan_content_pipeline.md CP-006/CP-022: one command-line coordinator implementation is
+# Content Pipeline CP-006/CP-022: one command-line coordinator implementation is
 # linked by both the stock front end and user-built custom content compilers. Keep cache,
 # configuration and atomic-publication logic here rather than copying it into custom launchers.
 add_library(cna_content_compiler STATIC

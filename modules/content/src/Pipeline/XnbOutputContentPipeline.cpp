@@ -764,7 +764,7 @@ namespace CNA::Content::Pipeline
          * @brief Converts one schema-1 mesh part's material into an XNA stock effect.
          *
          * The field mapping is the one CNA's own runtime adapter already applies to a schema-1
-         * Model (`plan_content_pipeline.md` `CP-041`): base colour becomes DiffuseColor and Alpha,
+         * Model (Content Pipeline `CP-041`): base colour becomes DiffuseColor and Alpha,
          * the emissive factor becomes EmissiveColor, and the specular colour factor becomes
          * SpecularColor. Nothing is invented; SpecularPower and WeightsPerVertex have no schema
          * field and take XNA's own constructor defaults, exactly as the runtime does.

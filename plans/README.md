@@ -130,6 +130,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   [`../docs/cnj-format.md`](../docs/cnj-format.md), what glTF import still loses is
   [`../docs/gltf-limitations.md`](../docs/gltf-limitations.md); comments cite the rows as
   "CNJ CNB-n" (the prefix predates the binary CNB format and its `CNBF-*` tasks).
+- `plan_content_pipeline.md` — the CNA Content Pipeline, `cna-content` (`CP-001`..`CP-063`,
+  2026-08-29/30), merged into `next`; deleted on 2026-10-28 (Git history only). The pipeline,
+  its limitations, stability summary, open questions and rejected alternatives are in
+  [`../docs/content-pipeline.md`](../docs/content-pipeline.md); comments cite the rows as
+  "Content Pipeline CP-nnn".
 - `plan_cnb.md` — the engineering record of CNB, the compiled binary content format
   (`CNBF-001`..`CNBF-123`, `CNBF-H001`..`H020`, 2026-08-26/27); deleted on 2026-10-28 (Git
   history only). The format, its numbered reader invariants (§12.2), what is deliberately not

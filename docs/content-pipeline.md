@@ -751,7 +751,8 @@ manifest; changed output set; changed
 component version; changed parameter; or changed dependency forces the owning node to rebuild.
 Identical effective inputs and intact outputs produce `SKIP`. Runtime XREF records are outputs
 rather than independent inputs; the source/dependency/component inputs that produced them are
-fingerprinted.
+fingerprinted. Dependency correctness comes before incremental speed: a component that cannot
+report a complete dependency set must make the node rebuild, never let it be skipped on a guess.
 
 Primary sources, file dependencies, generated-file dependencies, and existing output verification
 are hashed in 1 MiB chunks. Hashing therefore uses bounded memory and accepts individual files above
@@ -1398,6 +1399,12 @@ previously open Windows compiler/runtime verification action.
   justifies a generated-source graph contract and supplies stable per-child dependency partitions;
 - stable machine-readable build-decision output, if an IDE/build integration contract justifies a
   separately versioned format;
+- whether the experimental layer deserves its own physical/CMake module, once its link closure and
+  consumer set are measured;
+- whether built-in authoring formats beyond the context-resolved CNJ/XNB/custom seams need explicit
+  external-root reference syntax. glTF's shared converter validates and opens URIs before the
+  pipeline context sees them, so it must not claim the named-source-root capability without a
+  separately reviewed resolver callback;
 
 **Not provided:**
 
@@ -1418,5 +1425,38 @@ binary cannot honor the lease. No manifest generation, diagnostic, or check perf
 binary can make a concurrently running legacy executable acquire a lock it does not implement;
 different compiler generations must not overlap against the same output root.
 
-The engineering decisions, rejected alternatives, current risks, and CP task ledger are maintained
-separately in [`plans/plan_content_pipeline.md`](../plans/plan_content_pipeline.md).
+## Rejected alternatives
+
+The designs this pipeline deliberately does not use, each with the reason, so they are not
+rediscovered:
+
+- **`Cnb*Data` as every importer's output.** It would erase the import/process split: an image
+  importer would already have made texture policy decisions.
+- **One `CompileSourceToCnb` switch.** That was the tool shape the pipeline replaced; it is not
+  extensible and hides component choice and dependencies.
+- **A pure template/concept pipeline.** It would move selection to compile time, lose registry
+  diagnostics and custom discovery, and invite opaque metaprogramming.
+- **A `std::variant` of every built-in type.** Every game extension would have to edit CNA's
+  closed variant.
+- **Persisting `std::type_index` or `typeid(T).name()`.** ABI- and compiler-dependent.
+- **Global self-registering components.** Static-initialization order, test isolation,
+  registration-order selection and concurrency all argue against it.
+- **Writers that rebuild CNB chunks.** The typed CNB encoders are authoritative, without exception.
+- **A new `ContentTypeReader` hierarchy.** The runtime capability already exists and works.
+- **Inferring source dependencies from XREFs.** Source reads and runtime loads have different
+  semantics.
+- **Timestamp-only incremental builds.** They cannot answer whether the effective inputs changed.
+- **A project/configuration format first.** Deferred until implemented processors showed the
+  minimum useful semantics; `.cna-content.json` is what that produced.
+- **A parallel scheduler in v1.** Deferred until registry, dependency and publication correctness
+  were stable; it came later as the bounded `--workers` scheduler.
+- **Custom components loaded as arbitrary shared libraries.** Virtual interfaces, STL ownership and
+  exceptions cross the C++ ABI and CNA has no stable plugin handshake; a user-built compiler linked
+  from source covers the real extension case without implying binary compatibility or searching
+  untrusted directories.
+
+## History
+
+The pipeline was built as `CP-001`..`CP-063` (2026-08-29/30) and merged into `next`. Its plan,
+`plans/plan_content_pipeline.md`, was deleted on 2026-10-28 (Git history only); source comments
+cite the rows as "Content Pipeline CP-nnn".
