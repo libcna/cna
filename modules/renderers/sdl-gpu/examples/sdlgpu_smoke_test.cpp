@@ -64,7 +64,7 @@ namespace
     constexpr int kExpectedChecks = 31;
 #else
     // Unsupported-compiler builds also verify the diagnostic returned by CreateEffectRenderer.
-    constexpr int kExpectedChecks = 31;
+    constexpr int kExpectedChecks = 32;
 #endif
 
     int RunHeadlessGraphicsDeviceProbe(const char* requestedDriver)
