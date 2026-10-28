@@ -339,7 +339,12 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-None open (reconciled 2026-10-24).
+- `Microphone::Start` reports `MicrophoneState::Started` even when the capture device failed to
+  open: `modules/audio/src/Xna/Microphone.cpp` swallows the failure (`catch (...)`, following FNA)
+  and sets the state unconditionally. Microsoft XNA's `Microphone.Start` hands the native start's
+  error code to `Helpers.ThrowExceptionFromErrorCode`, so a failed start throws there, and XNA
+  wins. Found 2026-10-28 by reading XNA's decompiled source (former AUD-13-001); not yet pinned by
+  a test. Everything else on this list was fixed by 2026-10-24.
 
 ### 5.2 Limitations
 
@@ -448,6 +453,15 @@ None open (reconciled 2026-10-24).
 - **A shared SDL prebuilt can change under a running build** when a tree with another manifest
   rebuilds it (2026-10-26 review R3-01/R4-01; the watched stamp protects only the next build). Give
   such a tree its own `CNA_SDL_PREBUILT_ROOT` (`docs/development-environment.md`).
+- **Audio output has no device-change or device-loss handling of CNA's own.** The SDL3 backend
+  opens `SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK`, so a change of the system default is whatever SDL3
+  does with a default-device stream; the ALSA backend does not reopen a PCM that disappears.
+  Neither case has been measured (former AUD-04-010/011; capture devices do report a lost device).
+- **Three audio reports from the 2026-07-17 audit stay unconfirmed, not open:** high-pitched sound
+  effects, missing audio files, and distorted or sped-up gameplay audio. They were never
+  reproduced against the game they came from, which is not available. The audit narrowed the
+  pitch report to a wrong sample rate reaching CNA before the mixer -- the class CBIND-146 fixed
+  (`51d9c84cc`, 2026-10-02, an XNA-built sound's content sample rate).
 
 ### 5.3 External and driver limitations
 

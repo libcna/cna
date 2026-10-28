@@ -125,7 +125,7 @@ if(CNA_BUILD_TESTS AND CNA_AUDIO_PLATFORM STREQUAL "SDL3")
     )
 endif()
 
-# --- plans/plan_audio.md AUD-06-025: standalone XNB SoundEffect metadata inspection tool ---
+# --- audio AUD-06-025: standalone XNB SoundEffect metadata inspection tool ---
 # A small standalone (non-GTest) executable that loads a .xnb SoundEffect asset through the real
 # production ContentManager::Load<SoundEffect>() path and emits its metadata (name, decoded
 # duration) as stable single-line JSON, without ever calling Play()/CreateInstance() -- for
@@ -141,7 +141,7 @@ if(CNA_BUILD_TESTS)
     )
 endif()
 
-# --- plans/plan_audio.md AUD-11-028: standalone XWB wave-bank inspection/extraction tool ---
+# --- audio AUD-11-028: standalone XWB wave-bank inspection/extraction tool ---
 # A small standalone (non-GTest) executable that parses a .xwb wave bank via the real
 # CNA::Internal::Audio::ParseXwb() and emits every entry's metadata as stable JSON, optionally
 # also exporting each entry's real audio payload as a playable .wav file (via the same shared

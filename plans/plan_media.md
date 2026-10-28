@@ -34,7 +34,7 @@
 > **Provenance:** this revision synthesizes three independent research passes — (1) a complete,
 > method-level read of all 26 FNA `Media` source files (including `Video/`), (2) a full audit of every
 > current CNA `Microsoft::Xna::Framework::Media`/`CNA::Internal::Media` file plus the audio/content
-> infrastructure it depends on, and (3) a structural-conventions check against `plan_audio.md`,
+> infrastructure it depends on, and (3) a structural-conventions check against the audio plan,
 > `CHECKLIST.md`, and `AUDIT.md` — plus two direct verifications (`FrameworkDispatcher::Update()`'s
 > real call chain; existing `CNA::Internal::Graphics::ImageLoader` reuse for picture metadata). It
 > supersedes a first-pass draft that reached 73 tasks; this version deliberately goes to finer
@@ -42,7 +42,7 @@
 > per-overload testing mandate, and several real gaps the first pass missed) at the project owner's
 > explicit request for maximum thoroughness — **126 tasks as first written** (now 233, after
 > nine external review rounds appended Phases 8-16), not padded for a round number: every task
-> below is an independently completable, individually justified unit of work. Matching `plan_audio.md`'s
+> below is an independently completable, individually justified unit of work. Matching the audio plan's
 > own real history (an initial plan, then supplementary `P9-*`/`Phase 10` addenda as later audits found
 > more), any future re-audit findings should be appended as new phases here, not silently merged into
 > the phases below (see MEDIA-126).
@@ -142,7 +142,7 @@ scratch for the 14 Library-cluster rows (13 classes + 1 enum, which is already f
 ## 2. Accepted deviations (already true today, or deliberately chosen here — documented, not silently "fixed")
 
 1. **Audio playback backend**: SDL3_mixer instead of FAudio (same accepted-deviation family as
-   `plan_audio.md` — `CHECKLIST.md` already covers the shared parts; Song-specific notes go in Phase 7).
+   the audio plan — `CHECKLIST.md` already covers the shared parts; Song-specific notes go in Phase 7).
 2. **Video decode backend**: a single FFmpeg-based `VideoDecoder` replaces FNA's two separate native
    decoders (`dav1dfile` for AV1, `Theorafile` for Theora) plus FNA's shader-based
    (`BaseYUVPlayer`/`Effect`) YUV→RGBA blit; CNA does the YUV→RGBA conversion on the CPU in C++ instead
@@ -1022,7 +1022,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   Gyroscope) — identical count to MEDIA-120's own pass, as expected since Phase 7 is
   documentation-only (no code changes). Grepped in full, not a truncated tail.
 
-- [x] **MEDIA-126 — Establish this plan's own future-addendum convention.** Matching `plan_audio.md`'s
+- [x] **MEDIA-126 — Establish this plan's own future-addendum convention.** Matching the audio plan's
   real evolution (an initial plan, then supplementary `P9-*`/`Phase 10` sections appended as later
   re-audits found more), record explicitly at the top of this file (already done in the provenance note)
   that any future Media re-audit should append a new numbered phase here rather than silently rewriting
@@ -2677,7 +2677,7 @@ Beyond §4's D1-D11 (already resolved with defaults), these remain genuinely ope
 `Media`-namespace source files (including `Video/`), a full line-level audit of the current CNA
 implementation (all `.hpp`/`.cpp` under `Microsoft::Xna::Framework::Media` + `CNA::Internal::Media`,
 plus the SDL3_mixer/FFmpeg backends and content-pipeline integration it depends on), and a structural
-convention check against `plan_audio.md`/`CHECKLIST.md`/`AUDIT.md` — cross-checked against each other,
+convention check against the audio plan/`CHECKLIST.md`/`AUDIT.md` — cross-checked against each other,
 plus two direct source verifications (`FrameworkDispatcher` → `MediaPlayer::Update()` wiring;
 `CNA::Internal::Graphics::ImageLoader` reuse for picture metadata) that a first-pass draft did not
 perform.*

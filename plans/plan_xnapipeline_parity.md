@@ -76,7 +76,7 @@ plumbing, not API, and is not a member.
 
 **Out of scope.** Private/internal Microsoft implementation classes (their *observable* behaviour
 through public API and built-in components is in scope); XACT (`BuildXact` is inventoried as an
-MSBuild host task, §18, and `plan_audio.md` owns XACT); Visual Studio project-system integration
+MSBuild host task, §18, and the audio plan owned XACT); Visual Studio project-system integration
 beyond the `.contentproj` file itself.
 
 ---

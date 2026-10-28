@@ -54,7 +54,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 
 ## XNA subsystems, content, and ABI
 
-- [`plan_audio.md`](plan_audio.md) — audio and XACT compatibility.
+- `plan_audio.md` — the 2026-07-17 "audio perfection" audit backlog (`AUD-00`..`AUD-18`, 438
+  tasks; earlier audio rows such as `XA-*` and `P9`..`P12-*` came from the version it replaced),
+  worked on until 2026-07-18 and deleted on 2026-10-28 (Git history only). Audio deviations are in
+  [`../CHECKLIST.md`](../CHECKLIST.md); open audio defects and limitations are in
+  [`../handoff.md`](../handoff.md) §5.
 - [`plan_devices.md`](plan_devices.md) — XNA devices and sensors.
 - [`plan_cna_devices.md`](plan_cna_devices.md) — `CNA::Devices` extensions.
 - [`plan_input.md`](plan_input.md) — input compatibility and stabilization.
