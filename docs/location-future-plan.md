@@ -33,7 +33,7 @@ include/System/Device/Location/GeoPositionAccuracy.hpp
 
 Likely real API members (from the documented WP7 `System.Device.Location` surface —
 not independently re-verified against an archived MSDN page the way
-`Microsoft::Devices::Sensors` was in `plans/plan_devices_phase2.md` Task P2-2; treat these as
+`Microsoft::Devices::Sensors` was in devices phase-2 plan Task P2-2; treat these as
 a starting sketch, re-verify before actually implementing):
 
 - **`GeoCoordinateWatcher`** — the main entry point, roughly mirroring this codebase's

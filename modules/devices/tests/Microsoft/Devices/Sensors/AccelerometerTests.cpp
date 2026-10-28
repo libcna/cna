@@ -1349,7 +1349,7 @@ TEST(AccelerometerTests, DispatchDoesNotDeliverStaleEventToUnrelatedInstanceReus
 // whether to also raise the legacy ReadingChanged event — so destroying this same
 // instance from within a *CurrentValueChanged* handler is NOT safe for
 // Accelerometer specifically (documented, not tested — see this class's own
-// dispatchToken_ doc comment and plans/plan_devices_phase8.md Task P8-1; the project has
+// dispatchToken_ doc comment and devices phase-8 plan Task P8-1; the project has
 // no death-test convention to exercise the known-unsafe path directly). ReadingChanged
 // is the *last* statement DispatchSensorReading() executes, though — nothing touches
 // `this` afterward — so destroying the instance from within ReadingChanged's handler

@@ -124,7 +124,7 @@
     {
       "name": "devices-asan",
       "displayName": "AddressSanitizer (Microsoft::Devices hardening, OPENGLES3)",
-      "description": "Debug + OPENGLES3 + tests, instrumented with AddressSanitizer. Verified working in plans/plan_devices_phase8.md Task P8-4 \u2014 detects use-after-free/heap-corruption bugs (e.g. the Task P8-1 self-destroy-during-callback fix). Does not detect data races; use devices-tsan for that. CNA_DEVICES=ON is required here \u2014 without it, the entire CNA::Devices surface (FileDialog/MessageBox/Clipboard/SystemTray/...) this preset's own name and description promise compiles out silently.",
+      "description": "Debug + OPENGLES3 + tests, instrumented with AddressSanitizer. Verified working in devices phase-8 plan Task P8-4 \u2014 detects use-after-free/heap-corruption bugs (e.g. the Task P8-1 self-destroy-during-callback fix). Does not detect data races; use devices-tsan for that. CNA_DEVICES=ON is required here \u2014 without it, the entire CNA::Devices surface (FileDialog/MessageBox/Clipboard/SystemTray/...) this preset's own name and description promise compiles out silently.",
       "binaryDir": "${sourceDir}/cmake-build-devices-asan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -138,7 +138,7 @@
     {
       "name": "devices-tsan",
       "displayName": "ThreadSanitizer (Microsoft::Devices hardening, OPENGLES3)",
-      "description": "Debug + OPENGLES3 + tests, instrumented with ThreadSanitizer. Verified working in plans/plan_devices_phase8.md Task P8-4 \u2014 the tool that actually detects data races (ASan does not). As of Task P8-2, running the Devices-only test suite under this preset reports exactly one pre-existing, unrelated race in sharp-runtime's TimeSpan copy constructor (a debug copy_count counter) \u2014 out of scope for Microsoft::Devices work; any *new* race reported here is worth investigating. CNA_DEVICES=ON is required here \u2014 without it, the entire CNA::Devices surface (FileDialog/MessageBox/Clipboard/SystemTray/...) this preset's own name and description promise compiles out silently.",
+      "description": "Debug + OPENGLES3 + tests, instrumented with ThreadSanitizer. Verified working in devices phase-8 plan Task P8-4 \u2014 the tool that actually detects data races (ASan does not). As of Task P8-2, running the Devices-only test suite under this preset reports exactly one pre-existing, unrelated race in sharp-runtime's TimeSpan copy constructor (a debug copy_count counter) \u2014 out of scope for Microsoft::Devices work; any *new* race reported here is worth investigating. CNA_DEVICES=ON is required here \u2014 without it, the entire CNA::Devices surface (FileDialog/MessageBox/Clipboard/SystemTray/...) this preset's own name and description promise compiles out silently.",
       "binaryDir": "${sourceDir}/cmake-build-devices-tsan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -152,7 +152,7 @@
     {
       "name": "devices-ubsan",
       "displayName": "UndefinedBehaviorSanitizer (Microsoft::Devices hardening, OPENGLES3)",
-      "description": "Debug + OPENGLES3 + tests, instrumented with UndefinedBehaviorSanitizer. Verified working in plans/plan_devices_phase8.md Task P8-4 \u2014 the full Devices-only suite reports zero issues under this preset. CNA_DEVICES=ON is required here \u2014 without it, the entire CNA::Devices surface (FileDialog/MessageBox/Clipboard/SystemTray/...) this preset's own name and description promise compiles out silently.",
+      "description": "Debug + OPENGLES3 + tests, instrumented with UndefinedBehaviorSanitizer. Verified working in devices phase-8 plan Task P8-4 \u2014 the full Devices-only suite reports zero issues under this preset. CNA_DEVICES=ON is required here \u2014 without it, the entire CNA::Devices surface (FileDialog/MessageBox/Clipboard/SystemTray/...) this preset's own name and description promise compiles out silently.",
       "binaryDir": "${sourceDir}/cmake-build-devices-ubsan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",

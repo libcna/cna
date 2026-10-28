@@ -21,10 +21,10 @@ remains iOS-only-sketch, what limitations are accepted) — sections below are u
 in place to say what is actually implemented vs. still just designed, rather than
 being rewritten from scratch.
 
-Original history: `plans/plan_devices_phase9.md` Task P9-8 created this file to consolidate
+Original history: devices phase-9 plan Task P9-8 created this file to consolidate
 the native-backend architecture that had been scattered across two prior plan files
-(`plans/plan_devices_phase5.md` Tasks P5-8/P5-9's prose field mappings, and
-`plans/plan_devices_phase6.md` Task P6-8's `ICompassBackend`/`IMotionBackend` interface
+(devices phase-5 plan Tasks P5-8/P5-9's prose field mappings, and
+devices phase-6 plan Task P6-8's `ICompassBackend`/`IMotionBackend` interface
 sketch) into one place, extended to cover `IDeviceSensorBackend`,
 `IAccelerometerBackend`, and `IGyroscopeBackend` for architectural completeness, plus a
 migration plan — that migration plan has now been executed for Android (see
@@ -75,7 +75,7 @@ now takes a `CalibrationCallback onCalibrationNeeded` in addition to `ReadingCal
 matching `ICompassBackend::Start()` exactly — see the Android backend section below for
 how `AndroidMotionBackend` now drives it.
 
-The shape below extends `plans/plan_devices_phase6.md` Task P6-8's `ICompassBackend`/
+The shape below extends devices phase-6 plan Task P6-8's `ICompassBackend`/
 `IMotionBackend` sketch with a common base and the two sensors that already have a real
 backend, purely so the architecture reads as one consistent design rather than two
 unrelated one-off interfaces. **`IDeviceSensorBackend`/`IAccelerometerBackend`/
@@ -152,7 +152,7 @@ their fused/magnetometer data is outside the current platform sensor vocabulary.
 
 ## Android backend path — IMPLEMENTED (2026-07-05, devices plan Phases 6-8)
 
-Builds directly on `plans/plan_devices_phase5.md`'s existing Compass-Android/Motion-Android
+Builds directly on the devices phase-5 plan's existing Compass-Android/Motion-Android
 subsections (Tasks P5-8/P5-9); reproduced and consolidated here rather than duplicated
 with drift. **As-implemented, this deviated from the sketch in one important way**:
 no JNI/Kotlin bridge was needed at all — the NDK's own `<android/sensor.h>`/
@@ -231,7 +231,7 @@ scope for `MOTION-012`.
 
 ## iOS backend path
 
-Builds directly on `plans/plan_devices_phase5.md`'s existing Compass-iOS/Motion-iOS
+Builds directly on the devices phase-5 plan's existing Compass-iOS/Motion-iOS
 subsections (Tasks P5-8/P5-9).
 
 **Compass:** `CLLocationManager`'s heading APIs (`startUpdatingHeading()`, with updates
@@ -296,7 +296,7 @@ Android-only fixes:
 - **iOS, Compass specifically:** `CLLocationManager`'s heading APIs require **location
   permission authorization** (`CLLocationManager.requestWhenInUseAuthorization()` or
   equivalent) even though only heading — not a coordinate — is being read. This is an
-  iOS-specific quirk already flagged in `plans/plan_devices_phase5.md`'s original prose plan
+  iOS-specific quirk already flagged in the devices phase-5 plan's original prose plan
   and repeated here because it is easy to miss: a future Compass-iOS implementation
   cannot skip the location-permission flow just because it never calls
   `startUpdatingLocation()`.
