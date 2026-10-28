@@ -149,7 +149,7 @@ namespace CNA::Internal::Renderers::WebGPU
             // stop. They stay refused, by name, and GetAdditionalLimitationsTextEXT() says so.
             case SurfaceFormat::NormalizedByte2: return {WGPUTextureFormat_RG8Snorm, false, 2};
             case SurfaceFormat::NormalizedByte4: return {WGPUTextureFormat_RGBA8Snorm, false, 4};
-            // plans/plan_apple_m4.md AM4-187: XNA's four-channel half-float formats -- HdrBlendable
+            // Apple M4 AM4-187: XNA's four-channel half-float formats -- HdrBlendable
             // is RGBA16F, as the render-target map already states -- are core WebGPU `rgba16float`,
             // which is sampleable, filterable and renderable without any feature, so the game's
             // eight bytes per texel are stored exactly and mip generation works as for RGBA8.
@@ -1373,7 +1373,7 @@ namespace CNA::Internal::Renderers::WebGPU
                 out[4 + i] = p.boneTransforms[i];
         }
 
-        // plans/plan_apple_m4.md AM4-052: wgpu-native's own status (wgpu.h,
+        // Apple M4 AM4-052: wgpu-native's own status (wgpu.h,
         // WGPUSurfaceGetCurrentTextureStatus_Occluded), outside the standard enum's range. Its
         // Metal backend reports it for a window macOS considers not visible instead of blocking up
         // to a second for a drawable; the frame is simply skipped and the next one tries again.
@@ -1389,7 +1389,7 @@ namespace CNA::Internal::Renderers::WebGPU
             return static_cast<int>(status) == kWgpuNativeSurfaceStatusOccluded;
         }
 
-        /// plans/plan_apple_m4.md AM4-078: test hook. With CNA_WEBGPU_TEST_SURFACE_OCCLUDED set, every
+        /// Apple M4 AM4-078: test hook. With CNA_WEBGPU_TEST_SURFACE_OCCLUDED set, every
         /// surface acquisition reports wgpu-native's Occluded status without acquiring, so the
         /// dropped-frame path can be exercised on any host -- not only behind a hidden macOS window.
         [[nodiscard]] bool SurfaceOccludedForTesting()
@@ -1398,7 +1398,7 @@ namespace CNA::Internal::Renderers::WebGPU
             return forced;
         }
 
-        /// plans/plan_apple_m4.md AM4-109: the second test hook. With CNA_WEBGPU_TEST_SURFACE_OUTDATED
+        /// Apple M4 AM4-109: the second test hook. With CNA_WEBGPU_TEST_SURFACE_OUTDATED
         /// set, every surface acquisition reports Outdated -- the status a resize race produces -- so
         /// the AM4-078 path that drops a frame whole stays tested now that an occluded frame renders.
         [[nodiscard]] bool SurfaceOutdatedForTesting()
@@ -1710,7 +1710,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // MSR-018: RG8Snorm/RGBA8Snorm cannot be render attachments, so their mip levels are the
         // explicit XNA levels supplied through UpdatePixelsLevel. This is the path compiled XNB
         // normal maps use. A level-zero write does not invent or overwrite those authored levels.
-        // plans/plan_apple_m4.md AM4-187: and the same for every other non-RGBA8 storage. The
+        // Apple M4 AM4-187: and the same for every other non-RGBA8 storage. The
         // blit cascade is built for RGBA8Unorm, and XNA itself never generates a Texture2D's
         // levels, so `rgba16float` levels are exactly what the game authored.
         if (mipLevels_ > 1 && wgpuFormat_ == WGPUTextureFormat_RGBA8Unorm)
@@ -2126,7 +2126,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (data == nullptr || w <= 0 || h <= 0) return false;
         const int levelSize = MipDim(size_, level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
-        // plans/plan_apple_m4.md AM4-186: a block-aligned sub-rectangle (its extent may stop short
+        // Apple M4 AM4-186: a block-aligned sub-rectangle (its extent may stop short
         // of a block only where it reaches the level's edge -- GetCompressedDataEXT's own rule) is
         // patched into the level's block store, which stays the readback authority, and the whole
         // level is then written from that store, so the two can never disagree. A level never
@@ -3114,7 +3114,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         WGPUTextureDescriptor colorDescriptor{};
         colorDescriptor.label = StringView("CNA WebGPU RenderTarget2D Color");
-        // plans/plan_apple_m4.md AM4-094: CopyDst for RenderTarget2D.SetData.
+        // Apple M4 AM4-094: CopyDst for RenderTarget2D.SetData.
         colorDescriptor.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding |
                                 WGPUTextureUsage_CopySrc | WGPUTextureUsage_CopyDst;
         colorDescriptor.dimension = WGPUTextureDimension_2D;
@@ -5895,7 +5895,7 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT layout =
             ResolveStockVertexLayoutUncheckedEXT(vb, streams, streamCount, shape);
-        // plans/plan_apple_m4.md AM4-185: the native slots this draw occupies are the streams its
+        // Apple M4 AM4-185: the native slots this draw occupies are the streams its
         // shader reads, the neutral record when it defaults an attribute, and -- counted always,
         // so this cannot under-count -- the per-instance world-matrix stream an instanced twin
         // binds. GetMaxVertexStreams() no longer reserves a slot up front, so a draw that would
@@ -8988,7 +8988,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     void WebGPURenderer::RecordDrawOrder(DrawFamily family, std::size_t index)
     {
-        // plans/plan_apple_m4.md AM4-131: BlendState.MultiSampleMask, judged on the target this
+        // Apple M4 AM4-131: BlendState.MultiSampleMask, judged on the target this
         // draw was recorded for. A single-sample target ignores it (D3D9: "no effect when rendering
         // to a single sample buffer"); a mask that keeps no sample writes nothing, so the draw is
         // not recorded at all -- exact on every adapter, including Metal, whose wgpu backend drops
@@ -9578,7 +9578,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         auto* self = const_cast<WebGPUOcclusionQueryRenderer*>(this);
         if (ended_ && !complete_)
         {
-            // plans/plan_apple_m4.md AM4-108: a run that drew nothing counted nothing; it has no
+            // Apple M4 AM4-108: a run that drew nothing counted nothing; it has no
             // query to resolve and would otherwise never complete.
             if (drawsThisRun_ == 0)
             {
@@ -9603,7 +9603,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     bool WebGPUOcclusionQueryRenderer::PixelCountIsPreciseEXT() const noexcept
     {
-        // plans/plan_apple_m4.md AM4-091: measured on an Apple M4 -- a full-viewport quad reads 1.
+        // Apple M4 AM4-091: measured on an Apple M4 -- a full-viewport quad reads 1.
         return owner_ == nullptr || owner_->adapterBackendType_ != WGPUBackendType_Metal;
     }
 
@@ -12206,7 +12206,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     int WebGPURenderer::GetMaxVertexStreams() const
     {
-        // plans/plan_apple_m4.md AM4-185: the public bound is the device's own maximum. The
+        // Apple M4 AM4-185: the public bound is the device's own maximum. The
         // resolver searches every binding but binds only the streams the shader reads, so the
         // neutral (0,0,0,1) record WEBGPU-155 binds after them needs a slot only beside those --
         // ResolveStockVertexLayoutForDrawEXT checks that per draw. Reserving it here refused
@@ -12385,7 +12385,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // cube view, and WGPUFeatureName_TextureCompressionBC does not restrict BC to non-array 2D).
         // The verdict is therefore the same one the 2D path gives -- including its device-feature
         // gate, so 163's refusal survives exactly where it should: on a device without BC.
-        // plans/plan_apple_m4.md AM4-187: except the half-float formats the 2D path now stores;
+        // Apple M4 AM4-187: except the half-float formats the 2D path now stores;
         // a plain cube has no `rgba16float` storage, so it keeps the framework's own rule.
         {
             using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
@@ -12966,7 +12966,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             ConfigureSurface(false);
             if (!surfaceConfigured_)
             {
-                // plans/plan_apple_m4.md AM4-078: the frame is dropped whole -- every family, not
+                // Apple M4 AM4-078: the frame is dropped whole -- every family, not
                 // only the sprites. A surviving 3D draw was replayed by the next bind cycle into
                 // whatever target it opened, which could be the very texture the draw samples.
                 DiscardQueuedCommands();
@@ -13004,7 +13004,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                     throw std::runtime_error(
                         "CNA WebGPU: unrecoverable surface acquisition failure (status " +
                         std::to_string(static_cast<int>(surfaceTexture.status)) + ")");
-                // plans/plan_apple_m4.md AM4-089: XNA's back buffer exists whether or not the window
+                // Apple M4 AM4-089: XNA's back buffer exists whether or not the window
                 // is on screen. An occluded surface -- a window macOS does not show, which is every
                 // window of a locked session -- renders this frame into an offscreen stand-in, so
                 // GetBackBufferData still reads it and the frame's render-target work stays ordered
@@ -13362,7 +13362,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (physicalWidth_ <= 0 || physicalHeight_ <= 0 || surfaceFormat_ == WGPUTextureFormat_Undefined)
             return nullptr;
         // The same owned storage is also the browser's backbuffer, independent of canvas lifetime.
-        // plans/plan_apple_m4.md AM4-109: one stand-in serves every occluded frame of the same shape;
+        // Apple M4 AM4-109: one stand-in serves every occluded frame of the same shape;
         // the caller's reference is released at Present like a surface texture's, the cache keeps its
         // own. A minimised or hidden game used to allocate and free a full back buffer each frame.
         if (occludedBackbufferEXT_ != nullptr &&
@@ -14604,7 +14604,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
         // [0..15]=World*View*Projection, applied after the per-instance matrix -- XNA's
         // `position * InstanceWorld * Effect.World * View * Projection`, the composition the stock
-        // route and every other renderer use. plans/plan_apple_m4.md AM4-095: this used to be
+        // route and every other renderer use. Apple M4 AM4-095: this used to be
         // View*Projection alone, so Effect.World was ignored on this route.
         // [16..31]=diffuseColor+the same unused-here tail fields as colored3d.wgsl. FillExtUniforms()
         // is reused verbatim: it only cares that its first argument is SOME matrix to dump

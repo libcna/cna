@@ -987,7 +987,7 @@ class TextureFilterMipContractTest : public Game
         check(SoleLevel(Draw3D(dev, 8, 8, *mipFlat_, sampler(-1, 0.0f)), flatLevels_) == 3,
               "L3 XNA's unsigned MaxMipLevel write maps a negative value to the last level");
 
-        // plans/plan_apple_m4.md AM4-296: the retired METAL renderer refused a non-zero bias below
+        // Apple M4 AM4-296: the retired METAL renderer refused a non-zero bias below
         // macOS/iOS 26 and on a device measured to ignore MTLSamplerDescriptor.lodBias (a virtual
         // machine's paravirtual GPU). No surviving renderer may refuse it, and dropping the bias
         // silently is what L4-L11 catch.

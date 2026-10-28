@@ -123,7 +123,7 @@ namespace CNA::Internal::Renderers::Fna3d
 
         if (window_ == nullptr)
         {
-            // plans/plan_apple_m4.md AM4-188: a platform without SDL windows (HEADLESS, TERMINAL)
+            // Apple M4 AM4-188: a platform without SDL windows (HEADLESS, TERMINAL)
             // declining what this renderer needs, which GraphicsDevice reports as XNA does
             // (NoSuitableGraphicsDeviceException around the platform's refusal) -- the same
             // answer SDL_GPU gives since AM4-176 -- not an FNA3D failure.
@@ -147,7 +147,7 @@ namespace CNA::Internal::Renderers::Fna3d
         // redundant now rather than load-bearing, since the window's visual is already fixed from
         // the descriptor's own request.
         //
-        // plans/plan_apple_m4.md AM4-190: the flags it returns name the driver it selected -- only
+        // Apple M4 AM4-190: the flags it returns name the driver it selected -- only
         // the OpenGL driver asks for SDL_WINDOW_OPENGL (the window itself is always created as one,
         // so its own flags cannot tell) -- and only that driver disables an attribute array the
         // declaration does not fill, so the shader reads (0, 0, 0, 1) for it.

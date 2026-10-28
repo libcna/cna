@@ -118,7 +118,7 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" AND NOT CMAKE_SYSTEM_NAME STREQUAL 
         "-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake")
 endif()
 
-# plans/plan_apple.md APPLE-4: an iOS configure is rejected here unless CNA actually wires the selected
+# Apple APPLE-4: an iOS configure is rejected here unless CNA actually wires the selected
 # renderer up for iOS. This runs before the individual per-renderer gates below so the failure
 # names the platform rather than a dependency that was never configured for an iOS sysroot.
 # No-op on macOS and on every non-Apple target.

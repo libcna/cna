@@ -218,7 +218,7 @@ namespace
         // renderer deliberately does not make.
         // SOFTWARE-119 writes into the same CPU face/mip storage its rasterizer and GetData use;
         // The shared set-data contract asserts the exact round trip rather than mere acceptance.
-        // plans/plan_apple_m4.md AM4-092: SDL_GPU's RenderTargetCube uploads the face too
+        // Apple M4 AM4-092: SDL_GPU's RenderTargetCube uploads the face too
         // (SdlGpuRenderTargetCubeRenderer::SetData -> UploadTargetRegion).
         return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, SdlGpu);
     }

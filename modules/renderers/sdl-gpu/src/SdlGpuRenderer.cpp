@@ -156,7 +156,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 (std::strcmp(driver, "dummy") == 0 || std::strcmp(driver, "offscreen") == 0);
         }
 
-        // plans/plan_apple_m4.md AM4-176: SDL's GPU drivers will not prepare a device without SDL's
+        // Apple M4 AM4-176: SDL's GPU drivers will not prepare a device without SDL's
         // video subsystem -- Vulkan loads its library through it, Metal needs its layer -- and a
         // platform without SDL video (HEADLESS, TERMINAL) never starts it; the dummy video driver
         // offers Vulkan nothing, and neither isolated driver has a Metal layer. Those pairings are
@@ -1392,7 +1392,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 // a format-dependent shader variant.
                 case SurfaceFormat::NormalizedByte2: return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_SNORM;
                 case SurfaceFormat::NormalizedByte4: return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_SNORM;
-                // plans/plan_apple_m4.md AM4-184: the same rule for the classic float and wide
+                // Apple M4 AM4-184: the same rule for the classic float and wide
                 // formats. Those with fewer than four channels are stored in four, with D3D9's
                 // fill materialized at upload -- one for an absent R/G/B/A, and (0, 0, 0, A) for
                 // Alpha8 -- so every route (stock, custom, sprite) samples what XNA samples.
@@ -4407,7 +4407,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             case SurfaceFormat::NormalizedByte4:
                 return RendererFormatVerdict::Supported;
 
-            // plans/plan_apple_m4.md AM4-184: the remaining classic XNA 4.0 Texture2D formats, in
+            // Apple M4 AM4-184: the remaining classic XNA 4.0 Texture2D formats, in
             // their exact native storage (widened to four channels with D3D9's fill where they
             // have fewer, see PreferredTextureFormat), when this device can sample that storage.
             // There is no RGBA8 substitution: without it the format is refused.
@@ -6233,7 +6233,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "CNA SDL_GPU: the requested index range exceeds the bound index buffer.");
         }
 
-        // plans/plan_apple_m4.md AM4-183: baseVertex reaches SDL_gpu's Sint32 vertex_offset as XNA
+        // Apple M4 AM4-183: baseVertex reaches SDL_gpu's Sint32 vertex_offset as XNA
         // hands it to Direct3D, negative or past the buffer, and minVertexIndex/numVertices are
         // hints that never change addressing: the GPU reads decoded indices from the buffer's own
         // storage, never through a host copy, so neither is a managed error here.
@@ -8685,7 +8685,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 continue;
             }
 
-            // plans/plan_apple_m4.md AM4-183: baseVertex is forwarded, as XNA does; only the host
+            // Apple M4 AM4-183: baseVertex is forwarded, as XNA does; only the host
             // copy's own starting record has to lie inside the shadow.
             const int firstVertex = source.vertexOffset + (ib == nullptr ? params.vertexStart : 0);
             if (firstVertex < 0 || firstVertex > source.vertexCount)
@@ -9951,7 +9951,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 case DrawKind::EnvMap:
                 {
                     const EnvMapDrawCommand& c = envMapDrawCommands_[ref.index];
-                    // plans/plan_apple_m4.md AM4-107: no `c.texture`/`c.envMapTexture` requirement.
+                    // Apple M4 AM4-107: no `c.texture`/`c.envMapTexture` requirement.
                     // IssueEnvMapDraw binds XNA's opaque black for either unbound slot (AM4-066), and
                     // this guard dropped such a draw silently instead -- the SMG-0033 defect again.
                     if (c.uploadedVertexBuffer != nullptr && c.target == target)
@@ -11132,7 +11132,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                   PrimitiveType primitive, int primitiveCount,
                                                   const GpuDrawParams& params)
     {
-        // plans/plan_apple_m4.md AM4-183: a window SDL_gpu cannot issue draws nothing.
+        // Apple M4 AM4-183: a window SDL_gpu cannot issue draws nothing.
         if (!BufferedDrawWindowIsServableEXT(vb, nullptr, primitive, primitiveCount, params))
             return;
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
@@ -11155,7 +11155,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                          PrimitiveType primitive, int primitiveCount,
                                                          const GpuDrawParams& params)
     {
-        // plans/plan_apple_m4.md AM4-183: a window SDL_gpu cannot issue draws nothing.
+        // Apple M4 AM4-183: a window SDL_gpu cannot issue draws nothing.
         if (!BufferedDrawWindowIsServableEXT(vb, &ib, primitive, primitiveCount, params))
             return;
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
@@ -11177,7 +11177,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         PrimitiveType primitive, int primitiveCount, int instanceCount,
         const GpuDrawParams& params)
     {
-        // plans/plan_apple_m4.md AM4-183: a window SDL_gpu cannot issue draws nothing.
+        // Apple M4 AM4-183: a window SDL_gpu cannot issue draws nothing.
         if (!BufferedDrawWindowIsServableEXT(vb, &ib, primitive, primitiveCount, params))
             return;
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
@@ -11224,7 +11224,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (std::size_t i = 0; i < streams.count; ++i)
         {
             const StockVertexStreamSourceEXT& source = streams.sources[i];
-            // plans/plan_apple_m4.md AM4-183: a per-instance stream shorter than the instances
+            // Apple M4 AM4-183: a per-instance stream shorter than the instances
             // it is asked for is forwarded, as XNA does; the host copy stops at the buffer's end
             // and the records past it read as zero.
             if (source.instanceFrequency > 0)
@@ -11239,7 +11239,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             }
             else if (source.vertexOffset < 0 || source.vertexOffset > source.vertexCount)
             {
-                // plans/plan_apple_m4.md AM4-183: baseVertex is forwarded, as XNA does; the
+                // Apple M4 AM4-183: baseVertex is forwarded, as XNA does; the
                 // binding offset is where the host copy starts, so it must lie inside the buffer.
                 throw System::ArgumentOutOfRangeException(
                     "vertexOffset", std::to_string(source.vertexOffset),

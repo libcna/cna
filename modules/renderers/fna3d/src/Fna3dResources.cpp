@@ -1244,7 +1244,7 @@ namespace CNA::Internal::Renderers::Fna3d
         const int width = data.width > 0 ? data.width : 1;
         const int height = data.height > 0 ? data.height : 1;
         const int levelCount = data.mipLevels > 0 ? data.mipLevels : 1;
-        // plans/plan_apple_m4.md AM4-193: NormalizedByte2 is stored as NormalizedByte4, B and A at
+        // Apple M4 AM4-193: NormalizedByte2 is stored as NormalizedByte4, B and A at
         // +1, because no FNA3D driver swizzles: its SDL_GPU driver samples RG8 SNORM as
         // (R, G, 0, 1), where Direct3D 9 samples (R, G, 1, 1). Fna3dTextureRenderer widens on
         // upload and narrows on readback; the texture's own format stays NormalizedByte2.

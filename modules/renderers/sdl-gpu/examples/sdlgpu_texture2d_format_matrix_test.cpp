@@ -86,7 +86,7 @@ class SdlGpuTexture2DFormatMatrixTest final : public Game
         Check(supportedExact,
               "the exact nine-format EasyGL Texture2D set is explicitly Supported");
 
-        // plans/plan_apple_m4.md AM4-184: the remaining classic formats are stored natively (widened
+        // Apple M4 AM4-184: the remaining classic formats are stored natively (widened
         // to four channels with D3D9's fill where they have fewer) when the device can sample that
         // storage, and refused otherwise -- an explicit verdict either way, never RGBA8.
         const std::array remaining{

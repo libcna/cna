@@ -682,7 +682,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // OPENGLES3 / WEBGL2: the stored source is already GLSL ES 3.00.
         if (!ProfileIsDesktopCore())
             return std::string(es300Source);
-        // plans/plan_apple_m4.md AM4-116: the directive is parsed, not matched as exact text, so CRLF
+        // Apple M4 AM4-116: the directive is parsed, not matched as exact text, so CRLF
         // sources and blanks inside it are rewritten too; the line count and terminators are kept.
         return RewriteGlslEsVersionToDesktop(es300Source, "300", "#version 330 core");
     }
@@ -1899,7 +1899,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
     namespace
     {
-        // plans/plan_apple_m4.md AM4-040: a custom ShaderEffect is written to GLSL ES 3.00 like
+        // Apple M4 AM4-040: a custom ShaderEffect is written to GLSL ES 3.00 like
         // every stock shader here. Mesa compiles that source unchanged in a desktop core context
         // because it exposes GL_ARB_ES3_compatibility; macOS's OpenGL 4.1 core does not, and refuses
         // "#version 300 es" outright. Where the extension is missing, the source gets the same
@@ -2228,7 +2228,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // The query GL holds active on the occlusion target, when CNA began it. GL refuses a second
         // Begin while one is active, and any End ends whichever query is active, so this mirrors
         // the target exactly rather than each object's own Begin/End calls.
-        // plans/plan_apple_m4.md AM4-115: the target belongs to a GL context, so the owner is kept per
+        // Apple M4 AM4-115: the target belongs to a GL context, so the owner is kept per
         // context (keyed by its resource registry) and guarded: one process-wide pointer let two
         // devices -- possibly on two threads -- clear or race each other's owner.
         std::mutex g_occlusionTargetOwnersMutex;
@@ -2266,7 +2266,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // run still in flight. Beginning the same GL name again leaves it to the driver whether
         // that run's samples can still reach the new one, and on Mesa's llvmpipe -- the ES driver
         // CNA's Linux CI runs -- they did: a second run that drew nothing read 1. The abandoned run
-        // keeps its name and the new run starts on a fresh one (plans/plan_apple_m4.md AM4-271).
+        // keeps its name and the new run starts on a fresh one (Apple M4 AM4-271).
         if (hasRun_ && !query_.is_result_available())
         {
             query_.destroy();

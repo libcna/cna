@@ -352,7 +352,7 @@ TEST(DrawRouteValidation, EveryVertexElementFormatIsBoundOrRefusedByName)
     using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
     GraphicsDevice device;
-    // plans/plan_apple_m4.md AM4-195: a vertex declaration only reaches a 3D draw; a renderer
+    // Apple M4 AM4-195: a vertex declaration only reaches a 3D draw; a renderer
     // without 3D refuses the vertex buffer itself, before any element format is looked at.
     if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";

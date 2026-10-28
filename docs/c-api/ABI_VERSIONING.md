@@ -95,7 +95,7 @@ links); no other route, structure, field or exported symbol changes, nor does th
 
 ### Previous ABI 0.46.0
 
-The ABI was **0.46.0** (`plans/plan_apple_m4.md` `AM4-037`). It appends one
+The ABI was **0.46.0** (Apple M4 `AM4-037`). It appends one
 native windowing-system identity, `CNA_NATIVE_WINDOW_SYSTEM_UIKIT` (`9`): on iOS/iPadOS
 `cna_game_window_get_native_window_ext` reports SDL's `uikit` window with
 `CNA_NativeWindowHandle::window` set to its `UIWindow*`, where it used to report

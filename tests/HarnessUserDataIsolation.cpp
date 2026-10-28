@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_apple_m4.md AM4-162: give every test process its own per-user data root.
+// Apple M4 AM4-162: give every test process its own per-user data root.
 //
 // StorageDevice resolves its root from $XDG_DATA_HOME, else %LOCALAPPDATA%, else $HOME (on Apple,
 // ~/Library/Application Support), and the gamer-services offline store, saved games and SDL's

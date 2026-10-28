@@ -78,7 +78,7 @@ static CNA_Result validate_states(CNA_Handle graphics_device)
     for (size_t index = 0U; index < sizeof(extrema) / sizeof(extrema[0]); ++index) {
         blend.alpha_blend_function = extrema[index];
         blend.color_blend_function = extrema[index];
-        /* plans/plan_apple_m4.md AM4-198: a backend that cannot draw Min/Max blending refuses it
+        /* Apple M4 AM4-198: a backend that cannot draw Min/Max blending refuses it
            by name, and that is the documented NOT_SUPPORTED answer rather than a failure of the
            binding. */
         const CNA_Result extremum = cna_graphics_device_set_blend_state(graphics_device, &blend);

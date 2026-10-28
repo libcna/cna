@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_apple_m4.md AM4-209: CheckElfExports.cmake's question asked of a Mach-O dylib. `nm -D`
+# Apple M4 AM4-209: CheckElfExports.cmake's question asked of a Mach-O dylib. `nm -D`
 # has no meaning there ("File format has no dynamic symbol table"); `nm -gU` lists the defined
 # external symbols, which is the export trie's content, with Mach-O's leading underscore.
 

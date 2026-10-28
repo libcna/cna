@@ -41,7 +41,7 @@ if [ ! -x "$CNA_ORACLE_RENDER_EXE" ]; then
     exit 2
 fi
 
-# plans/plan_apple_m4.md AM4-040: macOS's SDL has no x11 driver; its native cocoa driver needs no
+# Apple M4 AM4-040: macOS's SDL has no x11 driver; its native cocoa driver needs no
 # DISPLAY, so the X11 defaults apply everywhere else only.
 if [ "$(uname -s)" != "Darwin" ]; then
     export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-x11}"

@@ -1511,7 +1511,7 @@ CNA_GL_PUNCTUAL_DECL
 // through every term after it. A zero normal comes from a singular World (a node scaled flat), a
 // zero tangent from a mesh whose tangent is missing, zero or parallel to its normal. Any
 // perpendicular unit tangent is as good as another there, so pick one rather than shade NaN.
-// plans/plan_apple_m4.md AM4-125: vNormal is the inverse-transpose of World applied to the normal,
+// Apple M4 AM4-125: vNormal is the inverse-transpose of World applied to the normal,
 // 1/scale long, so an absolute length threshold took a World scaled by 1e4 or more for a singular
 // one. The normal is divided by its largest component first, which only an exactly zero vector
 // fails; the tangent residual is judged relative to the tangent it came from.
@@ -1775,7 +1775,7 @@ CNA_GL_PUNCTUAL_DECL
 // through every term after it. A zero normal comes from a singular World (a node scaled flat), a
 // zero tangent from a mesh whose tangent is missing, zero or parallel to its normal. Any
 // perpendicular unit tangent is as good as another there, so pick one rather than shade NaN.
-// plans/plan_apple_m4.md AM4-125: vNormal is the inverse-transpose of World applied to the normal,
+// Apple M4 AM4-125: vNormal is the inverse-transpose of World applied to the normal,
 // 1/scale long, so an absolute length threshold took a World scaled by 1e4 or more for a singular
 // one. The normal is divided by its largest component first, which only an exactly zero vector
 // fails; the tangent residual is judged relative to the tangent it came from.

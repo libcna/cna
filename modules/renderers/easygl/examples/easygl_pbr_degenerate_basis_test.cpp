@@ -9,7 +9,7 @@
 // skinned program. A renderer without float targets (DIRECTX9) is given the adapter's Color
 // fallback instead; a NaN reaches that as 0, which the comparison with the lit control still catches.
 //
-// plans/plan_apple_m4.md AM4-125: the guards that catch those zero vectors compared squared lengths
+// Apple M4 AM4-125: the guards that catch those zero vectors compared squared lengths
 // with an absolute 1e-8, and the rigid program's interpolated normal is not unit length -- it is
 // the inverse-transpose of World applied to it, 1/scale long. Under a World scaled by 1e4 or more
 // a perfectly good normal was taken for a zero one and replaced by +Z. A second control with a

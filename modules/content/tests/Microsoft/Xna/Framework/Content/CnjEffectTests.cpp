@@ -104,7 +104,7 @@ namespace
     {
         using CNA::ShaderDialectEXT;
         const ShaderDialectEXT dialect = gd.GetShaderDialectEXT();
-        // plans/plan_apple_m4.md AM4-177: any declared non-GLSL dialect refuses this GLSL payload
+        // Apple M4 AM4-177: any declared non-GLSL dialect refuses this GLSL payload
         // at compile time -- WGSL included: WebGPU executes its source, so the execution query
         // below would otherwise have predicted a valid effect.
         if (dialect == ShaderDialectEXT::Hlsl || dialect == ShaderDialectEXT::Msl ||

@@ -5782,7 +5782,7 @@ namespace CNA::TestSupport
      * or patch the position (EasyGL's posFixup). Direct3D 9 puts pixel centres on whole coordinates,
      * so a quad whose edges lie on half pixels -- x and y in [0.5, 2.5) -- covers pixels 1 and 2,
      * where an uncorrected half-pixel-centred API would cover 0 and 1. First written for the retired
-     * METAL renderer (plans/plan_apple_m4.md AM4-144).
+     * METAL renderer (Apple M4 AM4-144).
      *
      * @param device Device whose renderer claims CompiledEffects.
      */
@@ -5833,7 +5833,7 @@ namespace CNA::TestSupport
      * writes the pass's assignments there, and a game may replace a slot before drawing -- Direct3D 9
      * device state, which XNA keeps. The pass assigns RED to slot 0 through its texture parameter;
      * the caller then puts BLUE there; the draw must sample BLUE. First written for the retired
-     * METAL renderer (plans/plan_apple_m4.md AM4-144).
+     * METAL renderer (Apple M4 AM4-144).
      *
      * @param device Device whose renderer claims CompiledEffects.
      */

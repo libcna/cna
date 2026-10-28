@@ -267,7 +267,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /**
          * @brief Writes level 0 from the caller's rows (RenderTarget2D.SetData).
          *
-         * plans/plan_apple_m4.md AM4-094: a render target is a Texture2D in XNA, and SetData on one
+         * Apple M4 AM4-094: a render target is a Texture2D in XNA, and SetData on one
          * that is not bound is legal. This target used to inherit the interface's empty default, so
          * the data was discarded without a word.
          *
@@ -1531,7 +1531,7 @@ namespace CNA::Internal::Renderers::WebGPU
          * @brief Whether a BlendState.MultiSampleMask that keeps some of a multisampled target's
          *        samples and drops others is applied on this adapter.
          *
-         * plans/plan_apple_m4.md AM4-131: wgpu-native's Metal backend does not apply
+         * Apple M4 AM4-131: wgpu-native's Metal backend does not apply
          * WGPUMultisampleState.mask (Metal has no pipeline sample mask), so such a draw is refused
          * with NotSupportedException there instead of silently writing every sample. A mask that
          * keeps every sample, or none -- the draw is then skipped, which writes exactly nothing --
@@ -2275,7 +2275,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /**
          * @brief Whether a half-float colour texture can be sampled with linear filtering.
          *
-         * plans/plan_apple_m4.md AM4-187: yes -- `rgba16float`, the storage of HalfVector4 and
+         * Apple M4 AM4-187: yes -- `rgba16float`, the storage of HalfVector4 and
          * HdrBlendable Texture2D, is filterable in core WebGPU. XNA still refuses a classic draw
          * that filters HalfVector4, which GraphicsDevice enforces; this says what the device can do.
          *
@@ -2683,7 +2683,7 @@ namespace CNA::Internal::Renderers::WebGPU
             /// WEBGPU-84: the occlusion query active when this draw was queued (nullptr = none).
             /// Trailing with a default, so the same three-field aggregate inits stay valid.
             WebGPUOcclusionQueryRenderer* occlusionQuery = nullptr;
-            /// plans/plan_apple_m4.md AM4-108: that query's run (its `runId_` at queue time). A draw
+            /// Apple M4 AM4-108: that query's run (its `runId_` at queue time). A draw
             /// queued before the query was begun again belongs to the abandoned run and is not counted.
             std::uint32_t occlusionRun = 0;
             /// The BlendState.BlendFactor in force when this draw was queued. A 3D draw sets it as the pass's blend
@@ -3601,7 +3601,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // so that GetBackBufferData() can observe work queued earlier in the same logical frame.
         // Returns false if the surface isn't presentable right now (minimized, lost, etc).
         bool EnsureFrameRendered();
-        // plans/plan_apple_m4.md AM4-089: an offscreen stand-in for the surface texture of an occluded
+        // Apple M4 AM4-089: an offscreen stand-in for the surface texture of an occluded
         // window, also used as the browser's retained backbuffer. Uses the surface's render format,
         // size and usage; null when the surface has no size or format yet.
         WGPUTexture CreateOccludedBackbufferEXT();
@@ -3719,7 +3719,7 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPULimits deviceLimits_ = WGPU_LIMITS_INIT;
         /// "<device> (<description>), <backend>, <adapter type>", logged once.
         std::string adapterDescription_;
-        /// plans/plan_apple_m4.md AM4-091: the native API under the adapter, for the few answers
+        /// Apple M4 AM4-091: the native API under the adapter, for the few answers
         /// that depend on it (WebGPUOcclusionQueryRenderer::PixelCountIsPreciseEXT).
         WGPUBackendType adapterBackendType_ = WGPUBackendType_Undefined;
         /// WMG-0006: the neutral 1x1 white textures an unbound descriptor slot binds, per shape.
@@ -4123,11 +4123,11 @@ namespace CNA::Internal::Renderers::WebGPU
 
         bool hasAcquiredTexture_ = false;
         WGPUTexture acquiredTexture_ = nullptr;
-        // plans/plan_apple_m4.md AM4-089: acquiredTexture_ is CreateOccludedBackbufferEXT()'s, not the
+        // Apple M4 AM4-089: acquiredTexture_ is CreateOccludedBackbufferEXT()'s, not the
         // surface's, so native Present() skips the surface present. Browsers always render into
         // this owned storage, then copy to a short-lived canvas texture at Present.
         bool acquiredOffscreenEXT_ = false;
-        // plans/plan_apple_m4.md AM4-109: the occluded-frame stand-in is kept and reused while its
+        // Apple M4 AM4-109: the occluded-frame stand-in is kept and reused while its
         // size, format and usage still match, instead of being created and destroyed every frame.
         WGPUTexture occludedBackbufferEXT_ = nullptr;
         int occludedBackbufferWidthEXT_ = 0;

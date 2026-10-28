@@ -161,7 +161,7 @@ def find_shaderc(explicit: str | None) -> Path:
         "/usr/local/lib/libshaderc.so.1",
     ]
     candidates.extend(sorted(glob.glob("/usr/lib/*/libshaderc.so.1")))
-    # plans/plan_apple_m4.md AM4-168: shaderc's own build (Homebrew's among them) names the shared
+    # Apple M4 AM4-168: shaderc's own build (Homebrew's among them) names the shared
     # library libshaderc_shared, and a macOS prefix is not a Linux multiarch directory. Ask
     # pkg-config where the installed shaderc lives rather than guessing a package manager's prefix.
     names = ("libshaderc.so.1", "libshaderc_shared.so.1", "libshaderc_shared.1.dylib",

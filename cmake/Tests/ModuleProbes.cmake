@@ -432,7 +432,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_release_gate.py" --check)
 
-        # plans/plan_apple_m4.md AM4-160: the three gates above measure the C++ surface through
+        # Apple M4 AM4-160: the three gates above measure the C++ surface through
         # Doxygen's parser, and their approval pins are content IDs of what Doxygen 1.9.x reports.
         # Doxygen 1.18 parses the same headers differently -- it reports a second copy of every
         # Vector3/Matrix/Quaternion overload and drops Dispose(bool) overloads -- so on a machine
@@ -480,7 +480,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
 
         # The other half: the library that was actually built, asked for its own ABI version and its
         # dynamic export list, wherever its exports can be read -- ELF, and Mach-O since
-        # plans/plan_apple_m4.md AM4-212 -- and only where the C API target exists.
+        # Apple M4 AM4-212 -- and only where the C API target exists.
         if(TARGET cna_c_api AND UNIX AND (NOT APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
             set(_abi_baseline_flags "")
             if(CNA_SANITIZE)

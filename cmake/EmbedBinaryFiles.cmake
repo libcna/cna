@@ -64,7 +64,7 @@ set(_cna_embed_binary_files_script "${CMAKE_CURRENT_LIST_FILE}")
 
 function(cna_embed_binary_files target namespace function output)
     cmake_parse_arguments(PARSE_ARGV 4 _embed "COMPRESS" "BASE" "FILES")
-    # plans/plan_apple_m4.md AM4-299: the list travels in a file, not on the command line. An
+    # Apple M4 AM4-299: the list travels in a file, not on the command line. An
     # escaped `;`-list in one argument survives Ninja and Makefiles, but the Visual Studio
     # generator's cmd.exe quoting left a literal `"` on its last element ("failed to open for
     # reading: .../animations.glb").

@@ -362,7 +362,7 @@ namespace
     };
     static_assert(sizeof(DualUvPbrVertex) == 60);
 
-    // From the retired METAL renderer's metal_pbr_dual_uv_specular_test (plans/plan_apple_m4.md
+    // From the retired METAL renderer's metal_pbr_dual_uv_specular_test (Apple M4
     // AM4-085, rows B3/B5): KHR_materials_specular's strength and colour maps each honour their OWN
     // coordinate set and texture transform. Every vertex carries TEXCOORD_0 = (0.25, 0.5) and
     // TEXCOORD_1 = (0.75, 0.5), so a 2x1 map answers which set (or a +0.5 offset) reached the

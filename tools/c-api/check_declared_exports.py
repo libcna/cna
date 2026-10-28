@@ -43,7 +43,7 @@ def declared_routes(header_root: Path) -> set[str]:
     return names
 
 
-# plans/plan_apple_m4.md AM4-212: a Mach-O dylib has no dynamic symbol table for `nm -D` to read
+# Apple M4 AM4-212: a Mach-O dylib has no dynamic symbol table for `nm -D` to read
 # ("File format has no dynamic symbol table"); its exports are the defined external symbols
 # (`nm -gU`), spelled with Mach-O's leading underscore. Decided by the file, not the host.
 _MACHO_MAGICS = {b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe", b"\xca\xfe\xba\xbe",

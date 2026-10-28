@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_apple_m4.md AM4-116: the GLSL ES-to-desktop header rewrite parses the #version directive
+// Apple M4 AM4-116: the GLSL ES-to-desktop header rewrite parses the #version directive
 // instead of matching the exact text "#version 300 es\n", which missed CRLF sources (MojoShader's
 // output in a Windows build) and blanks inside the directive.
 

@@ -266,7 +266,7 @@ TEST(CnbTextureCubeProducerTest, ATextureCubeCnbLoadsThroughContentManager)
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(device);
     // STUB creates no cube-map resource, so it refuses TextureCube::SetData, and the .cnb load
-    // passes that through (CNA plans/plan_apple_m4.md AM4-268).
+    // passes that through (CNA Apple M4 AM4-268).
     if (CNA_RENDERER_IS(CNA::Testing::Renderers::Stub))
     {
         EXPECT_THROW((void)cm.Load<Microsoft::Xna::Framework::Graphics::TextureCube>("sky"),

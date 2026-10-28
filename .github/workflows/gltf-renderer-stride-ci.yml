@@ -49,7 +49,7 @@ jobs:
         with:
           # Top level only: CNA disables every codec behind SDL_mixer's nested
           # external/* submodules (cmake/ThirdPartySDL.cmake), and fetching them recursively
-          # failed a run on a third-party host's HTTP 503 (plans/plan_apple_m4.md AM4-310).
+          # failed a run on a third-party host's HTTP 503 (Apple M4 AM4-310).
           submodules: true
 
       - name: Clone sibling repositories
@@ -136,7 +136,7 @@ jobs:
         with:
           # Top level only: CNA disables every codec behind SDL_mixer's nested
           # external/* submodules (cmake/ThirdPartySDL.cmake), and fetching them recursively
-          # failed a run on a third-party host's HTTP 503 (plans/plan_apple_m4.md AM4-310).
+          # failed a run on a third-party host's HTTP 503 (Apple M4 AM4-310).
           submodules: true
 
       - name: Clone pinned viewer and sibling repositories
@@ -146,7 +146,7 @@ jobs:
           bash "${GITHUB_WORKSPACE}/scripts/ci/clone_siblings.sh" "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime easy-gl meta-gl
           # The viewer's apple/m4-stabilization branch: f32d1f13 (ci/cna-gltf-l7) plus the HiDef
           # request --capture needs since CNA refuses GetBackBufferData under Reach, as XNA did
-          # (SOFTWARE-213; plans/plan_apple_m4.md AM4-242).
+          # (SOFTWARE-213; Apple M4 AM4-242).
           git clone --filter=blob:none \
             https://github.com/libcna/cna-gltf-viewer.git cna-gltf-viewer
           git -C cna-gltf-viewer checkout --detach \

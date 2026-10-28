@@ -58,7 +58,7 @@ namespace
         void SetUp() override
         {
             std::error_code ec;
-            // plans/plan_apple_m4.md AM4-092: ctest runs each case in its own process, where the
+            // Apple M4 AM4-092: ctest runs each case in its own process, where the
             // seed and the counter are both 0, so concurrent cases shared -- and deleted -- one
             // directory. The process id and a random part keep every fixture's tree its own.
             std::random_device entropy;

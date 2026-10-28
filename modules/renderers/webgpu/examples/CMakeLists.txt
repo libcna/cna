@@ -72,7 +72,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         if(TARGET SDL3::SDL3main)
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)
         endif()
-        # plans/plan_apple_m4.md AM4-041: the fixtures include <SDL3/SDL.h> (PixelTestGame.hpp) and
+        # Apple M4 AM4-041: the fixtures include <SDL3/SDL.h> (PixelTestGame.hpp) and
         # the renderer's own headers, which need wgpu-native's webgpu.h. Their include paths come
         # from these targets; on macOS neither lives in a directory the compiler searches anyway.
         if(TARGET SDL3::SDL3)
@@ -805,13 +805,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # draw's position. The pixel oracle in modules/graphics/examples/spritebatch_3d_order_test.cpp cannot see any of
     # those -- each renders the correct picture -- so the cost contract is measured separately, on
     # both the backbuffer and a render target, against this renderer's own native counters.
-    # plans/plan_apple_m4.md AM4-078: a dropped backbuffer frame (occluded or unconfigured surface)
+    # Apple M4 AM4-078: a dropped backbuffer frame (occluded or unconfigured surface)
     # must not leave its queued draws for the next bind cycle to replay.
     cna_webgpu_test(cna_test_webgpu_dropped_frame webgpu_dropped_frame_test.cpp)
     cna_register_renderer_test(NAME WebGPU_DroppedFrame COMMAND cna_test_webgpu_dropped_frame
         TIMEOUT 60 LABELS "WebGPU"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_WEBGPU_TEST_SURFACE_OCCLUDED=1")
-    # plans/plan_apple_m4.md AM4-109: the same scenario with every frame's surface Outdated, so the
+    # Apple M4 AM4-109: the same scenario with every frame's surface Outdated, so the
     # frame is dropped whole -- AM4-089 left that AM4-078 path without a test.
     cna_register_renderer_test(NAME WebGPU_DroppedFrame_Outdated COMMAND cna_test_webgpu_dropped_frame
         TIMEOUT 60 LABELS "WebGPU"

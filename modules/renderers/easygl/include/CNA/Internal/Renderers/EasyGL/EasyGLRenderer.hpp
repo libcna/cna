@@ -757,11 +757,11 @@ namespace CNA::Internal::Renderers::EasyGL
     private:
         ::easygl::Query query_;
         std::weak_ptr<::easygl::ResourceRegistry> registry_;
-        /// plans/plan_apple_m4.md AM4-115: identifies the GL context (its resource registry) this
+        /// Apple M4 AM4-115: identifies the GL context (its resource registry) this
         /// query last began on, so its occlusion-target ownership is per context and can be given up
         /// even after that registry is gone. Never dereferenced.
         const void* contextKey_ = nullptr;
-        /// plans/plan_apple_m4.md AM4-271: whether this query has begun a run, so a Begin can tell
+        /// Apple M4 AM4-271: whether this query has begun a run, so a Begin can tell
         /// a run it abandons -- whose result is still pending -- from a query that never ran.
         bool hasRun_ = false;
     };
@@ -1131,7 +1131,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /// and every one of those programs is then a dead GL name -- see
         /// RequireCompiledEffectContextEXT().
         std::uint64_t mojoShaderContextGeneration_ = 0;
-        /// plans/plan_apple_m4.md AM4-062: `mojoShaderContext_` translates to GLSL ES 3.00 and
+        /// Apple M4 AM4-062: `mojoShaderContext_` translates to GLSL ES 3.00 and
         /// compiles it as desktop core GLSL, because this context refuses GLSL 1.20.
         bool mojoShaderEs3OnDesktopCore_ = false;
         // plans/plan_fx.md FX-082: see EnsureCompiledEffectVaoEXT(). One array object, shared by every
@@ -1684,7 +1684,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * @brief CNAEXT. Returns the raw GL function-pointer loader this renderer's platform
          * context resolves every native GL call through, so code outside the renderer can look GL
          * functions up the same way: MojoShader's OpenGL adapter (EasyGLCompiledEffect.cpp), and a
-         * test that reads GL state through its own copy of meta-gl (plans/plan_apple_m4.md
+         * test that reads GL state through its own copy of meta-gl (Apple M4
          * AM4-284). Available whether or not compiled effects are built (AM4-286).
          *
          * @return The loader of the context this renderer drew its GL functions from.

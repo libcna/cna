@@ -451,7 +451,7 @@ namespace Microsoft::Xna::Framework
         bool isDisposed_;
         bool forceElapsedTimeToZero_;
 
-        // Mobile lifecycle (plans/plan_apple.md APPLE-7): true between the platform's
+        // Mobile lifecycle (Apple APPLE-7): true between the platform's
         // WillEnterBackground and DidEnterForeground notifications. Only ever set on Android and
         // iOS -- no other platform raises those transitions.
         bool isSuspended_;

@@ -53,13 +53,13 @@ jobs:
         with:
           # Top level only: CNA disables every codec behind SDL_mixer's nested
           # external/* submodules (cmake/ThirdPartySDL.cmake), and fetching them recursively
-          # failed a run on a third-party host's HTTP 503 (plans/plan_apple_m4.md AM4-310).
+          # failed a run on a third-party host's HTTP 503 (Apple M4 AM4-310).
           submodules: true
 
       - name: Choose the sharp-runtime branch
         id: sharp_runtime_branch
         # The branch CNA's own clone_siblings.sh would use, not a pinned commit: the pins here
-        # predated components CNA requests (plans/plan_apple_m4.md AM4-234).
+        # predated components CNA requests (Apple M4 AM4-234).
         run: echo "ref=$(bash scripts/ci/sibling_branch.sh "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout sharp-runtime sibling
@@ -118,14 +118,14 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           # nlohmann-json3-dev: gamer services read the host's header-only JSON even in a cross build
-          # (cmake/HeaderOnlyJson.cmake), and configure stops without it (plans/plan_apple_m4.md AM4-238).
+          # (cmake/HeaderOnlyJson.cmake), and configure stops without it (Apple M4 AM4-238).
           sudo apt-get install -y --no-install-recommends ccache python3 nlohmann-json3-dev
 
       - name: Configure one bundle with both renderers
         # One link at a time: wasm-ld peaks at 9.4 GB resident linking the Debug CnaTests.js
         # (measured on the same emsdk 6.0.3 build), so the final links running side by side under
         # -j$(nproc) exhausted the 16 GB runner, which shut down at step 1,679 of 1,700 (run
-        # 37929597871). Compilation keeps its full parallelism (CNA plans/plan_apple_m4.md AM4-287).
+        # 37929597871). Compilation keeps its full parallelism (CNA Apple M4 AM4-287).
         run: |
           set -euo pipefail
           source ~/emsdk/emsdk_env.sh
@@ -144,7 +144,7 @@ jobs:
       # the same emsdk 6.0.3 build), and with links serialized the 16 GB runner still shut down
       # 80 s into that one link (run 37934405097). Swap on the runner's large /mnt disk lets the
       # peak page instead of killing the agent; nothing about what is built changes
-      # (CNA plans/plan_apple_m4.md AM4-290).
+      # (CNA Apple M4 AM4-290).
       - name: Swap for the test binary's link
         run: |
           set -euo pipefail
@@ -174,7 +174,7 @@ jobs:
           # RTR-P10-23's surface: the page-facing export and the property reader. The symbol table
           # goes to a file first: `llvm-nm | grep -q` under pipefail reports a symbol it found as
           # missing, because grep exits at the first match and llvm-nm, still writing, dies of
-          # SIGPIPE (status 141) -- CNA plans/plan_apple_m4.md AM4-300.
+          # SIGPIPE (status 141) -- CNA Apple M4 AM4-300.
           core_symbols="${RUNNER_TEMP}/libcna_core.nm"
           "$EMSDK/upstream/bin/llvm-nm" "$core" > "$core_symbols" 2>/dev/null
           for symbol in cna_set_preferred_renderer cna_read_module_preferred_renderer; do

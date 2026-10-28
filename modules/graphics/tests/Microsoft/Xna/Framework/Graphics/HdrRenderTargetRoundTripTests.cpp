@@ -475,7 +475,7 @@ TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetIsCreatedInTheRequestedFormat
     EXPECT_FLOAT_EQ(centre.W, 1.0f);
 }
 
-// plans/plan_apple_m4.md AM4-147: a float cube target's own texels through TextureCube.GetData and
+// Apple M4 AM4-147: a float cube target's own texels through TextureCube.GetData and
 // SetData -- the declared-format transfer, not the Color one. First pinned on the retired METAL
 // renderer; SDL_GPU and WEBGPU refuse the typed read (handoff.md section 5.1).
 TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetTransfersItsTypedTexels)

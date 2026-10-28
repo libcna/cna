@@ -178,7 +178,7 @@ namespace CNA::Internal::Renderers::Fna3d
         std::uint32_t definedLevels_ = 0;
 
         /**
-         * @brief plans/plan_apple_m4.md AM4-193: whether this NormalizedByte2 texture is stored as
+         * @brief Apple M4 AM4-193: whether this NormalizedByte2 texture is stored as
          * NormalizedByte4 with B and A at +1, so every driver samples Direct3D 9's (R, G, 1, 1).
          */
         [[nodiscard]] bool WidensNormalizedByte2EXT() const noexcept;
@@ -1560,7 +1560,7 @@ namespace CNA::Internal::Renderers::Fna3d
         /**
          * @brief Whether `SamplerState.MipMapLevelOfDetailBias` reaches the GPU. CNAEXT.
          *
-         * plans/plan_apple_m4.md AM4-191: FNA3D hands the bias to its driver's native sampler. On
+         * Apple M4 AM4-191: FNA3D hands the bias to its driver's native sampler. On
          * Apple its SDL_GPU driver runs on SDL's Metal backend, which ignores `mip_lod_bias` (CNA's
          * own SDL_GPU renderer carries the bias in its shaders instead, SDLGPU-121; FNA3D's
          * MojoShader shaders have no such input), so there the bias has no effect.
@@ -1829,7 +1829,7 @@ namespace CNA::Internal::Renderers::Fna3d
         bool supportsSrgbRenderTargets_ = false;
         /// Whether the selected internal FNA3D driver creates real raster occlusion queries.
         bool supportsOcclusionQueries_ = false;
-        /// plans/plan_apple_m4.md AM4-190: whether the selected driver reads a default for a vertex
+        /// Apple M4 AM4-190: whether the selected driver reads a default for a vertex
         /// input the declaration lacks -- FNA3D's OpenGL driver does; its SDL_GPU and Direct3D 11
         /// drivers fail the pipeline instead, so a stock draw missing an input is refused first.
         bool driverDefaultsMissingVertexInputs_ = false;

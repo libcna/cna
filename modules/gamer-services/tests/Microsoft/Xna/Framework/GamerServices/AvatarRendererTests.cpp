@@ -286,7 +286,7 @@ TEST(AvatarRendererTest, EveryFormat3FeatureDrawsAndANewDeviceGetsItsOwnResource
     EXPECT_NO_THROW(renderer.Draw(&wave));
 }
 
-// plans/plan_apple_m4.md AM4-008: the GPU upload used to set its "uploaded" marker before the
+// Apple M4 AM4-008: the GPU upload used to set its "uploaded" marker before the
 // buffers existed, so a renderer that refuses vertex buffers left a half-built upload behind a
 // complete-looking marker and the second Draw indexed past the end of the part list. Every Draw
 // must now fail the same clean way, which only a renderer that refuses vertex buffers can provoke:

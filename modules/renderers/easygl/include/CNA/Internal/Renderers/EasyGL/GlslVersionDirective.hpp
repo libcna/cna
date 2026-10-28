@@ -9,7 +9,7 @@ namespace CNA::Internal::Renderers::EasyGL
     /**
      * @brief Where a GLSL source's `#version <number> es` directive line is.
      *
-     * plans/plan_apple_m4.md AM4-116: the ES-to-desktop header rewrite used to look for the exact
+     * Apple M4 AM4-116: the ES-to-desktop header rewrite used to look for the exact
      * text "#version 300 es\n", so a source with CRLF line endings -- MojoShader writes "\r\n" in
      * a Windows build -- or with spaces inside the directive was not rewritten, and a desktop core
      * context that has no GL_ARB_ES3_compatibility (macOS) refused it. The directive is parsed the

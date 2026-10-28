@@ -214,7 +214,7 @@ include(cmake/TestDisplayPolicy.cmake)
 # a refused name fails before any dependency is configured instead of falling back to a default.
 include(cmake/RendererIdentities.cmake)
 
-# Apple platform resolution (macOS/iOS, plans/plan_apple.md). Must run before the vendored SDL builds
+# Apple platform resolution (macOS/iOS, docs/apple-platforms.md). Must run before the vendored SDL builds
 # below: those are separate cmake invocations that inherit nothing from this cache, so the
 # sysroot/architecture/deployment target this file settles has to exist before they are launched.
 include(cmake/ApplePlatform.cmake)
@@ -406,7 +406,7 @@ include(cmake/Tests/ModuleProbes.cmake)
 # full-featured one must (docs/link-size-architecture.md).
 include(cmake/Tests/LinkFootprint.cmake)
 
-# Apple bundle sweep (plans/plan_apple.md, APPLE-3). Every executable target in the tree -- examples,
+# Apple bundle sweep (Apple APPLE-3). Every executable target in the tree -- examples,
 # tools, tests -- is registered by now, so this is the one place that can hand each of them the
 # Info.plist/signing configuration an iOS product cannot launch without, and the only alternative
 # to editing ~200 module-local example registrations that know nothing about Apple. No-op on

@@ -77,7 +77,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
                 "SDL_VIDEODRIVER=dummy;DISPLAY=;WAYLAND_DISPLAY=")
         endif()
     elseif(APPLE)
-        # plans/plan_apple_m4.md AM4-069: SDL_gpu's only Apple driver is Metal, so pinning the
+        # Apple M4 AM4-069: SDL_gpu's only Apple driver is Metal, so pinning the
         # Linux "vulkan" here made every headless registration fail before its first check
         # ("SDL_HINT_GPU_DRIVER vulkan unsupported!"). SDL's Metal driver is also only available
         # under a video driver that can create a Metal view (cocoa/uikit), so the headless runs
@@ -360,7 +360,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     if(CNA_SHARED_LIBRARY)
         # libcna.so provides every archive member.
     elseif(APPLE)
-        # plans/plan_apple_m4.md AM4-039: CMake implements the RESCAN link group only for
+        # Apple M4 AM4-039: CMake implements the RESCAN link group only for
         # GNU-style linkers and refuses it at configure time for Apple's. ld64 needs no group: it
         # keeps rescanning every static archive on the line until nothing new resolves.
         target_link_libraries(cna_test_sdlgpu_constructor_exception_safety PRIVATE

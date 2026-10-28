@@ -155,7 +155,7 @@ def main(argv: list[str]) -> int:
                         help="rewrite the manifest from what the corpus does now")
     parser.add_argument("--python", default=sys.executable,
                         help="interpreter for the independent conformance parser")
-    # plans/plan_apple_m4.md AM4-165: the manifest records the outcome without a Draco decoder;
+    # Apple M4 AM4-165: the manifest records the outcome without a Draco decoder;
     # a content tool built with one (-DCNA_ENABLE_DRACO, CNA_DRACO_AVAILABLE) must instead build
     # every fixture recorded as draco-required, to an .xnb the independent parser accepts.
     parser.add_argument("--draco-decoder", action="store_true",

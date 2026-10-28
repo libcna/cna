@@ -3531,7 +3531,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Whether GraphicsDevice must range-check buffered draws for this renderer.
          *
-         * plans/plan_apple_m4.md AM4-183: no -- XNA forwards vertexStart, startIndex, baseVertex and
+         * Apple M4 AM4-183: no -- XNA forwards vertexStart, startIndex, baseVertex and
          * the range hints to the native draw. Every buffered draw entry point here first asks
          * BufferedDrawWindowIsServableEXT, and a vertex or index window SDL_gpu cannot issue (a
          * negative or out-of-buffer one) draws nothing, as an undefined native draw may; every
@@ -4305,7 +4305,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] NativeIndexedRange ResolveIndexedRange(
             const SdlGpuIndexBufferRenderer& ib, const SdlGpuVertexBufferRenderer& vb,
             PrimitiveType primitive, int primitiveCount, const GpuDrawParams* params) const;
-        // plans/plan_apple_m4.md AM4-183: whether a buffered draw's index window (indexed) or vertex
+        // Apple M4 AM4-183: whether a buffered draw's index window (indexed) or vertex
         // window (not) lies inside its bound buffer, the only windows SDL_gpu can issue.
         [[nodiscard]] bool BufferedDrawWindowIsServableEXT(
             const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,

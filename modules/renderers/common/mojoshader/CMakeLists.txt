@@ -10,7 +10,7 @@ add_library(cna_renderer_mojoshader_effect STATIC ${MOJOSHADER_EFFECT_SOURCES})
 target_link_libraries(cna_renderer_mojoshader_effect PUBLIC cna_renderer_common cna_mojoshader)
 # A renderer helper linked PUBLIC by its renderer, so it takes the renderer closure, not the default
 # one: the default includes Xml (cmake/SharpRuntimeConsumption.cmake), and through this PUBLIC edge it
-# reached every program linking the renderer (plans/plan_apple_m4.md AM4-205).
+# reached every program linking the renderer (Apple M4 AM4-205).
 cna_link_sharp_runtime(cna_renderer_mojoshader_effect PUBLIC ${CNA_SHARP_RUNTIME_RENDERER_COMPONENTS})
 cna_module_include_root(cna_renderer_mojoshader_effect PUBLIC)
 cna_register_cxx_target(cna_renderer_mojoshader_effect Internal_MojoShaderEffect)

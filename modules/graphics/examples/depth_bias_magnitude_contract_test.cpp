@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_apple_m4.md AM4-134: RasterizerState.DepthBias is an offset in normalized depth, and
+// Apple M4 AM4-134: RasterizerState.DepthBias is an offset in normalized depth, and
 // its magnitude -- not only its sign -- has to survive the renderer's conversion to native units.
 //
 // The coplanar fixture (easygl_depth_bias_test.cpp) cannot see a wrong scale on Apple GPUs: there

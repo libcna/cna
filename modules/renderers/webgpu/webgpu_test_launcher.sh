@@ -1,6 +1,6 @@
 #!/bin/sh
 # WEBGPU-150: preflight/retry launcher for the display/GPU-backed WebGPU CTests (Linux and, since
-# plans/plan_apple_m4.md AM4-041/088, macOS). It makes a permanently-unavailable display/GPU return
+# Apple M4 AM4-041/088, macOS). It makes a permanently-unavailable display/GPU return
 # the CTest skip code (77) so a headless `ctest -L WebGPU` SKIPs instead of producing dozens of abort
 # failures, while a real renderer/test failure is propagated unchanged and an expected abort is left
 # to the test's own registration. SKIP_RETURN_CODE 77 is applied directory-wide
@@ -25,7 +25,7 @@ display_present() {
         present) return 0 ;;
         absent)  return 1 ;;
     esac
-    # plans/plan_apple_m4.md AM4-088: macOS has no X or Wayland socket to probe -- its window server
+    # Apple M4 AM4-088: macOS has no X or Wayland socket to probe -- its window server
     # serves every login session. A session without one fails the run with SDL's own "No available
     # video device", which step 2 below retries and then skips, exactly as on Linux.
     [ "$(uname -s)" = Darwin ] && return 0

@@ -86,7 +86,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             }
 
             const System::AsyncCallback Callback;
-            // plans/plan_apple_m4.md AM4-090: identifies this request to the Guide's input reader,
+            // Apple M4 AM4-090: identifies this request to the Guide's input reader,
             // which primes when something new appears on top; text or an address could repeat.
             const std::uint64_t Serial = NextSerial();
             // Reference XOverlappedAsyncResult.endHasBeenCalled.

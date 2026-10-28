@@ -76,7 +76,7 @@ public:
     // that opened a screen (A in a game menu, Enter confirming a prompt) cannot also answer it.
     // That is decided by what is shown, never by how long a frame took: a reader that measured
     // idleness in wall-clock time ignored every press on a renderer drawing the Guide slower than
-    // two frames a second (plans/plan_apple_m4.md AM4-086).
+    // two frames a second (Apple M4 AM4-086).
     void prime(){primed_=true;}
     InputFrame poll(double now)
     {
@@ -843,7 +843,7 @@ void primeOnNewTop()
 {
     auto& s=state();
     std::string top;
-    // plans/plan_apple_m4.md AM4-090: by creation number -- the same text, or a new screen at an old
+    // Apple M4 AM4-090: by creation number -- the same text, or a new screen at an old
     // one's address, is still something new.
     if(auto box=pendingMessageBox())top="box:"+std::to_string(box->serial);
     else if(auto keys=pendingKeyboard())top="keys:"+std::to_string(keys->serial);

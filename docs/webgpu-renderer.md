@@ -318,7 +318,7 @@ An **occluded** surface is different: it is configured and intact, but wgpu-nati
 `Occluded` status (`0x00030001`) instead of a texture -- on macOS for any window the system does not
 show, which is every window while the session is locked. XNA's back buffer exists regardless, so
 such a frame renders into an offscreen texture of the surface's format, size and usage, and only the
-present is skipped (`plans/plan_apple_m4.md` `AM4-089`): `GetBackBufferData` reads it and the frame's
+present is skipped (Apple M4 `AM4-089`): `GetBackBufferData` reads it and the frame's
 render-target work stays ordered as on a visible window. Only a surface that cannot be configured,
 or another non-success status, still drops the frame -- whole, every draw family (`AM4-078`).
 
@@ -1467,12 +1467,12 @@ guarantees only zero versus non-zero for an occlusion result, and the count is t
 Vulkan backend counts samples (a fully occluded draw reads back 0 and a visible one a full target of
 samples, `WebGPU_OcclusionQuery`), while its Metal backend records Metal's boolean visibility, so a
 visible draw reads 1 there -- `PixelCountIsPreciseEXT()` reports false on a Metal adapter
-(`plans/plan_apple_m4.md` `AM4-091`). Other backends (DX12, GLES, a browser) are not measured. A query
+(Apple M4 `AM4-091`). Other backends (DX12, GLES, a browser) are not measured. A query
 whose draws span more than one render-pass segment records only its first segment.
 
 **`BlendState.MultiSampleMask`** is pipeline state (`WGPUMultisampleState.mask`), and wgpu-native's
 Metal backend does not apply it -- Metal has no pipeline sample mask. So the renderer judges the mask
-against the bound target when a draw is recorded (`plans/plan_apple_m4.md` `AM4-131`): a
+against the bound target when a draw is recorded (Apple M4 `AM4-131`): a
 single-sample target ignores it, as in XNA; a mask that keeps every sample draws normally; one that
 keeps none is not recorded at all, which is exact on every adapter; and one that keeps some samples
 and drops others is applied by the Vulkan backend but refused with `NotSupportedException` on a Metal

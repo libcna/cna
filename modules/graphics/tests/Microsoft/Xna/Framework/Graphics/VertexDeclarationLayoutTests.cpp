@@ -159,10 +159,10 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// guard; none of the cases in this matrix reaches them.
 ///
 /// The retired VULKAN (VULKAN-146), DIRECTX11 (DX-221/DX-222, WINCLOSE-0013) and METAL
-/// (plans/plan_apple_m4.md AM4-035) renderers translated the declaration too.
+/// (Apple M4 AM4-035) renderers translated the declaration too.
 [[nodiscard]] inline bool TranslatesDeclarations()
 {
-    // plans/plan_apple_m4.md AM4-092: SDL_GPU builds its vertex input from the declaration since
+    // Apple M4 AM4-092: SDL_GPU builds its vertex input from the declaration since
     // SDLGPU-59; the arm predates it. D3D9 builds its IDirect3DVertexDeclaration9 from the
     // declaration and its stock effects accept any layout that supplies the elements they read.
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software,

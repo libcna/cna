@@ -3327,7 +3327,7 @@ namespace CNA::Internal::Renderers
         // at any point of teardown (C API smoke stability CSS-3). A game the C API
         // still holds at exit is disposed from its runtime state's static destructor, after this
         // function-local static, first used later, was destroyed: ~SdlRenderer then erased from a
-        // freed table (SEGFAULT on macOS, plans/plan_apple_m4.md AM4-073).
+        // freed table (SEGFAULT on macOS, Apple M4 AM4-073).
         static std::unordered_map<CNA::Platform::WindowId, IGraphicsRenderer*>& windowRegistry()
         {
             static auto* const reg = new std::unordered_map<CNA::Platform::WindowId, IGraphicsRenderer*>();

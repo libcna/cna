@@ -69,7 +69,7 @@ struct VertexOutput {
     var output: VertexOutput;
     output.position = u.mvp * vec4f(input.position, 1.0);
     let vertexColorEnabled = u.light0DiffuseVertexColor.w;
-    // plans/plan_apple_m4.md AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
+    // Apple M4 AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
     // Direct3D 9 saturates before interpolation and texture sampling (EasyGL clamps it the same way).
     output.color = clamp(select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5), vec4f(0.0), vec4f(1.0));
     // WEBGPU-145: FNA fog keep factor. fogVector (from World*View) dotted with the object-space
@@ -124,7 +124,7 @@ struct VertexOutput {
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let textureEnabled = u.light0DirTexture.w;
     let sampled = select(vec4f(1.0), textureSampleBias(tex, texSampler, input.uv, u.samplerBias.x), textureEnabled > 0.5);
-    // plans/plan_apple_m4.md AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
+    // Apple M4 AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
     // Direct3D 9 saturates before interpolation and texture sampling (EasyGL clamps it the same way).
     let base = sampled * clamp(u.diffuseColor, vec4f(0.0), vec4f(1.0));
     // WEBGPU-149: FNA ApplyFog -- mix(FogColor*base.a, rgb, keep); output alpha preserved.
@@ -167,7 +167,7 @@ struct VertexOutput {
     output.position = u.mvp * vec4f(input.position, 1.0);
     output.uv = input.uv;
     let vertexColorEnabled = u.light0DiffuseVertexColor.w;
-    // plans/plan_apple_m4.md AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
+    // Apple M4 AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
     // Direct3D 9 saturates before interpolation and texture sampling (EasyGL clamps it the same way).
     output.tint = clamp(select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5), vec4f(0.0), vec4f(1.0));
     // WEBGPU-145: FNA fog keep factor (see colored3d.wgsl).
@@ -450,7 +450,7 @@ struct VertexOutput {
     let vc = select(vec4f(1.0), input.tint, u.light0DiffuseVertexColor.w > 0.5);
     if (lightingEnabled <= 0.5) {
         // WEBGPU-145: fog applies in the unlit branch too (BasicEffect fog is independent of lighting).
-        // plans/plan_apple_m4.md AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
+        // Apple M4 AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
         // Direct3D 9 saturates before interpolation and texture sampling (EasyGL clamps it the same way).
         let unlit = clamp(u.diffuseColor * vc, vec4f(0.0), vec4f(1.0)) * sampled;
         return vec4f(mix(u.fogColor.xyz * unlit.a, unlit.rgb, input.fogFactor), unlit.a);
@@ -572,7 +572,7 @@ struct VertexOutput {
     let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
     let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
     let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
-    // plans/plan_apple_m4.md AM4-106: XNA's VSBasicVertexLighting(Vc) writes these to COLOR0/COLOR1,
+    // Apple M4 AM4-106: XNA's VSBasicVertexLighting(Vc) writes these to COLOR0/COLOR1,
     // which Direct3D 9 saturates before interpolation, and its Vc variants multiply by the vertex
     // colour first (`vout.Diffuse *= vin.Color`) -- EasyGL's order (FX-123/FX-125). Unclamped, an
     // EnableDefaultLighting sum above 1 drew brighter than XNA and EasyGL.
@@ -592,7 +592,7 @@ struct VertexOutput {
     let vc = select(vec4f(1.0), input.tint, u.light0DiffuseVertexColor.w > 0.5);
     if (lightingEnabled <= 0.5) {
         // WEBGPU-145: fog applies in the unlit branch too (BasicEffect fog is independent of lighting).
-        // plans/plan_apple_m4.md AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
+        // Apple M4 AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
         // Direct3D 9 saturates before interpolation and texture sampling (EasyGL clamps it the same way).
         let unlit = clamp(u.diffuseColor * vc, vec4f(0.0), vec4f(1.0)) * sampled;
         return vec4f(mix(u.fogColor.xyz * unlit.a, unlit.rgb, input.fogFactor), unlit.a);
@@ -643,7 +643,7 @@ struct VertexOutput {
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    // plans/plan_apple_m4.md AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
+    // Apple M4 AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
     // Direct3D 9 saturates before interpolation and texture sampling (EasyGL clamps it the same way).
     let color = textureSampleBias(tex, texSampler, input.uv, u.samplerBias.x) * clamp(u.diffuseColor, vec4f(0.0), vec4f(1.0));
     let alpha = color.a;
@@ -696,7 +696,7 @@ struct VertexOutput {
     output.position = u.mvp * vec4f(input.position, 1.0);
     output.uv = input.uv;
     let vertexColorEnabled = u.extra.x;
-    // plans/plan_apple_m4.md AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
+    // Apple M4 AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
     // Direct3D 9 saturates before interpolation and texture sampling (EasyGL clamps it the same way).
     output.tint = clamp(select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5), vec4f(0.0), vec4f(1.0));
     // WEBGPU-146: FNA fog keep factor (see colored3d.wgsl).
@@ -773,7 +773,7 @@ struct VertexOutput {
     var sample0 = textureSampleBias(tex0, tex0Sampler, input.uv, u.samplerBias.x);
     let sample1 = textureSampleBias(tex1, tex1Sampler, input.uv1, u.samplerBias.y);
     sample0 = vec4f(sample0.rgb * 2.0, sample0.a);
-    // plans/plan_apple_m4.md AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
+    // Apple M4 AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
     // Direct3D 9 saturates before interpolation and texture sampling (EasyGL clamps it the same way).
     let base = sample0 * sample1 * clamp(u.diffuseColor, vec4f(0.0), vec4f(1.0));
     // WEBGPU-149: FNA ApplyFog -- mix(FogColor*base.a, rgb, keep); output alpha preserved.
@@ -821,7 +821,7 @@ struct VertexOutput {
     output.uv = input.uv;
     output.uv1 = input.uv1;
     let vertexColorEnabled = u.light0DiffuseVertexColor.w;
-    // plans/plan_apple_m4.md AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
+    // Apple M4 AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
     // Direct3D 9 saturates before interpolation and texture sampling (EasyGL clamps it the same way).
     output.tint = clamp(select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5), vec4f(0.0), vec4f(1.0));
     // WEBGPU-147: FNA fog keep factor (see colored3d.wgsl).
@@ -977,7 +977,7 @@ struct VertexOutput {
     var output: VertexOutput;
     let world = mat4x4f(instance.instCol0, instance.instCol1, instance.instCol2, instance.instCol3);
     output.position = u.vp * world * vec4f(input.position, 1.0);
-    // plans/plan_apple_m4.md AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
+    // Apple M4 AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
     // Direct3D 9 saturates before interpolation and texture sampling (EasyGL clamps it the same way).
     output.color = clamp(u.diffuseColor, vec4f(0.0), vec4f(1.0));
     return output;
@@ -1016,7 +1016,7 @@ struct VertexOutput {
     let world = mat4x4f(instance.instCol0, instance.instCol1, instance.instCol2, instance.instCol3);
     output.position = u.vp * world * vec4f(input.position, 1.0);
     let vertexColorEnabled = u.light0DiffuseVertexColor.w;
-    // plans/plan_apple_m4.md AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
+    // Apple M4 AM4-096: XNA's stock vertex shaders hand this colour to COLOR0, which
     // Direct3D 9 saturates before interpolation and texture sampling (EasyGL clamps it the same way).
     output.color = clamp(select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5), vec4f(0.0), vec4f(1.0));
     return output;
@@ -1711,7 +1711,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
     let lightSum = ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
                   + ndotl2 * lp.light2Diffuse.xyz;
-    // plans/plan_apple_m4.md AM4-106: COLOR0/COLOR1 of XNA's per-vertex-lit SkinnedEffect, which
+    // Apple M4 AM4-106: COLOR0/COLOR1 of XNA's per-vertex-lit SkinnedEffect, which
     // Direct3D 9 saturates before interpolation (EasyGL clamps both the same way).
     output.litRGB = clamp(lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz, vec3f(0.0), vec3f(1.0));
     let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
@@ -1836,7 +1836,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
     let lightSum = ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
                   + ndotl2 * lp.light2Diffuse.xyz;
-    // plans/plan_apple_m4.md AM4-106: COLOR0/COLOR1 of XNA's per-vertex-lit SkinnedEffect, which
+    // Apple M4 AM4-106: COLOR0/COLOR1 of XNA's per-vertex-lit SkinnedEffect, which
     // Direct3D 9 saturates before interpolation (EasyGL clamps both the same way).
     // XNA folds the vertex colour into the diffuse here, before the interpolator saturates it
     // (ambient 1.8 x 0.5 is 0.9, not 0.5) and before the fragment stage adds specular.

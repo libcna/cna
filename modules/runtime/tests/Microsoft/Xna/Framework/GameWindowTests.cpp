@@ -257,7 +257,7 @@ TEST(GameWindowTest, NullWindow_EndScreenDeviceChangeOneArgIsSafe)
     EXPECT_NO_THROW(window.EndScreenDeviceChange("test"));
 }
 
-// plans/plan_apple.md APPLE-15: SupportedOrientations is the framework's own bookkeeping on a desktop
+// Apple APPLE-15: SupportedOrientations is the framework's own bookkeeping on a desktop
 // and the channel into the operating system on iOS/Android. These cases pin down both halves --
 // the fallback rule that is platform-independent, and the forwarding to the platform window that
 // is what makes the declaration mean anything on a mobile target.

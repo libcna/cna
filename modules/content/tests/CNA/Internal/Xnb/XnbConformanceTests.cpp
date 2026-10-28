@@ -95,7 +95,7 @@ namespace
         // A WebAssembly build cannot start a process: Emscripten declares posix_spawnp and links
         // none, which stopped the wasm test bundle at link time. The parser tests read -1 as "the
         // tool is unavailable" and skip; the fixture-tool tests below are not built here at all
-        // (CNA plans/plan_apple_m4.md AM4-282, as AM4-254 did for HostProcess).
+        // (CNA Apple M4 AM4-282, as AM4-254 did for HostProcess).
         (void)executable;
         (void)arguments;
         output.clear();

@@ -957,7 +957,7 @@ TEST(GuideTest, TheClickThatAnswersAMessageBoxDoesNotAlsoReachTheGame) {
     // reproducing that arithmetic here. Each attempt releases first, because the overlay answers
     // on the press edge. Columns go from the middle outward: the box is centred, so the first
     // column normally answers, and a whole-viewport sweep (two renders per probe) took a Debug
-    // SOFTWARE build past the test timeout (plans/plan_apple_m4.md AM4-180).
+    // SOFTWARE build past the test timeout (Apple M4 AM4-180).
     const int width = device.getViewportProperty().getWidthProperty();
     const int height = device.getViewportProperty().getHeightProperty();
     std::vector<int> columns;
@@ -1078,7 +1078,7 @@ TEST(GuideTest, MessageBoxesAnswerToTheKeyboard) {
     delete result;
 }
 
-// plans/plan_apple_m4.md AM4-090: the Guide primes its input -- every key already down counts as
+// Apple M4 AM4-090: the Guide primes its input -- every key already down counts as
 // held -- when something new appears on top, so the Enter that opened a message box cannot also
 // answer it. AM4-086 judged "new" by the box's text, so a box identical to the previous one was not
 // new: opened while Enter was down (the game's own Enter raising it, say), it took that Enter as a

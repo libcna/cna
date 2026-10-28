@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MS-PL */
 
 /*
- * plans/plan_apple_m4.md AM4-072 -- C11 threads for the pure-C suites on every C library.
+ * Apple M4 AM4-072 -- C11 threads for the pure-C suites on every C library.
  *
  * The suites start a second thread to call the C API from where it must refuse, and use C11's
  * <threads.h> to do it. Apple's C library has no <threads.h> at all (the compiler advertises

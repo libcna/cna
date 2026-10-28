@@ -335,7 +335,7 @@ TEST(RenderTargetFormatAgreement, ASixteenBitFloatTargetsContentIsSamplableBack)
             << " target cleared to red sampled back without its red -- the clear did not reach the "
                "target, or sampling it does not read what was written";
     }
-    // plans/plan_apple_m4.md AM4-189: FNA3D's declared boundary. Its render targets other than
+    // Apple M4 AM4-189: FNA3D's declared boundary. Its render targets other than
     // Color defer to the shared rule (a Color target): promoting the float ones is measured but not
     // done -- its SDL_GPU driver has no channel swizzle, Metal refuses Bgra4444 as an attachment,
     // and float cubes and partial transfers have their own gaps.

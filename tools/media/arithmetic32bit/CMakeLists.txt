@@ -46,7 +46,7 @@ set(CNA_MODULE_INCLUDE_ROOTS
 # support includes System/Runtime/Serialization, so the audio check needs sharp-runtime's headers
 # and the one translation unit that defines System::Exception -- from the same sibling checkout the
 # main build uses. Without them the check stopped compiling once ContentLoadException gained that
-# support, and the 32-bit job failed on every run (plans/plan_apple_m4.md AM4-239).
+# support, and the 32-bit job failed on every run (Apple M4 AM4-239).
 set(CNA_SHARP_RUNTIME_ROOT "${CNA_ROOT}/../sharp-runtime" CACHE PATH
     "Path to the sharp-runtime checkout (sibling '../sharp-runtime' of the CNA checkout by default)")
 get_filename_component(CNA_SHARP_RUNTIME_ROOT "${CNA_SHARP_RUNTIME_ROOT}" ABSOLUTE)

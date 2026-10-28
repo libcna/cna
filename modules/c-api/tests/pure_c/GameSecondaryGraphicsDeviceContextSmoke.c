@@ -64,7 +64,7 @@ static CNA_Result on_draw(
         return result;
     }
 
-    /* plans/plan_apple_m4.md AM4-197: a device without a depth-stencil buffer keeps no depth or
+    /* Apple M4 AM4-197: a device without a depth-stencil buffer keeps no depth or
        stencil plane whatever was asked for, and XNA refuses a clear of an attachment that does
        not exist; ask the device, and clear what it has. */
     CNA_Bool has_depth_stencil = CNA_FALSE;

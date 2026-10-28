@@ -1591,7 +1591,7 @@ static int validate_object_dictionary(const CNA_Handle manager)
     /* The C++ type name is a diagnostic: it is present and non-empty, and its spelling is not
        asserted, because it is the toolchain's rather than this ABI's -- nor is its length, so the
        copy goes into a buffer of the size reported (libc++ spells this vector in 70 bytes,
-       libstdc++ in 52; plans/plan_apple_m4.md AM4-075). */
+       libstdc++ in 52; Apple M4 AM4-075). */
     if (cna_object_dictionary_ext_get_type_name_size(dictionary, view("Vertices"), &bytes) !=
             CNA_RESULT_SUCCESS ||
         bytes == UINT64_C(0)) {

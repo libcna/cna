@@ -19,7 +19,7 @@
 #include <android/api-level.h>
 #endif
 
-// plans/plan_apple_m4.md AM4-297: posix_spawn and its attribute/file-action calls exist in Bionic
+// Apple M4 AM4-297: posix_spawn and its attribute/file-action calls exist in Bionic
 // only from Android API 28, so an NDK build for an older minimum API refuses as a browser does.
 #if defined(__EMSCRIPTEN__) || (defined(__ANDROID__) && __ANDROID_API__ < 28)
 #define CNA_HOST_PROCESS_CANNOT_SPAWN 1
@@ -257,7 +257,7 @@ namespace CNA::Internal
 #elif defined(CNA_HOST_PROCESS_CANNOT_SPAWN)
         // Emscripten declares posix_spawn but a browser has nothing to spawn, so linking the POSIX
         // path failed every WebAssembly build of the content tools ("undefined symbol:
-        // posix_spawnp", plans/plan_apple_m4.md AM4-254); Android below API 28 does not declare it
+        // posix_spawnp", Apple M4 AM4-254); Android below API 28 does not declare it
         // at all (AM4-297). The external-compiler routes refuse here, by name, as they do when the
         // compiler is missing.
         (void)arguments;
@@ -307,7 +307,7 @@ namespace CNA::Internal
         // the GitHub Actions runner does -- otherwise hands that to every tool: GNU `yes` writing
         // into a closed pipe printed "yes: standard output: Broken pipe" into the very stream a
         // caller collects, and a tool that relies on SIGPIPE to stop keeps writing
-        // (plans/plan_apple_m4.md AM4-264).
+        // (Apple M4 AM4-264).
         posix_spawnattr_t attributes;
         posix_spawnattr_init(&attributes);
         sigset_t restored;

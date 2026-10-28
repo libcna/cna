@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_apple_m4.md AM4-155: raw integer vertex elements (Byte4, Short2, Short4) feeding float
+// Apple M4 AM4-155: raw integer vertex elements (Byte4, Short2, Short4) feeding float
 // inputs, which Direct3D 9 converts to float. software_vertex_declaration_test covers every format
 // feeding COLOR0, where saturation hides the magnitude; a position shows it.
 

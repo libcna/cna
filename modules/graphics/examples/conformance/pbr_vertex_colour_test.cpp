@@ -18,7 +18,7 @@
 //        -- always drawable;
 //   E -- skinned stride 80 through SkinnedPbrEffect with an identity bone: the vertex colour (red).
 //
-// First written for the retired METAL renderer (plans/plan_apple_m4.md AM4-084).
+// First written for the retired METAL renderer (Apple M4 AM4-084).
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = the renderer refused the colour product (or
 // PBR shading altogether) by name and every identity case that must still draw did.

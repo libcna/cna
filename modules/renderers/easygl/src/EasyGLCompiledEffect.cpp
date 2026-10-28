@@ -308,7 +308,7 @@ namespace CNA::Internal::Renderers::EasyGL
             return loader != nullptr ? loader(fnname) : nullptr;
         }
 
-        /// plans/plan_apple_m4.md AM4-062: whether the current context compiles GLSL 1.20, the
+        /// Apple M4 AM4-062: whether the current context compiles GLSL 1.20, the
         /// dialect MojoShader writes for desktop GL. A core profile need not: macOS's 4.1 core
         /// context accepts GLSL 1.40 and later only ("version '120' is not supported"), while
         /// Mesa's core profile still compiles it. The driver is asked rather than the platform
@@ -816,7 +816,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // multi-renderer builds keep using the profile of the context that owns this MojoShader
         // context. tools/graphics/mojoshader_gl_probe.cpp independently qualifies the GLES3 route.
         //
-        // plans/plan_apple_m4.md AM4-062: a desktop core context that refuses GLSL 1.20 (macOS's)
+        // Apple M4 AM4-062: a desktop core context that refuses GLSL 1.20 (macOS's)
         // gets MojoShader's GLSL ES 3.00 instead -- the dialect OPENGLES3 and WEBGL2 already run --
         // compiled through the same ES-to-desktop header rewrite as a custom ShaderEffect.
         void* loaderData = reinterpret_cast<void*>(GetProcAddressLoaderEXT());

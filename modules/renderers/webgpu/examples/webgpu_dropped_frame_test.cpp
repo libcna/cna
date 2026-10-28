@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_apple_m4.md AM4-078/089: a backbuffer frame on an occluded WebGPU surface.
+// Apple M4 AM4-078/089: a backbuffer frame on an occluded WebGPU surface.
 //
 // A surface reports Occluded for a macOS window that is not on screen -- every window of a locked
 // session. AM4-078 found that dropping such a frame dropped only its queued SpriteBatch draws: a 3D

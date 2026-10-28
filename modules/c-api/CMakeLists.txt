@@ -108,7 +108,7 @@ if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     set_property(TARGET cna_c_api APPEND PROPERTY
         LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CnaCApiExports.map")
 elseif(APPLE)
-    # plans/plan_apple_m4.md AM4-209: Mach-O has no version scripts, so without this the dylib
+    # Apple M4 AM4-209: Mach-O has no version scripts, so without this the dylib
     # exported every default-visibility symbol of the private archives it links -- 21,904 names on
     # macOS, of which 3,210 were the ABI. ld64's exported-symbols list is the same promise.
     target_link_options(cna_c_api PRIVATE
@@ -378,7 +378,7 @@ find_package(Python3 COMPONENTS Interpreter QUIET)
 # to ship and the wrong one to regenerate idly, so it can be turned off per build tree -- and when
 # it is off, the consumer gate says so by name instead of quietly testing half the package.
 option(CNA_C_API_BUILD_STATIC "Build and install the static C API archive" ON)
-# plans/plan_apple_m4.md AM4-213: macOS builds it too -- ld64's `ld -r -all_load` and `nmedit -s` keep
+# Apple M4 AM4-213: macOS builds it too -- ld64's `ld -r -all_load` and `nmedit -s` keep
 # the same promise objcopy keeps on ELF.
 if(CNA_C_API_BUILD_STATIC AND UNIX AND (NOT APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
    AND Python3_Interpreter_FOUND)
@@ -552,7 +552,7 @@ if(NOT DEFINED _cna_abi_MAJOR OR NOT DEFINED _cna_abi_MINOR OR NOT DEFINED _cna_
 endif()
 set(CNA_C_ABI_VERSION "${_cna_abi_MAJOR}.${_cna_abi_MINOR}.${_cna_abi_PATCH}")
 
-# plans/plan_apple_m4.md AM4-210: the Mach-O half of CBIND-041's "the installed library keeps looking
+# Apple M4 AM4-210: the Mach-O half of CBIND-041's "the installed library keeps looking
 # beside itself". `$ORIGIN` is ELF syntax; ld64 writes it into LC_RPATH literally, where dyld treats it
 # as a directory named "$ORIGIN". `@loader_path` is the same rule for dyld, and the shipped SDL3
 # dylibs, whose install names are `@rpath/libSDL3*.0.dylib`, resolve through it. The install name
@@ -1613,7 +1613,7 @@ if(CNA_BUILD_TESTS)
     # deterministic library instead of whatever music the developer's machine happens to hold --
     # and keeps the test from ever reading or writing a real user directory.
     #
-    # plans/plan_apple_m4.md AM4-164: on Apple, SDL asks Foundation instead
+    # Apple M4 AM4-164: on Apple, SDL asks Foundation instead
     # (NSSearchPathForDirectoriesInDomains), which ignores XDG and read the developer's real
     # ~/Music and ~/Pictures. Foundation takes the user domain from CFFIXED_USER_HOME when it is
     # set -- $HOME it does not consult -- and the fixture root holds Music/ and Pictures/ at
@@ -2223,7 +2223,7 @@ if(CNA_BUILD_TESTS)
     #
     # Since CBIND-045 it passes no SDL path of any kind -- the package ships those libraries, so a
     # consumer needing an environment variable would be a defect rather than a fact of life, and this
-    # is where it shows. plans/plan_apple_m4.md AM4-211: macOS runs it too, now that the installed
+    # is where it shows. Apple M4 AM4-211: macOS runs it too, now that the installed
     # dylib looks beside itself (AM4-210). There the consumer gets the platform's own video driver
     # rather than an x11 pin; since AM4-213 the static half is built and run there as well.
     set(_cna_consumer_platform)

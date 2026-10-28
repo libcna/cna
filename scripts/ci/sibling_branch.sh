@@ -7,7 +7,7 @@
 # place that choice is made -- scripts/ci/clone_siblings.sh clones on it, and a workflow that checks
 # a sibling out with actions/checkout passes it as `ref`. A workflow that pinned a sibling commit
 # instead drifted from what CNA asks of it: four workflows failed at configure on a sharp-runtime
-# that predated the components CNA requests (plans/plan_apple_m4.md AM4-234).
+# that predated the components CNA requests (Apple M4 AM4-234).
 #
 # Usage: scripts/ci/sibling_branch.sh "<candidate branches, space separated>" <repo>
 set -euo pipefail

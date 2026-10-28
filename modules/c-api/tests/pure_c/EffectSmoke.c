@@ -25,7 +25,7 @@ typedef struct CallbackState {
 } CallbackState;
 
 /*
- * plans/plan_apple_m4.md AM4-206: a device without 3D refuses a cube texture at
+ * Apple M4 AM4-206: a device without 3D refuses a cube texture at
  * construction under the default Unsupported3DGraphicsCallBehavior::Throw, so the
  * sampler-retention checks below hold a cube where the device can make one and a Texture2D where it
  * cannot -- the retention rule under test is the same for both.

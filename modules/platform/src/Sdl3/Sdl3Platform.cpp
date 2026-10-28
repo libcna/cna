@@ -204,7 +204,7 @@ namespace CNA::Platform::Sdl3 {
         }
 #endif
 
-        // plans/plan_apple.md APPLE-15. The orientation set is a pre-initialization hint: it has to be
+        // Apple APPLE-15. The orientation set is a pre-initialization hint: it has to be
         // in place before the video subsystem starts, which is earlier than any window exists and
         // therefore earlier than the game can have chosen anything. Seed the full XNA default set
         // here so the first window is not accidentally locked to one orientation;
@@ -362,7 +362,7 @@ namespace CNA::Platform::Sdl3 {
                     ? "; this SDL build contains no video driver at all"
                     : "; this SDL build contains these video drivers: " + drivers;
 #if defined(__APPLE__)
-                // plans/plan_apple_m4.md AM4-074: SDL reports a Cocoa/UIKit refusal off the main
+                // Apple M4 AM4-074: SDL reports a Cocoa/UIKit refusal off the main
                 // thread as "No available video device", which names the wrong cause. Darwin's own
                 // answer, because SDL counts whichever thread first initialized it as "main".
                 if (pthread_main_np() == 0)

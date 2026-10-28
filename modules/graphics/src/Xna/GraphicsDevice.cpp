@@ -69,7 +69,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /// still alive when the process exits -- the C API's runtime state releases its undestroyed
         /// handles from a static destructor -- is disposed after this function-local static, first
         /// used later, has already been destroyed. glibc tolerates locking it; Darwin reports EINVAL
-        /// and libc++ throws from ~GraphicsDevice (plans/plan_apple_m4.md AM4-073).
+        /// and libc++ throws from ~GraphicsDevice (Apple M4 AM4-073).
         std::recursive_mutex& NativeDeviceLifecycleMutex()
         {
             static auto* const mutex = new std::recursive_mutex();
@@ -513,7 +513,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 setDepthStencilStateProperty(DepthStencilState::Default);
             else
             {
-                // plans/plan_apple_m4.md AM4-195: but the public state is XNA's on every device --
+                // Apple M4 AM4-195: but the public state is XNA's on every device --
                 // the DepthStencilState.Default preset is bound to it and is its current state,
                 // exactly as the setter leaves them -- even where there is nothing native to apply.
                 DepthStencilState::Default.BindForUse(this);

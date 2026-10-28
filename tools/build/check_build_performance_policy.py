@@ -162,7 +162,7 @@ def check_no_global_raw_flags(errors: list[str]) -> None:
         # choice: every object linked into shared memory, third-party ones included, must be built
         # and linked with -pthread, so the option is set for the directory before any target
         # exists. Per-target options cannot reach targets CNA does not define. The block landed two
-        # days after this rule and failed general-tests-ci on every run (plans/plan_apple_m4.md
+        # days after this rule and failed general-tests-ci on every run (Apple M4
         # AM4-240).
         "CMakeLists.txt": {
             "add_compile_options(-pthread)",

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_apple_m4.md AM4-106 -- BasicEffect's per-vertex lighting reaches the pixel shader through
+// Apple M4 AM4-106 -- BasicEffect's per-vertex lighting reaches the pixel shader through
 // COLOR registers, and Direct3D 9 saturates those.
 //
 // THE CONTRACT:
@@ -146,7 +146,7 @@ namespace
         }
 
         // Headless reports ThreeD -- it accepts every 3D call -- and rasterizes nothing, refusing
-        // the readback, so it has no pixel to measure either (CNA plans/plan_apple_m4.md AM4-269).
+        // the readback, so it has no pixel to measure either (CNA Apple M4 AM4-269).
         static bool Renders3D()
         {
             GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,

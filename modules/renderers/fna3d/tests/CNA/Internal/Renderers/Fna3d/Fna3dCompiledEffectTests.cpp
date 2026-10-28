@@ -1955,7 +1955,7 @@ TEST(Fna3dCompiledEffectDrawTest, SharedSamplerPixelContract)
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::CompiledEffectSamplerContractOptions options;
-    // plans/plan_apple_m4.md AM4-191: SDL's Metal backend ignores a sampler's LOD bias.
+    // Apple M4 AM4-191: SDL's Metal backend ignores a sampler's LOD bias.
     if (const auto* fna3d =
             dynamic_cast<const CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(&device.GetRenderer()))
         options.supportsLodBias = fna3d->SamplerLodBiasReachesTheGpuEXT();
@@ -2076,7 +2076,7 @@ TEST(Fna3dCompiledEffectDrawTest, SharedLodBiasRegisterContract)
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::CompiledEffectSamplerContractOptions options;
-    // plans/plan_apple_m4.md AM4-191: SDL's Metal backend ignores a sampler's LOD bias.
+    // Apple M4 AM4-191: SDL's Metal backend ignores a sampler's LOD bias.
     if (const auto* fna3d =
             dynamic_cast<const CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(&device.GetRenderer()))
         options.supportsLodBias = fna3d->SamplerLodBiasReachesTheGpuEXT();
@@ -2089,7 +2089,7 @@ TEST(Fna3dCompiledEffectDrawTest, SharedLodBiasPerDrawContract)
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::CompiledEffectSamplerContractOptions options;
-    // plans/plan_apple_m4.md AM4-191: SDL's Metal backend ignores a sampler's LOD bias.
+    // Apple M4 AM4-191: SDL's Metal backend ignores a sampler's LOD bias.
     if (const auto* fna3d =
             dynamic_cast<const CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(&device.GetRenderer()))
         options.supportsLodBias = fna3d->SamplerLodBiasReachesTheGpuEXT();

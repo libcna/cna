@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_apple_m4.md AM4-152: BLENDINDICES in a format other than Byte4 still selects its bone.
+// Apple M4 AM4-152: BLENDINDICES in a format other than Byte4 still selects its bone.
 // Direct3D 9 hands every vertex input to the shader as float, so XNA draws a Short4 BLENDINDICES
 // element exactly as a Byte4 one; FX-127's Vector4 case is the EasyGL oracle
 // easygl_skinnedeffect_vector4_bone_indices_test. The retired METAL renderer could not fetch Short4

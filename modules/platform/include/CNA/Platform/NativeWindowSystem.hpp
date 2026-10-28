@@ -50,7 +50,7 @@ namespace CNA::Platform {
         /**
          * @brief iOS/iPadOS. The window value is a `UIWindow*`.
          *
-         * plans/plan_apple_m4.md AM4-037. Reported for SDL's `uikit` video driver, which used to
+         * Apple M4 AM4-037. Reported for SDL's `uikit` video driver, which used to
          * fall through to Headless; a renderer that draws through UIKit natively (as the retired
          * METAL renderer did on iOS) needs the window, the way it needs the `NSWindow*` on macOS.
          * Appended, so no existing value moves.

@@ -1266,7 +1266,7 @@ namespace
      * XNA converts a DateTime that carries an offset to local time, so accept_datetime_offset
      * normalizes to +01:00 on the capture machine (central Europe, in January). CNA converts the
      * same way, through the C library's local time, so it reproduces those bytes only in that zone:
-     * on a UTC runner the case produced +00:00 and the test failed (plans/plan_apple_m4.md
+     * on a UTC runner the case produced +00:00 and the test failed (Apple M4
      * AM4-263). A POSIX rule string, so no tzdata is needed. Windows resolves zones through Win32,
      * not TZ, and keeps the host's zone.
      */

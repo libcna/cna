@@ -17,7 +17,7 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     enable_testing()
 
-    # plans/plan_apple_m4.md AM4-051: on Apple the OpenGL pin is the deprecated legacy GL 2.1
+    # Apple M4 AM4-051: on Apple the OpenGL pin is the deprecated legacy GL 2.1
     # context (macOS's compatibility profile), not a validation target anybody ships on; FNA3D's
     # SDL_GPU driver on Metal is. It passes the whole registered suite, the XNA-oracle corpus
     # included, where GL 2.1 leaks a draw into an unbound cube face.

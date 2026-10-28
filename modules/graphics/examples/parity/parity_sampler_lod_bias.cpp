@@ -99,7 +99,7 @@ namespace
 /// limitation for stock sampling -- ES has no `GL_TEXTURE_LOD_BIAS`, which is why FNA3D's own GL
 /// driver skips it too. There the documented answer is that a bias changes nothing, and the fixture
 /// measures that rather than skipping, so whoever emulates it on ES updates that row as well
-/// (CNA plans/plan_apple_m4.md AM4-270).
+/// (CNA Apple M4 AM4-270).
 static bool StockSamplingHasNoLodBias()
 {
     const CNA::GraphicsRendererType renderer = CNA::GraphicsRendererSelection::GetSelected();

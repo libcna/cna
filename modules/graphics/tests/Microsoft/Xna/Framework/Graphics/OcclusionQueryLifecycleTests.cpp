@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_apple_m4.md AM4-108 -- what an OcclusionQuery run counts and when it completes.
+// Apple M4 AM4-108 -- what an OcclusionQuery run counts and when it completes.
 //
 //   * XNA lets a query be begun again once IsComplete has been asked, whether or not the result
 //     had arrived (OcclusionQueryPixelCountPrecisionTest pins that lifecycle); the earlier run is

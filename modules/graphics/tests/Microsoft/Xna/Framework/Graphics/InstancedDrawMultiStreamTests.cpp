@@ -832,7 +832,7 @@ namespace
 
 namespace
 {
-    /// A forwarded range is not a managed error (plans/plan_apple_m4.md AM4-183). SDL_GPU's stock
+    /// A forwarded range is not a managed error (Apple M4 AM4-183). SDL_GPU's stock
     /// instancing takes per-instance data only as a four-column world matrix (STREETS-0001), so a
     /// layout without one is a capability refusal there, which is not what these tests measure.
     template <typename Draw>

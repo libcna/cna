@@ -77,7 +77,7 @@ struct ServiceENetSession::Impl {
     // Client whose host vanished in a session allowing migration, until the directory names a new one.
     bool migrating=false;
     Time migrationDeadline;
-    // plans/plan_apple_m4.md AM4-200: a client's app data for a new host whose connection is not yet
+    // Apple M4 AM4-200: a client's app data for a new host whose connection is not yet
     // admitted, in order, until that host's welcome; ENet refuses a send on a connecting peer.
     std::vector<std::pair<std::vector<unsigned char>,SendDataOptions>> pendingUpstream;
     std::size_t pendingUpstreamBytes=0;

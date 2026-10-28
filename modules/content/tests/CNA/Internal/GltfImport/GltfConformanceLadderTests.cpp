@@ -340,7 +340,7 @@ TEST(GltfConformanceLadder, RequiredCiRunsEveryCampaignRendererOnIntegrationHead
     // matrix. Pinning the viewer commit prevents a mutable develop head from changing the camera
     // or presentation policy underneath an otherwise unchanged CNA commit.
     // The pin moved from f32d1f13 to 6061bff1 -- that commit plus the HiDef request --capture
-    // needs since CNA refuses GetBackBufferData under Reach (plans/plan_apple_m4.md AM4-242).
+    // needs since CNA refuses GetBackBufferData under Reach (Apple M4 AM4-242).
     EXPECT_NE(std::string::npos, source.find("  l7-corpus:\n"));
     EXPECT_NE(std::string::npos,
               source.find("6061bff135c9b0701983ad5950f69da7f3658d1f"));

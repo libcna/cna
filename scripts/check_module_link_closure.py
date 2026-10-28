@@ -35,7 +35,7 @@ def cache_value(build_dir, name):
 
 
 def ninja_link_line(build_dir, target):
-    """plans/plan_apple_m4.md AM4-167: the Ninja generator writes no link.txt, so every probe
+    """Apple M4 AM4-167: the Ninja generator writes no link.txt, so every probe
     skipped in a Ninja tree. Ninja itself prints a target's final command."""
     if cache_value(build_dir, "CMAKE_GENERATOR") != "Ninja":
         return None

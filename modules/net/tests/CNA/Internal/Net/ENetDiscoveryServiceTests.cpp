@@ -12,7 +12,7 @@
 #include <vector>
 
 // The discovery codec is built on every platform, and so are the tests of it below; only the
-// socket-level tests further down need a POSIX host (CNA plans/plan_apple_m4.md AM4-273).
+// socket-level tests further down need a POSIX host (CNA Apple M4 AM4-273).
 #include "CNA/Internal/Net/NetDiscoveryProtocol.hpp"
 
 #if !defined(__EMSCRIPTEN__) && !defined(_WIN32)

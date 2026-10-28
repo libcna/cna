@@ -181,7 +181,7 @@ TEST(WebGpuMrtOcclusionContract, SingleTargetBindStillRenders)
 TEST(WebGpuMrtOcclusionContract, TwoTargetBindSucceedsAndBothTargetsReceiveOwnContent)
 {
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
-    // plans/plan_apple_m4.md AM4-177: HiDef, as XNA requires for more than one render target and
+    // Apple M4 AM4-177: HiDef, as XNA requires for more than one render target and
     // for occlusion queries; a default device is Reach.
     GraphicsDevice gd(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                       PresentationParameters::CreateWindowedEXT(800, 480));
@@ -242,7 +242,7 @@ TEST(WebGpuMrtOcclusionContract, TwoTargetBindSucceedsAndBothTargetsReceiveOwnCo
 TEST(WebGpuMrtOcclusionContract, OcclusionQueryCapabilityIsTrue)
 {
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
-    // plans/plan_apple_m4.md AM4-177: HiDef, as XNA requires for more than one render target and
+    // Apple M4 AM4-177: HiDef, as XNA requires for more than one render target and
     // for occlusion queries; a default device is Reach.
     GraphicsDevice gd(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                       PresentationParameters::CreateWindowedEXT(800, 480));

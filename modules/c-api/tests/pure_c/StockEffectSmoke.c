@@ -388,7 +388,7 @@ static int validate_environment_map(
                 CNA_RESULT_SUCCESS && scalar == 2.5F);
 
     /*
-     * plans/plan_apple_m4.md AM4-206: a device without 3D refuses the cube at
+     * Apple M4 AM4-206: a device without 3D refuses the cube at
      * construction under the default Unsupported3DGraphicsCallBehavior::Throw, by
      * name; the effect itself, its Texture2D and its clone work the same either way, and an unset
      * environment map reads back as unset.

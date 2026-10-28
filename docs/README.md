@@ -134,8 +134,7 @@ Kept for their investigation methodology and root-cause detail, not as current s
 - **[`apple-platforms.md`](apple-platforms.md)** — macOS and iOS: build instructions, the iOS
   renderer allow-list, bundle/lifecycle/storage behavior, and an explicit per-claim evidence
   boundary (macOS has a native CI gate; iOS final-links for device and runs a one-frame smoke app
-  in the simulator, but still lacks physical-device and feature evidence). Task breakdown is in
-  `../plans/plan_apple.md`.
+  in the simulator, but still lacks physical-device and feature evidence), and the known gaps.
 - **[`ascii-post-process-effect.md`](ascii-post-process-effect.md)** — `CNA::Graphics::AsciiPostProcessEffect`,
   the renderer-neutral ASCII/glyph-grid post-process effect (`modules/graphics-ext/`) that replaced
   the former `ASCII` graphics-renderer identity; the page also records that renderer's historical

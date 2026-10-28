@@ -318,7 +318,7 @@ unchanged catalog vertices across the model digest's quantization boundaries.
 
 `GamerServices_AvatarCatalogUpToDate` regenerates catalog v3 and compares it byte for byte (on a C library other than glibc, every
 byte except catalog v3's six `FemaleShocked` arm rotations, which a non-convergent head solve froze
-from glibc's libm until revision 4 and are still checked only structurally there; plans/plan_apple_m4.md AM4-166).
+from glibc's libm until revision 4 and are still checked only structurally there; Apple M4 AM4-166).
 `AvatarCatalogTest.CatalogV3HasTheItemFeatureStyleAndAnimationContract` and
 `V3DescriptionsAssembleExactlyAsRevised` pin the content; `AvatarCatalogContentTests` check every
 model's geometry, every manifest reference and how accessories, makeup, ears and proportions

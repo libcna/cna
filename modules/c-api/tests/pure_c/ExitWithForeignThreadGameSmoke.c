@@ -72,7 +72,7 @@ static int owner(void* const argument)
     const CNA_Result created_game = cna_game_create(&create_info, &game);
 #if defined(__APPLE__)
     /*
-     * plans/plan_apple_m4.md AM4-074: Apple's Cocoa and UIKit video drivers initialize only on the
+     * Apple M4 AM4-074: Apple's Cocoa and UIKit video drivers initialize only on the
      * main thread. Where the renderer can live with another SDL video driver SDL falls back to one
      * and the scenario runs as everywhere else; where it cannot, the game is refused, and then
      * what Apple promises is checked instead: a clean refusal that says why.
@@ -100,7 +100,7 @@ static int exit_from_this_thread(void* const argument)
 }
 
 /*
- * plans/plan_apple_m4.md AM4-122: where Apple refused the foreign-thread owner, the same exit is
+ * Apple M4 AM4-122: where Apple refused the foreign-thread owner, the same exit is
  * taken the other way round -- the game is owned by the main thread, as Apple requires, and the
  * process exits from a thread that is not its owner (Java's System.exit from a worker thread).
  * The exiting thread has no graphics context of the game's either, so the graph must again be left

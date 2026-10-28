@@ -69,7 +69,7 @@ namespace
     // These are pixel oracles, so they need a renderer that rasterizes 3D triangles into a target
     // it can read back. A renderer without 3D reports no ThreeD; Headless reports ThreeD -- it
     // accepts every 3D call -- and rasterizes nothing, refusing the readback. Neither has a
-    // pixel to measure (CNA plans/plan_apple_m4.md AM4-269).
+    // pixel to measure (CNA Apple M4 AM4-269).
     [[nodiscard]] bool RasterizesTriangles()
     {
         GraphicsDevice device;

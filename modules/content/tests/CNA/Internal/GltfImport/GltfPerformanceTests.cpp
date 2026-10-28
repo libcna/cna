@@ -78,7 +78,7 @@ namespace
     /// The budgets below are tripwires for a change in the SHAPE of the work, sized against an
     /// uninstrumented build. ASan+UBSan instrumentation costs about an order of magnitude on this
     /// code: the sanitizer job measured 55.9 ms per parse and 53.5 ms per load/unload cycle against
-    /// 50 ms budgets (plans/plan_apple_m4.md AM4-316), so a sanitized build scales them.
+    /// 50 ms budgets (Apple M4 AM4-316), so a sanitized build scales them.
     constexpr double kBudgetScale = kAddressSanitized ? 10.0 : 1.0;
 
     /// The calling thread's own CPU time, in milliseconds.

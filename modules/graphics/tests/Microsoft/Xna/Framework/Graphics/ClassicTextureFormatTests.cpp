@@ -591,7 +591,7 @@ TEST(ClassicTextureFormat, DxtCubeBlocksFeedThePublicEnvironmentMapSampler)
     EXPECT_NEAR(sampled.getAProperty(), 255, 2);
 }
 
-// plans/plan_apple_m4.md AM4-148: a DXT3 and a DXT5 texture sampled in a real draw, alpha
+// Apple M4 AM4-148: a DXT3 and a DXT5 texture sampled in a real draw, alpha
 // included. Their readbacks return the blocks the renderer kept and the cube fixture's colour halves
 // are identical in BC2 and BC3, so only a sampled alpha tells the two block layouts apart -- found
 // when one renderer gave DXT5 the BC2 format, which every other DXT test still passed.

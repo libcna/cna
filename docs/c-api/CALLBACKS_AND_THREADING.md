@@ -42,7 +42,7 @@ On Apple platforms the creation thread must also be the **process's main thread*
 renderer needs a window: SDL's Cocoa and UIKit video drivers initialize only there. Created on
 another thread, a renderer that needs those drivers is refused with a message that names the
 main-thread requirement, while one that can run on SDL's offscreen driver (SOFTWARE) runs there,
-without a window (`plans/plan_apple_m4.md` AM4-074). Exiting the process from another thread while the
+without a window (Apple M4 AM4-074). Exiting the process from another thread while the
 main-thread game is alive remains supported (AM4-122).
 
 Audio callbacks and native worker activity may occur internally, but the public ABI does not expose

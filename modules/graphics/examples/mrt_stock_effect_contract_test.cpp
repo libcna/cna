@@ -6,7 +6,7 @@
 // resolve, mip generation and target transitions still apply to every bound attachment. This is
 // intentionally independent of CNAEXT ShaderEffect and does not fabricate extra CPU outputs.
 //
-// plans/plan_apple_m4.md AM4-097: a renderer without MultiSampleAntiAliasing is registered with
+// Apple M4 AM4-097: a renderer without MultiSampleAntiAliasing is registered with
 // MRT_CONTRACT_WITHOUT_MSAA, which compiles out the multisampled scenarios only -- and then the test
 // asserts that the renderer really reports no MSAA, so the definition cannot hide a regression.
 

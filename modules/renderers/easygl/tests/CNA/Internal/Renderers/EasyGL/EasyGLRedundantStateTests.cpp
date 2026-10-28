@@ -77,7 +77,7 @@ namespace
             // CnaTests links its own static copy of meta-gl, apart from the renderer's inside
             // libcna.so (VKPAR-0017), and meta-gl terminates on a call through a table nobody
             // initialised -- which is how three of these tests aborted on Linux, as FX-144 found in
-            // EasyGLCompiledEffectTests (CNA plans/plan_apple_m4.md AM4-284). Load this binary's
+            // EasyGLCompiledEffectTests (CNA Apple M4 AM4-284). Load this binary's
             // copy from the renderer's own context before reading GL state directly.
             auto* renderer = dynamic_cast<CNA::Internal::Renderers::EasyGL::EasyGLRenderer*>(
                 &device->GetRenderer());

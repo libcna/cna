@@ -178,7 +178,7 @@ protected:
             // incomplete, while End happens to close the deleted query that poisoned the target.
             // GL promises a result only eventually, and macOS's GL delivers it asynchronously
             // after the read: under a parallel ctest run 30 reads were occasionally not enough
-            // (plans/plan_apple_m4.md AM4-058). The poll is therefore bounded by time as well;
+            // (Apple M4 AM4-058). The poll is therefore bounded by time as well;
             // a poisoned query still never completes.
             Color flushPixel;
             const Rectangle flushRegion(0, 0, 1, 1);

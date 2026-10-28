@@ -60,7 +60,7 @@ function(cna_apply_test_display_policy_to environment modification display_empty
     set(${out_modification} "${modification}" PARENT_SCOPE)
 endfunction()
 
-# plans/plan_apple_m4.md AM4-007: a registration that pins SDL_VIDEODRIVER=x11 or =wayland means
+# Apple M4 AM4-007: a registration that pins SDL_VIDEODRIVER=x11 or =wayland means
 # "open a real window on a real display server". On a host whose SDL drives neither -- macOS, where
 # the window system is SDL's cocoa driver -- that pin names a driver the build does not contain:
 # SDL refuses to start video and the test fails before it tests anything. Where

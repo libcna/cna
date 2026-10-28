@@ -31,7 +31,7 @@ from typing import Iterable
 
 SCHEMA_VERSION = 1
 PLANNED_OWNER_PATTERN = re.compile(r"CBIND-[0-9A-Za-z]+")
-# plans/plan_apple_m4.md AM4-160: the approval pins below are content IDs of the declarations
+# Apple M4 AM4-160: the approval pins below are content IDs of the declarations
 # Doxygen 1.9.x reports, and Doxygen is not a stable parser across releases. 1.18 (Homebrew's)
 # reports a second copy of every Vector3/Matrix/Quaternion overload and a Microsoft::Devices::
 # Sensors::Matrix struct that does not exist, and drops the Dispose(bool) overloads: against it

@@ -77,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
     # A cold UBSan build of CnaTests on the hosted runner had reached 90 % when the former
     # 45-minute budget cancelled it (run 37922925862), so no run could finish -- or ever save the
-    # compiler cache below that makes the next one warm (CNA plans/plan_apple_m4.md AM4-281).
+    # compiler cache below that makes the next one warm (CNA Apple M4 AM4-281).
     timeout-minutes: 75
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -99,7 +99,7 @@ jobs:
       - name: Choose the sharp-runtime branch
         id: sharp_runtime_branch
         # The branch CNA's own clone_siblings.sh would use, not a pinned commit: the pins here
-        # predated components CNA requests (plans/plan_apple_m4.md AM4-234).
+        # predated components CNA requests (Apple M4 AM4-234).
         run: echo "ref=$(bash cna_devices/scripts/ci/sibling_branch.sh "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout sharp-runtime sibling

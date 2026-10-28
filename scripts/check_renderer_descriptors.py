@@ -165,7 +165,7 @@ def include_roots() -> list[str]:
 
 # GCC: "fatal error: vulkan/vulkan.h: No such file or directory"; Clang: "fatal error:
 # 'vulkan/vulkan.h' file not found". Matching only GCC's wording made every unreachable family a
-# hard failure under Clang (plans/plan_apple_m4.md AM4-241).
+# hard failure under Clang (Apple M4 AM4-241).
 MISSING_INCLUDE = re.compile(
     r"fatal error: (?:([^:']+): No such file or directory|'([^']+)' file not found)")
 

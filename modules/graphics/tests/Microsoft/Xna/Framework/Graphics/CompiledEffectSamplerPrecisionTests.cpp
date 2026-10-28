@@ -58,7 +58,7 @@ TEST(CompiledEffectSamplerPrecisionTest, ASpriteEffectBlursVector2MomentsAtFullP
     device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
         GTEST_SKIP() << "this renderer does not execute compiled effects";
-    // plans/plan_apple_m4.md AM4-189: the precision measured is the Vector2 target's; a renderer
+    // Apple M4 AM4-189: the precision measured is the Vector2 target's; a renderer
     // that substitutes Color for it (FNA3D promotes no float render target) has nothing to measure.
     if (!device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector2))
         GTEST_SKIP() << "this renderer has no Vector2 render target";

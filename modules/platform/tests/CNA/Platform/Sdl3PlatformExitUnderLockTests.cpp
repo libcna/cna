@@ -57,7 +57,7 @@ using CNA::Platform::PlatformFactory;
 using CNA::Platform::Sdl3::SdlGlobalStateLock;
 
 // The two exit tests are death tests, which GoogleTest builds only where it can fork a child --
-// not under Emscripten, which also defines __unix__ (CNA plans/plan_apple_m4.md AM4-280). The
+// not under Emscripten, which also defines __unix__ (CNA Apple M4 AM4-280). The
 // ownership query below needs no child and runs everywhere this file does.
 #if GTEST_HAS_DEATH_TEST
 constexpr unsigned kChildDeadlineSeconds = 20;

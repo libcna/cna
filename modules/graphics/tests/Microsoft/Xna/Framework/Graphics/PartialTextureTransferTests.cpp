@@ -225,7 +225,7 @@ TEST(PartialTextureTransfer, ACubeFaceSubRectangleLeavesTheOtherFivesAlone)
 TEST(PartialTextureTransfer, ATexture3DSubBoxChangesOnlyItself)
 {
     GraphicsDevice device;
-    // plans/plan_apple_m4.md AM4-158: volume textures are HiDef-only (SOFTWARE-179), so on the
+    // Apple M4 AM4-158: volume textures are HiDef-only (SOFTWARE-179), so on the
     // default Reach device this test skipped on every renderer, Texture3D or not.
     device.SetGraphicsProfileEXT(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
     constexpr int kWidth = 6;

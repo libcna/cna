@@ -132,7 +132,7 @@ else()
     message(STATUS "skipped: the static archive, because ${CNA_STATIC_SKIP_REASON}")
 endif()
 
-# plans/plan_apple_m4.md AM4-211: on Mach-O the claim "the installed library looks beside itself" is
+# Apple M4 AM4-211: on Mach-O the claim "the installed library looks beside itself" is
 # a load command, so it is read rather than inferred from the consumer happening to run -- a
 # consumer whose own rpath reached the stage would run either way.
 if(CNA_CONSUMER_PLATFORM STREQUAL "MACHO")

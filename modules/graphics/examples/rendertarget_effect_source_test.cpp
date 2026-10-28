@@ -1278,7 +1278,7 @@ void main() {
         // cancels, leaving only a difference in WHICH RESOURCE was bound. Judging the custom route
         // against the raw pattern instead would fold an unrelated colour-convention question into
         // this ticket.
-        // plans/plan_apple_m4.md AM4-026: a renderer that reports no CustomEffects capability may
+        // Apple M4 AM4-026: a renderer that reports no CustomEffects capability may
         // refuse the effect at construction instead of returning an invalid one -- the same
         // declared boundary, reached one call earlier.
         if (!dev.SupportsCapability(CNA::GraphicsCapability::CustomEffects))

@@ -19,7 +19,7 @@ namespace
 
         void SetUp() override
         {
-            // plans/plan_apple_m4.md AM4-162: a directory of this case's own. The one fixed in-tree
+            // Apple M4 AM4-162: a directory of this case's own. The one fixed in-tree
             // path used before was removed by every case's SetUp and TearDown -- including those of
             // cases CTest was running at the same moment in other processes.
             std::random_device entropy;

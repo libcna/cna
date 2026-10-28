@@ -86,7 +86,7 @@ vec3 cnaSafeDirection(vec3 v) {
 
 void main() {
     gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(inPos, 1.0));
-    gl_PointSize = 1.0;  // plans/plan_apple_m4.md AM4-181: PointListEXT draws one pixel per point
+    gl_PointSize = 1.0;  // Apple M4 AM4-181: PointListEXT draws one pixel per point
     fragUV = inUV;
     #ifdef CNA_PBR_VERTEX_COLOR
     fragUV1 = inUV1;

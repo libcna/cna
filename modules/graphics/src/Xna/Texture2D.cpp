@@ -131,7 +131,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    // plans/plan_apple_m4.md AM4-087: the renderer's own verdict, asked only after every XNA rule --
+    // Apple M4 AM4-087: the renderer's own verdict, asked only after every XNA rule --
     // the profile's formats and ValidateTexture2DCreationShapeEXT's shapes -- so a renderer that
     // cannot store a format never pre-empts the refusal XNA itself gives for that request.
     static void ValidateTexture2DRendererFormatEXT(const GraphicsDevice* device, SurfaceFormat format)

@@ -555,5 +555,5 @@ TEST_F(OnlineNetworkSessionTest, LiveBlockAndMuteSnapshotsSuppressSubsequentVoic
     until([&]{return probe->played>played;});
 }
 // The voice tests use the same online-session fixture, which is not built for Emscripten
-// (CNA plans/plan_apple_m4.md AM4-275).
+// (CNA Apple M4 AM4-275).
 #endif // __EMSCRIPTEN__

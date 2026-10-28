@@ -109,7 +109,7 @@ protected:
 // cleanly -- Texture3D's own constructor throws System::NotSupportedException -- instead of
 // previously silently succeeding with all-zero pixel data. Since SAMPLE-078 a loose-file load
 // reports that as ContentLoadException, as XNA does, with the cause in its message
-// (CNA plans/plan_apple_m4.md AM4-268).
+// (CNA Apple M4 AM4-268).
 TEST_F(CnjTexture3DTest, LoadsRealCnjFixture)
 {
     ScratchContentRoot root;

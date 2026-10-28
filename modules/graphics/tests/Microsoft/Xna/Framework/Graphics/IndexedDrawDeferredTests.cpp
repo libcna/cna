@@ -2131,7 +2131,7 @@ TEST_F(IndexedDrawDeferredTest, WebGpuTriangleStripAlternatesWindingBeforeCullin
     device.DrawIndexedPrimitives(
         PrimitiveType::TriangleStrip, 0, 0, 4, 0, 2);
 
-    // plans/plan_apple_m4.md AM4-177: a buffer set on the device is not written, as in XNA
+    // Apple M4 AM4-177: a buffer set on the device is not written, as in XNA
     // (SOFTWARE-247); unbind, rewrite, bind again.
     device.SetIndexBuffer(nullptr);
     indexBuffer.SetData(rightIndices.data(), 4);
@@ -2206,7 +2206,7 @@ TEST_F(IndexedDrawDeferredTest, WebGpuIndexedStripsRenderToTargetAndBackbuffer)
     ExpectExactColor(targetPixel, Color::Red, "RenderTarget2D Uint16 strip");
 
     vertices = StripQuadAt(0.0f, Color::Blue);
-    // plans/plan_apple_m4.md AM4-177: unbound before it is rewritten, as XNA requires.
+    // Apple M4 AM4-177: unbound before it is rewritten, as XNA requires.
     device.SetVertexBuffer(nullptr);
     vertexBuffer.SetData(vertices.data(), 4);
     device.Clear(Color::Black);

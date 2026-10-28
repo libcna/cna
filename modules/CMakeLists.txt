@@ -208,7 +208,7 @@ else()
     # Every compiled Draco target gets it, not only draco_io: the command-line tools (draco_decoder,
     # draco_encoder) compile the same io/ sources themselves, and a build that names targets
     # explicitly -- Android Gradle builds every target the CMake file API lists, EXCLUDE_FROM_ALL
-    # or not -- failed in draco_decoder (plans/plan_apple_m4.md AM4-305).
+    # or not -- failed in draco_decoder (Apple M4 AM4-305).
     add_subdirectory("${_cna_draco_dir}" "${CMAKE_CURRENT_BINARY_DIR}/draco" EXCLUDE_FROM_ALL)
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         get_property(_cna_draco_targets DIRECTORY "${_cna_draco_dir}" PROPERTY BUILDSYSTEM_TARGETS)

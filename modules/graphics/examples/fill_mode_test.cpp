@@ -118,7 +118,7 @@ protected:
         // A device without native polygon mode -- EasyGL on a GLES/WebGL context with no
         // polygon-mode extension, Mesa's included -- reports no WireFrame capability and refuses
         // the draw (SOFTWARE-178); sub-test 3 then shows the refusal left Solid working
-        // (CNA plans/plan_apple_m4.md AM4-285).
+        // (CNA Apple M4 AM4-285).
         if (dev.SupportsCapability(CNA::GraphicsCapability::WireFrame))
         {
             px = drawAndRead(dev, vb, fx);

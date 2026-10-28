@@ -45,7 +45,7 @@ NOT_MET = "not met"
 BLOCKED = "blocked"
 
 
-# plans/plan_apple_m4.md AM4-160: a tool that cannot measure here (the coverage tools without a
+# Apple M4 AM4-160: a tool that cannot measure here (the coverage tools without a
 # Doxygen 1.9.x) exits with this, and the gate then reports nothing rather than a criterion "not
 # met" that only the toolchain decided.
 NOT_MEASURED_EXIT = 77
@@ -173,7 +173,7 @@ def check_native_dependencies_shipped() -> tuple[str, str]:
         return NOT_MET, "the SDL3 runtime libraries are not installed with the C API component"
     if 'INSTALL_RPATH "$ORIGIN"' not in lists:
         return NOT_MET, "the installed library does not look beside itself for its dependencies"
-    # plans/plan_apple_m4.md AM4-210: the same promise on Mach-O, where $ORIGIN means nothing.
+    # Apple M4 AM4-210: the same promise on Mach-O, where $ORIGIN means nothing.
     if "libSDL3*.dylib" not in lists:
         return NOT_MET, "the SDL3 dylibs are not installed with the C API component on macOS"
     if 'INSTALL_RPATH "@loader_path"' not in lists:

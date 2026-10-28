@@ -469,7 +469,7 @@ protected:
         }
 
         {
-            // plans/plan_apple_m4.md AM4-131: D3D9's MULTISAMPLEMASK "has no effect when rendering
+            // Apple M4 AM4-131: D3D9's MULTISAMPLEMASK "has no effect when rendering
             // to a single sample buffer", while a WebGPU pipeline applies bit 0 of its mask even
             // at one sample. A single-sample target must therefore draw under a mask of 0.
             RenderTarget2D single(device, kRtW, kRtH, false, SurfaceFormat::Color, DepthFormat::None);
@@ -521,7 +521,7 @@ protected:
             oneSample.setMultiSampleMaskProperty(0x1);
             device.SetRenderTarget(&msaaTarget);
             device.Clear(Color::Black);
-            // plans/plan_apple_m4.md AM4-131: wgpu-native's Metal backend has no pipeline sample
+            // Apple M4 AM4-131: wgpu-native's Metal backend has no pipeline sample
             // mask, so a partial mask is refused there rather than written to every sample.
             const bool partialMasks = renderer.SupportsPartialMultiSampleMaskEXT();
             bool refused = false;

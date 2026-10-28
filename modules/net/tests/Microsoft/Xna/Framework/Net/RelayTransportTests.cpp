@@ -46,7 +46,7 @@ TEST(RelayTransportTest, RoutesAreStableAtomicBoundedAndStopIsIdempotent) {
     bridge.stop();bridge.stop();const auto status=bridge.status();EXPECT_EQ(RelayTransportState::Stopped,status.state);EXPECT_EQ(0,status.queued);
     rejected([&]{bridge.setRoutes({other});},"RELAY_STOPPED");EXPECT_EQ(0,bridge.routePort(other));
 }
-// plans/plan_apple_m4.md AM4-123: the capability rule on synthetic libcurl version data, so the
+// Apple M4 AM4-123: the capability rule on synthetic libcurl version data, so the
 // connection-failure test below does not merely agree with whatever the product decided.
 TEST(RelayTransportTest, RefusalNeedsWsAndWssWithTlsFromCurl7860) {
     const char* const both[]={"http","https","ws","wss",nullptr};

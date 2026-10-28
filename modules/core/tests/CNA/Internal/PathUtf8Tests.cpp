@@ -160,7 +160,7 @@ TEST(PathUtf8Test, DirectoryEnumerationAgreesWithTheUtf8TextOfWhatWasWritten)
 
     // APFS (and HFS+) are normalization-insensitive: the NFC and NFD spellings of "étude" name ONE
     // file there, and the second open reuses the first entry. Whether this filesystem folds is
-    // probed with raw bytes, independently of PathFromUtf8 (plans/plan_apple_m4.md AM4-111): on a
+    // probed with raw bytes, independently of PathFromUtf8 (Apple M4 AM4-111): on a
     // byte-exact filesystem (ext4) every class must create its own entry, so a PathFromUtf8 that
     // normalized NFD to NFC would still be caught there.
 #if defined(_WIN32)

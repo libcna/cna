@@ -293,7 +293,7 @@ the renderer supports elsewhere but this draw route cannot preserve. `plans/plan
 10.5 is the authoritative per-renderer table. In particular, cube sampling is no longer a
 limitation: FNA3D, SDL_GPU and EasyGL all pass the compiled cube-sampler contract.
 
-Running EasyGL's Shader Model 1-3 sections on the MojoShader SPIR-V route (`plans/plan_apple_m4.md`
+Running EasyGL's Shader Model 1-3 sections on the MojoShader SPIR-V route (Apple M4
 AM4-144) found silent wrong-pixel defects shared by every SPIR-V backend, all fixed for `SDL_GPU`
 and `WEBGPU`: a predicated `TEXKILL` that killed unconditionally
 (libcna/mojoshader `spirv-predicated-texkill`), `vPos` at the pixel centre rather than

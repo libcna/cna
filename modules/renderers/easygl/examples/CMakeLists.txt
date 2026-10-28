@@ -345,7 +345,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # context destroy/recreate cycle, then draw the same imported buffers and texture again.
         cna_easygl_test(cna_test_easygl_gltf_context_loss
                         easygl_gltf_context_loss_test.cpp)
-        # plans/plan_apple_m4.md AM4-040: macOS's offscreen driver has no GL at all (it is
+        # Apple M4 AM4-040: macOS's offscreen driver has no GL at all (it is
         # EGL-only), so there the native cocoa driver provides the context.
         if(APPLE)
             set(_cna_easygl_context_loss_video_driver "SDL_VIDEODRIVER=cocoa")
@@ -2051,7 +2051,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         easygl_depth_bias_test.cpp)
         cna_register_renderer_test(NAME EasyGL_DepthBias COMMAND cna_test_easygl_depth_bias
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        # plans/plan_apple_m4.md AM4-134: the bias's magnitude, against a 1e-4 depth gap.
+        # Apple M4 AM4-134: the bias's magnitude, against a 1e-4 depth gap.
         cna_easygl_test(cna_test_easygl_depth_bias_magnitude
                         ${CNA_GRAPHICS_EXAMPLES_DIR}/depth_bias_magnitude_contract_test.cpp)
         cna_register_renderer_test(NAME EasyGL_DepthBias_Magnitude COMMAND cna_test_easygl_depth_bias_magnitude

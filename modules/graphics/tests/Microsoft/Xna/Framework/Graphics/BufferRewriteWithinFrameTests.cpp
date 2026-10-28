@@ -59,7 +59,7 @@ namespace
         {
             device_ = std::make_unique<GraphicsDevice>();
             // Headless reports ThreeD -- it accepts every 3D call -- and rasterizes nothing,
-            // refusing the readback these cases measure (CNA plans/plan_apple_m4.md AM4-269).
+            // refusing the readback these cases measure (CNA Apple M4 AM4-269).
             if (!device_->SupportsCapability(CNA::GraphicsCapability::ThreeD) ||
                 CNA_RENDERER_IS(CNA::Testing::Renderers::Headless))
                 GTEST_SKIP() << "this renderer draws no 3D primitives";

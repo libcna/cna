@@ -32,7 +32,7 @@ layout(set = 1, binding = 1) uniform FogParams {
 
 void main() {
     gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(inPos, 1.0));
-    gl_PointSize = 1.0;  // plans/plan_apple_m4.md AM4-181: PointListEXT draws one pixel per point
+    gl_PointSize = 1.0;  // Apple M4 AM4-181: PointListEXT draws one pixel per point
     fragUV = inUV;
     fragUV1 = inUV1;
     // STREETS-0008 (the retired Vulkan renderer's VULKAN-197): Direct3D 9

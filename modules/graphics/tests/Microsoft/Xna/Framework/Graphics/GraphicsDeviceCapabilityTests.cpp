@@ -95,7 +95,7 @@ struct CapabilityExpectation
         case GraphicsRendererType::Software:
             return {true, true, false};
 
-        // plans/plan_apple_m4.md AM4-175: SDL3's GPU API has no occlusion query at all, so the false
+        // Apple M4 AM4-175: SDL3's GPU API has no occlusion query at all, so the false
         // is structural on every platform. Its ShaderEffect route hands SPIR-V to the driver: on
         // Apple, Windows and the browser no driver takes it (modules/renderers/sdl-gpu/CMakeLists.txt
         // leaves the capability off there); elsewhere it needs libshaderc at build time, which
@@ -186,7 +186,7 @@ TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
     GraphicsDevice gd;
     if (CNA_RENDERER_IS(SdlGpu))
     {
-        // plans/plan_apple_m4.md AM4-175: SDL_GPU answers the capability as GraphicsCapability.hpp
+        // Apple M4 AM4-175: SDL_GPU answers the capability as GraphicsCapability.hpp
         // documents it -- "a complete real depth/stencil attachment on the active target"
         // (SDLGPU-132) -- and a default device's back buffer has none, as in XNA, whose
         // PresentationParameters.DepthStencilFormat defaults to None. Ask both ways.
@@ -286,7 +286,7 @@ TEST(GraphicsDeviceCapabilityTest, SupportsOcclusionQuery)
     GraphicsDevice gd;
     if (CNA_RENDERER_IS(Fna3d))
     {
-        // plans/plan_apple_m4.md AM4-189: FNA3D's answer is its selected driver's, measured at
+        // Apple M4 AM4-189: FNA3D's answer is its selected driver's, measured at
         // device creation by creating a query: the OpenGL and Direct3D 11 drivers have queries,
         // its SDL_GPU driver (the one macOS gets) has none, as SDL3's GPU API has none. So the
         // capability is asked to agree with what OcclusionQuery's constructor does on HiDef.
@@ -357,7 +357,7 @@ TEST(GraphicsDeviceCapabilityTest, MultiSampleAntiAliasingAgreesWithWhatARenderT
     EXPECT_GE(applied, 0);
     if (!capability)
     {
-        // plans/plan_apple_m4.md AM4-179: single-sampled is 0 in XNA's RenderTarget2D
+        // Apple M4 AM4-179: single-sampled is 0 in XNA's RenderTarget2D
         // .MultiSampleCount, and some renderers report their native single sample as 1; either
         // way not multisampled.
         EXPECT_LE(applied, 1)

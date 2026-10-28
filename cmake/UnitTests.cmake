@@ -254,7 +254,7 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/inspector/tests/.*\\.cpp$")
     endif()
 
-    # plans/plan_apple.md APPLE-11: the Apple smoke application (cmake/AppleSmoke.cmake) is a complete
+    # Apple APPLE-11: the Apple smoke application (cmake/AppleSmoke.cmake) is a complete
     # program with its own main(), for the same reason as the two entries above. Swept into
     # CnaTests it does not merely add a case -- its main() replaces GTest's, so the test binary
     # links, runs the smoke app and exits without running a single test.
@@ -361,7 +361,7 @@ if(CNA_BUILD_TESTS)
     # multi-process spawning exists in a single Node.js/Wasm module. Also excluded on Android: the
     # harness path baked in via CNA_NET_HARNESS_PATH is an absolute path on the build machine, not
     # the on-device filesystem, and CnaTests is run as a bare pushed executable, not a packaged app
-    # with its own bundled assets. iOS (plans/plan_apple.md APPLE-5) is excluded for both of those
+    # with its own bundled assets. iOS (Apple APPLE-5) is excluded for both of those
     # reasons at once: an app-sandboxed process may not spawn another executable at all, and the
     # baked-in build-machine harness path does not exist inside the .app either. Not part of the Task 6.2/6.4 verification filters
     # (*Network*:*Gamer*:*ENet*:*Packet*) either, since its suite name is TwoProcessLoopbackTest.
@@ -1307,7 +1307,7 @@ if(CNA_BUILD_TESTS)
     if(_cna_unit_tests_audio_environment)
         set(_cna_unit_tests_audio_properties PROPERTIES ${_cna_unit_tests_audio_environment})
     endif()
-    # plans/plan_apple_m4.md AM4-163: the suites that open real sockets share the machine with each
+    # Apple M4 AM4-163: the suites that open real sockets share the machine with each
     # other. SystemLink discovery answers on one well-known UDP port for the whole machine (as
     # XNA's does), so a case asserting that a search finds nothing heard a host another case was
     # announcing at the same moment, and loopback ENet sessions raced each other's peers -- eight
@@ -1534,7 +1534,7 @@ if(CNA_BUILD_TESTS)
         # running it once; a sweep nobody can re-run cannot notice a fixture that stopped
         # building, a refusal that started saying something else, or a fixture added later.
         if(TARGET cna_content_tool)
-            # plans/plan_apple_m4.md AM4-165: whether the four Draco fixtures build is this build's
+            # Apple M4 AM4-165: whether the four Draco fixtures build is this build's
             # choice, not the corpus's; the sweep is told which one was made.
             set(_cna_model_sweep_draco)
             if(CNA_DRACO_AVAILABLE)

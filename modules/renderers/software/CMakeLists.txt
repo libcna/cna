@@ -6,7 +6,7 @@ if("SOFTWARE" IN_LIST CNA_RENDERER_IDENTITIES)
     cna_renderer_target_name(_cna_software_target)
     add_library(${_cna_software_target} STATIC ${_cna_software_sources})
     cna_renderer_common_setup(${_cna_software_target})
-    # plans/plan_apple_m4.md AM4-053: this rasterizer is XNA's pixel oracle, and its coverage,
+    # Apple M4 AM4-053: this rasterizer is XNA's pixel oracle, and its coverage,
     # texel selection and blending are exact float comparisons. Clang 14+ and GCC contract
     # `a * b + c` into a fused multiply-add wherever the target has one (every arm64), which
     # moves results across those exact boundaries; XNA itself never fused. An x86-64 build

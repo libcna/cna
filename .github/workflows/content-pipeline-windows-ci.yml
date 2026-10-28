@@ -39,7 +39,7 @@ jobs:
       - name: Choose the sharp-runtime branch
         id: sharp_runtime_branch
         # The branch CNA's own clone_siblings.sh would use, not a pinned commit: the pins here
-        # predated components CNA requests (plans/plan_apple_m4.md AM4-234).
+        # predated components CNA requests (Apple M4 AM4-234).
         run: echo "ref=$(bash cna/scripts/ci/sibling_branch.sh "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout sharp-runtime sibling

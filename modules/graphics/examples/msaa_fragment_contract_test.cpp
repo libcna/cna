@@ -395,7 +395,7 @@ class MsaaFragmentContractTest final : public Game
         // A device without native polygon mode -- EasyGL on a GLES/WebGL context with no
         // polygon-mode extension, Mesa's included -- reports no WireFrame capability and refuses
         // the draw (SOFTWARE-178). There the contract is that refusal; there is no wireframe edge
-        // to measure (CNA plans/plan_apple_m4.md AM4-285).
+        // to measure (CNA Apple M4 AM4-285).
         if (!device.SupportsCapability(CNA::GraphicsCapability::WireFrame))
         {
             bool refused = false;

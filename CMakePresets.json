@@ -166,7 +166,7 @@
     {
       "name": "macos",
       "displayName": "macOS (SDL_GPU, Release)",
-      "description": "plans/plan_apple.md APPLE-1: native macOS desktop build. Requires the sibling sharp-runtime checkout and initialized submodules; the first configure builds SDL3/SDL3_mixer into .sdl-prebuilt-Darwin-<arch>/ (several minutes) and every later configure reuses it. The deployment target defaults to CNA_MACOS_DEPLOYMENT_TARGET (13.3); executables stay plain binaries unless CNA_APPLE_BUNDLE_MACOS_EXECUTABLES=ON.",
+      "description": "Apple APPLE-1: native macOS desktop build. Requires the sibling sharp-runtime checkout and initialized submodules; the first configure builds SDL3/SDL3_mixer into .sdl-prebuilt-Darwin-<arch>/ (several minutes) and every later configure reuses it. The deployment target defaults to CNA_MACOS_DEPLOYMENT_TARGET (13.3); executables stay plain binaries unless CNA_APPLE_BUNDLE_MACOS_EXECUTABLES=ON.",
       "binaryDir": "${sourceDir}/cmake-build-macos",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE":      "Release",
@@ -178,7 +178,7 @@
     {
       "name": "ios",
       "displayName": "iOS device (arm64, SOFTWARE, final-link smoke app)",
-      "description": "plans/plan_apple.md APPLE-2/APPLE-13: cross-compiles CNA and final-links cna_ios_smoke.app for arm64 iPhone/iPad on a macOS host with Xcode. Tests/examples are off because their harnesses assume a desktop process/filesystem. The app is not run on a physical device; see docs/apple-platforms.md. Add -G Xcode and -DCNA_APPLE_DEVELOPMENT_TEAM=<TEAMID> to sign and deploy.",
+      "description": "Apple APPLE-2/APPLE-13: cross-compiles CNA and final-links cna_ios_smoke.app for arm64 iPhone/iPad on a macOS host with Xcode. Tests/examples are off because their harnesses assume a desktop process/filesystem. The app is not run on a physical device; see docs/apple-platforms.md. Add -G Xcode and -DCNA_APPLE_DEVELOPMENT_TEAM=<TEAMID> to sign and deploy.",
       "binaryDir": "${sourceDir}/cmake-build-ios",
       "toolchainFile": "${sourceDir}/cmake/toolchains/ios.cmake",
       "cacheVariables": {
@@ -193,7 +193,7 @@
     {
       "name": "ios-simulator",
       "displayName": "iOS simulator (host arch, SOFTWARE, smoke app)",
-      "description": "plans/plan_apple.md APPLE-2/APPLE-13: the simulator counterpart of the 'ios' preset. It final-links cna_ios_smoke.app; Apple CI installs and launches that app for one framework frame. Kept in its own build directory because device and simulator binaries are not interchangeable even at the same architecture, which is also why the vendored SDL install root is keyed by sysroot.",
+      "description": "Apple APPLE-2/APPLE-13: the simulator counterpart of the 'ios' preset. It final-links cna_ios_smoke.app; Apple CI installs and launches that app for one framework frame. Kept in its own build directory because device and simulator binaries are not interchangeable even at the same architecture, which is also why the vendored SDL install root is keyed by sysroot.",
       "binaryDir": "${sourceDir}/cmake-build-ios-sim",
       "toolchainFile": "${sourceDir}/cmake/toolchains/ios.cmake",
       "cacheVariables": {

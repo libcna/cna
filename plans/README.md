@@ -18,7 +18,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   only). The current architecture and its permanent validators are in
   [`../docs/physical-modules.md`](../docs/physical-modules.md).
 - [`plan_platform.md`](plan_platform.md) — platform abstraction.
-- [`plan_apple.md`](plan_apple.md) — macOS and iOS platform support.
+- `plan_apple.md` (`APPLE-1`..`APPLE-20`, macOS/iOS platform subsystem) and `plan_apple_m4.md`
+  (`AM4-*`, the Mac mini M4 qualification campaign of 2026-10-07/08) — deleted on 2026-10-28
+  (Git history only). The current support boundary, design and known gaps are in
+  [`../docs/apple-platforms.md`](../docs/apple-platforms.md); comments cite their rows as
+  "Apple APPLE-N" and "Apple M4 AM4-NNN".
 - [`plan_runtimerenderer.md`](plan_runtimerenderer.md) — runtime graphics-renderer selection.
 - `plan_sdl3free.md` — historical SDL3-independent migration plan; its SDL2 route was superseded
   by native backends and retired on 2026-10-04, and those native backends were retired in turn on

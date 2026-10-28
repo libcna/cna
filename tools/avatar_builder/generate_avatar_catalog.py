@@ -146,7 +146,7 @@ def build(jobs=1):
     return files
 
 
-# plans/plan_apple_m4.md AM4-166: the one part of the released catalog v3 another C library cannot
+# Apple M4 AM4-166: the one part of the released catalog v3 another C library cannot
 # reproduce. FemaleShocked places both hands at face(+-0.13, -0.13), a point the head's Newton
 # solve (cna_avatar.head._solve) has no solution for: its residual wanders between 0.06 and 0.26 for
 # all twelve iterations, and a one-ulp change in the starting guess moves the answer by 11 radians.

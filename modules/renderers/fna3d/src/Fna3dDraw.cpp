@@ -110,7 +110,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         /**
-         * plans/plan_apple_m4.md AM4-190: the inputs the selected XNA stock vertex shader reads,
+         * Apple M4 AM4-190: the inputs the selected XNA stock vertex shader reads,
          * from the stock effects' own HLSL (BasicEffect.fx and its siblings), as (usage, index).
          * XNA refuses a draw whose declaration omits one; FNA3D's SDL_GPU and Direct3D 11 drivers
          * fail the pipeline, and its SDL_GPU driver then draws with a null one and crashes.

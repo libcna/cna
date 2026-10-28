@@ -10,8 +10,8 @@ each one is, how to build it, and — most importantly — what evidence exists 
 | iOS simulator | `CMAKE_SYSTEM_NAME=iOS`, `iphonesimulator` sysroot | Experimental; one-frame app smoke run |
 | tvOS / watchOS / visionOS | — | Rejected at configure time |
 
-The corresponding tasks are `APPLE-1`…`APPLE-15` in [`plans/plan_apple.md`](../plans/plan_apple.md), which
-also lists what is deliberately left undone.
+The corresponding tasks were `APPLE-1`…`APPLE-20` (the Apple platform plan, deleted on 2026-10-28;
+Git history only). What is deliberately left undone is under *Known gaps* below.
 
 ## Evidence boundary
 
@@ -119,7 +119,7 @@ cmake -S . -B cmake-build-ios-sim \
 
 `CNA_ENABLE_NET=OFF` is required on iOS today: networking (`GamerServices` + `Net`) needs a
 libcurl for the target, and the iOS SDK ships none, so with networking on the configure stops at
-"Could NOT find CURL" (`plans/plan_apple_m4.md` `AM4-105`; Apple CI passes the same flag).
+"Could NOT find CURL" (Apple M4 `AM4-105`; Apple CI passes the same flag).
 `SDL_GPU` on iOS has never been built; `-DCNA_GRAPHICS_RENDERER=SOFTWARE` is the dependency-free
 alternative for a platform smoke run.
 
@@ -185,7 +185,8 @@ expect build or runtime failures, and nothing about such a configuration is supp
 
 ## Mac mini M4 qualification (2026-10-07/08)
 
-`plans/plan_apple_m4.md` (`AM4-*`) is the task-by-task record; this is its summary. It predates the
+The `AM4-*` campaign plan was the task-by-task record (deleted on 2026-10-28; Git history only);
+this is its summary. It predates the
 2026-10-13 retirement: its `METAL` and `SDL_RENDERER` rows describe renderers CNA no longer has,
 and `VULKAN` and `DIRECTX11` in its scope rows were retired the same day; all are kept as the
 measurement they were. Host: Mac mini
@@ -256,7 +257,7 @@ destroys the rendering surface at the same moment. `Game`'s loop therefore stops
 operating system's "did enter background" and "will enter foreground" notifications: it blocks
 on the SDL event queue instead of ticking, and neither updates nor draws. This is a deliberate
 deviation from FNA, which tracks only `IsActive` on those events — it is documented in
-`Game.cpp` at the site and covered by `plans/plan_apple.md` APPLE-7.
+`Game.cpp` at the site and covered by Apple APPLE-7.
 
 On resume the performance counter is restarted, so the first frame after a resume measures only
 itself rather than the whole background period. `SDL_EVENT_TERMINATING` ends the loop so
@@ -293,7 +294,7 @@ portrait window's bounds for a landscape-only set before that rotation, and UIKi
 then turned the rotation into a 1346x0 root view (iPhone 17 Simulator started in portrait): the
 game ran on, drawing into a drawable one pixel high. CNA carries
 `cmake/patches/sdl-86296ac8-0003-uikit-scene-window-frame.patch` for iOS builds, which keeps a
-scene window's bounds as UIKit reports them (`plans/plan_apple_m4.md` `AM4-120`; SDL main stopped
+scene window's bounds as UIKit reports them (Apple M4 `AM4-120`; SDL main stopped
 swapping on iOS 13+ in `22a4d8b25`, 2026-10-23, after the pin).
 
 ### Storage locations
@@ -346,10 +347,17 @@ boundary stated above. The former `metal-macos-ci.yml` went with the `METAL` ren
 These remain outside the verified support boundary:
 
 - No physical iPhone/iPad run, and no pixel, real-touch, audio, storage, background/resume or
-  performance observation. The simulator smoke proves only that one framework frame returns.
+  performance observation. The simulator smoke proves only that one framework frame returns; no
+  content-bearing game or example has yet run for multiple frames in the simulator.
+- Touch on iOS is unobserved. The path is platform-neutral and already exists (`SdlInputBridge`
+  turns SDL finger events into `TouchPanel`/`GestureDetector`), so this is verification work, not
+  implementation work -- and iOS has no keyboard/mouse fallback to hide behind.
 - No current Intel-macOS CI run; x86_64 and universal builds are configured but unverified.
-- No safe-area handling: the notch/home-indicator insets are not exposed to the game, so
-  full-screen UI can sit under them.
+- Safe area is only a CNA extension. `CNA::Devices::DisplayInfo::getSafeAreaProperty(window)`
+  (`modules/devices-ext`, from `SDL_GetWindowSafeArea`) reports the notch/home-indicator safe
+  area, but XNA's `Viewport.TitleSafeArea` and `DisplayMode.TitleSafeArea` still return the whole
+  surface, so a game that only uses XNA's API can place UI under them. Neither has been measured
+  on an iOS device or simulator.
 - No high-density (Retina) back buffer. CNA creates the game window without
   `SDL_WINDOW_HIGH_PIXEL_DENSITY` (`CNA::Platform::WindowDescription::highDpi` stays false; the
   retired `METAL` renderer was the only one that asked for it, and the descriptor field that carried

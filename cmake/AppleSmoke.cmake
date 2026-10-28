@@ -22,7 +22,7 @@ if(CNA_APPLE AND CNA_BUILD_APPLE_SMOKE_APP)
     # This is the same integration an application consuming CNA through add_subdirectory() uses.
     cna_apple_configure_bundle(${_cna_apple_smoke_target})
 
-    # plans/plan_apple_m4.md AM4-037: the same application shape, one frame, but it checks what the
+    # Apple M4 AM4-037: the same application shape, one frame, but it checks what the
     # frame drew (clear colour, a SpriteBatch quad, a BasicEffect triangle where 3D exists) by
     # reading the back buffer before presenting, and prints CNA_APPLE_PIXELS_OK/_FAILED.
     if(CNA_APPLE_IOS)

@@ -895,7 +895,7 @@ TEST_F(SdlGpuIndexedDrawRangeTest, MutatingSourceBuffersAfterQueuingDoesNotChang
     device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 3, 0, 3, 3, 1);
 
     // Rewrite both sources after the draw was queued but before the frame is rendered.
-    // plans/plan_apple_m4.md AM4-174: unbound first -- writing a buffer still set on the device is
+    // Apple M4 AM4-174: unbound first -- writing a buffer still set on the device is
     // refused, as in XNA (SOFTWARE-247); the queued draw must keep its captured data regardless.
     device.SetVertexBuffer(nullptr);
     device.SetIndexBuffer(nullptr);
@@ -1016,7 +1016,7 @@ TEST_F(SdlGpuIndexedDrawRangeTest, DrawUserIndexedPrimitivesRebasesBeforeTheRend
 }
 
 // ---------------------------------------------------------------------------
-// plans/plan_apple_m4.md AM4-183: XNA forwards startIndex, baseVertex and the range hints to the
+// Apple M4 AM4-183: XNA forwards startIndex, baseVertex and the range hints to the
 // native draw rather than validating them, and SDL_GPU now does too. An index window it cannot
 // issue draws nothing; a forwarded baseVertex or hint reaches the GPU as given. Only the
 // arguments XNA itself refuses still throw.

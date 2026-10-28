@@ -60,7 +60,7 @@ vec3 safeNormalize(vec3 v) {
 
 void main() {
     gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(inPos, 1.0));
-    gl_PointSize = 1.0;  // plans/plan_apple_m4.md AM4-181: PointListEXT draws one pixel per point
+    gl_PointSize = 1.0;  // Apple M4 AM4-181: PointListEXT draws one pixel per point
     fragUV = inUV;
     // GLSL has a built-in inverse(), unlike WGSL -- no need for WebGPU's CPU-precomputed normal
     // matrix workaround; this mirrors the retired VulkanRenderer's lit_textured3d.vert.glsl.

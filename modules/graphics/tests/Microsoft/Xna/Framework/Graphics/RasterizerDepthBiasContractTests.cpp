@@ -162,7 +162,7 @@ TEST(RasterizerDepthBiasContractTest, ConstantBiasUsesNormalizedDepthAcrossDepth
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
 #if defined(__APPLE__)
-    // plans/plan_apple_m4.md AM4-171: Apple's OpenGL keeps every depth format as 32-bit float (it
+    // Apple M4 AM4-171: Apple's OpenGL keeps every depth format as 32-bit float (it
     // runs on Metal, and Apple GPUs have no 24-bit depth) -- measured by clearing to a value a
     // 24-bit unorm cannot hold and reading it back exactly. glPolygonOffset's constant term is then
     // relative to each fragment's own float exponent, so the same bias is twice as large at

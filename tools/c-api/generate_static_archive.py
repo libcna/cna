@@ -22,7 +22,7 @@ What survives step 4 is `cna_*` and nothing else, with one measured exception: s
 names that no C program can collide with, they are never callable API, and this tool fails if any
 non-`cna_*` symbol of any *other* binding survives -- so the exception cannot quietly widen.
 
-Mach-O (plans/plan_apple_m4.md AM4-213) takes the same five steps with ld64's tools: `ld -r
+Mach-O (Apple M4 AM4-213) takes the same five steps with ld64's tools: `ld -r
 -all_load` for the partial link and `nmedit -s` -- which turns every global not on its list into a
 static symbol -- for the localization, and the verification is the same. Mach-O has no
 `STB_GNU_UNIQUE`, so there the survivors must be exactly the `_cna_*` names.

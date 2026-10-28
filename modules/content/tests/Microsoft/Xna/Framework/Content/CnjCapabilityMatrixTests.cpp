@@ -224,7 +224,7 @@ TEST_F(CnjCapabilityMatrixTest, TextureCubeDelegatesViaSourceFile)
     {
         // SAMPLE-078: a loose-file load reports its reader's failure as ContentLoadException, as
         // XNA does, carrying the cause in its message -- here the renderer's TextureCube refusal,
-        // from SetData on STUB (CNA plans/plan_apple_m4.md AM4-268).
+        // from SetData on STUB (CNA Apple M4 AM4-268).
         try
         {
             (void)cm.Load<TextureCube>("cube");

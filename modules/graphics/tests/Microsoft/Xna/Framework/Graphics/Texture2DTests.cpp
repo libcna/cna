@@ -845,7 +845,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // plans/plan_webgpu.md WEBGPU-184 added WEBGPU to this list: core WebGPU has `rg8snorm` and
     // `rgba8snorm`, so the format is stored natively there too, with no expansion.
     // Software retains the signed values in its canonical CPU sampling plane.
-    // plans/plan_apple_m4.md AM4-189: FNA3D stores it natively signed-normalized on its OpenGL and
+    // Apple M4 AM4-189: FNA3D stores it natively signed-normalized on its OpenGL and
     // SDL_GPU drivers since MSR-019 -- the stale arm still expected its old refusal.
     if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Software, Fna3d) ||
         Direct3D9DeviceStores(SurfaceFormat::NormalizedByte2))
@@ -860,7 +860,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
-    // plans/plan_apple_m4.md AM4-189: FNA3D stores it natively signed-normalized on its OpenGL and
+    // Apple M4 AM4-189: FNA3D stores it natively signed-normalized on its OpenGL and
     // SDL_GPU drivers since MSR-019 -- the stale arm still expected its old refusal.
     if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Software, Fna3d) ||
         Direct3D9DeviceStores(SurfaceFormat::NormalizedByte4))

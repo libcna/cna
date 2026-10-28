@@ -66,7 +66,7 @@ if(EMSCRIPTEN)
 endif()
 # UIKit_ComputeViewFrame swapped a scene window's portrait bounds for a landscape-only app before
 # UIKit had rotated the window, and autoresizing then left the root view 1346x0 once it did
-# (plans/plan_apple_m4.md AM4-120). SDL main stopped swapping on iOS 13 and later in 22a4d8b25
+# (Apple M4 AM4-120). SDL main stopped swapping on iOS 13 and later in 22a4d8b25
 # ("Fixed window orientation on iOS 27", 2026-10-23); drop this once the pin includes it.
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     list(APPEND CNA_SDL3_PATCHES
@@ -481,7 +481,7 @@ function(_cna_ensure_sdl_dep)
     )
     set(_cna_sdl_toolchain "")
     if(CMAKE_TOOLCHAIN_FILE)
-        # plans/plan_apple_m4.md AM4-105: a relative toolchain path (the documented
+        # Apple M4 AM4-105: a relative toolchain path (the documented
         # -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake) reaches this variable resolved on a
         # first configure but as spelled on a re-configure, and the sub-build runs in its own
         # directory, where that spelling names nothing -- so any re-configure that had to rebuild

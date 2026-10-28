@@ -1,6 +1,6 @@
 name: Apple platforms (macOS + iOS)
 
-# plan_apple.md APPLE-9. Five legs, deliberately unequal in what they claim:
+# Apple APPLE-9. Five legs, deliberately unequal in what they claim:
 #
 #   apple-cmake-check — Linux, seconds, no Apple hardware: proves the Apple CMake layer still
 #                   parses and that the iOS allow-list accepts/refuses/overrides as documented.
@@ -96,7 +96,7 @@ jobs:
   macos-build:
     name: macOS (SOFTWARE, portable suites)
     # macos-26 (Xcode 26): macos-14's default Xcode 15.4 has no std::jthread/std::stop_token in its
-    # libc++, which gamer services use, so the build stopped there (plans/plan_apple_m4.md AM4-255).
+    # libc++, which gamer services use, so the build stopped there (Apple M4 AM4-255).
     runs-on: macos-26
     timeout-minutes: 90
 
@@ -110,7 +110,7 @@ jobs:
       - name: Choose the sharp-runtime branch
         id: sharp_runtime_branch
         # The branch CNA's own clone_siblings.sh would use, not a pinned commit: the pins here
-        # predated components CNA requests (plans/plan_apple_m4.md AM4-234).
+        # predated components CNA requests (Apple M4 AM4-234).
         run: echo "ref=$(bash cna/scripts/ci/sibling_branch.sh "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout sharp-runtime sibling
@@ -122,7 +122,7 @@ jobs:
 
       - name: Install build dependencies
         # nlohmann-json: gamer services parse their JSON with it (cmake/HeaderOnlyJson.cmake), and
-        # the hosted image does not ship it, so configure stopped there (plans/plan_apple_m4.md
+        # the hosted image does not ship it, so configure stopped there (Apple M4
         # AM4-247).
         run: brew install ccache ffmpeg nlohmann-json
 
@@ -277,7 +277,7 @@ jobs:
   ios-build:
     name: iOS ${{ matrix.name }}
     # macos-26 (Xcode 26): macos-14's default Xcode 15.4 has no std::jthread/std::stop_token in its
-    # libc++, which gamer services use, so the build stopped there (plans/plan_apple_m4.md AM4-255).
+    # libc++, which gamer services use, so the build stopped there (Apple M4 AM4-255).
     runs-on: macos-26
     timeout-minutes: 90
     continue-on-error: ${{ matrix.experimental == true }}
@@ -317,7 +317,7 @@ jobs:
       - name: Choose the sharp-runtime branch
         id: sharp_runtime_branch
         # The branch CNA's own clone_siblings.sh would use, not a pinned commit: the pins here
-        # predated components CNA requests (plans/plan_apple_m4.md AM4-234).
+        # predated components CNA requests (Apple M4 AM4-234).
         run: echo "ref=$(bash cna/scripts/ci/sibling_branch.sh "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout sharp-runtime sibling
@@ -436,7 +436,7 @@ jobs:
           # one-frame marker within a bounded interval, then terminate the app ourselves.
           # The interval is wall-clock, 180 s: a cold simulator on a loaded runner (boot 2:42)
           # printed its marker about a minute after launch, seconds after a 60-iteration loop
-          # had already given up (plans/plan_apple_m4.md AM4-312). One launch, no retry.
+          # had already given up (Apple M4 AM4-312). One launch, no retry.
           xcrun simctl launch --console "$udid" com.openeggbert.cna.cna-ios-smoke >"$log_file" 2>&1 &
           launch_pid=$!
           smoke_ok=0
@@ -457,7 +457,7 @@ jobs:
           cat "$log_file"
           test "$smoke_ok" -eq 1
 
-          # plans/plan_apple_m4.md AM4-037: the pixel probe draws a clear colour, a SpriteBatch
+          # Apple M4 AM4-037: the pixel probe draws a clear colour, a SpriteBatch
           # quad and a BasicEffect triangle, reads them back before presenting and prints
           # CNA_APPLE_PIXELS_OK or CNA_APPLE_PIXELS_FAILED. SDL_GPU only: the probe reads the back
           # buffer through the letterbox scaling a phone's surface always needs.

@@ -25,7 +25,7 @@ int main()
 
     // SOFTWARE-110 made 4x stencil sample-correct: four 8-bit stencil samples per pixel join the
     // four RGBA8 colour samples. This harness was not updated with it -- its CI job had stopped
-    // compiling -- and still expected the earlier 174,182,400-byte total (plans/plan_apple_m4.md
+    // compiling -- and still expected the earlier 174,182,400-byte total (Apple M4
     // AM4-239).
     const SoftwareFramebufferAllocationLayout normal =
         PlanSoftwareFramebufferAllocation({3840, 2160, false, true, 4});

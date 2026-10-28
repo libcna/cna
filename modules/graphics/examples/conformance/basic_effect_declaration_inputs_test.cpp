@@ -13,7 +13,7 @@
 //   C -- the textured permutation over Position + Normal: TEXCOORD0 is read and absent, so the draw
 //        throws InvalidOperationException rather than sampling a defaulted coordinate.
 //
-// First written for the retired METAL renderer (plans/plan_apple_m4.md AM4-080).
+// First written for the retired METAL renderer (Apple M4 AM4-080).
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL.
 
