@@ -423,8 +423,8 @@ namespace CNA::Internal::Renderers::DirectX9
         // Texture units: s0=base color, s1=NormalMap, s2=MetallicRoughnessMap, s3=EmissiveMap,
         // s4=OcclusionMap, s5=specular strength, s6=specular colour. Base color falls back to
         // opaque white (matches EasyGL's own
-        // BindDrawParams() -- PbrEffect never requires a bound texture0, unlike the Stock Effects'
-        // own DrawXxxEffectEXT "requires non-null texture0" checks).
+        // BindDrawParams() -- PbrEffect's missing base colour is white, where a classic stock
+        // effect's missing texture is XNA's opaque black, ClassicTextureOrBlackEXT()).
         BindPbrSampler(device_.Get(), 0, params.texture0, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
         BindPbrSampler(device_.Get(), 1, params.pbrNormalMap, ResolveD3D9TextureEXT(GetOrCreateDefaultFlatNormalTextureEXT()));
         BindPbrSampler(device_.Get(), 2, params.pbrMetallicRoughnessMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));

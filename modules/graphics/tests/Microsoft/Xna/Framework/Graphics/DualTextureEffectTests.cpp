@@ -402,7 +402,11 @@ namespace
         void SetUp() override
         {
             device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
-            if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software))
+            // Every rasterizing renderer is held to XNA's opaque black for a missing slot
+            // (graphics shared cleanup GSC-0004); WebGPU, SDL_GPU, FNA3D and DIRECTX9 joined with
+            // GSC-F2, so the rule is measured on each of them rather than assumed.
+            if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, WebGPU, SdlGpu, Fna3d,
+                                 DirectX9))
                 GTEST_SKIP() << "requires a stock-effect raster path that samples a missing slot";
         }
 

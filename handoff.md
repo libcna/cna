@@ -345,6 +345,15 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   error code to `Helpers.ThrowExceptionFromErrorCode`, so a failed start throws there, and XNA
   wins. Found 2026-10-28 by reading XNA's decompiled source (former AUD-13-001); not yet pinned by
   a test. Everything else on this list was fixed by 2026-10-24.
+- `CnaGraphicsTests.exe` on `DIRECTX9` (`cmake-build-mingw`, Wine with DXVK 3.1.1, eight shards,
+  2026-10-28) fails three cases that also fail on `ed724c017` without that day's null-texture
+  change: `PresentationLifecycle.EveryPresentIntervalRoundTripsThroughReset` and
+  `.IsFullScreenRoundTripsThroughResetBothWays` -- `GraphicsDevice::Clear` after a presentation
+  `Reset` throws `DeviceLostException` ("The graphics device was lost.",
+  `PresentationLifecycleTests.cpp:223`/`246`) -- and
+  `ShadowTargetOrientation/2.RenderedUpperHalfOccluderShadowsOnlyUpperHalf` (`PbrEffect`), where
+  DirectX9 refuses the 68-byte PBR vertex layout ("stride 68 has no matching CNA vertex layout,
+  expected 48 or 60"). The shards last passed 2,688/2,688 under DXVK 2.6.0 (see §2); not bisected.
 
 ### 5.2 Limitations
 

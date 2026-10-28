@@ -31,10 +31,13 @@
 #include "CNA/Internal/Renderers/DirectX9/D3D9RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX9/shaders/D3D9ShaderRegisters.hpp"
 
+#include "CNA/Internal/Graphics/ImageData.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/InvalidOperationException.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <iterator>
 #include <stdexcept>
 #include <string>
@@ -679,6 +682,45 @@ namespace CNA::Internal::Renderers::DirectX9
         DrawPrimitivesExImpl(vb, &ib, world, view, projection, primitive, primitiveCount, params);
     }
 
+    const ITextureRenderer* DirectX9Renderer::ClassicTextureOrBlackEXT(const ITextureRenderer* texture)
+    {
+        if (texture != nullptr) return texture;
+        if (!classicNullTexture_)
+        {
+            CNA::Internal::Graphics::ImageData data{};
+            data.width = 1;
+            data.height = 1;
+            data.pixels = {0, 0, 0, 255};
+            classicNullTexture_ = CreateTexture(data);
+        }
+        return classicNullTexture_.get();
+    }
+
+    const ITextureCubeRenderer* DirectX9Renderer::ClassicCubeOrBlackEXT(const ITextureCubeRenderer* cube)
+    {
+        if (cube != nullptr) return cube;
+        if (!classicNullCube_)
+        {
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            auto created = CreateTextureCube(1, false, static_cast<int>(SurfaceFormat::Color));
+            if (!created)
+                throw std::runtime_error(
+                    "DirectX9Renderer: the opaque-black cube for an unbound environment map could "
+                    "not be created");
+            constexpr std::uint8_t opaqueBlack[4] = {0, 0, 0, 255};
+            for (int face = 0; face < 6; ++face)
+            {
+                if (!created->SetData(face, 0, 0, 0, 1, 1, opaqueBlack,
+                                      static_cast<int>(sizeof(opaqueBlack))))
+                    throw std::runtime_error(
+                        "DirectX9Renderer: the opaque-black cube for an unbound environment map "
+                        "could not be filled");
+            }
+            classicNullCube_ = std::move(created);
+        }
+        return classicNullCube_.get();
+    }
+
     void DirectX9Renderer::DrawBasicEffectEXT(
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib, std::size_t stride,
         const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -834,9 +876,9 @@ namespace CNA::Internal::Renderers::DirectX9
                                              Pad3(params.light2Specular).v);
         }
 
-        if (params.textureEnabled && params.texture0)
+        if (params.textureEnabled)
         {
-            device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
+            device_->SetTexture(0, ResolveD3D9TextureEXT(ClassicTextureOrBlackEXT(params.texture0)));
         }
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
@@ -869,11 +911,7 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         // AlphaTestEffect always samples a texture (no untextured VSInput shape exists at all in
         // AlphaTestEffect.fx) -- ComputeAlphaTestEffectShaderIndex() itself takes no textureEnabled
-        // parameter, unlike BasicEffect's.
-        if (!params.texture0)
-            throw std::runtime_error(
-                "DirectX9Renderer::DrawPrimitivesEx (AlphaTestEffect): requires a non-null "
-                "texture0 (plans/plan_dx9.md D9-82c)");
+        // parameter, unlike BasicEffect's. A missing one samples XNA's opaque black (GSC-0004).
 
         // AlphaTestEffect's two VSInput shapes are Position+TexCoord and Position+TexCoord+Color. Any vertex layout
         // that supplies those elements will do (extra Normal bytes are ignored), so a stock VertexPositionNormalTexture
@@ -917,7 +955,7 @@ namespace CNA::Internal::Renderers::DirectX9
         // directly, no reconstruction needed (unlike BasicEffect's EmissiveColor).
         TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "AlphaTest", params.alphaTest);
 
-        device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
+        device_->SetTexture(0, ResolveD3D9TextureEXT(ClassicTextureOrBlackEXT(params.texture0)));
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
@@ -947,11 +985,6 @@ namespace CNA::Internal::Renderers::DirectX9
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
-        if (!params.texture0 || !params.texture1)
-            throw std::runtime_error(
-                "DirectX9Renderer::DrawPrimitivesEx (DualTextureEffect): requires non-null "
-                "texture0 AND texture1 (plans/plan_dx9.md D9-82d)");
-
         // XNA: "The current vertex declaration does not include all the elements required by the
         // current vertex shader" -- validate those elements, not one exact byte stride. D3D9
         // ignores declaration elements the shader does not read, so a model may legally carry a
@@ -992,8 +1025,8 @@ namespace CNA::Internal::Renderers::DirectX9
         // color.rgb *= 2; color *= SampleTex(Texture2,uv1) * pin.Diffuse -- the classic XNA
         // lightmap-doubling blend. No CPU-side computation needed here; it's entirely in the real
         // compiled pixel shader.
-        device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
-        device_->SetTexture(1, ResolveD3D9TextureEXT(params.texture1));
+        device_->SetTexture(0, ResolveD3D9TextureEXT(ClassicTextureOrBlackEXT(params.texture0)));
+        device_->SetTexture(1, ResolveD3D9TextureEXT(ClassicTextureOrBlackEXT(params.texture1)));
 
         device_->SetVertexDeclaration(layout);
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
@@ -1023,11 +1056,6 @@ namespace CNA::Internal::Renderers::DirectX9
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
-        if (!params.texture0 || !params.envMap)
-            throw std::runtime_error(
-                "DirectX9Renderer::DrawPrimitivesEx (EnvironmentMapEffect): requires non-null "
-                "texture0 AND envMap (plans/plan_dx9.md D9-82e)");
-
         // VSInputNmTx reads Position+Normal+TexCoord. Extra declaration elements are legal and
         // ignored by D3D9; only the required semantic set matters.
         IDirect3DVertexDeclaration9* layout = GetOrCreateVertexDeclarationEXT(vb, stride);
@@ -1103,8 +1131,8 @@ namespace CNA::Internal::Renderers::DirectX9
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", params.fogVector);
         TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "FogColor", Pad3(params.fogColor).v);
 
-        device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
-        device_->SetTexture(1, ResolveD3D9TextureCubeEXT(params.envMap));
+        device_->SetTexture(0, ResolveD3D9TextureEXT(ClassicTextureOrBlackEXT(params.texture0)));
+        device_->SetTexture(1, ResolveD3D9TextureCubeEXT(ClassicCubeOrBlackEXT(params.envMap)));
 
         device_->SetVertexDeclaration(layout);
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
@@ -1134,11 +1162,6 @@ namespace CNA::Internal::Renderers::DirectX9
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
-        if (!params.texture0)
-            throw std::runtime_error(
-                "DirectX9Renderer::DrawPrimitivesEx (SkinnedEffect): requires non-null texture0 "
-                "(plans/plan_dx9.md D9-82f)");
-
         // VSInputNmTxWeights reads Position+Normal+TexCoord+BlendWeight+BlendIndices. A skinned
         // PBR stream can also carry a tangent, second UV, colour, or padding; D3D9 ignores those
         // extras, so validate the shader's semantic inputs instead of demanding stride 52.
@@ -1258,7 +1281,7 @@ namespace CNA::Internal::Renderers::DirectX9
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", params.fogVector);
         TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "FogColor", Pad3(params.fogColor).v);
 
-        device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
+        device_->SetTexture(0, ResolveD3D9TextureEXT(ClassicTextureOrBlackEXT(params.texture0)));
 
         device_->SetVertexDeclaration(layout);
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);

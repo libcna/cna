@@ -112,11 +112,6 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         using namespace Shaders;
 
-        if (!params.texture0)
-            throw std::runtime_error(
-                "DirectX9Renderer::DrawPrimitivesEx (SkinnedVertexColor3D): requires non-null "
-                "texture0 (matches DrawSkinnedEffectEXT's own identical requirement)");
-
         if (!skinnedVertexColorVS_)
         {
             const HRESULT hr = device_->CreateVertexShader(
@@ -177,7 +172,7 @@ namespace CNA::Internal::Renderers::DirectX9
         const float vertexColorEnabled4[4] = {params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f};
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "VertexColorEnabledPad", vertexColorEnabled4);
 
-        device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
+        device_->SetTexture(0, ResolveD3D9TextureEXT(ClassicTextureOrBlackEXT(params.texture0)));
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(56));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);

@@ -25,8 +25,8 @@
 //   as directx9_drawex_test.cpp's own Check O / directx9_pbr_test.cpp's own Check B): Check A's setup
 //   redrawn with boneCount=1/weightsPerVertex=1 gives the SAME exact red readback, proving the
 //   Bones[72] upload doesn't corrupt vertex-color output either.
-// Check D -- missing texture0 throws a named error, matching DrawSkinnedEffectEXT's own identical
-//   requirement for the real SkinnedEffect.
+// Check D -- a missing texture0 reads as XNA's opaque black (graphics shared cleanup GSC-0004), as it
+//   does for the real SkinnedEffect: the vertex-coloured result is (0,0,0,255) over the blue clear.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 //
@@ -206,7 +206,7 @@ protected:
                   "readback, Bones[72] upload doesn't corrupt vertex-color output");
         }
 
-        // Check D: missing texture0 throws a named error.
+        // Check D: a missing texture0 samples XNA's opaque black rather than being refused.
         {
             auto vb = renderer.CreateVertexBuffer(3);
             vb->SetData(kTriRedVertexColor, 3, sizeof(VPNTWC));
@@ -216,14 +216,13 @@ protected:
             params.vertexColorEnabled = true;
 
             dev.Clear(Color(0, 0, 255, 255));
-            bool threw = false;
-            try
-            {
-                renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
-                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
-            }
-            catch (const std::exception&) { threw = true; }
-            check(threw, "DrawPrimitivesEx (SkinnedVertexColor3D): missing texture0 throws a named error");
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            check(px.getRProperty() == 0 && px.getGProperty() == 0 && px.getBProperty() == 0 &&
+                      px.getAProperty() == 255,
+                  "DrawPrimitivesEx (SkinnedVertexColor3D): a missing texture0 samples XNA's opaque black");
         }
 
         // Check E: EmissiveColor is ADDED outside the diffuse multiply, not

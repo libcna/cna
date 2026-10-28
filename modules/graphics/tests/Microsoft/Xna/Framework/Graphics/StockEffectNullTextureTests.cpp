@@ -72,7 +72,9 @@ namespace
             // handling at all until it gained the same 1x1 opaque-black 2D and cube.
             // Apple M4 AM4-066 gave SDL_GPU the same opaque black for every classic
             // slot (AM4-107 enrols it here, so that rule is measured rather than only reviewed).
-            if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, WebGPU, SdlGpu))
+            // FNA3D and DIRECTX9 are enrolled too (graphics shared cleanup GSC-F2), so every
+            // surviving rasterizing renderer is held to the measured rule rather than assumed.
+            if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, WebGPU, SdlGpu, Fna3d, DirectX9))
                 GTEST_SKIP() << "needs a stock-effect raster path whose missing slots are pinned";
 
             PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
@@ -239,6 +241,12 @@ TEST_F(StockEffectNullTextureTest, AlphaTestEffectSamplesOpaqueBlack)
     ASSERT_EQ(Render([&] { effect.Apply(); DrawQuad(TexturedQuad()); }), kRed);
 
     effect.setTextureProperty(nullptr);
+    EXPECT_EQ(Render([&] { effect.Apply(); DrawQuad(TexturedQuad()); }), kOpaqueBlack);
+
+    // A compare that can discard runs a different shader (and, on DIRECTX9, a different draw
+    // route). The missing texture's alpha 255 passes Greater-than-0, so it draws the same black.
+    effect.setAlphaFunctionProperty(CompareFunction::Greater);
+    effect.setReferenceAlphaProperty(0);
     EXPECT_EQ(Render([&] { effect.Apply(); DrawQuad(TexturedQuad()); }), kOpaqueBlack);
 }
 

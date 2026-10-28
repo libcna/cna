@@ -1694,6 +1694,17 @@ namespace CNA::Internal::Renderers::Fna3d
                                  bool vertexColorDeclared = false);
         ITextureRenderer* GetOrCreatePbrWhiteTextureEXT();
         ITextureRenderer* GetOrCreatePbrFlatNormalTextureEXT();
+        /** @brief The 1x1 opaque black an unbound classic stock-effect 2D slot samples (GSC-0004). */
+        ITextureRenderer* GetOrCreateClassicNullTextureEXT();
+        /** @brief The 1x1 opaque-black cube an unbound EnvironmentMap samples (GSC-0004). */
+        FNA3D_Texture* GetOrCreateClassicNullCubeEXT();
+        /**
+         * @brief Binds a classic stock effect's texture, or XNA's opaque black when it has none.
+         *
+         * @param slot    Sampler slot the effect reads.
+         * @param texture The effect's texture for that slot, which may be null.
+         */
+        void BindClassicTextureEXT(int slot, const ITextureRenderer* texture);
 
         /**
          * @brief CNAEXT. Binds every declared vertex stream for the draw about to be submitted.
@@ -1799,6 +1810,11 @@ namespace CNA::Internal::Renderers::Fna3d
         /// Lazy 1x1 fallbacks for optional PBR maps (white factors and tangent-space +Z).
         std::unique_ptr<ITextureRenderer> pbrDefaultWhiteTexture_;
         std::unique_ptr<ITextureRenderer> pbrDefaultFlatNormalTexture_;
+
+        /// Lazy fallbacks for the classic stock effects' unbound slots. XNA reads a missing texture
+        /// as opaque black; FNA3D's own empty binding reads as transparent black.
+        std::unique_ptr<ITextureRenderer> classicNullTexture_;
+        std::unique_ptr<ITextureCubeRenderer> classicNullCube_;
 
         std::vector<BoundTarget> boundTargets_;
         FNA3D_Renderbuffer* boundDepthBuffer_ = nullptr;

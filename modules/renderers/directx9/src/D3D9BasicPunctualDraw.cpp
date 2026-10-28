@@ -285,7 +285,7 @@ namespace CNA::Internal::Renderers::DirectX9
             device_.Get(), psRegs, psCount, "FogColor", Pad3(params.fogColor).v);
 
         if (params.textureEnabled)
-            device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
+            device_->SetTexture(0, ResolveD3D9TextureEXT(ClassicTextureOrBlackEXT(params.texture0)));
         if (useShadowShader)
             ShadowUploadDetail::UploadAndBind(device_.Get(), psRegs, psCount, params);
 

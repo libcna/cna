@@ -521,6 +521,54 @@ namespace CNA::Internal::Renderers::Fna3d
         return pbrDefaultFlatNormalTexture_.get();
     }
 
+    ITextureRenderer* Fna3dRenderer::GetOrCreateClassicNullTextureEXT()
+    {
+        if (classicNullTexture_ == nullptr)
+        {
+            CNA::Internal::Graphics::ImageData data{};
+            data.width = 1;
+            data.height = 1;
+            data.pixels = {0, 0, 0, 255};
+            classicNullTexture_ = CreateTexture(data);
+        }
+        return classicNullTexture_.get();
+    }
+
+    FNA3D_Texture* Fna3dRenderer::GetOrCreateClassicNullCubeEXT()
+    {
+        if (classicNullCube_ == nullptr)
+        {
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            classicNullCube_ = CreateTextureCube(1, false, static_cast<int>(SurfaceFormat::Color));
+            if (classicNullCube_ == nullptr)
+            {
+                throw std::runtime_error(
+                    "FNA3D renderer: the opaque-black cube for an unbound environment map could "
+                    "not be created.");
+            }
+            constexpr std::uint8_t opaqueBlack[4] = {0, 0, 0, 255};
+            for (int face = 0; face < 6; ++face)
+            {
+                if (!classicNullCube_->SetData(face, 0, 0, 0, 1, 1, opaqueBlack,
+                                               static_cast<int>(sizeof(opaqueBlack))))
+                {
+                    throw std::runtime_error(
+                        "FNA3D renderer: the opaque-black cube for an unbound environment map "
+                        "could not be filled.");
+                }
+            }
+        }
+        const auto* sampled = dynamic_cast<const Fna3dSampledTexture*>(classicNullCube_.get());
+        return sampled != nullptr ? sampled->GetFna3dTextureEXT() : nullptr;
+    }
+
+    void Fna3dRenderer::BindClassicTextureEXT(int slot, const ITextureRenderer* texture)
+    {
+        // graphics shared cleanup GSC-0004: XNA reads a classic stock effect's unbound texture as
+        // opaque black (0,0,0,255), where FNA3D's own empty binding reads transparent black.
+        BindEffectTextureEXT(slot, texture != nullptr ? texture : GetOrCreateClassicNullTextureEXT());
+    }
+
     void Fna3dRenderer::BindCompiledPixelTexturesEXT(const GpuDrawParams& params,
                                                      FNA3D_Texture* spriteTexture0)
     {
@@ -631,7 +679,12 @@ namespace CNA::Internal::Renderers::Fna3d
                                                       params.lightingEnabled,
                                                       params.preferPerPixelLighting, oneLight));
                 effect.Apply(device_);
-                BindEffectTextureEXT(0, params.texture0);
+                // graphics shared cleanup GSC-0004: a classic stock effect reads an unbound texture
+                // as XNA's opaque black. BasicEffect without TextureEnabled runs a variant that never
+                // samples, so it is left as it is.
+                BindEffectTextureEXT(0, params.texture0 != nullptr || !params.textureEnabled
+                                            ? params.texture0
+                                            : GetOrCreateClassicNullTextureEXT());
                 break;
             }
 
@@ -644,7 +697,7 @@ namespace CNA::Internal::Renderers::Fna3d
                                                           params.vertexColorEnabled,
                                                           params.alphaTest[1] > 0.0f));
                 effect.Apply(device_);
-                BindEffectTextureEXT(0, params.texture0);
+                BindClassicTextureEXT(0, params.texture0);
                 break;
             }
 
@@ -655,8 +708,8 @@ namespace CNA::Internal::Renderers::Fna3d
                               StockShaderIndex::DualTexture(params.fogEnabled,
                                                             params.vertexColorEnabled));
                 effect.Apply(device_);
-                BindEffectTextureEXT(0, params.texture0);
-                BindEffectTextureEXT(1, params.texture1);
+                BindClassicTextureEXT(0, params.texture0);
+                BindClassicTextureEXT(1, params.texture1);
                 break;
             }
 
@@ -676,7 +729,7 @@ namespace CNA::Internal::Renderers::Fna3d
                                                                params.fresnelEnabled,
                                                                params.specularEnabled, oneLight));
                 effect.Apply(device_);
-                BindEffectTextureEXT(0, params.texture0);
+                BindClassicTextureEXT(0, params.texture0);
                 const auto* cube = dynamic_cast<const Fna3dSampledTexture*>(params.envMap);
                 if (params.envMap != nullptr &&
                     (cube == nullptr || cube->GetFna3dDeviceStateEXT() != deviceState_))
@@ -686,7 +739,7 @@ namespace CNA::Internal::Renderers::Fna3d
                         "device.");
                 }
                 FNA3D_Texture* cubeNative =
-                    cube != nullptr ? cube->GetFna3dTextureEXT() : nullptr;
+                    cube != nullptr ? cube->GetFna3dTextureEXT() : GetOrCreateClassicNullCubeEXT();
                 FNA3D_VerifySampler(device_, 1, cubeNative, &samplerStates_[1]);
                 boundPixelTextures_[1] = cubeNative;
                 break;
@@ -702,7 +755,7 @@ namespace CNA::Internal::Renderers::Fna3d
                                                         params.weightsPerVertex,
                                                         params.preferPerPixelLighting, oneLight));
                 effect.Apply(device_);
-                BindEffectTextureEXT(0, params.texture0);
+                BindClassicTextureEXT(0, params.texture0);
                 break;
             }
 
@@ -749,7 +802,7 @@ namespace CNA::Internal::Renderers::Fna3d
                 effect.Apply(device_, passIndex);
                 BindShadowMapsEXT(effect, params);
                 if (params.textureEnabled || params.skinned)
-                    BindEffectTextureEXT(0, params.texture0);
+                    BindClassicTextureEXT(0, params.texture0);
                 break;
             }
 

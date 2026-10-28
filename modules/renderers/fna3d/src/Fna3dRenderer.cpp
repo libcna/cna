@@ -608,6 +608,8 @@ namespace CNA::Internal::Renderers::Fna3d
         spriteIndexBuffer_.reset();
         pbrDefaultWhiteTexture_.reset();
         pbrDefaultFlatNormalTexture_.reset();
+        classicNullTexture_.reset();
+        classicNullCube_.reset();
         for (Fna3dStockEffect& effect : effects_)
         {
             effect.Destroy(device_);

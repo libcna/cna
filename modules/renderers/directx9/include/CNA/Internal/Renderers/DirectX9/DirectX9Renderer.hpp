@@ -704,6 +704,24 @@ namespace CNA::Internal::Renderers::DirectX9
         /// mirroring `EasyGLRenderer::EnsureDefaultWhiteTexture()`. Defined in
         /// `D3D9PbrDraw.cpp`.
         ITextureRenderer* GetOrCreateDefaultWhiteTextureEXT();
+        /**
+         * @brief A classic stock effect's texture, or XNA's 1x1 opaque black when it has none.
+         *
+         * graphics shared cleanup GSC-0004: Microsoft XNA reads an unbound classic stock-effect
+         * texture as (0,0,0,255). Binding that explicitly keeps the answer independent of what a
+         * D3D9 implementation returns for an empty sampler. Defined in `D3D9EffectDraw.cpp`.
+         *
+         * @param texture The effect's texture, which may be null.
+         * @return @p texture, or the lazily created opaque-black texture.
+         */
+        const ITextureRenderer* ClassicTextureOrBlackEXT(const ITextureRenderer* texture);
+        /**
+         * @brief EnvironmentMapEffect's cube, or a 1x1 opaque-black cube when it has none.
+         *
+         * @param cube The effect's environment map, which may be null.
+         * @return @p cube, or the lazily created opaque-black cube.
+         */
+        const ITextureCubeRenderer* ClassicCubeOrBlackEXT(const ITextureCubeRenderer* cube);
 
         PlatformRendererSurfaceState surface_;
         HWND hwnd_ = nullptr;
@@ -843,5 +861,8 @@ namespace CNA::Internal::Renderers::DirectX9
         /// CNA D3D9 texture. Lazily created by `GetOrCreateDefault{FlatNormal,White}TextureEXT()`.
         std::unique_ptr<ITextureRenderer> defaultFlatNormalTexture_;
         std::unique_ptr<ITextureRenderer> defaultWhiteTexture_;
+        /// The classic stock effects' unbound-slot fallbacks (GSC-0004), created on first use.
+        std::unique_ptr<ITextureRenderer> classicNullTexture_;
+        std::unique_ptr<ITextureCubeRenderer> classicNullCube_;
     };
 }
