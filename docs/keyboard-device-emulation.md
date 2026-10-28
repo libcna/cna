@@ -105,6 +105,6 @@ other processes. The mapped keyboard layout was approved by the owner on 2026-10
 The disabled frame path performs a flag check for each feature and uses the existing snapshot;
 it does not open sensors, allocate keyboard state, start threads or make per-key native calls.
 Enabled processing scans the held-key snapshot, then publishes to the currently open streams.
-Meaningful lifecycle/unit tests and real OPENGLES3/WEBGL2 clients are recorded in
-`plans/plan_keyboard_device_emulation.md`. Physical Phone rotation and other renderer identities
-are not qualification claims of this task.
+Meaningful lifecycle/unit tests and real OPENGLES3/WEBGL2 clients qualified INPUT-EMU-001
+(2026-09-28) and INPUT-EMU-002 (2026-10-03); their records are in Git history. Physical Phone
+rotation and other renderer identities are not qualification claims of this task.

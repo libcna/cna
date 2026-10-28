@@ -143,7 +143,7 @@ addition: `Accelerometer::{get,set}KeyboardEmulationEnabledEXT` and
 `GamePad::{get,set}KeyboardEmulationEnabledEXT` for player one. These are independent of physical
 sensor/controller support and follow normal sensor/device lifecycles. The software gamepad merges
 with physical input, keeps the Guide read path physical and applies the normal ownership/release filter. See
-`docs/keyboard-device-emulation.md` and `plans/plan_keyboard_device_emulation.md`.
+`docs/keyboard-device-emulation.md`.
 
 | Deviation | Reason |
 |---|---|

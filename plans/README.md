@@ -62,6 +62,10 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_devices.md`](plan_devices.md) — XNA devices and sensors.
 - [`plan_cna_devices.md`](plan_cna_devices.md) — `CNA::Devices` extensions.
 - [`plan_input.md`](plan_input.md) — input compatibility and stabilization.
+- `plan_keyboard_device_emulation.md` — INPUT-EMU-001/002, the off-by-default keyboard-driven
+  accelerometer, window orientation and player-one GamePad (2026-09-28, 2026-10-03); deleted on
+  2026-10-28 (Git history only). The API and its boundaries are in
+  [`../docs/keyboard-device-emulation.md`](../docs/keyboard-device-emulation.md).
 - [`plan_media.md`](plan_media.md) — media API implementation.
 - [`plan_net.md`](plan_net.md) — networking, GamerServices, and Avatar APIs up to 2026-07 (history;
   continued in `plan_gamer_services_server.md`, `plan_gamer_services_avatar_polish.md`,
