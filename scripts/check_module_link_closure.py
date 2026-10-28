@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Link-closure gate for the CNA module probes (plans/MODULARIZATION_PLAN.md §4).
+"""Link-closure gate for CNA's physical-module probes (docs/physical-modules.md).
 
 Reads the generated link line of a probe executable (the Makefiles generator's
 CMakeFiles/<target>.dir/link.txt, or under Ninja the target's final command as

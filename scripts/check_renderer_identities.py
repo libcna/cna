@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Renderer-identity registry gate (plans/MODULARIZATION_PLAN.md §2.3).
+"""Renderer-identity registry gate (docs/renderer-registry.md).
 
 CNA has a curated set of public renderer identities (docs/renderer-registry.md). This check mechanically compares
 the authoritative registries -- the public GraphicsRendererType enum, the

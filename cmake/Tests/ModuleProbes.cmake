@@ -1,5 +1,5 @@
 # Minimal-link module probes and mechanical modularization gates
-# (plans/MODULARIZATION_PLAN.md §2.3/§4). Each probe is a tiny standalone consumer of exactly one
+# (docs/physical-modules.md, "Validators"). Each probe is a tiny standalone consumer of exactly one
 # CNA module alias; the paired ModuleLinkClosure_* test inspects the probe's generated link
 # line and fails when a forbidden archive/library appears, turning every module's real
 # dependency closure into a permanent contract. RendererIdentityRegistry mechanically pins

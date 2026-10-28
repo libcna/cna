@@ -277,7 +277,7 @@ unset(_cna_sharp_runtime_components)
 # repo (Task DEV-BUILD-001) -- `git submodule update --init` cannot fetch it.
 # It must be cloned next to this repo's own directory, so that
 # "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime" resolves to a real checkout.
-# CNA_SHARP_RUNTIME_ROOT (plans/MODULARIZATION_PLAN.md §3) points builds at a different
+# CNA_SHARP_RUNTIME_ROOT points builds at a different
 # checkout -- e.g. a pinned read-only worktree of the modular sharp-runtime --
 # without moving worktrees around.
 set(CNA_SHARP_RUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime" CACHE PATH
@@ -367,7 +367,7 @@ if(CNA_BUILD_TESTS)
     enable_testing()
 endif()
 
-# Physical module composition (plans/MODULARIZATION_PLAN.md §11): every subsystem and renderer
+# Physical module composition (docs/physical-modules.md): every subsystem and renderer
 # family owns modules/<name>/{CMakeLists.txt,include/,src/,tests/}; the former central
 # cmake/BackendLibraries.cmake + cmake/CnaLibrary.cmake manifests dissolved into the
 # per-module files this directory composes.
@@ -400,7 +400,7 @@ include(cmake/UnitTests.cmake)
 # entry point, native framework closure, selected renderer and generated bundle all link together.
 include(cmake/AppleSmoke.cmake)
 
-# Minimal-link module probes + renderer-identity registry gate (plans/MODULARIZATION_PLAN.md §4).
+# Minimal-link module probes + renderer-identity registry gate (docs/physical-modules.md).
 include(cmake/Tests/ModuleProbes.cmake)
 # Symbol-level link-footprint gates: what a 2D game's executable must not contain, and what a
 # full-featured one must (docs/link-size-architecture.md).

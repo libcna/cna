@@ -13,7 +13,10 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   reconciled on 2026-10-14 and deleted on 2026-10-28 (Git history only). Its lasting capability
   admission rule is in
   [`../docs/renderer-capability-profiles.md`](../docs/renderer-capability-profiles.md).
-- [`MODULARIZATION_PLAN.md`](MODULARIZATION_PLAN.md) — library modularization.
+- `MODULARIZATION_PLAN.md` — the three-phase target, physical-source and final module/package
+  modularization campaign, closed and promoted on 2026-08-10; deleted on 2026-10-28 (Git history
+  only). The current architecture and its permanent validators are in
+  [`../docs/physical-modules.md`](../docs/physical-modules.md).
 - [`plan_platform.md`](plan_platform.md) — platform abstraction.
 - [`plan_apple.md`](plan_apple.md) — macOS and iOS platform support.
 - [`plan_runtimerenderer.md`](plan_runtimerenderer.md) — runtime graphics-renderer selection.

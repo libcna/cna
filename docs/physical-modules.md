@@ -134,17 +134,23 @@ miscellaneous dumping ground again.
 
 ## Intentional cycles (unchanged from the accepted target graph)
 
-- **graphics ↔ input** — XNA semantics (GraphicsDevice updates TouchPanel/Mouse binding;
-  MouseCursor builds on Texture2D).
-- **audio ↔ media** — FrameworkDispatcher pumps MediaPlayer; MediaPlayer plays through the
-  mixer.
+- **graphics ↔ input** — XNA semantics require `GraphicsDevice` to update the TouchPanel and Mouse
+  bindings, while the public `MouseCursor::FromTexture2D` surface points back to graphics. Moving
+  propagation into `Game` would break standalone `GraphicsDevice` use, and a registration hook
+  could disappear when its object file is not pulled from a static archive.
+- **audio ↔ media** — `FrameworkDispatcher` owns and pumps the `MediaPlayer` event state, while
+  `MediaPlayer` plays through the audio mixer. A lazy bridge would move upstream-owned state and
+  add global registration and initialization-order hazards without reducing a consumer-visible
+  dependency.
 - **media → video-ffmpeg (optional)** — `cna_media` always owns the XNA `Video`/`VideoPlayer`
   surface and a link-complete unavailable implementation. `CNA_ENABLE_VIDEO=AUTO/ON` may replace
   that implementation with `cna_video_ffmpeg`; `OFF` leaves the entire Game/audio link graph free
   of FFmpeg. See [video-backend.md](video-backend.md).
-- **graphics ↔ selected renderer** — the factory edge plus the unconditional reverse edges
-  (`${RENDERER_TARGET}` → graphics/core/math), declared by
-  `cna_renderer_common_setup()` in `modules/renderers/CMakeLists.txt`.
+- **graphics ↔ selected renderer** — the explicit renderer-factory call is the undefined-symbol
+  anchor that makes a static linker pull the selected renderer archive. Self-registration alone
+  cannot pull its registrar object; repairing that would require whole-archive flags or another
+  anchor. The reverse edges (`${RENDERER_TARGET}` → graphics/core/math) are shared implementation
+  dependencies declared by `cna_renderer_common_setup()` in `modules/renderers/CMakeLists.txt`.
 
 ## Validators
 

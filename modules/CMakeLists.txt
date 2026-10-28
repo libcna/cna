@@ -1,5 +1,5 @@
 # =====================================================================================
-# CNA physical module composition (plans/MODULARIZATION_PLAN.md §11). Each subsystem owns
+# CNA physical module composition (docs/physical-modules.md). Each subsystem owns
 # modules/<name>/{CMakeLists.txt,include/,src/,tests/}; this file detects the shared
 # third-party media dependencies, defines the shared build-flag surface, composes the
 # modules, and keeps the source-partition/no-loss ownership gate.
@@ -467,8 +467,8 @@ if(CNA_BUILD_C_API)
     add_subdirectory(c-api)
 endif()
 
-# --- Physical source-partition validator (no-loss ownership gate, plans/MODULARIZATION_PLAN.md
-# §5/§11): file physical module location == declared CMake ownership. Every production TU
+# --- Physical source-partition validator (no-loss ownership gate; docs/physical-modules.md):
+# file physical module location == declared CMake ownership. Every production TU
 # must live under a declared module's src/ tree (module CMakeLists glob exactly their own
 # src/, so location IS ownership); a TU outside every module src/ tree, or a module
 # directory outside the declared set, fails the configure.
