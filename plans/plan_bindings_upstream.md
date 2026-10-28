@@ -1,22 +1,15 @@
-# plan_bindings_upstream.md — defects the language bindings measured in CNA
+# plan_bindings_upstream.md — decisions and findings measured by language bindings
 
-Ten language bindings live in `../\_bindings`: `cna-cs`, `cna-common-lisp`, `cna-go`,
-`cna-java`, `cna-python`, `cna-ruby`, `cna-rust`, `cna-swift`, `cna-ts`, and their
-templates. Each one binds this repository's C ABI, and each one has been writing down
-what it found wrong in CNA rather than working around it silently.
+This ledger was collected on 2026-09-04 from ten consumer binding repositories, whose evidence
+spanned CNA C ABI 0.7.0 through 0.21.0. CNA.NET is now the actively maintained language binding;
+the Go, Java, Python, Ruby, Rust, Swift and TypeScript bindings were archived into `cna-lab`, as
+documented in [`docs/binding.md`](../docs/binding.md). Current `next` is ABI 0.50.0.
 
-This plan is the CNA-side backlog derived from those records. It exists because the
-evidence was scattered across roughly fifty documents in ten repositories, and because
-none of those repositories can fix anything here: they are consumers of a read-only
-dependency.
-
-**Collected 2026-09-04** from the binding repositories' own documents. Their measurements
-were taken against CNA C ABI 0.7.0 through 0.21.0, at commits between
-`a09196a6477f69a7a57c8364f990658d31531a5b` and `e5ae0820e`. This repository's `next` is
-several hundred commits past most of them and the ABI is now 0.22.0, so **every row must
-be re-measured before it is worked on**. Several rows the bindings still carry as open
-were closed by later commits, and the bindings say so themselves where they have
-re-measured.
+This file remains the required record for measured XNA/FNA decisions and for provenance behind
+consumer findings. It is **not** the current defect list: that is exclusively `handoff.md` §5.1,
+which currently has no open defect. Campaign text below is chronological, so a later closure
+paragraph or status line supersedes an earlier report. Re-measure every finding against the current
+tree before acting on it; old consumer probes were pinned to old commits and ABI versions.
 
 ## What this plan is not
 
@@ -25,9 +18,9 @@ binding findings were exactly that, and they were recorded here as **decisions f
 project owner rather than defects**, because `CLAUDE.md` then made FNA the authoritative
 behavioural reference and CNA matched FNA faithfully in each case.
 
-**All five are now closed, in CNA's favour of XNA.** The owner made XNA the tie-break on
-2026-09-04 and restated it on 2026-09-09 — *CNA should follow XNA faithfully, and FNA only
-after it*. This section is kept because the reasoning is worth having, not because anything
+**All recorded decisions below are closed or deliberately retained.** The owner made XNA the
+tie-break on 2026-09-04 and restated it on 2026-09-09: *CNA should follow XNA faithfully, and FNA
+only after it*. This section is kept because the reasoning is worth having, not because anything
 here is open.
 
 | divergence | what it was | closed by |
@@ -80,22 +73,18 @@ behaviours are pinned by tests rather than only by comments:
 - **Display modes carrying a hardcoded `SurfaceFormat::Color`**, which `cna-ruby` and
   `cna-swift` both recorded. `SurfaceFormat.Color // FIXME: Assumption!` is what FNA writes,
   four times over, in `SDL3_FNAPlatform.cs` and `SDL2_FNAPlatform.cs`.
-- **`SpriteFont::MeasureString`** adding the last glyph's right side bearing unclamped.
-  `cna-ts` (finding 27) and `cna-go` (Foundation 69) measured this independently, with
-  tables, against XNA's IL, which keeps the bearing pending and adds `Math.Max(pendingZ, 0)`
-  at each line break. CNA's `curLineWidth += cKern.Y + cKern.Z` is
-  `FNA/src/Graphics/SpriteFont.cs:201`, character for character, in both of FNA's measure
-  paths.
+- **`SpriteFont::MeasureString`** formerly added the last glyph's right side bearing unclamped.
+  `cna-ts` and `cna-go` measured XNA's pending-bearing rule independently; `fb62662c9` fixed both
+  measurement paths and added negative-right-bearing regressions on 2026-09-04.
 
-Each of these is a real observable divergence from XNA that a binding has measured and
-pinned. Fixing them means deciding that XNA's IL outranks FNA where the two disagree,
-which is a change to the project's governing rule and not a change to a function.
+These findings established the policy question rather than a standing defect list. Closed rows
+name their repair; the display-mode observation remains a deliberate FNA-compatible boundary until
+genuine XNA evidence establishes a different contract.
 
 That rule has since been decided: `CLAUDE.md` now makes XNA the tie-break where a measured
 Microsoft XNA 4.0 behaviour and FNA's implementation disagree, and requires each divergence
-taken on those grounds to be recorded here. The rows above are still owner decisions, because
-none of them has been re-measured against the runtime itself; **XNAPACK-001** below is the first
-one that has.
+taken on those grounds to be recorded here. Rows based only on source or IL remain decision
+provenance; **XNAPACK-001** below was the first one measured against the runtime itself.
 
 ---
 
@@ -371,12 +360,10 @@ visible in output, not only in edge cases: it is what made the content pipeline'
 `VectorConverter` tables agree with XNA
 (`plans/plan_xnapipeline_parity.md` XNAPP-090..092).
 
-**Still open, measured in the same pass:** XNA's packed-vector structs all override `ToString()`
-to print their packed value as hex (`packed/Byte4/tostring` is `04030201`,
-`packed/Short2/tostring` is `00020001`). CNA implements `ToString()` on none of the seventeen
-types. That is a missing member of the XNA surface rather than a packing difference, so it is
-recorded here and left to the graphics module's own parity work; the two cases are listed as
-unreproduced in the test above rather than silently skipped.
+**Closed 2026-09-20 by `b6f127b15`.** All seventeen packed-vector types now carry their XNA value
+contracts, including the exact uppercase, storage-width hexadecimal `ToString()` forms measured by
+this oracle. `PackedVectorValueContractTest.HexToStringUsesTheStorageWidthInUppercase` pins the
+contract alongside typed/object equality and hash consistency.
 
 ---
 
@@ -423,10 +410,11 @@ in one process:
 
 The probe is `build-probe/bindfix_adapter_ordering.c`.
 
-**Still open on this row:** the HEADLESS/no-display artifact check from the regression
-list below has not been run — this build carries OPENGLES3 only, and the available
-control was a video driver that cannot start, which degrades to the fallback and exits
-cleanly. The four separate audits at the end of this row are also untouched.
+**Historical validation note:** this original OPENGLES3 qualification did not include the
+HEADLESS/no-display control. The current
+`GraphicsAdapterPlatformTest.EmptyEnumerationProducesSingleSyntheticAdapter` and
+`MissingDisplayServiceProducesSingleSyntheticAdapter` cases pin that fallback, and the four
+separate audits later in this row are closed.
 
 ### The measured behaviour
 
@@ -561,49 +549,30 @@ authoritative behavioural reference. All four come back the same way.
 
 ---
 
-## BINDFIX-008 — should `cna_game_launch_parameters_add` refuse a duplicate key?
+## BINDFIX-008 — duplicate launch-parameter keys and parse fidelity
 
-`LaunchParameters::Add` calls `emplace`, so the first value for a key wins and a second add is a
-silent no-op that still answers `CNA_RESULT_SUCCESS`. Three contracts existed for one operation:
-the C header said "adds or replaces", the implementation kept the first value, and XNA's
-`Dictionary<string, string>.Add` throws on a duplicate.
+**Closed 2026-10-20 by `b086814f9`.** `LaunchParameters::Add` now matches XNA's dictionary
+contract: a duplicate key throws `System::ArgumentException`, preserves the original value, and
+crosses the C barrier as `CNA_RESULT_INVALID_ARGUMENT`. The parser also retains empty and
+colonless values as XNA does; the deliberately sorted C enumeration order remains unchanged.
 
-The header's claim was the demonstrably false one — it asserted the canonical add overwrites,
-which it does not — so it now states the measured behaviour. What remains open is whether the
-boundary should answer `CNA_RESULT_INVALID_STATE` for a key already present, which is what XNA's
-throw becomes in a C ABI. That is a behaviour change to a published route, and `LaunchParameters`
-also carries two related divergences `cna-ruby` measured and `cna-rust` restated:
-`cna_game_launch_parameters_parse_ext` skips an argument shorter than three characters or without
-a colon, where XNA keeps a colonless argument with an empty value; and
-`cna_game_launch_parameters_get_key_size` enumerates by name rather than in container order.
-Reported by `cna-rust` (`RUST-UPSTREAM-026`) and `cna-ruby`.
-
-2026-10-20 repair campaign ISSUE-144 resolves the canonical behavior in commit
-b086814f9, with genuine-XNA evidence and native tests. Duplicate Add throws
-System::ArgumentException, whose existing C barrier maps to INVALID_ARGUMENT (not
-the earlier proposed INVALID_STATE); original value is preserved. The canonical
-parse now retains empty/colonless values. The deliberately sorted C enumeration
-order is unchanged. External C regression and final closure are still pending.
+The native `LaunchParametersTests` cover duplicate and parse behavior, and
+`modules/c-api/tests/pure_c/RuntimeGameSmoke.c` verifies the C result and preservation of the
+first value. The earlier proposal of `CNA_RESULT_INVALID_STATE` and its “external regression
+pending” label are superseded by those committed tests.
 
 ---
 
-## BINDFIX-018 — a decal pass has no support query
+## BINDFIX-018 — the retired decal family needed its own support query
 
-`cna_decal_pass_create` succeeds on a renderer that cannot run the pass, which is the
-engine layer's usual contract, and the caller is meant to ask before using it. There is
-nothing to ask: a decal pass is its own handle kind, so `cna_post_process_pass_is_supported`
-refuses it with `CNA_RESULT_INVALID_HANDLE`, and no `cna_decal_pass_is_supported` exists.
+**Closed 2026-09-04 by `e18854238`.** The additive
+`cna_decal_pass_is_supported` route gave the decal handle family the capability query its header
+already told callers to use, with strict-C coverage for supported, unsupported, wrong-kind, and null
+output cases. That change published ABI 0.23.0.
 
-The header used to name that route anyway, along with `cna_post_process_pass_destroy`,
-which refuses the handle too and so leaked every pass a caller released by the book. The
-header is fixed; the missing query is not, because adding a route is an ABI addition.
-Either give the family its own `cna_decal_pass_is_supported`, or let the
-`cna_post_process_pass_*` routes accept the kind — the second is what the header assumed
-all along and would close `copy_name` at the same time.
-
-Measured by `cna-java`'s `engine_layer_families.c`, which asks a bloom pass the same
-questions and gets SUCCESS, so the difference is the handle kind rather than the renderer.
-Reported as `JAVA-UPSTREAM-008`.
+The entire graphics engine-layer C surface, including the decal-pass family, was then retired by
+`5572f3ca1` on 2026-09-27. The original missing-query report remains useful only as provenance for
+the pre-retirement contract; it is not current C-ABI work.
 
 ---
 
@@ -669,34 +638,16 @@ been created.
 
 ---
 
-## BINDFIX-031 — the GPU instance culler culls nothing, narrowed
+## BINDFIX-031 — retired GPU instance-culler hypothesis
 
-`cna-ts` (finding 20) measured the culler running, reporting success and keeping every
-instance it is given: one ten thousand units off the side of a hundred-unit frustum
-survives. `is_supported` answers true and the unsupported reason is empty, so nothing is
-announced.
+**Closed by removal on 2026-09-27 (`5572f3ca1`).** The archived TypeScript consumer observed that
+the engine-layer GPU culler retained an obviously out-of-frustum instance. The follow-up narrowed
+the likely fault to construction of `BoundingFrustum(view * projection)`, because the shader test
+used a prebuilt CPU frustum and passed.
 
-What this pass established, without reproducing it on a GPU:
-
-- CNA has its own test for exactly this, `ComputeCullingTest.TheGpuCullerAgreesWithTheCpuOneBoxForBox`
-  (`plans/plan_modern.md` MOD-1551), and it passes. So the shader's arithmetic and the
-  outward-normal convention it mirrors are not the fault on their own — the test runs the
-  same test expression, character for character.
-- The test and the shipped route differ in exactly one thing: **where the frustum comes
-  from**. The test uploads `culler.getFrustum()`, the frustum the CPU culler already holds.
-  `GpuInstanceCuller::cull` builds its own, `BoundingFrustum(view * projection)`, from the
-  two matrices the caller passed.
-
-So the hypothesis to test first is the product, not the shader: whether the matrices reach
-`cull` in the order and convention `BoundingFrustum` expects. A frustum built from a
-transposed or mis-ordered view-projection yields six planes that reject nothing, which is
-the measured symptom exactly, and it would leave the existing test green because that test
-never goes through this path.
-
-The next step is a probe that culls with a known camera and compares against
-`FrustumCullerEXT` on the CPU, then prints the six planes both produce. That is a GPU
-measurement rather than a reading, which is why it is written down here instead of guessed
-at.
+The graphics engine layer, its C routes, and `GpuInstanceCuller` were removed before that hypothesis
+was measured through the failing route. Reintroducing comparable functionality would require a new
+measurement and a new task; this historical hypothesis is not an open defect.
 
 ---
 
@@ -964,107 +915,3 @@ first.
   `modules/c-api/wasm/browser_probe.html`, which fails 12/13 against the unfixed renderer.
 
 ---
-
-## The rest of the backlog
-
-Roughly 160 further open findings are recorded in the binding repositories. They are not
-transcribed here, because each one's evidence — the probe source, the measured table, the
-artifact SHA — lives with the binding that took it, and a copy here would go stale. What
-follows is the index: where to look, and which rows carry a reproducer.
-
-### Process-fatal
-
-| what | where reported | reproducer |
-|---|---|---|
-| Content-loaded `Model` destroy faults; `~MeshResource` moves an absent `detachedValue` over a good pointer and `~PartResource` then calls `setTagProperty` on it with no null check | `cna-rust` `RUST-UPSTREAM-021`, `cna-java` `JAVA-UPSTREAM-004`, `cna-ruby` | `cna-rust/tools/reproducers/ext015g_load_model_destroy.c` (+ hand-built control), `cna-java/tools/native-abi/probes/content_manager_model_teardown.c` |
-| `cna_camera_destroy` leaves a dangling process-wide platform override; the next camera route dereferences freed memory | `cna-rust` `RUST-UPSTREAM-020`, `cna-ts` (11), `cna-java` `JAVA-UPSTREAM-019` | `cna-java/tools/native-abi/probes/camera_test_backend.c` |
-| Concurrent `cna_graphics_device_create` corrupts the heap; `Sdl3GlContext::CreateContext`'s mutex does not cover the whole construction | `cna-rust` `RUST-UPSTREAM-023` | `cna-rust/tools/reproducers/ext015h_concurrent_device_create.c` (13 aborts / 70) |
-| A process exiting with a live vertex buffer aborts on the EasyGL renderers when the creating thread has ended — which every JVM satisfies | `cna-java` `JAVA-UPSTREAM-014` | `cna-java/tools/native-abi/probes/exit_with_live_graph.c` |
-| An unavailable `CNA_GRAPHICS_RENDERER` aborts the process during library load, before any consumer frame exists | `cna-java` `JAVA-UPSTREAM-017` | `cna-java/tools/native-abi/probes/renderer_selection.c` |
-| `cna_shader_effect_create` aborts on EasyGL/OPENGLES3 when handed desktop GLSL instead of the dialect the renderer declares | `cna-cs` | — |
-| A second `Game` create/destroy cycle segfaults on OPENGL33 | `cna-cs` | two-line reproducer named in `docs/native-behavior-blockers.md` |
-| A refused `cna_game_destroy` is not side-effect-free: the process then segfaults on the way out | `cna-ts` (18) | — |
-| Shutdown on `SIGTERM` calls a pure virtual during native teardown | `cna-cs` | `scripts/Reproduce-SigtermShutdown.sh` |
-| A virtual call into a `GraphicsDevice` whose derived destructor has run (UBSan + ASan agree) | `cna-cs` | reproduced on this repository's own `build-ubsan` and `build-asan` |
-
-### Owned-handle accounting
-
-`cna_post_process_chain_add_owned_pass` releases the handle without the matching
-`RemoveOwnedGraphicsResourceFor`, so the game's owned-child count never falls and
-`cna_game_destroy` refuses for the rest of the process — reported by `cna-ts` (1) and
-`cna-java` (`JAVA-UPSTREAM-011`), with a precise fix and a reproducer
-(`chain_owned_pass.c`). Several engine getters mint a fresh counted handle per read while
-their headers say the handle is borrowed and must not be destroyed:
-`cna_post_process_effect_pass_get_effect` is the one every binding names
-(`cna-python` ENGINE-002, `cna-ts` 17, `cna-java`), and `cna_skybox_get_environment`
-versus `cna_render_pipeline_get_skybox` document the same contract while only one of them
-mints (`cna-ts` 15).
-
-### Documentation that contradicts the code
-
-The four clustered-lighting constructors name their first parameter `game` and resolve it
-with `GetBorrowedGraphicsDevice`, so a real game handle is refused (`cna-python`
-ENGINE-006, `cna-ts` 10, `cna-java` `JAVA-UPSTREAM-005`). `cna_compute_shader_create` is
-documented to succeed for source that does not compile, and fails instead — which makes
-`is_valid` and `copy_compile_error` unreachable for the case they exist for
-(`cna-python` ENGINE-001, `cna-ts` 8, `cna-java` `JAVA-UPSTREAM-012`). Three `_init`
-routes document identity transforms and write zero matrices (`cna-python` ENGINE-008,
-`cna-ts` 23). `cna_sprite_batch_begin_with_effect` and `_with_states` document "or null
-for AlphaBlend" and refuse null, one parameter at a time (`cna-ruby`). The weighted-blended
-bracket's header describes behaviour the code deliberately changed (`cna-ts` 21).
-
-### Two sources of truth
-
-`cna_pbr_effect_apply_material` sets textures through the C++ object while
-`set_texture`/`get_texture` use the C API's retained-handle table, so a material applied
-through the ABI carries every scalar and no texture, `extract_material` never reports a
-texture at all, and a read-modify-write silently unbinds every map. Reported by
-`cna-python` (ENGINE-005), `cna-ts` (19) and `cna-java` (`JAVA-UPSTREAM-010`), all three
-independently.
-
-### Silent wrong answers
-
-An upload into a render target reports success and is dropped (`cna-ruby`). A `Color`
-written into a packet cannot be read back out of it — the writer writes four bytes and the
-reader consumes sixteen (`cna-python`). A packet larger than the caller's buffer is cut
-and reported as a success, and the `PacketReader` overload delivers every byte while
-reporting none (`cna-rust` `RUST-UPSTREAM-028`). The GPU instance culler runs, reports
-success and culls nothing (`cna-ts` 20). A `ShaderEffect`'s first draw through
-`SpriteBatch` produces nothing (`cna-ts` 22). A uniform set before its shader effect is
-applied is written to whichever program is current (`cna-java` `JAVA-UPSTREAM-016`). The
-packed depth encoding divides by 256 where an 8-bit UNORM target quantises by 255, losing
-every bit the packing bought (`cna-ts` 13). `cna_texture2d_create_from_encoded_memory`'s
-cover-and-crop path refuses targets wider than tall while accepting taller than wide
-(`cna-ruby`, `cna-swift`).
-
-### Capability queries that do not predict behaviour
-
-`cna-java` counts five instances by itself (`JAVA-UPSTREAM-005`, `-007`, `-015`, `-021`,
-`-022`); `cna-cs` adds render-target readback and cube-face storage having no capability
-identity at all, and `cna-ts` adds WEBGL2 advertising `MultipleRenderTargets` while a draw
-into two bound targets reaches neither. `cna_graphics_device_get_shader_dialect_ext`
-answers `UNKNOWN` on every renderer but WebGPU, while GLSL ES sources compile and draw.
-
-### Arithmetic that disagrees with XNA
-
-`SpriteFont::MeasureString` adds the last glyph's right side bearing unclamped, where
-XNA's IL adds `Math.Max(pendingZ, 0)` — measured independently by `cna-ts` (27) and
-`cna-go` (Foundation 69), both with tables. `GetSampleDuration` truncates the fractional
-millisecond before `TimeSpan::FromMilliseconds` ever sees it, and `GetSampleSizeInBytes`
-drops XNA's frame alignment and binary32 division (`cna-rust` `RUST-UPSTREAM-027`,
-`cna-ruby`). The two stencil masks default to `Int32.MaxValue` where XNA's IL writes `-1`
-(`cna-ruby`, `cna-common-lisp`, `cna-cs`). `cna_game_launch_parameters_add` documents
-"adds or replaces", calls `emplace`, and so does neither (`cna-rust`
-`RUST-UPSTREAM-026`, `cna-ruby`).
-
-### Build and environment
-
-`_bindings/fixcna-analysis.md` (2026-08-26, against `6319f30c5`) is the earlier
-cross-binding analysis and still holds two prerequisites: the C-API test suite had six
-red tests, and several rows in it were already stale when it was written. `cna-java`
-`JAVA-UPSTREAM-003` reports five of this repository's own `CApi_*` smoke tests failing in
-the HEADLESS/NULL-audio configuration. `cna-common-lisp` records that `next` at
-`822d3b960` does not build against published `sharp-runtime:next`, because
-`StorageDevice.cpp` calls `SetIsolatedStorageRootOverride`, which exists only on the
-`next` branch of that repository — the same breakage this session hit, and the reason
-`CMakeLists.txt`'s default of `../sharp-runtime` is worth revisiting.
