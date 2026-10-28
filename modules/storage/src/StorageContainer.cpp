@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include <stdexcept>
+#include <vector>
 
 #include "CNA/Internal/PathContainment.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
@@ -38,6 +39,30 @@ namespace
         if (error == std::errc::permission_denied || error == std::errc::operation_not_permitted)
             throw System::UnauthorizedAccessException(message, cause);
         throw System::IO::IOException(message, cause);
+    }
+
+    // Directory.Delete(recursive) reports the first entry it cannot delete. filesystem::remove_all
+    // does not say which error it keeps: Apple's libc++ goes on past an undeletable file and
+    // reports its parent as not empty. Links are removed, never followed.
+    void RemoveTree(const std::filesystem::path& path, std::error_code& error)
+    {
+        namespace fs = std::filesystem;
+        const auto status = fs::symlink_status(path, error);
+        if (error) return;
+        if (fs::is_directory(status))
+        {
+            std::vector<fs::path> children;
+            for (fs::directory_iterator entry(path, error), end; !error && entry != end;
+                 entry.increment(error))
+                children.push_back(entry->path());
+            if (error) return;
+            for (const auto& child : children)
+            {
+                RemoveTree(child, error);
+                if (error) return;
+            }
+        }
+        fs::remove(path, error);
     }
 
     // weakly_canonical cannot follow a symlink whose target does not exist yet, so the containment
@@ -201,7 +226,7 @@ namespace Microsoft::Xna::Framework::Storage
             "or one that escapes it.");
         std::error_code error;
         if (!fs::is_directory(path, error)) return;
-        fs::remove_all(path, error);
+        RemoveTree(path, error);
         if (error && error != std::errc::no_such_file_or_directory)
             ThrowDirectoryDeletionError("DeleteContainer", path, error);
     }
