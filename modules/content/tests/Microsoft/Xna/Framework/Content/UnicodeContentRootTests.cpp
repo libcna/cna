@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_windows_portability.md WINPORT-0011. Content loading from a content root whose own
+// Windows portability WINPORT-0011. Content loading from a content root whose own
 // directories and asset names are non-ASCII.
 //
 // These are deliberately independent of the thirteen CnaContentTests failures that predate this

@@ -326,11 +326,11 @@ add_library(CNA::ProjectOptions ALIAS cna_project_options)
 # file; there is no code-generation or performance consequence, and every Microsoft tool that reads
 # these objects has understood the wider form for two decades. Repo-wide, because which file
 # crosses the line is an accident of instantiation counts rather than a property worth tracking.
-# plans/plan_win32_native_validation.md WINNATIVE-0009.
+# Win32 native validation WINNATIVE-0009.
 target_compile_options(cna_project_options INTERFACE
     "$<$<CXX_COMPILER_ID:MSVC>:/utf-8;/bigobj>")
 
-# plans/plan_win32_native_validation.md WINNATIVE-0009. <windows.h> -- reached here through
+# Win32 native validation WINNATIVE-0009. <windows.h> -- reached here through
 # <d3d9.h> and every other Windows SDK header -- defines min and max as
 # function-like macros unless NOMINMAX is defined first. Every std::max(...) in a translation unit
 # that includes one is then parsed as a macro invocation:

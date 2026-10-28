@@ -1,6 +1,7 @@
 # `windows-unicode-path-spike` — what breaks when a path is not in the ANSI code page
 
-The existence gate for `plans/plan_windows_portability.md` (WINPORT-0003). It exists because
+The existence gate for the Windows portability workstream (WINPORT-0003; Git history). It exists
+because
 WINNATIVE-F30 was recorded as a *prescription* ("narrow with `u8string()`, widen with
 `path(std::u8string)`") that had never been measured, and one half of that prescription turns out
 to be wrong.

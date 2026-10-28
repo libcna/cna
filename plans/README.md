@@ -23,6 +23,14 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   (Git history only). The current support boundary, design and known gaps are in
   [`../docs/apple-platforms.md`](../docs/apple-platforms.md); comments cite their rows as
   "Apple APPLE-N" and "Apple M4 AM4-NNN".
+- `plan_windows_portability.md` (`WINPORT-*`, the Unicode filesystem path model on native
+  Windows) and `plan_windows_portability_closeout.md` (`WINCLOSE-*`, its closing pass and the
+  post-closeout `DIRECTX11` rounds) — all done on the since-deleted Windows 10 VM; deleted on
+  2026-10-28 (Git history only), as `plan_win32_native_validation.md` (`WINNATIVE-*`) was on
+  2026-10-11. The path contract is
+  [`../docs/filesystem-path-model.md`](../docs/filesystem-path-model.md); comments cite rows as
+  "Windows portability WINPORT-NNNN", "Windows closeout WINCLOSE-NNNN" and "Win32 native
+  validation WINNATIVE-NNNN".
 - [`plan_runtimerenderer.md`](plan_runtimerenderer.md) — runtime graphics-renderer selection.
 - `plan_sdl3free.md` — historical SDL3-independent migration plan; its SDL2 route was superseded
   by native backends and retired on 2026-10-04, and those native backends were retired in turn on

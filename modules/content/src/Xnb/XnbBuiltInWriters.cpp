@@ -15,7 +15,7 @@
 // OrderedDictionary is used unconditionally below (the dictionary writers at the bottom of this
 // file), and has nothing to do with 128-bit integers -- it was inside the guard by proximity to
 // System::Decimal, which does. Every compiler with native __int128 therefore compiled this file
-// and MSVC, which has none, did not: plans/plan_win32_native_validation.md WINNATIVE-0009.
+// and MSVC, which has none, did not: Win32 native validation WINNATIVE-0009.
 #include "System/Collections/Generic/OrderedDictionary.hpp"
 
 // System::Decimal genuinely is guarded: sharp-runtime provides it only where it has native 128-bit

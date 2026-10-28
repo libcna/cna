@@ -4,8 +4,9 @@ What a path is inside CNA, what a `std::string` holding a path means, and where 
 between them happens. This exists because the answer used to be different in different modules, and
 on Windows that is not a style question — it decides whether a file opens.
 
-The measurements behind every claim here are in `spikes/windows-unicode-path-spike/`, and the
-migration that applied them is `plans/plan_windows_portability.md`.
+The measurements behind every claim here are in `spikes/windows-unicode-path-spike/`; the
+migration that applied them was the Windows portability workstream (`WINPORT-*`, 2026-09, Git
+history).
 
 ---
 
@@ -103,8 +104,7 @@ normalisation. Those are separate decisions with separate call sites.
 > filename on POSIX and two accepted path components on Windows — one authored manifest with two
 > meanings. A rule about how text was *written* has to be applied to the text as written, before
 > any conversion. The corollary: a logical content identifier (`@alias/path`, an asset name, a
-> manifest key) has one separator, `/`, on every platform — see
-> `plans/plan_windows_portability_closeout.md` WINCLOSE-0006.
+> manifest key) has one separator, `/`, on every platform (Windows closeout WINCLOSE-0006).
 
 **8. What happens with invalid UTF-8?** `PathFromUtf8()` does not validate, and the two platforms
 then differ because they genuinely differ (see question 9). On Windows the standard library throws
@@ -168,9 +168,10 @@ Case sensitivity is not part of this model. Windows is usually case-insensitive 
 POSIX usually is not, and CNA does not normalise case anywhere to paper over that. See
 `CNA/Internal/CaseInsensitivePath.hpp` for the one place case is deliberately resolved -- the XNA
 asset paths of `TitleContainer`, `ContentManager` and the XACT banks, which accept Windows separators
-and fall back to a unique case-insensitive match so titles open on case-sensitive hosts -- and
-`plans/plan_win32_native_validation.md` WINNATIVE-F26 for the divergence that is recorded rather
-than fixed.
+and fall back to a unique case-insensitive match so titles open on case-sensitive hosts. It
+promises a spelling that opens the file, not the casing stored on disk, so on a case-insensitive
+filesystem the requested spelling comes back unchanged (graphics shared cleanup GSC-0007, formerly
+WINNATIVE-F26).
 
 Long paths are a separate concern from encoding and are tracked separately. With
 `LongPathsEnabled=0`, which is the default, `std::filesystem` on MSVC enforces the legacy 260-character

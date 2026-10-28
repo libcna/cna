@@ -58,7 +58,8 @@ and SDL2 platform and audio support on 2026-10-04. None of them is a selectable 
 CNA provides no compatibility alias or forwarding backend for them: configuring with one fails,
 naming `SDL3` as the replacement. Their designs and measurements stay in the history -- the plans
 `plans/plan_x11.md`, `plans/plan_wayland.md`, `plans/plan_win32.md` and
-`plans/plan_win32_native_validation.md`, and the commits that removed them.
+`plans/plan_win32_native_validation.md` (all deleted since; Git history), and the commits that
+removed them.
 
 Headless is compiled in every build. Terminal is also compiled on POSIX. This lets the conformance
 suite exercise multiple implementations in one process; the selected value determines the

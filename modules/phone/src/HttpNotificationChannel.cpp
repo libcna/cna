@@ -28,7 +28,7 @@ using socket_t = int;
 // CNA::LogLevel::ERROR and CNA::LogCategory::ERROR in the CNA/Logger.hpp below -- so this file did
 // not compile on any Windows toolchain. Undefined locally, the standard idiom; non-Windows builds
 // are unaffected because the macro is never defined there.
-// plans/plan_win32_native_validation.md WINNATIVE-0009.
+// Win32 native validation WINNATIVE-0009.
 #ifdef ERROR
 #undef ERROR
 #endif

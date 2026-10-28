@@ -276,7 +276,7 @@ namespace Microsoft::Xna::Framework::Content
                 // A reader for an abstract type is served by AbstractReflectiveTypeReader, which
                 // hands back a shared_ptr to a concrete subclass; reaching this throw would mean a
                 // value-shaped reader was registered for a type that has no values.
-                // plans/plan_win32_native_validation.md WINNATIVE-0014.
+                // Win32 native validation WINNATIVE-0014.
                 (void) input;
                 (void) existingInstance;
                 throw std::runtime_error(

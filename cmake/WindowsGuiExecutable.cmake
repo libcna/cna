@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_win32_native_validation.md WINNATIVE-0030: mark a target as a Windows GUI application
+# Win32 native validation WINNATIVE-0030: mark a target as a Windows GUI application
 # without breaking the entry point CNA actually uses.
 #
 # `WIN32_EXECUTABLE TRUE` links with the GUI subsystem, which is what stops a window from opening

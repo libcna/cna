@@ -53,7 +53,7 @@
 // it already does in ContentCompiler.cpp, XnbBuiltInWriters and DecimalDateTimeContentTypeReaders.
 // This file was the one place that omitted the guard, which is why MSVC (no __int128) could not
 // compile cna_content_pipeline at all.
-// plans/plan_win32_native_validation.md WINNATIVE-0009.
+// Win32 native validation WINNATIVE-0009.
 #if SHARP_RUNTIME_HAS_NATIVE_INT128
 #include "System/Decimal.hpp"
 #endif

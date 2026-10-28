@@ -4,7 +4,7 @@
     Native Windows validation for CNA under non-ASCII filesystem paths.
 
 .DESCRIPTION
-    plans/plan_windows_portability.md WINPORT-0012..0014 and 0018. Three things that a build under
+    Windows portability WINPORT-0012..0014 and 0018. Three things that a build under
     C:\src\cna cannot tell you, each of which is a different way for a path to reach CNA:
 
       temp      the whole test suite with TEMP and TMP pointed at a non-ASCII directory, so every

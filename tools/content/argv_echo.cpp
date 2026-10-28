@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_windows_portability_closeout.md WINCLOSE-0003: the program the Windows half of
+// Windows closeout WINCLOSE-0003: the program the Windows half of
 // RunHostProcess could not be tested without.
 //
 // RunHostProcess takes a vector of arguments and, on Windows, has to turn it back into the single

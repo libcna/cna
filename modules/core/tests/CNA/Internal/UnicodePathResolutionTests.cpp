@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// Regression coverage for plans/plan_windows_portability.md WINPORT-0007: the core path helpers
+// Regression coverage for Windows portability WINPORT-0007: the core path helpers
 // against real non-ASCII directory trees. Each of these exercises a code path that, before the
 // migration, narrowed a path through the process ANSI code page -- so on a CP1252 Windows host it
 // threw or silently matched the wrong entry, while on Linux it was a byte copy and passed.

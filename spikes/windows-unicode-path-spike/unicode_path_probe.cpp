@@ -3,7 +3,7 @@
 // windows-unicode-path-spike — what actually breaks when a filesystem path is not
 // representable in the process ANSI code page.
 //
-// This is the existence gate for `plans/plan_windows_portability.md` WINPORT-0003. It answers
+// This is the existence gate for Windows portability WINPORT-0003. It answers
 // one question per line of output: given a real file on disk whose name contains characters
 // outside the active ANSI code page, which of the conversions and open calls CNA actually
 // performs still find it?

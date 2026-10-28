@@ -477,7 +477,7 @@ if(CNA_BUILD_TESTS)
     endif()
 endif()
 
-# plans/plan_windows_portability_closeout.md WINCLOSE-0003: reports its own argument vector, so
+# Windows closeout WINCLOSE-0003: reports its own argument vector, so
 # RunHostProcess's Windows command-line quoting can be measured against what the child actually
 # received rather than assumed. See its own top-of-file comment for why neither cmd.exe nor
 # /bin/echo can do this job. Links nothing, for the same reason as the compiler above.

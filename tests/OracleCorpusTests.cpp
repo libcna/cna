@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_win32_native_validation.md WINNATIVE-0024: the oracle corpus reader that replaced a
+// Win32 native validation WINNATIVE-0024: the oracle corpus reader that replaced a
 // std::regex MSVC could not run.
 //
 // The reader is shared by sixteen fixtures and decides what every one of them compares against, so

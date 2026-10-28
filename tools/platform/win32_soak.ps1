@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_win32_native_validation.md WINNATIVE-0021: a real CNA application, run for a sustained
+# Win32 native validation WINNATIVE-0021: a real CNA application, run for a sustained
 # period while the desktop does things to it.
 #
 # The stress harness answers "do ten thousand repetitions of one operation cost anything". This

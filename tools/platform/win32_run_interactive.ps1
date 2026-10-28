@@ -19,7 +19,7 @@
 #
 # Measured on the validation VM: an SSH process reports session 0, window station
 # `Service-0x0-2346c6$`, while the logged-on desktop is session 1. So every check in
-# plans/plan_win32_native_validation.md that is about the desktop is launched through here.
+# the Win32 native validation (WINNATIVE-*) that is about the desktop is launched through here.
 #
 # How
 # ---

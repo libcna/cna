@@ -2,7 +2,7 @@
 #
 # Run a GoogleTest binary as N fresh processes on the interactive Windows desktop and total the result.
 #
-# Why sharded: plans/plan_windows_portability_closeout.md measured that one CnaTests process cannot be a
+# Why sharded: the Windows closeout (WINCLOSE-0013..0036) measured that one CnaTests process cannot be a
 # result on the VirtualBox guest -- the virtual GPU driver leaks per device (F24), so everything after the
 # first exhaustion is noise.
 #

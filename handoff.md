@@ -394,6 +394,11 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   Windows what it cannot provide: a Python interpreter where none can be started, `/dev/full`,
   aging a directory through `utime`, symbolic links, a renderer without 3D, and the ordering guard
   for tests that need an uninitialized `GamerServicesDispatcher`.
+- The content and content-pipeline *tests* are not Unicode-clean: about 1,150 `.string()` calls,
+  most narrowing a fixture path before handing it to CNA, so under a non-ASCII `TEMP` on Windows
+  they throw in the test body (Windows portability WINPORT-F5, measured on native Windows
+  2026-09-16). The library is not implicated; its path contract is
+  `docs/filesystem-path-model.md`.
 - **`SDL_GPU` is the default renderer on Windows, macOS and iOS but is not qualified there** since
   the 2026-10-13 retirement of `DIRECTX11` and `METAL` (`docs/removed-renderers.md`). Evidence that
   exists: the full tree passed with `SDL_GPU` (Metal backend) on a Mac mini M4 in the AM4 campaign,

@@ -309,7 +309,7 @@ if(CNA_BUILD_TESTS)
                 ".*/modules/audio/tests/.*/${_cna_sdl3_mixer_test}\\.cpp$")
         endforeach()
     endif()
-    # plans/plan_win32_native_validation.md WINNATIVE-0014: HttpNotificationChannelTests stands up
+    # Win32 native validation WINNATIVE-0014: HttpNotificationChannelTests stands up
     # a listening socket with <arpa/inet.h>, <netinet/in.h> and <sys/socket.h> to receive what the
     # channel sends. Those are POSIX headers; Winsock is a different API, not a spelling. The
     # channel ITSELF is built on Windows -- PushNotificationSender.cpp has the #if _WIN32 arm --
@@ -318,7 +318,7 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Phone/Notification/HttpNotificationChannelTests\\.cpp$")
     endif()
 
-    # plans/plan_win32_native_validation.md WINNATIVE-0009: System::Decimal exists only where the
+    # Win32 native validation WINNATIVE-0009: System::Decimal exists only where the
     # compiler provides a native 128-bit integer -- sharp-runtime's header hard-errors otherwise,
     # and sharp-runtime itself drops Decimal.cpp from Core.Base on such a target. CNA's production
     # code already guards every Decimal use behind SHARP_RUNTIME_HAS_NATIVE_INT128; this suite
@@ -604,7 +604,7 @@ if(CNA_BUILD_TESTS)
 
     add_executable(CnaTests ${CNA_TEST_HARNESS_SOURCES})
 
-    # plans/plan_win32_native_validation.md WINNATIVE-0014. Windows reserves 1 MB of stack for a
+    # Win32 native validation WINNATIVE-0014. Windows reserves 1 MB of stack for a
     # thread; Linux reserves 8. This binary links every module's tests into one process, and the
     # content-pipeline suite's in-process content build crosses that 1 MB -- measured by bisection
     # with editbin, it needs a little over 1.2 MB and is comfortable at 1.5. Below that it dies
@@ -950,7 +950,7 @@ if(CNA_BUILD_TESTS)
     endif()
 
     if(TARGET cna_argv_echo)
-        # plans/plan_windows_portability_closeout.md WINCLOSE-0003: the HostProcessTest cases in
+        # Windows closeout WINCLOSE-0003: the HostProcessTest cases in
         # EffectSourceTests.cpp launch this to read back the argument vector RunHostProcess
         # delivered. Baked in unconditionally, for the reason given just above: the repository
         # supplies the prerequisite, so skipping would only hide a regression.

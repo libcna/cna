@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
 // The conversion layer's own tests. These are deliberately written so that they would have FAILED
-// on Windows before plans/plan_windows_portability.md WINPORT-0006: every case that touches the
+// on Windows before Windows portability WINPORT-0006: every case that touches the
 // filesystem creates a real file under a real non-ASCII directory and reads a known payload back
 // out of it, rather than comparing strings the test itself produced.
 //

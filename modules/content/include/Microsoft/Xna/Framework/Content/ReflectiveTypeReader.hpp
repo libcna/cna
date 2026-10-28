@@ -35,7 +35,7 @@ namespace Microsoft::Xna::Framework::Content
      * its `virtual T Read(ContentReader&, std::optional<T>)` returns `T` by value, and
      * [class.abstract] forbids an abstract class as a return type, so even declaring it is
      * ill-formed. MSVC diagnoses that; GCC and Clang accepted the instantiation, which is why
-     * naming it worked until plans/plan_win32_native_validation.md WINNATIVE-0014.
+     * naming it worked until Win32 native validation WINNATIVE-0014.
      *
      * @param targetTypeName The .NET name of the serialized type.
      * @return The canonical reflective reader name.

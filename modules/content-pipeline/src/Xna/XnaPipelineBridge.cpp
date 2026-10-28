@@ -455,7 +455,7 @@ namespace CNA::Content::Pipeline
             const std::filesystem::path relative = std::filesystem::relative(source, root, error);
             // "does the relative path start by leaving the root" asked as a path question rather
             // than a string one. path::native() is std::wstring on Windows, so comparing it with a
-            // narrow ".." does not compile there at all -- plans/plan_win32_native_validation.md
+            // narrow ".." does not compile there at all -- Win32 native validation
             // WINNATIVE-0009. Comparing the first COMPONENT is also more correct than a prefix
             // test on the whole string, which would mistake a directory named "..config" for an
             // escape.
