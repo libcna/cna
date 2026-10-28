@@ -130,7 +130,9 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_headless.md`](plan_headless.md) — headless rendering.
 - [`plan_sdlgpu.md`](plan_sdlgpu.md) — SDL GPU.
 - [`plan_software.md`](plan_software.md) — CPU software rasterizer.
-- [`plan_stub.md`](plan_stub.md) — no-op stub renderer.
+- `plan_stub.md` — STUB-1..6, the no-op Stub renderer (done 2026-07-19); deleted on 2026-10-28
+  (Git history only). Its design and limitations are in
+  [`../docs/stub-renderer.md`](../docs/stub-renderer.md).
 - [`plan_webgpu.md`](plan_webgpu.md) — WebGPU.
 - `plan_webgpu_perf.md` — WebGPU's per-draw CPU cost (binding-model redesign); deleted on
   2026-10-11 and available only in Git history.

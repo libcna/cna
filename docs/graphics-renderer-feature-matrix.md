@@ -60,8 +60,8 @@ XNA/Core campaign rather than a Software parity gap.
 | Custom ShaderEffect and standalone stylization effects | OUTSIDE-SCOPE | These CNA additions are outside this classic XNA/Core Software campaign; capability depends on the selected renderer. The former modern engine pipeline has been removed. |
 | Physical window, GPU context, swap chain and driver state | N/A | Software owns no native window or graphics context; `Present()` completes synchronously while preserving the CPU framebuffer. |
 
-The **Stub** renderer (`CNA_GRAPHICS_RENDERER=STUB`, tracked in `../plans/plan_stub.md`) is, like Headless,
-**not** a column in this matrix and for the same reason: it never renders a single pixel. Unlike
+The **Stub** renderer (`CNA_GRAPHICS_RENDERER=STUB`) is, like Headless, **not** a column in this
+matrix and for the same reason: it never renders a single pixel. Unlike
 Headless, it also keeps no bookkeeping at all (no counters, no validation modes, no trace log) — it
 exists purely as the smallest possible complete `IGraphicsRenderer` implementation, a minimal
 reference and a dependency-free placeholder, not a pixel-parity or diagnostic tool. See

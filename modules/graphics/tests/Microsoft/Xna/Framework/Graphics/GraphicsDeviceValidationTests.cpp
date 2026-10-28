@@ -493,7 +493,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     }
     if (CNA_RENDERER_IS(Stub))
     {
-    // plans/plan_stub.md: Stub supports no render targets AT ALL -- it keeps IGraphicsRenderer's nullptr
+    // docs/stub-renderer.md: Stub supports no render targets AT ALL -- it keeps IGraphicsRenderer's nullptr
     // CreateRenderTarget2D()/CreateRenderTargetCube() defaults -- so this is a different case from
     // a single-target renderer, which supports one. GraphicsDevice rejects the bind before
     // reaching the renderer, because RenderTarget2D::GetRenderTargetRenderer() is null. Rejecting is

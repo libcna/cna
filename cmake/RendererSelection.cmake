@@ -20,10 +20,10 @@ option(CNA_RENDERER_WEBGL2 "Enable WebGL 2 graphics renderer, Emscripten only (i
 option(CNA_RENDERER_WEBGPU "Enable WebGPU graphics renderer (wgpu-native)" OFF)
 option(CNA_RENDERER_HEADLESS "Enable Headless (no GPU/window) graphics renderer" OFF)
 option(CNA_RENDERER_SOFTWARE "Enable Software (CPU rasterizer) graphics renderer" OFF)
-# plans/plan_stub.md: deliberately minimal no-op graphics renderer -- renders nothing, touches no SDL
+# docs/stub-renderer.md: deliberately minimal no-op graphics renderer -- renders nothing, touches no SDL
 # window/video subsystem/GPU library, keeps no bookkeeping of any kind (unlike HEADLESS's
 # validation modes/counters or SOFTWARE's real CPU rasterizer). Named "Stub" rather than "Null" to
-# avoid colliding with the <cstddef>/<cstdlib> NULL macro (see plans/plan_stub.md's naming section).
+# avoid colliding with the <cstddef>/<cstdlib> NULL macro (see docs/stub-renderer.md, Naming).
 option(CNA_RENDERER_STUB "Enable Stub (no-op) graphics renderer" OFF)
 option(CNA_RENDERER_DIRECTX9 "Enable Direct3D 9 graphics renderer (Windows only)" OFF)
 option(CNA_RENDERER_SDL_GPU "Enable SDL_gpu graphics renderer" OFF)

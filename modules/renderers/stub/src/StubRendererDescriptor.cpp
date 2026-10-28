@@ -1,6 +1,6 @@
 // plans/plan_runtimerenderer.md RTR-P1-D09: the Stub family's pre-construction contract.
 //
-// Deliberately minimal no-op renderer (plans/plan_stub.md design decision 1): renders nothing, touches no
+// Deliberately minimal no-op renderer (docs/stub-renderer.md, Design): renders nothing, touches no
 // platform window or video subsystem, keeps no bookkeeping of any kind.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
