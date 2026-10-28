@@ -5,6 +5,7 @@
 #include <memory>
 #include <gtest/gtest.h>
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
@@ -64,6 +65,8 @@ protected:
         RecordProperty("renderer", std::string(device->GetGraphicsRendererName()));
         if (!device->SupportsCapability(CNA::GraphicsCapability::OcclusionQuery))
             GTEST_SKIP() << "The renderer explicitly lacks occlusion queries";
+        if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
+            GTEST_SKIP() << "HEADLESS validates query lifetime but has no raster samples to count";
         effect = std::make_unique<BasicEffect>(*device);
         effect->setVertexColorEnabledProperty(true);
         device->setRasterizerStateProperty(RasterizerState::CullNone);

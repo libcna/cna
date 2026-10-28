@@ -5,6 +5,7 @@
 #include <vector>
 #include <gtest/gtest.h>
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/RendererCapabilityProfile.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
@@ -56,6 +57,10 @@ protected:
     {
         primary = MakeDevice();
         RecordProperty("renderer", std::string(primary->GetGraphicsRendererName()));
+        // Every case observes its context through pixels read back from a target or back buffer.
+        if (primary->GetRendererFeatureSupportEXT(CNA::RendererFeature::RenderTargetReadback) !=
+            CNA::RendererFeatureSupport::Supported)
+            GTEST_SKIP() << "this renderer cannot read render targets back";
     }
 };
 
