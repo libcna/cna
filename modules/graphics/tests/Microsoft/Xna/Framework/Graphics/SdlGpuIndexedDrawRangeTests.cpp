@@ -339,7 +339,7 @@ namespace
     class SdlGpuIndexedDrawRangeTest : public ::testing::Test
     {
     protected:
-        // plans/plan_pre_sdlgpu_closeout.md PSG-0008: HiDef, because a default GraphicsDevice is
+        // pre-SDL_GPU PSG-0008: HiDef, because a default GraphicsDevice is
         // Reach and Reach refuses thirty-two-bit index buffers outright --
         // IndexedDrawHonorsOffsetsWithThirtyTwoBitIndices therefore threw before its first check
         // and reported as a renderer failure. profile_dead_tests.py named it DEAD-ON-PROFILE.

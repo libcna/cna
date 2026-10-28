@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_pre_sdlgpu_closeout.md PSG-0006: a draw that outlives the effect that queued it.
+// pre-SDL_GPU PSG-0006: a draw that outlives the effect that queued it.
 //
 // This renderer records a frame and replays it later, and a queued sprite or custom-effect draw
 // holds its `ShaderEffect` as a RAW pointer. Disposing the effect before the frame flushes

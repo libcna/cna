@@ -168,6 +168,10 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   `directx9_frame_recovery_test.cpp`, `directx9_resize_state_test.cpp` and
   `spritebatch_presentation_test.cpp`.
 - [`plan_headless.md`](plan_headless.md) — headless rendering.
+- `plan_pre_sdlgpu_closeout.md` — PSG-0001..0013 (2026-09-23): the WebGPU merge, the bounded
+  GoogleTest runner (`../tools/tests/run_gtest_bounded.sh`) and the measured hand-off to the SDL_GPU
+  workstream; deleted on 2026-10-28 (Git history only). Comments cite rows as
+  "pre-SDL_GPU PSG-NNNN".
 - [`plan_sdlgpu.md`](plan_sdlgpu.md) — SDL GPU.
 - [`plan_software.md`](plan_software.md) — CPU software rasterizer.
 - `plan_stub.md` — STUB-1..6, the no-op Stub renderer (done 2026-07-19); deleted on 2026-10-28

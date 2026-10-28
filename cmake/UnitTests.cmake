@@ -453,7 +453,7 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Fna3d/.*\\.cpp$")
     endif()
 
-    # plans/plan_pre_sdlgpu_closeout.md PSG-0007, the third instance of the same shape: the EasyGL
+    # pre-SDL_GPU PSG-0007, the third instance of the same shape: the EasyGL
     # suites under modules/renderers/easygl/tests/ include <metagl/metagl.hpp>, whose include root
     # arrives with the easy-gl sibling checkout that only a GL identity adds. Configuring SDL_GPU
     # therefore produced a CnaTests that could not compile, which is what blocked the SDL_GPU

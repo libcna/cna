@@ -6078,8 +6078,8 @@ namespace CNA::Internal::Renderers::WebGPU
         int recordedDebugRegionEndCountEXT_ = 0;
     public:
         /**
-         * @brief plans/plan_pre_sdlgpu_closeout.md PSG-0006: drops every queued draw that still
-         * names a `ShaderEffect` renderer which is about to be destroyed.
+         * @brief Drops every queued draw that still names a `ShaderEffect` renderer which is about
+         * to be destroyed (pre-SDL_GPU PSG-0006).
          *
          * This renderer replays a frame later, and a queued sprite or custom-effect draw holds its
          * effect as a RAW pointer. An application that disposes an `Effect` before the frame

@@ -1,7 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_pre_sdlgpu_closeout.md PSG-0002: run a GoogleTest binary in BOUNDED MEMORY.
+# pre-SDL_GPU PSG-0002: run a GoogleTest binary in BOUNDED MEMORY.
 #
 # Why this exists, stated as the measurement that forced it. A CNA test builds a GraphicsDevice,
 # and on some renderers a device is not cheap to have had: the provider keeps per-device state that

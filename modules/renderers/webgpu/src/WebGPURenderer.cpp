@@ -9403,7 +9403,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     void WebGPURenderer::ForgetEffectEXT(WebGPUEffectRenderer* effect) noexcept
     {
-        // plans/plan_pre_sdlgpu_closeout.md PSG-0006. Both command kinds hold the effect as a raw
+        // pre-SDL_GPU PSG-0006. Both command kinds hold the effect as a raw
         // pointer, so both have to let go of it here. Nulling is enough: every issue path already
         // begins by refusing a command whose effect is null, so the draw becomes a no-op instead
         // of a read of freed memory.
@@ -9626,7 +9626,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // WEBGPU-182.
         if (owner_ != nullptr)
         {
-            // plans/plan_pre_sdlgpu_closeout.md PSG-0006: a queued sprite or custom-effect draw
+            // pre-SDL_GPU PSG-0006: a queued sprite or custom-effect draw
             // holds this object as a RAW pointer and the frame carrying it may not have flushed
             // yet, so it must let go before the memory does (CNAEXT_LeakLoop's use-after-free).
             // XNA had drawn it at the call, so the draw keeps it: the state moves to an heir the

@@ -747,7 +747,7 @@ public:
     SdlGpuRenderTargetCubeMsaaMipTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // plans/plan_pre_sdlgpu_closeout.md PSG-0008: this test exercises a resource the
+        // pre-SDL_GPU PSG-0008: this test exercises a resource the
         // Reach profile refuses outright, so under the default profile it threw before its
         // first check and reported as a renderer failure rather than as a test defect.
         // profile_dead_tests.py named it DEAD-ON-PROFILE; GTI-0003 fixed three SDL_GPU
