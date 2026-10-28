@@ -197,7 +197,7 @@ def hem_weights(body_type):
     across the centre, so a raised knee lifts the hem instead of pushing the trousers through it,
     and the hem neither tears between the legs nor stays behind. The back follows the pelvis, as the
     trousers' waistband under it does: a thigh share there swung the back of the hem forward into
-    the waistband in a deep crouch (FemaleIdleFixShoe; plans/plan_avatar_acceptance.md AVA-08)."""
+    the waistband in a deep crouch (FemaleIdleFixShoe; Avatar acceptance AVA-08)."""
     tw = body.torso_weights(body_type)
     hip_y = rig.PROPORTIONS[body_type]["hip"][1]
     left, right = I["HipLeft"], I["HipRight"]
@@ -864,7 +864,7 @@ def top(body_type, style):
         # The body up to the chest, then a scooped neckline and armholes, with flat straps.
         sections = body.torso_sections(body_type, 0.017)
         # A little ease round the waist and hips: in a deep crouch the trousers' or skirt's top
-        # moves out under it (plans/plan_avatar_acceptance.md AVA-08).
+        # moves out under it (Avatar acceptance AVA-08).
         eased = body.torso_sections(body_type, 0.023)
         c, rx, rz, n = eased[1]
         rows = [(add(c, (0.0, -0.03, 0.0)), rx + 0.028, rz + 0.028, n)] + eased[2:4] + sections[4:8]

@@ -43,7 +43,7 @@ GOLDEN = REGRESSION / "golden"
 CATALOGS = HERE.parent.parent / "modules" / "gamer-services" / "assets" / "avatars"
 CANONICAL = "SOFTWARE"
 SIZE = 256
-# Tolerances per renderer, from measurement (plans/plan_avatar_acceptance.md AVA-04): mean absolute
+# Tolerances per renderer, from measurement (Avatar acceptance AVA-04): mean absolute
 # difference (0-255); block, the worst 8x8 block's mean of the per-pixel largest channel difference
 # (a ring, a stud, a changed ear); silhouette, intersection over union of the pixels that differ from
 # the background; area, the pixels of a solid patch (every pixel of its 3x3 neighbourhood too) that
@@ -112,7 +112,7 @@ AVATARS = {
         face="Round", ears="ears_protruding", outfit="Summer",
         accessories={"earrings": ("earrings_bighoop", 0)}, jewelry=(212, 175, 90),
         makeup={"lips": "lips_bold"}, lips=(150, 40, 60)),
-    # A tied tail under a wide brim (plans/plan_avatar_acceptance.md AVA-09: it came through the brim).
+    # A tied tail under a wide brim (Avatar acceptance AVA-09: it came through the brim).
     "female-ponytail-sunhat": dict(
         body=0, height=1700, skin=2, hair="hair_highponytail", hair_colour=(150, 70, 40), eyes=(70, 130, 90), face="Soft",
         hat="hat_sunhat", outfit="Smart casual"),

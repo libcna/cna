@@ -683,7 +683,7 @@ been run.
 
 - **Status:** not independently validated.
 - **CNA now:** at catalog v3 revision 4, on 2026-10-24 at `ba707082e`
-  (`plans/plan_avatar_acceptance.md` AVA-01), the full avatar review (982 frames: views, hands, feet,
+  (Avatar acceptance AVA-01, Git history), the full avatar review (982 frames: views, hands, feet,
   every face control at both ends, every hairstyle from the front and from behind, every garment,
   headwear, facial-hair style, ear shape, accessory and makeup style, portraits, face presets,
   builds, key frames of every animation, every expression) rendered on OpenGL 3.3, OpenGL ES 3,
@@ -691,7 +691,7 @@ been run.
   build through the private GPU runner, each confirmed by its log, all frames rendered. Against
   OpenGL 3.3 (`avatar_review.py compare`) the worst mean absolute pixel difference is 0.09/255
   (WebGPU) and the worst silhouette overlap 0.9992 (SOFTWARE); OpenGL ES 3 is identical. At catalog
-  v3 revision 5, on 2026-10-25 at `ac20344ef` (`plans/plan_avatar_acceptance.md` AVH-08), the
+  v3 revision 5, on 2026-10-25 at `ac20344ef` (Avatar acceptance AVH-08, Git history), the
   Avatar v3 acceptance command (`tools/avatar_builder/avatar_acceptance.py --all-renderers --service
   ...`, `avatars.md`), which builds the binaries it runs from the commit it names, passed on all
   eight renderers compiled in, in the main tree and in a freshly configured checkout: the 233

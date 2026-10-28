@@ -291,7 +291,7 @@ TEST(AvatarRendererTest, EveryFormat3FeatureDrawsAndANewDeviceGetsItsOwnResource
 // complete-looking marker and the second Draw indexed past the end of the part list. Every Draw
 // must now fail the same clean way, which only a renderer that refuses vertex buffers can provoke:
 // the retired 2D-only SDL_RENDERER did; STUB, without a 3D pipeline too, accepts them and draws
-// nothing (plans/plan_avatar_acceptance.md AVA-02).
+// nothing (Avatar acceptance AVA-02).
 TEST(AvatarRendererTest, AFailedGpuUploadFailsEveryDrawCleanlyRatherThanHalfBuilding) {
     GraphicsDevice device;
     bool refused = false;
@@ -482,7 +482,7 @@ TEST(AvatarRendererTest, AttachmentCompositionAgreesWithDrawnJointsForEveryPrese
     }
 }
 
-// plans/plan_avatar_acceptance.md AVH-05: an avatar a renderer still draws is reused at once, and
+// Avatar acceptance AVH-05: an avatar a renderer still draws is reused at once, and
 // once every renderer drawing it is disposed the caches let go of it and of its textures. The load
 // times are recorded as test properties; avatar_acceptance.py runs this test alone, so the first
 // load is the process's first (docs/avatars.md, Assets, states what to expect).

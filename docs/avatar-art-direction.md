@@ -118,7 +118,7 @@ Review it with the focus sheets of `avatar_review.py`: `eyes`, `mouth`, `temples
 Every entry is unchanged, and every model but the tops and skirts. Each ear shape now names where an earring
 hangs on it (`lobes`: the bottom of its lobe, on the front of the lobe's surface), and the
 assembly carries earrings, made for the first shape's lobes, to the shape worn: before, they hung
-5 mm under a small ear's lobe and 11 mm up inside a long lobe (`plans/plan_avatar_acceptance.md`
+5 mm under a small ear's lobe and 11 mm up inside a long lobe (Avatar acceptance
 AVA-06). Below the hips only the front of a top's hem follows the thighs; the back follows the
 pelvis, as the trousers' waistband under it does, so a deep crouch lifts the back of the hem off the
 seat instead of swinging it into the waistband; a skirt's weights start from the torso's, hips

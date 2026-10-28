@@ -358,7 +358,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN
         cna_copy_sdl_runtime(cna_avatar_review)
         cna_copy_sdl_runtime(cna_guide_review)
     endif()
-    # plans/plan_avatar_acceptance.md AVA-04: the checked-in avatar visual regression
+    # Avatar acceptance AVA-04: the checked-in avatar visual regression
     # (tools/avatar_builder/regression) drawn by cna_avatar_review with this build's default renderer
     # and compared with goldens captured on SOFTWARE, within that renderer's tolerance. Needs Python 3
     # with Pillow and a display (the private GPU runner); a cross build would need its emulator.

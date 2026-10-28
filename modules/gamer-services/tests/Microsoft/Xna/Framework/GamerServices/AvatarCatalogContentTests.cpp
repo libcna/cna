@@ -233,7 +233,7 @@ TEST(AvatarCatalogContentTest, AccessoriesAreWornOnTheSideTheDescriptionNames) {
     }
 }
 
-// plans/plan_avatar_acceptance.md AVA-06: earrings are made for the first ear shape's lobes. Each
+// Avatar acceptance AVA-06: earrings are made for the first ear shape's lobes. Each
 // shape names its own (catalog v3 revision 5), lying on that ear, and the earring keeps the place it
 // has on the first shape's lobe on the worn shape's lobe -- for every shape, both bodies and the ear
 // controls at their ends. Before, a small ear's stud hung 5 mm under its lobe and a long lobe's sat
@@ -697,7 +697,7 @@ TEST(AvatarCatalogContentTest, AnInnerLayerStaysUnderTheOneOverItInEveryPose) {
     EXPECT_EQ(exposed, 0) << "first: " << firstExposed;
 }
 
-// plans/plan_avatar_acceptance.md AVA-08: in the deepest crouch (FemaleIdleFixShoe) the trousers stay
+// Avatar acceptance AVA-08: in the deepest crouch (FemaleIdleFixShoe) the trousers stay
 // under the top over them. The back of a top's hem followed the thighs and swung forward into the
 // waistband: jeans showed through the back of the tank top in patches (103 of the waist vertices it
 // covers on the female body, 89 on the male), and every skirt through the back of every top (33-76:
@@ -841,7 +841,7 @@ TEST(AvatarCatalogContentTest, TheTrousersStayUnderTheTopInTheDeepestCrouch) {
     }
 }
 
-// plans/plan_avatar_acceptance.md AVA-09: hair never comes through a hat. Flattening hair under a hat
+// Avatar acceptance AVA-09: hair never comes through a hat. Flattening hair under a hat
 // pulled a ponytail's tie or a mass of curls in to the head and stretched its triangles out through
 // the brim or crown (high ponytails through sun hats, western hats and backward caps, an afro through
 // a bucket hat's brim, curls and spikes through a beret, locks over a headband: 17-290 vertices of
@@ -952,7 +952,7 @@ TEST(AvatarCatalogContentTest, HairNeverComesThroughAHat) {
     EXPECT_LE(worst, 6) << worstPair;
 }
 
-// plans/plan_avatar_acceptance.md AVA-07: how far a planted foot drifts when a preset plays on an avatar
+// Avatar acceptance AVA-07: how far a planted foot drifts when a preset plays on an avatar
 // it was not authored for. Presets are solved, feet planted, on one body at its authored height (the
 // Female* ones on the female, the rest on the male); the renderer draws every other joint from the
 // avatar's own bind pose but the root's motion is the clip's, in metres, as XNA's

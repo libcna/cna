@@ -552,7 +552,7 @@ TEST_F(GuideAvatarEditorDeviceTest, AMouseReachesEveryPartOfTheEditor) {
     EXPECT_NE(View().first, yaw);
 }
 
-// plans/plan_avatar_acceptance.md AVA-02: the stage and the portraits are drawn into render targets.
+// Avatar acceptance AVA-02: the stage and the portraits are drawn into render targets.
 // A renderer without them (STUB) used to throw out of the Guide's draw once an avatar was ready,
 // which only the device tests whose avatar happened to finish loading in time reached. These wait
 // for the avatar, so every renderer reaches the draw: one with render targets draws, one without

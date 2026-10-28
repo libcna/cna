@@ -1316,7 +1316,7 @@ if(CNA_BUILD_TESTS)
     # themselves and still in parallel with everything else.
     set(_cna_unit_tests_network_filter
         "ENetBackendTest.*:ENetHostHandleTest.*:ENetDiscoveryServiceTest.*:NetworkSessionTest.*:ServiceSearchTest.*:OnlineNetworkSessionTest.*:NetworkSessionTypePolicyTest.*:TwoProcessLoopbackTest.*:AvailableNetworkSession*.*:QualityOfServiceTest.*:OnlineLeaderboardTest.*:LocalNetworkGamerTest.*:GamerServicesDispatcherHangRegressionTest.*:RelayTransportTest.*")
-    # plans/plan_avatar_acceptance.md AVH-07: the SDL_GPU and FNA3D compiled-effect suites test their
+    # Avatar acceptance AVH-07: the SDL_GPU and FNA3D compiled-effect suites test their
     # renderer's own runtime and need it to be the device's. In a multi-renderer tree whose default
     # is another renderer they were discovered with the default, so most cases skipped and those
     # that assert the runtime exists failed (15 in cmake-build-multi). They are discovered on their

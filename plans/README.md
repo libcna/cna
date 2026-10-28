@@ -74,6 +74,12 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   [`../docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md),
   deployment is in [`../docs/gamer-services-server.md`](../docs/gamer-services-server.md), and
   consumer sample status is in [`cna-samples/plan.md`](../../cna-samples/plan.md).
+- `plan_avatar_coordinate_space.md` (`GS-009g`, the XNA -Z avatar space, 2026-10-03) and
+  `plan_avatar_acceptance.md` (`AVA-01`..`AVA-10`, `AVH-01`..`AVH-08`, Avatar v3 acceptance at
+  `ac20344ef`, 2026-10-25) — deleted on 2026-10-28 (Git history only). The coordinate contract and
+  the acceptance command are in [`../docs/avatars.md`](../docs/avatars.md), the accepted results in
+  [`../docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md) §33.
+  Comments cite the rows as "Avatar acceptance AVA-NN".
 - `plan_binding.md` — native C API/C ABI campaign (`CBIND-000`–`CBIND-153`) and its historical
   phase ledger; deleted on 2026-10-28 (Git history only). Current measured coverage and planned
   owners are generated in [`../docs/c-api/COVERAGE.md`](../docs/c-api/COVERAGE.md), permanent
