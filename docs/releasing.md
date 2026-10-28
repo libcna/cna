@@ -1,6 +1,6 @@
 # Releasing CNA
 
-*Current as of 0.1.0 (2026-10-10).*
+*Current as of 0.2.0 (2026-10-28).*
 
 CNA follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html). A release is a
 git tag plus a `CHANGELOG.md` entry — there is no separate release branch, and nothing is
@@ -34,10 +34,11 @@ Everything else derives from that:
 `core` module publishes that directory as a public include root. Never edit the generated file,
 and never hard-code the version anywhere else.
 
-Two copies are maintained by hand and must be updated as part of a bump:
+These copies are maintained by hand and must be updated as part of a bump:
 
 - `CHANGELOG.md` — the release entry and its link definitions at the bottom.
 - `Doxyfile` — `PROJECT_NUMBER`.
+- `README.md` — the *Current release* line and the sibling releases it requires (step 3).
 
 ## Numbers that are *not* the product version
 
@@ -82,7 +83,7 @@ are `alpha.N` → `beta.N` → `rc.N`, ordered as SemVer orders them. `0.1.0-alp
 
    ```bash
    cmake -S . -B cmake-build-multi
-   cmake --build cmake-build-multi --parallel
+   cmake --build cmake-build-multi --parallel 8
    tools/platform/run_gpu_tests_private.sh cmake-build-multi -j8 --output-on-failure
    ```
 
@@ -93,7 +94,8 @@ are `alpha.N` → `beta.N` → `rc.N`, ordered as SemVer orders them. `0.1.0-alp
    prints `CNA: version <x.y.z>` and one `CNA: <sibling> <version> at <path>` line per sibling —
    check all four.
 5. **Commit** the version-bearing files by explicit name (`CMakeLists.txt`, `Doxyfile`,
-   `CHANGELOG.md`), never `git add -A`.
+   `CHANGELOG.md`, `README.md`, and `cmake/DependencyVersions.cmake` when a sibling requirement
+   changed), never `git add -A`.
 6. **Tag** with a `v` prefix and an annotated tag:
 
    ```bash

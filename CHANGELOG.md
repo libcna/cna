@@ -9,7 +9,110 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-28
+
+The 0.2.0 release, cut from `next`. It narrows what a program links to what it uses, retires four
+more renderer identities and the experimental modern GPU layer, makes `WEBGPU` a supported
+renderer, ships an installed C++ SDK, brings PBR, image-based lighting and shadows to the FNA3D,
+DIRECTX9 and SOFTWARE renderers, introduces Avatar v3, and follows XNA wherever the ported XNA
+demos and the XNA museum measured CNA behaving differently. The experimental C ABI goes from
+`0.46.0` to `0.50.0`.
+
+**C++ programs and libraries must be rebuilt against this release** — class layouts, virtual
+functions and exception types changed (see *Changed*) — and it requires **sharp-runtime 0.2.0**,
+whose own `FileStream` layout changed.
+
+### Dependencies
+
+CNA consumes three separately versioned sibling checkouts with `add_subdirectory`, so checking out
+this tag does not select them. This release requires, and was built and tested against:
+
+| Sibling | Required | Verified against |
+|---|---|---|
+| sharp-runtime (`../sharp-runtime`) | **0.2.0** | [`v0.2.0`](https://github.com/libcna/sharp-runtime/releases/tag/v0.2.0), `1797b51b6e5ed29d2676f2c78f73adccdbbeb2c4` |
+| easy-gl (`../easy-gl`) | **0.1.1** | `d911020e8cab69f5ad1e94e3a1d81d83406b4020`: [`v0.1.1`](https://github.com/libcna/easy-gl/releases/tag/v0.1.1) (`f4d6afaf16cdc7e7e73130950bc45e6d865b41bd`) plus one commit that changes only `AGENTS.md` and `CLAUDE.md` |
+| meta-gl (easy-gl's `../meta-gl`) | **0.4.1** | `4e9f7b523c935f4159402393bf2412a21b7fd9c6`: [`v0.4.1`](https://github.com/libcna/meta-gl/releases/tag/v0.4.1) (`dd3b30055d55fdc42240de7af248259338256992`) plus one commit that changes only `AGENTS.md` and `CLAUDE.md` |
+
+Only the sharp-runtime requirement moved. `cmake/DependencyVersions.cmake` enforces all three at
+configure time, as it did for `0.1.0`, and the installed C++ SDK's `find_dependency(SharpRuntime)`
+asks for the same version. Every other dependency is pinned by this repository through submodule
+gitlinks and the `GIT_TAG` values in `cmake/ThirdParty*.cmake` and
+`cmake/RendererSelection.cmake`; this release moves several of them (see *Changed*).
+
+### Added
+
+- **An installed, relocatable C++ SDK.** `CNA_INSTALL_CXX=ON` installs the configured modules;
+  a consumer without the source checkout uses `find_package(CNA CONFIG COMPONENTS …)` and the
+  `CNA::` and `SharpRuntime::` targets ([`docs/installed-cpp-sdk.md`](docs/installed-cpp-sdk.md)).
+- **C ABI `0.50.0`** (additive): the `SkinnedModelEXT` part diffuse colour routes, a typed
+  `CNA_DisplayColorSpace`, glTF cameras in compiled models (`CNA_CnbModelCamera` and five
+  `cna_cnb_model_*camera*` routes), and the renderer features `SamplerLevelOfDetailBias`,
+  `PbrEffectShading`, `SkinnedPbrEffectShading`, `MultiSampleMask` and `RenderTargetReadback`
+  (32–36), which C++ `RendererFeature` gains too. `cna_shader_effect_create` also accepts SPIR-V,
+  so a C game can give `SDL_GPU` a custom effect
+  ([`docs/c-api/ABI_VERSIONING.md`](docs/c-api/ABI_VERSIONING.md)).
+- **PBR on more renderers.** FNA3D renders `PbrEffect`/`SkinnedPbrEffect` (metallic-roughness,
+  image-based lighting, double-sided materials, a UV set per map, punctual lights), and so do
+  DIRECTX9 and SOFTWARE; all three gain stock-effect shadows and punctual lights in the stock
+  effects. DIRECTX9 also gets native cube and volume formats, real render-target mip chains and a
+  working `SetStringMarkerEXT`.
+- **`SDL_GPU`** draws with a base instance, binds `RenderTargetCube` faces in any slot of a
+  multi-target set, samples textures in vertex shaders, and applies a `MultiSampleMask` that keeps
+  all samples or none (any other mask throws `NotSupportedException`). Float `Texture3D` formats
+  work on `SDL_GPU` and `WEBGPU`.
+- **`ContentCompiler` writes `.xnb`** for processed textures (2D, cube and volume), sound effects,
+  songs, sprite fonts, compiled effects and video, as XNA's compiler does.
+- **glTF cameras** survive into the compiled `Model`, through an optional `.cnb` `MCAM` chunk and
+  CNJ cameras ([`docs/cnj-format.md`](docs/cnj-format.md)).
+- **XNA API filled in:** `SoundEffect.FromStream(Stream)`, `ResourceContentManager.Load<T>()`,
+  `HttpNotificationChannel.ErrorOccurred`, `DisplayMode` equality and hashing, and `XmlSerializer`
+  support for `Color`, `Rectangle` and `Point`. New CNAEXT: `PresentationParameters::
+  CreateWindowedEXT(width, height)` and a public `SamplerStateCollection::ActiveSamplerCount`.
+- **Avatar v3.** Avatar description format 3 (eyebrows, ear shapes, earrings, wristwear, gloves,
+  rings, makeup, body proportions and more face controls), avatar catalog v3 through revision 5,
+  a redesigned Guide avatar editor with outfits and named shapes, and `demo_avatar`
+  ([`docs/avatars.md`](docs/avatars.md)).
+
 ### Changed
+
+- **`WEBGPU` is a supported renderer** (`GraphicsRendererMaturity::Supported`, beside `SDL_GPU`)
+  instead of experimental, and ranks with the other supported renderers in the automatic fallback
+  order. **The fallback tries `HEADLESS` after every renderer that shows a picture**, `SOFTWARE`
+  included, and before `STUB`.
+- **`new PresentationParameters()` has XNA's defaults**: a 0×0 back buffer and
+  `IsFullScreen = true`, not an 800×480 window; `cna_presentation_parameters_init` follows. A
+  device built without a `GraphicsDeviceManager` states its size with
+  `PresentationParameters::CreateWindowedEXT`; `GraphicsDevice()` and a `Game`'s implicit device
+  use it for 800×480 and behave as before.
+- **Stock-effect draws are checked against the vertex declaration**, as XNA does — draws from
+  vertex buffers and every `DrawUser*` overload. A missing input throws
+  `InvalidOperationException` naming it, and a `DrawUser*` call with a non-trivially-copyable
+  vertex type no longer compiles.
+- **XNA-facing errors throw the matching `System::` exceptions** (`ArgumentException`,
+  `InvalidOperationException`, `FileNotFoundException`, …) instead of `std::invalid_argument`,
+  `std::out_of_range` or `std::runtime_error`, across math, storage, content, input, net, runtime
+  and graphics. A `catch` of the standard type no longer catches them.
+- **CNA's headers no longer leak sharp-runtime's `Prop.hpp` macros** (`YES`, `NO`, `nothing`,
+  `getter1`, …); code that used them without including the header itself must include it.
+- **`StorageContainer` follows XNA:** `CreateFile`/`OpenFile` default to `FileShare::None` and
+  honour an explicit `FileShare`, `DeleteContainer` removes only its own player's folder, errors
+  use XNA's exception types, and a dangling symlink can no longer reach outside the container.
+- **`ContentManager`** refuses a `RootDirectory` change while assets are cached, disposes what it
+  loaded on `Unload`, routes `Load<T>` through an `OpenStream` override, and resolves compiled
+  references beside the asset. The glTF pipeline builds extracted textures as child assets by
+  default and keeps STEP and CUBICSPLINE animation; its component versions moved, so existing
+  content rebuilds once.
+- **`GraphicsDevice::SetBlendEnabled`** applies the same non-premultiplied blend on every
+  renderer, and `SpriteBatch.Begin` with a `ColorMatrixEffect` throws `NotSupportedException`
+  where the renderer cannot apply it (everywhere but `SOFTWARE`). EasyGL promises and delivers at
+  most 4× MSAA.
+- **`SendDataOptions` is a flags enumeration**, so `Chat` combines with `Reliable` and `InOrder`.
+- **`CNA_SHARED_LIBRARY` needs CMake 3.30**, and with it `libcna_c_api.so` links `libcna.so`, so a
+  program mixing the C and C++ APIs shares one runtime
+  ([`docs/c-api/CONSUMING.md`](docs/c-api/CONSUMING.md)).
+- **Dependency moves:** FNA3D (release 26.10) and MojoShader are fetched from the libcna forks
+  without configure-time patches, SDL moves to `86296ac8`, and ENet is unmodified upstream master
+  instead of a patched 1.3.17.
 
 - **A program links only the CNA subsystems it uses.** Mobile Eggbert (textures, sounds,
   `Guide.IsTrialMode`, `Guide.ShowMarketplace`) went from 208 MB to 62.4 MB as a Debug executable
@@ -110,7 +213,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   API's by-name route). Their C ABI values 1, 8, 14 and 42 are permanently reserved and the
   experimental C ABI goes to `0.48.0`; no surviving identity is renumbered. Not carried over:
   `SDL_GPU` compiles `ShaderEffect` out on Windows, Apple and Emscripten and has no occlusion
-  queries, and no surviving renderer implements `RendererFeature::BaseInstanceDrawing`.
+  queries. (`RendererFeature::BaseInstanceDrawing` was carried over after all: `SDL_GPU`
+  implements it since RRC-043.)
+- **The retired modern GPU layer**, C ABI `0.47.0`: compute shaders, indirect draws
+  (`GraphicsDevice::Draw[Indexed]PrimitivesIndirectEXT`), storage images, GPU timers and texture
+  arrays, with their headers, capabilities, renderer features and limits, and the matching C
+  constants, structures and routes ([`docs/c-api/ABI_VERSIONING.md`](docs/c-api/ABI_VERSIONING.md)).
+- **`CNA::Runtime`, `RuntimeOptions` and `CNA/Misc.hpp`**, which were declared and never
+  implemented.
+- **Avatar development catalogs 1 and 2.** Catalog v3 is the only catalog CNA ships, and avatar
+  descriptions that need catalog 1 or 2 are refused.
 
 ### Fixed
 
@@ -140,6 +252,47 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   carries `Depth24`, the default `PreferredDepthStencilFormat` of an XNA `GraphicsDeviceManager`,
   as every XNA game's device does; `new PresentationParameters()` keeps XNA's `None`. Pinned by
   `CApi_GameDefaultDepthBufferSmoke`. Found by cna-c-template 0.1.0's 3D path.
+- **XNA parity found by the ported XNA demos and the XNA museum** (`CNA_DEMOS_REPAIR_MATRIX.json`,
+  [`docs/xna-fna-behavior-decisions.md`](docs/xna-fna-behavior-decisions.md)): `Curve`, matrix
+  decomposition and perspective, `Quaternion`, bounding-volume containment and intersection,
+  `Color`, hashing and `ToString` text; XNB, CNB and intermediate-XML reading bounds; `Song`,
+  `SoundEffect`, WaveBank and `VideoPlayer` lifetimes and errors; `SpriteBatch` immediate mode and
+  upload ordering on `SDL_GPU` and `WEBGPU`; achievements, leaderboards, System Link joins and host
+  migration; `Game.ResetElapsedTime` with a fixed time step; and renderer defects in every family.
+- **Crashes at exit and on background threads**: C API objects alive at exit, diagnostics after
+  thread-local teardown, audio-mixer races, and a playing `Video` destroyed under its decoder.
+- The C API builds for Windows with MinGW-w64.
+
+### Known limitations
+
+- Pre-release quality remains: a minor release may change the public API, renderer coverage is
+  uneven by design (`docs/<renderer>-renderer.md`), the known defects and limitations are in
+  `handoff.md` §5, and `Content` has no general `.xnb` reader.
+- The release gate is Linux x86-64. `WEBGPU`'s Supported class rests on Linux and headless Chrome;
+  its Windows, macOS and linux-aarch64 wgpu-native packages are still unverified (`WEBGPU-1`).
+  `DIRECTX9`, the Apple, Android and Emscripten builds, and the MinGW C API build are not covered
+  by this release's gate.
+- The 232 skipped tests are the tests' own renderer and profile conditions
+  (`WebGPUCompiledEffect*`, `SdlGpuIndexedDrawRangeTest`, `WebGpuWireFrameContract`, …), as in
+  `0.1.0`.
+
+### Verification
+
+- `cmake-build-multi` — `OPENGLES3` as the default renderer plus `OPENGL33`, `WEBGPU`,
+  `SDL_GPU`, `FNA3D`, `SOFTWARE`, `HEADLESS` and `STUB` in one binary, Debug, tests on —
+  configures with `CNA: version 0.2.0` and one accepted-version line for each of sharp-runtime
+  0.2.0, easy-gl 0.1.1 and meta-gl 0.4.1. The incremental build from the tree's previous state
+  ran 1,855 steps with 0 errors; its 37 warnings are all in seven test sources
+  (`-Wunused-result` in six content and GamerServices test files, `-Wenum-compare` in
+  `Fna3dCompiledEffectTests.cpp`), none in production code.
+- The complete suite on the private display: **12,593 tests, 12,360 passed, 232 skipped,
+  1 failed** in 14.2 minutes at `-j8`. The one failure was `CnaProvenanceGate`: the A-09 fixture
+  `fx_struct_defaults.fx` had no `PROVENANCE.json` row. The row was added just before this
+  release, and the gate and its self-test then passed. Every failure carried by `0.1.0` passes now,
+  the three Wine-based `XnaPipelineGenuineRuntime*` tests included.
+- Verified on Debian GNU/Linux 13 with GCC 14.2.0, CMake 3.31.6, Ninja and Mesa 25.0.7, with the
+  siblings clean: sharp-runtime at its `v0.2.0` tag, and easy-gl and meta-gl at the commits in
+  *Dependencies*.
 
 ## [0.1.0] — 2026-10-10
 
@@ -413,6 +566,7 @@ mechanism (a configure-time check against a recorded pin, or a submodule) is pla
 - Per-renderer bugs and gaps that are known and tracked are listed in `NEXT.md` §5.
 - `Content` has no general `.xnb` reader by design, and 14 of the `Media` types are shells.
 
-[Unreleased]: https://github.com/libcna/cna/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/libcna/cna/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/libcna/cna/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/libcna/cna/compare/v0.1.0-alpha.1...v0.1.0
 [0.1.0-alpha.1]: https://github.com/libcna/cna/releases/tag/v0.1.0-alpha.1

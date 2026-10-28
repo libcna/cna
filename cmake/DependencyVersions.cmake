@@ -17,7 +17,7 @@
 # A release bump updates these three values, the matching CHANGELOG.md entry, and nothing else.
 # =====================================================================================
 
-set(CNA_REQUIRED_SHARP_RUNTIME_VERSION "0.1.0")
+set(CNA_REQUIRED_SHARP_RUNTIME_VERSION "0.2.0")
 set(CNA_REQUIRED_EASYGL_VERSION        "0.1.1")
 set(CNA_REQUIRED_METAGL_VERSION        "0.4.1")
 

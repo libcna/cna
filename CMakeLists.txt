@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(CNA VERSION 0.1.0 LANGUAGES CXX)
+project(CNA VERSION 0.2.0 LANGUAGES CXX)
 
 # --- Release identity (docs/releasing.md) --------------------------------------------------
 # project(VERSION) accepts numeric components only, so the Semantic Versioning pre-release
