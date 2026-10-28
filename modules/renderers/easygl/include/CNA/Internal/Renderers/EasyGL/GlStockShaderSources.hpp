@@ -415,7 +415,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
-"precision mediump float;\n"
+"precision highp float;\n"
 "in vec4 vColor;\n"
 "in float vFogFactor;\n"
 "uniform vec4 uAlphaTest;\n"
@@ -464,7 +464,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
-"precision mediump float;\n"
+"precision highp float;\n"
 "in vec2 vUV;\n"
 "in vec4 vDiffuse;\n"
 "in float vFogFactor;\n"
@@ -518,7 +518,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
-"precision mediump float;\n"
+"precision highp float;\n"
 "in vec4 vColor;\n"
 "in vec2 vUV;\n"
 "in float vFogFactor;\n"
@@ -695,10 +695,9 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform vec4 uFogVector;\n"
 // uDiffuseColor is read by BOTH stages here (vertex needs .rgb for vLitRGB, fragment needs .a) --
 // GLSL ES 3.00 requires a uniform shared across stages to have the SAME precision qualification,
-// and this shader's own vertex/fragment stages have different DEFAULT float precisions (highp
-// here vs. mediump in the fragment stage below), so it must be qualified explicitly and
-// identically in both declarations or linking fails ("mismatching precision qualifiers") --
-// found via a real link failure, not assumed.
+// so it is qualified explicitly and identically in both declarations or linking fails
+// ("mismatching precision qualifiers") -- found via a real link failure, not assumed, when the
+// fragment stages still defaulted to mediump.
 "uniform highp vec4 uDiffuseColor;\n"
 "uniform vec3 uAmbientColor;\n"
 "uniform vec3 uLight0Dir;\n"
@@ -714,15 +713,8 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform float uSpecularPower;\n"
 "uniform vec3 uEyePosition;\n"
 "uniform vec3 uEmissiveColor;\n"
-// Declared in THIS stage only. The fragment stage defaults to mediump while this one is
-// highp, and GLSL ES 3.00 refuses to link a uniform shared across stages with different
-// precision -- the same trap uDiffuseColor above documents. Since the multiply moved here,
-// the fragment stage does not need it.
+// Declared in THIS stage only: since the multiply moved here, the fragment stage does not need it.
 "uniform float uVertexColorEnabled;\n"
-// Declared in THIS stage only. The fragment stage below defaults to mediump while
-// this one is highp, and GLSL ES 3.00 refuses to link a uniform shared across stages
-// with different precision -- the same trap uDiffuseColor above documents. After the
-// multiply moved here the fragment stage no longer needs it at all.
 
 "out vec2 vUV;\n"
 "out float vVertexAlpha;\n"
@@ -774,7 +766,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
-"precision mediump float;\n"
+"precision highp float;\n"
 "in vec2 vUV;\n"
 "in float vVertexAlpha;\n"
 "in float vFogFactor;\n"
@@ -837,7 +829,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
-"precision mediump float;\n"
+"precision highp float;\n"
 "in vec2 vUV;\n"
 "in vec2 vUV1;\n"
 "in vec4 vDiffuse;\n"
@@ -898,7 +890,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
-"precision mediump float;\n"
+"precision highp float;\n"
 "in vec4 vColor;\n"
 "in vec2 vUV;\n"
 "in vec2 vUV1;\n"
@@ -986,7 +978,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
-"precision mediump float;\n"
+"precision highp float;\n"
 "in vec3 vWorldNormal;\n"
 "in vec3 vEyeDir;\n"
 "in vec2 vUV;\n"
@@ -1226,7 +1218,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // both declarations here too, not assumed safe by analogy.
 "uniform highp vec4 uDiffuseColor;\n"
 "uniform vec3 uEmissiveColor;\n"
-"uniform mediump float uVertexColorEnabled;\n"
+"uniform float uVertexColorEnabled;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -1302,7 +1294,7 @@ CNA_GL_SKIN_NORMAL_DECL
 
         static const char* fsrc =
 "#version 300 es\n"
-"precision mediump float;\n"
+"precision highp float;\n"
 "in vec2 vUV;\n"
 "in float vFogFactor;\n"
 "in vec3 vLitRGB;\n"
@@ -1874,7 +1866,7 @@ void main()
 )";
 
         const char* fragmentShaderSource = R"(#version 300 es
-precision mediump float;
+precision highp float;
 
 in vec2 TexCoord;
 in vec4 Color;
