@@ -101,8 +101,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 ### Removed
 
 - **Four more renderer identities**, `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER`, leaving 10
-  public identities over 8 implementation families (`plans/plan_renderer_retirement.md`,
-  [`docs/removed-renderers.md`](docs/removed-renderers.md)). None is replaced or aliased: `SDL_GPU`
+  public identities over 8 implementation families
+  ([`docs/removed-renderers.md`](docs/removed-renderers.md)). None is replaced or aliased: `SDL_GPU`
   is the modern native path (SDL owns its Vulkan, Direct3D 12 and Metal backends) and the default on
   Windows, macOS and iOS, `DIRECTX9` stays on Windows, and `OPENGLES3` is the default elsewhere
   outside the browser. A retired name is refused at configure time and at run time (the

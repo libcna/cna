@@ -83,11 +83,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 
 ## Graphics backends and renderers
 
-- [`plan_renderer_retirement.md`](plan_renderer_retirement.md) — the 2026-10-13 retirement of
-  `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER` (RRC-030..RRC-039, remediation from RRC-040),
-  and its report. [`../docs/renderer-registry.md`](../docs/renderer-registry.md) is the canonical
-  list of the 10 identities that remain; [`../docs/removed-renderers.md`](../docs/removed-renderers.md)
-  records all 41 retired ones.
+- `plan_renderer_retirement.md` — the 2026-10-13 retirement of `VULKAN`, `DIRECTX11`, `METAL` and
+  `SDL_RENDERER` (`RRC-030`..`RRC-054`); deleted on 2026-10-28 (Git history only). The canonical
+  current list is [`../docs/renderer-registry.md`](../docs/renderer-registry.md); the campaign
+  record and all 41 retired identities are in
+  [`../docs/removed-renderers.md`](../docs/removed-renderers.md).
 - `plan_vulkan_parity.md` — VKPAR-0001..0029, the Vulkan hardware-parity ledger (Radeon 780M,
   closed 2026-09-21; `VULKAN` retired 2026-10-13). Deleted on 2026-10-26 (Git history only); its
   shared contracts live in [`plan_graphics_shared_cleanup.md`](plan_graphics_shared_cleanup.md)

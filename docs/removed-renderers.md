@@ -35,7 +35,7 @@ themselves later. The current set is the 10 identities in `cmake/RendererIdentit
 (`docs/renderer-registry.md`), and the most recent section names what covers each platform today.
 `plans/plan_renderer_cleanup.md`, which the older sections cite for their `RRC-` task records, was
 deleted on 2026-10-11 and survives in Git history; the 2026-10-13 retirement's ledger is
-`plans/plan_renderer_retirement.md`.
+preserved below and in the report snapshot at commit `a37bb07ba`.
 
 ## Retired identity values
 
@@ -102,8 +102,7 @@ The C ABI went to `0.28.0` for the 2026-09-17 retirement, to `0.31.0` for the 20
 
 An owner decision, final: CNA stops maintaining its own native Vulkan, Direct3D 11 and Metal
 renderers and SDL's 2D renderer (`RRC-030`..`RRC-039`, with a remediation series continuing from
-`RRC-040`; the ledger and full report are
-[`plans/plan_renderer_retirement.md`](../plans/plan_renderer_retirement.md)). `SDL_GPU` is CNA's
+`RRC-040` through `RRC-054`). `SDL_GPU` is CNA's
 modern native path -- CNA maps XNA 4.0 onto SDL_GPU, and SDL owns the Vulkan, Direct3D 12 and Metal
 backends underneath it. None of the four is aliased to `SDL_GPU` or to anything else: each name is
 refused at configure time by name and value, and at run time (`CNA_GRAPHICS_RENDERER`,
@@ -114,7 +113,7 @@ was retired. CNA keeps 10 public renderer identities over 8 implementation famil
 |---|---:|---|---|
 | `VULKAN` | 8 | A second, hand-written native Vulkan backend beside SDL_GPU's. | `SDL_GPU` (SDL's Vulkan backend on Linux and Android), `WEBGPU` (wgpu's), `FNA3D` through SDL_GPU. |
 | `DIRECTX11` | 14 | A native Direct3D 11 backend, with the shared `D3DCommon` core and its offline HLSL. | `SDL_GPU` (SDL's Direct3D 12 backend), `DIRECTX9`, `FNA3D` (its own D3D11 and SDL_GPU drivers). |
-| `METAL` | 42 | A native Metal backend for macOS and iOS (Objective-C++). | `SDL_GPU` (SDL's Metal backend), not yet re-qualified on Apple hardware. |
+| `METAL` | 42 | A native Metal backend for macOS and iOS (Objective-C++). | `SDL_GPU` (SDL's Metal backend); current qualification is tracked in `handoff.md` §5.2. |
 | `SDL_RENDERER` | 1 | SDL's 2D API: 2D-only, it refused every 3D call. | `SDL_GPU`, `OPENGLES3`/`OPENGL33`, `SOFTWARE`. |
 
 **What went with them.** `modules/renderers/{vulkan,directx11,metal,sdl-renderer}` and
@@ -131,10 +130,27 @@ its offline SPIR-V build. `DIRECTX11`: the Windows SDK's `d3d11`, `dxgi` and `d3
 own 2D API (SDL3 itself stays). The removal commits are `fe5e25994` (`VULKAN`), `def6f7747`
 (`DIRECTX11`), `22842c107` (`METAL`) and `86b8152f2` (`SDL_RENDERER`).
 
+**Campaign record.** `RRC-030` classified each retiring suite and moved XNA-visible behaviour to
+shared coverage. `RRC-031`, `RRC-032`, `RRC-034` and `RRC-035` removed the implementations, while
+`RRC-033` restored two shared BasicEffect programs. `RRC-036`..`RRC-039` cleaned remaining
+references, validated the surviving renderer set and finalised the report.
+`RRC-040`..`RRC-054` then closed diagnostics, obsolete common hooks, cross-family test coverage,
+C API metadata, CI and documentation; commit `a37bb07ba` records the final close-out validation.
+`git log --grep='Task RRC-0'` locates every task commit.
+
+At the `RRC-039` checkpoint the campaign had reduced the tracked tree by 732 files and, after
+excluding three concurrent commits, 265,816 text lines. The five implementation directories began
+with 434 files and 242,960 lines; `RRC-030` first moved 10 files and 2,197 lines into shared
+locations, and the removal commits deleted the remaining 424 files and 240,760 lines. The same
+checkpoint retained the reusable behaviour as 30 conformance programs, seven shared examples,
+compiled-effect helpers and renderer-neutral CnaTests coverage. These are dated measurements, not
+current suite counts.
+
 **Tests.** Each suite was classified before deletion. Implementation tests went with their
 renderer; XNA behaviour not covered elsewhere became renderer-neutral conformance programs
-(`modules/graphics/examples/conformance/`, run as `<Renderer>_Conformance_*` by EasyGL, SDL_GPU and
-WebGPU) or CnaTests cases, and what surviving renderers get wrong is in `handoff.md` §5.1.
+(`modules/graphics/examples/conformance/`, registered for EasyGL, SDL_GPU, WebGPU, SOFTWARE, FNA3D
+and HEADLESS as `<Renderer>_Conformance_*`) or CnaTests cases. Current defects and limitations are
+recorded only in `handoff.md` §5.
 
 **Kept on purpose.** SDL's own Vulkan/D3D12 patches and the `run-wine-vkd3d*.sh` launchers
 (`SDL_GPU`); MojoShader's D3D11 and Metal patches (`FNA3D`'s own drivers); SPIRV-Cross for
@@ -144,15 +160,13 @@ frames; the `ShaderLanguageEXT` HLSL/MSL identities.
 **Validation.** On Linux, from empty caches: the multi-renderer tree (`OPENGLES3` default with
 `OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`) in Debug and Release and the
 `SDL_GPU`, `WEBGPU`, `HEADLESS`, `SOFTWARE` and `FNA3D` trees built and ran their full suites through
-the private runner, every failure a `handoff.md` §5.1 entry; the Emscripten build ran the C API
+the private runner, with every failure matching the dated defect list; the Emscripten build ran the
+C API
 under node and two demos with `WEBGPU` and with `WEBGL2` in headless Chrome; on an x86_64 Android
 emulator the C API's identity checks passed and `OPENGLES3` ran the C API lifecycle smoke to exit 0;
 the MinGW cross build ran the C API, the `DIRECTX9` suite and `SDL_GPU`'s Direct3D 12 backend under
-Wine. Not run: native Windows, macOS, iOS, a physical Android device. Details and numbers:
-`plans/plan_renderer_retirement.md`.
-
-**Not run:** native Windows (MSVC, Direct3D 12), macOS and iOS hardware, an Android device. SDL_GPU's
-qualification on those is the follow-up (`handoff.md` §5.2).
+Wine. The complete dated matrix and intermediate failure counts remain in Git history at commit
+`a37bb07ba`. Current platform qualification work is tracked only in `handoff.md` §5.2.
 
 ## The 2026-10-06 retirement
 

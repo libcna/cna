@@ -234,7 +234,7 @@ configure time, not merely to exist.
 | Set | Status |
 |---|---|
 | `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
-| `OPENGLES3;OPENGL33;WEBGPU;SDL_GPU;FNA3D;SOFTWARE;HEADLESS;STUB` | ✅ builds with tests and examples (`RRC-035`, 2026-10-14): only the default's example suite registers; every renderer is selectable at run time, and the retirement campaign's focused suites ran with SDL_GPU, WEBGPU, SOFTWARE, FNA3D, HEADLESS and STUB selected that way (`plans/plan_renderer_retirement.md`). |
+| `OPENGLES3;OPENGL33;WEBGPU;SDL_GPU;FNA3D;SOFTWARE;HEADLESS;STUB` | ✅ builds with tests and examples (`RRC-035`, 2026-10-14): only the default's example suite registers; every renderer is selectable at run time, and the retirement campaign's focused suites ran with SDL_GPU, WEBGPU, SOFTWARE, FNA3D, HEADLESS and STUB selected that way ([retirement record](removed-renderers.md#the-2026-10-13-retirement)). |
 | `WEBGL2;WEBGPU` (Emscripten) | ✅ one wasm bundle carries both. In headless Chrome on the real GPU (2026-10-07, emsdk 6.0.9) the renderer benchmark and `cna_house3d_demo --depth-probe` ran under each, selected at runtime through `Module.cnaPreferredRenderer`, with no extra link flags: a build that compiles `WEBGPU` in sizes the Asyncify stack for it automatically (`RRC-025`). With Emscripten's default 4 KiB stack `WEBGPU` aborted with `unreachable` (`RRC-018`) |
 
 Combinations whose evidence involved a renderer retired on 2026-09-17, 2026-09-27, 2026-09-28,

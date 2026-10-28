@@ -1,7 +1,7 @@
 # CNA Platform Abstraction (`IPlatform`) — Implementation Plan
 
 > **Retirement notice (2026-10-13):** the `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER`
-> renderers were retired (`plans/plan_renderer_retirement.md`, `docs/removed-renderers.md`), and
+> renderers were retired (`docs/removed-renderers.md`, `RRC-030`..`RRC-054`), and
 > with them the platform's Vulkan-surface service (`IPlatformVulkanSurface`, PLAT-23/PLAT-42) and
 > the Metal window intent. The renderer SDL allow-list is now exactly `sdl-gpu` and `fna3d`
 > (`tools/platform/renderer_sdl_audit.py`). Rows below that name those renderers record completed
