@@ -11,22 +11,14 @@ existing managed consumer tests; unresolved Wine/DXVK timeouts are recorded in `
 Native Apple/MSVC validation remains the separate platform campaign. Subsequent compiles use
 shared ccache and at most six parallel compile jobs, without concurrent builds.
 
-> **Status (2026-08-31, after `CBIND-124`):
-> B0–B11, B13 and B18 complete; B12, B14 and B15 are explicit
-> C-ABI backlog, not Content Pipeline v1 work.** Phase B10 bound all 506 rows the sixth merge
-> reopened, the CNB content format included; Phase B11 bound the seventh merge's 15-row tail. The
-> completed experimental C++ Content Pipeline, its post-XNB continuation, CP-055's manifest-v7
-> named-source-root capability, CP-058's Model schema-2 CPU codec, and CP-059's exact emitted-schema
-> contract now add 654 deliberately
-> unbound inventory rows under `CBIND-117`.
-> Coverage:
-> **553 headers / 9,492 symbols — 8,348 implemented, 15 approved partial, 663 planned, 466 not
-> applicable.** Phase B13 bound `Load<Model>` and the `Tag` a content processor writes; Phase B18
-> closes the small SAMPLE-060/061 public-API tail and takes the ABI to **`0.21.0` / 4,054 exports**. The
-> release gate is consistently
-> **Not ready** on coverage alone until `CBIND-117`, `CBIND-120`, `CBIND-121` and `CBIND-122`; this integration does not invent C routes for
-> a C++ build-time extension API merely because it is public. See *Current status* and Phase B12.
-> This document is
+> **Status (measured 2026-10-28):** this remains the machine-readable native C-ABI work plan.
+> Coverage is **466 headers / 8,134 symbols — 7,033 implemented, 15 approved partial, 633 planned,
+> 453 not applicable**. The six open owners are `CBIND-117` (134), `CBIND-120` (3), `CBIND-121`
+> (1), `CBIND-122` (2), `CBIND-125` (5), and `CBIND-127` (488). The ABI is **`0.50.0` / 3,212
+> exports**. The release gate is **Not ready** on the single coverage criterion; generated
+> [`COVERAGE.md`](../docs/c-api/COVERAGE.md) and
+> [`RELEASE_GATE.md`](../docs/c-api/RELEASE_GATE.md) are authoritative whenever prose and
+> measurement differ. See *Current status* for the exact reproduction commands. This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -1569,7 +1561,7 @@ silently bless them as implemented or invent new C routes.
 
 | # | Task | Rows | Status | Acceptance criteria |
 |---|---|---:|---|---|
-| CBIND-122 | Design or disposition untyped XNB loading seams | 5 | ⬜ | Decide whether the C content API needs type-erased external-reference/root-asset dispatch and the `ContentManager` friendship/loading helpers, or record owner-approved not-applicable dispositions for internal-only seams. If bound, add strict-C runtime, type-identity, malformed-reader and lifetime evidence. Remove the five exact `SYMBOL_OWNER_OVERRIDES` entries when resolved. This is C-ABI backlog only and adds no export in this task. |
+| CBIND-122 | Design or disposition untyped XNB loading seams | 2 | ⬜ | Decide whether the C content API needs type-erased `ContentReader::ReadAsset` and `ReadExternalReference` dispatch, or record owner-approved not-applicable dispositions for internal-only seams. If bound, add strict-C runtime, type-identity, malformed-reader and lifetime evidence. Remove the two exact `SYMBOL_OWNER_OVERRIDES` entries when resolved. The three former `ContentManager`/helper rows have since acquired mappings. This is C-ABI backlog only and adds no export in this task. |
 
 ## Phase B17 — keep derived reports out of repository history
 
@@ -1613,7 +1605,7 @@ ABI stays `0.29.0` / 4,055 exports / 221 structs.
 | # | Task | Rows | Status | Acceptance criteria |
 |---|---|---:|---|---|
 | CBIND-126 | Make the coverage, limitations and ownership tooling describe the current tree | 40 | ✅ | **Done 2026-09-18.** Scope is now a declared, *total* function over the modules that exist (`MODULE_SCOPE`, plus `OUT_OF_SCOPE_SUBTREES` for build-time surface inside a linked module), so an unclassified module stops the gate instead of inheriting a default; `COVERAGE.md` renders every exclusion with its reason and measured header count. `owner_task()` has no fallthrough left — an unowned runtime module raises by name. `EXCLUDED_PATH_SEGMENTS` is matched case-insensitively. Rule ownership is resolved per symbol against `approved_symbols` rather than per pattern, which is what `--approve-rule-symbols` had been discarding: 34 ambiguous rule pairs over 296 symbols, none of them approved twice, so the data was already a clean partition. Three carve-out rules whose patterns reached declarations they did not own were narrowed by signature. Thirty-one declarations with no C form — the state PODs' copy/assign and `Dispose`, resource move semantics, five friendship declarations and the `*Internal` template-dispatch helpers — carry recorded not-applicable dispositions here. Scanner 12,733 → 9,355 symbols; planned 3,895 → the live backlog below. |
-| CBIND-127 | Bind the runtime C++ surface that grew after the CBIND campaign closed | 320 | ⬜ | The genuinely missing runtime C bindings, separated from the bookkeeping that used to hide them. These are declarations in modules the C ABI links, with no exported route that answers them: predominantly the CNAEXT engine layer and the 3D graphics resources that arrived after their slices closed — `StorageTexture2D`, `Texture2DArray`, `Texture3D`, `ShaderPackageEXT`, `ShaderCodeEXT` and their device entry points. Design C-native routes with strict-C behaviour, lifetime and ABI evidence, or record owner-approved dispositions, one family at a time. This row exists so that unfinished work names an unfinished task: it is the *current* owner of these rows, and the historical slice tasks in Phases B7–B19 remain the record of what was finished when. No route is added by opening it. |
+| CBIND-127 | Bind the runtime C++ surface that grew after the CBIND campaign closed | 488 | ⬜ | The genuinely missing runtime C bindings, separated from the bookkeeping that used to hide them. These declarations span the linked runtime modules and have no exported route that answers them; the generated coverage inventory, not this historical example list, defines the exact set. Design C-native routes with strict-C behaviour, lifetime and ABI evidence, or record owner-approved dispositions, one family at a time. This row exists so unfinished work names an unfinished task: it is the *current* owner of these rows, and the historical slice tasks in Phases B7–B19 remain the record of what was finished when. No route is added by opening it. |
 | CBIND-128 | A drawable component may borrow the game's device from the callbacks the game drives | 1 | ✅ | **Done 2026-10-01.** `CGame` opened its callback scope only around the consumer's own lifecycle callback, but `Game::Update/Draw/Initialize` walk the components after that callback returns, so a component's load-content, update and draw handlers answered `CNA_RESULT_INVALID_STATE` from `cna_drawable_game_component_get_graphics_device` -- measured `load 0/1, update 0/4, draw 0/4` -- and could re-enter `cna_game_run_one_frame` (it returned success and ran a nested frame). The scope is now a depth: each lifecycle step covers its callback and its base pass, every C component handler opens it too, nested scopes share one borrowed device and the outermost invalidates it. `RuntimeComponentDeviceBorrow.c` covers Initialize-time loading, game-driven update/draw, the closed scope afterwards, re-entry refusal and a component added between frames; `^CApi` 117/117 on OPENGLES3. A contract correction within 0.35.0: no export, layout or constant changed. Reported by the C# binding (cna-cs-samples `CNA-REPORT-004`). |
 | CBIND-129 | A component's C initialize handler runs before its base loads content | 1 | ✅ | **Done 2026-10-01.** `ForwardingComponent::Initialize` called `TBase::Initialize()` first -- which for a drawable component is what calls `LoadContent` -- and only then the C `initialize` handler, so load-content ran before the consumer's own initialize. XNA's ParticleSample sets its texture name in `Initialize` and loads it in `LoadContent`, and died with `textureFilename wasn't set properly`. Now handler first, base last, the canonical override shape `CGame::Initialize` already used. `RuntimeComponentsSmoke.c` records the call sequence (fails on the old order at the `validated` stage, passes now); a second initialize re-runs the handler but loads content once. `^CApi` 117/117. Reported by cna-cs-samples CSSAMPLE-029. |
 | CBIND-131 | Exit-time teardown of a live game no longer reads a destroyed thread-local | 1 | ✅ | **Done 2026-10-01.** `CApi_TeardownLifetime_cycles` (a game deliberately left alive for the registry's exit-time fallback) segfaulted intermittently -- 1 run in 3 with `SDL_AUDIODRIVER=dummy`, at run 13 of a gdb loop -- in `EasyGLRenderer::AcquireThreadContextLeaseEXT`, under `HandleRegistry::~HandleRegistry` -> `~Game` -> `GraphicsDevice::Dispose` -> `Texture2D::Dispose`. The lease depth/binding map was a `static thread_local`, and `exit()` destroys the main thread's thread-locals before any static object ([basic.start.term]), so the registry's teardown read a dead map. The state now lives on the lease control, owned by whichever thread holds its recursive mutex (an owner id keeps the unmatched-release diagnostic). 40/40 gdb-looped runs clean afterwards; `^CApi` plus `EasyGL_BackgroundContent_ContextOwnership`, `EasyGL_ThreadContextLease_Exclusion`, `EasyGL_Gltf_ContextLoss` 120/120. Found while verifying CBIND-130. |
@@ -1694,13 +1686,10 @@ This is an **experimental C ABI foundation**, not ABI 1.0 or a future language-s
 
 ## Completion criteria for full public CNA API coverage
 
-The C API is not complete until `CBIND-112` is ✅ and the machine-checked coverage matrix proves
-that every public CNA API symbol has a documented C-native mapping and the required C-only tests.
-(`CBIND-044` closed this criterion on 2026-08-16 for the surface that existed then and `CBIND-095`
-closed it again on 2026-08-27; the sixth merge of `next` reopened it the next day, and `CBIND-112`
-is the row that owns closing it now. A criterion that a finished task satisfied once is not a
-criterion that stays satisfied — this is the sixth time that sentence has had to be rewritten with a
-new task number, which is itself the point.)
+The C API is not complete until the machine-checked coverage matrix proves that every public CNA
+API symbol has a documented C-native mapping and the required C-only tests. Earlier campaigns
+closed this criterion for smaller surfaces, but a finished task does not keep a growing surface
+closed; the current owners are listed below and are derived from the inventory.
 The full surface must preserve the behavior of the canonical C++ implementation (and FNA/XNA where
 applicable), including constants, overload-specific behavior, errors, lifetime and renderer
 capability limits. A raw C++ type, exception, container, callback/delegate, stream, task or Sharp
@@ -1708,151 +1697,39 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-09-01, after `CBIND-125` records the inherited-reader tail):** 553 headers /
-**9,497 symbols — 8,348 implemented, 15 approved partial, 668 planned, 466 not applicable.** ABI
-`0.21.0`, 4,054
-exported symbols — the same 4,054 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
-differ), which is the engine layer's ABI promise measured rather than asserted.
+**Snapshot measured 2026-10-28:** 466 headers / **8,134 symbols — 7,033 implemented,
+15 approved partial, 633 planned, 453 not applicable.** ABI **`0.50.0`**, 3,212 exported
+symbols. The generated release gate is **Not ready** on exactly one criterion: public C++ symbols
+remain without a completed C mapping or an approved disposition.
 
-The completed C++ Content Pipeline, its continuation, and Model-v2 CPU codec reopened only the
-coverage criterion: all 654 unmapped Content Pipeline declarations are assigned to open
-`CBIND-117`; the three public texture profile-format queries added by current `next` are assigned
-to open `CBIND-120`; the reflective shared-resource builder declaration from the final local
-`next` synchronization is assigned to open `CBIND-121`; five untyped XNB loading declarations are
-assigned to open `CBIND-122`. No C route or ABI export was added, and the four new
-not-applicable rows are explicitly deleted declarations reported by Doxygen. The release gate is
-therefore **Not ready** on that one measured criterion while B12, B14, B15 and B16 remain open.
-Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
+The 633 planned rows have six open owners:
 
-**Phase B10 closed the matrix it was opened to close.** The sixth merge of `next` brought in 506
-public symbols, 460 of them the `CNA::Content::Cnb` content format, and the owner ruled on
-2026-08-28 that binding them belonged to a later pass — then asked for that pass. `CBIND-106`–
-`CBIND-111` bound the container, the document, every asset schema the format defines and the
-compile path with the loader registry; `CBIND-103`, `CBIND-104` and `CBIND-105` bound the math,
-graphics and reflective-reader tails. **All 506 are accounted for, and exactly one of them was
-dispositioned `not-applicable`** — a `friend` declaration Doxygen reports as a member, named in
-`CBIND-111`.
+- `CBIND-117`: 134 Model-v2/CNB CPU API rows whose runtime C boundary still needs a design or
+  disposition;
+- `CBIND-120`: three texture profile/format policy queries;
+- `CBIND-121`: one reflective shared-resource field declaration;
+- `CBIND-122`: two type-erased `ContentReader` loading seams;
+- `CBIND-125`: five inheritance-aware reflective-reader declarations;
+- `CBIND-127`: 488 genuinely missing runtime mappings across linked modules.
 
-`docs/c-api/RELEASE_GATE.md` read **Ready** again at that point, on all ten criteria. It had read
-**Not ready** on exactly one — *No public C++ symbol is unaccounted for* — for the whole of this
-phase, which is `CBIND-042B`'s design working: a deferral that only lives in somebody's memory is
-the thing that gate exists to prevent, and it stayed visible until the rows were actually bound.
+No planned row is attributed to a completed task. Regenerate or verify the canonical evidence with:
 
-**The seventh merge then reopened that same criterion, and Phase B11 owns it.** Merging
-`feature/bindings` into `next` was textually disjoint — not one of the branch's 93 files is touched
-by the eight commits `next` had added — but three of those eight added public C++ surface the branch
-never saw: `ObjectDictionaryEXT` (7 rows), `ReflectiveSharedTypeReader` with `RegisterShared` (6)
-and `BasicEffect`'s `VertexColorEnabled` pair (2). Each landed in a header a closed slice owns, so
-all 15 were attributed to finished tasks until `CBIND-114` partitioned them onto `B11_SLICE_OWNERS`.
-Until that task the published `COVERAGE.md` and `RELEASE_GATE.md` asserted **0 planned** and
-**Ready** on a tree holding 15 planned rows, because both had been generated on the bindings branch
-before it saw those commits. `CBIND-116` then bound all 15 and the gate reads **Ready**
-again. Two of its three surfaces cost no new ABI at all or corrected documentation rather than code:
-the `BasicEffect` pair was already reachable through the routes that bound the public field beside
-it, and the work measured two claims the canonical headers made — that a second registration under a
-canonical name replaces the first, and that the value-shaped reflective reader misreads a dispatched
-payload — and found both false on every path C can reach.
+```bash
+python3 tools/c-api/generate_coverage_inventory.py --write
+python3 tools/c-api/audit_coverage_backlog.py
+python3 tools/c-api/check_release_gate.py --check
+python3 tools/c-api/generate_limitations.py --check
+```
 
-**`CBIND-112` has since checked that, by name rather than by `--check`, and found one real defect
-doing it** — a rule citing a route that does not exist, written two commits earlier. Its six checks
-and their numbers are in its own row; the short version is that 505 rows were bound, exactly one was
-dispositioned not-applicable and named, none was made partial, `planned` is still reachable, all
-three build arms export the same 4,033 names, and the gate's verdict is computed rather than
-recorded.
-
-**Read this before rewriting this block.** The snapshot that stood here before `CBIND-079` — *0
-planned, ABI 0.2.0, the gate reads ready* — was accurate on 2026-08-19 and stayed in the file while
-four merges and an ABI bump moved every number in it, so for a week this plan and
-`RELEASE_GATE.md` asserted opposite things about the same measurable fact. Nothing had regressed;
-the record had. Re-measure this block before trusting it, and if
-`generate_coverage_inventory.py --check` disagrees with it, the check is right.
-
-### What is closed
-
-| Scope | State |
-|---|---|
-| `CBIND-000`–`CBIND-034` | ✅ all |
-| `CBIND-035` (math, geometry, textures, effects, models, device and draw submission) | ✅ closed by `CBIND-035G` |
-| `CBIND-036` (storage, content, networking, fake-async) | ✅ closed by `CBIND-036E5` |
-| `CBIND-037A` core, `CBIND-037B` **the whole input module** (gamepad, keyboard, mouse, cursor, text input, touch, haptics, joysticks, host devices) | ✅ |
-| `CBIND-037C` **the whole media module** (identities, songs, the library catalog, pictures, playback, video) | ✅ |
-
-**`storage`, `net`, `core`, `input` and `media` have no planned row left.** `content` had none
-either until the sixth merge; the CNB format put 462 rows back into it, which is most of Phase B10.
-
-**Phase B9 is closed.** All fourteen slices, `CBIND-080`–`CBIND-093`, bound the 1,451 rows the
-CNAEXT engine layer and the fifth merge's tail opened, and `CBIND-095` verified the closure on
-2026-08-27 rather than reading the measurement. That paragraph is history now; what follows is not.
-
-### What remains
-
-**Phase B10 is complete. All twelve tasks are closed: `CBIND-102` opened the phase, `CBIND-103`–`CBIND-111` bound all 506 rows, `CBIND-112` verified the closure by name, and `CBIND-113` made every C API suite able to say which stage failed.** The
-sixth reopening. `origin/next` merged on 2026-08-28 and brought in the **CNB content format**
-(`CNA::Content::Cnb`, 23 public headers, `plans/plan_cnb.md`'s `CNBF-002`–`CNBF-123`) — 460 of the
-506 rows — plus 46 ordinary XNA symbols: the math types' compound-assignment operators,
-`DynamicVertexBuffer`'s `using`-exposed and templated `SetData`, `EffectMaterial`'s retained
-parameter textures, `OcclusionQuery`'s precision query, and the reflective XNB reader with its
-`.cnb` loader hook.
-
-**One slice of it is done and the rest is a recorded owner decision rather than a gap.** On
-2026-08-28 the ruling was that this pass integrates the merge and writes the backlog; binding the
-format itself is a later pass. `CBIND-106`, `CBIND-107` and `CBIND-108` — the container, the
-document and the texture schemas — were then asked for separately and are closed, which is why the
-count below reads 285 rather than 506. So `docs/c-api/RELEASE_GATE.md` reads **Not ready** and this plan says why,
-which is the arrangement `CBIND-079` exists to keep honest: three documents agreeing on one
-measurable fact, rather than each being locally consistent.
-
-**The two defect rows that were open are closed, and neither was a coverage row.** `CBIND-098` is
-fixed as of 2026-08-28 under an explicit owner exception to the audit-only rule; `CBIND-101` is
-closed as not reproducible under the expanded multi-target protocol, on the owner's authorisation,
-with the environment hardening it prompted applied and `CBIND-113` opened for the diagnostic gap it
-exposed. Both are recorded in their own rows.
-
-**Expect the matrix to keep reopening, and do not read a closed one as a finished one.** Six merges
-have now each reopened it, and the pattern is stable: this plan's queue empties, the branch merges,
-and the tracked surface grows. The standing work is not "close the matrix" but "reconcile after
-each merge" — start every context by running `python3 tools/c-api/generate_coverage_inventory.py
---check`, because a stale inventory is the first symptom every time. `CBIND-058` found this the
-hard way: it ran that check *after* starting a slice and discovered two symbols the merge had left
-unbound.
-
-**One honest gap is open and is not a task here.** No build tree this campaign uses advertises
-`CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`, so the *accepting* path of `cna_effect_create_compiled`
-and of `cna_content_manager_load_effect`'s compiled shape is exercised only by the shared
-compiled-effect conformance suite in a tree configured for it
-(`-DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_EASYGL_COMPILED_EFFECTS=ON`, or `FNA3D`, which has it
-always). Every refusal path is covered here; the acceptance is not, and no amount of work in this
-plan changes that without such a tree.
-
-**One decision is reversible and belongs to the owner.** `CBIND-062` changed the installed CMake
-package from `SameMinorVersion` to `SameMajorVersion` so it matches what `ABI_VERSIONING.md`
-promises. The alternative reading is that `0.x` minors may be breaking — in which case
-`SameMinorVersion` was right and what needs revisiting is bumping the minor for purely additive
-changes at all.
-
-The table below is otherwise kept as the order the work was done in rather than as a queue:
-
-| Order | Task | Status | Note |
-|---:|---|---|---|
-| — | `CBIND-038` pure-C compatibility matrix | ✅ | 23 cells, 1,380 translation units; found and fixed a duplicate `CNA_PowerState` that made C99 impossible |
-| — | `CBIND-039` ABI layout, export and compatibility gates | ✅ | `abi_baseline.json` records 166 structs, 258 scalars, 1,338 constants and 2,720 exports; two gates, one build-free |
-| — | `CBIND-040A` stress the handle, teardown and buffer contracts | ✅ | found a heap use-after-free (a registration outliving its game) and two documentation defects |
-| — | `CBIND-040B` fuzz targets for the parser-like surfaces | ✅ | 16.8M enumerated UTF-8 cases against an independent oracle, plus a libFuzzer target; closes `CBIND-040` |
-| — | `CBIND-041` C consumer documentation and examples | ✅ | found that `find_package(CNA CONFIG)` could not work at all; there is now a package, an example and a gate that builds it from outside the tree |
-| — | `CBIND-042A` publish the known-limitations matrix | ✅ | found three stale deferrals, one of which had silently become implemented |
-| — | `CBIND-042B` define the experimental release gate | ✅ | ten criteria, eight measured met, two blocked on owner decisions; verdict is NOT READY and correctly so |
-| — | `CBIND-045` ship the native libraries CNA builds | ✅ | owner ruled yes on 2026-08-16; the package needs no environment variable at all |
-| — | `CBIND-046` offer a static configuration | ✅ | owner ruled yes on 2026-08-16; the archive publishes the same 2,720 names the shared library does, or the build fails |
-| — | `CBIND-044` close the public API coverage matrix | ✅ | closed 2026-08-16 with the owner's approval of the twelve remaining limitations |
-| — | `CBIND-052B` bind the compiled-effect additions to the Effect object graph | ✅ | the 9 rows `CBIND-052A` left; closed 2026-08-17, and it found that the C adapter's `Clone()` override was silently dropping a compiled effect's runtime |
-
-`CBIND-043` is done — the matrix is a gate in both CTest and CI, so an unmapped public symbol now
-fails a build rather than merely showing up in a report.
+The generated [coverage summary](../docs/c-api/COVERAGE.md) and
+[release gate](../docs/c-api/RELEASE_GATE.md) take precedence over copied counts in historical task
+rows. Completed slices below remain a chronology, not a current queue. Current defects belong in
+`handoff.md` §5.1; this plan owns only the C-ABI coverage work and its acceptance evidence.
 
 ### Judgment calls that produced the closed slices
 
-The mechanics — which files, which commands — are in *The loop for one slice* in the handoff
-below. These are the decisions that mechanics cannot make for you:
+The generator commands above cover the mechanics. These are the decisions that mechanics cannot
+make for you:
 
 1. **Read the canonical `.cpp`, not only the header.** Several slices turned on behavior only the
    implementation reveals: a square clamp, an epsilon comparison, a silently dropped key, a
@@ -2313,379 +2190,3 @@ re-approval rather than a route: Clone() and OnApply() stopped being pure virtua
 adapter's Clone() override silently drop a compiled effect's runtime and parameter values. The
 snapshot is 6,296 implemented, 12 approved partial, 0 planned and 386 not applicable, and the
 release gate reads ready.
-
-## Handoff for the next context / Claude Code
-
-Read *Current status* above first: it carries the snapshot, what is closed, and the ordered list of
-what remains. This section carries only what a fresh context cannot infer from the plan.
-
-### Where things stand (2026-08-28, after `CBIND-102`)
-
-- **Branch and worktree:** `feature/bindings` in
-  `/rv/data/development/github.com/openeggbert/binding`, merged with `origin/next` on 2026-08-28.
-  The three build trees this phase uses are **inside the repository**: `cmake-build-debug`
-  (HEADLESS, `CNA_CNAEXT=OFF`), `cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and
-  `build-probe` (HEADLESS, `CNA_CNAEXT=ON`). The four `/media/robertvokac/.../cmake-build-binding-*`
-  trees the older handoff below describes are **gone**; do not go looking for them, and do not
-  recreate them.
-- **Nine tasks are open and none is started:** `CBIND-103`–`CBIND-111` bind the 506 rows the sixth
-  merge reopened, and `CBIND-112` closes the matrix. `CBIND-106` comes first — every later CNB
-  slice names the identities it publishes. Start any context by running
-  `python3 tools/c-api/generate_coverage_inventory.py --check`, which is how a stale inventory
-  announces itself.
-- **The test display is a private Xvfb, never `:0`.** `:0` is the owner's real desktop and this
-  host is a Wayland session, so a test that names neither a driver nor a display reaches the host
-  compositor rather than any X server you started. Start one (`Xvfb :143 -screen 0 1280x1024x24
-  +extension GLX +render -noreset`), point every tree at it
-  (`cmake -S . -B <tree> -DCNA_TEST_DISPLAY=:143`), and run the suite with the display forced for
-  the tests that name nothing themselves:
-
-  ```bash
-  env -u WAYLAND_DISPLAY DISPLAY=:143 SDL_VIDEODRIVER=x11 \
-      ctest --test-dir <tree> -R '^CApi' --output-on-failure
-  ```
-
-  The cached `CNA_TEST_DISPLAY` was `:0` in all three trees until 2026-08-28, which is the
-  `feedback_cmake_test_display_stale_cache` shape: it is a cache variable, so it survives every
-  reconfigure that does not name it.
-
-The bullets below are older and are kept for the reasoning rather than the state:
-
-- **The published export count was stale in three documents** — `ABI_VERSIONING.md`,
-  `CONSUMING.md` and `LIMITATIONS.md` all said **2,720** where `abi_baseline.json` measured
-  **2,838**. Corrected on 2026-08-17 in its own commit, deliberately separate from `CBIND-052A`/`B`
-  because it predates them. **Nothing prevents it happening again:** these are prose claims and no
-  gate reads them, while every count in the same sentence's neighbourhood (`COVERAGE.md`'s
-  snapshot, `LIMITATIONS.md`'s group counts, `RELEASE_GATE.md`'s evidence) is generated. A checker
-  that holds the three documents' export figure against `abi_baseline.json` is the obvious fix and
-  is not yet written.
-- **`abi_baseline.json` records no `CNA_*_FLAG_*` constant at all**, because the tool reads simple
-  integer constants and these are shift expressions; `CNA_GRAPHICS_CAPABILITY_FLAG_COMPILED_EFFECTS`
-  is pinned by the `AbiHeaderC.c`/`AbiHeaderCpp.cpp` assertion walls instead. Left as it stands:
-  it is a tooling gap, not a wrong claim.
-- Historical, kept because the reasoning still applies: **the experimental release gate**
-  (`CBIND-042B`) was built this way, and a later gate should be built the same way. Every input it
-  needs now
-  exists and should be **pointed at rather than rebuilt**: `COMPATIBILITY.md` (23 toolchain cells),
-  `abi_baseline.json` (layouts and exports), `hello_cna` with `CApi_InstalledConsumer` (a real
-  C application built from outside the tree), `FUZZING.md`, `COVERAGE.md` and now
-  `LIMITATIONS.md`. Build it the way this campaign builds every gate — a declaration, a checker,
-  `--check` in ctest and CI — and make it fail **in both directions**: a criterion recorded as met
-  that no longer is, and one recorded as blocked that has quietly become met. The second direction
-  is the one that matters here, because a release gate nobody re-reads is how a project ships
-  something it decided not to ship.
-
-  Two criteria are **owner decisions and must block**, both recorded as `open decision` in
-  `docs/c-api/LIMITATIONS.md`: whether the package ships SDL3 and FFmpeg beside the library, and
-  whether a static configuration is ever offered given that it would export every C++ symbol it
-  archived. Do not decide those alone, and do not let the gate report ready while they stand. ABI
-  1.0 is explicitly a later, separate decision.
-
-  Two things the last two gate tasks established that this one inherits: **absence is skipped by
-  name, presence is binding** — a gate that cannot run somewhere says so rather than passing
-  quietly; and a gate is not finished until it has been **shown to fail** on the defect it exists
-  for. `CBIND-038` proved itself by reinstating a duplicate typedef; `CBIND-039` by swapping two
-  struct fields, in CI as well as by hand.
-- **The `CNA_DEVICES` environment decision is done, not pending.** The owner directed (2026-08-15)
-  that the `#ifdef CNA_DEVICES` half of `devices-ext` be genuinely exercised rather than only ever
-  tested compiled-out. `cmake-build-binding-sdlrenderer` and `cmake-build-binding-asan` have been
-  **reconfigured with `-DCNA_DEVICES=ON`** and rebuilt; `headless` and `software` stay OFF, so both
-  states are covered, mirroring the existing `CNA_CNAEXT` split. No fifth build tree was added, and
-  all four trees are green in that configuration. The routes themselves must stay exported in both
-  states, following the `CnaCApiGraphicsExt.cpp` precedent of an `#ifndef` fallback that reports the
-  feature as unavailable, so the ABI's symbol set never depends on a build option.
-- Do not reopen a closed slice without a concrete demonstrated defect.
-- The four verification trees and the shared ccache are set up and warm; nothing needs configuring
-  before the next slice. See *Environment and disk hygiene* below for what was cleaned up on
-  2026-08-15 and what must not be undone.
-- **Check for a second Claude session before writing anything.** See the trap entry below; this
-  campaign lost work to it twice in one afternoon.
-
-### Code map — what one slice touches
-
-The C API lives entirely in `modules/c-api/`. A slice almost always edits exactly these, in this
-order:
-
-| File | Role |
-|---|---|
-| `include/CNA/C/<family>.h` | the public surface. One header per family — 55 today (`sensors.h`, `video.h`, `media_player.h`, `media_library.h`, `media.h`, `input_devices.h`, `input_joystick.h`, `input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `input_text.h`, `input_touch.h`, `input_haptics.h`, `net_sessions.h`, `storage.h`, `core_ext.h`, …). Add a new one when the family is genuinely new; extend an existing one when it is not. |
-| `include/CNA/C/cna.h` | the umbrella. **Every new header must be added here** or a strict-C consumer never sees it. |
-| `src/CnaCApi<Family>.cpp` | the adapter — 45 files today. Routes go in `extern "C"` scope; helpers in an anonymous namespace above them. |
-| `src/CnaCApiDetail.hpp` | shared substrate: the `ObjectKind` handle-kind enum (**next free number is 91**), the `HandleRegistry`, `CallWithExceptionBarrier` and its 18 exception arms, `CopyStringView`, `Fail`. A new handle kind or a new canonical exception conversion lands here. |
-| `src/CnaCApi<Family>Detail.hpp` | cross-file borrow helpers, when one family's adapter must reach another's resource (`CnaCApiGraphicsDetail.hpp` exposes `GetOwnedTexture2D`, `CnaCApiNetDetail.hpp` exposes `BorrowPacketReader`, …). |
-| `CMakeLists.txt` | the `cna_c_api` source list, and the per-test executable + `add_test` block (81 tests today). Since `CBIND-052A` the **library itself** also carries `-Wall -Wextra -Werror`, which the test targets always had and it never did; an exhaustive `switch` over a CNA enumeration is therefore a build gate now, not a suggestion. |
-| `tests/pure_c/<Family>Smoke.c` | the strict-C17 behavior test. 55 files; prefer extending the family's existing one over adding a target — but a family with its own adapter file has earned its own test target, as haptics did. |
-| `tests/pure_c/AbiHeaderC.c` and `tests/cpp/AbiHeaderCpp.cpp` | freeze every new identity value and every new struct size/alignment/offset. Both must compile — the surface has to be valid C17 *and* C++23. |
-| `tests/cpp/BoundaryDetailTest.cpp` | only when a slice adds an exception-firewall arm; returns a distinct code per case. |
-| `tools/c-api/coverage_mappings.json` | the rules that close inventory rows. |
-| `docs/c-api/<FAMILY>.md` + `FEATURE_MATRIX.md` + `README.md` | the consumer-facing contract. |
-
-The design contracts that already exist do not need restating in a new page — point at
-`docs/c-api/HANDLES.md`, `OWNERSHIP.md`, `STRINGS_AND_BUFFERS.md`, `ERRORS.md` and
-`CALLBACKS_AND_THREADING.md`.
-
-### Conventions already settled (do not reinvent)
-
-Every closed slice follows these. A new slice that invents a different shape makes the ABI
-inconsistent, which is worse than the shape being slightly suboptimal.
-
-- **Identities** are `typedef uint32_t CNA_Xxx;` plus `#define CNA_XXX_* UINT32_C(n)` at the
-  canonical ordinals — never renumbered into a dense range (`CNA_LOG_LEVEL_EXPERIMENT` is 100).
-  Flag sets get a `CNA_XXX_ALL` mask and every route validates against it.
-- **Values** are fixed PODs. Anything that may grow carries `struct_size` + `struct_version` and
-  an `_init` route; a pure math pair (`CNA_GamePadThumbSticks`) does not.
-- **Strings** are the count/copy pair `cna_x_get_y_size` + `cna_x_copy_y`: **no terminator**,
-  `out_bytes` always required and always written, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial
-  write** when the capacity is short. Input strings are a borrowed `CNA_StringView`, copied before
-  use.
-- **Handles** are opaque, generation-checked and thread-affine. Owned vs borrowed is a deliberate
-  choice per type: a borrowed view keeps its parent alive and blocks the parent's release.
-- **`_ext` suffix** marks a route with no XNA 4.0 counterpart — either the canonical member is
-  `CNAEXT`, or the route exists only because C needs it. A whole header of CNA-namespace surface
-  (`core_ext.h`) does not repeat the suffix on every route.
-- **Every fallible route** returns `CNA_Result` and runs inside `CallWithExceptionBarrier`.
-- **Availability is separate from the answer.** A canonical query that returns `bool` and fills an
-  output reference becomes a route with an `out_available` flag — "no sensor" is an ordinary answer,
-  never a failure.
-- **An identity is not a capability claim.** Never branch a test or a route on which renderer is
-  compiled in; probe the behavior.
-- **Preserve canonical quirks, record deliberate deviations.** Both have precedent in the closed
-  slices; what is not acceptable is silently smoothing one over.
-
-### The loop for one slice
-
-```bash
-cd /rv/data/development/github.com/openeggbert/binding
-
-# 1. what does this slice own?  (planned rows, by header)
-python3 - <<'EOF'
-import re
-hdr=None
-for line in open('docs/c-api/COVERAGE.md',encoding='utf-8'):
-    m=re.match(r'#### `(modules/[^`]+)`', line)
-    if m: hdr=m.group(1); continue
-    if line.startswith('| `CPP-') and '⬜' in line and '<Header>.hpp' in (hdr or ''):
-        print(line.split('|')[4].strip())
-EOF
-
-# 2. implement, then build just the library
-nice -n 5 cmake --build cmake-build-debug --target cna_c_api -j$(nproc)
-
-# 3. probe a new struct layout before freezing it
-gcc -std=c17 -I modules/c-api/include /path/to/probe.c -o "$SCRATCH/probe" && "$SCRATCH/probe"
-
-# 4. coverage: regenerate, then CHECK THE DELTA equals the slice's row count
-python3 tools/c-api/generate_coverage_inventory.py --write
-python3 tools/c-api/generate_coverage_inventory.py --check
-
-# 5. all three arms
-for T in cmake-build-debug cmake-build-cnaext build-probe; do
-  nice -n 5 cmake --build $T -j$(nproc) || break
-  env -u WAYLAND_DISPLAY DISPLAY=:143 SDL_VIDEODRIVER=x11 \
-      ctest --test-dir $T -R '^CApi' --output-on-failure | tail -3
-done
-```
-
-A slice is not finished until step 4's delta matches, all three arms are green, and
-`plan_binding.md` / `handoff.md` / the `docs/c-api/` pages say what changed.
-
-### Verification (do all three arms before committing a slice)
-
-The three arms live **inside the repository** and are shared with the rest of the project rather
-than owned by this campaign:
-
-| Tree | Configuration | Why it exists |
-|---|---|---|
-| `cmake-build-debug` | `HEADLESS`, `CNA_CNAEXT=OFF` | deterministic state; the no-engine-layer half, and the one every engine-layer refusal arm is measured in |
-| `cmake-build-cnaext` | `OPENGLES3`/EasyGL, `CNA_CNAEXT=ON` | the only renderer here that advertises compute, so the only arm where an engine-layer success path executes at all |
-| `build-probe` | `HEADLESS`, `CNA_CNAEXT=ON` | the layer present on a renderer that cannot do the work — `CBIND-097` is the record of what only this arm finds |
-
-All three run the same 103 `CApi` tests. Every tree needs `-DCNA_BUILD_C_API=ON`, which defaults to
-OFF: a freshly configured tree silently has no `modules/c-api` build directory at all without it.
-Parallelism is not capped (the `-j3` the paragraphs below assume was for a cooling fault repaired
-on 2026-08-22); memory is the constraint that remains, so drop the job count for one target that
-starts swapping rather than for the whole build.
-
-**The four `cmake-build-binding-*` trees the rest of this section describes no longer exist**, and
-neither does the branch they were built from. The reasoning in what follows is still worth reading
-— it is why the arms are configured the way they are — but the paths are history.
-
-Historical, from when those four trees existed: they shared the project-wide
-`CCACHE_DIR=/rv/cnaccache` rather than a private cache. A private one
-had reached a **0.69% hit rate over 6,932 compilations** because it started cold and never saw the
-CNA and sharp-runtime objects the shared cache already holds. Do not give a binding tree a cache of
-its own. The sanitizer tree ran with `ASAN_OPTIONS=detect_leaks=1
-UBSAN_OPTIONS=print_stacktrace=1`, stricter than the `detect_leaks=0` the `CBIND-035B`–`E` slices
-used; **do not weaken that back** if a sanitizer arm is ever reinstated.
-
-**A slice that changes a canonical C++ header must also run the C++ suite**, which these trees do
-not build by default. `CBIND-052B` added one public accessor to `modules/graphics` and verified it
-with `cmake --build <tree> --target CnaTests -j3`, then
-`SDL_VIDEODRIVER=dummy <tree>/CnaTests --gtest_filter='EffectPassTest.*'` **run from the repository
-root**, because the suite's fixtures are resolved relative to the working directory. The binary and
-its object tree are ~1.1 GB, so they are deleted afterwards (`rm -f <tree>/CnaTests &&
-rm -rf <tree>/CMakeFiles/CnaTests.dir`) and the C API suite re-run to confirm nothing else depended
-on them. **Deleting the `.dir` takes make's generated `build.make` with it**, so the next attempt to
-build that target fails with `No rule to make target 'CMakeFiles/CnaTests.dir/build.make'` until
-`cmake <tree>` regenerates it -- run the reconfigure first rather than concluding the tree is
-broken. Run the suite on a **virtual display** (`Xvfb :95 -screen 0 1280x1024x24`, then
-`env -u SDL_VIDEODRIVER DISPLAY=:95 <tree>/CnaTests`) rather than under
-`SDL_VIDEODRIVER=dummy`: the dummy driver skips a further handful of SDL3 platform and graphics
-tests, and the repository already has a `CNA_TEST_DISPLAY` cache variable for the same purpose.
-Displays `:99` and `:97` are usually already taken by other sessions -- pick a free one instead of
-reusing theirs. Note the three `GltfRenderer*Policy` inventory audits that fail in a full run at this
-commit: they are pre-existing, they predate this campaign's slices, and `next`'s `09786205e` already
-fixes them on the other side of the merge.
-
-**Never branch a test on a renderer identity.** Probe the capability or the actual result, so a new
-backend needs no test edits. `CApi_TextureSmoke`, `CApi_TextureVolumeSmoke` and `CApi_LifecycleSmoke`
-were rewritten once for exactly this reason.
-
-### How to tell a closed matrix from a matrix that merely passes `--check`
-
-`--check` only proves `COVERAGE.md` matches what the generator produces from the rules. It cannot
-see a rule whose `approved_symbols` names something with no C route behind it — that is exactly how
-`TINYGL` read `implemented` with test evidence for two merges. After `CBIND-052B` closed the matrix
-on 2026-08-17 the closure was audited rather than assumed, in three ways worth repeating whenever
-someone needs to trust a "0 planned":
-
-1. **Count C identities against C++ enumerators, per family.** Group the implemented `enum-value`
-   rows by their enum, read the `CNA_XXX_*` glob out of each row's mapping text, and count the
-   matching `#define`s in `modules/c-api/include`. Exclude only `_MAXIMUM`, `_ALL` and `_COUNT` —
-   `_NONE`, `_UNKNOWN` and `_INVALID` are real enumerators and excluding them manufactures an
-   off-by-one in a dozen families. Result: no family publishes fewer C constants than CNA declares
-   enumerators.
-2. **Rely on the compiler for the outward direction.** Since `CBIND-052A` the library builds with
-   `-Werror=switch`, so any C++→C switch missing an enumerator fails the build. That is only worth
-   anything if no such switch carries a `default:` to swallow it — 29 defaulted switches in the
-   adapter return a `CNA_` constant, and every one of them switches on a **C** identity, where a
-   default is correct. Two `std::array<std::pair<CNA_…>>` tables exist; `RendererIdentities` carries
-   the `consteval` count gate, and the fallback-reason table is checked by (1).
-3. **Check that the routes the rules name exist.** Extract every `cna_[a-z0-9_]+` from the
-   `mapping` and `tests` text of every `implemented` rule and hold it against
-   `abi_baseline.json`'s export list. Ignore trailing-underscore family prefixes (`cna_vector3_`)
-   and `cna_c_api_*` test names. This found the campaign's two broken Doxygen cross-references —
-   `cna_gamepad_get_battery_level_ext` and `cna_graphics_device_get_info`, neither of which has
-   ever existed — and after those were repaired all 484 named routes resolve.
-
-None of the three is wired into a gate. They are cheap enough to re-run by hand, and (3) in
-particular is the one that would catch a rule citing a route that a later rename removed.
-
-### Traps this campaign actually hit
-
-- **A green coverage matrix is not evidence that a mapping exists.** `CBIND-050` pinned every rule
-  to reviewed symbol IDs, seeded from the pre-merge tree so that merge's 121 unreviewed rows could
-  not be blessed — the right call, and it also froze whatever the pre-merge tree already believed.
-  `TINYGL` had been sitting there as `implemented` with test evidence and **no `CNA_*` constant
-  anywhere**. Seeding cannot tell a reviewed claim from an inherited one, so when a slice touches
-  an identity family, `grep` the C constant rather than trusting its row.
-- **The four verification trees can be stale in a way that reads as green.** Three of them were
-  built before the merge commit even existed and passed 81/81 on the *old* library; only the tree
-  actually rebuilt showed the two failures HEAD had introduced. Compare each tree's
-  `libcna_c_api.so` mtime against `git log -1 --format=%ci` before believing a suite, and never
-  conclude "pre-existing" from a green run in a tree you did not rebuild.
-- **Warning flags applied per target miss the target that matters.**
-  `cna_c_api_enable_strict_warnings` was called on all 59 test executables and never on
-  `cna_c_api` itself, so the shipped library compiled without `-Wall`. GCC had been printing
-  `enumeration value 'TinyGL' not handled in switch` the whole time. When a helper exists to
-  harden targets, check what it is *not* applied to.
-- **Coverage rules on free operators need a `signature_regex`.** `^CNA::Input::operator\|$` with no
-  signature also swallowed `HapticFeatureEXT`'s five operators and claimed haptics coverage that
-  does not exist. Caught only by comparing the implemented delta against the slice's row count —
-  **always do that comparison** after regenerating.
-- **`sharp-runtime` is a sibling checkout other sessions edit and commit to mid-build**
-  (`/rv/data/development/github.com/openeggbert/sharp-runtime`). A build failure inside it is very
-  likely someone else's work in progress, not a regression here: run `git status` and `git log` in
-  *that* tree before diagnosing, and never modify it from this task.
-- **A windowed backend publishes a real window into the input statics.** `GraphicsDevice` calls
-  `TextInputEXT::setWindowHandleProperty` and `Mouse::setWindowHandleProperty` when it attaches or
-  creates a window, so under `SDL_RENDERER` the handle is *not* zero, while HEADLESS and SOFTWARE
-  leave it at zero. A test that asserts the initial value is zero passes in three trees and fails in
-  the fourth — which is the identity-versus-behavior rule biting from the other side, since the
-  assumption is about the environment rather than the renderer name. The fix that also produced
-  *better* evidence: force the unbound case to prove the null-guarded contract everywhere, then
-  restore whatever the backend really bound and assert only the *relationship* between the answers
-  (activation that took effect must be undone by stopping it). On `SDL_RENDERER` that is a real
-  activate/deactivate round trip. `TouchPanel` has the same window-handle property and `CBIND-037B5`
-  did meet it again — any route that resets this state must put it back, because it is process-wide
-  state the suite does not own. Expect the remaining `CNA::Input` families to have their own.
-- **Out-parameter clobbering.** Routes set `*out = CNA_INVALID_HANDLE` before validating, so
-  reusing one variable for an expected-failure call destroys a live handle. Hit three times; use a
-  separate scratch variable for the failure case. **Versioned output structures have the same
-  problem in a nastier form:** `CBIND-037B5` set `struct_version = 2` on a live `CNA_GestureSample`
-  to test the invalid-structure refusal and every *later* read of that variable then refused, which
-  looks like a broken route rather than a broken test. Copy to a scratch value.
-- **A canonical Doxygen comment can contradict its own implementation.** `TouchPanel::ResetForTests`
-  documents that the display size and orientation are left untouched; it clears them, plus the
-  window handle, deliberately — a leaked display size silently corrupts another test's scaled touch
-  coordinates. Read the `.cpp`, not just the header, before writing a C contract sentence, and when
-  they disagree follow the behavior and say so in the C header. Assume other stale comments exist.
-- **Two sources feed one snapshot.** `TouchPanel::INTERNAL_onTouchEvent` feeds gesture detection and
-  the event-driven touch map; `TouchPanel::SetFinger` feeds the slot array that `GetState` actually
-  reports. A test that raises an event and then asserts the snapshot changed will fail while looking
-  like a mapping bug. The raise path is also a **silent no-op** until a display size is published.
-  Expect more of these splits in the remaining `CNA::Input` families.
-- **Do not pipe a build into `grep … | head`.** SIGPIPE kills the build and leaves a target
-  unlinked, which then shows up as a mysterious "Not Run" in ctest. Redirect to a log and grep the
-  log.
-- **A second Claude session on this working tree will silently destroy your edits.** It happened
-  twice on 2026-08-15, and both times the first symptom was `git status` listing files the session
-  had not touched, or a file changing mtime mid-read. The damage: a duplicated
-  `validate_text_input_family` block appended to `InputSnapshotsSmoke.c`, and a read-modify-write
-  that could have dropped the other session's concurrent write. It also produced a **false test
-  failure** — a `sdlrenderer` red that looked like a mapping bug but was another session's
-  mid-flight state. Detect it before writing: `ListAgents`, or
-  `ps -eo pid,args | grep "[c]laude" | grep "resume .*cnabinding"`. Background sessions run with
-  `--permission-mode auto`, survive their terminal being closed, and can respawn after being killed.
-  If one is active, agree on who owns the slice *before* writing, and never build the same tree
-  concurrently — a spurious `ranlib` failure from exactly that is already on record.
-- Read the canonical `.cpp`, not just the header. Several slices turned on behavior only the
-  implementation reveals: a square clamp, an epsilon comparison, a silent drop, a no-op disposal,
-  a hash that ignores half the fields.
-
-### Environment and disk hygiene
-
-**Current, as of 2026-08-28.** The three arms are in-repo `cmake-build-debug`,
-`cmake-build-cnaext` and `build-probe`; `ccache` is enabled in all three
-(`CMAKE_CXX_COMPILER_LAUNCHER=ccache`) and none of them has a private cache directory. The three
-arms are shared with the rest of the project, so **do not delete one** — another session may be
-mid-build in it — and do not add a fourth, ticket-named tree: the repository's build rules close
-that list on purpose, and separating a task's artifacts is done by file-name prefix inside
-`build-probe`, never by a new directory.
-
-Unlike the four trees the bullets below describe, these are full configurations that build `all`.
-That is deliberate here: a merge integration has to compile the whole tree to be worth anything,
-and the CBIND-101 protocol needs exactly that shape. The "never build `all`" rule below was about
-four single-purpose trees that no longer exist.
-
-Historical, settled on 2026-08-15 after an audit of those four trees; the reasoning outlives the
-paths:
-
-- **One shared ccache, not one per campaign.** `CCACHE_DIR=/rv/cnaccache`
-  (20 GB ceiling, ~31% hit rate across 21 build configurations). The binding trees briefly had their
-  own `tmp/ccache`; it reached a **0.69% hit rate over 6,932 compilations** because it started cold
-  and never saw the CNA and sharp-runtime objects the shared cache already holds. It was deleted.
-  Do not give these trees a private cache again.
-- **Do not shrink the shared cache.** It sits at 96.5% of its ceiling and still misses 69% of the
-  time, which means it is undersized for this workload, not oversized. Shrinking it causes more
-  compilation, which means more SSD writes — the opposite of what the build rules are protecting.
-- **Never build `all` in a binding tree.** Someone did, once, in
-  `cmake-build-binding-headless`: it left **56 stray executables and their object trees, 2.6 GB**,
-  none of which the C API loop ever links against. They were deleted; the tree went 3.7 GB → 1.1 GB
-  with zero recompilation afterwards. Build `make -C <tree>/modules/c-api -j3` and nothing else.
-  To check a tree for the same rot:
-  `find <tree> -maxdepth 1 \( -name 'cna_test_*' -o -name 'cna_demo_*' -o -name 'CnaTests' \)`.
-- **The four binding trees are the only build directories this campaign owns.** Everything else
-  under `build-probe/` (`cmake-build-multi`, `gltf-*`, `fna3d*`,
-  `develop-opengles`, `next-*`, `software`, `sdlgpu`, …) belongs to other checkouts and other
-  sessions. Do not delete or build in them.
-- Session scratchpads and per-run build logs are disposable; write throwaway probes there, never a
-  build tree.
-
-### Standing constraints
-
-- Only the C binding is in scope. Do not plan or implement C#, .NET, JavaScript, Rust, Python,
-  Java, Zig, Go, Swift or any other language binding.
-- One task, one commit. Stage explicit file names; never `git add -A`. Do not push unless asked.
-- Build targets are `cna_c_api` plus the strict-C and C/C++ ABI targets; there is no `CNA` target
-  in the configured build trees.
