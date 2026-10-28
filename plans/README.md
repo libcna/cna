@@ -203,7 +203,12 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   2026-10-28 (Git history only). The policy is explained in `../cmake/TestDisplayPolicy.cmake`, the
   runner in `../tools/platform/run_gpu_tests_private.sh`, the guard in
   `../tools/platform/profile_dead_tests.py`; comments cite rows as "GPU test isolation GTI-NNNN".
-- [`plan_dx9.md`](plan_dx9.md) — Direct3D 9.
+- `plan_dx9.md` — the Direct3D 9 renderer (`D9-0`..`D9-140`, 2026-07/09): every phase closed
+  except `D9-140`, real Windows hardware (`needs_human`); deleted on 2026-10-28 (Git history
+  only). The renderer, its 17 design decisions and limitations are
+  [`../docs/directx9-renderer.md`](../docs/directx9-renderer.md), the XNA oracle measurement
+  [`../docs/d3d9-divergence-report.md`](../docs/d3d9-divergence-report.md); comments cite rows as
+  "DX9 D9-nn".
 - `plan_fullscreen_regressions.md` (`FULLSCREEN-001`) and `plan_directx9_fullscreen_motion.md`
   (`FULLSCREEN-002`) — fullscreen presentation and DirectX9 loss/reset recovery found in Mobile
   Eggbert, 2026-09-28 (museum follow-up 2026-10-22); their Vulkan and Canvas parts went with those

@@ -1,4 +1,4 @@
-# plans/plan_dx9.md Phase D9-11 (D9-110/D9-111), design decision 16: D3D9EffectRenderer.cpp calls
+# DX9 Phase D9-11 (D9-110/D9-111), design decision 16: D3D9EffectRenderer.cpp calls
 # D3DCompile() (the custom-ShaderEffect runtime compile path), which needs d3dcompiler -- but the
 # stock D3D9 pipeline must stay d3dcompiler-free (unlike the retired D3D11 renderer, which linked it
 # into its whole renderer target unconditionally, DX-58/DX-121). Excluded from the main glob and
@@ -36,7 +36,7 @@ cna_renderer_target_name(_cna_d3d9_target)
 add_library(${_cna_d3d9_target} STATIC ${_cna_d3d9_sources})
 cna_renderer_common_setup(${_cna_d3d9_target})
 set(RENDERER_TARGET "${_cna_d3d9_target}")
-# plans/plan_dx9.md design decision 16 / D9-2: d3d9 alone was confirmed sufficient (no dxguid, no
+# docs/directx9-renderer.md design decision 16 / D9-2: d3d9 alone was confirmed sufficient (no dxguid, no
 # dxgi -- D3D9 predates DXGI) by D9-2's own spike. d3dcompiler is deliberately NOT linked here --
 # design decision 9/16 keep the stock pipeline dependency-free; it lives on the isolated effect
 # target only.

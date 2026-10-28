@@ -26,7 +26,7 @@
 #include <stdexcept>
 #include <vector>
 
-// plans/plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef cube-texture-size
+// DX9 Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef cube-texture-size
 // ceilings. plans/plan_runtimerenderer.md design decision 9: asked of the active renderer rather than
 // convention exactly.
 

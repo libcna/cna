@@ -1,6 +1,6 @@
 #pragma once
 
-// plans/plan_dx9.md Phase D9-2 (D9-21): XNA Blend/BlendFunction/CompareFunction/CullMode/FillMode/
+// DX9 Phase D9-2 (D9-21): XNA Blend/BlendFunction/CompareFunction/CullMode/FillMode/
 // TextureAddressMode/TextureFilter/StencilOperation -> D3D9 render-state equivalents.
 //
 // design decision 12/11: this is D3D9's own table, never a consumer of the retired D3DCommon --

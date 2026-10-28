@@ -1,6 +1,6 @@
 #pragma once
 
-// plans/plan_dx9.md Phase D9-2 (D9-22): stride-keyed D3DVERTEXELEMENT9 arrays, mirroring the same 5
+// DX9 Phase D9-2 (D9-22): stride-keyed D3DVERTEXELEMENT9 arrays, mirroring the same 5
 // stride-keyed layouts (16/20/24/32/52 bytes) the retired D3DCommon::InputElementsForStride()
 // established for D3D11 -- same byte offsets, same semantic meaning, D3D9's own element/type
 // enums (design decision 12: this is D3D9's own table, not a D3DCommon consumer).

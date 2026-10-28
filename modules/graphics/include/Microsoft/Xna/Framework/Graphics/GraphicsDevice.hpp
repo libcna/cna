@@ -1552,7 +1552,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Enables or disables depth writes. */
         CNAEXT void SetDepthWriteEnabled(bool enabled);
         /**
-         * @brief Task/plans/plan_dx9.md D9-103 finding: real XNA fixes GraphicsProfile at device
+         * @brief Task/DX9 D9-103 finding: real XNA fixes GraphicsProfile at device
          * construction (the public GraphicsDevice.GraphicsProfile property is read-only), but
          * CNA's own GraphicsDeviceManager architecture eagerly default-constructs Game's
          * GraphicsDevice_ member (hardcoded GraphicsProfile::Reach) BEFORE GraphicsDeviceManager
@@ -1959,7 +1959,7 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsProfile graphicsProfile_;
         PresentationParameters presentationParameters_;
         bool isDisposed_;
-        /// plans/plan_dx9.md D9-34: tracks the real device-lifecycle state reported by a renderer via
+        /// DX9 D9-34: tracks the real device-lifecycle state reported by a renderer via
         /// GraphicsRendererCreateArgs::deviceEventCallback (RendererDeviceEvent::Lost -> Lost,
         /// Resetting -> NotReset, Reset -> Normal). DirectX9 and WebGPU report these transitions;
         /// renderers without a lifecycle callback leave this status Normal.

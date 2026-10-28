@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_dx9.md Phase D9-10 (D9-100/D9-101/D9-102/D9-103): GraphicsProfile.Reach/HiDef made real on
+// DX9 Phase D9-10 (D9-100/D9-101/D9-102/D9-103): GraphicsProfile.Reach/HiDef made real on
 // this renderer, through the real public GraphicsAdapter/Game/GraphicsDeviceManager/Texture2D API.
 //
 // Check A/B -- GraphicsAdapter::IsProfileSupported(): Reach is always true (every real D3D9 HAL

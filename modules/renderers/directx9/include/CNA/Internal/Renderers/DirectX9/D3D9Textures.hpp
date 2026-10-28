@@ -1,6 +1,6 @@
 #pragma once
 
-// plans/plan_dx9.md Phase D9-5 (D9-50/D9-51): real D3D9 texture renderers.
+// DX9 Phase D9-5 (D9-50/D9-51): real D3D9 texture renderers.
 //
 // All three resource kinds use the requested classic XNA SurfaceFormat through
 // D3D9FormatMapping. Their independent capability classifiers probe the matching D3D9 resource

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// graphics Task 1102 (Phase 80 / plans/plan_dx9.md Divergence 1): BasicEffect pixel test --
+// graphics Task 1102 (Phase 80 / the DX9 plan's Divergence 1): BasicEffect pixel test --
 // PreferPerPixelLighting genuinely selects between two different lighting evaluations (EasyGL
 // renderer).
 //

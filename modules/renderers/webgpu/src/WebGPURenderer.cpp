@@ -5774,7 +5774,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (params.pbr)
             return StockVertexShapeEXT::StrideDerived;
 
-        // Task 1105 / plans/plan_dx9.md Divergence 1: XNA's BasicEffect defaults
+        // Task 1105 / the DX9 plan's Divergence 1: XNA's BasicEffect defaults
         // PreferPerPixelLighting=false, so a lit draw is Gouraud unless it asks otherwise. Only
         // meaningfully distinct while lighting is actually on.
         const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;

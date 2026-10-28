@@ -4396,13 +4396,13 @@ namespace Microsoft::Xna::Framework::Graphics
         args.contextRecoveryEnabled = contextRecoveryEnabled_;
         args.multiSampleCount = presentationParameters_.getMultiSampleCountProperty();
         args.swapInterval = toSwapInterval(presentationParameters_.getPresentationIntervalProperty());
-        // plans/plan_dx9.md D9-30: real presentation-parameter fidelity for renderers that need it (D3D9);
+        // DX9 D9-30: real presentation-parameter fidelity for renderers that need it (D3D9);
         // every other renderer continues to ignore these exactly as before the fields existed.
         args.backBufferFormat = static_cast<int>(presentationParameters_.getBackBufferFormatProperty());
         args.depthStencilFormat = static_cast<int>(presentationParameters_.getDepthStencilFormatProperty());
         args.isFullScreen = presentationParameters_.getIsFullScreenProperty();
         args.graphicsProfile = static_cast<int>(graphicsProfile_);
-        // plans/plan_dx9.md D9-34: forward a REAL, renderer-detected device-lost/reset event to this
+        // DX9 D9-34: forward a REAL, renderer-detected device-lost/reset event to this
         // GraphicsDevice's own public XNA events. DirectX9 and WebGPU implement this path;
         // support depends on the selected renderer rather than desktop versus mobile.
         args.deviceEventCallback = [this](CNA::Internal::Renderers::RendererDeviceEvent event)
@@ -4881,7 +4881,7 @@ namespace Microsoft::Xna::Framework::Graphics
     GraphicsDeviceStatus GraphicsDevice::getGraphicsDeviceStatusProperty() const
     {
         ThrowIfDisposed();
-        // plans/plan_dx9.md D9-34: tracks the real renderer-reported status via deviceStatus_ (updated by
+        // DX9 D9-34: tracks the real renderer-reported status via deviceStatus_ (updated by
         // the deviceEventCallback lambda in createRenderer()). Every renderer except D3D9 never calls
         // that callback, so this stays Normal for them -- identical behavior to before this field
         // existed.

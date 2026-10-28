@@ -192,7 +192,7 @@ namespace
      * @brief Whether `DualTextureEffect` accepts this fixture's `VertexPositionTexture` geometry.
      *
      * D3D9 rejects it outright -- "stride 20 with vertexColor=false has no matching CNA vertex
-     * layout (plans/plan_dx9.md D9-82d)" -- which is a documented, pre-existing vertex-layout boundary of
+     * layout (DX9 D9-82d)" -- which is a documented, pre-existing vertex-layout boundary of
      * that renderer and nothing to do with render-to-texture. The other three stock-effect cases
      * (BasicEffect indexed and non-indexed, AlphaTestEffect) still run there and are what carry the
      * "not SpriteBatch-only" claim on D3D9.
@@ -582,7 +582,7 @@ class RenderTargetProducerConsumerTest : public Game
             if (c.kind == 3 && !kDualTextureAcceptsPositionTexture)
             {
                 std::printf("[INFO] %s skipped on %s: DualTextureEffect rejects this fixture's "
-                            "VertexPositionTexture stride (plans/plan_dx9.md D9-82d) -- a documented "
+                            "VertexPositionTexture stride (DX9 D9-82d) -- a documented "
                             "vertex-layout boundary, unrelated to render-to-texture\n",
                             c.name, kRendererName);
                 std::fflush(stdout);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_dx9.md Phase D9-8 (D9-83): CNA's own minimal hardware-instancing shader (CNAEXT) -- vs_2_0/
+// DX9 Phase D9-8 (D9-83): CNA's own minimal hardware-instancing shader (CNAEXT) -- vs_2_0/
 // ps_2_0, with the exact scope of the retired D3DCommon's instanced3d.vert.hlsl/.frag.hlsl
 // (Position + a per-instance world matrix, flat DiffuseColor output, no lighting/texture/fog).
 //

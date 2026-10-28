@@ -1,6 +1,6 @@
 #pragma once
 
-// plans/plan_dx9.md Phase D9-2 (D9-20): XNA SurfaceFormat/DepthFormat -> D3DFORMAT mapping.
+// DX9 Phase D9-2 (D9-20): XNA SurfaceFormat/DepthFormat -> D3DFORMAT mapping.
 //
 // design decision 12: D3D9 did NOT share the retired D3DCommon's D3DFormatMapping (DXGI_FORMAT is a
 // different enum space, and D3D9's channel-order naming convention is the historical reverse of

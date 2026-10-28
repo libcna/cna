@@ -45,7 +45,7 @@ namespace
 /// it reads the back buffer, which is HiDef-only since SOFTWARE-213, so under the
 /// default Reach device this test died on a profile refusal before its first check. It is set
 /// here rather than on the GraphicsDeviceManager because `Game`'s own GraphicsDevice exists before
-/// that manager does (plans/plan_dx9.md D9-103).
+/// that manager does (DX9 D9-103).
 const CNA::ProjectGraphicsProfileEXT kProfileOptIn{
     Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef};
 }

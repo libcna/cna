@@ -1256,7 +1256,7 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(cna_test_build_config INTERFACE easy-gl)
     endif()
 
-    # plans/plan_dx9.md D9-123 follow-up: CnaTests.exe builds under the D3D9 MinGW cross-target,
+    # DX9 D9-123 follow-up: CnaTests.exe builds under the D3D9 MinGW cross-target,
     # and gtest_discover_tests(DISCOVERY_MODE PRE_TEST) below executes it directly to enumerate
     # tests -- as does any add_test(COMMAND CnaTests ...) test (e.g. CnaInputTests, further below)
     # at run time. Both need the Wine wrapper DirectX9_Smoke already uses, or every ctest

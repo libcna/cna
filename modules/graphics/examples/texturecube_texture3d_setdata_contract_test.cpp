@@ -168,7 +168,7 @@ namespace
                                  true, Support::Exact, Support::Exact,
                                  Support::Exact, true};
 #elif defined(CNA_RENDERER_DIRECTX9)
-    // plans/plan_dx9.md D9-100: GraphicsProfile.Reach does not support volume textures at all, so the
+    // DX9 D9-100: GraphicsProfile.Reach does not support volume textures at all, so the
     // Texture3D half of this file needs a HiDef device to have anything to measure.
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
@@ -278,7 +278,7 @@ namespace
 namespace {
 /// plans/plan_webgpu_modern_graphics.md WMG-0005: a row that declares `wantHiDefProfile` needs
 /// HiDef to be the PROGRAM's profile, not a request made later. `Game`'s own GraphicsDevice is
-/// default-constructed at Reach before `GraphicsDeviceManager` exists (plans/plan_dx9.md D9-103),
+/// default-constructed at Reach before `GraphicsDeviceManager` exists (DX9 D9-103),
 /// so the manager-level request below arrives after the device it has to describe -- the test then
 /// ran to a Reach refusal instead of to its checks. A row that wants Reach keeps Reach.
 const CNA::ProjectGraphicsProfileEXT kProfileOptIn{

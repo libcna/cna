@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# plans/plan_dx9.md D9-5: run a Windows cross-compiled .exe (D3D9 renderer) under Wine
+# DX9 D9-5: run a Windows cross-compiled .exe (D3D9 renderer) under Wine
 # with DXVK, using this project's own dedicated Wine prefix.
 #
 # Usage: scripts/run-wine-dxvk9.sh <path-to.exe> [args...]
 #
 # This was a NEW script, deliberately not a shared edit to scripts/run-wine-dxvk.sh,
-# the retired D3D11/D3D12 renderers' wrapper (plans/plan_dx9.md cold-start §4: this
+# the retired D3D11/D3D12 renderers' wrapper (the DX9 plan cold-start §4: this
 # repo's own convention keeps every renderer's runtime wrapper independent).
 #
 # Set CNA_D3D9_WINEPREFIX to point at a different prefix; defaults to
-# ~/.wine-cna-d3d11 -- verified in plans/plan_dx9.md's "Development environment"
+# ~/.wine-cna-d3d11 -- verified in the DX9 plan's "Development environment"
 # section that this prefix's own `dxvk-setup install` (run for D3D11/DX-2)
 # already symlinks system32/d3d9.dll to DXVK's d3d9.dll.so with "d3d9"="native"
 # in the registry, so D3D9 needs no separate prefix setup. The retired DIRECTX11
 # renderer's CNA_D3D11_WINEPREFIX named the same physical prefix by default under a
-# deliberately distinct name (plans/plan_dx9.md cold-start §4), so D3D9 test infra
+# deliberately distinct name (the DX9 plan cold-start §4), so D3D9 test infra
 # never silently inherited D3D11's env-var contract.
 #
 # DXVK_LOG_PATH/DXVK_LOG_LEVEL/DXVK_HUD are honored from the calling
@@ -22,7 +22,7 @@
 # a log level that's enough to confirm DXVK (not WineD3D) actually handled the
 # run.
 #
-# plans/plan_dx9.md design decision 17 / D9-5: this wrapper also automatically
+# docs/directx9-renderer.md design decision 17 / D9-5: this wrapper also automatically
 # ASSERTS that DXVK itself (not a silent WineD3D fallback) handled the run,
 # mirroring the retired plans/plan_dx.md's DX-85 gate -- a "DXVK: <version>" log line that only
 # DXVK's own logger ever prints (vanilla WineD3D never does). Without this, a

@@ -1,4 +1,4 @@
-// plans/plan_dx9.md Phase D9-2 (D9-22). COLOR0 element type corrected in D9-82 (see below).
+// DX9 Phase D9-2 (D9-22). COLOR0 element type corrected in D9-82 (see below).
 #include "CNA/Internal/Renderers/DirectX9/D3D9VertexDeclarations.hpp"
 
 #include <limits>
@@ -52,7 +52,7 @@ namespace CNA::Internal::Renderers::DirectX9
             throw std::runtime_error("DirectX9Renderer: unsupported vertex element usage");
         }
 
-        // D9-82 real finding (plans/plan_dx9.md's DirectX9Renderer's own first real draw, empirically
+        // D9-82 real finding (the DX9 plan's DirectX9Renderer's own first real draw, empirically
         // verified with cna_test_directx9_draw before AND after this fix -- not assumed): COLOR0 was
         // originally declared D3DDECLTYPE_D3DCOLOR (D9-22, "same semantic meaning" as D3D11's
         // DXGI_FORMAT_R8G8B8A8_UNORM). That is wrong -- MSDN's own D3DDECLTYPE reference says

@@ -2,7 +2,7 @@
 """Compile the vendored XNA Stock Effects HLSL to real D3D9 (SM2) bytecode and emit a checked-in
 C++ header with embedded byte arrays.
 
-plans/plan_dx9.md Phase D9-7 (D9-71). It cross-builds a tiny D3DCompile()-calling .exe, runs it
+DX9 Phase D9-7 (D9-71). It cross-builds a tiny D3DCompile()-calling .exe, runs it
 once per shader through Wine and embeds the resulting bytecode as C++ arrays -- the shape the retired
 Direct3D 11 renderer's HLSL generator had -- with three D3D9-specific points:
 

@@ -19,9 +19,9 @@
 #include <string>
 #endif
 
-// plans/plan_dx9.md Phase D9-10 (D9-101/D9-102): GraphicsProfile.Reach/HiDef is a real, D3DCAPS9-backed
+// DX9 Phase D9-10 (D9-101/D9-102): GraphicsProfile.Reach/HiDef is a real, D3DCAPS9-backed
 // distinction ONLY on this renderer -- the other 9 CNA renderers have no D3DCAPS9 to consult and
-// keep their honest `return true;`/hardcoded-fallback behavior below (see plans/plan_dx9.md's own
+// keep their honest `return true;`/hardcoded-fallback behavior below (see the DX9 plan's own
 // "Boundaries" section: an implementation would otherwise be a hardcoded table pretending to be a
 // capability query, which this project explicitly refuses to fake).
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
@@ -387,7 +387,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return queries.isProfileSupported(static_cast<int>(graphicsProfile));
 
         // D9-101: the other renderers have no capability structure to consult -- an implementation
-        // here would be a hardcoded table pretending to be a capability query (plans/plan_dx9.md's own
+        // here would be a hardcoded table pretending to be a capability query (the DX9 plan's own
         // "Boundaries" section explicitly refuses that), so they keep this honest.
         (void)graphicsProfile;
         return true;

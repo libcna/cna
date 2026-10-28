@@ -1,4 +1,4 @@
-// plans/plan_dx9.md Phase D9-3 (D9-30/D9-31): real device creation + Clear/Present/ReadBackbuffer.
+// DX9 Phase D9-3 (D9-30/D9-31): real device creation + Clear/Present/ReadBackbuffer.
 // Phase D9-6 (D9-60/D9-61/D9-62) render states landed here too, forced in early: GraphicsDevice's
 // own constructor unconditionally pushes BlendState/DepthStencilState/RasterizerState defaults, so
 // none of those methods could stay throwing stubs once a real device exists (see ApplyBlendState's
@@ -1068,7 +1068,7 @@ namespace CNA::Internal::Renderers::DirectX9
         if (stride != 16)
             throw std::runtime_error(
                 "DirectX9Renderer::DrawColoredPrimitives: only stride-16 (VertexPositionColor) "
-                "is implemented so far (plans/plan_dx9.md D9-82)");
+                "is implemented so far (DX9 D9-82)");
 
         if (!shaderCache_) shaderCache_ = std::make_unique<D3D9ShaderCache>(device_.Get());
 
@@ -1122,7 +1122,7 @@ namespace CNA::Internal::Renderers::DirectX9
         if (stride != 16)
             throw std::runtime_error(
                 "DirectX9Renderer::DrawIndexedColoredPrimitives: only stride-16 "
-                "(VertexPositionColor) is implemented so far (plans/plan_dx9.md D9-82)");
+                "(VertexPositionColor) is implemented so far (DX9 D9-82)");
 
         if (!shaderCache_) shaderCache_ = std::make_unique<D3D9ShaderCache>(device_.Get());
 

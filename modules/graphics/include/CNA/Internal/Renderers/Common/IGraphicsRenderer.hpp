@@ -1368,7 +1368,7 @@ namespace CNA::Internal::Renderers
         bool fresnelEnabled = false;
         /// EnvironmentMapEffect: exponent for the Fresnel edge-weighting term above.
         float fresnelFactor = 1.0f;
-        /// BasicEffect/SkinnedEffect: real XNA `PreferPerPixelLighting` value (plans/plan_dx9.md
+        /// BasicEffect/SkinnedEffect: real XNA `PreferPerPixelLighting` value (the DX9 plan
         /// Divergence 1 / D9-81 item 1). When true, XNA selects a per-pixel-lit shader
         /// (`VSBasicPixelLighting*`/`PSBasicPixelLighting*`); when false (XNA's own default),
         /// it selects a per-vertex-lit shader instead. Renderers that generate both lighting
@@ -1378,7 +1378,7 @@ namespace CNA::Internal::Renderers
         /// divergence from XNA's default, not fixed by adding this field alone. Only meaningful
         /// when `lightingEnabled` is true.
         bool preferPerPixelLighting = false;
-        /// EnvironmentMapEffect: real XNA `specularEnabled` value (plans/plan_dx9.md Divergence 1 /
+        /// EnvironmentMapEffect: real XNA `specularEnabled` value (the DX9 plan's Divergence 1 /
         /// D9-81 item 4) -- true when `SpecularColor` is non-black, selecting a distinct
         /// compiled shader in real XNA rather than a uniform toggle. `envMapSpecular` above
         /// already carries the specular color itself; this field additionally carries whether
@@ -2123,7 +2123,7 @@ namespace CNA::Internal::Renderers
         /// count applied (0 = no MSAA). Default: unsupported -- renderers that cannot change this
         /// post-construction report back whatever GetMultiSampleCount() already is.
         virtual int ApplyMultiSampleCount(int /*requestedMultiSampleCount*/) { return GetMultiSampleCount(); }
-        /// CNAEXT (plans/plan_dx9.md D9-30/D9-33, found empirically). Reconfigures the renderer's tracked
+        /// CNAEXT (DX9 D9-30/D9-33, found empirically). Reconfigures the renderer's tracked
         /// back-buffer format/depth-stencil format/fullscreen state in place, called from
         /// GraphicsDevice::Reset() alongside SetVirtualResolution()/ApplyMultiSampleCount() above --
         /// same "actually reach the renderer instead of being silently ignored after construction"
@@ -3378,7 +3378,7 @@ namespace CNA::Internal::Renderers
     };
 
     /**
-     * @brief CNAEXT (plans/plan_dx9.md D9-34). Real, driver-triggered device lifecycle events a renderer
+     * @brief CNAEXT (DX9 D9-34). Real, driver-triggered device lifecycle events a renderer
      * can report back to GraphicsDevice via GraphicsRendererCreateArgs::deviceEventCallback.
      *
      * Distinct from the pre-existing IGraphicsRenderer::SetContextRecoveryEnabled()/
@@ -3475,27 +3475,27 @@ namespace CNA::Internal::Renderers
         ///   2 = wait for 2 vertical retraces (half refresh rate)
         /// Corresponds to PresentInterval: Default/One→1, Two→2, Immediate→0.
         int swapInterval = 1;
-        /// CNAEXT (plans/plan_dx9.md D9-30). Requested back-buffer pixel format -- raw ordinal of
+        /// CNAEXT (DX9 D9-30). Requested back-buffer pixel format -- raw ordinal of
         /// Microsoft::Xna::Framework::Graphics::SurfaceFormat, avoiding coupling this
         /// renderer-agnostic header to the XNA namespace (mirrors CreateTexture3D's own
         /// surfaceFormat int convention). Renderers that don't need real format fidelity (every
         /// existing renderer except D3D9, whose goal is XNA authenticity rather than parity) may
         /// ignore this and keep hardcoding their own default, exactly as before this field existed.
         int backBufferFormat = 0;  // SurfaceFormat::Color
-        /// CNAEXT (plans/plan_dx9.md D9-30). Requested depth/stencil format -- raw ordinal of
+        /// CNAEXT (DX9 D9-30). Requested depth/stencil format -- raw ordinal of
         /// Microsoft::Xna::Framework::Graphics::DepthFormat. See backBufferFormat's own doc for
         /// the int-ordinal convention and the same "existing renderers may ignore this" note.
         int depthStencilFormat = 0;  // DepthFormat::None
-        /// CNAEXT (plans/plan_dx9.md D9-30). Whether the game requested exclusive fullscreen. Existing
+        /// CNAEXT (DX9 D9-30). Whether the game requested exclusive fullscreen. Existing
         /// renderers that already have their own fullscreen handling via the SDL window itself may
         /// continue to ignore this field exactly as before it existed.
         bool isFullScreen = false;
-        /// CNAEXT (plans/plan_dx9.md D9-30/D9-32). Requested Microsoft::Xna::Framework::Graphics::
+        /// CNAEXT (DX9 D9-30/D9-32). Requested Microsoft::Xna::Framework::Graphics::
         /// GraphicsProfile ordinal (Reach=0, HiDef=1). Profile-aware renderers may use this during
         /// creation; GraphicsDevice also applies dynamic per-profile resource ceilings through
         /// the dedicated renderer queries when GraphicsDeviceManager changes the profile later.
         int graphicsProfile = 0;  // GraphicsProfile::Reach
-        /// CNAEXT (plans/plan_dx9.md D9-34). Callback a renderer may invoke to report a REAL,
+        /// CNAEXT (DX9 D9-34). Callback a renderer may invoke to report a REAL,
         /// driver-triggered device lifecycle event back to GraphicsDevice (which raises the
         /// corresponding DeviceLost/DeviceResetting/DeviceReset XNA event). Null by default; nine
         /// of the ten renderers never call it -- only a renderer that can genuinely lose its device

@@ -55,7 +55,7 @@ namespace Microsoft::Xna::Framework::Graphics
     // Private helpers
     // -----------------------------------------------------------------------
 
-    // plans/plan_runtimerenderer.md design decision 9 / plans/plan_dx9.md D9-103: GraphicsProfile.Reach/HiDef
+    // plans/plan_runtimerenderer.md design decision 9 / DX9 D9-103: GraphicsProfile.Reach/HiDef
     // texture-size ceilings. Checked as a profile CEILING, not a hardware query: even where the
     // device could allocate more, a Reach-profile game is restricted to the profile's own limit,
     // which is what XNA's portability guarantee means. SOFTWARE-179 made the renderer-interface

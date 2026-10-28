@@ -182,15 +182,15 @@ committed: it is a benchmark input, not evidence.
 `SkinnedEffect.fx`, `SpriteEffect.fx`, `Macros.fxh`, `Common.fxh`, `Lighting.fxh`,
 `Structures.fxh`) copied **verbatim, byte-for-byte**, from FNA's own
 `src/Graphics/Effect/StockEffects/HLSL/` directory, which in turn vendors them from Microsoft's
-Stock Effects sample project. Not one line has been edited (`plans/plan_dx9.md` design decision 3);
-`scripts/verify-d3d9-stock-effects-vendored.sh` diffs them against the FNA tree and fails on any
-delta. Licensed under the Microsoft Permissive License (Ms-PL) — the full license text is also
-checked in at `src/CNA/Internal/Backends/D3D9/shaders/xna/LICENSE`.
+Stock Effects sample project. Not one line has been edited (`docs/directx9-renderer.md` design
+decision 3); `scripts/verify-d3d9-stock-effects-vendored.sh` diffs them against the FNA tree and
+fails on any delta. Licensed under the Microsoft Permissive License (Ms-PL) — the full license text
+is also checked in at `modules/renderers/directx9/src/shaders/xna/LICENSE`.
 
 CNA compiles these sources itself (`D3DCompile`, Microsoft's own `vs_2_0`/`ps_2_0` targets) rather
-than shipping Microsoft's pre-built `.fxb` bytecode — see `plans/plan_dx9.md`'s "CNA's divergences from
-XNA 4.0" section and design decision 4 for why, and `src/CNA/Internal/Backends/D3D9/shaders/xna/README.md`
-for the full list of compiled entry points.
+than shipping Microsoft's pre-built `.fxb` bytecode — see `docs/directx9-renderer.md`'s design
+decision 4 for why, and `modules/renderers/directx9/src/shaders/xna/README.md` for the full list of
+compiled entry points.
 
 ## FNA3D (FNA3D renderer dependency)
 

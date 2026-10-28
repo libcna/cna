@@ -27,7 +27,7 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     // A genuine, previously-uncaught gap in the D3D9 branch (feature/dx9): no commit in this
     // file's own history ever added a D3D9 entry here (found 2026-07-16 while merging
     // feature/sdlgpu). The full unfiltered CnaTests suite was never run under
-    // CNA_GRAPHICS_RENDERER=D3D9 (plans/plan_dx9.md's D9-123 note says as much), so this would have
+    // CNA_GRAPHICS_RENDERER=D3D9 (the DX9 plan's D9-123 note says as much), so this would have
     // silently failed EXPECT_EQ(enabled, 1) the first time anyone actually did.
 #ifdef CNA_RENDERER_DIRECTX9
     ++enabled;

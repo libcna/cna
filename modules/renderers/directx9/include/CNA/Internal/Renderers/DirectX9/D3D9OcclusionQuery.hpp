@@ -1,6 +1,6 @@
 #pragma once
 
-// plans/plan_dx9.md Phase D9-5 (D9-55): real D3D9 occlusion query renderer.
+// DX9 Phase D9-5 (D9-55): real D3D9 occlusion query renderer.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 

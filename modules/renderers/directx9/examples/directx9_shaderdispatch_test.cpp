@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_dx9.md Phase D9-8 (D9-80): unit checks for D3D9ShaderDispatch's transcribed
+// DX9 Phase D9-8 (D9-80): unit checks for D3D9ShaderDispatch's transcribed
 // ShaderIndex/VSIndices/PSIndices tables. No device/window/GPU needed -- these are pure
 // functions, verified directly against the vendored .fx files' own row comments and the FNA
 // .cs sources' own ShaderIndex formulas (both cited in D3D9ShaderDispatch.cpp).

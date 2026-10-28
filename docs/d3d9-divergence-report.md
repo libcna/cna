@@ -1,9 +1,17 @@
-# D3D9 renderer — divergence report (plans/plan_dx9.md D9-121)
+# D3D9 renderer — divergence report (DX9 D9-121)
 
 **Status: 2026-07-15. Corpus: 31 scenes, `D9-A5`. Result: 0 measured pixel divergences from real
 XNA 4.0, at `--tolerance 0` (exact match), across the entire current corpus.**
 
-This is the deliverable `plans/plan_dx9.md`'s own Phase D9-12 asks for: not a feature checklist, but a
+> **Rerun 2026-10-28.** The corpus has since grown to 40 scenes, 39 with a checked-in XNA
+> reference image, and `D3D9_XNA_Diff` reports **39/39 matching real XNA 4.0 exactly**. The
+> additions closed four rows of "Not yet measured" below: per-pixel lighting
+> (`lit_textured_quad_pixellighting`, `skinned_pixellighting_*`), `EnvironmentMapEffect`'s specular
+> bucket (`envmap_specular_quad`), `D3DCULL` winding (`cullmode_*`), and the lighting part of
+> divergence 1. Render targets sampled as textures stopped being blocked: the crash was CNA's own
+> (`D9-84`). The sections below keep the 2026-07-15 wording and mark what changed.
+
+This is the deliverable the DX9 plan's Phase D9-12 asked for: not a feature checklist, but a
 measurement. "Indistinguishable from XNA 4.0" is a claim this renderer makes; this document is the
 evidence for it, and — just as importantly — the explicit boundary of what has and has not been
 measured yet. A short divergence list is a triumph. A short list produced by not looking hard
@@ -70,7 +78,7 @@ for — a divergence report with nothing in this section would be a weaker one, 
    D3D9-specific; found while building `D9-103`'s own tests, which is exactly the kind of thing
    a feature that never gets tested through the real public API stays broken indefinitely.
 
-Neither bug is a "CNA vs. XNA divergence" in the sense `plans/plan_dx9.md`'s own six-divergences section
+Neither bug is a "CNA vs. XNA divergence" in the sense the DX9 plan's six-divergences section
 means (a deliberate or historical CNA design choice diverging from documented XNA behavior) — both
 were straightforward implementation bugs, caught precisely because this project insists on
 testing through the real public API against a real oracle rather than trusting the implementation.
@@ -82,18 +90,18 @@ isn't closed yet, not just "not gotten to":
 
 | Area | Why it's not in the corpus |
 |---|---|
-| Render targets (`RenderTarget2D`/`RenderTargetCube` as a sampled texture) | **Blocked on a real, reproducible crash** (`dxvk::DxvkError`, uncaught, on what appears to be a DXVK async shader-compiler thread) the moment a `D3DUSAGE_RENDERTARGET`-flagged texture exists in-process alongside any subsequent draw call. Documented in `NEXT.md` §4; needs Vulkan validation layers or DXVK-internals debugging to root-cause, not another oracle-scene attempt. |
+| Render targets (`RenderTarget2D`/`RenderTargetCube` as a sampled texture) | **No longer blocked.** The crash was a wrong `static_cast` in `D3D9EffectDraw.cpp`, fixed by `D9-84` (2026-07-16); `DirectX9_RenderTarget_SamplingOrientation`, `_ProducerConsumer` and `_EffectSource` cover the path. No oracle scene diffs it against XNA yet. |
 | Every `SurfaceFormat` besides `Color` | The former shared-API blocker is closed by `SOFTWARE-276`: CNA now exposes generic, byte-width-compatible `Texture2D::SetData<T>`/`GetData<T>`. These formats still have no dedicated D3D9 oracle scenes in this corpus, so they remain unmeasured here rather than being described as impossible to submit. |
-| `EnvironmentMapEffect`'s specular variants, `PreferPerPixelLighting` (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) | Blocked on `D9-81`'s own confirmed `GpuDrawParams` gaps (this plan's own **Divergence 1**, below) — cross-cutting across all 10 CNA renderers, explicitly out of this plan's authority to fix (see Boundaries). |
+| `EnvironmentMapEffect`'s specular variants, `PreferPerPixelLighting` (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) | **Measured since** (2026-10-28 rerun): `GpuDrawParams` carries `preferPerPixelLighting` (graphics Phase 80, 2026-07-16), and `lit_textured_quad_pixellighting`, `skinned_pixellighting_*` and `envmap_specular_quad` pass. |
 | `SpriteSortMode.Immediate` | Its only real behavioral difference from `Deferred` (per-`Draw()` GPU submission instead of batching until `End()`) is not pixel-observable by a raster-diff methodology at all — a batched multi-quad draw call and N individual draw calls in the same order produce the identical final image. No scene for it would add verification value. |
 | `SpriteSortMode.Texture` | Confirmed **not viable** as a deterministic oracle scene, not merely deferred: real FNA's own `SpriteBatch.cs` `TextureComparer.Compare` sorts by `texture.GetHashCode()` — `Texture`'s inherited default `Object.GetHashCode()`, an implementation-defined identity hash with no documented, predictable ordering between two arbitrary textures. |
 | NPOT-wrap-on-`Reach` | Real XNA's own enforcement timing/behavior here is undocumented, and FNA implements none of it either (confirmed via `D9-100`'s own research into `ProfileCapabilities.cs`) — inventing an enforcement point without a reference to verify against would be asserting behavior this project cannot actually check. |
 | Hardware instancing's `HiDef`-only gate | Noted as a Phase D9-10 follow-up when `D9-83` closed; not yet wired. |
-| `D3DCULL` winding (`D9-21`) | Deferred to `D9-84`'s own draw-path validation sweep; the mapping table itself is done and source-verified, the pixel proof is not yet landed. |
+| `D3DCULL` winding (`D9-21`) | **Measured since**: `cullmode_cwface_quad`, `cullmode_ccwface_quad` and `cullmode_none_quad` pass. |
 
 ## The six project-wide CNA-vs-XNA divergences — status as measured by this renderer
 
-`plans/plan_dx9.md`'s own "CNA's divergences from XNA 4.0" section names six confirmed divergences
+The DX9 plan's "CNA's divergences from XNA 4.0" section named six confirmed divergences
 present on **every** CNA renderer, discovered by taking XNA seriously as the specification before
 writing D3D9 renderer code. They are cross-cutting (`GpuDrawParams` + shader-variant work spanning
 all 10 renderers) and explicitly **not this plan's to fix** — see Boundaries. What follows is their
@@ -101,19 +109,19 @@ status as *measured*, specifically by D3D9's own oracle work, not a re-litigatio
 fix them:
 
 1. **`PreferPerPixelLighting` ignored; CNA always renders per-pixel, XNA defaults per-vertex.**
-   Still fully present and unmeasured on D3D9 — no per-vertex lighting shader exists anywhere in
-   CNA, D3D9 included. **Not exercised by the corpus** (see table above). Still the highest-severity
-   divergence in the project.
+   *(2026-07-15 wording.)* **Resolved on D3D9 since**: `GpuDrawParams` carries the flag (graphics
+   Phase 80), and both the vertex-lit default (`lit_textured_quad`) and the per-pixel scenes match
+   XNA exactly in the 2026-10-28 rerun.
 2. **`oneLight` inferred, not carried in `GpuDrawParams`.** Resolved for D3D9's own *dispatch*
    specifically (`D9-82b`'s own finding: a provably-lossless derivation from existing
    `GpuDrawParams` fields, not a `GpuDrawParams` change) — but this is a shader-selection
-   correctness fix, not a measurement of the divergence's pixel impact, which `plans/plan_dx9.md`'s own
+   correctness fix, not a measurement of the divergence's pixel impact, which the DX9 plan's own
    text already predicts is likely zero (a black light contributes nothing either way).
 3. **`GraphicsProfile` was decorative.** **No longer true on D3D9** — this is what Phase D9-10
    (this session) closed: `IsProfileSupported()`, `QueryRenderTargetFormat()`/
    `QueryBackBufferFormat()`, and resource-creation-time enforcement (`Texture2D`/`TextureCube`/
    `Texture3D` size ceilings, `MaxRenderTargets`) are all real now, verified through the real
-   public API. Still decorative on the other 9 renderers, correctly so — `plans/plan_dx9.md`'s own text
+   public API. Still decorative on the other renderers, correctly so — the DX9 plan's own text
    already anticipated this is D3D9-only fixable (no `D3DCAPS9` exists elsewhere to consult).
 4. **`SpriteBatch`'s D3D9 half-texel convention was never modeled or measured.** **Now measured
    and confirmed correct on D3D9** — `D9-91`'s own half-pixel offset formula, oracle-verified AND
@@ -164,7 +172,7 @@ only) — not a claim that D3D9 is finished. `D9-84`/`D9-A5` (grow the corpus fu
 `tools/xna-oracle/reference/*.png`, same `xna-diff.py --tolerance 0` — now also run through the
 EasyGL renderer. Result: 10/31 pixel-perfect, 21/31 diverge.**
 
-`plans/plan_dx9.md`'s own `D9-A6` row calls this "free": the D3D9 half of the corpus already exists
+The DX9 plan's own `D9-A6` row called this "free": the D3D9 half of the corpus already exists
 (`D9-A3`/`D9-A5`), and `CnaOracleRender.cpp` was already renderer-agnostic (verified before touching
 anything — a grep for D3D9-specific code found only two cosmetic `printf` strings and one comment,
 all now parameterized/updated; see "What was built" below). The only genuinely new work was a
@@ -249,7 +257,7 @@ convention gap, not a shading/math bug:
 | `colored_linelist_quad` | 816/65536 | 237 | (26,63): clear → `(255,0,0,255)` |
 
 The five "lit/skinned/multilight/dualtexture/envmap" rows here are the interesting negative result:
-`plans/plan_dx9.md`'s own prediction for `D9-A6` was that the `PreferPerPixelLighting` gap (design
+The DX9 plan's own prediction for `D9-A6` was that the `PreferPerPixelLighting` gap (design
 decision 8: CNA always lights per-pixel, XNA defaults per-vertex) would produce "at least one
 guaranteed hit" — but these five scenes all use a spatially **uniform** normal/light direction
 across every vertex (by their own scene-file design, e.g. `lit_textured_quad`'s comment: "every
@@ -304,7 +312,7 @@ real, concrete "opens a graphics-plan bug" result this task's own notes predicte
   Fresnel term in a way that doesn't correctly Gouraud-interpolate the per-vertex-computed scalar
   across the primitive (possibly evaluating it from an interpolated per-fragment normal instead of
   interpolating the already-computed per-vertex Fresnel value, or a flat/qualifier issue on the
-  varying that carries it) — consistent with, and a concrete confirmation of, `plans/plan_dx9.md`'s own
+  varying that carries it) — consistent with, and a concrete confirmation of, the DX9 plan's own
   design-decision-8 prediction, in the one scene actually shaped to detect it. Same caveat as
   `fog_gradient_quad`: D3D9 already renders this exact scene correctly (0/65536), so this is
   EasyGL-renderer-local, not a shared cross-renderer `GpuDrawParams` gap.

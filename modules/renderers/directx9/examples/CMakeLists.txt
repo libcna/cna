@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plans/plan_dx9.md D9-23: D3D9 CTest registration, run under Wine through
+# DX9 D9-23: D3D9 CTest registration, run under Wine through
 # scripts/run-wine-dxvk9.sh (D9-5).
 
 # Example/test executables historically live at the build root (scripts, docs and

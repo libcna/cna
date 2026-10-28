@@ -1,7 +1,7 @@
 # Graphics renderer feature matrix — established GPU paths and CPU/raster companions
 
 Master, up-to-date cross-renderer feature matrix for CNA's established renderers, written for
-Task 451 (Phase 51) and extended 2026-07-15 with a `DIRECTX9` column (`../plans/plan_dx9.md`,
+Task 451 (Phase 51) and extended 2026-07-15 with a `DIRECTX9` column (`../the DX9 plan`,
 `D9-130`). The WebGPU renderer is intentionally tracked separately in
 [`webgpu-renderer.md`](webgpu-renderer.md) and `../plans/plan_webgpu.md`; SDL_GPU
 (`../plans/plan_sdlgpu.md`) and FNA3D ([`fna3d-renderer.md`](fna3d-renderer.md)) have no columns
@@ -195,7 +195,7 @@ itself could support.
 
 | Feature | EasyGL | D3D9 |
 |---|---|---|
-| Wired to real GPU work (`Begin`/`End`) | ✅ | ⬜ **not built at all** — `plans/plan_dx9.md`'s task list has no `IDirect3DQuery9`-based occlusion-query task; `CreateOcclusionQuery()` falls through to `IGraphicsRenderer`'s own silent `nullptr` default |
+| Wired to real GPU work (`Begin`/`End`) | ✅ | ⬜ **not built at all** — the DX9 plan's task list has no `IDirect3DQuery9`-based occlusion-query task; `CreateOcclusionQuery()` falls through to `IGraphicsRenderer`'s own silent `nullptr` default |
 | Pixel/query correctness (visible vs. occluded) | ✅ verified both directions (Tasks 445/446) | N/A — no query support exists |
 
 ## Model (Phase 49, closed this session — see `docs/model-content-pipeline-support.md` for full detail)

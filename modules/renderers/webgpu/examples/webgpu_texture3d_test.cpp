@@ -58,7 +58,7 @@ namespace {
 /// made later. Reach has no volume textures, so this test died on a profile refusal before its
 /// first check. It has to be set here rather than on the GraphicsDeviceManager, because `Game`'s
 /// own GraphicsDevice is default-constructed at Reach before that manager exists
-/// (plans/plan_dx9.md D9-103), so a manager-level request arrives after the device it describes.
+/// (DX9 D9-103), so a manager-level request arrives after the device it describes.
 const CNA::ProjectGraphicsProfileEXT kProfileOptIn{
     Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef};
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-// plans/plan_dx9.md Phase D9-5 (D9-53): real D3D9 offscreen render-target renderers.
+// DX9 Phase D9-5 (D9-53): real D3D9 offscreen render-target renderers.
 //
 // Both classes hold a non-owning DirectX9Renderer* (owner_) -- a render target's Unbind must be
 // able to restore the owner's default back-buffer/depth-stencil surfaces, which only the owning

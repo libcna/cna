@@ -1,6 +1,6 @@
 #pragma once
 
-// plans/plan_dx9.md D9-11: a small shared "loud, explicit failure" helper for renderer methods that are
+// DX9 D9-11: a small shared "loud, explicit failure" helper for renderer methods that are
 // not implemented yet; new renderer work should prefer this shared header to a private copy.
 
 #include <stdexcept>

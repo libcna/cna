@@ -1,4 +1,4 @@
-# plan_dx9.md: builds the DIRECTX9 renderer with native MSVC (a completely different compiler from
+# DX9 plan (D9-*): builds the DIRECTX9 renderer with native MSVC (a completely different compiler from
 # the MinGW-w64 cross-builds this project otherwise uses) and runs its off-screen smoke CTest suite
 # directly against the real Windows D3D9 runtime, with no Wine involved. RRC-051 added an SDL_GPU
 # leg: SDL_GPU is the default renderer on Windows, SDL drives Direct3D 12 underneath it, and after

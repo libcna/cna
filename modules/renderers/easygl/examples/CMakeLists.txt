@@ -145,7 +145,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # not registered as a ctest.
         cna_easygl_test(cna_corpus2d_easygl ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_2d_corpus.cpp)
 
-        # plans/plan_dx9.md D9-A6: builds the SAME ${CMAKE_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp (D9-A3's own
+        # DX9 D9-A6: builds the SAME ${CMAKE_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp (D9-A3's own
         # scene-driven renderer, already renderer-agnostic -- real public Game/GraphicsDeviceManager/
         # GraphicsDevice/BasicEffect/SpriteBatch API throughout, no EasyGL- or D3D9-specific code)
         # natively under the EasyGL renderer, so the checked-in 31-scene XNA-oracle corpus can be

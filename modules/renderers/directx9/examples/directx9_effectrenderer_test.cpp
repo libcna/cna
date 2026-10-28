@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_dx9.md Phase D9-11 (D9-111): validates D3D9EffectRenderer -- runtime D3DCompile() of a
+// DX9 Phase D9-11 (D9-111): validates D3D9EffectRenderer -- runtime D3DCompile() of a
 // custom vertex+pixel shader pair, per-stage name->register lookup via D9-110's CTAB parser, and
 // real uniform-driven pixel output. Mirrors the retired D3D11EffectRenderer's DX-58 test bar:
 // "compile a trivial custom vertex+pixel shader pair at runtime, draw a real triangle with it, read

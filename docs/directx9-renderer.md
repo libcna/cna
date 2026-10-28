@@ -21,18 +21,19 @@ DXVK Direct3D-9-over-Vulkan implementation on this dev machine, which is what ma
 meaningful — without that, it would silently measure a driver difference and misattribute it to
 CNA.
 
-**Current result: 0/31 scenes diverge.** See `docs/d3d9-divergence-report.md` for the full,
-current measurement — what's covered, what isn't yet, and the honest DXVK-authenticity caveat
-every result here inherits (below).
+**Current result: all 39 scenes with a reference image match real XNA 4.0 exactly**
+(`D3D9_XNA_Diff`, rerun 2026-10-28; the corpus holds 40 scenes). See
+`docs/d3d9-divergence-report.md` for the measurement — what's covered, what isn't yet, and the
+honest DXVK-authenticity caveat every result here inherits (below).
 
 Select this renderer with:
 
 ```bash
-cmake -S . -B cmake-build-d3d9 \
+cmake -S . -B cmake-build-mingw \
   -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
   -DCNA_GRAPHICS_RENDERER=DIRECTX9 \
   -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-d3d9 -j
+cmake --build cmake-build-mingw --parallel 8
 ```
 
 `D3D9` is hard-gated to Windows cross-compilation (or native Windows) at configure time.
@@ -71,23 +72,21 @@ cmake --build cmake-build-d3d9 -j
   active, leaving Microsoft's stock bytecode untouched for ordinary XNA draws. Focused public
   BasicEffect and SkinnedEffect regressions cover disabled, point, out-of-range and aimed/away
   spot cases; PBR also covers a skinned draw.
+- **Custom `ShaderEffect`**: HLSL compiled at run time through `D3DCompile` in the separate
+  `cna_renderer_d3d9_effect` library, so the stock pipeline itself never links `d3dcompiler`;
+  constants are mapped by CNA's own CTAB parser (`D9-110`..`D9-112`, `DirectX9_CompiledEffects`).
+- **Render targets sampled as textures**, single and MRT: the DXVK crash once blamed for blocking
+  them was a wrong `static_cast` in `D3D9EffectDraw.cpp` (`D9-84`, fixed 2026-07-16), and
+  `DirectX9_RenderTarget_SamplingOrientation`, `_ProducerConsumer` and `_EffectSource` cover them.
 
 ## What's not (yet)
 
-- **Render targets sampled back as a texture**: blocked on a real, reproducible crash
-  (`dxvk::DxvkError`, uncaught, apparently on a DXVK async shader-compiler thread) the moment a
-  `D3DUSAGE_RENDERTARGET`-flagged texture exists in-process alongside any subsequent draw call.
-  Documented in `NEXT.md` §4 with a full reproduction record; needs Vulkan validation layers or
-  DXVK-internals debugging to root-cause, not another oracle-scene attempt.
+- **An oracle scene for a render target sampled as a texture**: covered by CTests (above), not
+  yet by a scene diffed against real XNA.
 - **Every `SurfaceFormat` besides `Color`**: the former shared API blocker is closed by
   `SOFTWARE-276`, which restores generic, byte-width-compatible Texture2D transfers. Dedicated
   D3D9 oracle scenes for the remaining formats have still not been run, so this is an evidence gap
   in that renderer's corpus rather than a missing CNA submission API.
-- **`EnvironmentMapEffect`'s specular variants, `PreferPerPixelLighting`**
-  (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`): blocked on a confirmed, cross-cutting
-  `GpuDrawParams` gap present on **every** CNA renderer (Divergence 1/4 in `plans/plan_dx9.md`'s own
-  "CNA's divergences from XNA 4.0" section) — out of this renderer's authority to fix; measured
-  and reported, not silently worked around.
 - **Direct shadow-map sampling** is not implemented in the D3D9 Basic/Skinned/PBR paths; their
   point and spot lights are currently unshadowed.
 - **`SpriteSortMode.Immediate`/`.Texture`**: `Immediate`'s only real behavioral difference from
@@ -102,7 +101,7 @@ cmake --build cmake-build-d3d9 -j
 
 ## The one caveat every result above inherits
 
-Every check in this renderer — the oracle's own `0/31` result included — ran under Wine+DXVK, on
+Every check in this renderer — the oracle's own `39/39` result included — ran under Wine+DXVK, on
 this dev machine's own GPU (AMD Radeon 780M, RADV). `D3DCAPS9` in this loop is **synthesized by
 DXVK**, not reported by an authentic XNA-era (~2006–2013) Direct3D 9 driver.
 `IsProfileSupported(HiDef)` returning `true` here proves the comparison *logic* is correct, not
@@ -110,7 +109,58 @@ that a real `HiDef`-class GPU exists in this loop (it doesn't). This renderer's 
 precisely: **indistinguishable from real XNA 4.0 running through the same DXVK
 Direct3D-9-over-Vulkan path, on this machine** — a real, strong, reproducible result, and a
 narrower one than "authentically indistinguishable from XNA on real hardware." That gap is
-`plans/plan_dx9.md`'s own `D9-140`, `needs_human`, still open.
+`D9-140`, `needs_human`, still open.
+
+## Design decisions
+
+The decisions behind the renderer, each binding because "indistinguishable from XNA 4.0" is the
+goal (numbered as source comments cite them, "design decision N"):
+
+1. **One renderer identity, `DIRECTX9`**, hard-gated to Windows targets at configure time.
+2. **Plain Direct3D 9 (`Direct3DCreate9`), not D3D9Ex.** User resources live in
+   `D3DPOOL_MANAGED`, so they survive `Reset()` exactly as XNA 4.0 promised; only render targets
+   and dynamic buffers use `D3DPOOL_DEFAULT`. The full device-lost lifecycle is implemented and
+   fires `DeviceLost`/`DeviceResetting`/`DeviceReset` at XNA's own points; its pain is the
+   deliverable, not a reason to switch to D3D9Ex.
+3. **Microsoft's Stock Effects sources are vendored verbatim** (`HLSL/*.fx`/`*.fxh` from the FNA
+   tree, with their MS-PL headers and provenance README) and never edited. A compile problem is
+   solved in the compile step or an added `#define`, never in Microsoft's source, so a `diff`
+   against FNA stays empty.
+4. **No D3D9 Effect framework.** Each `.fx` entry point is compiled individually by CNA (with
+   the real `d3dcompiler_47.dll` and an `ID3DInclude` for the `.fxh` files); Microsoft's shipped
+   `.fxb` is a verification oracle only, never a source of shipped bytes (owner decision,
+   2026-07-14). 61 of 66 variants are byte-identical to Microsoft's; the 5 `PixelLighting`
+   variants differ by compiler version only and are oracle-proven instead. The
+   `VSArray`/`PSArray`/`ShaderIndex` machinery is replicated in C++.
+5. **Shader targets are Microsoft's own `vs_2_0`/`ps_2_0`** for every stock effect; upgrading to
+   SM3 would change codegen and precision. SM3 appears only as the `HiDef` capability floor and in
+   custom `ShaderEffect`s.
+6. **Constant registers come from Microsoft's `_vs(c#)`/`_ps(c#)` annotations**, transcribed into
+   one `static_assert`-checked table; where a CNA layout disagrees, Microsoft's wins.
+7. **XNA's shader-permutation model is replicated exactly**: each effect's `ShaderIndex`
+   computation is ported from FNA's `*.cs`, not derived from CNA's own variant selection.
+8. **`GpuDrawParams` is that computation's input.** Gaps it exposes are reported and fixed
+   across renderers rather than worked around here; `preferPerPixelLighting` was the first
+   (graphics Phase 80, 2026-07-16), and `oneLight` is derived losslessly from the light fields.
+9. **No D3DX, ever.** `d3dx9_43.dll` is a deprecated redistributable absent from stock Windows, so
+   constants are read by CNA's own CTAB parser rather than `ID3DXConstantTable`.
+10. **SpriteBatch's half-pixel offset is applied on the CPU in `MatrixTransform`**, where XNA
+    applied it (`SpriteEffect.fx` has no offset in the shader), at one site, with a pixel test
+    that fails without it. It is never absorbed into a widened tolerance.
+11. **Render state, not state objects**: blend/depth-stencil/rasterizer/sampler state become
+    `SetRenderState`/`SetSamplerState` sequences; there is nothing to cache.
+12. **D3D9 has its own format, state and vertex-declaration mapping** (`D3DFORMAT` is not
+    `DXGI_FORMAT`); it shared a vendor with the retired D3D11/D3D12 renderers, not a model.
+13. **MRT is capped by `D3DCAPS9::NumSimultaneousRTs` (at most 4)**, all targets the same bit
+    depth, no independent blending; over-requesting throws a named error instead of degrading.
+14. **The native `HWND`** comes from the platform window (`IPlatformWindow::GetNativeHandle()`)
+    into `D3DPRESENT_PARAMETERS::hDeviceWindow`; there is no windowing code of its own.
+15. **COM lifetime is `Microsoft::WRL::ComPtr<T>`**, with no bare `Release()` call sites.
+16. **The renderer links `d3d9` alone.** `d3dcompiler` is linked only by the offline shader tool
+    and the separate custom-`ShaderEffect` library, so the stock pipeline has no runtime
+    shader-compiler dependency.
+17. **The DXVK gate**: a run that silently fell back to WineD3D fails (exit 3), and that gate was
+    seen to fail on a deliberately broken prefix before it was trusted.
 
 ## Development environment: Wine + DXVK dev-loop
 
@@ -130,27 +180,27 @@ Debian (this repo's actual dev machine)
 ```
 
 ```bash
-scripts/run-wine-dxvk9.sh cmake-build-d3d9/cna_test_directx9_smoke.exe
+scripts/run-wine-dxvk9.sh cmake-build-mingw/cna_test_directx9_smoke.exe
 ```
 
 `CNA_D3D9_WINEPREFIX` overrides the prefix; the D9-5 gate fails loudly (exit 3) if a run silently
-fell back to WineD3D instead of DXVK. `ctest --test-dir cmake-build-d3d9 -L DIRECTX9` runs every D3D9
-test — including `D3D9_XNA_Diff` (below) — through this same wrapper automatically; none of them
-need the separate XNA prefix to run.
+fell back to WineD3D instead of DXVK. `ctest --test-dir cmake-build-mingw -L DIRECTX9` runs every
+D3D9 test — including `D3D9_XNA_Diff` (below) — through this same wrapper automatically; none of
+them need the separate XNA prefix to run.
 
 ## The oracle harness (`tools/xna-oracle/`)
 
 - `tools/xna-oracle/scenes/*.scene` — a shared, declarative `key=value` text scene format, parsed
   identically by both sides. Extending it (a new key, a new effect combination) is the normal way
-  to grow coverage — see `tools/xna-oracle/README.md` for the full key reference and current
-  31-scene corpus manifest.
+  to grow coverage — see `tools/xna-oracle/README.md` for the full key reference and the corpus
+  manifest.
 - `tools/xna-oracle/Oracle.cs` — the real-XNA-4.0 side, compiled by the in-prefix `csc.exe`
   (targets .NET Framework 4.0-era C# — no expression-bodied members, no string interpolation, no
   C# 6+ syntax at all).
 - `tools/xna-oracle/CnaOracleRender.cpp` — the CNA side, through the real public
   `Game`/`GraphicsDeviceManager`/`GraphicsDevice`/effect/`SpriteBatch`/`Texture2D` API, never the
   raw renderer interface.
-- `tools/xna-oracle/reference/*.png` — the 31 real-XNA-4.0 renders, captured once and checked in.
+- `tools/xna-oracle/reference/*.png` — the real-XNA-4.0 renders (39), captured once and checked in.
   `D3D9_XNA_Diff` (a real CTest, `D9-120`) diffs every scene against these on every run — it needs
   only the D3D9 Wine prefix, never the XNA one, to keep validating against them.
 - `scripts/xna-diff.py` — the pixel-diff tool itself (`--tolerance` defaults to `0`; **never**
@@ -174,27 +224,25 @@ Two established patterns:
 
 Every check added to this renderer that claims to test something is expected to be
 **mutation-verified**: deliberately break the implementation it exercises, confirm the check (and
-only the checks that should be affected) goes red, then revert and reconfirm green. See
-`plans/plan_dx9.md`'s own `D9-91`/`D9-93`/`D9-103`/`D9-122` closure notes for real examples of this
-discipline catching genuine false-positive traps (a check that stays green even with its own
+only the checks that should be affected) goes red, then revert and reconfirm green. The
+`D9-91`/`D9-93`/`D9-103`/`D9-122` closure notes (the DX9 plan, Git history) are real examples of
+this discipline catching genuine false-positive traps (a check that stays green even with its own
 target feature disabled is worse than no check at all).
 
-## Known limitations (2026-10-16)
+## Known limitations (2026-10-28)
 
 - **Not verified on real Windows hardware** (`D9-140`, `needs_human`) — see the DXVK-authenticity
-  caveat above.
-- **`CnaTests` does not build under D3D9** (`D9-123`) — the POSIX `::setenv()` wall.
+  caveat above. `handoff.md` §5 lists the `CnaGraphicsTests.exe` cases that currently fail under
+  Wine.
 - **`DirectX9_Common`'s lookup-table checks are mostly not individually mutation-verified** — `D9-122`
   closed the highest-value gaps (blend state, device-lost recovery, MRT, render-target bind,
   vertex-buffer upload, cube-texture upload) but explicitly left most of `DirectX9_Common`'s ~30
   homogeneous mapping-table checks and a handful of `DirectX9_Smoke` checks (Clear/Clear* combo
   variants, resize) unverified this pass — documented, not silently assumed covered.
-- **Render targets cannot be sampled as textures at all** — see "What's not (yet)" above.
-- **`D9-11` (custom `ShaderEffect`)** is explicitly ask-first in `plans/plan_dx9.md`'s own execution
-  order and has not been started.
 
-See `plans/plan_dx9.md` for the full task-by-task status (`D9-0` through `D9-140`) and design rationale,
-`docs/d3d9-divergence-report.md` for the current oracle measurement, and
+The task-by-task record, `D9-0` through `D9-140` (2026-07/09), was `plans/plan_dx9.md`, deleted on
+2026-10-28 (Git history only); source comments cite its rows as "DX9 D9-nn". See
+`docs/d3d9-divergence-report.md` for the oracle measurement, and
 `docs/graphics-renderer-feature-matrix.md` for a row-by-row comparison against the other
 established renderers (with the caveat that D3D9's own goal — XNA-authenticity, not feature parity
 — makes some of that matrix's rows less meaningful for this renderer than for the others; the

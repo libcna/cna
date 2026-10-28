@@ -8884,7 +8884,7 @@ namespace CNA::Internal::Renderers::EasyGL
         CNA_RENDER_LOG("lit+textured3D ready loc_wvp=" << prog_lit_textured_.loc_wvp);
     }
 
-    // graphics Task 1102 (Phase 80 / plans/plan_dx9.md Divergence 1): real XNA's
+    // graphics Task 1102 (Phase 80 / the DX9 plan's Divergence 1): real XNA's
     // BasicEffect/SkinnedEffect default to PreferPerPixelLighting=false, which selects a
     // per-vertex-lit shader family (VSBasicVertexLighting*) -- lighting is computed ONCE per
     // vertex and Gouraud-interpolated across the triangle, not re-evaluated per fragment.
@@ -9059,7 +9059,7 @@ namespace CNA::Internal::Renderers::EasyGL
         CNA_RENDER_LOG("skinned3D ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
     }
 
-    // graphics Task 1102b (Phase 80 / plans/plan_dx9.md Divergence 1): SkinnedEffect's own
+    // graphics Task 1102b (Phase 80 / the DX9 plan's Divergence 1): SkinnedEffect's own
     // per-vertex-lit sibling, mirroring Task 1102's EnsureLit3DVertexLitProgram() for BasicEffect
     // exactly -- same technique (move FNA's Lighting.fxh ComputeLights() Blinn-Phong math from the
     // fragment stage into the vertex stage, Gouraud-interpolate the result via varyings, keep the
@@ -9360,7 +9360,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const bool receivesShadow = params.shadowsEnabled && params.shadowMap != nullptr;
         if (params.skinned)
         {
-            // Task 1102b (plans/plan_dx9.md Divergence 1): real XNA's SkinnedEffect defaults
+            // Task 1102b (the DX9 plan's Divergence 1): real XNA's SkinnedEffect defaults
             // PreferPerPixelLighting=false too, same as BasicEffect (Task 1102). Only
             // meaningfully distinct while lighting is actually on, same reasoning as Task 1102's
             // own stride-32 gate.

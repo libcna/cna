@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_dx9.md Phase D9-8 (D9-82b/c/d/e): real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx
+// DX9 Phase D9-8 (D9-82b/c/d/e): real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx
 // dispatch -- BasicEffect (D9-82b), AlphaTestEffect (D9-82c), DualTextureEffect (D9-82d),
 // EnvironmentMapEffect (D9-82e), and SkinnedEffect (D9-82f), plus negative checks confirming that
 // incomplete vertex declarations throw rather than silently drawing the wrong thing.
@@ -65,7 +65,7 @@
 //   situation. This check's exact readback (matching Check A's own color) proves the render
 //   target's REAL content is genuinely sampled, not merely "didn't crash".
 // Check R -- BasicEffect PreferPerPixelLighting=true, textured (ShaderIndex 28/29 -- one of the 5
-//   shader variants plans/plan_dx9.md D9-73 found do NOT byte-match Microsoft's shipped .fxb, a
+//   shader variants DX9 D9-73 found do NOT byte-match Microsoft's shipped .fxb, a
 //   compiler-version difference the same row demands be PROVEN pixel-equivalent against the real
 //   XNA oracle -- see the new lit_textured_quad_pixellighting.scene oracle scene for that proof; a
 //   flat single-normal triangle like this one cannot itself distinguish vertex-lit from pixel-lit

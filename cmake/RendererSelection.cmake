@@ -109,7 +109,7 @@ if(CNA_PLATFORM STREQUAL "TERMINAL" AND NOT CNA_GRAPHICS_RENDERER IN_LIST _cna_t
         "Choose a CPU renderer: ${_cna_terminal_renderers_text}.")
 endif()
 
-# plans/plan_dx9.md design decision 1: DIRECTX9 genuinely cannot build anywhere but Windows (native
+# docs/directx9-renderer.md design decision 1: DIRECTX9 genuinely cannot build anywhere but Windows (native
 # or MinGW/MSVC cross-compile) -- d3d9.h does not exist elsewhere, so this is a hard FATAL_ERROR.
 if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(FATAL_ERROR
