@@ -186,8 +186,17 @@ def check_no_global_raw_flags(errors: list[str]) -> None:
             "add_link_options(-static-libstdc++)",
         },
     }
+    # Whole files that only ever run as their own `cmake -P` script, with no project and no target,
+    # and handle flag variables as data: nothing in them can reach a build's flags.
+    allowed_files = {
+        # Prints the flags a toolchain file decides, for the SDL prebuilt manifest (audit C-09).
+        "cmake/SdlToolchainSettings.cmake",
+        # The SdlPrebuiltFingerprint fixture writes toolchain files that only the script above reads.
+        "cmake/Tests/SdlPrebuiltFingerprint.cmake",
+    }
 
     seen_allowed: set[tuple[str, str]] = set()
+    seen_allowed_files: set[str] = set()
     for path in cmake_policy_files():
         relative = path.relative_to(SOURCE_DIR).as_posix()
         for line_number, original_line in enumerate(
@@ -198,6 +207,10 @@ def check_no_global_raw_flags(errors: list[str]) -> None:
                 continue
             if line in allowed_lines.get(relative, ()):
                 seen_allowed.add((relative, line))
+                continue
+            matched = bool(raw_flag.search(line) or global_option.search(line))
+            if matched and relative in allowed_files:
+                seen_allowed_files.add(relative)
                 continue
             if raw_flag.search(line):
                 errors.append(f"{relative}:{line_number}: raw global flag policy: {line}")
@@ -210,6 +223,8 @@ def check_no_global_raw_flags(errors: list[str]) -> None:
         for line in sorted(lines):
             if (relative, line) not in seen_allowed:
                 errors.append(f"{relative}: stale policy exception, the line is gone: {line}")
+    for relative in sorted(allowed_files - seen_allowed_files):
+        errors.append(f"{relative}: stale policy exception, the file no longer names a flag")
 
 
 def main() -> None:
