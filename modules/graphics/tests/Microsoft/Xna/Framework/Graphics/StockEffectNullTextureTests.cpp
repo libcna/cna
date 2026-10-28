@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_graphics_shared_cleanup.md GSC-0004: what a classic stock effect samples from an unbound
+// graphics shared cleanup GSC-0004: what a classic stock effect samples from an unbound
 // texture slot.
 //
 // Measured on Microsoft XNA 4.0 (HiDef) through tools/xna-oracle with the scenes in

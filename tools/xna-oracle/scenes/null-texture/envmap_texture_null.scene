@@ -1,4 +1,4 @@
-# plans/plan_graphics_shared_cleanup.md GSC-0004: what a real XNA 4.0 stock effect samples from an
+# graphics shared cleanup GSC-0004: what a real XNA 4.0 stock effect samples from an
 # unbound texture slot. EnvironmentMapEffect with Texture=null over a (200,100,50) cube, amount 0.5,
 # no fresnel, ambient white: lerp(sample, cube, 0.5). White would give ~(228,178,153), black (100,50,25).
 # The clear colour has alpha 255 and the default BlendState.Opaque writes the effect's alpha, so the

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_graphics_shared_cleanup.md GSC-0002: DepthStencilState.TwoSidedStencilMode applies the
+// graphics shared cleanup GSC-0002: DepthStencilState.TwoSidedStencilMode applies the
 // CounterClockwise* stencil state to counter-clockwise triangles and the ordinary state to clockwise
 // ones -- per field (function, pass, fail, depth-buffer fail), on the back buffer and on a render
 // target, and on exactly the winding CullCounterClockwiseFace removes.

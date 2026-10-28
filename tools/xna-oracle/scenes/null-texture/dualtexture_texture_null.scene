@@ -1,4 +1,4 @@
-# plans/plan_graphics_shared_cleanup.md GSC-0004: what a real XNA 4.0 stock effect samples from an
+# graphics shared cleanup GSC-0004: what a real XNA 4.0 stock effect samples from an
 # unbound texture slot. DualTextureEffect with Texture=null and a white Texture2, DiffuseColor 0.5:
 # texture * texture2 * 2 * diffuse is the sample itself.
 # The clear colour has alpha 255 and the default BlendState.Opaque writes the effect's alpha, so the

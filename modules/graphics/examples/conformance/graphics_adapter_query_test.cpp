@@ -18,7 +18,7 @@
 //   * Reset and RenderTarget2D apply the selected format, depth and sample count;
 //   * the answers do not change once the device and its resources exist.
 //
-// First written for the retired DIRECTX11 renderer (DX-245, plans/plan_graphics_shared_cleanup.md
+// First written for the retired DIRECTX11 renderer (DX-245, graphics shared cleanup
 // GSC-0005); the Direct3D-specific fixed back-buffer table and its >= 4x MSAA floor are not carried
 // over. That original, graphics_adapter_query_contract_test.cpp, was removed in RRC-047 once the two
 // renderer-neutral checks only it made had been moved here.

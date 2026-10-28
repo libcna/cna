@@ -12,7 +12,7 @@
 #include <unistd.h>
 #endif
 
-// plans/plan_graphics_shared_cleanup.md GSC-0008: the audio suites wrote their XACT fixtures into fixed
+// graphics shared cleanup GSC-0008: the audio suites wrote their XACT fixtures into fixed
 // directories directly under the system temporary directory (%TEMP%\cna_audio_engine_test and siblings).
 // Test processes that run at the same time -- parallel gtest shards on Windows, a parallel ctest of
 // discovered tests on Linux -- then rewrote one another's files while they were being read: Windows

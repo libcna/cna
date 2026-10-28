@@ -1101,7 +1101,7 @@ TEST(XnbModelSourceRouteTest, ASkinnedModelStatesThatItsSkeletonIsNotWritten)
 
 TEST(XnbModelSourceRouteTest, AnUntexturedGltfSkinBuiltToCnbCarriesGltfWhite)
 {
-    // plans/plan_graphics_shared_cleanup.md GSC-0004: the compiled-model loader applies the same glTF
+    // graphics shared cleanup GSC-0004: the compiled-model loader applies the same glTF
     // material policy as the runtime glTF path. An untextured glTF skin reaches SkinnedEffect, whose
     // unbound texture samples XNA's opaque black, so the glTF white base colour is bound explicitly.
     ScratchDirectory scratch("gltf_skin_cnb");

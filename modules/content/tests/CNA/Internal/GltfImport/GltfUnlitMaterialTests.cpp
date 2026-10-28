@@ -227,7 +227,7 @@ TEST(GltfUnlitMaterial, ASkinnedUnlitMaterialIsApproximatedRatherThanMapped)
 
 TEST(GltfUnlitMaterial, AnUntexturedSkinSamplesGltfWhiteRatherThanAnUnboundTexture)
 {
-    // plans/plan_graphics_shared_cleanup.md GSC-0004. glTF: a missing baseColorTexture is a white
+    // graphics shared cleanup GSC-0004. glTF: a missing baseColorTexture is a white
     // multiplier of baseColorFactor. XNA's SkinnedEffect always samples its texture and reads an
     // unbound one as opaque black (tools/xna-oracle/reference/null-texture/skinned_null.png), so the
     // importer has to bind glTF's white itself -- the Direct3D renderers used to paper over this with

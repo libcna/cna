@@ -142,10 +142,15 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   [`../docs/removed-renderers.md`](../docs/removed-renderers.md).
 - `plan_vulkan_parity.md` — VKPAR-0001..0029, the Vulkan hardware-parity ledger (Radeon 780M,
   closed 2026-09-21; `VULKAN` retired 2026-10-13). Deleted on 2026-10-26 (Git history only); its
-  shared contracts live in [`plan_graphics_shared_cleanup.md`](plan_graphics_shared_cleanup.md)
-  (GSC-0002, GSC-0004), [`../tools/xna-oracle/README.md`](../tools/xna-oracle/README.md) and
+  shared contracts live in `TwoSidedStencilTests.cpp` and `StockEffectNullTextureTests.cpp`
+  (`modules/graphics/tests/`), [`../tools/xna-oracle/README.md`](../tools/xna-oracle/README.md) and
   the test display policy (`../cmake/TestDisplayPolicy.cmake`). Comments cite its rows as
   "Vulkan parity VKPAR-NNNN".
+- `plan_graphics_shared_cleanup.md` — GSC-0001..0010 (2026-09-17/30): XNA's missing-texture,
+  two-sided stencil and back-buffer depth rules, PBR basis guards, and test-harness fixes found by
+  the DirectX 11/12 validation; its follow-ups were fixed later. Deleted on 2026-10-28 (Git history
+  only); each rule is stated in the header of the test that pins it. Comments cite rows as
+  "graphics shared cleanup GSC-NNNN".
 - `plan_gpu_test_isolation.md` — GTI-0001..0010 (2026-09-21/22): tests no longer reach the live
   desktop, the private GPU runner, and the guard for tests that die before their checks. Deleted on
   2026-10-28 (Git history only). The policy is explained in `../cmake/TestDisplayPolicy.cmake`, the

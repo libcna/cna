@@ -57,7 +57,7 @@ namespace CNA::Internal
      * directory scan. Otherwise, if a component has exactly one case-insensitive match in its
      * parent directory, that spelling is used. Missing or ambiguous components leave the original
      * path unchanged so the caller's normal not-found behavior remains authoritative.
-     * (plans/plan_graphics_shared_cleanup.md GSC-0007, formerly WINNATIVE-F26.)
+     * (graphics shared cleanup GSC-0007, formerly WINNATIVE-F26.)
      *
      * Every comparison is made on UTF-8 text obtained with PathToUtf8(), never on
      * `path::string()`: the walker converts *every entry it enumerates*, not only the one it is

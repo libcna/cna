@@ -12,7 +12,7 @@
 #include "CNA/Internal/CaseInsensitivePath.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 
-// plans/plan_graphics_shared_cleanup.md GSC-0007 (formerly WINNATIVE-F26, two deliberately red tests on
+// graphics shared cleanup GSC-0007 (formerly WINNATIVE-F26, two deliberately red tests on
 // Windows). ResolveExistingXnaPath promises a spelling that OPENS the file XNA content named with any
 // ASCII casing, not the casing stored on disk: on a case-insensitive filesystem the requested spelling
 // already opens and is returned without a directory scan. So every case asserts what the function

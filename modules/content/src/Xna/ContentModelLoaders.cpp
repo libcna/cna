@@ -812,7 +812,7 @@ namespace Microsoft::Xna::Framework::Content
             // CNB-64/65 (Phase 13B): owns the morph-target data attached to each morphed mesh
             // part's own Tag property (one entry per part that has morph targets, not per Model).
             std::vector<std::unique_ptr<Graphics::MorphTargetDataEXT>> morphOwners;
-            // plans/plan_graphics_shared_cleanup.md GSC-0004: the 1x1 opaque-white base colour an
+            // graphics shared cleanup GSC-0004: the 1x1 opaque-white base colour an
             // untextured glTF SkinnedEffect material samples, created once per model on first use and
             // owned by textureOwners.
             Graphics::Texture2D* gltfWhiteBaseColorTexture = nullptr;

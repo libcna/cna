@@ -140,7 +140,7 @@ public class Scene
     public bool LightingEnabled;
     public bool PreferPerPixelLighting;
     public bool TextureEnabled;
-    // plans/plan_graphics_shared_cleanup.md GSC-0004: texture sampling requested with no texture object.
+    // graphics shared cleanup GSC-0004: texture sampling requested with no texture object.
     public bool TextureNull;
     public int TextureWidth;
     public int TextureHeight;

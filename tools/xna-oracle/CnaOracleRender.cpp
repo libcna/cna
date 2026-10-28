@@ -214,7 +214,7 @@ namespace
         // real XNA's own default (per-vertex/Gouraud lighting).
         bool preferPerPixelLighting = false;
         bool textureEnabled = false;
-        // plans/plan_graphics_shared_cleanup.md GSC-0004: texture sampling requested with no texture object.
+        // graphics shared cleanup GSC-0004: texture sampling requested with no texture object.
         bool textureNull = false;
         int textureWidth = 0;
         int textureHeight = 0;

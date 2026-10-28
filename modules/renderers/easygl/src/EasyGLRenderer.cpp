@@ -10338,7 +10338,7 @@ namespace CNA::Internal::Renderers::EasyGL
             rtFlipV[0] = SampledRowOrderIsBottomUp(params.texture0) ? 1.0f : 0.0f;
             if (params.texture0)
                 params.texture0->BindGL(0);
-            // plans/plan_graphics_shared_cleanup.md GSC-0004: a classic stock effect that samples its
+            // graphics shared cleanup GSC-0004: a classic stock effect that samples its
             // texture reads an unbound one as XNA's opaque black. BasicEffect with TextureEnabled=false
             // (the only stock effect that passes textureEnabled=false) does not sample in XNA, but both
             // lit programs here multiply unit 0 in unconditionally, so it gets the white identity below --

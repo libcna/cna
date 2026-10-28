@@ -488,7 +488,7 @@ TEST_F(GraphicsAdapterTest, QueryRenderTargetFormatDoesNotPromiseRgba64OnGles)
 
 TEST_F(GraphicsAdapterTest, QueryBackBufferFormatAcceptsColor)
 {
-    // plans/plan_graphics_shared_cleanup.md GSC-0005: every renderer keeps the depth request, as FNA's
+    // graphics shared cleanup GSC-0005: every renderer keeps the depth request, as FNA's
     // QueryBackBufferFormat does. DirectX11 and DirectX12 used to answer DX-213's fixed Depth24Stencil8
     // here while their back buffers already allocated the requested format.
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();

@@ -156,7 +156,7 @@ class EasyGLViewSpaceFogTest : public Game
         fx.setFogEndProperty(Ref::kFogEnd);
 
         // SkinnedEffect always samples its Texture, and an unset one reads as XNA's opaque black
-        // (plans/plan_graphics_shared_cleanup.md GSC-0004) -- which would multiply the emissive
+        // (graphics shared cleanup GSC-0004) -- which would multiply the emissive
         // blue this discriminator measures down to black. A white texel is the identity.
         Texture2D white(dev, 1, 1);
         const Color whiteTexel = Color::White;
