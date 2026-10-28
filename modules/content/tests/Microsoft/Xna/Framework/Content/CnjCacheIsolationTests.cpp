@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnj.md CNB-33: a .cnj sidecar's metadata transform (colorKey) must never leak into a
+// CNJ CNB-33: a .cnj sidecar's metadata transform (colorKey) must never leak into a
 // separately-cached, separately-requested load of the same underlying native file, in either
 // load order. Texture2D::SetData(const Color*, int) reassigns renderer_/cpuPixels_ to freshly
 // created targets rather than mutating the shared objects in place, so a .cnj's recursively-loaded

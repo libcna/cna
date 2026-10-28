@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnj.md CNB-50/51/52 (Phase 12): offline glTF 2.0 -> .cnj Model/AnimationClip converter.
+// CNJ CNB-50/51/52 (Phase 12): offline glTF 2.0 -> .cnj Model/AnimationClip converter.
 // Reads a .gltf/.glb file via cgltf and writes one Model .cnj per mesh group (meshes + optional
 // "skeleton"/"animations" fields, Task 941's existing shape) plus vertex/index/skeleton binary
 // sidecars, one standalone, shareable .cnj AnimationClip file per animation clip (CNB-48), and any
@@ -8,7 +8,7 @@
 // separate Avatar-specific SkinnedModelEXT/.skinnedmodel.json system (see ../../gltf.md, which
 // analyzes that different target).
 //
-// plans/plan_cnj.md CNB-70 (Phase 13D): the actual glTF parsing/skeleton/animation/mesh-extraction core
+// CNJ CNB-70 (Phase 13D): the actual glTF parsing/skeleton/animation/mesh-extraction core
 // (topological bone reorder, sparse-accessor-safe reads, CUBICSPLINE Hermite evaluation, texture
 // extraction, scene-scoped mesh grouping) now lives in the reusable
 // CNA::Internal::GltfImport::GltfImportCore library (include/CNA/Internal/GltfImport/
@@ -23,7 +23,7 @@
 // the .cnj path, locked by plans/plan_gltf.md GLTF-236/GLTF-237. Current representation limits are
 // reported by GltfImportCore rather than copied into this CLI-specific file.
 //
-// plans/plan_cnj.md CNB-82/83 (Phase 14C): morph target position/normal/tangent deltas (GltfImportCore::
+// CNJ CNB-82/83 (Phase 14C): morph target position/normal/tangent deltas (GltfImportCore::
 // ExtractMesh always extracts them), the default blend weights, and an optional weight animation
 // track are serialized to a per-primitive binary sidecar (BuildMorphBytes) plus "morphTargets"/
 // "morphWeights"/"morphWeightTrack" mesh-entry JSON fields, read back by ModelTypeReader::Read()'s
@@ -736,7 +736,7 @@ namespace
                     }
                 }
 
-                // plans/plan_cnj.md CNB-59 (Phase 13A): PbrEffect's own 4 maps. A helper mirroring the
+                // CNJ CNB-59 (Phase 13A): PbrEffect's own 4 maps. A helper mirroring the
                 // baseColor/occlusion extraction above -- cached by cgltf_image* like the others,
                 // so a texture shared across primitives is only written once.
                 auto extractCached = [&](const cgltf_image* image) -> std::string

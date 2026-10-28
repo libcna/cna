@@ -414,7 +414,7 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Audio/AudioMixerTests\\.cpp$")
     endif()
 
-    # GltfToCnjToolTests.cpp (plans/plan_cnj.md CNB-52) uses the same POSIX-only posix_spawn/sys-wait
+    # GltfToCnjToolTests.cpp (CNJ CNB-52) uses the same POSIX-only posix_spawn/sys-wait
     # process APIs to spawn cna_tool_gltf_to_cnj as an independent OS process, for the same
     # reasons as the harness-spawning tests above.
     if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
@@ -977,7 +977,7 @@ if(CNA_BUILD_TESTS)
     )
 
     if(TARGET cna_tool_gltf_to_cnj)
-        # plans/plan_cnj.md CNB-52: GltfToCnjToolTests.cpp spawns the real converter tool as a
+        # CNJ CNB-52: GltfToCnjToolTests.cpp spawns the real converter tool as a
         # subprocess (same reasoning as cna_net_two_process_harness above -- a separate
         # executable with its own main(), not a library call) and needs its real built path
         # baked in at compile time.

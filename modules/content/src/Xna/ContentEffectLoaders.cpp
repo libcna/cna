@@ -136,7 +136,7 @@ namespace Microsoft::Xna::Framework::Content
             return v->boolValue;
         }
 
-        // plans/plan_cnj.md CNB-45: RegisterTypeReader<T>() allows exactly one reader per T, and this
+        // CNJ CNB-45: RegisterTypeReader<T>() allows exactly one reader per T, and this
         // class already owns std::shared_ptr<Effect> for the pre-existing custom-GLSL "Effect"
         // .cnj shape -- so the 5 stock effects (BasicEffect/AlphaTestEffect/DualTextureEffect/
         // EnvironmentMapEffect/SkinnedEffect) are dispatched from inside this same reader by

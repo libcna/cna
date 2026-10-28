@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnj.md CNB-43/CNB-46: first-ever .cnj coverage for Texture3D. Unlike TextureCube (.dds via
+// CNJ CNB-43/CNB-46: first-ever .cnj coverage for Texture3D. Unlike TextureCube (.dds via
 // sourceFile), Texture3D has no native passthrough file format at all -- self-contained JSON
 // ("width"/"height"/"depth") + a raw RGBA8 binary sidecar ("data"), mirroring Model's own
 // vertex/index binary-sidecar convention.

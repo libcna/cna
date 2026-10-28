@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnj.md CNB-40/CNB-41: first-ever gtest coverage for AnimationClipTypeReader -- a
+// CNJ CNB-40/CNB-41: first-ever gtest coverage for AnimationClipTypeReader -- a
 // directly-loadable .cnj AnimationClip document, independent of any specific Model. Before this,
 // AnimationClipEXT/KeyframeEXT data only ever loaded as part of ModelTypeReader's/
 // SkinnedModelTypeReader's own "animations" field, always referencing a raw .clip.bin binary
 // file; the per-type table now in docs/cnj-format.md flagged a standalone AnimationClip reader as a
-// "natural, open-ended follow-up" left undone by plans/plan_cnj.md's original 9 phases.
+// "natural, open-ended follow-up" left undone by the `.cnj` plan's original 9 phases.
 
 #include <cstdint>
 #include <cstring>

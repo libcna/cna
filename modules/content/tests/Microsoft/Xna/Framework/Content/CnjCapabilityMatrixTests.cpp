@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnj.md CNB-34: the .cnj "sourceFile" capability matrix. Texture2D's support (sourceFile +
+// CNJ CNB-34: the .cnj "sourceFile" capability matrix. Texture2D's support (sourceFile +
 // colorKey) is already covered by CnjSourceFileTests.cpp/CnjCacheIsolationTests.cpp -- this file
 // covers the other branches: SoundEffect and TextureCube delegate via sourceFile (no
 // metadata fields yet); SpriteFont, Effect, Model, and AnimationClip (CNB-40) explicitly reject a

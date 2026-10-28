@@ -30,7 +30,7 @@ namespace CNA::Internal::GltfImport
      *
      * @note CNAEXT — not part of the XNA 4.0 API. Shared parsing core used by both
      * `tools/gltf_to_cnj` (offline `.cnj` export) and `GltfModelTypeReader` (runtime
-     * `ContentManager` loading, plans/plan_cnj.md CNB-70/71).
+     * `ContentManager` loading, CNJ CNB-70/71).
      */
     struct BoneOut
     {
@@ -1501,7 +1501,7 @@ namespace CNA::Internal::GltfImport
     /**
      * @brief Decodes an extracted occlusion image, halves every RGB channel (alpha left
      * unchanged), and re-encodes the result as PNG -- the real fix for `DualTextureEffect`'s own
-     * occlusion-as-lightmap approximation (plans/plan_cnj.md CNB-72/73).
+     * occlusion-as-lightmap approximation (CNJ CNB-72/73).
      *
      * glTF's own occlusion texture convention is "1.0 = fully visible" (correctly consumed as-is
      * by `PbrEffect::OcclusionMap`), but `DualTextureEffect`'s real XNA blend shader
@@ -1532,7 +1532,7 @@ namespace CNA::Internal::GltfImport
 
     /**
      * @brief Returns a primitive's material's normal map image, or nullptr if the primitive has
-     * no material or normal map (plans/plan_cnj.md CNB-59, Phase 13A).
+     * no material or normal map (CNJ CNB-59, Phase 13A).
      */
     const cgltf_image* FindNormalImage(const cgltf_primitive& prim);
 

@@ -34,7 +34,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * content loader -- exactly like SkinnedEffect, game code feeds AnimationPlayer::
      * GetSkinTransforms() into SetBoneTransforms() itself, every frame.
      *
-     * Every renderer with a real PbrEffect shader also has one for this class (plans/plan_cnj.md
+     * Every renderer with a real PbrEffect shader also has one for this class (CNJ
      * CNB-75..79, CNB-103..109). Ask `RendererFeature::SkinnedPbrEffectShading` which renderer
      * draws it with its maps and lighting; the others draw an untextured, unlit fallback.
      */

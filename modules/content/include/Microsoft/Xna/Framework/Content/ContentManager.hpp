@@ -67,7 +67,7 @@ namespace Microsoft::Xna::Framework::Content
         // the base implementation reports a missing XNB.
         bool loadsThroughOpenStream_ = false;
 
-        // plans/plan_cnj.md CNB-36: keyed by (T's type_index, normalized logical name), not name
+        // CNJ CNB-36: keyed by (T's type_index, normalized logical name), not name
         // alone -- otherwise a second Load<T2>() for a logical name a different T1 already
         // cached under would std::any_cast<T2> a std::any actually holding T1, throwing
         // std::bad_any_cast (an unrelated, undocumented exception type) instead of reaching the
@@ -98,7 +98,7 @@ namespace Microsoft::Xna::Framework::Content
         std::size_t disposableAssetsVersion_ = 0;
         std::unordered_map<std::type_index, std::any> typeReaders_;
 
-        // plans/plan_cnj.md CNB-24: per-C++-type table of named .cnj loaders, keyed first by the
+        // CNJ CNB-24: per-C++-type table of named .cnj loaders, keyed first by the
         // requested type T (std::type_index), then by the .cnj document's own "type" string.
         // Populated by RegisterCnjLoader<T>(); consulted by GenericCnjTypeReader<T> below.
         std::unordered_map<std::type_index, std::unordered_map<std::string, std::any>> cnjNamedLoaders_;
@@ -426,7 +426,7 @@ namespace Microsoft::Xna::Framework::Content
          * existing reader already registered (built-in or via RegisterTypeReader<T>()); throws
          * immediately if one already exists, since it would never be consulted by that reader.
          *
-         * Registration is deterministic and fails fast (plans/plan_cnj.md CNB-37): an empty
+         * Registration is deterministic and fails fast (CNJ CNB-37): an empty
          * @p typeName or an empty @p factory is rejected immediately, and re-registering an
          * already-used `(T, typeName)` pair throws rather than silently replacing the earlier
          * factory -- two *different* `typeName`s for the same `T` remain fully supported (that
@@ -929,7 +929,7 @@ namespace Microsoft::Xna::Framework::Content
             // .cnj is always tried before any native/reader-declared extension (docs/cnj-format.md's
             // resolution order -- when a .cnj sidecar is present, it always has final say over how an asset
             // name resolves, even if a native file with the same name also exists). This makes
-            // .cnj usable as an optional metadata sidecar (plans/plan_cnj.md CNB-4), not just a
+            // .cnj usable as an optional metadata sidecar (CNJ CNB-4), not just a
             // mutually-exclusive alternative to a native file.
             const std::string cnjCandidate = ResolveExistingAssetPath(base + ".cnj");
             if (std::filesystem::exists(CNA::Internal::PathFromUtf8(cnjCandidate)))

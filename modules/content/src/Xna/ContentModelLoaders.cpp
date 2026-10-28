@@ -725,7 +725,7 @@ namespace Microsoft::Xna::Framework::Content
             return CNA::Internal::ReadCnjAnimationClipSidecar(clipFilePath);
         }
 
-        // plans/plan_cnj.md CNB-48: an "animations" entry's "clip" field may name either a raw
+        // CNJ CNB-48: an "animations" entry's "clip" field may name either a raw
         // .clip.bin binary blob (ReadAnimationClipFileEXT's original, still-supported shape) or
         // a standalone .cnj AnimationClip asset (Phase 10) -- letting multiple Models/
         // SkinnedModels share one clip (e.g. a common "Idle"/"Walk" library) instead of
@@ -747,9 +747,9 @@ namespace Microsoft::Xna::Framework::Content
         }
 
 
-        // plans/plan_cnj.md CNB-40: a directly-loadable .cnj AnimationClip document, independent of
+        // CNJ CNB-40: a directly-loadable .cnj AnimationClip document, independent of
         // any specific Model -- the per-type table now in docs/cnj-format.md documented this as a
-        // natural, open-ended follow-up beyond plans/plan_cnj.md's original 9 phases. Either inline
+        // natural, open-ended follow-up beyond the `.cnj` plan's original 9 phases. Either inline
         // JSON keyframe/bone-transform data ("tracks"), or -- for large clips, to avoid bloating
         // JSON with thousands of matrices, exactly as docs/cnj-format.md's table describes -- a reference to
         // an existing raw binary blob via "clipFile", read through the same shared
@@ -1052,7 +1052,7 @@ namespace Microsoft::Xna::Framework::Content
                 }
                 vb->SetData(verts.data(), numVertices);
             } else if (stride == 48) {
-                // plans/plan_cnj.md CNB-57 (Phase 13A): VertexPositionNormalTangentTexture (PbrEffect)
+                // CNJ CNB-57 (Phase 13A): VertexPositionNormalTangentTexture (PbrEffect)
                 // -- raw byte upload for the same vtable-inflation reason as stride 52/56 above.
                 vb->SetDataRaw(vertBytes.data(), numVertices, 48);
             } else if (stride == 52) {
@@ -1669,7 +1669,7 @@ namespace Microsoft::Xna::Framework::Content
             return fx;
         }
 
-        // plans/plan_cnj.md CNB-70/71 (Phase 13D): loads a .gltf/.glb file directly into a real Model,
+        // CNJ CNB-70/71 (Phase 13D): loads a .gltf/.glb file directly into a real Model,
         // with no intermediate .cnj/binary sidecar files -- reuses the same
         // CNA::Internal::GltfImport::GltfImportCore parsing/skeleton/animation/mesh-extraction
         // functions tools/gltf_to_cnj's offline CLI tool calls (see that header's own docs for the
@@ -4993,7 +4993,7 @@ namespace Microsoft::Xna::Framework::Content
 
                     // Task 941: extracted into the shared ReadAnimationClipFileEXT() helper
                     // (also used by ModelTypeReader's own new .model.json "animations" support).
-                    // plans/plan_cnj.md CNB-48: ReadAnimationClipRefEXT additionally lets "clip" name a
+                    // CNJ CNB-48: ReadAnimationClipRefEXT additionally lets "clip" name a
                     // standalone, shareable .cnj AnimationClip asset instead of only a raw
                     // .clip.bin blob.
                     model->Clips[name] = ReadAnimationClipRefEXT(clipPath, root, cm);

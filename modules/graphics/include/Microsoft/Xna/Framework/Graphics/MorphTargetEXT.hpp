@@ -18,7 +18,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @brief One morph-weight animation keyframe: a full weight vector (one entry per morph
      * target) at a point in time.
      *
-     * @note CNAEXT — not part of the XNA 4.0 API. plans/plan_cnj.md CNB-64 (Phase 13B).
+     * @note CNAEXT — not part of the XNA 4.0 API. CNJ CNB-64 (Phase 13B).
      */
     struct MorphWeightKeyframeEXT
     {
@@ -65,13 +65,13 @@ namespace Microsoft::Xna::Framework::Graphics
      * current blend weights, and (optionally) a time-varying weight animation track.
      *
      * @note CNAEXT — not part of the XNA 4.0 API. Mirrors SkinningData's own established
-     * precedent (plans/plan_cnj.md CNB-70/Task 941): attached to a loaded ModelMeshPart's own real
+     * precedent (CNJ CNB-70/Task 941): attached to a loaded ModelMeshPart's own real
      * XNA `Tag` property (real XNA's ModelMeshPart has no dedicated morph-target property of its
      * own) -- game code retrieves it via `static_cast<MorphTargetDataEXT*>(part.getTagProperty())`.
      * Blending is CPU-side (re-blend + re-upload the vertex buffer via SetMorphWeightsEXT), not a
      * GPU vertex-shader technique: this works unchanged with every existing effect/shader on
      * every graphics renderer, at the cost of a full vertex-buffer re-upload whenever weights
-     * change -- a deliberate simplicity-over-throughput tradeoff (see plans/plan_cnj.md CNB-62's own
+     * change -- a deliberate simplicity-over-throughput tradeoff (see CNJ CNB-62's own
      * design-decision notes for the full reasoning).
      */
     struct CNAEXT MorphTargetDataEXT : public System::Object

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnj.md CNB-70 (Phase 13D): the glTF parsing/skeleton/animation core originally built for
+// CNJ CNB-70 (Phase 13D): the glTF parsing/skeleton/animation core originally built for
 // tools/gltf_to_cnj (Phase 12) is now a reusable library, so a runtime ContentManager reader
 // (GltfModelTypeReader, see ContentManager.cpp) can parse a .gltf/.glb file directly into a
 // Microsoft::Xna::Framework::Graphics::Model with no intermediate .cnj/binary sidecar files --
@@ -17,7 +17,7 @@
 
 #include <functional>
 
-// RemapOcclusionImageForDualTextureEXT's own decode/re-encode step (plans/plan_cnj.md CNB-88). STATIC
+// RemapOcclusionImageForDualTextureEXT's own decode/re-encode step (CNJ CNB-88). STATIC
 // so every stbi_*/stbiw_* symbol has internal linkage in this one translation unit -- other
 // dependencies in the CNA tree also compile a vendored stb_image.h implementation, and
 // without STATIC the two would collide at link time (duplicate global symbols) in any executable
@@ -50,7 +50,7 @@
 
 #include "CNA/Internal/ContentPath.hpp"
 
-// plans/plan_cnj.md CNB-91 / plans/plan_gltf.md GLTF-353: KHR_draco_mesh_compression decoding. The normal
+// CNJ CNB-91 / plans/plan_gltf.md GLTF-353: KHR_draco_mesh_compression decoding. The normal
 // build uses CNA's pinned Draco submodule; CNA_DRACO_AVAILABLE remains conditional so packagers
 // and the conformance gate can deliberately exercise the decoder-free refusal path.
 #ifdef CNA_DRACO_AVAILABLE
@@ -848,7 +848,7 @@ namespace CNA::Internal::GltfImport
             return std::acos(cosAngle);
         }
 
-        // plans/plan_cnj.md CNB-57/CNB-94 (Phase 13A/14G): computes a per-vertex tangent basis when the
+        // CNJ CNB-57/CNB-94 (Phase 13A/14G): computes a per-vertex tangent basis when the
         // file has no TANGENT accessor of its own, for PbrEffect's normal mapping.
         //
         // Per triangle: the same position+UV-gradient tangent/bitangent formula Lengyel's method
@@ -2982,7 +2982,7 @@ namespace CNA::Internal::GltfImport
         // existing effect (SkinnedEffect has no Texture2 slot; the colored VertexPositionColor
         // Texture layout has no room for a second UV/texture either) -- a documented scope cut,
         // not an oversight.
-        // plans/plan_cnj.md CNB-59 (Phase 13A): an unskinned, uncolored primitive with a normal map or
+        // CNJ CNB-59 (Phase 13A): an unskinned, uncolored primitive with a normal map or
         // metallic-roughness map is genuinely PBR-authored content (not just "any glTF material"
         // -- pbrMetallicRoughness is glTF's own default material block even for the simple
         // base-color-only content BasicEffect already handles) and is imported through PbrEffect
@@ -3835,7 +3835,7 @@ namespace CNA::Internal::GltfImport
             : std::vector<float>();
         gatherFloats(colors, static_cast<std::size_t>(colorComponents));
 
-        // plans/plan_cnj.md CNB-57 (Phase 13A): PbrEffect's normal mapping needs a per-vertex tangent
+        // CNJ CNB-57 (Phase 13A): PbrEffect's normal mapping needs a per-vertex tangent
         // basis -- use the file's own TANGENT accessor when present, or compute one (see
         // ComputeTangentsEXT's own doc comment for the algorithm and its documented divergence
         // from full MikkTSpace) when absent, exactly as the glTF spec itself recommends.

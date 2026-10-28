@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnj.md CNB-12/CNB-13: first-ever test coverage for SpriteFontTypeReader, migrated from
+// CNJ CNB-12/CNB-13: first-ever test coverage for SpriteFontTypeReader, migrated from
 // .font.json to .cnj (CNB-11). No prior test or example anywhere exercised this reader.
 
 #include <cstdint>
@@ -198,7 +198,7 @@ TEST_F(CnjSpriteFontTest, MismatchedTypeThrowsContentLoadException)
     EXPECT_THROW(cm.Load<SpriteFont>("wrong"), ContentLoadException);
 }
 
-// plans/plan_cnj.md CNB-35: end-to-end proof that the strict envelope/version policy is wired through
+// CNJ CNB-35: end-to-end proof that the strict envelope/version policy is wired through
 // a real built-in reader, not just unit-tested against ParseCnjEnvelope/ValidateCnjEnvelope in
 // isolation.
 TEST_F(CnjSpriteFontTest, UnsupportedCnjVersionThrowsThroughRealReader)

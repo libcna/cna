@@ -86,7 +86,7 @@ namespace Microsoft::Xna::Framework::Content
     {
         using namespace detail;
 
-        // plans/plan_cnj.md CNB-44: self-contained JSON port of CurveContentTypeReader.hpp's already-
+        // CNJ CNB-44: self-contained JSON port of CurveContentTypeReader.hpp's already-
         // FNA-verified field order/shape -- "preLoop"/"postLoop" (CurveLoopType names, default
         // "Constant" when omitted) + "keys" (position/value/tangentIn/tangentOut/continuity,
         // tangentIn/tangentOut/continuity default to 0.0/0.0/"Smooth" when omitted per key).

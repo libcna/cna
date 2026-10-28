@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnj.md CNB-3: unit tests for CNB-1 (ParseCnjEnvelope) and CNB-2 (ValidateCnjEnvelope).
+// CNJ CNB-3: unit tests for CNB-1 (ParseCnjEnvelope) and CNB-2 (ValidateCnjEnvelope).
 // First gtest coverage of any .cnj JSON-envelope-level parsing, independent of any one reader.
 
 #include <gtest/gtest.h>

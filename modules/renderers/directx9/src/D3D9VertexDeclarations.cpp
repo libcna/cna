@@ -119,7 +119,7 @@ namespace CNA::Internal::Renderers::DirectX9
             D3DDECL_END()
         };
 
-        // plans/plan_cnj.md CNB-58/CNB-67-equivalent D3D9 porting task: VertexPositionNormalTangentTexture
+        // CNJ CNB-58/CNB-67-equivalent D3D9 porting task: VertexPositionNormalTangentTexture
         // (stride 48), used by the CNA CNAEXT "Pbr3D" custom shader (PbrEffect, unskinned). Byte
         // offsets match EasyGLRenderer.cpp's own ApplyLayout() `case 48:` exactly: POSITION0
         // (FLOAT3, 0), NORMAL0 (FLOAT3, 12), TANGENT0 (FLOAT4, 24 -- xyz=tangent, w=bitangent sign,
@@ -149,7 +149,7 @@ namespace CNA::Internal::Renderers::DirectX9
             D3DDECL_END()
         };
 
-        // plans/plan_cnj.md CNB-75..79-equivalent D3D9 porting task: VertexPositionNormalTangentTextureSkinned
+        // CNJ CNB-75..79-equivalent D3D9 porting task: VertexPositionNormalTangentTextureSkinned
         // (stride 68), used by the CNA CNAEXT "PbrSkinned3D" custom shader (SkinnedPbrEffect). The
         // stride-48 PBR layout above with the stride-52/56 skinning suffix (BlendWeight, BlendIndices)
         // appended, matching EasyGLRenderer.cpp's own ApplyLayout() `case 68:` exactly.

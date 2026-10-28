@@ -100,6 +100,11 @@ Which types accept it:
 | every other built-in type | **rejected** | these documents are self-contained |
 | a game-registered loader | up to the loader | it receives the whole document |
 
+`colorKey` is the only metadata a `Texture2D` document applies. Premultiplied alpha, an atlas
+sub-rectangle and mip-generation hints were considered and deliberately not added: each needs a
+`Texture2D`/`GraphicsDevice` capability the runtime reader does not have, and none is added
+speculatively (CNJ `CNB-10`).
+
 ## One extension for every type
 
 All types share the `.cnj` extension, so a font and a model cannot both be called `Cursor`. That is
@@ -350,4 +355,7 @@ change. The contract is strict:
   checked against every renderer.
 - [`gltf-conformance.md`](gltf-conformance.md) and [`gltf-limitations.md`](gltf-limitations.md): the
   glTF import behind `Model` documents.
-- [`../plans/plan_cnj.md`](../plans/plan_cnj.md): the task history of the format.
+- The task history of the format, `CNB-1`..`CNB-110` (2026-07), was `plans/plan_cnj.md`, deleted
+  on 2026-10-28 (Git history only). Source comments cite those rows as "CNJ CNB-n": the `CNB-`
+  prefix dates from when `.cnj` was called `.cnb` and has nothing to do with the binary format in
+  [`cnb-format.md`](cnb-format.md), whose tasks are `CNBF-*`.

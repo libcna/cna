@@ -125,7 +125,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   [`../docs/xna-fna-behavior-decisions.md`](../docs/xna-fna-behavior-decisions.md), current binding
   architecture is in [`../docs/binding.md`](../docs/binding.md), and current defects are only in
   [`../handoff.md`](../handoff.md) §5.1.
-- [`plan_cnj.md`](plan_cnj.md) — `.cnj` content format.
+- `plan_cnj.md` — the `.cnj` content format and its glTF import (`CNB-1`..`CNB-110`, 2026-07);
+  deleted on 2026-10-28 (Git history only). The format is
+  [`../docs/cnj-format.md`](../docs/cnj-format.md), what glTF import still loses is
+  [`../docs/gltf-limitations.md`](../docs/gltf-limitations.md); comments cite the rows as
+  "CNJ CNB-n" (the prefix predates the binary CNB format and its `CNBF-*` tasks).
 - `plan_cnb.md` — the engineering record of CNB, the compiled binary content format
   (`CNBF-001`..`CNBF-123`, `CNBF-H001`..`H020`, 2026-08-26/27); deleted on 2026-10-28 (Git
   history only). The format, its numbered reader invariants (§12.2), what is deliberately not

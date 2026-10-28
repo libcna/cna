@@ -31,7 +31,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * own reference BRDF (GGX distribution + Smith-Schlick-GGX visibility + Schlick Fresnel, see
      * EasyGLRenderer::EnsurePbrProgram()'s own doc comment), not image-based lighting (a
      * separate, much larger feature). Ask `RendererFeature::PbrEffectShading` whether the
-     * renderer draws it with its maps and lighting (plans/plan_cnj.md CNB-58, CNB-103..109;
+     * renderer draws it with its maps and lighting (CNJ CNB-58, CNB-103..109;
      * SOFTWARE-347); a renderer without that accepts a bound PbrEffect without erroring and draws
      * an untextured, unlit fallback (HEADLESS and STUB draw nothing).
      */

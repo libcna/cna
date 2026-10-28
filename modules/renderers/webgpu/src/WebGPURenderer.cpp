@@ -16272,7 +16272,7 @@ namespace
     }
 
     // ------------------------------------------------------------------------------------------
-    // plans/plan_cnj.md Phase 14J: SkinnedEffect (skinned3d.wgsl family) -- closes this renderer's
+    // CNJ Phase 14J: SkinnedEffect (skinned3d.wgsl family) -- closes this renderer's
     // pre-existing "no skinning shader at all" gap. See CreateSkinnedResources()'s own doc
     // comment for the full formula-fidelity rationale (ported line-for-line from
     // EasyGLRenderer::EnsureSkinnedProgram()/EnsureSkinnedVertexLitProgram()).

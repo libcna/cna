@@ -447,7 +447,8 @@ Its one stale citation (`EasyGLGraphicsBackend.cpp:4121`, and the file has since
 `modules/renderers/easygl/src/EasyGLRenderer.cpp`) is deliberately retained as historical, per
 `integration/lanes/gltf.md`. (The document itself was removed on 2026-10-25; Git history.)
 
-`plan_cnj.md` Phases 12–14 (`CNB-50`…`CNB-109`) — **HISTORICAL PLAN, LARGELY IMPLEMENTED**. Those
+`plan_cnj.md` (deleted on 2026-10-28; Git history) Phases 12–14 (`CNB-50`…`CNB-109`) —
+**HISTORICAL PLAN, LARGELY IMPLEMENTED**. Those
 phases built the import core, PBR effects, morph targets, Draco and the three named extensions. They
 never scoped node transforms, primitive topology, material factors, samplers or colour space, so
 their completion is **not** evidence that glTF is correct. This campaign does not reopen them; it

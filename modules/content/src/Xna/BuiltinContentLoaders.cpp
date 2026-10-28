@@ -173,7 +173,7 @@ namespace Microsoft::Xna::Framework::Content
             return loaded.substr(0, loaded.size() - compiled.size()) + reference;
         }
 
-        // plans/plan_cnj.md CNB-34: SpriteFont/Effect/Model .cnj documents are self-contained
+        // CNJ CNB-34: SpriteFont/Effect/Model .cnj documents are self-contained
         // descriptors -- unlike Texture2D/SoundEffect/TextureCube, they have no meaning for a
         // "sourceFile" field. Reject it explicitly with a clear error instead of silently
         // ignoring it (the previous behavior) or letting some future field-parsing change

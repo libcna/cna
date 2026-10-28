@@ -23,7 +23,7 @@ namespace Microsoft::Xna::Framework::Graphics
      *
      * @note CNAEXT — not part of the XNA 4.0 API. Mirrors VertexPositionNormalTextureSkinned's own
      * established precedent, extended with VertexPositionNormalTangentTexture's own Tangent field
-     * (plans/plan_cnj.md CNB-57/Phase 13A follow-up: PBR + skinning combination).
+     * (CNJ CNB-57/Phase 13A follow-up: PBR + skinning combination).
      */
     struct CNAEXT VertexPositionNormalTangentTextureSkinned : public IVertexType
     {

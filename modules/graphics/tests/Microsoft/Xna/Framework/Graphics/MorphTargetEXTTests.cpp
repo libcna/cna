@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnj.md CNB-62/63 (Phase 13B): engine-level tests for BlendMorphTargetsEXT/
+// CNJ CNB-62/63 (Phase 13B): engine-level tests for BlendMorphTargetsEXT/
 // SetMorphWeightsEXT/EvaluateMorphWeightsEXT with hand-crafted synthetic data (no glTF involved --
 // see RuntimeGltfModelTests.cpp for the glTF-extraction integration tests). Proves the blend math
 // itself: weight=0 reproduces the base pose exactly, weight=1 applies the full delta, two targets

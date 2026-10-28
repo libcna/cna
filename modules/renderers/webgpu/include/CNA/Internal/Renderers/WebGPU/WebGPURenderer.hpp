@@ -5524,7 +5524,7 @@ namespace CNA::Internal::Renderers::WebGPU
         std::unique_ptr<WebGPUTextureRenderer> classicNullTexture_;
         std::unique_ptr<WebGPUTextureCubeRenderer> classicNullCube_;
 
-        // plans/plan_cnj.md Phase 14J: closing this renderer's pre-existing "no skinning shader at all"
+        // CNJ Phase 14J: closing this renderer's pre-existing "no skinning shader at all"
         // gap for SkinnedEffect -- both PreferPerPixelLighting lighting variants (matching every
         // other renderer's own established "two skinned shader variants" convention) plus
         // SkinnedEffect.VertexColorEnabled (stride-56 vertex colour on skinned meshes). Ported

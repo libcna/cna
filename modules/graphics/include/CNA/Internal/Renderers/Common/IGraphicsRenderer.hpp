@@ -1420,7 +1420,7 @@ namespace CNA::Internal::Renderers
         /// When true the renderer selects the skinning shader variant.
         bool skinned             = false;
         /// When true the renderer selects the PbrEffect (metallic-roughness BRDF) shader variant
-        /// (plans/plan_cnj.md CNB-58, Phase 13A).
+        /// (CNJ CNB-58, Phase 13A).
         bool pbr                 = false;
         /// Number of instances to draw (1 = non-instanced).
         int instanceCount = 1;
@@ -1523,7 +1523,7 @@ namespace CNA::Internal::Renderers
         /// IEffectRenderer. Backends without custom shaders use this to refuse the draw instead of
         /// mistaking a null renderer for an ordinary fixed-function stock effect.
         bool customEffectRequested = false;
-        /// plans/plan_cnj.md CNB-58 (Phase 13A): PbrEffect's normal map (tangent-space, RGB), or null.
+        /// CNJ CNB-58 (Phase 13A): PbrEffect's normal map (tangent-space, RGB), or null.
         /// When null the surface normal from the vertex stream is used unperturbed.
         const ITextureRenderer* pbrNormalMap = nullptr;
         /// PbrEffect: metallic-roughness map, glTF's own packing convention (G=roughness,

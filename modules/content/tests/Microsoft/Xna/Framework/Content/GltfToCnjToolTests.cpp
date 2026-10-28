@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnj.md CNB-52: end-to-end regression test for the offline glTF -> .cnj converter
+// CNJ CNB-52: end-to-end regression test for the offline glTF -> .cnj converter
 // (tools/gltf_to_cnj/gltf_to_cnj.cpp), spawned as a real subprocess (CNA_GLTF_TO_CNJ_TOOL_PATH,
 // baked in by cmake/UnitTests.cmake) -- same "needs a real separate executable, not a library
 // call" reasoning as TwoProcessLoopbackTest.cpp/AudioMixerTests.cpp.

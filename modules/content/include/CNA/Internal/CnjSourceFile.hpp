@@ -25,7 +25,7 @@ namespace CNA::Internal
 
     /**
      * @brief Resolves a `.cnj` envelope's `"sourceFile"` field to a safe, root-relative logical
-     *        asset name (plans/plan_cnj.md CNB-32).
+     *        asset name (CNJ CNB-32).
      *
      * `sourceFile` is always resolved relative to the referring `.cnj` file's own directory (not
      * the content root), matching `docs/cnj-format.md` and `SkinnedModelTypeReader`'s pre-existing

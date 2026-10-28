@@ -8366,7 +8366,7 @@ namespace CNA::Internal::Renderers::EasyGL
             vao.set_attribute_pointer(2, 2, ::easygl::DataType::Float, false, s, (void*)24);
             break;
         case 48:
-            // plans/plan_cnj.md CNB-57 (Phase 13A): VertexPositionNormalTangentTexture (packed):
+            // CNJ CNB-57 (Phase 13A): VertexPositionNormalTangentTexture (packed):
             // float3 position + float3 normal + float4 tangent (xyz + bitangent handedness in w)
             // + float2 texcoord -- the layout PbrEffect's normal mapping needs to build a
             // per-pixel TBN basis.
@@ -9114,7 +9114,7 @@ namespace CNA::Internal::Renderers::EasyGL
         CNA_RENDER_LOG("skinned3D (vertex-lit) ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
     }
 
-    // plans/plan_cnj.md CNB-58 (Phase 13A): real glTF metallic-roughness BRDF (glTF 2.0 spec Appendix
+    // CNJ CNB-58 (Phase 13A): real glTF metallic-roughness BRDF (glTF 2.0 spec Appendix
     // B) -- GGX/Trowbridge-Reitz normal distribution, Smith-Schlick-GGX visibility, Schlick
     // Fresnel -- driven by the same 3-DirectionalLight + AmbientLightColor convention every other
     // CNA stock effect already uses (so existing scene-lighting setup code transfers directly),
@@ -9323,7 +9323,7 @@ namespace CNA::Internal::Renderers::EasyGL
         default_black_cube_texture_ready_ = true;
     }
 
-    // plans/plan_cnj.md CNB-58 (Phase 13A): fallback for PbrEffect::NormalMap when unbound -- a "flat"
+    // CNJ CNB-58 (Phase 13A): fallback for PbrEffect::NormalMap when unbound -- a "flat"
     // tangent-space normal (0,0,1) encoded as RGB (128,128,255), so the sampled/decoded (rgb*2-1)
     // normal is exactly the geometric normal (no perturbation). The other 3 PBR map fallbacks
     // (metallic-roughness, emissive, occlusion) all reuse the existing default_white_texture_
@@ -10077,7 +10077,7 @@ namespace CNA::Internal::Renderers::EasyGL
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
 
-        // plans/plan_cnj.md CNB-58 (Phase 13A): PbrEffect's 4 additional maps (units 1-4, bound before
+        // CNJ CNB-58 (Phase 13A): PbrEffect's 4 additional maps (units 1-4, bound before
         // unit 0 to leave it active last, matching the envMap/texture2 precedent above). Each
         // falls back to a texture whose sampled value is the correct "map absent" constant for
         // its own semantic (see EnsureDefaultFlatNormalTexture()'s own doc comment).

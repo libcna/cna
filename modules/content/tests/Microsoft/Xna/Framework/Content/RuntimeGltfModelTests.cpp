@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnj.md CNB-70/71 (Phase 13D): end-to-end regression test for runtime (non-CLI) glTF
+// CNJ CNB-70/71 (Phase 13D): end-to-end regression test for runtime (non-CLI) glTF
 // loading -- ContentManager::Load<Model>("name") finding and parsing a "name.gltf" file directly
 // via ModelTypeReader::ReadGltfModel(), with no intermediate .cnj/binary sidecar files at all.
 // Complements GltfToCnjToolTests.cpp (which tests the offline CLI tool, a separate process) --

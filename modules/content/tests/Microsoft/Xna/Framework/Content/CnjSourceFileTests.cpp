@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnj.md CNB-9: tests for CNB-7 (generic sourceFile resolution) and CNB-8 (colorKey wired
+// CNJ CNB-9: tests for CNB-7 (generic sourceFile resolution) and CNB-8 (colorKey wired
 // into Texture2DTypeReader as the first real sourceFile consumer).
 
 #include <cstdint>

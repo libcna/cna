@@ -128,12 +128,12 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
-        // plans/plan_cnj.md CNB-43: no native "3D texture" file format exists in CNA the way .dds serves
+        // CNJ CNB-43: no native "3D texture" file format exists in CNA the way .dds serves
         // TextureCube (Texture3D has no FromStream/DDSFromStream equivalent) -- so unlike
         // TextureCubeTypeReader, this is self-contained JSON + a raw binary pixel-data sidecar
         // (mirrors Model's own vertex/index binary-sidecar convention), not a sourceFile delegation.
         // Single mip level only; deliberately skips the .xnb Texture3DReader's mip-chain/DXT
-        // handling -- no real sample content needs either (plans/plan_cnj.md CNB-43's own survey), and
+        // handling -- no real sample content needs either (CNJ CNB-43's own survey), and
         // .cnj content is hand-authored, so pre-compressed DXT data has no natural place to come
         // from here the way it does inside a real XNA content-pipeline build.
 

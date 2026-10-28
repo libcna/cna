@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_cnj.md CNB-44/CNB-46: first-ever .cnj coverage for Curve. Self-contained JSON port of
+// CNJ CNB-44/CNB-46: first-ever .cnj coverage for Curve. Self-contained JSON port of
 // CurveContentTypeReader.hpp's already-FNA-verified field shape (preLoop/postLoop + keys), not a
 // new design -- see that .xnb-side reader for the binary equivalent of this same field list.
 

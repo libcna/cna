@@ -192,7 +192,7 @@ TRS composed *after* the node's own transform.
 
 **What CNA already has.** `GraphicsDevice::DrawInstancedPrimitives` is real XNA 4.0 API and is
 implemented on every GPU renderer; `GpuDrawParams::instanceCount` and a per-instance
-`VertexBuffer` stream already exist (`plans/plan_cnj.md` §3.3). So the GPU half is not the work.
+`VertexBuffer` stream already exist. So the GPU half is not the work.
 
 **The sketch.**
 

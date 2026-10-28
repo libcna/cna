@@ -299,7 +299,7 @@ namespace
         drawAndExpect("specular-colour map RGB -> slot 6", Color(66, 81, 81, 255));
     }
 
-    // From the retired DIRECTX11 renderer's directx11_pbr_vertexcolor_test (plans/plan_cnj.md
+    // From the retired DIRECTX11 renderer's directx11_pbr_vertexcolor_test (CNJ
     // CNB-58/CNB-67, quads A/B): with NO base-colour texture bound the base colour is the neutral
     // opaque white -- alpha included -- and with no emissive map the emissive factor stands alone.
     // NonPremultiplied over the green clear makes the alpha visible: a transparent fallback would
