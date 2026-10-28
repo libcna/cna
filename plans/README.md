@@ -56,6 +56,13 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   continued in `plan_gamer_services_server.md`, `plan_gamer_services_avatar_polish.md`,
   `plan_gamer_services_xbox_fidelity.md` and `plan_gamer_services_final_hardening.md`; the current
   state is [`../docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md)).
+- `gamer_services_server_initial_inventory.md`, `gamer_services_acceptance_sources.md` and
+  `gamer_services_server_final_register.md` — the GS-001 candidate baseline (`b8eb9c2b9`), sample
+  acceptance-source queue (`c611878d5`) and GS-011 refusal register (`f5df1c824`), deleted on
+  2026-10-28 (Git history only). Current runtime boundaries are in
+  [`../docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md),
+  deployment is in [`../docs/gamer-services-server.md`](../docs/gamer-services-server.md), and
+  consumer sample status is in [`cna-samples/plan.md`](../../cna-samples/plan.md).
 - [`plan_binding.md`](plan_binding.md) — native C API and stable C ABI.
 - [`plan_bindings_upstream.md`](plan_bindings_upstream.md) — defects the ten language
   bindings measured in CNA, and the CNA-side work they are waiting on.

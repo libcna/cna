@@ -113,7 +113,7 @@ Guest matrix at e46db9822 (`GamerServicesDispatcher.cpp:118-124`, `Guide.cpp:439
 | SystemLink | yes |
 | PlayerMatch, Ranked | no: `allowOnlineSessions` is false for a guest (the service authenticates each participant) |
 
-### Register rows (`gamer_services_server_final_register.md`) to re-audit
+### GS-011 register rows (snapshot at `f5df1c824`) to re-audit
 
 Research at e46db9822 / server 4ba7f95 (read-only; file:line in the task rows when each is done):
 
@@ -504,7 +504,7 @@ cna-samples branches have no `next` and stay as they are.
 | Avatar fidelity beyond v2, inspected on the real renderer | met, occlusion open | `art/after-b2/` (257 jobs, 0 failures), `art/before-after.png`, `art/hands-before-after.png` |
 | Old descriptions and formats preserved | met | format 1/2 codec tests, v1/v2 golden fixtures |
 | Console-style Guide, sign-in, gamer card, friends, invitations, achievements, leaderboards, party, content, editor | met | GSX-U1..U9; `ui/after6/`, `ui/sequence/`, `ui/before-after-*.png` |
-| Register gaps closed or decided | met | GSX-E1..E7, final register |
+| Register gaps closed or decided | met | GSX-E1..E7, GS-011 snapshot at `f5df1c824` |
 | No public CNA machinery added to Microsoft.Xna GamerServices/Net | met | diff of the public headers since e46db9822: private members and friends only; `setPartySizeProperty` removed |
 | Tests | met | per process: CnaGamerServicesTests 603 + 1 known skip, CnaNetTests 515/515, CnaRuntimeTests 192 + 2 environment skips; CnaTests (all modules, less the content-pipeline differential) 9,018 pass, 10 HEADLESS graphics/content failures untouched by this pass |
 | C API | met | CApi_* 107/110 (the three standing audio/content environment smokes); coverage/limitations/release-gate current (650 planned, as at the start); ABI baseline current (3,202 exports) |

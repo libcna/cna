@@ -9,9 +9,8 @@
 > by the avatar-polish pass ([`plan_gamer_services_avatar_polish.md`](plan_gamer_services_avatar_polish.md),
 > GSP) and the Xbox-fidelity pass ([`plan_gamer_services_xbox_fidelity.md`](plan_gamer_services_xbox_fidelity.md),
 > GSX), all merged into `next`. For the current implementation and every remaining limitation see
-> [`docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md);
-> [`gamer_services_server_final_register.md`](gamer_services_server_final_register.md) keeps each
-> refusal's evidence as of 2026-09-30.
+> [`docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md). The
+> GS-011 refusal-evidence snapshot is preserved in Git history at `f5df1c824`.
 
 Mission authorized 2026-09-28. Xbox 360 XNA behavior is the target; Windows/FNA service and avatar stubs are **not** behavioral evidence for Xbox 360. CNA protocol, accounts and original avatar assets have no Xbox LIVE compatibility. This plan supersedes plan_net.md's refusal of PlayerMatch/Ranked/invites and its standard-avatar/EXT split. Prohibition on proprietary/third-party avatar assets remains.
 
@@ -42,7 +41,9 @@ Read current repository AGENTS.md and CLAUDE.md (including sharp-runtime's curre
 * sharp-runtime HttpClient.cpp:114 rejects non-http; ClientWebSocket.cpp:146 rejects wss before socket creation. Net.Security is interface-only (no TLS stream). Crypto/random modules exist, but no service logic belongs there. Use mature libcurl HTTPS client with peer/hostname verification; Beast/OpenSSL TLS server. No custom crypto or insecure public authentication. Installed audit: OpenSSL 3.5.7, libcurl 8.14.1, SQLite 3.46.1, Boost.Beast/nlohmann headers and ccache.
 * Local evidence: `/rv/data/development/github.com/libcna/xna4-spec`, `/rv/data/development/github.com/libcna/xna4-decomp/dlls`. Dispatcher XML: Initialize locates graphics services; Update raises service events each frame; duplicate Initialize documented invalid. Guide XML: paneCount 1,2,4; onlineOnly permits guest of signed-in online profile. NetworkSession XML: Write* events immediately before lobby transition/when gamer leaves gameplay; no other service calls inside handlers. Leaderboard arbitration must be read carefully before claiming Ranked parity. Available managed IL is Windows build, so avatar no-op IL does **not** settle Xbox semantics. Native console traces are not yet available.
 
-See `gamer_services_server_initial_inventory.md` for every candidate throw/default/EXT/no-op location. Candidates are not all defects: parsing defaults, collection false results and ENet guards are legitimate until individual review.
+The GS-001 baseline at `b8eb9c2b9` preserves every candidate throw/default/EXT/no-op location.
+Candidates are not all defects: parsing defaults, collection false results and ENet guards are
+legitimate until individual review.
 
 ## Architecture and protocol decisions
 
@@ -68,7 +69,9 @@ Avatars: CNA-owned versioned envelope within exact 1021-byte public buffer; fixe
 - [x] GS-008: authenticated relay fallback with untrusted packet limits; prove connectivity across NAT-like isolation, membership revocation, failure/reconnect.
 - [x] GS-009: description encoding/random/service retrieval/cache; original 71-slot rig/presets/expressions; standard renderer Draw/ready/loading/disposal, pixel regression migration; only then retire redundant avatar EXT.
 - [x] GS-010: C ABI synchronization, standard-API-only demos, representative original XNA compatibility samples. (C ABI 0.34.0; Priority 9 samples.)
-- [x] GS-011: two separate CNA processes/server restart/E2E entire corpus, protocol fuzz/property tests, final throw/no-op evidence register, truthful docs and clean checkpoints. (`gamer_services_server_final_register.md`; final validation below.)
+- [x] GS-011: two separate CNA processes/server restart/E2E entire corpus, protocol fuzz/property
+  tests, final throw/no-op evidence register, truthful docs and clean checkpoints. (Register
+  snapshot at `f5df1c824`; final validation below.)
 
 Every task may be split into thematic subcommits; mark parent complete only after all criteria. After stable milestones inspect committed next, merge relevant commits (existing history uses merges), rerun regressions; never copy samples worktree files. Update AUDIT/NEXT with measured results, not completeness claims.
 
@@ -279,7 +282,9 @@ callback before Lobby and atomic/idempotent server commit. Ranked arbitration fo
   asserting Stub Gamer was corrected. SystemLink wire identity remains its real account identity.
 - [x] *(Closed by the GS-006c checkpoint and GS-006d/GS-006e; Stream columns were a documented limit then; GSP-L4 implemented them.)* GS-006c: leaving/disposal write events/submission, explicit epoch abort, transport-loss retry
   policy; Stream columns, catalog validation timing and full event restriction audit.
-- [x] *(Closed by GS-006e for arbitration; TrueSkill computation is a documented limit in the final register.)* Ranked/all-machine arbitration and TrueSkill require GS-007 session directory integration.
+- [x] *(Closed by GS-006e for arbitration; TrueSkill computation is a documented limit in the
+  GS-011 snapshot at `f5df1c824`.)* Ranked/all-machine arbitration and TrueSkill require GS-007
+  session directory integration.
 
 CNA fake harness **99 checks pass**, including four local signed-in gamers; Net **316/316 pass**
 (including real ENet two-process data/host migration); GamerServices **388 run, 387 pass, 1 existing
@@ -565,12 +570,15 @@ focus and LocalNetworkGamer identity fixes). These affect our Guide/Net path. In
 history at the clean GS-007b checkpoint, preserve the samples agent's plan notes, rerun affected
 corpus. No uncommitted sample files incorporated.
 
-Acceptance source inspection expanded in plans/gamer_services_acceptance_sources.md: original
-SAMPLE-096 event handler confirms Guide acceptance precedes InviteAccepted and immediate JoinInvited;
-SAMPLE-087 standard random-description/30-preset renderer logic is available, without extracting
-proprietary Avatar assets. SAMPLE-075 identity flow exists. No achievement/leaderboard source matched
-in the currently extracted sample corpus, so a minimal XNA-shaped compatibility sample is needed.
-These are queued source evidence, not newly unblocked samples; no samples-agent files modified.
+Acceptance source inspection is preserved with the consumer-owned evidence in
+[`Invites/missing.md`](../../cna-samples/samples/Invites/missing.md),
+[`AvatarShadows/missing.md`](../../cna-samples/samples/AvatarShadows/missing.md) and
+[`NetworkStateManagement/missing.md`](../../cna-samples/samples/NetworkStateManagement/missing.md).
+The original SAMPLE-096 event handler confirms Guide acceptance precedes `InviteAccepted` and an
+immediate `JoinInvited`; SAMPLE-087 uses the standard random-description/30-preset renderer without
+extracting proprietary Avatar assets, and SAMPLE-075 supplies the identity flow. No matching
+achievement/leaderboard source existed, so the campaign built a minimal XNA-shaped compatibility
+sample. These were queued source evidence, not newly unblocked samples.
 
 GS-007b implementation detail: five remaining structural NotSupportedException throws in
 NetworkSessionProperties (Add/Insert/Remove/RemoveAt/Clear) are intentional fixed-array behavior,
@@ -2099,7 +2107,8 @@ gamers, otherwise only the host reports TrueSkill; leaving Ranked players get "b
 - [x] Fix: remote gamers now carry their service identity (their writers used the offline store).
 - [x] Fix: Gamer copy/move (now protected) bind a fresh LeaderboardWriter to the new object; a moved
   gamer's writer used to point at the destroyed temporary (make_unique(CreateInternal) exposed it).
-- [x] *(Documented limit, listed in the final register.)* CNA computes no TrueSkill (skill boards are ordinary arbitrated boards) — documented gap.
+- [x] *(Documented limit, listed in the GS-011 snapshot at `f5df1c824`.)* CNA computes no TrueSkill
+  (skill boards are ordinary arbitrated boards) — documented gap.
 
 Validation: Net **465/465**; GamerServices **459 pass / 1 known skip**; fake **113**; private gates
 **13/13**; server **18/18, zero skips, 213.91s** (`build/ranked-full.log`) incl. 43 arbitration
@@ -2758,11 +2767,12 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
 
 ### GS-011 complete: final validation and register
 
-`gamer_services_server_final_register.md` records every deliberate refusal, constant and
-never-raised member left in GamerServices/Net (XNA behaviour, CNA limits, host-language limits),
-what the GS-001 inventory items became, and the evidence. `misc/known_gaps.md` entry 4 now names
-the online AddLocalGamer limit next to online host migration and points at the register. Validation
-(details in the register): server corpus 23/23 with every CNA harness and NAT, zero skips, 340.7 s;
+The GS-011 register snapshot at `f5df1c824` records every deliberate refusal, constant and
+never-raised member then left in GamerServices/Net (XNA behaviour, CNA limits, host-language
+limits), what the GS-001 inventory items became, and the evidence. At that checkpoint,
+`misc/known_gaps.md` entry 4 named the online AddLocalGamer limit next to online host migration and
+pointed at the register. Validation recorded by GS-011: server corpus 23/23 with every CNA harness
+and NAT, zero skips, 340.7 s;
 CnaNetTests 495, CnaGamerServicesTests 498 + 1 skip, CnaRuntimeTests 192; C API gates; all four
 sample acceptances rerun into new `*-20260929-final` evidence directories (the NGSM and AvatarShadows
 scripts gained an evidence-directory option, and the AvatarShadows default capture times were fixed);

@@ -13,8 +13,8 @@
 > [`docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md).
 
 Task ids `GSP-*`. Continues `plan_gamer_services_server.md` (GS-001..GS-011, closed) and its
-register `gamer_services_server_final_register.md`. This file is updated as work lands; the
-historical plan is not.
+GS-011 register snapshot at `f5df1c824`. This file is updated as work lands; the historical plan is
+not.
 
 ## Verified starting point (2026-09-29, from the repositories, not the prompt)
 
@@ -68,7 +68,7 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
 | Avatar download cache: content-addressed, verified on read; no bound, no cleanup | U | `GamerServicesBackend.cpp` cache dir; audit in GSP-H |
 | No way for a person to choose/edit their avatar (admin CLI only) | G | server `avatar <user> random|set|clear` |
 
-### GamerServices / Net register rows (`gamer_services_server_final_register.md`, "CNA limits")
+### GamerServices / Net GS-011 register rows (snapshot at `f5df1c824`, "CNA limits")
 
 | Row | Cat | Plan |
 |---|---|---|
@@ -395,7 +395,8 @@ gap · **V** visual/art-quality gap · **D** stale documentation only · **N** d
   public NetworkSession, relay transport, arbitration, EndGame ordering) and state the new limits;
   CNA `docs/gamer-services-server.md` (persistent connection, eviction, not-implemented list,
   Stream), `docs/xna-4-api-coverage.md` (header, §3/§4/§5/§9/§10/§11: online AddLocalGamer was
-  still listed as refused), the final register (Recent-window gap, service limits); demo scope
+  still listed as refused), the GS-011 snapshot at `f5df1c824` (Recent-window gap, service limits);
+  demo scope
   comments below.
 - GSP-P1 demos. Eleven GamerServices/Net demos audited (a subagent, reviewed): besides stale
   stub-era comments, the GamerServices game demos never let GamerServicesDispatcher.Update run
