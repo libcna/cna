@@ -140,6 +140,11 @@
       "thirdParty": false
     },
     {
+      "file": "fx_struct_defaults.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
       "file": "fx_two_passes.fx",
       "origin": "authored",
       "thirdParty": false

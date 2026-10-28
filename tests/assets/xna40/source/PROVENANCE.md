@@ -93,6 +93,12 @@ from, and they say nothing these four do not.
 `broken.fx`, `cyclic_include.fx` and `shader_model_3.fx` from `XNAPP-267` belong to the same
 family and are described above.
 
+`fx_struct_defaults.fx` (2026-10-26 dependency audit A-09) declares a structure parameter whose
+non-array members precede an array member, the shape of `CnaConformanceEffect.fx`'s `Lighting`, with
+every member read so the compiler keeps them all. XNA's own Content Pipeline builds it where it
+rejects the conformance effect, and `tools/xna-oracle/EffectStructDefaultsOracle.cs` reads the
+members' defaults back from that build (`tests/reference/xna40/effect-struct-defaults/`).
+
 ## The `.xml` documents
 
 `plans/plan_xnapipeline_parity.md` `XNAPP-261` added five more beside `probe.xml`, written here,
