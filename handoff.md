@@ -317,7 +317,7 @@ runtime. CI: `general-tests-ci.yml` runs the unfiltered suite for
 | Platform contract | `docs/platform-abstraction.md` |
 | API-surface coverage | `docs/xna-4-runtime-member-coverage.md` (generated) |
 | C API generation maintenance model and 2026-10-12 audit | `docs/c-api/GENERATED_ROUTES.md`, `docs/c-api/GENERATION_AUDIT.md` |
-| Deliberate deviations from FNA/XNA | `CHECKLIST.md`, `plans/plan_bindings_upstream.md` |
+| Deliberate deviations from FNA/XNA | `CHECKLIST.md`, `docs/xna-fna-behavior-decisions.md` |
 | GamerServices / Net / Avatar boundary | `docs/gamer-services-known-limitations.md` |
 | Why is a subsystem in (or out of) an executable? Link boundaries, size options, footprint gates | `docs/link-size-architecture.md` |
 | Build rules (ccache, build directories, display isolation) | `CLAUDE.md` / `AGENTS.md` |

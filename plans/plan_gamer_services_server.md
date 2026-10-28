@@ -2492,7 +2492,7 @@ whose `PlayerIndex` matches, else null; CNA indexed by the enum's ordinal (the F
 with only player two signed in, `[PlayerIndex.One]` named player two. Fixed at the one operator, which
 `cna_gamer_get_signed_in_gamer_at_player_index` also uses; the C header/doc text that described the
 positional lookup as canonical was corrected, and the divergence has its row in
-`plans/plan_bindings_upstream.md`. The dispatcher already publishes gamers in slot order. Tests:
+`docs/xna-fna-behavior-decisions.md`. The dispatcher already publishes gamers in slot order. Tests:
 `SignedInGamerCollectionTest.PlayerIndexOperatorFindsThePlayerNotThePosition`, `GamersSmoke` step 10-12
 rewritten. CnaGamerServicesTests 484 + 1 skip; C API gates unchanged apart from the three environment
 smokes.
@@ -2635,7 +2635,7 @@ the C struct field documents local ticks. CnaGamerServicesTests 485 + 1 skip.
   `AddLocalGamer` was still refused then (the directory admitted one local group per machine); GSP-K2
   implemented it.
 - [x] GS-007p Explicit local-gamer lists and the Find -> Join local limit (XNA over FNA; row in
-  `plans/plan_bindings_upstream.md`). The explicit-list `Create`/`JoinInvited` constructor sized the
+  `docs/xna-fna-behavior-decisions.md`). The explicit-list `Create`/`JoinInvited` constructor sized the
   local-gamer limit to the list, so a session created for one gamer refused `AddLocalGamer`; a gamer
   listed twice joined twice. `BeginCreate`/`BeginFind`/`BeginJoinInvited` with a list skipped
   reference `GetLocalGamers`. A SystemLink `Join` always allowed 4 local gamers, and ignored the list

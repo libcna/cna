@@ -53,7 +53,8 @@ include("${CMAKE_CURRENT_LIST_DIR}/SdlPrebuiltFingerprint.cmake")
 #      added were uninitialised on them.
 set(CNA_SDL3_PATCHES)
 # The Emscripten video backend's window teardown removed /tmp/filedrop unguarded, so destroying a
-# second window on one page threw ENOENT out of SDL_DestroyWindow (plans/plan_bindings_upstream.md
+# second window on one page threw ENOENT out of SDL_DestroyWindow (the BINDFIX-052 decision in
+# docs/xna-fna-behavior-decisions.md,
 # BINDFIX-052). SDL main still removes it unguarded (checked 2026-10-25).
 if(EMSCRIPTEN)
     list(APPEND CNA_SDL3_PATCHES

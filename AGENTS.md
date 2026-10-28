@@ -23,6 +23,11 @@ The current approved planning boundary is limited to CNA's native C API/C ABI. D
 plans or implementations for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go,
 Swift, or other language-specific bindings unless the project owner explicitly authorizes them.
 
+Measured Microsoft XNA 4.0 behavior wins when it disagrees with FNA. Record each such decision,
+its evidence and its regression in
+[`docs/xna-fna-behavior-decisions.md`](docs/xna-fna-behavior-decisions.md); FNA remains the normal
+readable implementation reference when no measured disagreement exists.
+
 ---
 
 ## Code Generation Rules

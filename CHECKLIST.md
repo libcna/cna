@@ -20,8 +20,10 @@ Use this checklist for every `.cs` file ported from FNA to CNA.
 
 ### API surface (compare against the XNA reference assemblies, NOT only FNA)
 
-> **FNA is authoritative for BEHAVIOR. The XNA 4.0 reference assemblies are authoritative for API
-> SURFACE.** FNA is a reimplementation targeting what games actually call on desktop, and it
+> **FNA is the normal readable reference for BEHAVIOR. Measured Microsoft XNA 4.0 behavior wins
+> when the two disagree; the reference assemblies remain authoritative for API SURFACE.** Record
+> measured tie-breaks in [`docs/xna-fna-behavior-decisions.md`](docs/xna-fna-behavior-decisions.md).
+> FNA is a reimplementation targeting what games actually call on desktop, and it
 > genuinely **omits public members that exist in XNA 4.0** — members tied to Xbox 360/Zune/Windows
 > Phone concepts, or that FNA's own renderers cannot populate, are dropped rather than stubbed.
 > Auditing "CNA vs FNA" can therefore come back clean while real API surface is missing.

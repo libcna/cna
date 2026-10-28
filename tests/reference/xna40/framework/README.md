@@ -9,7 +9,7 @@ Microsoft XNA Game Studio 4.0 framework (under the .NET Framework 4.0 in Wine) o
 
 The rule these measurements establish -- every float channel is saturated and rounded to the
 nearest integer with ties to even, a NaN channel packs as 0, and `Color.Lerp`/`Color.Multiply`
-truncate instead -- is written up in `plans/plan_bindings_upstream.md` (`XNAPACK-001`). CNA
+truncate instead -- is written up in `docs/xna-fna-behavior-decisions.md` (`XNAPACK-001`). CNA
 reproduces every case in
 `modules/graphics/tests/Microsoft/Xna/Framework/Graphics/PackedVector/XnaFrameworkPackingTests.cpp`,
 which also fails if a case here gains no reproduction. Regenerate rather than edit.

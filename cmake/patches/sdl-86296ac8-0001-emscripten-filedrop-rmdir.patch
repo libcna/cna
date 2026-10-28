@@ -10,7 +10,7 @@ the directory and the second destroy's FS.rmdir throws ErrnoError(ENOENT) out
 of MAIN_THREAD_EM_ASM into whatever called SDL_DestroyWindow.
 
 Not an upstream commit: SDL main still has the unguarded rmdir (checked
-2026-09-30). Carried by CNA (plans/plan_bindings_upstream.md BINDFIX-052).
+2026-09-30). Carried by CNA (XNA/FNA behavior decision BINDFIX-052).
 ---
 diff --git a/src/video/emscripten/SDL_emscriptenevents.c b/src/video/emscripten/SDL_emscriptenevents.c
 --- a/src/video/emscripten/SDL_emscriptenevents.c

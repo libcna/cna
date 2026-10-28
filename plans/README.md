@@ -67,8 +67,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   deployment is in [`../docs/gamer-services-server.md`](../docs/gamer-services-server.md), and
   consumer sample status is in [`cna-samples/plan.md`](../../cna-samples/plan.md).
 - [`plan_binding.md`](plan_binding.md) — native C API and stable C ABI.
-- [`plan_bindings_upstream.md`](plan_bindings_upstream.md) — defects the ten language
-  bindings measured in CNA, and the CNA-side work they are waiting on.
+- `plan_bindings_upstream.md` — measured XNA/FNA decisions and binding findings from the 2026-09
+  campaign; deleted on 2026-10-28 (Git history only). Permanent decisions are in
+  [`../docs/xna-fna-behavior-decisions.md`](../docs/xna-fna-behavior-decisions.md), current binding
+  architecture is in [`../docs/binding.md`](../docs/binding.md), and current defects are only in
+  [`../handoff.md`](../handoff.md) §5.1.
 - [`plan_cnj.md`](plan_cnj.md) — `.cnj` content format.
 - [`plan_gltf.md`](plan_gltf.md) — glTF import correctness.
 - [`plan_xnb.md`](plan_xnb.md) — XNB content pipeline.

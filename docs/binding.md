@@ -37,7 +37,7 @@ A binding is a presentation layer over that ABI, never a second implementation o
   They stay pinned to old ABI versions and are not maintained. A Common Lisp binding
   (`cna-common-lisp`) existed too but was not part of that final pass, and where it lives now is
   not recorded here. The CNA defects all of them measured are in
-  [`../plans/plan_bindings_upstream.md`](../plans/plan_bindings_upstream.md).
+  [`xna-fna-behavior-decisions.md`](xna-fna-behavior-decisions.md).
 
 What a binding supports is always an intersection: what the binding implements, what the CNA
 subsystem supports, what the selected renderer and platform support, and what the binding's
@@ -465,7 +465,7 @@ dependency becomes portable, that FFI is free, or that every CNA API exists in e
 Publish what was measured: API coverage, tested classes and methods, sample games that pass, and
 known content and behaviour deviations. Where FNA and XNA disagree, CNA follows XNA (`CLAUDE.md`),
 and the divergences bindings measured are listed in
-[`../plans/plan_bindings_upstream.md`](../plans/plan_bindings_upstream.md).
+[`xna-fna-behavior-decisions.md`](xna-fna-behavior-decisions.md).
 
 XNA reference material — decompiled behaviour, the reference assemblies a parity tool compares
 against — is used only as the project's legal policy allows. Microsoft's binaries are never
@@ -479,7 +479,7 @@ CNA.NET's API verification does.
 - [`c-api/LIMITATIONS.md`](c-api/LIMITATIONS.md) — what the ABI does not cover yet.
 - [`../plans/plan_binding.md`](../plans/plan_binding.md) — the C ABI implementation plan and its
   release gate.
-- [`../plans/plan_bindings_upstream.md`](../plans/plan_bindings_upstream.md) — CNA defects the
-  language bindings found.
+- [`xna-fna-behavior-decisions.md`](xna-fna-behavior-decisions.md) — measured XNA/FNA decisions
+  and the binding findings that established them.
 - [`libcna/cna-dotnet`](https://github.com/libcna/cna-dotnet) — CNA.NET, its
   `docs/architecture.md` and its ABI admission policy (`docs/native-abi-compatibility.md`).

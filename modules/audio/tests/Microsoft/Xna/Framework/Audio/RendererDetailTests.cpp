@@ -112,7 +112,7 @@ TEST(RendererDetailTest, PropertiesRoundTrip)
 // GetHashCode XORs the hashes of both fields, substituting 0 for an empty one
 // (xna4-decomp/.../Microsoft.Xna.Framework.Xact/Microsoft.Xna.Framework.Audio/RendererDetail.cs).
 // XNA is the tie-break, so these three cases assert XNA's comparison; the previous expectations
-// are recorded in plans/plan_bindings_upstream.md.
+// are recorded in docs/xna-fna-behavior-decisions.md.
 TEST(RendererDetailTest, GetHashCodeCombinesBothFields)
 {
     const RendererDetail a = Make("Name A", "same-id");

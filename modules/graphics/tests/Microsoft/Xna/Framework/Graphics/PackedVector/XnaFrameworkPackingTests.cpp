@@ -319,7 +319,7 @@ namespace
      *
      * Two kinds. XNA's packed-vector structs all override ToString() to print their packed value
      * as hex and CNA's do not implement ToString() at all -- a real gap in the XNA surface of
-     * modules/graphics, recorded in plans/plan_bindings_upstream.md rather than a packing
+     * modules/graphics, recorded in docs/xna-fna-behavior-decisions.md rather than a packing
      * difference, which is what this file is about.
      *
      * The other kind is a measurement this file is the wrong home for. The framework oracle is one

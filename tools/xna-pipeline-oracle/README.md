@@ -115,7 +115,7 @@ tools/xna-pipeline-oracle/framework/run-framework-oracle.sh   # writes tests/ref
 ```
 
 No Direct3D device is created here, so unlike the graphics oracle this one needs no display. What
-it settled is recorded in `plans/plan_bindings_upstream.md` (`XNAPACK-001`) and reproduced by
+it settled is recorded in `docs/xna-fna-behavior-decisions.md` (`XNAPACK-001`) and reproduced by
 `modules/graphics/tests/Microsoft/Xna/Framework/Graphics/PackedVector/XnaFrameworkPackingTests.cpp`.
 
 ## Not committed

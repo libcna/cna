@@ -2722,7 +2722,7 @@ CNA_C_API CNA_Result cna_skinning_data_set_skeleton_root_name_ext(
  * skin collection comes back empty, so the skins and their skeletons are unreachable through that
  * format. `tests/assets/cnb/skinned/skinned_model.cnb` is that case, built from
  * `tests/assets/gltf/skin-four-weighted.gltf`, and the gap is recorded as `BINDFIX-035` in
- * `plans/plan_bindings_upstream.md`.
+ * `docs/xna-fna-behavior-decisions.md`.
  */
 CNA_C_API CNA_Result cna_content_manager_load_model(
     CNA_Handle content_manager,

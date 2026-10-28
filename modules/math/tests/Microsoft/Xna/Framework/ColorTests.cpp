@@ -455,7 +455,7 @@ TEST(ColorTest, PackFromVector4SetsComponents)
 // XNA's IPackedVector.PackFromVector4 saturates and rounds exactly like the Color(Vector4)
 // constructor, so an out-of-range component clamps at 0/255 rather than wrapping. FNA's does not
 // -- "R = (byte) (vector.X * 255.0f);" (Color.cs) neither clamps nor rounds, and produced the
-// wraparound these tests used to pin. XNA wins (CLAUDE.md; plans/plan_bindings_upstream.md).
+// wraparound these tests used to pin. XNA wins (CLAUDE.md; docs/xna-fna-behavior-decisions.md).
 // A non-finite component stays defined here, unlike a bare C++ cast: NaN packs as 0, which is
 // what the runtime produces, and the infinities saturate with everything else.
 TEST(ColorTest, PackFromVector4AtZeroGivesZero)

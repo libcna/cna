@@ -28,7 +28,7 @@ no longer a defence for a behaviour XNA does not have.
 
 A divergence taken on these grounds must be recorded where it is made -- a comment
 naming the XNA IL that settles it, and a row in
-[`plans/plan_bindings_upstream.md`](plans/plan_bindings_upstream.md), which lists the
+[`docs/xna-fna-behavior-decisions.md`](docs/xna-fna-behavior-decisions.md), which lists the
 ones the language bindings measured.
 
 ---

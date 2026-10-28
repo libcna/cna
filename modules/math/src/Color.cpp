@@ -41,7 +41,7 @@ namespace Microsoft::Xna::Framework
         // FNA truncates instead ("R = (byte) MathHelper.Clamp(color.X * 255, Byte.MinValue,
         // Byte.MaxValue);", Color.cs), which turns Color(new Vector4(0.25f, 0.5f, 0.75f, 1)) into
         // {63, 127, 191, 255} where XNA gives {64, 128, 191, 255}. XNA wins (CLAUDE.md; the
-        // divergence is recorded in plans/plan_bindings_upstream.md).
+        // divergence is recorded in docs/xna-fna-behavior-decisions.md).
         //
         // NaN yields 0, which is both what the XNA runtime produces (color/vector4_nan) and what
         // keeps the conversion defined: casting NaN to an integer is undefined behaviour in C++,

@@ -414,7 +414,7 @@ A caller that iterates `0 .. CNA_RENDERER_FEATURE_MAXIMUM` sees one more entry t
 
 `0.23.0` added **one route**, `cna_decal_pass_is_supported`, and is otherwise
 identical to `0.22.0`. The addition closes a gap the language bindings recorded as
-`BINDFIX-018` in [`plans/plan_bindings_upstream.md`](../../plans/plan_bindings_upstream.md): a
+`BINDFIX-018` in [`xna-fna-behavior-decisions.md`](../xna-fna-behavior-decisions.md): a
 decal pass is its own handle kind, so `cna_post_process_pass_is_supported` refuses it with
 `CNA_RESULT_INVALID_HANDLE`, and `cna_decal_pass_create` succeeds on a renderer that cannot run
 the pass -- which left a caller told to ask a question no route would answer. The header used to
