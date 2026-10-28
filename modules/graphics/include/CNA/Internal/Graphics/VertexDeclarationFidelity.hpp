@@ -15,18 +15,17 @@
  * @file
  * @brief The declaration-fidelity safety boundary.
  *
- * Records that the rasterizing renderers then measured (Software, WebGPU, SDL_GPU,
- * D3D9 and the since-retired Vulkan, D3D11 and D3D12) did not translate a `VertexDeclaration` at
- * all: they select a native input layout from a canonical byte-stride table and discard
- * everything else the declaration states. A stride does not determine element composition, so two
- * declarations that share a stride share a native layout, and the one that does not match it is
- * read from the wrong bytes -- accepted, submitted, and silently wrong.
+ * Some fixed-layout draw routes select a native input layout from a canonical byte-stride table
+ * instead of translating the complete `VertexDeclaration`. A stride does not determine element
+ * composition, so two declarations that share a stride can otherwise share one native layout and
+ * the declaration that does not match it is read from the wrong bytes -- accepted, submitted and
+ * silently wrong.
  *
- * This file is NOT a translator. Complete per-renderer declaration translation stays in
- * `plans/plan_postaudit.md`. What it provides is the boundary that makes the gap safe until then: a pure
- * predicate that decides whether a declaration can be represented faithfully by the layout a
- * renderer actually programs, so an unrepresentable one fails deterministically before any native
- * layout, pipeline, command or submission exists instead of rendering the wrong thing.
+ * This file is not a translator. It is the permanent supported boundary for every route that
+ * still infers native inputs from a fixed stride table: the pure predicate decides whether that
+ * route can represent a declaration faithfully. An unrepresentable declaration therefore fails
+ * deterministically before any native layout, pipeline, command or submission exists instead of
+ * rendering the wrong thing. Routes that translate the declaration itself do not need the guard.
  *
  * ## The rule is asymmetric, and deliberately so
  *

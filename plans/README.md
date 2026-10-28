@@ -9,7 +9,10 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 
 ## Coordination and architecture
 
-- [`plan_postaudit.md`](plan_postaudit.md) — post-audit development work.
+- `plan_postaudit.md` — post-audit graphics remediation (`GFX-220`..`GFX-246`, `BUILD-017/018`),
+  reconciled on 2026-10-14 and deleted on 2026-10-28 (Git history only). Its lasting capability
+  admission rule is in
+  [`../docs/renderer-capability-profiles.md`](../docs/renderer-capability-profiles.md).
 - [`MODULARIZATION_PLAN.md`](MODULARIZATION_PLAN.md) — library modularization.
 - [`plan_platform.md`](plan_platform.md) — platform abstraction.
 - [`plan_apple.md`](plan_apple.md) — macOS and iOS platform support.

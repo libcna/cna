@@ -41,6 +41,14 @@ Every current feature is classified as one of:
 The current profile builder maps every initial feature explicitly, so a live profile has no
 `Unknown` feature answers. New enum entries default to `Unknown` until their mapping is added.
 
+## Admission rule for new graphics findings
+
+A new graphics finding belongs in `handoff.md` §5 when it is a defect, or in the owning renderer's
+document when it is a deliberate capability boundary. A silent wrong result on a supported path
+is never accepted as a boundary: the renderer must implement the behaviour or refuse the request
+deterministically before native submission. A regression test must assert whichever answer the
+renderer gives.
+
 ## Three independent sections
 
 `GraphicsDevice::GetRendererCapabilityProfileEXT()` returns one cached snapshot containing:
