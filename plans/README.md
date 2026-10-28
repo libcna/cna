@@ -67,7 +67,13 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   worked on until 2026-07-18 and deleted on 2026-10-28 (Git history only). Audio deviations are in
   [`../CHECKLIST.md`](../CHECKLIST.md); open audio defects and limitations are in
   [`../handoff.md`](../handoff.md) §5.
-- [`plan_devices.md`](plan_devices.md) — XNA devices and sensors.
+- `plan_devices.md` — XNA devices and sensors (`DEV-*`, `VIB-*`, `SENSORBASE-*`, `ACCEL-*`,
+  `COMPASS-*`, `MOTION-*`, `ANDROID-BRIDGE-*` …, 2026-07-05/18; earlier IDs such as
+  `DEVICES-0031` come from its previous versions). Deleted on 2026-10-28 (Git history only);
+  comments cite it as "the devices plan". The checks still waiting for a physical device are at
+  the top of [`../docs/devices-hardware-checklist.md`](../docs/devices-hardware-checklist.md); the
+  2026-07-17 re-audit's engineering backlog was dropped with it (the deleting commit names the
+  rows).
 - `plan_cna_devices.md` — `CNA::Devices` extensions (`DEVICES-CNA-000`..`012`, 2026-07-07), all
   closed; deleted on 2026-10-28 (Git history only). The module, its rules and every capability are
   in [`../docs/devices-ext.md`](../docs/devices-ext.md).

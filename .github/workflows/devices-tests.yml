@@ -1,6 +1,6 @@
 name: Devices and Sensors Tests
 
-# DEV-BUILD-003 (plan_devices.md): builds CnaTests and runs the full
+# DEV-BUILD-003 (devices plan): builds CnaTests and runs the full
 # Microsoft::Devices / Microsoft::Devices::Sensors gtest suite on a desktop
 # Linux runner. Every test run here executes without any physical sensor or
 # haptic hardware present — the two tests that genuinely require real hardware

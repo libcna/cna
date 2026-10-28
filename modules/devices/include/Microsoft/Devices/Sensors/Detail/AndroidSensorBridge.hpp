@@ -144,7 +144,7 @@ namespace Microsoft::Devices::Sensors::Detail
      * running on an unknown thread; see docs/devices-event-contract.md §1).
      *
      * This is CNA-internal plumbing shared by Compass/Motion's future
-     * native Android backends (`plans/plan_devices.md` Phase 7/8) — not itself an
+     * native Android backends (devices plan Phase 7/8) — not itself an
      * XNA-facing sensor class, and not wired into Compass/Motion by this
      * class alone (see AndroidCompassBackend/AndroidMotionBackend).
      *

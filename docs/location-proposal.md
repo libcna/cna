@@ -24,7 +24,7 @@ next to `Accelerometer` and `Compass`. It is the one design that is ruled out. O
 location was never part of `Microsoft.Devices.Sensors`. It lived in its own namespace and assembly,
 `System.Device.Location` (`System.Device.dll`), with a different shape: a watcher with a permission
 state, a desired accuracy, a movement threshold and an unknown position, not a sensor with a reading
-rate. `docs/location-future-plan.md` records that decision, and `plans/plan_devices.md`
+rate. `docs/location-future-plan.md` records that decision, and the devices plan
 (`COMPASS-003`) re-confirmed it. The TODO's fields all have a home in the real API:
 
 | TODO item | Real API |

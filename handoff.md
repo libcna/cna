@@ -365,6 +365,14 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   the previous SpriteBatch left in `Textures[0]`, which `Texture.cpp` refuses as XNA does
   (SOFTWARE-246). The test needs to unbind the slot first; the other 187 `WebGPU` tests pass. When
   it began to fail is not bisected.
+- On Android, the landscape remap `Accelerometer`, `Gyroscope` and `Motion` apply by default
+  (`Detail::ConvertAndroidPortraitToXnaLandscape`, a CNAEXT convenience that
+  `SetAndroidLandscapeRemapEnabled(false)` turns off) is, for both landscape rotations, a
+  reflection (`diag(1,-1,1)` / `diag(-1,1,1)`, determinant -1) rather than a rotation: a real 90°
+  turn of the device exchanges X and Y. Windows Phone itself never remaps; it reports the
+  device-fixed frame. Found by derivation on 2026-07-17 (devices plan `MOT2-001`, recorded in
+  `AndroidMotionMath.hpp`) after `ACCEL-008` had kept the remap on 2026-07-07; never checked on a
+  phone.
 
 ### 5.2 Limitations
 
@@ -411,6 +419,9 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   `SDL_GPU` since RRC-043 (its stock, instanced-matrix and compiled-effect routes expand per-instance
   streams on the host from the first instance); no other survivor claims it.
 - iOS has simulator smoke evidence only, with `SOFTWARE`.
+- `Microsoft::Devices` sensors and vibration have never run on a phone: the Android axis, compass
+  and attitude mappings are derived and host-tested only. The device checks still open are listed
+  at the top of `docs/devices-hardware-checklist.md`.
 - `WEBGPU` is supported (promoted from experimental on 2026-10-17) and verified on Linux x86_64
   and in headless Chrome only; its Windows, macOS and linux-aarch64 wgpu-native packages are
   unverified (`WEBGPU-1`, `plans/plan_webgpu.md`).

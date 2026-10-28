@@ -105,7 +105,7 @@ sketched above, `Compass`'s consumption of it should be:
   built, not a commitment that it will be. The answer to "should CNA implement real
   declination right now" remains **no**, per this document's existing reasoning
   (`System::Device::Location` doesn't exist yet at all, and building it is a
-  substantially separate, unscoped effort from anything in `plans/plan_devices.md`).
+  substantially separate, unscoped effort from anything in the devices plan).
 
 ## Explicitly not doing right now
 

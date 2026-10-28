@@ -72,7 +72,7 @@ Lost           — device disconnected/failed after being Ready (SDL3 sends a
 ```
 
 This mirrors `SensorState`'s own honesty principle (`Microsoft::Devices::Sensors`,
-closed in `plans/plan_devices.md`): a consumer must always be able to cheaply ask "can I use
+closed in the devices plan): a consumer must always be able to cheaply ask "can I use
 this right now" rather than finding out by a confusing runtime failure.
 
 ## 3. The texture-upload bridge — simpler than the original analysis assumed

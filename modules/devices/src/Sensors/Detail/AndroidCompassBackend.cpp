@@ -89,7 +89,7 @@ namespace Microsoft::Devices::Sensors::Detail
         // Heading comes from the OS-fused rotation vector quaternion, never
         // from raw accelerometer+magnetometer cross-product math computed
         // in this bridge -- see this class's own doc comment and
-        // plans/plan_devices.md's DEVICES-0100 gate task.
+        // the devices plan's DEVICES-0100 gate task.
         //
         // Task COMPASS-009: automatically switches between flat-mode and
         // upright-mode axis conventions based on the device's current tilt,
@@ -150,7 +150,7 @@ namespace Microsoft::Devices::Sensors::Detail
         // had exactly that bug. Not independently testable here beyond
         // compiling (Android-only code, no host test seam reaches this
         // exact multi-callback call chain -- see COMPASS-008's closing
-        // note in plans/plan_devices.md).
+        // note in the devices plan).
         PublishReading();
 
         if (calibrationCallback)

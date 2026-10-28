@@ -122,7 +122,7 @@ TEST(AccelerometerTests, ConstructorSucceedsUnderInstanceLimit)
 
 // Task SENSORBASE-002: confirmed via a MonoGame source cross-check (Medium
 // confidence, no direct MSDN Remarks stating a default -- see
-// plans/plan_devices.md's SENSORBASE-002 closing note) that the real WP7
+// the devices plan's SENSORBASE-002 closing note) that the real WP7
 // SensorBase<T>'s single shared 2ms default (not a per-sensor-class
 // override) is architecturally correct: MonoGame's own SensorBase()
 // constructor sets exactly `TimeSpan.FromMilliseconds(2)` at the shared base
@@ -1451,7 +1451,7 @@ TEST(AccelerometerTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanc
 // fault-injection layer capable of safely mocking sensor enumeration/open/close
 // (Task TEST2-005's own separate scope),
 // neither of which exists in this environment. See this task's own
-// plans/plan_devices.md resolution note and docs/devices-hardware-checklist.md for
+// devices plan resolution note and docs/devices-hardware-checklist.md for
 // the full, honest accounting of what remains unexercised.
 TEST(AccelerometerTests, IsSensorConnectedForTestingReportsNotConnectedWhenNoRealSensorIsOpen)
 {
@@ -1467,7 +1467,7 @@ TEST(AccelerometerTests, IsSensorConnectedForTestingReportsNotConnectedWhenNoRea
 // scale (the largest prior stress test, ConcurrentConstructDestroyKeepsInstanceCountBalanced,
 // covers only 8*50=400 iterations). LeakSanitizer (ASan's own built-in leak detector) does not
 // work in this specific container (needs ptrace, unavailable here -- see this task's own
-// plans/plan_devices.md resolution note), so this /proc-based tracking is the primary host-available
+// devices plan resolution note), so this /proc-based tracking is the primary host-available
 // leak signal for this task, not a substitute for a real LSan run.
 TEST(AccelerometerTests, OneHundredThousandConstructProbeStartStopDisposeCyclesLeaveNoResourceLeak)
 {

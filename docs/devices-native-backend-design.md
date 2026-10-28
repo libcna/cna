@@ -8,7 +8,7 @@ sessions are implemented by the selected platform. The historical interface sket
 useful context for Compass/Motion, but their statements that the old sensor subsystem must remain
 unchanged are superseded by this update.
 
-**Updated 2026-07-05 (`plans/plan_devices.md` Phases 6-8): the Android backend described
+**Updated 2026-07-05 (devices plan Phases 6-8): the Android backend described
 below is now implemented, not just sketched.** `Detail::AndroidSensorBridge`
 (`include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`),
 `Detail::ICompassBackend`/`Detail::AndroidCompassBackend`, and
@@ -30,7 +30,7 @@ sketch) into one place, extended to cover `IDeviceSensorBackend`,
 migration plan — that migration plan has now been executed for Android (see
 "Migration plan" section below, updated with actual results). **The iOS sections
 remain unimplemented sketches** — no Apple toolchain exists in this environment
-(`plans/plan_devices.md` Task DEVICES-0131), so no `.mm`/Swift code was written; a future
+(devices plan Task DEVICES-0131), so no `.mm`/Swift code was written; a future
 phase should update those sections as its own design evolves, following the same
 "update in place, don't treat as frozen" convention this document has followed since
 Phase 9.
@@ -150,7 +150,7 @@ their fused/magnetometer data is outside the current platform sensor vocabulary.
 
 ---
 
-## Android backend path — IMPLEMENTED (2026-07-05, `plans/plan_devices.md` Phases 6-8)
+## Android backend path — IMPLEMENTED (2026-07-05, devices plan Phases 6-8)
 
 Builds directly on `plans/plan_devices_phase5.md`'s existing Compass-Android/Motion-Android
 subsections (Tasks P5-8/P5-9); reproduced and consolidated here rather than duplicated
@@ -158,7 +158,7 @@ with drift. **As-implemented, this deviated from the sketch in one important way
 no JNI/Kotlin bridge was needed at all — the NDK's own `<android/sensor.h>`/
 `<android/looper.h>` (`ASensorManager`/`ASensorEventQueue`/`ALooper`) expose everything
 needed directly from C++, confirmed by reading the NDK sysroot headers before writing
-any code (`plans/plan_devices.md` Task DEVICES-0073). `Detail::AndroidSensorBridge`
+any code (devices plan Task DEVICES-0073). `Detail::AndroidSensorBridge`
 (Phase 6) is the shared bridge both `Compass` and `Motion` build on: one instance per
 Android sensor type, owning a dedicated background thread that prepares and polls its
 own `ALooper` (thread-affine — can't be pumped from an arbitrary caller thread) and
@@ -330,7 +330,7 @@ Android-only fixes:
    non-Android desktop build (re-run, not just read, after every change).
 4. **Behavior only changes once a platform backend is constructed and `IsSupported()`
    returns true — confirmed on Android** (cross-compiled, `llvm-nm`-verified, and
-   actually run on an emulator — `plans/plan_devices.md` Phase 9 — where the real backend's
+   actually run on an emulator — devices plan Phase 9 — where the real backend's
    `IsSupported()`/`Start()` genuinely execute, not just the stub path).
 5. **New tests, not modified tests — done.** All existing Compass/Motion stub-behavior
    tests are unmodified; new tests added: 11 `AndroidCompassMathTests` + 6 fake-backend
@@ -339,7 +339,7 @@ Android-only fixes:
 6. **Order of implementation — Android went first, not iOS, deviating from this
    plan's own suggested order.** The original suggestion (iOS Motion first) assumed iOS
    would be reachable before Android; in practice no Apple toolchain ever existed in this
-   environment (confirmed at every phase, including `plans/plan_devices.md` Task DEVICES-0131),
+   environment (confirmed at every phase, including devices plan Task DEVICES-0131),
    while Android's NDK was already available and, this session, so was a working emulator
    (`/dev/kvm`) — so Android Compass and Motion were both implemented and Android
    Compass's `System.Device.Location`-blocked true-heading limitation was accepted as a

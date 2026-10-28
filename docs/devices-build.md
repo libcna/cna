@@ -214,7 +214,7 @@ headless) — confirmed via direct investigation to be 100% unrelated to
 `Microsoft::Devices` (see `plans/plan_devices_phase5.md` Task P5-1's Resolution for the full
 finding).
 
-**As of `plans/plan_devices.md` Phase 10 (2026-07-05):** 3348 tests, 36 failures — same root
+**As of devices plan Phase 10 (2026-07-05):** 3348 tests, 36 failures — same root
 cause category (`EasyGL`/graphics-backend, headless-environment-dependent — this
 session's container has no real GPU/display, so more `EasyGL` cases fail/skip than the
 2 from the session above that did have one), still confirmed 100% unrelated to
@@ -266,7 +266,7 @@ landscape symbols still compile — see that task's Resolution for the exact com
 `plans/plan_devices_phase9.md` Task P9-4 re-confirmed the library cross-compile once more
 (no source changes since Task P8-8, so `ninja` correctly reported nothing to rebuild).
 
-### 4.1 APK packaging and emulator/device run (`plans/plan_devices.md` Phase 9, 2026-07-05)
+### 4.1 APK packaging and emulator/device run (devices plan Phase 9, 2026-07-05)
 
 **Superseded — `cna_demo_devices` now packages into a real, installable Android APK.**
 Every prior phase (through `plans/plan_devices_phase9.md` Task P9-4) found this "not
@@ -279,7 +279,7 @@ one just did).
 **1. `/dev/kvm` now exists.** `ls -la /dev/kvm` shows a real, openable device node
 (`crw-rw----+ 1 root kvm`), confirmed via a direct `open()` call, not just `stat`. Every
 session since `plans/plan_devices_phase4.md` found this absent. First noticed during
-`plans/plan_devices.md`'s Phase 0 audit (Task DEVICES-0012); exploited for real in Phase 9.
+the devices plan's Phase 0 audit (Task DEVICES-0012); exploited for real in Phase 9.
 
 **2. The Gradle/CMake integration now exists**, built from SDL's own vendored template
 rather than from scratch:
@@ -529,7 +529,7 @@ by coverage):
   had been waved away without reading it.
 - **UBSan:** clean (0 issues).
 
-**Re-verified as of `plans/plan_devices.md` Phase 10 (2026-07-05), all three presets
+**Re-verified as of devices plan Phase 10 (2026-07-05), all three presets
 reconfigured, rebuilt, and re-run against the updated filter above** (271 tests, 269
 passed, 2 expected skips):
 - **ASan:** clean (0 issues) — confirmed on Phases 6-8's new `Detail::AndroidSensorBridge`/
@@ -572,7 +572,7 @@ way, remember these are Debug, unoptimized-ish (`-O0`/`-O1`), instrumented build
 useful for correctness verification, not for measuring performance, and slower to
 build/run than a plain `cmake-build-debug`.
 
-## 7. Decided against: a native Android vibration backend (`plans/plan_devices.md` Task DEVICES-0031, 2026-07-05)
+## 7. Decided against: a native Android vibration backend (devices plan Task DEVICES-0031, 2026-07-05)
 
 Do not build a JNI/`Vibrator`/`VibrationEffect` bridge for `VibrateController` on
 Android, and do not build an `IDeviceVibrationBackend` abstraction seam to select one
@@ -588,7 +588,7 @@ bridge would have had to reinvent. SDL's own Android manifest template
 (`third_party/SDL/android-project/app/src/main/AndroidManifest.xml`) already declares
 `android.permission.VIBRATE`, uncommented. Building a second (native) backend behind an
 abstraction seam that would only ever have one real implementation would be pure
-speculative abstraction — see `plans/plan_devices.md`'s Task DEVICES-0031 for the full
+speculative abstraction — see the devices plan's Task DEVICES-0031 for the full
 evidence trail before reconsidering this.
 
 ## 8. Continuous Integration (`DEV-BUILD-003`, 2026-07-06)

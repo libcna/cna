@@ -29,6 +29,38 @@ specific run's results" template, with one section per numbered section below, p
 device/OS/commit-hash metadata fields, so results stay comparable across different
 testers, devices, and sessions instead of each tester inventing their own format.
 
+## Still open on real hardware
+
+The devices plan (deleted on 2026-10-28; Git history) left these rows open because each one's
+code is implemented and host-tested but its acceptance needs a physical device. Nothing below has
+been run on one since. The SDL sensor and haptic code those rows inspected has since moved behind
+`CNA::Platform::IPlatformSensors`/`IPlatformHaptics`
+(`modules/platform/src/Sdl3/Sdl3DeviceServices.cpp`), so recheck an SDL finding there rather than
+at the file the row names.
+
+| Row | What a device has to show | Section |
+|---|---|---|
+| `ACCEL-004` | accelerometer axis signs in portrait and both landscapes | §1 |
+| `GYRO-003` | gyroscope axes and the Android orientation remap | §2 |
+| `SDLCORE-005` | a sensor removed, re-added or replaced mid-session is detected and reopened | §2a |
+| `VIB2-005` | the phone vibrator against a direct backend | §3 |
+| `VIB2-003` | a failing haptic effect is cleaned up and reported | §4a |
+| `VIB2-004` | haptic disconnect/reconnect mid-session | §4b |
+| `VIB2-006` | zero duration, repeated `Start`, intensity zero, mutual exclusion on a real backend | §5a |
+| `SDLCORE-011` | closing a haptic device after SDL has shut its subsystem down; from SDL's source this is a heap use-after-free, never reproduced under ASan for want of an opened device | — |
+| `ANDR2-002` | the Probe cache under TSan stress and a real sensor-service restart | §6a |
+| `ANDR2-009` | Stop latency and coalescing with the bounded event drain | §6b |
+| `ANDR2-010` | requested versus effective sample interval | §6c |
+| `COMPASS-004`, `COMP2-003` | Android heading math and the derived Android-to-Windows-Phone basis | §7 |
+| `COMP2-004` | a physical compass truth table (cardinal headings, tilts) | §7 |
+| `COMP2-005` | `MagnetometerReading` units and axes | §7 |
+| `COMP2-001` | compass source freshness/skew alignment end to end | §7a |
+| `MOTION-002`, `MOT2-001` | quaternion/attitude mapping: cardinal yaw/pitch/roll poses match Windows Phone; see also `handoff.md` §5.1 on the landscape remap | §8 |
+| `MOT2-010` | a physical Motion pose and dynamics matrix | §8 |
+| `MOT2-005` | rotation-vector versus game-rotation-vector fallback, and drift | §8b |
+| `TEST2-006`, `TEST2-007` | real Android evidence as a release gate; iOS and desktop matrices | — |
+| `PERF2-004` | mobile power and thermal budgets | — |
+
 ---
 
 ## Phase 9 (2026-07-04) execution results — honest status per case
@@ -87,7 +119,7 @@ emulator, no APK packaging, no toolchain) — not vague unavailability. This che
 stays the authoritative source for whoever eventually has the missing hardware/toolchain
 available.
 
-**Update (2026-07-05, `plans/plan_devices.md` Phase 9, Tasks DEVICES-0122-0126): the "no working
+**Update (2026-07-05, devices plan Phase 9, Tasks DEVICES-0122-0126): the "no working
 emulator"/"no APK packaging" blockers above are resolved** — `/dev/kvm` now exists in this
 container (absent every session above), and a real Gradle/CMake Android app integration
 now exists (`modules/devices/examples/demo_devices/android/`, see `docs/devices-build.md` Section 4.1).
@@ -179,7 +211,7 @@ If step 2 above is ever re-verified on real hardware and found to disagree with 
 documented convention, that is now a bug in the *opt-in* remap specifically, not evidence
 that the remap should be removed outright — removal was considered and explicitly
 declined. **Not yet applied to `Motion`'s Gravity/DeviceAcceleration/RotationRate**
-(see Section 8, `plans/plan_devices.md` Task `MOTION-012`) — tracked separately since it needs
+(see Section 8, devices plan Task `MOTION-012`) — tracked separately since it needs
 its own careful math derivation, not a rushed addition alongside this decision.
 
 ## 2. Gyroscope axis correctness
@@ -229,7 +261,7 @@ proves the underlying `SDL_GetSensors()` query itself works and correctly report
 found," but a genuine remove/re-add/default-device-change scenario — this task's own
 acceptance criteria's literal ask — would need either real hardware or a native
 fault-injection layer capable of safely mocking `SDL_GetSensors()`/`SDL_OpenSensor()`/
-`SDL_CloseSensor()` (`plans/plan_devices.md` Task `TEST2-005`'s own separate scope; building
+`SDL_CloseSensor()` (devices plan Task `TEST2-005`'s own separate scope; building
 one ad hoc here to fake-inject a full device lifecycle was judged out of scope for this
 task, the same call made for `ANDR2-002`'s identical gap). **Status: NOT RUN — hardware
 or TEST2-005 validation open.**
@@ -431,7 +463,7 @@ recording one specific session's results.
 | Desktop with a connected non-gamepad haptic device (e.g. a USB force-feedback wheel) | same, real device opened | `Start(TimeSpan)`/`Start(TimeSpan, intensity)` | Device actuates for the given duration; `getIsSupportedProperty()` true | Intensity scales strength; `StartLeftRight()` may achieve genuine independent magnitudes if the device/driver supports `SDL_HAPTIC_LEFTRIGHT` natively (unlike the Android single-actuator blend above) | **NOT RUN** — no such hardware available in this session |
 | Desktop with a connected rumble-capable gamepad, no other haptic device | same | `getIsSupportedProperty()`, `Start()`, `GamePad::SetVibration()` | `VibrateController` excludes the gamepad's own haptic ID (`IsConnectedGamepadHapticDevice()`) — behaves as if unsupported; `GamePad::SetVibration()` drives the gamepad normally; neither API fights the other for the same motor | Same | **NOT RUN** — no gamepad connected in this session (full steps: Section 5 above) |
 
-## 6. `Detail::AndroidSensorBridge` lifecycle safety (`plans/plan_devices.md` Task DEVICES-0085)
+## 6. `Detail::AndroidSensorBridge` lifecycle safety (devices plan Task DEVICES-0085)
 
 **Code under test:** `AndroidSensorBridge::Stop()`'s self-join-detects-and-detaches
 logic (`src/Devices/Microsoft/Sensors/Detail/AndroidSensorBridge.cpp`) — confirmed by
@@ -478,7 +510,7 @@ be run in this environment:**
   all in the non-Android stub `Impl`, so it cannot even compile into a desktop TSan build,
   let alone run under one. Running an actual TSan-instrumented stress test requires either
   real Android hardware/an emulator with TSan support, or a future native fault-injection
-  seam (`plans/plan_devices.md` Task `TEST2-005`) that can host this logic off-device.
+  seam (devices plan Task `TEST2-005`) that can host this logic off-device.
 - "A fake service restart re-probes successfully" — there is no seam in this codebase today
   to make `ASensorManager_createEventQueue()`/`ASensorEventQueue_enableSensor()`/
   `ASensorEventQueue_getEvents()` fail on demand to simulate a service restart; that also
@@ -580,7 +612,7 @@ RUN — hardware validation open.**
    decide whether "keep software throttling if required" should actually be implemented —
    record the finding either way.
 
-## 7. `Compass` real Android backend (`plans/plan_devices.md` Phase 7, Tasks DEVICES-0086-0100)
+## 7. `Compass` real Android backend (devices plan Phase 7, Tasks DEVICES-0086-0100)
 
 **Code under test:** `Detail::AndroidCompassBackend` (`src/Devices/Microsoft/Sensors/Detail/AndroidCompassBackend.cpp`)
 and `Detail::ConvertRotationVectorToMagneticHeadingDegrees()`
@@ -677,7 +709,7 @@ observed. **Status: NOT RUN — hardware validation open** (matching this pass's
    automatically, with no special recovery action needed (per `PublishReading()`'s own
    "self-heals once the stalled stream delivers again" design).
 
-## 8. `Motion` real Android backend (`plans/plan_devices.md` Phase 8, Tasks DEVICES-0101-0119)
+## 8. `Motion` real Android backend (devices plan Phase 8, Tasks DEVICES-0101-0119)
 
 **Code under test:** `Detail::AndroidMotionBackend` (`src/Devices/Microsoft/Sensors/Detail/AndroidMotionBackend.cpp`)
 and `Detail::ConvertRotationVectorToXnaQuaternion()`/`ExtractYawPitchRollFromQuaternion()`
@@ -838,7 +870,7 @@ behavior.
 
 ---
 
-## 9. Emulator limitations for Devices testing (`plans/plan_devices.md` Task DEVICES-0129)
+## 9. Emulator limitations for Devices testing (devices plan Task DEVICES-0129)
 
 An Android emulator (confirmed working this session, `docs/devices-build.md` Section 4.1)
 closes the "does the software pipeline work at all" question, but is **not a substitute**
