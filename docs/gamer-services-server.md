@@ -3,10 +3,9 @@
 The CNA service has its own accounts, protocol and assets and is not Xbox LIVE compatible: CNA
 provides a CNA-owned, XNA/Xbox-like GamerServices implementation with backend policies of its own.
 Everything it does not do, does only in part or decides differently from Xbox is listed in
-[`gamer-services-known-limitations.md`](gamer-services-known-limitations.md); the plans
-([server](../plans/plan_gamer_services_server.md),
-[avatar polish](../plans/plan_gamer_services_avatar_polish.md), and
-[Xbox fidelity](../plans/plan_gamer_services_xbox_fidelity.md)) keep the history.
+[`gamer-services-known-limitations.md`](gamer-services-known-limitations.md); the plans of the
+server (GS-*), avatar-polish (GSP-*), Xbox-fidelity (GSX-*) and final-hardening (GSH-*) passes are
+in Git history.
 
 Configure outside ported gameplay code. Precedence is complete `CNA::GamerServices::setConfigurationOverride` (deployment/test hosts only), environment fields, title manifest, user settings. User settings default to `$XDG_CONFIG_HOME/cna/gamer-services.json` or `$HOME/.config/cna/gamer-services.json`. Title manifest defaults to `cna-title.json` in launch CWD or explicit `CNA_GAMER_SERVICES_MANIFEST`. No credential fields are accepted. Endpoint is full `https://host:port/cna/v1`; `gameId` must be administrator-provisioned and stable. Optional `caBundle` configures trust, never bypasses TLS checks. Optional `titleVersion` (environment `CNA_GAME_VERSION`; one to four dot-separated numbers such as `1.2.0`) states the game's version to a service that checks it: an administrator can set the oldest version a title accepts (`title-minimum-version`), and older games are then refused at sign-in (the Guide says the game must be updated) and when a network session starts (`GameUpdateRequiredException`, as XNA threw when Xbox LIVE no longer accepted a title version). CNA installs no title updates itself, so `GamerServicesDispatcher.InstallingTitleUpdate` is never raised; `GamerServicesComponent` still exits the game on it, as XNA's does.
 

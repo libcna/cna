@@ -3,10 +3,7 @@
 This is the authoritative list of what CNA's GamerServices, Net, Guide and Avatar implementation
 does **not** do, does only in part, does differently from XNA on Xbox 360 by design, or has not been
 able to verify. It describes the current code (verified 2026-09-30 after the final hardening pass,
-[`plans/plan_gamer_services_final_hardening.md`](../plans/plan_gamer_services_final_hardening.md),
-against CNA `feature/gamer-services-server` and cna-gamer-services-server
-`feature/gamer-services-server`). When code changes one of these
-entries, change it here in the same commit.
+GSH-01..GSH-22). When code changes one of these entries, change it here in the same commit.
 
 CNA provides a **CNA-owned, XNA/Xbox-like** GamerServices implementation: CNA's own protocol,
 accounts, service, relay and original avatar assets, with backend policies of its own where XNA does
@@ -19,7 +16,9 @@ deployment), [`avatars.md`](avatars.md) (the avatar system),
 [`link-size-architecture.md`](link-size-architecture.md) (which parts a program links: the Guide's
 license and dialogs without the system Guide, which `GamerServicesDispatcher.Initialize` installs,
 and the avatar catalog only with avatars). This page is the maintained register for every current
-refusal and limitation; the GS-011 snapshot and the three GamerServices plans are history.
+refusal and limitation; the GS-011 snapshot and the GamerServices plans -- the server (GS-*),
+avatar-polish (GSP-*), Xbox-fidelity (GSX-*) and final-hardening (GSH-*) passes -- are in Git
+history only.
 
 **Categories** (the summary's third column): *intentional* (CNA will not do it, or does it its own
 way, for the reason given) · *compatibility gap* (XNA-observable behaviour CNA lacks) · *platform

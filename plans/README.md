@@ -76,9 +76,17 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   [`../docs/keyboard-device-emulation.md`](../docs/keyboard-device-emulation.md).
 - [`plan_media.md`](plan_media.md) — media API implementation.
 - [`plan_net.md`](plan_net.md) — networking, GamerServices, and Avatar APIs up to 2026-07 (history;
-  continued in `plan_gamer_services_server.md`, `plan_gamer_services_avatar_polish.md`,
-  `plan_gamer_services_xbox_fidelity.md` and `plan_gamer_services_final_hardening.md`; the current
-  state is [`../docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md)).
+  the current state is
+  [`../docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md)).
+- `plan_gamer_services_server.md` (`GS-001`..`GS-011`, the CNA service, protocol, relay,
+  matchmaking and standard Avatar API, 2026-09-28/29), `plan_gamer_services_avatar_polish.md`
+  (`GSP-*`), `plan_gamer_services_xbox_fidelity.md` (`GSX-*`) and
+  `plan_gamer_services_final_hardening.md` (`GSH-*`, 2026-09-30) — the passes that continued
+  `plan_net.md`, all merged into `next`; deleted on 2026-10-28 (Git history only). Every remaining
+  limitation is in
+  [`../docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md),
+  deployment in [`../docs/gamer-services-server.md`](../docs/gamer-services-server.md) and the
+  avatar system in [`../docs/avatars.md`](../docs/avatars.md); comments cite the task IDs bare.
 - `gamer_services_server_initial_inventory.md`, `gamer_services_acceptance_sources.md` and
   `gamer_services_server_final_register.md` — the GS-001 candidate baseline (`b8eb9c2b9`), sample
   acceptance-source queue (`c611878d5`) and GS-011 refusal register (`f5df1c824`), deleted on

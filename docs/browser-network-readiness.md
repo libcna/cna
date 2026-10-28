@@ -35,9 +35,10 @@ signature, C ABI or framework class layout changes are required by this partial 
 name/command checks occur in these shared boundaries. Browser-specific refusals are temporary
 readiness markers; native behavior must not be weakened when replacing them.
 
-The larger service work remains owned by the living
-[Gamer Services server plan](../plans/plan_gamer_services_server.md) and its dedicated worktree.
-This samples task does not implement or change that server, its protocol or its task statuses.
+The service itself was built by the Gamer Services server pass (GS-001..GS-011, since merged;
+its plan is in Git history), and what the browser still lacks is limitation 26 of
+[`gamer-services-known-limitations.md`](gamer-services-known-limitations.md). This samples task
+does not implement or change that server or its protocol.
 
 ## Acceptance after shared services are ready
 

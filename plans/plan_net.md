@@ -5,11 +5,11 @@
 > 2026-08-20). It is not current capability documentation: several statements below (for example
 > "PlayerMatch/Ranked/Invite stay documented, tested-as-unsupported stubs" and "This demo uses CNA
 > real avatar rendering extensions") no longer hold. Its SystemLink-only PlayerMatch/Ranked/invite
-> refusal and public Avatar EXT split were superseded on 2026-09-28 by
-> [plan_gamer_services_server.md](plan_gamer_services_server.md), where matchmaking, invitations,
-> the relay and the standard Avatar API were completed (GS-007..GS-009), and by the passes after
-> it. Xbox 360 remains the behavioral target; proprietary/third-party avatar assets remain
-> prohibited. For the current implementation and every remaining limitation see
+> refusal and public Avatar EXT split were superseded on 2026-09-28 by the Gamer Services server
+> pass (GS-*, its plan deleted on 2026-10-28; Git history), where matchmaking, invitations, the
+> relay and the standard Avatar API were completed (GS-007..GS-009), and by the passes after it.
+> Xbox 360 remains the behavioral target; proprietary/third-party avatar assets remain prohibited.
+> For the current implementation and every remaining limitation see
 > [`docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md).
 
 
@@ -2213,7 +2213,7 @@ and not by moving the regression thresholds.
 - Clear English in docs, comments, plan files, and demo help text.
 
 
-GS-007b override (plans/plan_gamer_services_server.md): the old variable-list/append-index behavior
+GS-007b override (Gamer Services server pass): the old variable-list/append-index behavior
 is superseded by the managed XNA fixed eight-slot reference. Public index writes remain standard
 XNA source; structural Add/Remove/Clear are unsupported. Host authority is checked for every write
 before mutation, and transport-owned updates bypass that check privately while preserving it.
