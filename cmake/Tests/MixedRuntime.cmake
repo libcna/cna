@@ -30,7 +30,7 @@ if(CNA_SHARED_LIBRARY AND CNA_ENABLE_GAMER_SERVICES AND CMAKE_NM AND CMAKE_READE
         add_test(NAME MixedRuntime_${suffix} COMMAND ${_target})
         add_test(NAME MixedRuntimeSymbols_${suffix}
             COMMAND ${CMAKE_COMMAND} -DCNA_NM=${CMAKE_NM} ${_needed_check}
-                -DCNA_PROBE=$<TARGET_FILE:${_target}>
+                -DCNA_PROBE=$<TARGET_FILE:${_target}> -DCNA_RUNTIME=$<TARGET_FILE:cna_shared>
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/MixedRuntimeSymbols.cmake)
         set_tests_properties(MixedRuntime_${suffix} MixedRuntimeSymbols_${suffix}
             PROPERTIES TIMEOUT 30 LABELS "configuration;shared-runtime")
@@ -73,6 +73,7 @@ if(CNA_SHARED_LIBRARY AND CNA_ENABLE_GAMER_SERVICES AND CMAKE_NM AND CMAKE_READE
         add_test(NAME MixedRuntimeSymbols_${_order}
             COMMAND ${CMAKE_COMMAND} -DCNA_NM=${CMAKE_NM}
                 -DCNA_CHECK_ENGINE=TRUE -DCNA_PROBE=$<TARGET_FILE:${_probe}>
+                -DCNA_RUNTIME=$<TARGET_FILE:cna_shared>
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/MixedRuntimeSymbols.cmake)
         set_tests_properties(MixedRuntime_${_order} MixedRuntimeSymbols_${_order}
             PROPERTIES TIMEOUT 30 LABELS "configuration;shared-runtime")
