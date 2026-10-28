@@ -335,7 +335,11 @@ directory on both Apple platforms, so bundled content works without changes.
   more legs do the same with `SDL_GPU` and also run `cna_ios_pixel_probe`; they are
   `continue-on-error` until the SDL_GPU Apple qualification, so their result is information, not
   a gate: `SDL_GPU` has no recorded iOS build, so whether the simulator probe is deterministic is
-  unmeasured. `macos-sdlgpu` is the gating Apple-side `SDL_GPU` GPU evidence meanwhile.
+  unmeasured. In the Simulator the probe cannot run at all: SDL's Metal backend requires
+  `MTLGPUFamilyApple3`, the Simulator's Metal device fails that check on the hosted runners, and
+  `SDL_CreateGPUDevice` refuses with "Device does not meet the hardware requirements for SDL_GPU
+  Metal" (every launch since 2026-10-14). The leg accepts exactly that refusal and fails on any
+  other outcome. `macos-sdlgpu` is the gating Apple-side `SDL_GPU` GPU evidence meanwhile.
 
 Run [31736845749](https://github.com/openeggbert/cna/actions/runs/31736845749) was green with the
 since-retired `SDL_RENDERER`; the `SOFTWARE`/`SDL_GPU` legs have not run yet as of 2026-10-13. CI

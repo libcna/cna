@@ -21,6 +21,8 @@ name: Apple platforms (macOS + iOS)
 # gates its smoke set (macos-sdlgpu); the iOS SDL_GPU legs stay non-gating (continue-on-error):
 # SDL_GPU has never been built for iOS by a recorded run, so whether the simulator pixel probe is
 # deterministic there is unknown, and promoting it on a guess would be a claim nobody measured.
+# In the Simulator SDL refuses the Metal device itself (no MTLGPUFamilyApple3); that leg accepts
+# exactly that refusal and still fails on anything else.
 
 on:
   push:
@@ -446,7 +448,7 @@ jobs:
               smoke_ok=1
               break
             fi
-            if ! kill -0 "$launch_pid" 2>/dev/null; then
+            if grep -q 'CNA_APPLE_SMOKE_FAILED' "$log_file" || ! kill -0 "$launch_pid" 2>/dev/null; then
               break
             fi
             sleep 1
@@ -455,6 +457,16 @@ jobs:
           xcrun simctl terminate "$udid" com.openeggbert.cna.cna-ios-smoke >/dev/null 2>&1 || true
           wait "$launch_pid" || true
           cat "$log_file"
+          # SDL's Metal backend requires MTLGPUFamilyApple3 on iOS, and the Simulator's Metal device
+          # on these runners fails that check: every SDL_GPU simulator launch since the leg began
+          # (2026-10-14) ended in exactly this refusal. The leg records it as the measured result
+          # rather than a failure; any other outcome still fails, and a launch that succeeds goes
+          # on to the pixel probe.
+          if [ "${{ matrix.renderer }}" = "SDL_GPU" ] && [ "$smoke_ok" -eq 0 ] &&
+             grep -q 'SDL_CreateGPUDevice failed: Device does not meet the hardware requirements for SDL_GPU Metal' "$log_file"; then
+            echo "::notice title=SDL_GPU in the iOS Simulator::SDL refused the Simulator's Metal device (no MTLGPUFamilyApple3); the pixel probe cannot run here."
+            exit 0
+          fi
           test "$smoke_ok" -eq 1
 
           # Apple M4 AM4-037: the pixel probe draws a clear colour, a SpriteBatch
