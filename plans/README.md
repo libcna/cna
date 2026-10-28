@@ -43,8 +43,12 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   (compute, storage, texture arrays, indirect draw, GPU timers; C ABI 0.47.0, see
   [`../docs/c-api/ABI_VERSIONING.md`](../docs/c-api/ABI_VERSIONING.md)); all done, deleted on
   2026-10-26 (Git history only).
-- [`plan_diagnostics.md`](plan_diagnostics.md) — renderer-independent diagnostics, profiling,
-  bounded recording, and the Inspector provider boundary.
+- `plan_diagnostics.md` (`DIAG-0001`, 2026-09-17) and `plan_diagnostics_inspector_audit.md`
+  (`AUD-DIAG-INSP-0001`..`0005`, 2026-09-17/18) — the diagnostics and profiler module and the
+  production-readiness audit of it and the Inspector; deleted on 2026-10-28 (Git history only).
+  The module is [`../docs/diagnostics.md`](../docs/diagnostics.md), the Inspector
+  [`../docs/inspector.md`](../docs/inspector.md); the one public-API defect the audit left open
+  is in [`../handoff.md`](../handoff.md) §5.1.
 - [`plan_inspector.md`](plan_inspector.md) — optional authenticated agent, compact protocol,
   separate bridge/browser UI, security, tests, and performance validation.
 - [`cna-samples/plan.md`](../../cna-samples/plan.md) — authoritative sample coverage,

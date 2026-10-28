@@ -373,6 +373,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   device-fixed frame. Found by derivation on 2026-07-17 (devices plan `MOT2-001`, recorded in
   `AndroidMotionMath.hpp`) after `ACCEL-008` had kept the remap on 2026-07-07; never checked on a
   phone.
+- Three `SpriteBatch::Begin` overloads take `BlendState` by value (`SpriteBatch.hpp`: the
+  two-argument one, one of the two five-argument ones and the six-argument one; the other
+  five-argument overload takes `const BlendState*`), where XNA's `BlendState` is a class passed
+  by reference.
+  Every such call copies the state twice, each copy allocating its own state on the heap. Found
+  by the Inspector's first end-to-end run (`AUD-DIAG-INSP-0004`, 2026-09-18) and left open
+  because the fix changes a public signature.
 
 ### 5.2 Limitations
 

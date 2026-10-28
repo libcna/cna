@@ -235,6 +235,10 @@ and its explicit preview source. The Inspector did not require a diagnostics pro
   when diagnostics are re-enabled.
 - Timestamps use `steady_clock` and are comparable only within one process run.
 - The provider is an in-process C++ contract. No C ABI or out-of-process transport is included.
+- Most resources of a typical game report `unknown` metadata: the stock state objects, the state
+  objects `SpriteBatch` owns and vertex declarations are `GraphicsResource`s that never describe
+  themselves (19 of the Inspector demo's 25 resources). The rows are truthful, not missing, but
+  they push the described textures and buffers down the list.
 
 See [`diagnostics-benchmark.md`](diagnostics-benchmark.md) for the reproducible performance gate
 and measured results.
