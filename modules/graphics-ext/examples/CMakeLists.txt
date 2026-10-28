@@ -46,10 +46,11 @@ if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGL
 endif()
 
 # ---- AsciiPostProcessEffect oracles -----------------------------------------------------------
-# Migrated from the former ASCII graphics renderer (plans/plan_ascii.md); unlike the CRTEffect/DepthEffect
-# demos above, AsciiPostProcessEffect's portable CPU quantizer needs no GLSL shader compilation, so
-# these run under every renderer (any CNA_GRAPHICS_RENDERER), not just OPENGLES3/OPENGL33 -- the
-# whole point of this migration is that the effect is no longer tied to one specific renderer.
+# Migrated from the former ASCII graphics renderer's ASCII-1..ASCII-82 campaign; unlike the
+# CRTEffect/DepthEffect demos above, AsciiPostProcessEffect's portable CPU quantizer needs no GLSL
+# shader compilation, so these run under every renderer (any CNA_GRAPHICS_RENDERER), not just
+# OPENGLES3/OPENGL33 -- the effect is no longer tied to one specific renderer. The current contract
+# and migration history are in docs/ascii-post-process-effect.md.
 if(CNA_BUILD_TESTS AND CNA_CNAEXT)
     macro(cna_graphics_ext_test target src)
         add_executable(${target} ${src})

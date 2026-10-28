@@ -12,9 +12,9 @@ namespace CNA::Graphics {
     /**
      * @brief Selects how AsciiPostProcessEffect quantizes a source image into a glyph/color grid.
      *
-     * Migrated unchanged from the former ASCII graphics renderer's own quantizer (plans/plan_ascii.md
-     * design decision 5), now a public control on the post-process effect instead of an
-     * environment-variable-only renderer setting.
+     * Migrated unchanged from the former ASCII graphics renderer's own quantizer, now a public
+     * control on the post-process effect instead of an environment-variable-only renderer setting.
+     * See `docs/ascii-post-process-effect.md` for the migration history.
      */
     enum class AsciiQuantizeMode
     {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// Migrated from the former ASCII graphics renderer (plans/plan_ascii.md Phase G2, ASCII-10/11): smoke
-// test for AsciiPostProcessEffect's hand-authored glyph-density font atlas.
+// Migrated from former ASCII renderer tasks ASCII-10/11: smoke test for
+// AsciiPostProcessEffect's hand-authored glyph-density font atlas.
 //
 // Check A -- every glyph's pixel-count (popcount of its 8x8 bitmap) is strictly increasing along
 //   kAsciiGlyphRamp -- Phase G4's quantizer picks a glyph by luminance rank, so a non-monotonic

@@ -80,6 +80,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   renderer, or superseded (compiled effects by `plan_fx.md`, samples by `cna-samples/plan.md`),
   and the plan was deleted on 2026-10-26 (Git history only). Comments elsewhere cite its rows as
   "graphics Task N" or "graphics row N".
+- `plan_ascii.md` — the former SDL-windowed ASCII renderer campaign (`ASCII-1`..`ASCII-82`,
+  completed 2026-07-15); its reusable quantizer, font atlas and rendering oracles became
+  `AsciiPostProcessEffect`, and the plan was deleted on 2026-10-28 (Git history only). The optional
+  perf-only `ASCII-42` was not carried forward as active work. Current behavior and migration
+  commits are in [`../docs/ascii-post-process-effect.md`](../docs/ascii-post-process-effect.md).
 - [`plan_glbackends.md`](plan_glbackends.md) — OpenGL backend restructuring.
 - [`plan_fna3d.md`](plan_fna3d.md) — FNA3D renderer integration.
 - [`plan_fx.md`](plan_fx.md) — compiled XNA effect bytecode.

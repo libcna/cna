@@ -13,7 +13,8 @@ namespace Microsoft::Xna::Framework::Graphics { class GraphicsDevice; }
 namespace CNA::Internal::Graphics::Ascii
 {
     /// Luminance-ordered glyph-density ramp used by AsciiPostProcessEffect's BlackWhite/Color
-    /// quantization modes (originally plans/plan_ascii.md Phase G4) -- emptiest/darkest first, densest last.
+    /// quantization modes (former ASCII renderer tasks ASCII-30..33) -- emptiest/darkest first,
+    /// densest last.
     inline constexpr const char* kAsciiGlyphRamp = " .:-=+*#%@";
     inline constexpr int kAsciiGlyphRampLength = 10;
     inline constexpr int kAsciiGlyphWidth = 8;
@@ -40,10 +41,11 @@ namespace CNA::Internal::Graphics::Ascii
      * a GraphicsDevice (e.g. for diagnostics/demos) -- see BuildAsciiFontAtlasImageData() for the
      * lower-level version AsciiPostProcessEffect itself uses.
      *
-     * Design decision 4 (plans/plan_ascii.md, preserved unchanged by the ascii-post-process-effect
-     * migration): a custom-authored atlas, not a vendored font file -- avoids a new asset/license
-     * dependency entirely. Glyph pixels are opaque white on a fully transparent background so
-     * SpriteBatch's per-draw tint color paints them, exactly like any other CNA texture.
+     * Former ASCII renderer tasks ASCII-10/11 deliberately used a custom-authored atlas rather
+     * than a vendored font file, avoiding a new asset/license dependency entirely. The migration
+     * preserved that decision unchanged. Glyph pixels are opaque white on a fully transparent
+     * background so SpriteBatch's per-draw tint color paints them, exactly like any other CNA
+     * texture.
      *
      * @param device The GraphicsDevice to build the atlas texture on.
      * @return A SpriteFont over the generated atlas, one glyph per kAsciiGlyphRamp character.

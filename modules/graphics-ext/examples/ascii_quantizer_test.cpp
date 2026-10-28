@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// Migrated from the former ASCII graphics renderer (plans/plan_ascii.md Phase G4, ASCII-30..33) to
-// AsciiPostProcessEffect's own internal quantizer -- pure function, no GraphicsDevice/window
-// needed at all.
+// Migrated from former ASCII renderer tasks ASCII-30..33 to AsciiPostProcessEffect's own internal
+// quantizer -- pure function, no GraphicsDevice/window needed at all.
 //
 // Check A -- BlackWhite mode: a solid-black 8x8 block picks glyph index 0 (space, darkest);
 //   a solid-white 8x8 block picks the last ramp index ('@', densest). Both use a fixed white

@@ -135,10 +135,8 @@ Kept for their investigation methodology and root-cause detail, not as current s
   `../plans/plan_apple.md`.
 - **[`ascii-post-process-effect.md`](ascii-post-process-effect.md)** — `CNA::Graphics::AsciiPostProcessEffect`,
   the renderer-neutral ASCII/glyph-grid post-process effect (`modules/graphics-ext/`) that replaced
-  the former `ASCII` graphics-renderer identity.
-- `ascii-renderer.md` — **historical**: completeness status for the former `ASCII` (SDL-windowed
-  retro glyph-grid) graphics renderer, removed 2026-08 in favor of the post-process effect above;
-  see `../plans/plan_ascii.md` for the full historical task-by-task detail.
+  the former `ASCII` graphics-renderer identity; the page also records that renderer's historical
+  `ASCII-1`..`ASCII-82` campaign and migration commits.
 - `fna-reference-harness.md` — the differential-testing infra (`tools/fna-reference/`) mentioned
   in `../README.md`'s verification-methodology bullet.
 - **[`consoles.md`](consoles.md)** — game consoles: what NDA, homebrew and PC-handheld targets each

@@ -2,8 +2,14 @@
 
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) is CNA's renderer-neutral
 ASCII/glyph-grid image post-process effect. It replaces the former public `ASCII` graphics-renderer
-identity (`CNA_GRAPHICS_RENDERER=ASCII`, removed 2026-08 — see `docs/ascii-renderer.md` for the
-historical completeness record of that renderer).
+identity (`CNA_GRAPHICS_RENDERER=ASCII`, removed 2026-08).
+
+The former renderer's implementation campaign covered `ASCII-1`..`ASCII-82` and completed on
+2026-07-15. Commit `a7ba983dd` migrated its reusable quantizer and font atlas, `75df3b838` preserved
+its rendering oracles, `ea31cabc1` removed the renderer identity, and `58b131ec7` added this effect.
+The historical plan was deleted on 2026-10-28 and remains in Git history only. Its optional
+perf-only dirty-cell diff (`ASCII-42`) was not carried forward as active work; any future
+optimization starts with new measurements against the current effect.
 
 ## Why ASCII became an effect, not a renderer
 
