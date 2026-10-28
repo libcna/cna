@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_gpu_test_isolation.md GTI-0002: run a build's ctest suite on a PRIVATE display that
+# GPU test isolation GTI-0002: run a build's ctest suite on a PRIVATE display that
 # still has the real GPU -- the standard way to run GPU/window tests on a developer machine.
 #
 #   tools/platform/run_gpu_tests_private.sh <build-dir> [ctest arguments...]

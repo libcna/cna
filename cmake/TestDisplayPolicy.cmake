@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_gpu_test_isolation.md GTI-0001: which X display the GPU/window-creating tests use.
+# GPU test isolation GTI-0001: which X display the GPU/window-creating tests use.
 #
 # Nearly a thousand renderer tests are registered with
 #     ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"

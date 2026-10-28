@@ -1297,7 +1297,7 @@ if(CNA_BUILD_TESTS)
     if(_cna_unit_tests_environment)
         set(_cna_unit_tests_audio_environment ENVIRONMENT "${_cna_unit_tests_environment}")
     endif()
-    # plans/plan_gpu_test_isolation.md GTI-0006: a discovered case is in no directory's TESTS at
+    # GPU test isolation GTI-0006: a discovered case is in no directory's TESTS at
     # configure time, so cmake/TestDisplayPolicy.cmake's sweep cannot give it the Wayland guard;
     # this is the one hook that reaches it. With WAYLAND_DISPLAY unset a case that opens a window
     # would otherwise connect to the owner's live compositor ($XDG_RUNTIME_DIR/wayland-0).

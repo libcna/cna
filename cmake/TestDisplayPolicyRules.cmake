@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_gpu_test_isolation.md GTI-0001/GTI-0006: the decisions cmake/TestDisplayPolicy.cmake
+# GPU test isolation GTI-0001/GTI-0006: the decisions cmake/TestDisplayPolicy.cmake
 # makes, as pure functions with no cache or directory side effects -- so
 # cmake/Tests/TestDisplayPolicyCase.cmake can run them in `cmake -P` script mode, in milliseconds,
 # instead of configuring the whole project once per case.

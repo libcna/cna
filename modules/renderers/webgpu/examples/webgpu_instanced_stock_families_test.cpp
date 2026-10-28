@@ -428,7 +428,7 @@ public:
     WebGpuInstancedStockFamiliesTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // plans/plan_gpu_test_isolation.md GTI-0003: GetBackBufferData is HiDef-only.
+        // GPU test isolation GTI-0003: GetBackBufferData is HiDef-only.
         gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);

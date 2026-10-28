@@ -14,9 +14,9 @@ with their renderers, the older ones in the 2026-10-11 documentation cleanup -- 
 history. `plans/plan_vulkan_parity.md` stayed longest, for the XNA-measured shared contracts it
 settled, and was deleted on 2026-10-26: each of those contracts has its own owner now (GSC-0002 and
 GSC-0004 in `plans/plan_graphics_shared_cleanup.md`, channel expansion in `tools/xna-oracle/`, test
-display isolation in `plans/plan_gpu_test_isolation.md`). What git does *not* preserve is the
-third-party project each renderer wrapped, so every entry records the exact dependency it was
-pinned to. That pairing — CNA's code in
+display isolation in `cmake/TestDisplayPolicy.cmake` and `tools/platform/`). What git does *not*
+preserve is the third-party project each renderer wrapped, so every entry records the exact
+dependency it was pinned to. That pairing — CNA's code in
 git history, the dependency's coordinates here — is the archive.
 
 Standalone probes for retired renderers were also removed from the current `spikes/` tree. Their

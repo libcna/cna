@@ -233,7 +233,7 @@ renderer failure.
 ## Running the full WebGPU test suite
 
 The WebGPU CTests create a real GPU-backed surface (wgpu-native needs a real adapter), so they need an
-X display with a real GPU behind it. Since `plans/plan_gpu_test_isolation.md` GTI-0001 the build no longer
+X display with a real GPU behind it. Since GPU test isolation GTI-0001 the build no longer
 bakes one in: `CNA_TEST_DISPLAY` is empty by default and each test inherits the launcher's `DISPLAY`.
 The reproducible configuration and run:
 

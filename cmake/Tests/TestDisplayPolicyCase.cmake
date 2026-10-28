@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_gpu_test_isolation.md GTI-0006: the live-desktop policy of cmake/TestDisplayPolicy.cmake,
+# GPU test isolation GTI-0006: the live-desktop policy of cmake/TestDisplayPolicy.cmake,
 # run for real. Every decision the policy makes lives in cmake/TestDisplayPolicyRules.cmake as a pure
 # function; this script calls them in `cmake -P` script mode with fixed inputs and fails on any
 # answer other than the one the policy promises. Same shape as RendererDefaultCase.cmake.

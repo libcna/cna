@@ -408,8 +408,8 @@ tools/platform/run_gpu_tests_private.sh <build-dir> [ctest arguments...]
 It starts a headless Weston and a private rootful Xwayland (DRI3, the real GPU — Xvfb cannot present
 Vulkan, which SDL_GPU uses on Linux) and runs `ctest` against them; nothing appears on the desktop. `CNA_TEST_DISPLAY` is empty by
 default, so registered tests inherit the launcher's `DISPLAY`; the live desktop needs an explicit
-`-DCNA_TEST_DISPLAY=:0 -DCNA_TEST_ALLOW_LIVE_DISPLAY=ON` (see `cmake/TestDisplayPolicy.cmake` and
-`plans/plan_gpu_test_isolation.md`). The runner refuses a tree that still forces a display.
+`-DCNA_TEST_DISPLAY=:0 -DCNA_TEST_ALLOW_LIVE_DISPLAY=ON` (see `cmake/TestDisplayPolicy.cmake`, which
+explains the policy). The runner refuses a tree that still forces a display.
 
 ---
 

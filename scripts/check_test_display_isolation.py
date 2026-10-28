@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_gpu_test_isolation.md GTI-0006: no registered test may reach the live desktop.
+"""GPU test isolation GTI-0006: no registered test may reach the live desktop.
 
 Reads a configured build tree's real test registrations (``ctest --show-only=json-v1``) and its
 CMakeCache.txt, and fails when any test would open a window on the owner's desktop without the

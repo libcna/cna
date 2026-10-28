@@ -650,7 +650,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             PROPERTIES LABELS "renderer;configuration")
     endforeach()
 
-    # plans/plan_gpu_test_isolation.md GTI-0006: no automated test may reach the owner's live
+    # GPU test isolation GTI-0006: no automated test may reach the owner's live
     # desktop by default. CnaTestDisplayPolicy runs the policy's decisions (which X displays are the
     # live desktop, the opt-in, the Wayland guard) in script mode; CnaTestDisplayIsolation checks this
     # tree's actual registrations -- what ctest would run -- so a registration that bypasses the
@@ -691,7 +691,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         set_tests_properties(SpirvPayloadValidation PROPERTIES
             SKIP_RETURN_CODE 77 LABELS "spirv;shader;configuration")
     endif()
-    # plans/plan_gpu_test_isolation.md GTI-0007: the classifier the private GPU runner applies to
+    # GPU test isolation GTI-0007: the classifier the private GPU runner applies to
     # every run, which names tests that died on a graphics-profile refusal before their first check.
     if(Python3_Interpreter_FOUND)
         add_test(NAME CnaProfileDeadTestClassifier

@@ -144,8 +144,13 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   closed 2026-09-21; `VULKAN` retired 2026-10-13). Deleted on 2026-10-26 (Git history only); its
   shared contracts live in [`plan_graphics_shared_cleanup.md`](plan_graphics_shared_cleanup.md)
   (GSC-0002, GSC-0004), [`../tools/xna-oracle/README.md`](../tools/xna-oracle/README.md) and
-  [`plan_gpu_test_isolation.md`](plan_gpu_test_isolation.md). Comments cite its rows as
+  the test display policy (`../cmake/TestDisplayPolicy.cmake`). Comments cite its rows as
   "Vulkan parity VKPAR-NNNN".
+- `plan_gpu_test_isolation.md` — GTI-0001..0010 (2026-09-21/22): tests no longer reach the live
+  desktop, the private GPU runner, and the guard for tests that die before their checks. Deleted on
+  2026-10-28 (Git history only). The policy is explained in `../cmake/TestDisplayPolicy.cmake`, the
+  runner in `../tools/platform/run_gpu_tests_private.sh`, the guard in
+  `../tools/platform/profile_dead_tests.py`; comments cite rows as "GPU test isolation GTI-NNNN".
 - [`plan_dx9.md`](plan_dx9.md) — Direct3D 9.
 - `plan_fullscreen_regressions.md` (`FULLSCREEN-001`) and `plan_directx9_fullscreen_motion.md`
   (`FULLSCREEN-002`) — fullscreen presentation and DirectX9 loss/reset recovery found in Mobile

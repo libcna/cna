@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_gpu_test_isolation.md GTI-0007: name the tests that died on the graphics profile.
+"""GPU test isolation GTI-0007: name the tests that died on the graphics profile.
 
 A test that throws a Reach-profile refusal before its first check -- the `SOFTWARE-213` class: a
 GetBackBufferData, a second render target, a volume texture on a device that never asked for
 HiDef -- fails exactly like a renderer defect. 103 Vulkan examples, then 23 more, then 32 WebGPU and
 3 SDL_GPU ones sat in "known red" that way, filed as transfer or render-target bugs because of what
-they were named (Vulkan parity VKPAR-0006/0018, plans/plan_gpu_test_isolation.md
+they were named (Vulkan parity VKPAR-0006/0018, GPU test isolation
 GTI-0003). A test process launched is not a test that ran its assertions.
 
 This reads ctest's own record of a run (Testing/Temporary/LastTest.log) and reports every test
