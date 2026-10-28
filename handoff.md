@@ -33,7 +33,8 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
-- `BENCH-001` (2026-10-27, `plans/plan_cna_benchmark.md`): the external `cna-benchmark` now
+- `BENCH-001` (2026-10-27; CNA commit `421a38e4f`, consumer commit `ee012a8`): the external
+  `cna-benchmark` now
   builds against the current CNA tree and runs all seven scenes on SDL_GPU and OPENGLES3. Its
   streaming scene unbinds the sampled texture before the next upload. CNA reuses an unshared
   single-level texture renderer for full `SetData` while preserving copy isolation for shared

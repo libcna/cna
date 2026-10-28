@@ -37,6 +37,10 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   [`cna-rts/missing.md`](https://github.com/libcnalab/cna-rts/blob/develop/missing.md). CNA retains
   its render-target effect-source
   [regression fixture](../modules/graphics/examples/rendertarget_effect_source_test.cpp).
+- `plan_cna_benchmark.md` — BENCH-001, the 2026-10-27 `cna-benchmark` integration and streaming
+  upload repair; deleted on 2026-10-28 (Git history only). The
+  [`cna-benchmark`](https://github.com/libcnalab/cna-benchmark) repository owns the evidence in
+  `docs/cna-integration.md`; CNA retains the texture-cache regression in commit `421a38e4f`.
 
 ## XNA subsystems, content, and ABI
 
