@@ -37,7 +37,10 @@ jobs:
   multi-renderer:
     name: Runtime renderer selection (HEADLESS + SOFTWARE + STUB)
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # Two Debug builds of CnaTests and two runs of it. With -j2 they took 31 + 30 minutes of a
+    # 75-minute job on 2026-10-17 and 40 + 38 of a run cancelled at 90 on 2026-10-29. The runner has
+    # four cores; general-tests-ci builds a superset of these targets with four jobs.
+    timeout-minutes: 120
     env:
       CC: gcc-14
       CXX: g++-14
@@ -93,7 +96,7 @@ jobs:
           # configuration does not enter (cmake/RendererDescriptorGate.cmake). Named explicitly
           # because this step builds specific targets rather than `all`.
           cmake --build build-multi \
-            --target CnaTests cna_demo_renderer_selection cna_renderer_descriptor_gate -j2
+            --target CnaTests cna_demo_renderer_selection cna_renderer_descriptor_gate --parallel 4
 
       - name: Every compiled-in renderer is reachable at runtime
         run: |
@@ -137,7 +140,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCNA_GRAPHICS_RENDERER=HEADLESS \
             -DCNA_BUILD_TESTS=ON
-          cmake --build build-single --target CnaTests -j2
+          cmake --build build-single --target CnaTests --parallel 4
 
       - name: Single-renderer mode is unchanged
         run: |
