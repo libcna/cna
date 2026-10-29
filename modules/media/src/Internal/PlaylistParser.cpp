@@ -88,7 +88,7 @@ namespace CNA::Internal::Media
             {
                 result.songPaths.push_back(contained.resolvedPath);
             }
-            // A missing entry is skipped, not fatal (plans/plan_media.md MEDIA-57 acceptance).
+            // A missing entry is skipped, not fatal (MEDIA-57 acceptance).
         }
 
         return result;

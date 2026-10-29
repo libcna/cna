@@ -214,7 +214,7 @@ namespace Microsoft::Xna::Framework::Media
         // FNA's VideoPlayerAV1/VideoPlayerTheora both validate the video's declared metadata
         // (trusted upfront, e.g. from an XNB) against what the real file actually reports before
         // ever playing it, throwing InvalidOperationException on mismatch (~1.0f fps tolerance,
-        // matching FNA's own check) -- plans/plan_media.md MEDIA-42. For the raw-file constructor this
+        // matching FNA's own check) -- MEDIA-42. For the raw-file constructor this
         // is a trivially-true self-check (Video's own properties already came from an identical
         // probe); for the XNB-sourced constructor it is the real, meaningful validation.
         if (video->getWidthProperty() != decoder_->GetWidth() ||
@@ -230,7 +230,7 @@ namespace Microsoft::Xna::Framework::Media
         // Apply stored track preferences BEFORE creating the frame texture / audio stream --
         // both are sized/formatted from decoder_'s current state, so switching tracks first
         // (rather than after, as this used to do) ensures they're built for the track that will
-        // actually be used, not always the file's default track (plans/plan_media.md MEDIA-90, a real
+        // actually be used, not always the file's default track (MEDIA-90, a real
         // bug found by external code review: a caller that set a track preference via
         // SetAudioTrackEXT()/SetVideoTrackEXT() before Play() had that preference silently
         // ignored for the texture/audio-stream's own format/size).
@@ -259,7 +259,7 @@ namespace Microsoft::Xna::Framework::Media
         // reconfigure) to bypass CloseDecoder() entirely: state_ was already Playing and
         // decoder_, video_ and the video's player association were already live, same half-open-player
         // problem MEDIA-149 fixed for the narrower first-frame-decode case (found by external code
-        // review, plans/plan_media.md MEDIA-152).
+        // review, MEDIA-152).
         try
         {
             ReconfigureVideoOutputForCurrentTrack();
@@ -307,7 +307,7 @@ namespace Microsoft::Xna::Framework::Media
             audioStream_ = nullptr;
         }
         // audioBuffer_ can hold undrained decoded samples if the player is being torn down with no
-        // audio device open (plans/plan_media.md MEDIA-153) -- clear it so a later, successful Play() on
+        // audio device open (MEDIA-153) -- clear it so a later, successful Play() on
         // a real device never gets stale audio from a previous, unrelated playback prepended to it.
         audioBuffer_.clear();
         state_ = MediaState::Stopped;
@@ -362,7 +362,7 @@ namespace Microsoft::Xna::Framework::Media
         if (!video) throw System::ArgumentNullException("video");
         // CNA's optional-backend profile intentionally keeps VideoPlayer's state/configuration API
         // usable without FFmpeg. Reject before assigning video_ so a failed Play is transactional
-        // and leaves the observable stopped/no-video state intact (plans/plan_media.md MEDIA-233).
+        // and leaves the observable stopped/no-video state intact (MEDIA-233).
         CNA::Internal::Media::RequireVideoDecoderAvailable();
         OpenDecoder(video);
         if (!decoder_) return;
@@ -409,14 +409,14 @@ namespace Microsoft::Xna::Framework::Media
         {
             // A mid-playback switch can change sample rate/channel count -- the already-open
             // audio stream (opened for the previous track) must be recreated to match, not left
-            // stale (plans/plan_media.md MEDIA-90, a real bug found by external code review). Only the
+            // stale (MEDIA-90, a real bug found by external code review). Only the
             // audio side is touched -- reconfiguring the video texture too (as a single combined
             // helper used to do) would be a needless texture reallocation for a change that has no
-            // effect on it (plans/plan_media.md MEDIA-148, found by external code review). Only run at
+            // effect on it (MEDIA-148, found by external code review). Only run at
             // all if SetAudioStream() reports a genuine switch happened -- re-selecting the
             // already-active track (or an out-of-range index, which the decoder also treats as a
             // no-op) used to still tear down and reopen the stream for nothing, discarding
-            // whatever audio was already queued (plans/plan_media.md MEDIA-154, found by external code
+            // whatever audio was already queued (MEDIA-154, found by external code
             // review).
             if (decoder_->SetAudioStream(track))
             {
@@ -432,14 +432,14 @@ namespace Microsoft::Xna::Framework::Media
         if (decoder_)
         {
             // A mid-playback switch can change frame dimensions -- the already-created texture
-            // (sized for the previous track) must be recreated to match (plans/plan_media.md MEDIA-90).
+            // (sized for the previous track) must be recreated to match (MEDIA-90).
             // Only the video side is touched -- reconfiguring the audio stream too (as a single
             // combined helper used to do) tore down and reopened it on every video-only track
             // switch, discarding whatever audio was already queued for playback for no reason
-            // (plans/plan_media.md MEDIA-148, found by external code review). Only run at all if
+            // (MEDIA-148, found by external code review). Only run at all if
             // SetVideoStream() reports a genuine switch happened -- re-selecting the already-active
             // track (or an out-of-range index) used to still reallocate the texture for nothing
-            // (plans/plan_media.md MEDIA-154, found by external code review).
+            // (MEDIA-154, found by external code review).
             if (decoder_->SetVideoStream(track))
             {
                 ReconfigureVideoOutputForCurrentTrack();
@@ -483,7 +483,7 @@ namespace Microsoft::Xna::Framework::Media
             // true EOF) even on the call that ultimately returns false -- draining only in the
             // success branch below would silently strand that final batch of audio, undermining
             // the very "wait for queued audio to drain" check right below this
-            // (plans/plan_media.md MEDIA-41 -- a real, confirmed bug found by external code review).
+            // (MEDIA-41 -- a real, confirmed bug found by external code review).
             DrainAndFlushAudioBuffer();
 
             if (!gotFrame)
@@ -501,7 +501,7 @@ namespace Microsoft::Xna::Framework::Media
                     // FNA's VideoPlayerTheora explicitly waits for the audio stream's own
                     // PendingBufferCount to reach 0 (in addition to the codec's EOS) before
                     // declaring State == Stopped, so queued audio isn't cut off abruptly at
-                    // video EOF (plans/plan_media.md MEDIA-41). Re-checked on each GetTexture() call
+                    // video EOF (MEDIA-41). Re-checked on each GetTexture() call
                     // until the audio device has actually finished playing what was queued.
                     if (audioStream_
                         && QueuedAudioBytes(audioStream_) > 0)

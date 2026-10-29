@@ -111,7 +111,7 @@ namespace CNA::Internal::Media
                     // just above -- audio simply isn't available for this track, rather than
                     // leaving audioCtx_ allocated with HasAudio() correctly reporting false (via
                     // MEDIA-160) but the codec still decoding audio into a black hole every frame
-                    // (found by external code review, plans/plan_media.md MEDIA-162).
+                    // (found by external code review, MEDIA-162).
                     swrCtx_ = CreateResampler(audioCtx_);
                     if (!swrCtx_)
                     {
@@ -139,7 +139,7 @@ namespace CNA::Internal::Media
             // A real (if rare) OOM path -- NextFrame()/ProcessAudioPacket() both dereference
             // frame_/pkt_ unconditionally, so leaving either null here and returning success would
             // be a guaranteed null-pointer dereference on the very first decode call
-            // (plans/plan_media.md MEDIA-38/94 hardening).
+            // (MEDIA-38/94 hardening).
             Close();
             return false;
         }
@@ -168,7 +168,7 @@ namespace CNA::Internal::Media
         // pendingAudio_ holds decoded-but-not-yet-drained samples from whatever file was open --
         // left uncleared, a caller that reuses this same VideoDecoder instance (Close() then
         // Open() again) would have its first DrainAudio() call after the new Open() return stale
-        // samples from the PREVIOUS file (found by external code review, plans/plan_media.md MEDIA-155).
+        // samples from the PREVIOUS file (found by external code review, MEDIA-155).
         pendingAudio_.clear();
     }
 
@@ -180,7 +180,7 @@ namespace CNA::Internal::Media
         // start" assumption on top of a position that's still wherever it was before this call,
         // continuing to decode from an inconsistent state. Leave everything untouched and let the
         // caller's next NextFrame() simply carry on from wherever the stream already was (found by
-        // external code review, plans/plan_media.md MEDIA-159).
+        // external code review, MEDIA-159).
         if (av_seek_frame(fmtCtx_, -1, 0, AVSEEK_FLAG_BACKWARD) < 0) return;
 
         if (videoCtx_) avcodec_flush_buffers(videoCtx_);
@@ -188,7 +188,7 @@ namespace CNA::Internal::Media
 
         // pendingAudio_ can hold real, undrained samples decoded from BEFORE this seek -- left
         // uncleared, the next DrainAudio() call would splice stale pre-seek audio onto whatever
-        // decodes after it (found by external code review, plans/plan_media.md MEDIA-159; the same class
+        // decodes after it (found by external code review, MEDIA-159; the same class
         // of gap MEDIA-155 already fixed for Close(), now also closed here).
         pendingAudio_.clear();
 
@@ -201,7 +201,7 @@ namespace CNA::Internal::Media
             // *guarantee* the delay reached zero -- it could exit via its own iteration bound or a
             // swr_convert() error with real delay left unconfirmed-drained, and silently discarded
             // a genuine negative return without distinguishing it from "nothing more produced"
-            // (found by external code review, plans/plan_media.md MEDIA-167). Discarding the whole
+            // (found by external code review, MEDIA-167). Discarding the whole
             // resampler and building a fresh one via the same CreateResampler() every other
             // audio-open path already uses sidesteps the question entirely -- a brand-new
             // SwrContext has zero internal delay by construction, no draining required.
@@ -223,7 +223,7 @@ namespace CNA::Internal::Media
         // state, at best wasted work and at worst a spurious decode error. Reset both the flag and
         // the packet's own held reference so the next NextFrame() call starts clean, reading fresh
         // packets from the new (seeked) position instead (found by external code review,
-        // plans/plan_media.md MEDIA-155).
+        // MEDIA-155).
         if (havePendingVideoPacket_)
         {
             av_packet_unref(pkt_);
@@ -249,7 +249,7 @@ namespace CNA::Internal::Media
         // decoders, e.g. ffv1, otherwise compute but never *act on* a checksum mismatch);
         // AV_EF_EXPLODE then turns any detected inconsistency (CRC or otherwise) into a hard
         // decode error instead of a tolerated one -- so corrupted input is never silently
-        // displayed as if it decoded correctly (plans/plan_media.md MEDIA-39/40, confirmed via a real
+        // displayed as if it decoded correctly (MEDIA-39/40, confirmed via a real
         // corrupted-ffv1-slice fixture during external code review: AV_EF_EXPLODE alone was not
         // sufficient on its own to make a CRC mismatch fatal).
         ctx->err_recognition = AV_EF_CRCCHECK | AV_EF_BITSTREAM | AV_EF_BUFFER | AV_EF_EXPLODE;
@@ -298,7 +298,7 @@ namespace CNA::Internal::Media
         // resampler must succeed before anything old is destroyed, matching this function's own
         // return-value contract ("true only if a different stream is now genuinely active") for
         // every failure mode, not just avcodec_open2()'s (found by external code review,
-        // plans/plan_media.md MEDIA-162).
+        // MEDIA-162).
         SwrContext* newSwr = CreateResampler(newCtx);
         if (!newSwr)
         {
@@ -364,12 +364,12 @@ namespace CNA::Internal::Media
                     // recreate the codec context anyway, throwing away all decode state for no
                     // reason -- harmless for audio (no keyframe concept), but pointless work.
                     // Kept as a no-op for consistency with SetVideoStream()'s own fix below (found
-                    // by external code review, plans/plan_media.md MEDIA-131). The bool return (found by
-                    // a later external review, plans/plan_media.md MEDIA-154) lets VideoPlayer skip its
+                    // by external code review, MEDIA-131). The bool return (found by
+                    // a later external review, MEDIA-154) lets VideoPlayer skip its
                     // own downstream reconfiguration entirely when this was a true no-op, instead
                     // of tearing down and reopening the audio stream for a switch that never happened.
                     // Propagate OpenAudioStreamByIndex()'s own result rather than assuming success
-                    // (found by external code review, plans/plan_media.md MEDIA-158) -- it builds the new
+                    // (found by external code review, MEDIA-158) -- it builds the new
                     // codec context before touching audioCtx_/audioStream_, so on failure (bad
                     // codec, alloc failure) the old stream is genuinely still active, but the old
                     // unconditional `return true` told VideoPlayer a switch happened anyway,
@@ -400,13 +400,13 @@ namespace CNA::Internal::Media
                     // later SetVideoTrackEXT() call happens, so the freshly-reset codec context
                     // has no reference frame to decode the very next (non-keyframe) packet
                     // against, and (correctly, now that avcodec_send_packet()'s return is checked
-                    // -- plans/plan_media.md MEDIA-39/128) throws "Cannot decode non-keyframe without
+                    // -- MEDIA-39/128) throws "Cannot decode non-keyframe without
                     // valid keyframe" instead of silently producing a garbage frame. Found by
                     // external code review testing exactly this "re-select the same track"
-                    // scenario, plans/plan_media.md MEDIA-131. See SetAudioStream() above for why this
-                    // now returns bool (plans/plan_media.md MEDIA-154) and why that bool must be
+                    // scenario, MEDIA-131. See SetAudioStream() above for why this
+                    // now returns bool (MEDIA-154) and why that bool must be
                     // OpenVideoStreamByIndex()'s own real result, not an assumed `true`
-                    // (plans/plan_media.md MEDIA-158, found by external code review).
+                    // (MEDIA-158, found by external code review).
                     if (i == videoStream_) return false;
                     return OpenVideoStreamByIndex(i);
                 }
@@ -453,7 +453,7 @@ namespace CNA::Internal::Media
     // 10-/12-bit (16-bit-packed LE) planar YUV → RGBA, any chroma subsampling.
     // Downshifts each sample to its 8-bit equivalent before reusing the same integer
     // YUV math as the 8-bit path -- a simple, correct (if not full-precision-HDR)
-    // approach; see plans/plan_media.md MEDIA-36.
+    // approach; see MEDIA-36.
     // ---------------------------------------------------------------------------
     void VideoDecoder::yuv_planar16_to_rgba(
         const uint8_t* y, int yStride,
@@ -552,7 +552,7 @@ namespace CNA::Internal::Media
 
     void VideoDecoder::ConvertFrameToRGBA(std::vector<uint8_t>& out)
     {
-        // hChromaShift/vChromaShift: 0 = full resolution, 1 = halved (plans/plan_media.md MEDIA-35).
+        // hChromaShift/vChromaShift: 0 = full resolution, 1 = halved (MEDIA-35).
         struct PlanarFormat { int hShift; int vShift; int bitDepth; };
         auto planarFormat = [](int fmt) -> const PlanarFormat*
         {
@@ -614,7 +614,7 @@ namespace CNA::Internal::Media
         // retained here after send_packet() returns EAGAIN must survive not just this call's loop
         // but potentially several NextFrame() calls: the very next receive_frame() below almost
         // always yields a buffered frame immediately, returning to the caller before the pending
-        // packet is resent (found by external code review, plans/plan_media.md MEDIA-146; supersedes the
+        // packet is resent (found by external code review, MEDIA-146; supersedes the
         // MEDIA-128 fix, which used a function-local flag that lost this state across calls).
         while (true)
         {
@@ -646,7 +646,7 @@ namespace CNA::Internal::Media
                 // A genuine decode error (corrupt/truncated frame data reaching the codec, an
                 // unsupported bitstream feature, etc.) -- previously merged with the EOF case
                 // above, silently treating a decode failure as "video finished normally"
-                // (plans/plan_media.md MEDIA-39/40).
+                // (MEDIA-39/40).
                 char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
                 av_strerror(ret, errBuf, sizeof(errBuf));
                 throw std::runtime_error(
@@ -686,14 +686,14 @@ namespace CNA::Internal::Media
                     {
                         // A genuine I/O/demux error, not a clean end-of-stream -- surface it
                         // distinctly rather than silently treating a corrupt/truncated file as
-                        // "video finished normally" (plans/plan_media.md MEDIA-40).
+                        // "video finished normally" (MEDIA-40).
                         char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
                         av_strerror(ret, errBuf, sizeof(errBuf));
                         throw std::runtime_error(
                             std::string("VideoDecoder: I/O error while reading frame: ") + errBuf);
                     }
                     // Clean EOF — flush both codecs. A flush's own return is checked too (found
-                    // by external code review, plans/plan_media.md MEDIA-128/MEDIA-39's "at each site"):
+                    // by external code review, MEDIA-128/MEDIA-39's "at each site"):
                     // in practice this can only fail if the codec is already closed/flushed, but
                     // silently ignoring that would let a later avcodec_receive_frame() call
                     // proceed against a codec state this code didn't actually confirm was ready.
@@ -708,7 +708,7 @@ namespace CNA::Internal::Media
                     // The audio codec was never sent a flush packet at all -- any audio samples
                     // still buffered inside its own internal decode state (not yet emitted via
                     // avcodec_receive_frame) were silently lost at EOF (found by external code
-                    // review, plans/plan_media.md MEDIA-130). ProcessAudioPacket(nullptr) is FFmpeg's
+                    // review, MEDIA-130). ProcessAudioPacket(nullptr) is FFmpeg's
                     // own documented flush contract (avcodec_send_packet accepts a null packet to
                     // mean "no more input, drain what you have") -- reuses the exact same,
                     // already-hardened decode/resample/error-propagation logic as every other
@@ -744,7 +744,7 @@ namespace CNA::Internal::Media
                         av_packet_unref(pkt_);
                         // A malformed/corrupt packet the codec outright rejects -- surface it
                         // distinctly rather than silently discarding it and looping as if nothing
-                        // happened (plans/plan_media.md MEDIA-39/40).
+                        // happened (MEDIA-39/40).
                         char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
                         av_strerror(sendRet, errBuf, sizeof(errBuf));
                         throw std::runtime_error(
@@ -767,7 +767,7 @@ namespace CNA::Internal::Media
             throw std::runtime_error("VideoDecoder: av_frame_alloc() failed for audio frame.");
         }
 
-        // plans/plan_media.md MEDIA-39/128 (found incomplete by external code review): every FFmpeg
+        // MEDIA-39/128 (found incomplete by external code review): every FFmpeg
         // call in this function is now checked and a genuine error propagated as a thrown
         // exception, matching the same "surface it, don't silently produce garbage/skip" standard
         // NextFrame()'s own video-decode path already applies -- a corrupted *audio* packet is no
@@ -781,7 +781,7 @@ namespace CNA::Internal::Media
         // regardless of whether it was ever accepted, silently discarding real audio data on the
         // rare occasions this path is taken. Retried here, mirroring the same fix NextFrame()
         // already applies on the video side via havePendingVideoPacket_ (MEDIA-146) -- found by
-        // external code review, plans/plan_media.md MEDIA-164.
+        // external code review, MEDIA-164.
         bool needsResend = true;
         while (needsResend)
         {
@@ -818,7 +818,7 @@ namespace CNA::Internal::Media
                 uint8_t* outPtr = reinterpret_cast<uint8_t*>(buf.data());
                 int converted = swr_convert(swrCtx_, &outPtr, numSamples,
                             const_cast<const uint8_t**>(aFrame->data), numSamples);
-                // plans/plan_media.md MEDIA-39: swr_convert's return is the ACTUAL number of samples
+                // MEDIA-39: swr_convert's return is the ACTUAL number of samples
                 // produced, which can be less than numSamples (trim to what was actually produced) or
                 // negative on a genuine resample error, which -- like every other site in this
                 // function -- is now surfaced rather than silently swallowed.
@@ -845,7 +845,7 @@ namespace CNA::Internal::Media
             // internal buffer of its own (format/rate-conversion delay). FFmpeg's documented flush
             // contract for that is a null source pointer/zero count; skipping it silently drops
             // whatever the resampler was still holding at end-of-stream (found by external code
-            // review, plans/plan_media.md MEDIA-147).
+            // review, MEDIA-147).
             int delaySamples = static_cast<int>(swr_get_delay(swrCtx_, audioCtx_->sample_rate));
             if (delaySamples > 0)
             {

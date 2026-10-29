@@ -24,7 +24,7 @@ namespace
     }
 }
 
-// plans/plan_media.md MEDIA-66: real implementation, dimensions via the existing ImageLoader.
+// MEDIA-66: real implementation, dimensions via the existing ImageLoader.
 TEST_F(MediaLibraryTestFixture, PicturesContainsAllThreeFixtureImages)
 {
     EXPECT_EQ(library->getPicturesProperty()->getCountProperty(), 3);
@@ -81,7 +81,7 @@ TEST_F(MediaLibraryTestFixture, PictureEqualitySetByResolvedPath)
     EXPECT_TRUE(*beach != *portrait);
 }
 
-// plans/plan_media.md MEDIA-234: cover the System.Object override separately from Equals(Picture).
+// MEDIA-234: cover the System.Object override separately from Equals(Picture).
 TEST_F(MediaLibraryTestFixture, PictureObjectEqualsChecksRuntimeTypeAndValue)
 {
     Picture* beach = FindPicture(library->getPicturesProperty(), "beach");
@@ -114,7 +114,7 @@ TEST_F(MediaLibraryTestFixture, PictureGetTypeNameIsFullyQualified)
     EXPECT_EQ(beach->GetTypeName(), "Microsoft.Xna.Framework.Media.Picture");
 }
 
-// plans/plan_media.md MEDIA-104: Date -- sourced from the real file's last-write-time
+// MEDIA-104: Date -- sourced from the real file's last-write-time
 // (PictureLibraryIndex), not exercised by any other test above.
 TEST_F(MediaLibraryTestFixture, PictureDateIsARealNonDefaultTimestamp)
 {
@@ -123,10 +123,10 @@ TEST_F(MediaLibraryTestFixture, PictureDateIsARealNonDefaultTimestamp)
     EXPECT_NE(beach->getDateProperty(), std::chrono::system_clock::time_point{});
 }
 
-// plans/plan_media.md MEDIA-104: GetThumbnail() -- only GetImage() was covered above.
+// MEDIA-104: GetThumbnail() -- only GetImage() was covered above.
 // beach.jpg is 64x48 -- already within ThumbnailGenerator::MaxEdge (128), so no downscale is
 // needed and GetThumbnail() deliberately serves the ORIGINAL bytes rather than pointlessly
-// re-encoding an in-spec image (plans/plan_media.md MEDIA-210). Oversized sources genuinely are
+// re-encoding an in-spec image (MEDIA-210). Oversized sources genuinely are
 // downscaled -- see AlbumTests' GetThumbnailReturnsAGenuinelySmallerImageThanGetAlbumArt, which
 // uses a 200x200 cover. This test therefore asserts the small-image contract, NOT that
 // GetThumbnail is a synonym for GetImage.
@@ -152,7 +152,7 @@ TEST_F(MediaLibraryTestFixture, PictureGetThumbnailRoundTripsByteForByteForAnAlr
     EXPECT_TRUE(std::equal(actual.begin(), actual.end(), expected.begin()));
 }
 
-// plans/plan_media.md MEDIA-104: IsDisposed, not exercised anywhere else in this file.
+// MEDIA-104: IsDisposed, not exercised anywhere else in this file.
 TEST_F(MediaLibraryTestFixture, PictureDisposeFlipsIsDisposed)
 {
     Picture* beach = FindPicture(library->getPicturesProperty(), "beach");
@@ -164,7 +164,7 @@ TEST_F(MediaLibraryTestFixture, PictureDisposeFlipsIsDisposed)
     EXPECT_TRUE(beach->getIsDisposedProperty());
 }
 
-// plans/plan_media.md MEDIA-105: PictureCollection's own indexer (in-bounds) and Dispose()/IsDisposed --
+// MEDIA-105: PictureCollection's own indexer (in-bounds) and Dispose()/IsDisposed --
 // only Count was previously checked.
 TEST_F(MediaLibraryTestFixture, PictureCollectionIndexerReturnsPicturesInBounds)
 {
@@ -186,7 +186,7 @@ TEST_F(MediaLibraryTestFixture, PictureCollectionDisposeFlipsIsDisposed)
     EXPECT_TRUE(pics->getIsDisposedProperty());
 }
 
-// plans/plan_media.md MEDIA-121 (found by external code review): PictureCollection's own GetTypeName().
+// MEDIA-121 (found by external code review): PictureCollection's own GetTypeName().
 TEST_F(MediaLibraryTestFixture, PictureCollectionGetTypeNameIsFullyQualified)
 {
     EXPECT_EQ(library->getPicturesProperty()->GetTypeName(), "Microsoft.Xna.Framework.Media.PictureCollection");

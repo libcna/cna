@@ -8,8 +8,7 @@
 namespace CNA::Internal::Media
 {
     /// Lock-free capture of the final mixed PCM stream, feeding
-    /// Microsoft::Xna::Framework::Media::MediaPlayer::GetVisualizationData (plans/plan_media.md
-    /// MEDIA-186).
+    /// Microsoft::Xna::Framework::Media::MediaPlayer::GetVisualizationData (MEDIA-186).
     ///
     /// The mixer delivers the post-mix buffer on the **audio thread**, so Push() must be
     /// real-time safe: no allocation, no locking, no exceptions. A single-producer/single-consumer
@@ -21,8 +20,7 @@ namespace CNA::Internal::Media
     /// a data race and therefore undefined behaviour in C++, regardless of how benign the machine
     /// code looks. Relaxed atomics make it well-defined at effectively zero cost -- on every
     /// mainstream platform a relaxed load/store of a naturally-aligned float lowers to exactly the
-    /// same instruction a plain access would (found by external code review, plans/plan_media.md
-    /// MEDIA-216).
+    /// same instruction a plain access would (found by external code review, MEDIA-216).
     ///
     /// What remains deliberately tolerated is a *logically* torn read: the reader may observe a
     /// window whose samples span two different callback batches. That is a visual artefact of one

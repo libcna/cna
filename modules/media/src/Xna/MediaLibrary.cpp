@@ -28,7 +28,7 @@ namespace Microsoft::Xna::Framework::Media
     namespace
     {
         // Looks for a cover-art image in the same directory as `songPath`, matching the common
-        // "cover.jpg"/"folder.jpg" file-naming convention (plans/plan_media.md MEDIA-65/R2).
+        // "cover.jpg"/"folder.jpg" file-naming convention (MEDIA-65/R2).
         std::string FindAlbumArtPath(const std::string& songPath)
         {
             const std::optional<std::filesystem::path> nativeSong =
@@ -41,7 +41,7 @@ namespace Microsoft::Xna::Framework::Media
 
             // Precedence order, most-specific first. Real-world libraries are wildly inconsistent
             // about this, so several conventions are accepted rather than just cover.jpg/folder.jpg
-            // (plans/plan_media.md MEDIA-205).
+            // (MEDIA-205).
             static const char* kCandidates[] = {
                 "cover.jpg", "cover.jpeg", "cover.png",
                 "folder.jpg", "folder.jpeg", "folder.png",
@@ -113,7 +113,7 @@ namespace Microsoft::Xna::Framework::Media
         pictureRoot_ = pictureRoot;
 
         // --- Songs ---
-        // Real Duration (plans/plan_media.md MEDIA-65/68's "Duration (sum of member Song.Duration)")
+        // Real Duration (MEDIA-65/68's "Duration (sum of member Song.Duration)")
         // needs each Song's own duration populated for real -- a lightweight, decode-free
         // container-metadata probe (AudioDurationProbe, FFmpeg's avformat_find_stream_info only)
         // rather than the deferred "stays zero until actually played via MediaPlayer" design this
@@ -221,7 +221,7 @@ namespace Microsoft::Xna::Framework::Media
             std::string genreName = albumGenreByKey[key];
             Genre* genre = genreName.empty() ? nullptr : genreByName[genreName];
 
-            // plans/plan_media.md MEDIA-65: Duration is the real sum of member Song.Duration (now
+            // MEDIA-65: Duration is the real sum of member Song.Duration (now
             // populated for real by AudioDurationProbe above), not a hardcoded zero.
             System::TimeSpan albumDuration = System::TimeSpan::Zero;
             for (Song* memberSong : songsByAlbumKey[key])
@@ -239,8 +239,7 @@ namespace Microsoft::Xna::Framework::Media
 
             // No folder image for this album -- fall back to embedded art from the first member
             // song that actually has some. Only the PATH is stored; the image is extracted on
-            // demand so a big library doesn't hold every cover in memory (plans/plan_media.md
-            // MEDIA-206/207/208).
+            // demand so a big library doesn't hold every cover in memory (MEDIA-206/207/208).
             if (albumArtPathByKey[key].empty())
             {
                 for (Song* memberSong : songsByAlbumKey[key])
@@ -274,7 +273,7 @@ namespace Microsoft::Xna::Framework::Media
             ownedGroupAlbumCollections_.emplace_back(collection);
         }
 
-        // --- Song -> Album/Artist/Genre back-references (plans/plan_media.md MEDIA-177) ---
+        // --- Song -> Album/Artist/Genre back-references (MEDIA-177) ---
         // XNA's Song exposes Album/Artist/Genre, but CNA had none of those members at all until
         // MEDIA-174 (FNA omits them too, which is why every earlier audit against FNA missed it).
         // Populated in a dedicated final pass, after every group object exists, so the pointers
@@ -289,7 +288,7 @@ namespace Microsoft::Xna::Framework::Media
 
             // MediaLibraryIndex already parsed this from the file's own tags; it just was never
             // handed to Song, so getTrackNumberProperty() returned a hardcoded 0 for every library
-            // song -- real data parsed and then dropped (plans/plan_media.md MEDIA-181).
+            // song -- real data parsed and then dropped (MEDIA-181).
             song->trackNumber_ = static_cast<SharpRuntime::intcs>(indexed.trackNumber);
             song->rating_      = static_cast<SharpRuntime::intcs>(indexed.rating);
             song->isRated_     = indexed.hasRating;
@@ -496,7 +495,7 @@ namespace Microsoft::Xna::Framework::Media
         ThrowIfDisposed(isDisposed_, "MediaLibrary");
         // No real OS media-library token system exists to reference -- a Picture's own resolved
         // file path (Picture::getTokenEXT()) is used as its token, a simple, real, stable
-        // identifier (plans/plan_media.md MEDIA-62; no FNA logic to port here, see plan §0).
+        // identifier (MEDIA-62; no FNA logic to port here, see plan §0).
         for (auto& p : ownedPictures_)
         {
             if (p->getTokenEXT() == token)
@@ -530,7 +529,7 @@ namespace Microsoft::Xna::Framework::Media
             // just before this) always creates the real directory on disk regardless. Bootstrap a
             // real root node now too, the same lazy-creation pattern this whole function already
             // uses for "Saved Pictures" below, instead of leaving the saved Picture unparented in
-            // any tree at all (found by external code review, plans/plan_media.md MEDIA-132).
+            // any tree at all (found by external code review, MEDIA-132).
             if (pictureRoot_.empty())
             {
                 return nullptr; // no pictures root configured at all -- genuinely nowhere to attach

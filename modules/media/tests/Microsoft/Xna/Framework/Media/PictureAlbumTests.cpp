@@ -22,7 +22,7 @@ namespace
     }
 }
 
-// plans/plan_media.md MEDIA-67: real tree node, incl. the root's self-referencing Parent==nullptr case.
+// MEDIA-67: real tree node, incl. the root's self-referencing Parent==nullptr case.
 TEST_F(MediaLibraryTestFixture, RootPictureAlbumParentIsNull)
 {
     ASSERT_NE(library->getRootPictureAlbumProperty(), nullptr);
@@ -36,7 +36,7 @@ TEST_F(MediaLibraryTestFixture, RootHasTwoChildAlbums)
     EXPECT_EQ(root->getAlbumsProperty()->getCountProperty(), 2); // Vacation, Family
 }
 
-// plans/plan_media.md MEDIA-67: walking Parent from any leaf reaches the root in exactly as many steps
+// MEDIA-67: walking Parent from any leaf reaches the root in exactly as many steps
 // as the fixture's real directory depth -- Vacation/Day 2 is 2 levels deep.
 TEST_F(MediaLibraryTestFixture, MultiLevelParentWalkReachesRootInExpectedSteps)
 {
@@ -87,7 +87,7 @@ TEST_F(MediaLibraryTestFixture, PictureAlbumEqualitySetForEqualAndUnequalAlbums)
     EXPECT_TRUE(*vacation != *family);
 }
 
-// plans/plan_media.md MEDIA-234: cover the System.Object override separately from
+// MEDIA-234: cover the System.Object override separately from
 // Equals(PictureAlbum).
 TEST_F(MediaLibraryTestFixture, PictureAlbumObjectEqualsChecksRuntimeTypeAndValue)
 {
@@ -115,7 +115,7 @@ TEST_F(MediaLibraryTestFixture, PictureAlbumGetTypeNameIsFullyQualified)
     EXPECT_EQ(root->GetTypeName(), "Microsoft.Xna.Framework.Media.PictureAlbum");
 }
 
-// plans/plan_media.md MEDIA-106: IsDisposed, not exercised anywhere else in this file.
+// MEDIA-106: IsDisposed, not exercised anywhere else in this file.
 TEST_F(MediaLibraryTestFixture, PictureAlbumDisposeFlipsIsDisposed)
 {
     PictureAlbum* root = library->getRootPictureAlbumProperty();
@@ -129,7 +129,7 @@ TEST_F(MediaLibraryTestFixture, PictureAlbumDisposeFlipsIsDisposed)
     EXPECT_TRUE(vacation->getIsDisposedProperty());
 }
 
-// plans/plan_media.md MEDIA-107: PictureAlbumCollection's own explicit out-of-range indexer test and
+// MEDIA-107: PictureAlbumCollection's own explicit out-of-range indexer test and
 // Dispose()/IsDisposed -- neither was exercised anywhere else in this file (only in-bounds access
 // via FindChildAlbum, and only implicitly, never Dispose()).
 TEST_F(MediaLibraryTestFixture, PictureAlbumCollectionIndexerThrowsOutOfRange)
@@ -154,7 +154,7 @@ TEST_F(MediaLibraryTestFixture, PictureAlbumCollectionDisposeFlipsIsDisposed)
     EXPECT_TRUE(albums->getIsDisposedProperty());
 }
 
-// plans/plan_media.md MEDIA-121 (found by external code review): PictureAlbumCollection's own
+// MEDIA-121 (found by external code review): PictureAlbumCollection's own
 // GetTypeName().
 TEST_F(MediaLibraryTestFixture, PictureAlbumCollectionGetTypeNameIsFullyQualified)
 {

@@ -92,7 +92,12 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   accelerometer, window orientation and player-one GamePad (2026-09-28, 2026-10-03); deleted on
   2026-10-28 (Git history only). The API and its boundaries are in
   [`../docs/keyboard-device-emulation.md`](../docs/keyboard-device-emulation.md).
-- [`plan_media.md`](plan_media.md) — media API implementation.
+- `plan_media.md` — the Media port (`MEDIA-1`..`MEDIA-234`, 2026-07/08): 229 of 233 tasks done;
+  deleted on 2026-10-29 (Git history only). Its open `MEDIA-192`..`195` (target-native FFmpeg on
+  Windows/MSVC, MinGW, Android and Emscripten) are the fallback rows of
+  [`../docs/video-backend.md`](../docs/video-backend.md); its deviations and the library design
+  decisions D1-D11 are the Media rows of [`../CHECKLIST.md`](../CHECKLIST.md). Comments cite rows
+  as "MEDIA-nnn" and decisions as "media decision Dn".
 - [`plan_net.md`](plan_net.md) — networking, GamerServices, and Avatar APIs up to 2026-07 (history;
   the current state is
   [`../docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md)).

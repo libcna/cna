@@ -30,7 +30,7 @@ namespace
     constexpr const char* kAudioTailFixture = "tests/assets/media/video/audio_tail.mkv";
 }
 
-// plans/plan_media.md MEDIA-1: seeds tests/Microsoft/Xna/Framework/Media/Video/ so the existing
+// MEDIA-1: seeds tests/Microsoft/Xna/Framework/Media/Video/ so the existing
 // GLOB_RECURSE test discovery picks up the subfolder with no CMakeLists.txt change. Extended into
 // the full playback/disposal/loop-mute-volume/track-selection suites by MEDIA-87..90 in Phase 6.
 TEST(VideoPlayerTest, DefaultConstructionMatchesFna)
@@ -44,7 +44,7 @@ TEST(VideoPlayerTest, DefaultConstructionMatchesFna)
     EXPECT_EQ(player.getVideoProperty(), nullptr);
 }
 
-// plans/plan_media.md MEDIA-121/MEDIA-27 (found by external code review): VideoPlayer::GetTypeName(),
+// MEDIA-121/MEDIA-27 (found by external code review): VideoPlayer::GetTypeName(),
 // not exercised anywhere in this file at all before this.
 TEST(VideoPlayerTest, GetTypeNameIsFullyQualified)
 {
@@ -52,7 +52,7 @@ TEST(VideoPlayerTest, GetTypeNameIsFullyQualified)
     EXPECT_EQ(player.GetTypeName(), "Microsoft.Xna.Framework.Media.VideoPlayer");
 }
 
-// plans/plan_media.md MEDIA-121 (found by external code review): getVideoProperty() after a successful
+// MEDIA-121 (found by external code review): getVideoProperty() after a successful
 // Play() -- previously untested (only the default/never-played nullptr case was), and this
 // specific gap masked a real bug during Phase 8's own track-switching fix: OpenDecoder()'s
 // CloseDecoder() call unconditionally resets video_ to nullptr and nothing restored it, so
@@ -84,7 +84,7 @@ TEST(VideoPlayerTest, DestroyingThePlayedVideoStopsThePlayer)
     EXPECT_EQ(player.getStateProperty(), MediaState::Stopped);
 }
 
-// plans/plan_media.md MEDIA-43: every public method throws once disposed.
+// MEDIA-43: every public method throws once disposed.
 TEST(VideoPlayerTest, MethodsThrowObjectDisposedExceptionAfterDispose)
 {
     GraphicsDevice gd;
@@ -102,7 +102,7 @@ TEST(VideoPlayerTest, MethodsThrowObjectDisposedExceptionAfterDispose)
     EXPECT_THROW(player.SetVideoTrackEXT(0), System::ObjectDisposedException);
 }
 
-// plans/plan_media.md MEDIA-43: Dispose() is deliberately kept idempotent (not guarded), since
+// MEDIA-43: Dispose() is deliberately kept idempotent (not guarded), since
 // ~VideoPlayer() unconditionally calls Dispose() -- see the CheckDisposed comment in
 // VideoPlayer.cpp for why replicating FNA's literal double-Dispose-throws behavior would be
 // dangerous in C++.
@@ -114,7 +114,7 @@ TEST(VideoPlayerTest, DisposeIsIdempotent)
     EXPECT_TRUE(player.getIsDisposedProperty());
 }
 
-// plans/plan_media.md MEDIA-42: Play() validates the video's declared metadata against what the file
+// MEDIA-42: Play() validates the video's declared metadata against what the file
 // actually reports and throws InvalidOperationException on mismatch.
 TEST(VideoPlayerTest, PlayThrowsInvalidOperationExceptionOnDimensionMismatch)
 {
@@ -159,7 +159,7 @@ TEST(VideoPlayerTest, PlayRealFixtureProducesATextureOfCorrectSize)
 // VideoPlayer opens no stream at all, so the assertion would be vacuous rather than failing --
 // compiled out instead, while the rest of this suite's video coverage keeps running there.
 #ifdef SOUND_ENABLED
-// plans/plan_media.md MEDIA-131 regression (found by external code review): Play() left the newly
+// MEDIA-131 regression (found by external code review): Play() left the newly
 // opened audio stream paused forever -- playback-stream creation opens every stream paused
 // by default, and ReconfigureAudioOutputForCurrentTrack() only resumes it when state_ == Playing,
 // but OpenDecoder() (which calls that helper) used to run entirely before Play() itself ever set
@@ -182,7 +182,7 @@ TEST(VideoPlayerTest, PlayGenuinelyResumesTheAudioStreamNotJustOpensIt)
 // VideoPlayer opens no stream at all, so the assertion would be vacuous rather than failing --
 // compiled out instead, while the rest of this suite's video coverage keeps running there.
 #ifdef SOUND_ENABLED
-// plans/plan_media.md MEDIA-131 regression: Pause() must still actually pause the audio device (the
+// MEDIA-131 regression: Pause() must still actually pause the audio device (the
 // fix above must not have removed Pause()'s own real behavior while fixing the resume-on-Play bug).
 TEST(VideoPlayerTest, PauseStillActuallyPausesTheAudioStream)
 {
@@ -200,7 +200,7 @@ TEST(VideoPlayerTest, PauseStillActuallyPausesTheAudioStream)
 }
 #endif  // SOUND_ENABLED
 
-// plans/plan_media.md MEDIA-41: a non-looped 2-second video eventually reaches Stopped once played past
+// MEDIA-41: a non-looped 2-second video eventually reaches Stopped once played past
 // its own duration (whether or not a real audio device is available in this environment -- if one
 // is, this also exercises the "wait for queued audio to drain" branch; if not, audioStream_ stays
 // null and it stops as soon as the decoder reports EOF, which is still correct).
@@ -231,7 +231,7 @@ TEST(VideoPlayerTest, NonLoopedVideoEventuallyStopsAfterItsDuration)
 // Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
 // so this case is unobservable there rather than merely untested.
 #ifdef SOUND_ENABLED
-// plans/plan_media.md MEDIA-130/MEDIA-41: audio_tail.mkv's video track is 2.0s but its audio track is
+// MEDIA-130/MEDIA-41: audio_tail.mkv's video track is 2.0s but its audio track is
 // deliberately 3.0s (see its own manifest.json) -- confirms VideoPlayer genuinely stays Playing
 // past the video's own duration until the queued audio has actually drained, not just until video
 // EOF, matching FNA's VideoPlayerTheora "wait for PendingBufferCount==0" behavior. Previously
@@ -282,7 +282,7 @@ TEST(VideoPlayerTest, LoopedVideoKeepsPlayingPastItsDuration)
     EXPECT_EQ(player.getStateProperty(), MediaState::Playing);
 }
 
-// plans/plan_media.md MEDIA-87: real playback-state transitions across Stop/Pause/Resume -- previously
+// MEDIA-87: real playback-state transitions across Stop/Pause/Resume -- previously
 // only Play()'s own Playing transition was covered (PlayWithMatchingMetadataDoesNotThrow) and
 // Stop/Pause/Resume were only exercised post-Dispose() as throw-guards.
 TEST(VideoPlayerTest, StopPauseResumeTransitionStateCorrectly)
@@ -304,7 +304,7 @@ TEST(VideoPlayerTest, StopPauseResumeTransitionStateCorrectly)
     EXPECT_EQ(player.getStateProperty(), MediaState::Stopped);
 }
 
-// plans/plan_media.md MEDIA-87: Pause()/Resume() are documented no-ops outside their expected source
+// MEDIA-87: Pause()/Resume() are documented no-ops outside their expected source
 // state (Playing for Pause, Paused for Resume) -- confirms that guard, not just the happy path.
 TEST(VideoPlayerTest, PauseAndResumeAreNoOpsOutsideExpectedState)
 {
@@ -318,7 +318,7 @@ TEST(VideoPlayerTest, PauseAndResumeAreNoOpsOutsideExpectedState)
     EXPECT_EQ(player.getStateProperty(), MediaState::Stopped);
 }
 
-// plans/plan_media.md MEDIA-87: PlayPosition -- zero coverage anywhere else in this file.
+// MEDIA-87: PlayPosition -- zero coverage anywhere else in this file.
 TEST(VideoPlayerTest, PlayPositionIsZeroWhenStoppedAndAdvancesWhilePlaying)
 {
     GraphicsDevice gd;
@@ -335,7 +335,7 @@ TEST(VideoPlayerTest, PlayPositionIsZeroWhenStoppedAndAdvancesWhilePlaying)
     EXPECT_EQ(player.getPlayPositionProperty(), System::TimeSpan::Zero);
 }
 
-// plans/plan_media.md MEDIA-89: IsMuted round-trip -- DefaultConstructionMatchesFna only ever checked
+// MEDIA-89: IsMuted round-trip -- DefaultConstructionMatchesFna only ever checked
 // the default (false) value, never an actual set/get round trip.
 TEST(VideoPlayerTest, IsMutedRoundTrips)
 {
@@ -357,7 +357,7 @@ TEST(VideoPlayerTest, VolumeRefusesOutOfRangeWithoutMutation)
     EXPECT_FLOAT_EQ(player.getVolumeProperty(), 1.0f);
 }
 
-// plans/plan_media.md MEDIA-90: SetAudioTrackEXT/SetVideoTrackEXT round-trip against a real multi-track
+// MEDIA-90: SetAudioTrackEXT/SetVideoTrackEXT round-trip against a real multi-track
 // fixture (tests/assets/media/video/multi_track_audio.mkv, added Phase 6 -- no such fixture
 // existed before). VideoPlayer exposes no getter to directly observe which track is active (the
 // underlying switch itself is directly, numerically verified at the VideoDecoder level by
@@ -380,7 +380,7 @@ TEST(VideoPlayerTest, SetAudioTrackEXTAndSetVideoTrackEXTDoNotBreakPlaybackAfter
     EXPECT_EQ(texture->getHeightProperty(), 90);
 }
 
-// plans/plan_media.md MEDIA-90: a real, numeric regression test for the track-switching bug found by
+// MEDIA-90: a real, numeric regression test for the track-switching bug found by
 // external code review -- the previous version of this test only checked "doesn't throw" and the
 // texture's dimensions, which the fixture's single video track could never actually distinguish.
 // multi_track_audio.mkv's two audio tracks deliberately use different sample rates (48000 Hz vs
@@ -404,7 +404,7 @@ TEST(VideoPlayerTest, SetAudioTrackEXTMidPlaybackActuallyChangesTheActiveSampleR
 // Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
 // so this case is unobservable there rather than merely untested.
 #ifdef SOUND_ENABLED
-// plans/plan_media.md MEDIA-148 (found by external code review): before this fix, a single combined
+// MEDIA-148 (found by external code review): before this fix, a single combined
 // ReconfigureAudioAndVideoOutputForCurrentTracks() always tore down and reopened the SDL audio
 // stream on every SetVideoTrackEXT() call, even a video-only switch -- discarding whatever audio
 // was already queued for playback for no reason. The fix split it into independent
@@ -444,7 +444,7 @@ TEST(VideoPlayerTest, SetAudioTrackEXTDoesNotRecreateTheUnrelatedVideoTexture)
     EXPECT_EQ(player.GetTexture(), before);
 }
 
-// plans/plan_media.md MEDIA-90: the ordering half of the same bug -- a track preference set BEFORE
+// MEDIA-90: the ordering half of the same bug -- a track preference set BEFORE
 // Play() (not just mid-playback, as the test above covers) must still apply to the real decoder
 // used for the SDL audio stream/texture created inside Play() -> OpenDecoder(), not just be
 // silently ignored because it wasn't there yet when OpenDecoder() first built them.
@@ -460,7 +460,7 @@ TEST(VideoPlayerTest, AudioTrackPreferenceSetBeforePlayAppliesToTheOpenedDecoder
     EXPECT_EQ(VideoPlayerTestAccess::GetDecoderSampleRate(player), 44100); // track 1, not the default
 }
 
-// plans/plan_media.md MEDIA-149 (found by external code review): OpenDecoder()'s try/catch around the
+// MEDIA-149 (found by external code review): OpenDecoder()'s try/catch around the
 // first-frame decode used to only reset state_ to Stopped on failure, leaving decoder_,
 // audioStream_, frameTexture_ and video_->parent_ all still allocated/set -- state_ claimed
 // nothing was open while every actual resource said otherwise. The fix calls the same
@@ -517,7 +517,7 @@ TEST(VideoPlayerTest, PlayOnAFirstFrameDecodeFailureLeavesThePlayerFullyClosedNo
 // VideoPlayer opens no stream at all, so the assertion would be vacuous rather than failing --
 // compiled out instead, while the rest of this suite's video coverage keeps running there.
 #ifdef SOUND_ENABLED
-// plans/plan_media.md MEDIA-153 (found by external code review): decoder_->DrainAudio(audioBuffer_) ran
+// MEDIA-153 (found by external code review): decoder_->DrainAudio(audioBuffer_) ran
 // unconditionally every decode iteration, but audioBuffer_.clear() only ran inside
 // `if (audioStream_)` -- with no audio device (e.g. this simulated failure, or a genuinely headless
 // system), audioBuffer_ accumulated the ENTIRE decoded audio track in memory for the rest of
@@ -555,7 +555,7 @@ TEST(VideoPlayerTest, AudioBufferDoesNotAccumulateWithoutAnAudioDevice)
 // Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
 // so this case is unobservable there rather than merely untested.
 #ifdef SOUND_ENABLED
-// plans/plan_media.md MEDIA-154 (found by external code review): VideoDecoder::SetAudioStream()/
+// MEDIA-154 (found by external code review): VideoDecoder::SetAudioStream()/
 // SetVideoStream() correctly no-op at the decoder level when re-selecting the already-active track
 // (or an out-of-range index), but VideoPlayer::SetAudioTrackEXT()/SetVideoTrackEXT() used to call
 // their reconfigure helper unconditionally regardless, tearing down and reopening the SDL audio

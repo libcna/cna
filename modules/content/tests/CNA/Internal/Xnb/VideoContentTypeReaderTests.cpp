@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_media.md MEDIA-70/71/73: unit tests for VideoReader's own behavior (registration,
+// MEDIA-70/71/73: unit tests for VideoReader's own behavior (registration,
 // extension-probing fallback, field layout), mirroring SongContentTypeReaderTests.cpp's own
 // structure. Unlike Song, no full ContentManager::Load<Video>() round-trip against a real,
 // externally-produced .xnb exists here -- that needs a real MonoGame-built Video .xnb fixture,
 // which requires MonoGame/dotnet content-pipeline tooling not available in this environment (no
-// dotnet/mgcb installed). Documented as a real, honest gap (see plans/plan_media.md), not silently
+// dotnet/mgcb installed). Recorded here as a real, honest gap, not silently
 // skipped -- these reader-level tests still exercise VideoReader::Read()'s real logic (field
 // parsing, path normalization/fallback, GraphicsDevice wiring) via a hand-constructed in-memory
 // buffer matching FNA's exact real binary layout, the same technique
@@ -76,7 +76,7 @@ TEST_F(VideoContentTypeReaderTest, IsRegisteredUnderRealFnaCanonicalName)
     EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.VideoReader"));
 }
 
-// plans/plan_media.md MEDIA-70: the real fixture's own extension (.mkv) happens to be exactly 4
+// MEDIA-70: the real fixture's own extension (.mkv) happens to be exactly 4
 // characters, matching the same coincidental-length scenario
 // SongContentTypeReaderTests.cpp's "ReferenceEndingInFourCharacterRealExtensionResolvesToRealFile"
 // already relies on for .ogg -- the reader strips the last 4 characters, fails to find a
@@ -106,7 +106,7 @@ TEST_F(VideoContentTypeReaderTest, WindowsStyleNestedAssetNameResolvesMediaBesid
     EXPECT_TRUE(std::filesystem::exists(video.getFileNameProperty()));
 }
 
-// plans/plan_media.md MEDIA-70/71: all 5 numeric fields round-trip correctly using direct typed reads
+// MEDIA-70/71: all 5 numeric fields round-trip correctly using direct typed reads
 // (ReadInt32/ReadSingle), matching SongContentTypeReader's established code style.
 TEST_F(VideoContentTypeReaderTest, AllFieldsRoundTripCorrectly)
 {
@@ -125,7 +125,7 @@ TEST_F(VideoContentTypeReaderTest, AllFieldsRoundTripCorrectly)
 
 // The XNB-sourced constructor trusts the caller's metadata and does not probe the file at
 // construction time -- confirms VideoReader::Read() doesn't accidentally validate against the
-// decoder (that check only happens later, in VideoPlayer::Play(), per plans/plan_media.md MEDIA-42).
+// decoder (that check only happens later, in VideoPlayer::Play(), per MEDIA-42).
 TEST_F(VideoContentTypeReaderTest, DoesNotThrowOnDeliberatelyMismatchedDeclaredMetadata)
 {
     ContentManager cm(nullptr, "tests/assets/media/video");

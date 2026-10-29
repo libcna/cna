@@ -43,7 +43,7 @@ TEST(MediaQueueTest, ClearResetsCountAndActiveIndex)
     EXPECT_EQ(queue.getActiveSongIndexProperty(), -1);
 }
 
-// plans/plan_media.md MEDIA-11: the indexer now throws System::ArgumentOutOfRangeException, matching
+// MEDIA-11: the indexer now throws System::ArgumentOutOfRangeException, matching
 // the majority project precedent, instead of a bare std::out_of_range.
 TEST(MediaQueueTest, IndexerThrowsArgumentOutOfRangeExceptionWhenOutOfBounds)
 {

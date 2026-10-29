@@ -254,7 +254,7 @@ namespace Microsoft::Xna::Framework::Media
         // ("Only local file URIs are supported for now" -- Song.cs). CNA takes a std::string rather
         // than a System::Uri, so the equivalent parsing happens here: the raw string used to go
         // straight to the Song constructor, which then asked std::filesystem::exists about a
-        // literal "file:///..." and always failed (plans/plan_media.md MEDIA-217/219).
+        // literal "file:///..." and always failed (MEDIA-217/219).
         const std::size_t colon = uri.find(':');
 
         // A drive letter is a path, not a URI scheme. Absolute paths keep their existing spelling.
@@ -292,7 +292,7 @@ namespace Microsoft::Xna::Framework::Media
         // Strip the query and fragment: System.Uri.LocalPath returns ONLY the path component, so
         // "file:///music/song.mp3?v=1#intro" resolves to "/music/song.mp3". Keeping them made the
         // path unopenable and produced a misleading FileNotFoundException naming a filename that
-        // was never asked for (plans/plan_media.md MEDIA-223).
+        // was never asked for (MEDIA-223).
         //
         // Done BEFORE percent-decoding, deliberately: a '?' or '#' that is percent-encoded
         // (%3F / %23) is a LITERAL character in the filename, not a delimiter, and decoding first
@@ -308,7 +308,7 @@ namespace Microsoft::Xna::Framework::Media
         {
             // "file://<authority>/<path>". RFC 8089 allows a non-empty authority, which .NET's
             // Uri.LocalPath turns into a UNC path -- dropping it (as the first version of this fix
-            // did) would silently resolve a REMOTE path to a local one (plans/plan_media.md MEDIA-219).
+            // did) would silently resolve a REMOTE path to a local one (MEDIA-219).
             rest = rest.substr(2);
             const std::size_t slash = rest.find('/');
             const std::string authority = (slash == std::string::npos) ? rest : rest.substr(0, slash);
@@ -339,7 +339,7 @@ namespace Microsoft::Xna::Framework::Media
         else if (rest.rfind("/", 0) == 0)
         {
             // "file:/path" -- the authority-less form RFC 8089 also permits, which the first
-            // version of this fix did not recognise at all (plans/plan_media.md MEDIA-219).
+            // version of this fix did not recognise at all (MEDIA-219).
             path = PercentDecode(rest);
         }
         else

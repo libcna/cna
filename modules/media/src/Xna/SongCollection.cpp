@@ -19,7 +19,7 @@ namespace Microsoft::Xna::Framework::Media
         // FNA throws ArgumentOutOfRangeException (implicitly, via the underlying List<T>
         // indexer -- SongCollection.cs). Matches the majority project precedent (BoundingBox/
         // VertexBuffer/NetworkSessionProperties), not TouchCollection's std::out_of_range
-        // outlier -- see plans/plan_media.md Section 2 item 7.
+        // outlier -- see CHECKLIST.md's project-wide out-of-range row.
         ThrowIfDisposed(isDisposed_, "SongCollection");
         if (index < 0 || index >= getCountProperty())
         {

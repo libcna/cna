@@ -21,7 +21,7 @@ namespace
     }
 }
 
-// plans/plan_media.md MEDIA-68: real implementation backed by PlaylistParser results.
+// MEDIA-68: real implementation backed by PlaylistParser results.
 TEST_F(MediaLibraryTestFixture, PlaylistsContainsBothFixturePlaylists)
 {
     EXPECT_EQ(library->getPlaylistsProperty()->getCountProperty(), 2);
@@ -43,7 +43,7 @@ TEST_F(MediaLibraryTestFixture, InternationalResolvesTheNonAsciiEntry)
     EXPECT_EQ(international->getSongsProperty()->getCountProperty(), 2);
 }
 
-// plans/plan_media.md MEDIA-68: operator==/!= call Equals() directly (see Playlist.cpp's own comment on
+// MEDIA-68: operator==/!= call Equals() directly (see Playlist.cpp's own comment on
 // why FNA's null-check shape doesn't apply to C++ reference parameters).
 TEST_F(MediaLibraryTestFixture, PlaylistEqualitySetForEqualAndUnequalPlaylists)
 {
@@ -59,7 +59,7 @@ TEST_F(MediaLibraryTestFixture, PlaylistEqualitySetForEqualAndUnequalPlaylists)
     EXPECT_EQ(favorites->GetHashCode(), favorites->GetHashCode());
 }
 
-// plans/plan_media.md MEDIA-234: cover the System.Object override separately from Equals(Playlist).
+// MEDIA-234: cover the System.Object override separately from Equals(Playlist).
 TEST_F(MediaLibraryTestFixture, PlaylistObjectEqualsChecksRuntimeTypeAndValue)
 {
     Playlist* favorites = FindPlaylist(library->getPlaylistsProperty(), "Favorites");
@@ -84,7 +84,7 @@ TEST_F(MediaLibraryTestFixture, PlaylistGetTypeNameIsFullyQualified)
     EXPECT_EQ(favorites->GetTypeName(), "Microsoft.Xna.Framework.Media.Playlist");
 }
 
-// plans/plan_media.md MEDIA-108: Equals(nullptr) -- the "one-null" case. There is no C++ "both-null"
+// MEDIA-108: Equals(nullptr) -- the "one-null" case. There is no C++ "both-null"
 // analog to test: operator==/!= take references (see Playlist.cpp's own comment on why), and a
 // reference can never be null, so the only null-involving case reachable at all is via the
 // pointer-taking Equals(const Playlist*) overload with a real `this` and a null `other`.
@@ -95,10 +95,10 @@ TEST_F(MediaLibraryTestFixture, PlaylistEqualsReturnsFalseForNullOther)
     EXPECT_FALSE(favorites->Equals(static_cast<const Playlist*>(nullptr)));
 }
 
-// plans/plan_media.md MEDIA-108: Duration -- sum of song durations, all TimeSpan.Zero for
+// MEDIA-108: Duration -- sum of song durations, all TimeSpan.Zero for
 // library-scanned songs until actually played (§4 D9), so a freshly-scanned Playlist's Duration
 // is zero too.
-// plans/plan_media.md MEDIA-68 (corrected -- found by external code review): Duration is now a real,
+// MEDIA-68 (corrected -- found by external code review): Duration is now a real,
 // eagerly-probed sum of member Song.Duration, not a placeholder that stays zero forever.
 // Favorites resolves to 3 real songs (~2.0s/~2.04s/~2.04s per their own fixture manifest, roughly
 // 6.08s total) -- assert a real, non-zero value in the right ballpark rather than an exact
@@ -117,7 +117,7 @@ TEST_F(MediaLibraryTestFixture, PlaylistDurationIsARealNonZeroSumOfMemberSongDur
     EXPECT_LT(ms, 8000.0);
 }
 
-// plans/plan_media.md MEDIA-108: IsDisposed, not exercised anywhere else in this file.
+// MEDIA-108: IsDisposed, not exercised anywhere else in this file.
 TEST_F(MediaLibraryTestFixture, PlaylistDisposeFlipsIsDisposed)
 {
     Playlist* favorites = FindPlaylist(library->getPlaylistsProperty(), "Favorites");
@@ -129,7 +129,7 @@ TEST_F(MediaLibraryTestFixture, PlaylistDisposeFlipsIsDisposed)
     EXPECT_TRUE(favorites->getIsDisposedProperty());
 }
 
-// plans/plan_media.md MEDIA-109: PlaylistCollection's own indexer (in-bounds) and Dispose()/IsDisposed --
+// MEDIA-109: PlaylistCollection's own indexer (in-bounds) and Dispose()/IsDisposed --
 // only Count was previously checked.
 TEST_F(MediaLibraryTestFixture, PlaylistCollectionIndexerReturnsPlaylistsInBounds)
 {
@@ -151,7 +151,7 @@ TEST_F(MediaLibraryTestFixture, PlaylistCollectionDisposeFlipsIsDisposed)
     EXPECT_TRUE(playlists->getIsDisposedProperty());
 }
 
-// plans/plan_media.md MEDIA-121 (found by external code review): PlaylistCollection's own GetTypeName().
+// MEDIA-121 (found by external code review): PlaylistCollection's own GetTypeName().
 TEST_F(MediaLibraryTestFixture, PlaylistCollectionGetTypeNameIsFullyQualified)
 {
     EXPECT_EQ(library->getPlaylistsProperty()->GetTypeName(), "Microsoft.Xna.Framework.Media.PlaylistCollection");

@@ -37,7 +37,7 @@ namespace
     }
 }
 
-// plans/plan_media.md MEDIA-187: deterministic, device-free proof that the FFT is a real transform and
+// MEDIA-187: deterministic, device-free proof that the FFT is a real transform and
 // not a placeholder -- a pure tone must peak in its own bin, DC must land in bin 0, and silence
 // must produce nothing.
 
@@ -83,8 +83,12 @@ TEST(VisualizationFFTTest, SilenceProducesAllZeroMagnitudes)
     }
 }
 
-// plans/plan_media.md MEDIA-186: the ring buffer is the audio-thread-facing half. These exercise its
+// MEDIA-186: the ring buffer is the audio-thread-facing half. These exercise its
 // contract directly, without needing a real audio device.
+//
+// Known gap: nothing here writes from one thread while another reads, and no ThreadSanitizer run
+// covers it. The audio-thread/main-thread race is fixed by construction (MediaPlayer's install and
+// uninstall ordering), not pinned by a test that would catch a regression.
 
 TEST(VisualizationCaptureTest, ReadsBackTheMostRecentSamplesOldestFirst)
 {
