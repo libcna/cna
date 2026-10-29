@@ -197,6 +197,10 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   bare.
 - [`plan_xnb.md`](plan_xnb.md) — XNB content pipeline.
 - [`plan_xnapipeline.md`](plan_xnapipeline.md) — native XNB output (closed; external verification rows only).
+- `plan_xact_build_invocation.md` — `XACTBUILD-001` (2026-10-03): `BuildXact` passes XactBld3 the
+  SDK's own `/WINDOWS`/`/XBOX360` switches and Wine paths. Complete; deleted on 2026-10-29 (Git
+  history only). The behaviour and the measured XACT2 auto-import are in the `BuildXact.Execute()`
+  row of [`../docs/xna-content-pipeline-parity-report.md`](../docs/xna-content-pipeline-parity-report.md).
 - [`plan_xnapipeline_parity.md`](plan_xnapipeline_parity.md) — TRUE XNA 4.0 Content Pipeline public API + input-format parity, measured against the genuine SDK.
 - `plan_missing.md` — XNA-MISSING-001..020, the 160 runtime members that took coverage from 3,467
   to 3,627/3,627 (closed 2026-09-21; deleted on 2026-10-26, Git history only). The live figure is
