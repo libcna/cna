@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Primitive-mode fixtures -- owning group ``topology`` (plans/plan_gltf.md §24.2).
+"""Primitive-mode fixtures -- owning group ``topology``.
 
 All seven glTF modes, one fixture each. Two of them prove **D5**: CNA never read
 ``primitive.mode``. Every primitive, whatever its declared topology, was emitted as an index list
@@ -12,7 +12,7 @@ equivalent -- ``TRIANGLE_STRIP`` and ``TRIANGLE_FAN`` are rewritten at import wi
 preserved, so no renderer needs a new topology and the whole GPU packing layer is unchanged.
 
 `GLTF-073`/`GLTF-076`/`GLTF-078` then gave the remaining four a draw path: the part carries a real
-XNA ``PrimitiveType``, the primitive count follows §12.3's table instead of ``numIndices / 3``, and a
+XNA ``PrimitiveType``, the primitive count follows GLTF-078's table instead of ``numIndices / 3``, and a
 ``LINE_LOOP`` becomes a ``LINE_STRIP`` with the closing segment glTF leaves implicit in the mode.
 All seven modes now import, so **D5 is fixed** and every fixture here is an ordinary conformance
 asset whose expectation is asserted in full.
@@ -49,7 +49,7 @@ def _line_or_point_fixture(*, fixture_id: str, mode: int, mesh_name: str, node_n
     """One fixture for a topology that describes no triangles.
 
     All four import as themselves since `GLTF-073`/`GLTF-076`/`GLTF-078`: the part carries a real
-    XNA ``PrimitiveType``, the primitive count follows §12.3 rather than ``numIndices / 3``, and a
+    XNA ``PrimitiveType``, the primitive count follows GLTF-078 rather than ``numIndices / 3``, and a
     ``LINE_LOOP`` arrives as a ``LINE_STRIP`` with its closing segment appended.
     """
     b = GltfBuilder(fixture_id)

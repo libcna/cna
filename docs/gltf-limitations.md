@@ -18,8 +18,7 @@ a promise.
   `modules/content/src/GltfImport/GltfImportCore.cpp`, the same registry the `extensionsRequired`
   gate reads. `GltfLimitationsDoc.ExtensionTableAgreesWithTheRegistry` compares this file against
   it row by row and **prints the corrected table on failure** — paste that, do not edit the rows by
-  hand. (`plans/plan_gltf.md` §19 carries the same table and the same rule; the two are generated from
-  one registry, which is why they cannot disagree.)
+  hand.
 * **Every report field named below must exist.**
   `GltfLimitationsDoc.EveryReportFieldNamedHereExistsInTheHeader` reads
   `modules/content/include/CNA/Internal/GltfImport/GltfImportCore.hpp` and fails on any
@@ -220,7 +219,7 @@ difference between a limitation and a bug.
 
 | Capability | Condition | Behaviour when absent |
 |---|---|---|
-| `KHR_draco_mesh_compression` | `libdraco` present at configure time (`CNA_DRACO_AVAILABLE`) | The extension is **not claimed**, so a file requiring it is refused by name, and a Draco-compressed primitive throws at import rather than producing empty geometry. |
+| `KHR_draco_mesh_compression` | `CNA_ENABLE_DRACO=ON`, the default except under Emscripten (the decoder is built from the pinned `third_party/draco` submodule, or taken from the system with `CNA_USE_SYSTEM_DRACO=ON`) | The extension is **not claimed**, so a file requiring it is refused by name, and a Draco-compressed primitive throws at import rather than producing empty geometry. |
 | L7 image comparison | A renderer with a real 3D pipeline | The `STUB` renderer reports `GraphicsCapability::ThreeD == false` and the tests that need pixels skip rather than pass vacuously (`GLTF-009`). |
 
 Regardless of decoder availability, the Draco extension's primitive-mode restriction is enforced
@@ -239,4 +238,5 @@ rather than applied is a scope decision recorded in the API-change review, not a
 
 See also: `docs/gltf-conventions.md` (every decision with its rationale),
 `docs/gltf-conformance.md` (the oracle ladder and the corpus), `docs/gltf-api-change-review.md`
-(what may become public API), and `plans/plan_gltf.md` (the 460-row campaign record).
+(what may become public API), and `docs/gltf-campaign-retrospective.md` (the campaign; its row-by-row
+record is in Git history).

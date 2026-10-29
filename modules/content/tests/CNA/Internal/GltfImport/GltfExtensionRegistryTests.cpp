@@ -1,28 +1,27 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-334 / GLTF-335 / GLTF-348: the extension registry, and the rules that keep it
-// from becoming a third place the truth is written down.
+// GLTF-334 / GLTF-335 / GLTF-348: the extension registry, and the rules that keep it from becoming a
+// third place the truth is written down.
 //
 // Before GLTF-334 there were two: `IsGltfExtensionSupportedEXT`'s hand-written list, which decides
-// whether a file naming an extension in `extensionsRequired` loads at all, and plans/plan_gltf.md §19's
-// classification table, which is what a human reads. They already disagreed in spirit -- §19 called
-// KHR_texture_transform PARTIAL while the gate claimed it -- and nothing said why, because the
+// whether a file naming an extension in `extensionsRequired` loads at all, and the campaign's
+// classification table, which is what a human reads. They already disagreed in spirit -- the table
+// called KHR_texture_transform PARTIAL while the gate claimed it -- and nothing said why, because the
 // two axes ("how completely is it implemented" and "do we accept a file that demands it") had never
 // been separated.
 //
-// The registry separates them and this file holds it to three rules:
+// The registry separates them and this file holds it to two rules:
 //
 //   * the gate is a lookup into the registry, for every entry and for names not in it at all;
-//   * §19's table agrees with the registry on name, classification and owning task;
 //   * an extension a corpus fixture declares must be classified, and an extension CNA claims must
 //     have a fixture -- which is GLTF-335's "adding an extension requires a fixture and a
 //     classification", enforced rather than asked for.
+//
+// The human-readable table is docs/gltf-limitations.md §1, which GltfLimitationsDoc holds to the
+// registry row by row.
 
 #include <algorithm>
-#include <fstream>
-#include <map>
 #include <set>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -42,82 +41,6 @@ using CnaTest::GltfOracle::LoadedFixture;
 
 namespace
 {
-    /// The repository root, reached the same way the ladder test reaches cmake/UnitTests.cmake.
-    std::filesystem::path RepositoryRoot()
-    {
-        const std::filesystem::path corpus = CnaTest::GltfOracle::CorpusDirectory();
-        if (corpus.empty()) { return {}; }
-        return corpus.parent_path().parent_path().parent_path();
-    }
-
-    /// One §19 row, reduced to the three fields that must not drift from the registry.
-    struct DocRow
-    {
-        std::string name;
-        std::string classification;
-        std::string task;
-    };
-
-    /// Strips markdown emphasis and surrounding whitespace from one table cell.
-    std::string CleanCell(std::string cell)
-    {
-        const auto strip = [&cell](const std::string& token) {
-            std::string::size_type at;
-            while ((at = cell.find(token)) != std::string::npos) { cell.erase(at, token.size()); }
-        };
-        strip("**");
-        strip("`");
-        const auto first = cell.find_first_not_of(" \t");
-        if (first == std::string::npos) { return {}; }
-        return cell.substr(first, cell.find_last_not_of(" \t") - first + 1);
-    }
-
-    /// Splits a markdown table row into its cells.
-    std::vector<std::string> Cells(const std::string& line)
-    {
-        std::vector<std::string> out;
-        std::string cell;
-        std::istringstream stream(line);
-        while (std::getline(stream, cell, '|')) { out.push_back(CleanCell(cell)); }
-        // A well-formed row starts and ends with '|', so the first cell is empty and is dropped.
-        if (!out.empty() && out.front().empty()) { out.erase(out.begin()); }
-        return out;
-    }
-
-    /// Parses §19's classification table out of plans/plan_gltf.md.
-    ///
-    /// Reading the plan rather than restating it is the point: a duplicated table would drift, and
-    /// a drifted table asserts nothing.
-    std::vector<DocRow> ParseSection19(std::string& error)
-    {
-        const std::filesystem::path plan = RepositoryRoot() / "plans/plan_gltf.md";
-        std::ifstream file(plan);
-        if (!file) { error = "cannot open " + plan.string(); return {}; }
-
-        std::vector<DocRow> rows;
-        std::string line;
-        bool inSection = false;
-        while (std::getline(file, line))
-        {
-            if (line.rfind("## 19.", 0) == 0) { inSection = true; continue; }
-            if (inSection && line.rfind("## ", 0) == 0) { break; }
-            if (!inSection || line.empty() || line.front() != '|') { continue; }
-            if (line.find("---") != std::string::npos) { continue; }
-
-            const std::vector<std::string> cells = Cells(line);
-            if (cells.size() < 4) { continue; }
-            if (cells[0] == "Extension") { continue; } // the header row
-            // The classification cell may carry a parenthetical ("NOT_DESIRED (for now)"); only
-            // the leading token is the classification itself.
-            std::string classification = cells[1];
-            const auto space = classification.find(' ');
-            if (space != std::string::npos) { classification.erase(space); }
-            rows.push_back(DocRow{cells[0], classification, cells[3]});
-        }
-        if (rows.empty()) { error = "no §19 table rows parsed from " + plan.string(); }
-        return rows;
-    }
-
     /// Every extension name declared by any corpus fixture, in `extensionsUsed` or `Required`.
     std::set<std::string> ExtensionsDeclaredByTheCorpus()
     {
@@ -152,7 +75,7 @@ TEST(GltfExtensionRegistry, TheSupportGateIsALookupIntoTheRegistryForEveryEntry)
         SCOPED_TRACE(record.name);
         EXPECT_EQ(record.claimed, IsGltfExtensionSupportedEXT(record.name));
         EXPECT_FALSE(record.note.empty()) << "a classification with no reason is not a decision";
-        EXPECT_FALSE(record.task.empty()) << "every entry names the plan row that owns it";
+        EXPECT_FALSE(record.task.empty()) << "every entry names the task that owns it";
     }
 }
 
@@ -211,52 +134,6 @@ TEST(GltfExtensionRegistry, AnApproximationMayBeUnclaimedAndOneIs)
     EXPECT_TRUE(lights->claimed)
         << "the two approximations are classified alike and answered differently, which is the "
            "whole reason support and claimed are separate columns";
-}
-
-TEST(GltfExtensionRegistry, Section19AgreesWithTheRegistryOnEveryRow)
-{
-    // "§19's table is generated from it, not maintained by hand" (GLTF-334), enforced in the form
-    // that survives without a build step: the doc is parsed and compared field by field, and the
-    // generated table is printed on failure so correcting the doc is mechanical rather than a
-    // reading exercise.
-    std::string error;
-    const std::vector<DocRow> rows = ParseSection19(error);
-    ASSERT_TRUE(error.empty()) << error;
-
-    std::map<std::string, DocRow> byName;
-    for (const DocRow& row : rows)
-    {
-        EXPECT_TRUE(byName.emplace(row.name, row).second) << "§19 lists " << row.name << " twice";
-    }
-
-    std::ostringstream generated;
-    generated << "\n| Extension | Classification | Evidence / note | Task |\n|---|---|---|---|\n";
-    for (const GltfExtensionRecordEXT& record : GltfExtensionRegistryEXT())
-    {
-        generated << "| `" << record.name << "` | **" << GltfExtensionSupportNameEXT(record.support)
-                  << "** | " << record.note << " | `" << record.task << "` |\n";
-    }
-    const std::string table = generated.str();
-
-    for (const GltfExtensionRecordEXT& record : GltfExtensionRegistryEXT())
-    {
-        SCOPED_TRACE(record.name);
-        const auto found = byName.find(record.name);
-        ASSERT_NE(byName.end(), found)
-            << "the registry classifies " << record.name << " and §19 does not list it." << table;
-        EXPECT_EQ(GltfExtensionSupportNameEXT(record.support), found->second.classification)
-            << "§19 and the registry disagree about " << record.name << "." << table;
-        EXPECT_NE(std::string::npos, found->second.task.find(record.task))
-            << "§19 attributes " << record.name << " to '" << found->second.task
-            << "', the registry to '" << record.task << "'." << table;
-        byName.erase(found);
-    }
-    for (const auto& [name, row] : byName)
-    {
-        ADD_FAILURE() << "§19 lists " << name << " (" << row.classification
-                      << ") but the registry does not classify it -- the gate therefore refuses "
-                         "it for no recorded reason." << table;
-    }
 }
 
 // --- GLTF-335: adding an extension requires a fixture and a classification -----------------------

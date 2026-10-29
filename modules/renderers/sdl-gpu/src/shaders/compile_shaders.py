@@ -218,11 +218,11 @@ def main():
         ("skinned_colored3d.vert.glsl", VERTEX_SHADER,   "kSkinnedColored3dVertSpv"),
         ("skinned_colored3d.frag.glsl", FRAGMENT_SHADER, "kSkinnedColored3dFragSpv"),
         ("pbr3d.vert.glsl", VERTEX_SHADER,   "kPbr3dVertSpv"),
-        # plans/plan_gltf.md GLTF-462/GLTF-465: stride 60's colour-carrying twin of the line above.
+        # GLTF-462/GLTF-465: stride 60's colour-carrying twin of the line above.
         ("pbr3d.vert.glsl", VERTEX_SHADER,   "kPbr3dColorVertSpv", "CNA_PBR_VERTEX_COLOR"),
         ("pbr3d.frag.glsl", FRAGMENT_SHADER, "kPbr3dFragSpv"),
         ("pbr_skinned3d.vert.glsl", VERTEX_SHADER, "kPbrSkinned3dVertSpv"),
-        # plans/plan_gltf.md GLTF-463: stride 80's colour-carrying twin.
+        # GLTF-463: stride 80's colour-carrying twin.
         ("pbr_skinned3d.vert.glsl", VERTEX_SHADER, "kPbrSkinned3dColorVertSpv", "CNA_PBR_VERTEX_COLOR"),
         # pbr_skinned3d's fragment stage reuses pbr3d.frag.glsl unchanged (byte-identical varying
         # interface and UBO layout) -- no separate pbr_skinned3d.frag.glsl needed.
@@ -270,7 +270,7 @@ def main():
             sys.exit(1)
         source = expand_local_includes(glsl_path.read_text())
         if defines:
-            # plans/plan_gltf.md GLTF-465: variant defines are inserted after GLSL's mandatory #version
+            # GLTF-465: variant defines are inserted after GLSL's mandatory #version
             # line, the same way the retired Vulkan renderer's own compile_shaders.py did it.
             version_end = source.index("\n", source.index("#version")) + 1
             source = (source[:version_end]

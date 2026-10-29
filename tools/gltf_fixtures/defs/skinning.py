@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Skinning fixtures -- owning group ``skinning`` (plans/plan_gltf.md §15.4, §24.2).
+"""Skinning fixtures -- owning group ``skinning``.
 
 Proves **D8**, the second independent collapse mechanism. ``BuildSkeleton`` walks parent links only
 *within the skin's own joint set*, so any transform on an armature node above the joints is dropped
@@ -443,7 +443,7 @@ _HINT_MID_TRANSLATION = [3.0, 0.0, 0.0]
 def skin_skeleton_hint() -> Fixture:
     """``skin.skeleton`` declared above a transform it must not swallow. Owns **GLTF-249**.
 
-    §15.1.1 states the rule twice over, and this fixture is built so both halves can fail
+    docs/gltf-conventions.md states the rule twice over, and this fixture is built so both halves can fail
     separately:
 
     * **A transform-bearing ancestor sits ABOVE the declared root.** ``Outer`` carries
@@ -883,7 +883,7 @@ def _single_joint_skin(builder: GltfBuilder) -> tuple[int, int]:
 def skin_unlit() -> Fixture:
     """A skinned primitive with a non-PBR material -- the fixture that reaches vertex stride 52.
 
-    plans/plan_gltf.md `GLTF-149`. A skinned primitive lands on stride 68 (the skinned PBR layout)
+    `GLTF-149`. A skinned primitive lands on stride 68 (the skinned PBR layout)
     whenever its material uses the metallic-roughness model, which is glTF's default in two
     separate ways -- so stride 52, the skinned layout with no tangent slot, was unreachable by
     every fixture in the corpus and had no golden bytes at all.
@@ -955,7 +955,7 @@ def skin_unlit() -> Fixture:
 def skin_vertex_color() -> Fixture:
     """A skinned, vertex-coloured, **unlit** primitive -- the fixture that reaches vertex stride 56.
 
-    plans/plan_gltf.md `GLTF-149`/`GLTF-463`. Stride 56 is the skinned layout with a packed Color appended,
+    `GLTF-149`/`GLTF-463`. Stride 56 is the skinned layout with a packed Color appended,
     and it is the one stride with no C++ stream struct behind it (`GLTF-156`): the importer writes
     those bytes itself. That makes a golden more valuable here than anywhere else, not less -- there
     is no ``offsetof`` to catch a mistake in it.
@@ -1166,7 +1166,7 @@ def skin_vertex_color_pbr() -> Fixture:
     )
 
 
-# --- §15.4's arithmetic ladder ------------------------------------------------------------------
+# --- the skinning arithmetic ladder ---------------------------------------------------------------
 #
 # The rungs above own a defect each. These own the skin equation itself: one property per fixture,
 # each authored so that the plausible wrong answer is a DIFFERENT answer rather than a slightly
@@ -1256,7 +1256,7 @@ _TWO_WEIGHTED_WEIGHTS = [(0.5, 0.5, 0.0, 0.0)] * 3
 
 
 def skin_two_weighted() -> Fixture:
-    """§15.4's blending rung: `w = [0.5, 0.5]` across two joints 10 units apart.
+    """The skinning ladder's blending rung: `w = [0.5, 0.5]` across two joints 10 units apart.
 
     The skin equation is a weighted sum of joint matrices, and this is the smallest asset on which
     a reader that is not summing produces a *different* answer rather than a slightly worse one:
@@ -1308,7 +1308,7 @@ _FOUR_WEIGHTED_WEIGHTS = [(0.4, 0.3, 0.2, 0.1)] * 3
 
 
 def skin_four_weighted() -> Fixture:
-    """§15.4's four-influence rung. Every slot of `JOINTS_0`/`WEIGHTS_0` carries real work.
+    """The skinning ladder's four-influence rung. Every slot of `JOINTS_0`/`WEIGHTS_0` carries real work.
 
     XNA's ``BlendIndices``/``BlendWeight`` are four-wide and glTF's first influence set is too, so
     four is the case an importer must get exactly right -- and a reader that drops the fourth
@@ -1356,7 +1356,9 @@ def skin_four_weighted() -> Fixture:
 
 
 def skin_no_ibm() -> Fixture:
-    """§15.4's absent-`inverseBindMatrices` rung. §3.7.3: absent means identity, not absent joints.
+    """The skinning ladder's absent-`inverseBindMatrices` rung.
+
+    §3.7.3: absent means identity, not absent joints.
 
     The property is undefined-by-omission, which is the kind an importer gets wrong in two opposite
     directions: skipping the joint entirely (the vertex never moves) or leaving the bind matrix
@@ -1408,7 +1410,7 @@ _TILTED_NORMALS = [(0.0, 0.6, 0.8)] * 3
 
 
 def skin_nonuniform_joint_scale() -> Fixture:
-    """§15.4's non-uniform joint scale rung: positions **and** what happens to normals.
+    """The skinning ladder's non-uniform joint scale rung: positions **and** what happens to normals.
 
     A joint scaled `[1,2,1]` doubles Y for positions. Normals are the interesting half: they
     transform by the inverse transpose, so the same joint *halves* their Y before renormalisation.
@@ -1483,7 +1485,7 @@ _PARENTED_WEIGHTS = [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0), (0.5, 0.5, 0.0,
 
 
 def skin_parented_joints() -> Fixture:
-    """§15.4's joint-chain rung: joint B is a child of joint A, and both are transformed.
+    """The skinning ladder's joint-chain rung: joint B is a child of joint A, and both are transformed.
 
     A joint's matrix is built from its **global** transform, so the child's must include its
     parent's. An importer using node-local transforms produces a child matrix of T(2,0,0) instead
@@ -1550,7 +1552,7 @@ def skin_ushort_joint_indices() -> Fixture:
     byte-wise reading blends joints 1 and 0 instead: (2.5,3,0) rather than (0,3,3.5), which no
     tolerance can absorb.
 
-    This rung replaces §15.4's `skin-256-joints`, whose stated point -- that a 256-joint rig must
+    This rung replaces the planned `skin-256-joints`, whose stated point -- that a 256-joint rig must
     not wrap the index byte -- is unreachable: `GLTF-261` refuses any skin past the 72-joint GPU
     palette long before its indices are decoded, and `skin-73-joints` already owns that refusal
     one joint past the boundary. The reachable half of the same hazard is the component type, and

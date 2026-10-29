@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-239 / GLTF-358: two behaviours that live entirely on the CPU side of the
+// GLTF-239 / GLTF-358: two behaviours that live entirely on the CPU side of the
 // importer and are therefore verifiable without a renderer.
 //
 // `RemapOcclusionImageForDualTextureEXT` exists because `DualTextureEffect` multiplies its two

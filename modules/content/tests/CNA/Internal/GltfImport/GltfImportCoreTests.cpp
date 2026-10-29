@@ -767,7 +767,7 @@ TEST(GltfImportCoreTest, ExtractPunctualLightsEXTApproximatesDirectionalAndPoint
     cgltf_free(data);
 }
 
-// --- plans/plan_gltf.md GLTF-326: what the three-directional-light approximation costs ----------------
+// --- GLTF-326: what the three-directional-light approximation costs ----------------
 
 namespace
 {
@@ -958,7 +958,7 @@ TEST(GltfImportCoreTest, ExtractPunctualLightsEXTCapsAtThreeLights)
     cgltf_free(data);
 }
 
-// --- plans/plan_gltf.md GLTF-173: normals for a primitive that authors none ---------------------------
+// --- GLTF-173: normals for a primitive that authors none ---------------------------
 
 namespace
 {
@@ -1215,7 +1215,7 @@ namespace
 
 TEST(GltfImportCoreTest, AVertexSharedAcrossFacesOfDifferentOrientationIsSplitSoEveryFaceIsFlat)
 {
-    // plans/plan_gltf.md GLTF-461. Four triangles: (0,1,2) and (0,2,3) are a quad in the XY plane, and
+    // GLTF-461. Four triangles: (0,1,2) and (0,2,3) are a quad in the XY plane, and
     // (3,2,4) and (2,5,4) fold up out of it. Vertices 2 and 3 belong to faces of BOTH orientations,
     // so flat shading needs each of them duplicated once per orientation. GLTF-173 averaged them
     // instead and counted the approximation; this asserts the split.
@@ -1315,7 +1315,7 @@ TEST(GltfImportCoreTest, ADegenerateFaceNeverForcesADuplicate)
 
 TEST(GltfImportCoreTest, AnAuthoredTangentIsIgnoredWhenTheFileAuthorsNoNormal)
 {
-    // plans/plan_gltf.md GLTF-464: this was an inline document until the corpus could grow. It is a
+    // GLTF-464: this was an inline document until the corpus could grow. It is a
     // conformance statement about the format -- §3.7.2.1's "the provided tangents (if present) MUST
     // be ignored" -- so `docs/gltf-conformance.md` §3.8 puts it in `tools/gltf_fixtures/`, where the
     // L3 expectation is derived independently and the four L7 policies render it.

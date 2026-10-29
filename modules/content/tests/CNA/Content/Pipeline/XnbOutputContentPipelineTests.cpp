@@ -880,7 +880,7 @@ TEST(XnbOutputCliTest, TheUsageTextSeparatesXnaTargetsFromExtendedEcosystemTarge
 // -- glTF to XNA Model (XNAP-56, XNAP-57, XNAP-58) ---------------------------------------------
 //
 // Named XnbModelSourceRouteTest rather than anything with "Gltf" in it on purpose: these assert
-// what the XNB *writer* does with a model, not how CNA interprets glTF. plan_gltf.md's conformance
+// what the XNB *writer* does with a model, not how CNA interprets glTF. The glTF conformance
 // ladder governs every Gltf* suite and would have to claim this one, which would file an XNB
 // output test under a glTF conformance rung it does not belong to.
 

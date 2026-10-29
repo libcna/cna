@@ -20,7 +20,7 @@
 //
 // The original MVP material scope cuts named by CNB-50/51/55/67/73 are closed: the complete
 // MaterialOut record (seven supported texture slots, factors/scalars, alpha state and samplers) survives
-// the .cnj path, locked by plans/plan_gltf.md GLTF-236/GLTF-237. Current representation limits are
+// the .cnj path, locked by GLTF-236/GLTF-237. Current representation limits are
 // reported by GltfImportCore rather than copied into this CLI-specific file.
 //
 // CNJ CNB-82/83 (Phase 14C): morph target position/normal/tangent deltas (GltfImportCore::
@@ -421,7 +421,7 @@ namespace
 
     // Applies a unit-of-measure conversion to a transform's translation only. The importer's own
     // ScaleTranslation does the same thing for bind poses and inverse bind matrices; this is the
-    // node-hierarchy half of the same rule (plans/plan_gltf.md GLTF-121).
+    // node-hierarchy half of the same rule (GLTF-121).
     Matrix ScaleLocalTranslation(const Matrix& m, float unitScale)
     {
         Matrix result = m;
@@ -456,24 +456,24 @@ namespace
         SkeletonResult skeleton;
         if (hasSkin)
         {
-            // plans/plan_gltf.md GLTF-245: the joints' full scene ancestry, as on the runtime path;
+            // GLTF-245: the joints' full scene ancestry, as on the runtime path;
             // the skinned mesh node's own placement is ignored (CNASTREET-SKINDRAW).
             skeleton = BuildSkeleton(group.skin, sceneGraph, unitScale);
         }
 
         struct MeshEntry {
-            // plans/plan_gltf.md GLTF-141: the primitive's own name, traceable back to the glTF mesh it
+            // GLTF-141: the primitive's own name, traceable back to the glTF mesh it
             // came from (and its primitive index when the mesh has several). The reader already
             // read a "name" field for hand-written .model.json assets; this is the offline path
             // finally writing one instead of leaving every imported mesh called "mesh".
             std::string name;
             std::string vertFile, idxFile, textureFile, texture2File;
             int stride; std::string effect; bool vertexColorEnabled; bool unlit = false;
-            // plans/plan_gltf.md GLTF-073: the topology the index buffer is in, by its specification
+            // GLTF-073: the topology the index buffer is in, by its specification
             // name. Absent from a .cnj written before this, which could only ever hold a triangle
             // list -- so the reader's default is TRIANGLES and an older asset is unaffected.
             std::string primitiveTopology = "TRIANGLES";
-            // plans/plan_gltf.md GLTF-236/GLTF-237: the same complete carrier the runtime loader
+            // GLTF-236/GLTF-237: the same complete carrier the runtime loader
             // consumes. Keeping another loose copy here was exactly how four fields fell out of
             // the .cnj path while the direct path stayed correct.
             std::string normalMapFile, metallicRoughnessMapFile, emissiveMapFile,
@@ -485,16 +485,16 @@ namespace
             std::string morphFile;
             std::vector<float> morphWeights;
             std::optional<MorphWeightTrackOut> morphWeightTrack;
-            // plans/plan_gltf.md GLTF-461: the primitive authored no NORMAL, so its flat normals are a
+            // GLTF-461: the primitive authored no NORMAL, so its flat normals are a
             // function of the morph weights and the runtime has to recompute them per pose. Carried
             // as a mesh-entry JSON field rather than a further binary trailer because the reader
             // already has the index buffer it needs; only the DECISION has to travel.
             bool morphFlatNormals = false;
-            // plans/plan_gltf.md GLTF-114/GLTF-129 (Phase 5): index into the emitted "bones" array of the
+            // GLTF-114/GLTF-129 (Phase 5): index into the emitted "bones" array of the
             // node that instantiates this primitive's mesh -- 0 (the identity root) for a skinned
             // instance, whose own node transform glTF requires to be ignored.
             int parentBone = 0;
-            // plans/plan_gltf.md GLTF-139: which ModelMesh this primitive is a part OF. The .cnj
+            // GLTF-139: which ModelMesh this primitive is a part OF. The .cnj
             // "meshes" array is per primitive and XNA's shape is one ModelMesh per mesh with one
             // part per primitive, so consecutive entries sharing this value are one ModelMesh.
             // Left -1 -- and then omitted from the JSON entirely -- for a single-primitive
@@ -574,7 +574,7 @@ namespace
                         "to packed channel 0.");
                 }
 
-                // plans/plan_gltf.md GLTF-206: the converter copies glTF PNG/JPEG bytes and the runtime
+                // GLTF-206: the converter copies glTF PNG/JPEG bytes and the runtime
                 // decoder creates one texture level. Report authored mip filtering now, rather
                 // than pretending a role-incorrect generic RGBA downsample would be fidelity.
                 if (!meshOut.mipmappedSamplerMapsWithoutMipChainEXT.empty())
@@ -594,7 +594,7 @@ namespace
                         "(GLTF-206).");
                 }
 
-                // plans/plan_gltf.md GLTF-339: transmission approximated as alpha blending.
+                // GLTF-339: transmission approximated as alpha blending.
                 if (meshOut.transmissionApproximatedEXT)
                 {
                     warnings.push_back(
@@ -610,7 +610,7 @@ namespace
                             : ""));
                 }
 
-                // plans/plan_gltf.md GLTF-461: the residue of the flat-normal computation, not the
+                // GLTF-461: the residue of the flat-normal computation, not the
                 // computation itself -- the split is exact, so only what the tolerance merged and
                 // what glTF required to be thrown away are worth a warning.
                 if (meshOut.flatNormalMergedVertexCountEXT > 0)
@@ -651,7 +651,7 @@ namespace
                         "instead.");
                 }
 
-                // plans/plan_gltf.md GLTF-095/GLTF-257: influence sets past the first are dropped,
+                // GLTF-095/GLTF-257: influence sets past the first are dropped,
                 // because XNA's BlendIndices/BlendWeight carry exactly four.
                 if (meshOut.extraInfluenceSetsEXT > 0)
                 {
@@ -664,7 +664,7 @@ namespace
                         "renormalised, so the skin is coarser rather than collapsed.");
                 }
 
-                // plans/plan_gltf.md GLTF-200/GLTF-350: a map whose pixels are in a format CNA has no
+                // GLTF-200/GLTF-350: a map whose pixels are in a format CNA has no
                 // decoder for. A build pipeline is exactly where this needs to be loud -- the
                 // conversion succeeds, and the texture is simply not in the output.
                 for (const std::string& unsupported : meshOut.unsupportedTextureSourcesEXT)
@@ -804,7 +804,7 @@ namespace
                 entry.material = meshOut.material;
                 entry.primitiveTopology = PrimitiveTopologyName(meshOut.topology);
                 entry.vertexColorEnabled = meshOut.colored;
-                // plans/plan_gltf.md GLTF-337: KHR_materials_unlit. Carried through the .cnj so the two
+                // GLTF-337: KHR_materials_unlit. Carried through the .cnj so the two
                 // loaders agree -- the runtime path turns lighting off from MeshOut directly,
                 // and without this field the offline path would silently light the same file.
                 entry.unlit = meshOut.unlitEXT;
@@ -915,7 +915,7 @@ namespace
                         {
                             retainedWeightChannels.insert(weightChannel);
                         }
-                        // plans/plan_gltf.md GLTF-461, per variant: a variant chooses its own layout, so
+                        // GLTF-461, per variant: a variant chooses its own layout, so
                         // whether its normals are generated is its own MeshOut's answer.
                         variantEntry.morphFlatNormals = variantMesh.morphedFlatNormalsEXT;
                     }
@@ -949,7 +949,7 @@ namespace
         std::vector<ClipEntry> clipEntries;
         std::set<std::string> clipFiles;
 
-        // One writer for both clip kinds (plans/plan_gltf.md GLTF-294). The joint-palette and scene-node
+        // One writer for both clip kinds (GLTF-294). The joint-palette and scene-node
         // paths differ only in which index space the tracks are in, and that difference is a field
         // in the file rather than a second serialiser -- keeping two would let them drift, which is
         // the shape of mistake this whole track has been about.
@@ -1006,7 +1006,7 @@ namespace
             AccumulateGltfAnimationReportEXT(modelAnimationReport, animationReport);
         }
 
-        // plans/plan_gltf.md GLTF-293: rigid (non-joint) node animation. Before this, a channel targeting
+        // GLTF-293: rigid (non-joint) node animation. Before this, a channel targeting
         // an ordinary mesh node matched nothing in the skin's joint set and was dropped in complete
         // silence -- and for an unskinned file ExtractClips was never called at all, so the .cnj
         // simply had no "animations" key and said nothing about why (defect D6).
@@ -1014,7 +1014,7 @@ namespace
         // GLTF-294 added the .cnj clip schema's "targetSpace" field, so the clip is now SERIALISED
         // rather than only reported. That field is what makes it safe: a scene-node clip's
         // boneIndex is a sceneNodeIndex, and without a field naming which of the two index spaces
-        // (§15.1.2) a track is in, a reader could apply a scene-node index as a joint-palette slot
+        // (GLTF-252) a track is in, a reader could apply a scene-node index as a joint-palette slot
         // -- a fresh silent corruption in place of the old one.
         //
         // GLTF-295: extraction is unconditional. A file with no skin at all still reaches this
@@ -1074,7 +1074,7 @@ namespace
             json << "  \"skeleton\": \"" << JsonEscape(skeletonFile) << "\",\n";
         }
 
-        // plans/plan_gltf.md GLTF-129 (Phase 5): the glTF node graph, one entry per BuildSceneGraph node,
+        // GLTF-129 (Phase 5): the glTF node graph, one entry per BuildSceneGraph node,
         // parent-before-child, index 0 the synthetic identity root. Each mesh below names its own
         // "parentBone" index into this array, so the loader can rebuild the same ModelBone tree the
         // runtime .gltf path builds directly -- the two paths must place geometry identically
@@ -1087,7 +1087,7 @@ namespace
         for (std::size_t b = 0; b < sceneGraph.nodes.size(); ++b)
         {
             const SceneNodeOut& node = sceneGraph.nodes[b];
-            // plans/plan_gltf.md GLTF-121: unitScale converts the file's unit of measure, so it has to
+            // GLTF-121: unitScale converts the file's unit of measure, so it has to
             // reach the node translations as well as the vertex positions ExtractMesh already
             // scales. Scaling each node's LOCAL translation scales every composed world
             // translation by the same factor -- composition only ever adds a parent's already
@@ -1111,7 +1111,7 @@ namespace
         LightReportEXT lightReport;
         const std::vector<LightOut> punctualLights = ExtractPunctualLightsEXT(data, lightReport);
         AppendGltfLightReportEXT(importReport, lightReport, punctualLights.size());
-        // plans/plan_gltf.md GLTF-326: what the three-directional-light approximation cost this file.
+        // GLTF-326: what the three-directional-light approximation cost this file.
         if (lightReport.droppedLightCount > 0)
         {
             warnings.push_back(
@@ -1236,7 +1236,7 @@ namespace
             {
                 json << ", \"primitiveTopology\": \"" << JsonEscape(e.primitiveTopology) << "\"";
             }
-            // plans/plan_gltf.md GLTF-237: sampler state is part of the material as it reaches a draw,
+            // GLTF-237: sampler state is part of the material as it reaches a draw,
             // even though glTF declares it on the texture object. The direct path already stores
             // all supported slots on ModelMeshPart; preserve non-default states in .cnj as well. An
             // explicit LinearWrap serialises to nothing because it is observationally identical
@@ -1456,7 +1456,7 @@ namespace
         }
         struct DataGuard { cgltf_data* d; ~DataGuard() { cgltf_free(d); } } guard{data};
 
-        // plans/plan_gltf.md GLTF-032/GLTF-198: refuse a file naming something outside its own
+        // GLTF-032/GLTF-198: refuse a file naming something outside its own
         // directory, before cgltf_load_buffers resolves those URIs itself. The offline tool is if
         // anything the more exposed of the two entry points -- it is what a build pipeline points
         // at unattended assets with.
@@ -1478,13 +1478,13 @@ namespace
 
         std::vector<std::string> warnings;
 
-        // plans/plan_gltf.md GLTF-021..GLTF-024: structural validation, extensionsRequired enforcement
+        // GLTF-021..GLTF-024: structural validation, extensionsRequired enforcement
         // and an ignored-extension report, before anything is decoded. Deliberately after
         // cgltf_load_buffers, because the sparse index-bound check needs buffer data to run at all.
         ValidateGltfEXT(data, inputPathUtf8, warnings);
         const std::vector<std::string> validationWarnings = warnings;
 
-        // plans/plan_gltf.md GLTF-113: build the node graph once and share it across every group, so
+        // GLTF-113: build the node graph once and share it across every group, so
         // each group's emitted "bones" array indexes the same scene-node identity space.
         const SceneGraphOut sceneGraph = BuildSceneGraph(data);
         std::vector<MeshGroup> groups = CollectMeshGroups(data, sceneGraph);

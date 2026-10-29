@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-003 / GLTF-004: the generated conformance corpus and the L1-L4 ladder over it.
+// GLTF-003 / GLTF-004: the generated conformance corpus and the L1-L4 ladder over it.
 //
 // This suite is unusual on purpose, and the shape is the point.
 //
@@ -250,7 +250,7 @@ TEST(GltfFixtureCorpus, TheGeneratorPackageIsCompleteInTheCheckout)
                 << source.filename().string() << " imports '" << module
                 << "', but neither " << asModule.string() << " nor " << asPackage.string()
                 << " exists. The generator cannot run, so the corpus cannot be regenerated -- "
-                   "check .gitignore is not swallowing the file (plans/plan_gltf.md GLTF-003).";
+                   "check .gitignore is not swallowing the file (GLTF-003).";
         }
     }
 }
@@ -574,7 +574,7 @@ TEST(GltfFixtureCorpus, SoftwareCorpusL7ReportIsCompleteExactAndReproducible)
 
 TEST(GltfFixtureCorpus, EveryL7GoldenCarriesTheVertexColourAlphaProductRatherThanTheWhiteIdentity)
 {
-    // plans/plan_gltf.md GLTF-465. §3.9.2/§3.7.2.1: COLOR_0 is "an additional linear multiplier to base
+    // GLTF-465. §3.9.2/§3.7.2.1: COLOR_0 is "an additional linear multiplier to base
     // color" -- ITS ALPHA INCLUDED. Every other check in this suite proves the colour reaches the
     // renderer; this one proves the renderer USED it, from the committed pixels, with no display and
     // no shader-source string matching.
@@ -780,7 +780,7 @@ TEST(GltfFixtureCorpus, ValidatorErrorsAreExactNamedMalformedFixtureOracles)
 
 TEST(GltfFixtureCorpus, DistinctAssetCountEqualsTheSumOfOwningGroupCounts)
 {
-    // plans/plan_gltf.md §24.1: one asset has exactly one owning group, so the distinct-asset total is
+    // One asset has exactly one owning group, so the distinct-asset total is
     // the sum of the owning-group counts. Referencing a fixture from another group never
     // re-counts it.
     const JsonValue& manifest = CorpusManifest();
@@ -851,23 +851,11 @@ TEST(GltfFixtureCorpus, FinalTargetAccountsForEveryGeneratedAndMissingAssetExact
     EXPECT_EQ(static_cast<std::size_t>(NumberOr(manifest, "distinctAssetCount", -1)), currentSum);
     EXPECT_EQ(targetSum, accountedIds.size());
     EXPECT_EQ(targetSum, currentSum + missing.arrayValue.size());
-
-    // The human plan names the generated target rather than carrying a fourth independent number.
-    const std::filesystem::path plan =
-        CorpusDirectory().parent_path().parent_path().parent_path() / "plans/plan_gltf.md";
-    std::ifstream file(plan);
-    ASSERT_TRUE(file.is_open()) << plan.string();
-    const std::string text((std::istreambuf_iterator<char>(file)),
-                           std::istreambuf_iterator<char>());
-    const std::string heading = "### 24.2 Target corpus — " + std::to_string(targetSum) +
-                                " distinct synthetic assets";
-    EXPECT_NE(std::string::npos, text.find(heading))
-        << "plans/plan_gltf.md must use the generator's target: " << heading;
 }
 
 TEST(GltfFixtureCorpus, AllFourteenForensicAuditFixturesArePromoted)
 {
-    // plans/plan_gltf.md §24.2: f1...f14 are promoted, not re-invented, and each maps to exactly one
+    // docs/gltf-conformance.md §3.4: f1...f14 are promoted, not re-invented, and each maps to exactly one
     // canonical corpus id.
     const JsonValue& promoted = Member(CorpusManifest(), "promotedAuditFixtures");
     ASSERT_EQ(JsonType::Object, promoted.type);
@@ -944,7 +932,7 @@ TEST(GltfFixtureCorpus, EveryGlbTwinIsAValidContainerCarryingTheSameAsset)
     }
 }
 
-// plans/plan_gltf.md GLTF-131: the transform ladder in `.glb` form too.
+// GLTF-131: the transform ladder in `.glb` form too.
 //
 // The test above proves the two containers hold the same *counts*. This one asks the question the
 // row is actually about: does CNA place the geometry identically out of either container? A GLB
@@ -1187,7 +1175,7 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
             EXPECT_EQ(static_cast<int>(NumberOr(expected, "mode", -1)), dump.topologyMode);
             EXPECT_EQ(StringOr(expected, "modeName", ""), dump.topologyName);
 
-            // GLTF-072: what CNA's own documented per-mode policy (plans/plan_gltf.md §10.1) must turn
+            // GLTF-072: what CNA's own documented per-mode policy (`GLTF-072`) must turn
             // the primitive into. Kept separate from the spec-derived fields above because it is a
             // CNA decision -- converting strips and fans at import rather than plumbing new
             // topologies through every renderer.
@@ -1206,7 +1194,7 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
             // into a slot whose attribute the file omits is not something the specification
             // constrains, and asserting CNA's fill value here would silently promote an
             // implementation choice to a requirement.
-            // plans/plan_gltf.md GLTF-178: tangents are compared here too, but only where the fixture
+            // GLTF-178: tangents are compared here too, but only where the fixture
             // AUTHORS them. A generated tangent basis is CNA's own algorithm rather than anything
             // §3.7.2.1 prescribes, so the manifest states none and this comparison skips it --
             // asserting a generated basis would promote an implementation choice to a conformance
@@ -1306,7 +1294,7 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
                 {
                     ASSERT_EQ(triangles.arrayValue.size() * 3, dump.indices.size())
                         << "the emitted index list does not describe the expected triangle count";
-                    // plans/plan_gltf.md GLTF-461: §3.7.2.1's flat-normal split renumbers, so an emitted
+                    // GLTF-461: §3.7.2.1's flat-normal split renumbers, so an emitted
                     // index is compared through the manifest's own independently computed remap
                     // rather than against the authored number directly. `triangles` stays in
                     // AUTHORED numbering because it is the spec's own expansion of the file, which
@@ -1487,7 +1475,7 @@ TEST(GltfConformanceL4, CnaWorldPositionsMatchTheExpectedGeometry)
             ASSERT_NE(cnaByPlacement.end(), found)
                 << "CNA imported no instance for this node/primitive pair";
             EXPECT_EQ(expectedInstance->mesh, found->second->mesh);
-            // plans/plan_gltf.md GLTF-461: §3.7.2.1's flat-normal split duplicates a vertex shared
+            // GLTF-461: §3.7.2.1's flat-normal split duplicates a vertex shared
             // between differently oriented faces, so CNA can emit more vertices than the file
             // declares. The invariant is that the split DUPLICATES and never MOVES: every emitted
             // vertex must sit exactly where its source vertex does. Mapping through the remap keeps
@@ -1516,11 +1504,11 @@ TEST(GltfConformanceL4, CnaWorldPositionsMatchTheExpectedGeometry)
     }
 }
 
-// --- plans/plan_gltf.md GLTF-401: the manifest describes every asset, completely ------------------------
+// --- GLTF-401: the manifest describes every asset, completely ------------------------
 
 TEST(GltfFixtureCorpus, EveryAssetDeclaresItsGroupItsLayersAndAnExpectationForEachOfThem)
 {
-    // §24.1's inventory is only worth having if it is total. The count check above proves the
+    // The owning-group inventory is only worth having if it is total. The count check above proves the
     // owning groups add up; this proves each entry actually says what it claims to validate, and
     // -- the part that matters -- that the fixture carries an expectation for every layer it
     // names. A fixture declaring "L4" with an empty `l4` block is compared against nothing at that
@@ -1551,7 +1539,7 @@ TEST(GltfFixtureCorpus, EveryAssetDeclaresItsGroupItsLayersAndAnExpectationForEa
             << "owningGroup '" << owning << "' is not one of the counted groups";
 
         // A referencing group is a *different* group that uses the asset. Naming its own owning
-        // group would double-count it in exactly the way §24.1's ownership model exists to prevent.
+        // group would double-count it in exactly the way the ownership model exists to prevent.
         const JsonValue& referencing = Member(asset, "referencingGroups");
         ASSERT_EQ(JsonType::Array, referencing.type) << "referencingGroups is not an array";
         for (const JsonValue& group : referencing.arrayValue)
@@ -1591,7 +1579,7 @@ TEST(GltfFixtureCorpus, EveryAssetDeclaresItsGroupItsLayersAndAnExpectationForEa
         << "too few declared layers across the corpus for this to be a completeness check";
 }
 
-// --- plans/plan_gltf.md GLTF-419: the corpus stays small enough to read --------------------------------
+// --- GLTF-419: the corpus stays small enough to read --------------------------------
 
 TEST(GltfFixtureCorpus, EveryAssetFitsTheSizeBudgetOrStatesWhyItCannot)
 {
@@ -1652,15 +1640,15 @@ TEST(GltfFixtureCorpus, EveryAssetFitsTheSizeBudgetOrStatesWhyItCannot)
     RecordProperty("largestAsset", largestName);
 }
 
-// --- plans/plan_gltf.md GLTF-416: the corpus documentation is generated, not maintained ----------------
+// --- GLTF-416: the corpus documentation is generated, not maintained ----------------
 
 TEST(GltfFixtureCorpus, TheConformanceDocListsEveryFixtureTheManifestDeclares)
 {
     // A corpus inventory written by hand is stale the first time a fixture is added, and a stale
     // inventory is worse than none: it reads as a coverage claim nobody checked. So
     // docs/gltf-conformance.md §7 is generated (`--fixture-table`) and compared here, the same rule
-    // §19's extension table lives under -- with the corrected table printed on failure, so fixing
-    // the document is a paste rather than a reading exercise.
+    // docs/gltf-limitations.md's extension table lives under -- with the corrected table printed on
+    // failure, so fixing the document is a paste rather than a reading exercise.
     const std::filesystem::path doc =
         CorpusDirectory().parent_path().parent_path().parent_path() / "docs" / "gltf-conformance.md";
     std::ifstream file(doc);
@@ -1722,7 +1710,7 @@ TEST(GltfFixtureCorpus, TheConformanceDocListsEveryFixtureTheManifestDeclares)
     EXPECT_EQ(CorpusFixtureIds().size(), compared);
 }
 
-// --- plans/plan_gltf.md GLTF-414: inline documents stay a deliberate choice ----------------------------
+// --- GLTF-414: inline documents stay a deliberate choice ----------------------------
 
 TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
 {
@@ -1758,7 +1746,7 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     // attribute table allows `COLOR_n` as VEC3 or VEC4 and `TEXCOORD_n` as float, unsigned byte
     // normalized or unsigned short normalized, and the corpus had an asset for exactly one form of
     // each. Neither found a bug -- CNA decodes all of them -- so what they add is the assertion, and
-    // an unasserted rule is how the four §27.1.2 divergences survived. GLTF-464 owns promoting them.
+    // an unasserted rule is how the four 2026-08-17 core divergences survived. GLTF-464 owns promoting them.
     //
     // 267 -> 276 buys no further document, for the reason this test already records above:
     // GLTF-468's `ColorAndTexcoordFormDocument` is PARAMETERISED (colour type and texcoord component
@@ -1770,7 +1758,7 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     //
     // 276 -> 277 for GLTF-470's sparse animation sampler: one document, written with literal offsets
     // so it needs no splices at all. It crosses two features the corpus covers separately and never
-    // together, which is a gap §24's own per-feature inventory is structurally unable to see.
+    // together, which is a gap the corpus's own per-feature inventory is structurally unable to see.
     //
     // Note for whoever edits this comment: the scan counts the opening delimiter anywhere in a
     // .cpp, comments included, so spelling it here would raise the very number it explains.
@@ -1855,7 +1843,7 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
            "the commit message.";
 }
 
-// --- plans/plan_gltf.md GLTF-066: the L2 dump shows the sparse override APPLIED -------------------------
+// --- GLTF-066: the L2 dump shows the sparse override APPLIED -------------------------
 
 TEST(GltfConformanceL2, ASparseOverrideIsVisibleInTheDumpAndNotJustPlausible)
 {

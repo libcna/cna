@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-010: `ctest -L gltf-conformance` runs the whole ladder and names the failing
+// GLTF-010: `ctest -L gltf-conformance` runs the whole ladder and names the failing
 // layer.
 //
 // The label is assembled in cmake/UnitTests.cmake, one CTest entry per rung, so CTest's own
@@ -214,7 +214,7 @@ TEST(GltfConformanceLadder, TheRungListIsReadableFromTheBuildFile)
     // being layers. Naming them here means a rung that silently disappears from the build file is
     // caught, not just one that gains an unmatched suite.
     //
-    // `Perf` is Phase 22's measurements (plans/plan_gltf.md GLTF-433 … GLTF-443). It is on the label
+    // `Perf` is Phase 22's measurements (GLTF-433 … GLTF-443). It is on the label
     // rather than beside it because its assertions are conformance assertions in the campaign's
     // sense -- "a cached load still costs less than a parse", "a copied Model still shares its
     // buffers" -- and because a measurement nobody runs stops being a measurement.
@@ -354,12 +354,12 @@ TEST(GltfConformanceLadder, RequiredCiRunsEveryCampaignRendererOnIntegrationHead
     EXPECT_EQ(std::string::npos, source.find("|| true"));
 }
 
-// --- plans/plan_gltf.md GLTF-403 / GLTF-413: §27.1's evidence must exist ------------------------------
+// --- GLTF-403 / GLTF-413: the core milestone's evidence must exist ---------------------------------
 
-TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatExist)
+TEST(GltfConformanceLadder, EveryCoreMilestoneRowIsTraceableToFixturesAndTestsThatExist)
 {
-    // §27.1 is the CORE 2.0 CORRECT milestone's checklist, and §27.1.1 maps each of its 20 rows to
-    // the fixtures that exercise it and the suites that assert it. A milestone citing evidence is
+    // docs/gltf-conformance.md §8.1 is the core milestone's checklist, and §8.2 maps each of its 20
+    // rows to the fixtures that exercise it and the suites that assert it. A milestone citing evidence is
     // only worth as much as the evidence being real, so this checks exactly that: every row
     // present, every fixture named actually in the corpus, and every suite name backed either by
     // gtest in this binary or by an exact renderer CTest registration. Renderer framebuffer tests
@@ -370,8 +370,8 @@ TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatE
     // What it deliberately does NOT check is the State column. Whether a row is green is the
     // judgement `GLTF-458` has to make from the tests themselves; a test asserting its own
     // milestone would be circular.
-    std::ifstream plan(RepositoryRoot() / "plans/plan_gltf.md");
-    ASSERT_TRUE(plan.is_open()) << "cannot open plans/plan_gltf.md";
+    std::ifstream doc(RepositoryRoot() / "docs/gltf-conformance.md");
+    ASSERT_TRUE(doc.is_open()) << "cannot open docs/gltf-conformance.md";
 
     std::set<std::string> registeredEvidenceNames;
     const ::testing::UnitTest& unitTest = *::testing::UnitTest::GetInstance();
@@ -383,7 +383,7 @@ TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatE
 
     // A platform may intentionally omit a suite whose implementation needs unavailable process
     // APIs. It remains evidence only while its real source still declares that suite; this is not
-    // a free-form allow-list for stale plan references.
+    // a free-form allow-list for stale milestone references.
     for (const std::string& suite : PlatformExcludedGltfSuites())
     {
         EXPECT_TRUE(SourceDeclaresPlatformExcludedGltfSuite(suite))
@@ -426,7 +426,7 @@ TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatE
     // its CMake registration is not present in a clean CNA checkout.  The required CNA workflow
     // pins that viewer commit and selects the exact CTest name.  Extract exact anchored selectors
     // from the workflow instead of adding a free-form exception here: renaming/removing the CI
-    // rung then makes the plan citation stale and fails this test.
+    // rung then makes the milestone citation stale and fails this test.
     const std::filesystem::path workflow =
         RepositoryRoot() / ".github" / "workflows" / "gltf-renderer-stride-ci.yml";
     std::ifstream workflowFile(workflow);
@@ -454,9 +454,9 @@ TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatE
     std::size_t suitesChecked = 0;
     std::string line;
     bool inSection = false;
-    while (std::getline(plan, line))
+    while (std::getline(doc, line))
     {
-        if (line.rfind("#### 27.1.1 ", 0) == 0) { inSection = true; continue; }
+        if (line.rfind("### 8.2 Traceability", 0) == 0) { inSection = true; continue; }
         if (inSection && line.rfind("#", 0) == 0) { break; }
         if (!inSection || line.empty() || line.front() != '|') { continue; }
         if (line.find("---") != std::string::npos) { continue; }
@@ -475,7 +475,7 @@ TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatE
         if (number.rfind("#", 0) == 0) { continue; }  // the header row
         int row = 0;
         try { row = std::stoi(number); } catch (const std::exception&) { continue; }
-        SCOPED_TRACE("§27.1 row " + std::to_string(row));
+        SCOPED_TRACE("§8.1 row " + std::to_string(row));
         rowsSeen.insert(row);
 
         // Every backticked token in the fixtures cell that is not a wildcard or a task id must be
@@ -487,7 +487,7 @@ TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatE
             if (token.rfind("GLTF-", 0) == 0) { continue; }
             if (token.rfind("l5.", 0) == 0) { continue; }
             EXPECT_NE(corpusIds.end(), corpusIds.find(token))
-                << "§27.1.1 row " << row << " cites fixture '" << token
+                << "§8.2 row " << row << " cites fixture '" << token
                 << "', which is not in the corpus";
             ++fixturesChecked;
         }
@@ -500,7 +500,7 @@ TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatE
             if (token.rfind("GLTF-", 0) == 0) { continue; }
             if (token.find('(') != std::string::npos) { continue; }  // a named case, not a suite
             EXPECT_NE(registeredEvidenceNames.end(), registeredEvidenceNames.find(token))
-                << "§27.1.1 row " << row << " cites test suite '" << token
+                << "§8.2 row " << row << " cites test suite '" << token
                 << "', which is neither registered in this binary nor as an EasyGL CTest";
             ++suitesChecked;
         }
@@ -509,7 +509,7 @@ TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatE
     for (int row = 1; row <= 20; ++row)
     {
         EXPECT_NE(rowsSeen.end(), rowsSeen.find(row))
-            << "§27.1 row " << row << " has no entry in §27.1.1, so the milestone would be "
+            << "§8.1 row " << row << " has no entry in §8.2, so the milestone would be "
                "declared with nothing said about it";
     }
     EXPECT_GT(fixturesChecked, 40u) << "too few fixtures cited for this to be traceability";

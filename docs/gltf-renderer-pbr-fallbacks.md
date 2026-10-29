@@ -206,7 +206,7 @@ corrected per-renderer transport is:
 `GltfRendererPbrFallbackPolicy.EveryPbrShaderConsumesTheAlphaCoverageVector` is an ordinary,
 source-based inventory gate over every renderer implementation, including separately stored rigid
 and skinned variants. The changed shader sources also compile in the native SDL GPU and WebGPU
-backend targets. These checks cover this alpha-coverage slice of `GLTF-379`; other §21.1 rows keep
+backend targets. These checks cover this alpha-coverage slice of `GLTF-379`; other L6 contract rows keep
 that broader audit open.
 
 ## PBR map scalars (`GLTF-224`, `GLTF-225`, `GLTF-379`)

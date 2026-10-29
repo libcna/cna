@@ -176,7 +176,14 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   implemented (`Effect` `CNBF-104`, `.cnapak` `CNBF-107`, §15) and its design decisions D1–D11
   (Appendix A) are in [`../docs/cnb-format.md`](../docs/cnb-format.md); comments cite the
   `CNBF-*` IDs bare.
-- [`plan_gltf.md`](plan_gltf.md) — glTF import correctness.
+- `plan_gltf.md` — the glTF 2.0 correctness campaign (`GLTF-001`..`GLTF-480`, 2026-08-11/18). 476
+  rows closed; of the other four, three were made moot by renderer retirements and `GLTF-459`
+  (declare `GLTF ROBUST`) stays open on its rows 6 and 12. Deleted on 2026-10-29 (Git history
+  only). The milestones, their checked traceability table and the `GLTF ROBUST` state are in
+  [`../docs/gltf-conformance.md`](../docs/gltf-conformance.md) §8, the Gate C matrix in its §5.6,
+  and the extension classification in
+  [`../docs/gltf-limitations.md`](../docs/gltf-limitations.md) §1; comments cite the `GLTF-*` IDs
+  bare.
 - [`plan_xnb.md`](plan_xnb.md) — XNB content pipeline.
 - [`plan_xnapipeline.md`](plan_xnapipeline.md) — native XNB output (closed; external verification rows only).
 - [`plan_xnapipeline_parity.md`](plan_xnapipeline_parity.md) — TRUE XNA 4.0 Content Pipeline public API + input-format parity, measured against the genuine SDK.

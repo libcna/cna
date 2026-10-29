@@ -187,7 +187,7 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         using namespace Shaders;
 
-        // plans/plan_gltf.md GLTF-465: this renderer applies the COLOR_0 product now, so the shared
+        // GLTF-465: this renderer applies the COLOR_0 product now, so the shared
         // RequireVertexColourPbrSupportEXT refusal is gone. Stride 60 is the rigid PBR record with a
         // packed COLOR_0 at offset 56 and stride 80 the skinned one with its own at 76; each selects
         // the vertex program whose input struct that declaration satisfies, because a vs_3_0 input
@@ -369,7 +369,7 @@ namespace CNA::Internal::Renderers::DirectX9
         const float fogColor[4] = {params.fogColor[0], params.fogColor[1], params.fogColor[2],
                                    params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f};
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "FogColor", fogColor);
-        // plans/plan_gltf.md GLTF-465: the effect's own VertexColorEnabledEXT, and the layout must
+        // GLTF-465: the effect's own VertexColorEnabledEXT, and the layout must
         // supply the attribute as well -- the stride-48/68 programs write opaque white to the
         // interpolant, so raising the flag for them would multiply by an identity rather than by
         // a colour, but stating both keeps the uniform meaning one thing.

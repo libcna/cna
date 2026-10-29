@@ -285,20 +285,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_SkinnedPbrEffect_Golden COMMAND cna_test_easygl_skinnedpbreffect_golden
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_gltf.md GLTF-343/344: IOR/specular Fresnel endpoints reach both real PBR programs.
+        # GLTF-343/344: IOR/specular Fresnel endpoints reach both real PBR programs.
         cna_easygl_test(cna_test_easygl_pbr_fresnel_factors
                         easygl_pbr_fresnel_factors_test.cpp)
         cna_register_renderer_test(NAME EasyGL_Pbr_FresnelFactors COMMAND cna_test_easygl_pbr_fresnel_factors
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_gltf.md GLTF-210/212/223: mid-grey texture decode and final sRGB encode on both
+        # GLTF-210/212/223: mid-grey texture decode and final sRGB encode on both
         # rigid and skinned PBR programs. Endpoint textures cannot prove the decode path.
         cna_easygl_test(cna_test_easygl_pbr_srgb_transfer
                         easygl_pbr_srgb_transfer_test.cpp)
         cna_register_renderer_test(NAME EasyGL_Pbr_SrgbTransfer COMMAND cna_test_easygl_pbr_srgb_transfer
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_gltf.md GLTF-182/183/224..227: independent rigid/skinned UV0/UV1 material slots,
+        # GLTF-182/183/224..227: independent rigid/skinned UV0/UV1 material slots,
         # channel-discriminating normal/occlusion semantics, XY-only normal scale and the
         # specification's occlusion-strength formula.
         cna_easygl_test(cna_test_easygl_pbr_material_maps
@@ -306,7 +306,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_Pbr_MaterialMaps COMMAND cna_test_easygl_pbr_material_maps
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_gltf.md GLTF-373: a narrower renderer-shared test whose five sentinel textures
+        # GLTF-373: a narrower renderer-shared test whose five sentinel textures
         # prove base/normal/MR/emissive/occlusion binding without relying on EasyGL-only scalar or
         # output-transfer extensions.
         cna_easygl_test(cna_test_easygl_pbr_texture_slots
@@ -314,7 +314,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_Pbr_TextureSlots COMMAND cna_test_easygl_pbr_texture_slots
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_gltf.md GLTF-268: the generated stride-68 skinned PBR corpus fixture through the
+        # GLTF-268: the generated stride-68 skinned PBR corpus fixture through the
         # real ContentManager.Load<Model> -> bind-pose palette -> Model.Draw -> EasyGL pixel path.
         cna_easygl_test(cna_test_easygl_gltf_skinned_pbr_nonuniform_joint
                         easygl_gltf_skinned_pbr_nonuniform_joint_test.cpp)
@@ -323,7 +323,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_gltf.md GLTF-218: generated textured material through ContentManager.Load<Model>,
+        # GLTF-218: generated textured material through ContentManager.Load<Model>,
         # retaining both operands and multiplying them in linear space in the real PBR program.
         cna_easygl_test(cna_test_easygl_gltf_basecolor_factor_texture
                         easygl_gltf_basecolor_factor_texture_test.cpp)
@@ -332,7 +332,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_gltf.md GLTF-184/336: one imported UV samples the base-colour and normal maps
+        # GLTF-184/336: one imported UV samples the base-colour and normal maps
         # through two distinct KHR_texture_transform affine matrices at the real PBR samplers.
         cna_easygl_test(cna_test_easygl_gltf_texture_transform_per_map
                         easygl_gltf_texture_transform_per_map_test.cpp)
@@ -341,7 +341,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_gltf.md GLTF-439: retain one loaded glTF model across EasyGL's real desktop GL
+        # GLTF-439: retain one loaded glTF model across EasyGL's real desktop GL
         # context destroy/recreate cycle, then draw the same imported buffers and texture again.
         cna_easygl_test(cna_test_easygl_gltf_context_loss
                         easygl_gltf_context_loss_test.cpp)
@@ -362,7 +362,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             # selected another device, which crashes before the test reaches context recovery.
             ENVIRONMENT "${_cna_easygl_context_loss_video_driver}")
 
-        # plans/plan_gltf.md GLTF-189: CLAMP/REPEAT/MIRRORED_REPEAT from three generated assets,
+        # GLTF-189: CLAMP/REPEAT/MIRRORED_REPEAT from three generated assets,
         # applied through ModelMeshPart's public per-slot sampler contract before Model::Draw.
         cna_easygl_test(cna_test_easygl_gltf_sampler_wrap
                         easygl_gltf_sampler_wrap_test.cpp)
@@ -371,7 +371,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_gltf.md GLTF-175: the two corpus primitives' opposite tangent.w signs must
+        # GLTF-175: the two corpus primitives' opposite tangent.w signs must
         # reconstruct opposite bitangents under the same imported normal map.
         cna_easygl_test(cna_test_easygl_gltf_tangent_handedness
                         easygl_gltf_tangent_handedness_test.cpp)
@@ -380,7 +380,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_gltf.md GLTF-176: one shared tangent buffer placed normally and through a
+        # GLTF-176: one shared tangent buffer placed normally and through a
         # negative-determinant node transform; both draws must reconstruct the same world B.
         cna_easygl_test(cna_test_easygl_gltf_mirrored_tangent
                         easygl_gltf_mirrored_tangent_test.cpp)
@@ -389,7 +389,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_gltf.md GLTF-230/231: a real imported BLEND + doubleSided material remains
+        # GLTF-230/231: a real imported BLEND + doubleSided material remains
         # straight-alpha output; the application selects blend/cull state and draw order around
         # Model::Draw, which preserves caller-owned device state.
         cna_easygl_test(cna_test_easygl_gltf_alpha_blend
@@ -399,7 +399,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_gltf.md GLTF-340: an opaque dial must be drawn before the nearer transmission
+        # GLTF-340: an opaque dial must be drawn before the nearer transmission
         # approximation; the inverse order writes glass depth and hides the dial behind it.
         cna_easygl_test(cna_test_easygl_gltf_transmission_ordering
                         easygl_gltf_transmission_ordering_test.cpp)
@@ -1681,7 +1681,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_vertex_declaration_formats
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_gltf.md GLTF-157: a raw upload whose stride has no fixed layout and no explicit
+        # GLTF-157: a raw upload whose stride has no fixed layout and no explicit
         # VertexDeclaration must fail by name instead of inheriting stale VAO attributes.
         cna_easygl_test(cna_test_easygl_unknown_stride_rejection
                         easygl_unknown_stride_rejection_test.cpp)

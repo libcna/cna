@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-007: the L5 golden vertex/index buffer comparator, and the corpus asserted
+// GLTF-007: the L5 golden vertex/index buffer comparator, and the corpus asserted
 // through it.
 //
 // Two halves, in the order they have to be trusted:
@@ -348,7 +348,7 @@ TEST(GltfConformanceL5, GeneratedBuffersMatchTheGoldenBytesExactly)
             EXPECT_TRUE(ib.equal) << ib.report;
 
             // The topology the buffer is actually in, and the draw-call count derived from it
-            // (§12.3, GLTF-078). Both are read from the manifest rather than assumed, which is the
+            // (GLTF-078). Both are read from the manifest rather than assumed, which is the
             // whole point: every loader used to compute numIndices / 3 unconditionally, and that is
             // right for exactly one of the seven topologies.
             EXPECT_EQ(part.topology, std::string(CNA::Internal::GltfImport::PrimitiveTopologyName(
@@ -391,7 +391,7 @@ TEST(GltfConformanceL5, EveryTopologyProducesAGoldenAndItsOwnPrimitiveCount)
 {
     // Replaces the "a rejected topology has no golden" case: since GLTF-073/GLTF-076/GLTF-078 all
     // seven modes import, so all seven have goldens. What is asserted instead is the property that
-    // makes those goldens meaningful -- each carries its own topology and its own §12.3 count,
+    // makes those goldens meaningful -- each carries its own topology and its own GLTF-078 count,
     // rather than every buffer being described as a triangle list.
     const struct { const char* id; const char* topology; int primitiveCount; } kCases[] = {
         {"mode-triangles",      "TRIANGLES",  2},

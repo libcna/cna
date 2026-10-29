@@ -18,7 +18,7 @@
 // Renderer scope. D3D9, EasyGL, WebGPU and Software render points and support backbuffer readback,
 // so they carry the permanent pixel coverage here. SDL_GPU maps PointListEXT natively but
 // implements no backbuffer readback, so it is covered by a separate practical control. The retired
-// VULKAN renderer joined this matrix with plans/plan_gltf.md GLTF-393; the Direct3D disposition
+// VULKAN renderer joined this matrix with GLTF-393; the Direct3D disposition
 // closes GLTF-394. SOFTWARE-133 reconciled the oracle after the CPU renderer gained
 // a real point raster path: it now runs the same exact pixel, addressing and graphics-state
 // contract.

@@ -474,7 +474,7 @@ namespace CNA::Internal::Graphics
     /**
      * @brief Where the canonical layout for one stride puts one semantic.
      *
-     * plans/plan_gltf.md `GLTF-473`. `InferredLayoutForStride` answers "what does this stride mean";
+     * `GLTF-473`. `InferredLayoutForStride` answers "what does this stride mean";
      * this answers the narrower question a **fixed-function** renderer has to ask before it binds a
      * client array: *at which byte offset does this stride's canonical record carry Normal / Color /
      * TextureCoordinate 0?* A renderer that hard-codes that offset instead of asking is reading one

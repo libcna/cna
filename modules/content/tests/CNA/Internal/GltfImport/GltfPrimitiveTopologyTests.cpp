@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-071 / GLTF-072: mesh.primitive.mode is read, classified, converted where it
+// GLTF-071 / GLTF-072: mesh.primitive.mode is read, classified, converted where it
 // has an exact triangle-list equivalent, and never silently reinterpreted.
 //
 // The defect (D5) was that cgltf_primitive_type had zero occurrences in CNA production code. Every
@@ -9,7 +9,7 @@
 // triangle with vertex 3 unreachable; a four-vertex POINTS cloud became one arbitrary triangle.
 // Neither produced a warning.
 //
-// GLTF-071 owns reading and classifying; GLTF-072 owns the conversion policy of §10.1. Together
+// GLTF-071 owns reading and classifying; GLTF-072 owns the conversion policy. Together
 // these tests assert:
 //
 //   1. all seven glTF modes classify, by number and by specification name;
@@ -18,7 +18,7 @@
 //      preserved, and the source mode survives the conversion so it can still be reported;
 //   4. the four topologies that describe no triangles import as THEMSELVES -- a LINE_LOOP as a
 //      LINE_STRIP carrying the closing segment glTF leaves implicit in the mode (GLTF-076), the
-//      rest untouched -- each with its own §12.3 primitive count rather than numIndices/3
+//      rest untouched -- each with its own GLTF-078 primitive count rather than numIndices/3
 //      (GLTF-078) and a real PrimitiveType on the part (GLTF-073).
 
 #include <array>
@@ -222,7 +222,7 @@ TEST(GltfPrimitiveTopology, EveryModeImportsAndOnlyTriangleModesConvert)
 
 TEST(GltfPrimitiveTopology, ThePrimitiveCountFollowsTheTopologyRatherThanDividingByThree)
 {
-    // plans/plan_gltf.md §12.3, stated as the table it is. All three loaders hardcoded numIndices / 3,
+    // GLTF-078, stated as the table it is. All three loaders hardcoded numIndices / 3,
     // which is right for a triangle list and silently wrong for every other topology -- and was
     // written out three times, so the three could drift.
     EXPECT_EQ(2, PrimitiveCountForTopology(PrimitiveTopology::Triangles, 6));
@@ -426,7 +426,7 @@ TEST(GltfPrimitiveTopology, StripAndFanImportThroughExtractMeshAsTriangleLists)
 
         // The topology conversion itself touches only the INDEX list, which is precisely why no
         // renderer needs to change for it. What can renumber afterwards is §3.7.2.1's flat-normal
-        // split (plans/plan_gltf.md GLTF-461), and this fixture authors no NORMAL -- so the two are
+        // split (GLTF-461), and this fixture authors no NORMAL -- so the two are
         // separated here rather than conflated.
         //
         // Read as a strip, [0,1,2,0,2,3] over a planar quad expands to a +Z triangle, a REVERSED
@@ -499,7 +499,7 @@ TEST(GltfPrimitiveTopology, AModeOutsideTheSpecifiedRangeIsRejectedRatherThanAss
                  std::runtime_error);
 }
 
-// --- plans/plan_gltf.md GLTF-080: topology and Draco cannot disagree -------------------------------------
+// --- GLTF-080: topology and Draco cannot disagree -------------------------------------
 
 // KHR_draco_mesh_compression normatively permits exactly TRIANGLES and TRIANGLE_STRIP. That is
 // narrower than core glTF's three triangle-producing topologies: TRIANGLE_FAN is invalid too.
@@ -596,7 +596,7 @@ TEST(GltfPrimitiveTopology, ConvertingAStripCarriesEveryMorphDeltaWithItsOwnVert
     // compacting them would still produce a mesh, still produce a morph, and put every delta on the
     // wrong vertex -- a plausible deformation of the wrong shape, with nothing to indicate it.
     //
-    // plans/plan_gltf.md GLTF-461 restated the invariant without weakening it. This primitive authors no
+    // GLTF-461 restated the invariant without weakening it. This primitive authors no
     // NORMAL, so §3.7.2.2 requires flat normals for each morph target, and every corner becomes its
     // own vertex; the deltas move with it. What must hold is therefore the PAIRING, not the
     // numbering: delta[new] == authoredDelta[sourceVertex[new]]. The manifest states `sourceVertex`

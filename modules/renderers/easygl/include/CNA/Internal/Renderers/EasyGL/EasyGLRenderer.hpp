@@ -1376,27 +1376,27 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_pbr_specularcolormap = -1; ///< KHR_materials_specular colour map (RGB)
             int loc_pbr_metallic    = -1;  ///< float metallic factor (PbrEffect only)
             int loc_pbr_roughness   = -1;  ///< float roughness factor (PbrEffect only)
-            /// plans/plan_gltf.md GLTF-343/344: xyz = dielectric F0, w = dielectric F90.
+            /// GLTF-343/344: xyz = dielectric F0, w = dielectric F90.
             int loc_pbr_dielectric_fresnel = -1;
             /// GLTF-344: xyz = unclamped IOR F0 * specularColorFactor, w = specularFactor.
             int loc_pbr_specular_fresnel_inputs = -1;
-            /// plans/plan_gltf.md GLTF-210/GLTF-212: vec3 colour-management gate (PbrEffect only).
+            /// GLTF-210/GLTF-212: vec3 colour-management gate (PbrEffect only).
             /// x = decode the base-colour sample from sRGB, y = decode the emissive sample,
             /// z = encode the fragment's RGB back to sRGB. Each is 0 or 1 and multiplies a
             /// `mix()` rather than driving a branch, so every fragment costs the same.
             int loc_pbr_srgb        = -1;
-            /// plans/plan_gltf.md GLTF-224: float normalTexture.scale (PbrEffect only).
+            /// GLTF-224: float normalTexture.scale (PbrEffect only).
             int loc_pbr_normalscale = -1;
             int loc_pbr_doublesided = -1;
-            /// plans/plan_gltf.md GLTF-225: float occlusionTexture.strength (PbrEffect only).
+            /// GLTF-225: float occlusionTexture.strength (PbrEffect only).
             int loc_pbr_occlstrength = -1;
-            /// plans/plan_gltf.md GLTF-182/183: vec4 UV1 selectors for PBR slots 0-3.
+            /// GLTF-182/183: vec4 UV1 selectors for PBR slots 0-3.
             int loc_pbr_texcoordsets = -1;
-            /// plans/plan_gltf.md GLTF-182/183: UV1 selector for PBR occlusion slot 4.
+            /// GLTF-182/183: UV1 selector for PBR occlusion slot 4.
             int loc_pbr_occlusiontexcoordset = -1;
             /// GLTF-344: UV1 selectors for specular strength/colour slots 5 and 6.
             int loc_pbr_specular_texcoordsets = -1;
-            /// plans/plan_gltf.md GLTF-184: ten vec4 affine rows, two for each PBR texture slot.
+            /// GLTF-184: ten vec4 affine rows, two for each PBR texture slot.
             std::array<int, 10> loc_pbr_texture_transform_rows{
                 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
             /// GLTF-344: two affine rows for each specular texture, kept ABI-separate from slots 0-4.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-008 -- the L6 rung of the oracle ladder, and the §21.1 contract rows whose
+// GLTF-008 -- the L6 rung of the oracle ladder, and the L6 contract rows whose
 // "Assert at" column says L6.
 //
 // L3 proved the importer understood the file. L5 proved it packed the right bytes. Neither says
@@ -176,10 +176,10 @@ namespace
 
 // --- GLTF-008: the harness's own acceptance ----------------------------------------------------
 
-// "A PbrEffect draw yields all 12 §21.1 quantities." Asserted one contract row at a time on the
+// "A PbrEffect draw yields all 12 L6 contract quantities." Asserted one contract row at a time on the
 // fixture that authors every material property at once, so a row that stopped being captured
 // fails by name instead of by a diff nobody reads.
-// plans/plan_gltf.md GLTF-462. The L6 layer is where "the importer is right" stops being enough: a
+// GLTF-462. The L6 layer is where "the importer is right" stops being enough: a
 // vertex-coloured metallic-roughness primitive has to arrive at the renderer AS a PBR draw with the
 // colour stream switched ON, or §3.7.2.1's "additional linear multiplier to base color" is a value
 // sitting in a vertex buffer nobody reads.
@@ -189,7 +189,7 @@ namespace
 // `PbrEffect::VertexColorEnabledEXT` reaching `GpuDrawParams`, and it defaults to false on the
 // effect while `GpuDrawParams` defaults it to TRUE -- so a loader that forgot to set the property
 // produces a draw that looks enabled from one side and disabled from the other.
-// plans/plan_gltf.md GLTF-463, at the layer where "the importer is right" stops being enough. A skinned
+// GLTF-463, at the layer where "the importer is right" stops being enough. A skinned
 // vertex-coloured metallic-roughness primitive has to arrive at the renderer as a SKINNED PBR draw
 // with the colour stream on AND every material factor intact -- the combination that used to lose
 // all three at once, because a colour stream sent it to SkinnedEffect on a layout with no tangent
@@ -812,7 +812,7 @@ TEST(GltfConformanceL6, SkinnedDrawBindsThePaletteAndFourInfluencesPerVertex)
     EXPECT_GT(skinnedFixtures, 0u) << "the corpus has no skinned fixture any more";
 }
 
-// plans/plan_gltf.md GLTF-262. An identity bone palette is not a neutral value: it means "every joint
+// GLTF-262. An identity bone palette is not a neutral value: it means "every joint
 // matrix is the identity", so a mesh drawn that way is posed in joint space and glTF's own
 // inverse(globalTransform(meshNode)) cancellation (section 3.7.3) never applies. A skinned model
 // that had been loaded and not yet animated therefore rendered WRONG, not merely still -- the
@@ -916,7 +916,7 @@ TEST(GltfConformanceL6, ABlendMaterialCarriesItsAlphaStateWithoutDiscardingAnyth
     EXPECT_NEAR(1.0f, d.alphaTest[3], kTolerance);
 }
 
-// plans/plan_gltf.md GLTF-372. Every PBR shader already evaluates uAlphaTest and discards on it; nothing
+// GLTF-372. Every PBR shader already evaluates uAlphaTest and discards on it; nothing
 // filled the vector in, so a MASK material was indistinguishable from an OPAQUE one at the only
 // place the distinction exists. The fixture states the four numbers a renderer receives, so this
 // compares against the manifest rather than against a second copy of the mapping.
@@ -1033,7 +1033,7 @@ TEST(GltfConformanceL6, CapturedTopologyAndPrimitiveCountMatchTheImportPolicy)
         const DrawParamsDump& d = captured.front();
         SCOPED_TRACE(ToJson(d));
 
-        // glTF mode name -> the XNA PrimitiveType a conforming draw issues (plans/plan_gltf.md §10.1).
+        // glTF mode name -> the XNA PrimitiveType a conforming draw issues (`GLTF-072`).
         const std::string topology = StringOr(policy, "topologyName", "");
         std::string expectedType;
         if (topology == "TRIANGLES")        { expectedType = "TriangleList"; }
@@ -1048,7 +1048,7 @@ TEST(GltfConformanceL6, CapturedTopologyAndPrimitiveCountMatchTheImportPolicy)
     }
 }
 
-// --- plans/plan_gltf.md GLTF-137: every mesh group is imported ------------------------------------------
+// --- GLTF-137: every mesh group is imported ------------------------------------------
 
 // `CollectMeshGroups` makes one group per distinct skin plus one for the unskinned meshes, and the
 // runtime loader took `groups.front()` -- so a file holding a character and a prop imported
@@ -1110,7 +1110,7 @@ TEST(GltfConformanceL6, EveryMeshGroupOfAMixedFileIsImportedAndDrawable)
     EXPECT_TRUE(checkedStaticPlacement) << "the static instance is not in the L4 manifest";
 }
 
-// --- plans/plan_gltf.md GLTF-222: KHR_materials_emissive_strength ----------------------------------------
+// --- GLTF-222: KHR_materials_emissive_strength ----------------------------------------
 
 // The extension exists because `emissiveFactor` is a [0,1] value and HDR-authored content wants
 // more. A strength that is dropped, or applied and then clamped, destroys exactly that -- so the
@@ -1154,7 +1154,7 @@ TEST(GltfConformanceL6, EmissiveStrengthMultipliesTheFactorAndSurvivesAboveOne)
            "lift, so a clamp makes carrying it pointless";
 }
 
-// --- plans/plan_gltf.md GLTF-152: ModelMeshPart counts and offsets ----------------------------------------
+// --- GLTF-152: ModelMeshPart counts and offsets ----------------------------------------
 
 // The count half was replaced by GLTF-078's topology-aware helper and is asserted per topology by
 // `CapturedTopologyAndPrimitiveCountMatchTheImportPolicy` above. The offsets are the other half and
@@ -1197,7 +1197,7 @@ TEST(GltfConformanceL6, EveryImportedPartOwnsItsBuffersSoItsOffsetsAreZero)
     EXPECT_GT(checkedParts, 0u) << "no part was checked";
 }
 
-// --- plans/plan_gltf.md GLTF-210/GLTF-212: colour space reaches the renderer ------------------------------
+// --- GLTF-210/GLTF-212: colour space reaches the renderer ------------------------------
 
 // glTF §3.9.2 assigns colour spaces per map, and it does so unconditionally: baseColorTexture and
 // emissiveTexture are sRGB-encoded, normalTexture / occlusionTexture / metallicRoughnessTexture are
@@ -1268,7 +1268,7 @@ TEST(GltfConformanceL6, TheThreeColourSpaceDecisionsAreIndependent)
     EXPECT_TRUE(captured.front().encodeOutputToSrgb);
 }
 
-// --- plans/plan_gltf.md GLTF-224 / GLTF-225: normalTexture.scale and occlusionTexture.strength ----------
+// --- GLTF-224 / GLTF-225: normalTexture.scale and occlusionTexture.strength ----------
 
 // Neither was ever read, so a material that dialled its normal map down to a subtle 0.35 got the
 // full-strength 1.0 instead -- not a subtle difference. The fixture authors both away from 1 (the
@@ -1322,7 +1322,7 @@ TEST(GltfConformanceL6, AMaterialDeclaringNeitherScalarGetsGltfsOwnDefaultOfOne)
     EXPECT_NEAR(1.0f, captured.front().occlusionStrength, kTolerance);
 }
 
-// --- plans/plan_gltf.md GLTF-376: the light parameters the shader actually receives -------------------
+// --- GLTF-376: the light parameters the shader actually receives -------------------
 //
 // GLTF-325 locks what `ExtractPunctualLightsEXT` produces; this locks what survives all the way to
 // the parameter block a renderer binds. The two are different claims: a light can be extracted
@@ -1517,7 +1517,7 @@ TEST(GltfConformanceL6, APartWithNoDeclaredSamplerKeepsTheDefaultRatherThanTheLa
               captured.front().samplers.front().addressU);
 }
 
-// --- plans/plan_gltf.md GLTF-365: the capture is effect-agnostic ------------------------------------------
+// --- GLTF-365: the capture is effect-agnostic ------------------------------------------
 
 // The L6 rung is only an oracle if it measures whatever effect a part happens to carry. It reads
 // parameters through `Effect::FillGpuDrawParams` -- the same virtual call the draw path makes -- so
@@ -1619,7 +1619,7 @@ TEST(GltfDrawParamsOracleL6, EveryStockEffectIsCapturableWithItsOwnDistinguishin
     part->setEffectProperty(nullptr);
 }
 
-// --- plans/plan_gltf.md GLTF-380: identically named PBR parameters share one convention ------------
+// --- GLTF-380: identically named PBR parameters share one convention ------------
 
 // PbrEffect and SkinnedPbrEffect expose the same material, lighting and fog names but implement
 // FillGpuDrawParams separately. A same-spelled setter is not evidence that the two copies apply
@@ -1885,7 +1885,7 @@ void main() { FragColor = vVertexProbe; }
     EXPECT_EQ(vertices, after) << "drawing through ShaderEffect changed the imported vertex data";
 }
 
-// --- plans/plan_gltf.md GLTF-377: fog is state no glTF file can ask for -----------------------------------
+// --- GLTF-377: fog is state no glTF file can ask for -----------------------------------
 
 // The PBR fragment program carries a fog term, because CNA's effects are XNA's and an XNA
 // application may turn fog on. glTF has no fog at all, so an imported draw that arrived with it

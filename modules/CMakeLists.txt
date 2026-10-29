@@ -57,7 +57,7 @@ else()
         "CNA: video disabled (${CNA_ENABLE_VIDEO}); Video playback reports NotSupportedException")
 endif()
 
-# --- Draco (KHR_draco_mesh_compression mesh decoding, plans/plan_gltf.md GLTF-353/GLTF-363) ---------
+# --- Draco (KHR_draco_mesh_compression mesh decoding, GLTF-353/GLTF-363) ---------
 # The default is the repository's immutable gitlink at google/draco 1.5.7, not a host package:
 # conformance must not silently depend on which distro version happened to be installed. A system
 # package remains an explicit escape hatch for packagers, and the decoder-free configuration stays

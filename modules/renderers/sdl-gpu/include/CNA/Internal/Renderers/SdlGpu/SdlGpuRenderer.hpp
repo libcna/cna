@@ -2705,7 +2705,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::array<float, 72> pbrParams{};          ///< factors plus 14 affine transform rows
             ShadowReceptionEXT shadow;  ///< SMG-0032
             bool skinned = false;
-            /// plans/plan_gltf.md GLTF-462/GLTF-463: the record carries a packed COLOR_0 (stride 60 or 80).
+            /// GLTF-462/GLTF-463: the record carries a packed COLOR_0 (stride 60 or 80).
             bool colored = false;
             std::array<float, 72 * 16> boneUniforms{}; ///< only used/uploaded when skinned == true
         std::array<float, 8> fogUniforms{};  ///< FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
@@ -4663,7 +4663,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUShader* pbrVertexShader_ = nullptr;
         SDL_GPUShader* pbrSkinnedVertexShader_ = nullptr;
         SDL_GPUShader* pbrFragmentShader_ = nullptr;
-        // plans/plan_gltf.md GLTF-462/GLTF-463/GLTF-465: the stride-60/80 twins, which declare the packed
+        // GLTF-462/GLTF-463/GLTF-465: the stride-60/80 twins, which declare the packed
         // COLOR_0 attribute glTF 3.9.2 makes a multiplier on base colour. Separate shaders rather
         // than a runtime flag because a SPIR-V input with no matching vertex attribute is invalid.
         SDL_GPUShader* pbrColorVertexShader_ = nullptr;

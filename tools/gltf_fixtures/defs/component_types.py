@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Component-type fixtures -- owning group ``component-types`` (plans/plan_gltf.md §24.2).
+"""Component-type fixtures -- owning group ``component-types``.
 
 Both fixtures here lock behaviour the forensic audit **verified correct** (`GLTF-041`). Neither
 exposes a defect: they exist so that later index-path and material work cannot be blamed on, or
@@ -65,7 +65,7 @@ def normalized_u8_color() -> Fixture:
     Authored without NORMAL on purpose: CNA's colored-unskinned layout is stride 24
     (Position + Color + TextureCoordinate) and has no normal slot at all, so including one would
     make the fixture test two unrelated things and misattribute a documented packing limitation
-    (plans/plan_gltf.md §2.3) to the colour decode path.
+    (`GLTF-099`) to the colour decode path.
     """
     b = GltfBuilder("normalized-u8-color")
     position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
@@ -189,7 +189,7 @@ def non_indexed_triangles() -> Fixture:
     )
 
 
-# --- the remaining §24.2 component-type rungs (`GLTF-399`) ---------------------------------------
+# --- the remaining component-type rungs (`GLTF-399`) --------------------------------------------
 
 #: A `COLOR_0` as 16-bit normalized integers. 65535 -> 1.0 exactly, and 21845/65535 is deliberately
 #: not a short decimal, so a decoder dividing by 65536 diverges in the fourth digit rather than

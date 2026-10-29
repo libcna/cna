@@ -153,7 +153,7 @@ namespace CNA::Internal::Renderers::DirectX9
         // (stride 68), used by the CNA CNAEXT "PbrSkinned3D" custom shader (SkinnedPbrEffect). The
         // stride-48 PBR layout above with the stride-52/56 skinning suffix (BlendWeight, BlendIndices)
         // appended, matching EasyGLRenderer.cpp's own ApplyLayout() `case 68:` exactly.
-        // plans/plan_gltf.md GLTF-465: the two colour-carrying PBR records. Stride 60 is the stride-48
+        // GLTF-465: the two colour-carrying PBR records. Stride 60 is the stride-48
         // rigid record with TEXCOORD_1 at 48 and a packed COLOR_0 at 56; stride 80 is the skinned
         // record with TEXCOORD_1 at 68 and its own COLOR_0 at 76. D3DDECLTYPE_D3DCOLOR is the
         // right type for both -- it is the BGRA-ordered, normalized four-byte element D3D9 reads
@@ -201,7 +201,7 @@ namespace CNA::Internal::Renderers::DirectX9
             case 28: count = 3; return kStride28;
             case 32: count = 3; return kStride32;
             case 48: count = 4; return kStride48;
-            // plans/plan_gltf.md GLTF-462: stride 60's first four fields are byte-identical to stride 48,
+            // GLTF-462: stride 60's first four fields are byte-identical to stride 48,
             // and a D3D9 declaration carries element OFFSETS while the stride travels with
             // SetStreamSource -- so the stride-48 element list describes a stride-60 record exactly,
             // minus the second UV set and the packed colour this renderer's PBR shader does not

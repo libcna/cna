@@ -333,7 +333,7 @@ TEST(EvaluateMorphWeightsEXTTest, FallsBackToLinearWhenTangentsAreMissing)
     EXPECT_NEAR(mid[0], 0.5f, 1e-6f);
 }
 
-// --- plans/plan_gltf.md GLTF-278: a normal delta must apply on EVERY stride with a Normal slot --------
+// --- GLTF-278: a normal delta must apply on EVERY stride with a Normal slot --------
 //
 // The stride carrying the Normal is not a property of the morph target; it is a property of the
 // vertex layout the importer chose, and GLTF-215 changed that choice. A metallic-roughness
@@ -435,7 +435,7 @@ TEST(BlendMorphTargetsEXTTest, ThePbrStridesAreNotExcludedFromNormalBlending)
     }
 }
 
-// --- plans/plan_gltf.md GLTF-279: TANGENT deltas, with the handedness left alone ------------------------
+// --- GLTF-279: TANGENT deltas, with the handedness left alone ------------------------
 //
 // Morph tangent deltas were never extracted at all, so a morphed PBR surface kept its rest-pose
 // tangent basis while its positions and normals moved -- normal mapping then lit the deformed

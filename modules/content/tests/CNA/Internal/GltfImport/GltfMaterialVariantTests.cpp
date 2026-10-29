@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-341 / GLTF-342 -- KHR_materials_variants import and selection.
+// GLTF-341 / GLTF-342 -- KHR_materials_variants import and selection.
 
 #include <gtest/gtest.h>
 #include "System/ArgumentOutOfRangeException.hpp"

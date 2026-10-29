@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// plans/plan_gltf.md GLTF-008: the L6 rung of the numerical oracle ladder (plans/plan_gltf.md §7.1) -- the
+// GLTF-008: the L6 rung of the numerical oracle ladder (docs/gltf-conformance.md §3.1) -- the
 // effect parameters a draw actually binds.
 //
 // TEST SCOPE ONLY. Nothing here is CNA public API, CNAEXT surface, or part of
@@ -21,9 +21,9 @@
 // instance, after `Model::Draw` has bound the matrices. What it deliberately does not exercise is
 // `GraphicsDevice`'s own additions to the block after that call (vertex stream bindings,
 // `vertexStart`, `startIndex`): those describe the buffers, not the material, and none of them is
-// a plans/plan_gltf.md §21.1 quantity. Everything §21.1 lists as "Assert at L6" is here.
+// an L6 contract quantity. Everything docs/gltf-conformance.md §5.2 asserts at L6 is here.
 //
-// A few §21.1 rows are effect state that has no `GpuDrawParams` field yet -- the alpha mode,
+// A few §5.2 rows are effect state that has no `GpuDrawParams` field yet -- the alpha mode,
 // cutoff and double-sidedness `GLTF-228`/`GLTF-229`/`GLTF-231` added, which
 // `docs/gltf-api-change-review.md` §1.3/§1.4 deliberately left *carried* rather than *applied*.
 // Those are captured from the effect's own CNAEXT properties and recorded next to the block, so
@@ -55,7 +55,7 @@ namespace CnaTest::GltfOracle
      * @brief The effect parameters one `ModelMeshPart` would bind for a draw (oracle layer L6).
      *
      * One record per part actually drawn, in `Model::Draw`'s own mesh-then-part order. Fields are
-     * grouped by plans/plan_gltf.md §21.1 row so a failure can name the contract line it broke.
+     * grouped by docs/gltf-conformance.md §5.2 row so a failure can name the contract line it broke.
      */
     struct DrawParamsDump
     {
@@ -72,7 +72,7 @@ namespace CnaTest::GltfOracle
         /** @brief The bound effect's fully-qualified .NET type name, e.g. "…Graphics.PbrEffect". */
         std::string effectTypeName;
 
-        // --- plans/plan_gltf.md GLTF-208: the sampler state each texture slot carries -----------------
+        // --- GLTF-208: the sampler state each texture slot carries -----------------
 
         /**
          * @brief One entry per texture slot, as the part carries it (`GLTF-202`/`GLTF-203`).
@@ -95,7 +95,7 @@ namespace CnaTest::GltfOracle
         /** @brief Sampler state per slot, in `ModelMeshPart`'s own slot order. */
         std::vector<SamplerSlotDump> samplers;
 
-        // --- §21.1 "World / View / Projection" ------------------------------------------------
+        // --- L6 contract "World / View / Projection" --------------------------------------------
 
         /** @brief `IEffectMatrices::World` as `Model::Draw` bound it, column-major. */
         ColumnMajor4x4 world{};
@@ -106,7 +106,7 @@ namespace CnaTest::GltfOracle
         /** @brief `GpuDrawParams::worldColMajor` -- the world matrix as the renderer receives it. */
         ColumnMajor4x4 worldColMajor{};
 
-        // --- §21.1 "Normal matrix" -------------------------------------------------------------
+        // --- L6 contract "Normal matrix" ---------------------------------------------------------
 
         /**
          * @brief `uNormalMatrix` as a renderer derives it from @ref worldColMajor.
@@ -119,12 +119,12 @@ namespace CnaTest::GltfOracle
          */
         ColumnMajor3x3 normalMatrix{};
 
-        // --- §21.1 "Base colour factor" ---------------------------------------------------------
+        // --- L6 contract "Base colour factor" -----------------------------------------------------
 
         /** @brief `GpuDrawParams::diffuseColor` -- RGB base colour with alpha in `[3]`. */
         std::array<float, 4> diffuseColor{};
 
-        // --- §21.1 "Metallic / roughness" and "Emissive" ----------------------------------------
+        // --- L6 contract "Metallic / roughness" and "Emissive" ------------------------------------
 
         /** @brief `GpuDrawParams::pbrMetallicFactor`. */
         float metallicFactor = 0.0f;
@@ -141,7 +141,7 @@ namespace CnaTest::GltfOracle
         /** @brief `GpuDrawParams::pbrDielectricF90`. */
         float dielectricF90 = 1.0f;
 
-        // --- §21.1 colour space (plans/plan_gltf.md GLTF-210/GLTF-212) ---------------------------------
+        // --- L6 contract colour space (GLTF-210/GLTF-212) -----------------------------
 
         /** @brief `GpuDrawParams::pbrNormalScale` (glTF `normalTexture.scale`). */
         float normalScale = 0.0f;
@@ -160,7 +160,7 @@ namespace CnaTest::GltfOracle
         /** @brief `GpuDrawParams::emissiveColor`. */
         std::array<float, 3> emissiveColor{};
 
-        // --- §21.1 texture rows: which map is bound, not what it contains ------------------------
+        // --- L6 contract texture rows: which map is bound, not what it contains --------------------
 
         /** @brief True when a base-colour texture is bound to unit 0. */
         bool hasBaseColorMap = false;
@@ -173,7 +173,7 @@ namespace CnaTest::GltfOracle
         /** @brief True when an emissive map is bound. */
         bool hasEmissiveMap = false;
 
-        // --- §21.1 "Bone palette" and "Influences per vertex" -------------------------------------
+        // --- L6 contract "Bone palette" and "Influences per vertex" ---------------------------------
 
         /** @brief `GpuDrawParams::boneCount` -- 0 for an unskinned draw. */
         int boneCount = 0;
@@ -182,7 +182,7 @@ namespace CnaTest::GltfOracle
         /** @brief `GpuDrawParams::weightsPerVertex`. */
         int weightsPerVertex = 0;
 
-        // --- §21.1 "Alpha mode / cutoff" ----------------------------------------------------------
+        // --- L6 contract "Alpha mode / cutoff" ------------------------------------------------------
 
         /**
          * @brief `GpuDrawParams::alphaTest` (x=refVal, y=tolerance, z=passWeight, w=failWeight).
@@ -223,7 +223,7 @@ namespace CnaTest::GltfOracle
         /**
          * @brief The three directional lights the lit shaders read, direction then diffuse colour.
          *
-         * plans/plan_gltf.md `GLTF-376`. XNA's stock effects light with exactly three directional lights,
+         * `GLTF-376`. XNA's stock effects light with exactly three directional lights,
          * and a **disabled** one is expressed as a zero diffuse colour rather than by a flag — the
          * shader adds all three unconditionally, so zero is what makes the addition a no-op.
          * Capturing them is what lets `GLTF-325`'s import-side approximation be checked against
@@ -232,10 +232,10 @@ namespace CnaTest::GltfOracle
         std::array<std::array<float, 3>, 3> lightDirections{};
         /** @brief The three lights' diffuse colours, zero for a light that is disabled. */
         std::array<std::array<float, 3>, 3> lightDiffuseColors{};
-        // --- §21.1 "Fog": state a glTF file cannot ask for and must not receive -------------------
+        // --- L6 contract "Fog": state a glTF file cannot ask for and must not receive ---------------
 
         /**
-         * @brief `GpuDrawParams::fogEnabled`. plans/plan_gltf.md `GLTF-377`.
+         * @brief `GpuDrawParams::fogEnabled`. `GLTF-377`.
          *
          * glTF has no fog. The PBR shaders carry one anyway — `vFogFactor` and `uFogColor` are in
          * the fragment program — because CNA's effects are XNA's, and an XNA application may turn
@@ -297,7 +297,7 @@ namespace CnaTest::GltfOracle
      * first, then asserts the captured palette equals the transforms it pushed.
      *
      * @param model The model whose parts carry `SkinnedPbrEffect`s.
-     * @param skinTransforms The palette, in `paletteIndex` order (plans/plan_gltf.md §15.1.2).
+     * @param skinTransforms The palette, in `paletteIndex` order (docs/gltf-conventions.md).
      * @return The number of effects the palette was pushed onto.
      */
     std::size_t ApplyBonePaletteEXT(Microsoft::Xna::Framework::Graphics::Model& model,

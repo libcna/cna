@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-063: the sparse-safe, bounds-checked index reader, and D4's regression witness.
+// GLTF-063: the sparse-safe, bounds-checked index reader, and D4's regression witness.
 //
 // The defect these lock out (D4) was that CNA read primitive indices through
 // cgltf_accessor_read_index, which returns 0 -- with no error channel -- for a sparse accessor and
@@ -338,7 +338,7 @@ TEST(GltfIndexDecode, UnsignedIntIndicesDecodeExactly)
 
 TEST(GltfIndexDecode, IndicesHonourBothTheBufferViewAndAccessorByteOffsets)
 {
-    // §8.1's effective-address equation with two independent non-zero terms: the view starts 8
+    // The effective-address equation with two independent non-zero terms: the view starts 8
     // bytes into the padded region and the accessor starts 4 bytes into the view. A reader that
     // dropped either term would return a different, plausible-looking triangle.
     std::vector<std::uint8_t> buffer = TrianglePositions();

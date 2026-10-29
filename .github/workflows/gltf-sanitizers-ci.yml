@@ -1,4 +1,4 @@
-# plan_gltf.md GLTF-036: the glTF import path, under AddressSanitizer + UndefinedBehaviorSanitizer.
+# GLTF-036: the glTF import path, under AddressSanitizer + UndefinedBehaviorSanitizer.
 #
 # This exists because the audit's the cgltf misalignment finding recorded a UBSan-confirmed misaligned `float` load
 # inside cgltf and nothing in CI would ever have found it again. It turned out to be neither a cgltf
@@ -137,7 +137,7 @@ jobs:
         # '*Gltf*' rather than 'Gltf*': RuntimeGltfModelTest is a glTF suite by any reading --
         # it loads .gltf through ContentManager end to end -- and a prefix filter left it outside
         # this job entirely. Four of its cases were failing on any renderer with a 3D pipeline
-        # while this job stayed green (plan_gltf.md GLTF-383).
+        # while this job stayed green (GLTF-383).
         run: ./build-sanitize/CnaTests --gtest_filter='*Gltf*'
 
       # The same binary again through the conformance ladder's own label, so a rung that stops being

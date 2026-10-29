@@ -1,4 +1,4 @@
-# plan_gltf.md GLTF-158 / GLTF-398 / GLTF-420: exercise every glTF conformance rung and every
+# GLTF-158 / GLTF-398 / GLTF-420: exercise every glTF conformance rung and every
 # vertex declaration at each campaign renderer boundary.
 #
 # L0-L6 are exact, renderer-independent oracles. The focused stride test then adds seven real
@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # SOFTWARE joined on 2026-08-18 (plan_gltf.md GLTF-473): it is a CPU rasteriser, so it
+        # SOFTWARE joined on 2026-08-18 (GLTF-473): it is a CPU rasteriser, so it
         # needs no driver on the runner, and it is one of the four L7 golden policies -- which
         # makes it the cheapest way to widen the live draw-boundary gate below.
         # SDL_GPU replaced the retired VULKAN leg on 2026-10-13; on the runner its Vulkan backend

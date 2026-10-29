@@ -240,7 +240,7 @@ What the loader builds from this: the bone tree from `bones`, each mesh's `Paren
 
 A version-1 `Model` has no node hierarchy: each mesh gets its own child bone of the root at the
 identity transform, so it sits in its own local space. **Version 2** adds two members, written by `cna_tool_gltf_to_cnj` since the glTF campaign
-(`plans/plan_gltf.md`, `GLTF-455`):
+(`GLTF-455`):
 
 | Member | Where | Purpose |
 |---|---|---|

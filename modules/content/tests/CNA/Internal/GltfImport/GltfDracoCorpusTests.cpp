@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-271/288/353/360/361/363: real pinned-Draco corpus parity.
+// GLTF-271/288/353/360/361/363: real pinned-Draco corpus parity.
 
 #include <algorithm>
 #include <array>

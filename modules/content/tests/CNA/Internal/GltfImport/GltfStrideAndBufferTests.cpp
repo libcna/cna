@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-151 / GLTF-153 / GLTF-158 / GLTF-159 / GLTF-162 / GLTF-164 / GLTF-165 / GLTF-166.
+// GLTF-151 / GLTF-153 / GLTF-158 / GLTF-159 / GLTF-162 / GLTF-164 / GLTF-165 / GLTF-166.
 //
 // The vertex/index buffer ABI, asserted at the layer a game actually meets it: the byte offsets a
 // renderer will read from, the index element size the GPU is told about, and what happens at the
@@ -186,7 +186,7 @@ namespace
 
 // --- GLTF-151: every element of every stride ------------------------------------------------------
 
-TEST(GltfStrideAndBuffer, EveryCanonicalStrideHasExactlyTheElementsSection23States)
+TEST(GltfStrideAndBuffer, EveryCanonicalStrideHasExactlyItsDeclaredElements)
 {
     ExpectStrideLayout(16, {
         {VertexElementUsage::Position, 0, VertexElementFormat::Vector3},
@@ -232,7 +232,7 @@ TEST(GltfStrideAndBuffer, EveryCanonicalStrideHasExactlyTheElementsSection23Stat
         {VertexElementUsage::BlendIndices, 48, VertexElementFormat::Byte4},
         {VertexElementUsage::Color, 52, VertexElementFormat::Color},
     });
-    // plans/plan_gltf.md GLTF-462: the four bytes GLTF-182 reserved purely to keep this stride distinct
+    // GLTF-462: the four bytes GLTF-182 reserved purely to keep this stride distinct
     // from 56 are the packed COLOR_0 slot now, which is what lets a vertex-coloured primitive keep
     // its metallic-roughness material instead of being downgraded to a layout with no Normal at all.
     ExpectStrideLayout(60, {
@@ -391,7 +391,7 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
     {
         SCOPED_TRACE(fixture);
         Model model = cm.Load<Model>(fixture);
-        // plans/plan_gltf.md GLTF-473 replaced the plain EXPECT_NO_THROW here, and it is a STRICTER
+        // GLTF-473 replaced the plain EXPECT_NO_THROW here, and it is a STRICTER
         // requirement rather than a looser one: not throwing can itself be the symptom, when a
         // renderer reaches a record through bytes its layout does not describe. So the rule is the
         // partition: reach the boundary, or refuse with a diagnostic that names why.
@@ -408,7 +408,7 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
             failure = error.what();
         }
         if (failure.empty()) { continue; }
-        // plans/plan_gltf.md GLTF-477: the legitimate refusal is a renderer with no
+        // GLTF-477: the legitimate refusal is a renderer with no
         // metallic-roughness shading path at all. The token comes from a shared guard nobody can
         // reproduce by accident, which is the property that made the narrow check worth having.
         // (GLTF-473's fixed-function layout refusal was the other one; the only renderer that could
@@ -425,7 +425,7 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
 
 TEST(RendererStrideConformance, AColourCarryingPbrPrimitiveEitherDrawsOrRefusesByName)
 {
-    // plans/plan_gltf.md GLTF-465, at the draw boundary rather than in shader text. The audit above it
+    // GLTF-465, at the draw boundary rather than in shader text. The audit above it
     // asks whether a renderer DECLARES the stride-60/80 colour; this asks whether a real
     // vertex-coloured metallic-roughness Model can be drawn through it at all.
     //
@@ -498,7 +498,7 @@ TEST(RendererStrideConformance, AColourCarryingPbrPrimitiveEitherDrawsOrRefusesB
 
 TEST(RendererStrideConformance, EveryPbrAndSkinnedFixtureImportsToItsCanonicalStride)
 {
-    // plans/plan_gltf.md GLTF-473. The strides are the whole PBR and skinned family, not the stride 60
+    // GLTF-473. The strides are the whole PBR and skinned family, not the stride 60
     // a layout defect was once reported on: a fix that special-cased stride 60 would leave 48, 52,
     // 56 and 68 unguarded. Each fixture must import to the stride its row names, so a layout change
     // that moves one is a visible failure here rather than a silent loss of coverage; drawing it

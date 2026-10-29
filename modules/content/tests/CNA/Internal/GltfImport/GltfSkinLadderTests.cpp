@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-399 / §15.4: the skinning ladder, evaluated rather than described.
+// GLTF-399: the skinning ladder, evaluated rather than described.
 //
-// §15.4 lists a ladder of skin fixtures with an exactly computable answer for each. Six of them
+// The campaign listed a ladder of skin fixtures with an exactly computable answer for each. Six of them
 // owned a defect and got a hand-written test when that defect was closed; the rest stated their
 // expected world position in the plan and in the manifest, and nothing read it. A ladder nobody
 // climbs is a table of claims.
@@ -17,7 +17,7 @@
 // circular:
 //
 //   * The palette is indexed in CNA's OWN parent-before-child order, not the file's joint order,
-//     and the two differ by `SkeletonResult::oldToNew` (§15.1.2). The scene-node order is a third,
+//     and the two differ by `SkeletonResult::oldToNew` (GLTF-252). The scene-node order is a third,
 //     deliberately separate space. The mapping is read from the importer rather than assumed, so
 //     a reordering regression surfaces as a wrong position rather than being absorbed.
 //   * The expected positions are computed by the generator from the authored transforms, in
@@ -127,7 +127,7 @@ namespace
     }
 
     /// The file's joint index space mapped into CNA's bone index space, straight from the importer.
-    /// §15.1.2 keeps the two deliberately distinct, so this must be read and never assumed.
+    /// GLTF-252 keeps the two deliberately distinct, so this must be read and never assumed.
     bool ReadJointToBone(const LoadedFixture& fixture, std::vector<int>& out, std::string& why)
     {
         using namespace CNA::Internal::GltfImport;
@@ -212,17 +212,17 @@ TEST(GltfSkinLadder, EverySkinFixtureSkinsItsVerticesWhereTheSpecificationSaysIt
         }
     }
 
-    // The floor. §15.4's ladder is what this number tracks; a fixture dropping its `l4.skin` block
+    // The floor. The skinning ladder is what this number tracks; a fixture dropping its `l4.skin` block
     // would otherwise remove itself from the sweep and still report success.
-    EXPECT_GE(covered, 8) << "fewer skin fixtures carry an evaluable expectation than §15.4's "
+    EXPECT_GE(covered, 8) << "fewer skin fixtures carry an evaluable expectation than the skinning ladder's "
                              "ladder has rungs -- the sweep shrank rather than the corpus";
 }
 
-TEST(GltfSkinLadder, TheLadderCoversTheDistinctPropertiesSection154Enumerates)
+TEST(GltfSkinLadder, TheLadderCoversEveryDistinctSkinningProperty)
 {
-    // A count alone would pass with eight copies of the same fixture. What §15.4 is a ladder OF is
-    // the properties: blending, four influences, an absent bind matrix, a non-uniform joint scale,
-    // a joint chain, and an index component type that is not a byte. Each is named by a feature
+    // A count alone would pass with eight copies of the same fixture. What the skinning ladder is a
+    // ladder OF is the properties: blending, four influences, an absent bind matrix, a non-uniform
+    // joint scale, a joint chain, and an index component type that is not a byte. Each is named by a feature
     // string in the manifest, so this asserts the ladder's *shape* rather than its length.
     const std::vector<std::string> required = {
         "two-joint weight blending",
@@ -248,6 +248,6 @@ TEST(GltfSkinLadder, TheLadderCoversTheDistinctPropertiesSection154Enumerates)
     for (const std::string& absent : missing)
     {
         ADD_FAILURE() << "no corpus fixture declares the property \"" << absent
-                      << "\" -- §15.4's ladder has a rung with nothing standing on it";
+                      << "\" -- the skinning ladder has a rung with nothing standing on it";
     }
 }

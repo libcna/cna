@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_gltf.md GLTF-344/373/379: discriminating real-pixel proof of all seven PBR texture
+// GLTF-344/373/379: discriminating real-pixel proof of all seven PBR texture
 // bindings, both PBR map scalars, and glTF MASK coverage staying inside rigid and skinned PBR
 // programs.
 //

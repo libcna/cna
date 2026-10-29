@@ -1387,7 +1387,7 @@ if(CNA_BUILD_TESTS)
     cna_register_renderer_test(NAME CnaInputTests COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5
         TIMEOUT 1200 LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
-    # plans/plan_gltf.md GLTF-010: the glTF conformance ladder as one runnable label.
+    # GLTF-010: the glTF conformance ladder as one runnable label.
     #
     # `ctest -L gltf-conformance` runs the whole ladder. Each rung is registered as its OWN ctest
     # entry rather than one filter over all of them, because the ladder's whole point is that a

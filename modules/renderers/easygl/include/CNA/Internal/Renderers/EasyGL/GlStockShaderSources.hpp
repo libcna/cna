@@ -68,13 +68,13 @@ CNA_GL_CUBE_DIR_DECL
 #define CNA_GL_RT_SAMPLE_UV_HI_DECL \
 "uniform vec4 uRtFlipVHi;\n"
 
-/// plans/plan_gltf.md GLTF-210/GLTF-212: the sRGB transfer, pasted into the PbrEffect shaders. The text
+/// GLTF-210/GLTF-212: the sRGB transfer, pasted into the PbrEffect shaders. The text
 /// is not written here -- it comes from CNA/Internal/Graphics/SrgbTransfer.hpp, which is also
 /// where the C++ implementation of the same formula lives, so the two cannot drift into two
 /// slightly different curves.
 #define CNA_GL_SRGB_TRANSFER_DECL CNA_GLSL_SRGB_TRANSFER
 
-// plans/plan_gltf.md GLTF-264: a normal follows the inverse transpose of the blended skin matrix.
+// GLTF-264: a normal follows the inverse transpose of the blended skin matrix.
 // It is written with cross/dot rather than inverse(), a form kept from the former GLSL ES 1.00
 // floor so the pixels do not move. The three cross products are the columns of
 // det(m)*inverseTranspose(m). Normalisation
@@ -90,7 +90,7 @@ CNA_GL_CUBE_DIR_DECL
 "    return (abs(det)>1e-6)?transformed*sign(det):m*n;\n" \
 "}\n"
 
-// plans/plan_gltf.md GLTF-176: a tangent frame changes orientation under a negative-determinant
+// GLTF-176: a tangent frame changes orientation under a negative-determinant
 // direction transform. The scalar triple product (rather than determinant(), a form kept from the
 // former GLSL ES 1.00 floor) is shared by both PBR vertex programs. A singular transform has no
 // meaningful tangent frame; +1 is the stable fallback and, unlike sign(0), does not erase an
@@ -1339,7 +1339,7 @@ std::string("#version 300 es\n") +
 "layout(location=2) in vec4 aTangent;\n"
 "layout(location=3) in vec2 aUV;\n"
 + (dualUv ? "layout(location=4) in vec2 aUV1;\n"
-          // plans/plan_gltf.md GLTF-462: only the stride-60 program declares the colour, for the reason
+          // GLTF-462: only the stride-60 program declares the colour, for the reason
           // in this function's own opening comment -- an unused varying added to the stride-48
           // program moved thousands of llvmpipe fragments by one RGB unit, and stride 60 is the only
           // rigid PBR record that HAS a colour slot.
@@ -1418,17 +1418,17 @@ std::string("#version 300 es\n") +
 "uniform vec3 uEmissiveColor;\n"
 "uniform float uMetallicFactor;\n"
 "uniform float uRoughnessFactor;\n"
-// plans/plan_gltf.md GLTF-343/344: factor-only KHR_materials_ior/specular state, already reduced by
+// GLTF-343/344: factor-only KHR_materials_ior/specular state, already reduced by
 // FillGpuDrawParams to the exact shader-ready Fresnel endpoints. xyz is dielectric F0; w is F90.
 "uniform vec4 uDielectricFresnel;\n"
 // GLTF-344: the colour texture is multiplied before clamping, so this must retain the pre-clamp
 // value instead of attempting to reconstruct it from uDielectricFresnel.
 "uniform vec4 uSpecularFresnelInputs;\n"
-// plans/plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
+// GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
 // emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
 // than a branch, so every fragment costs the same whichever way it is set.
 "uniform vec4 uSrgb;\n"
-// plans/plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
+// GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
 // uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
 // already uses everywhere.
 "uniform float uNormalScale;\n"
@@ -1490,7 +1490,7 @@ CNA_GL_PUNCTUAL_DECL
 // glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
 // the sample is decoded -- transferring both would apply it twice to one of them.
 "    vec3 baseRGB=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x);\n"
-// plans/plan_gltf.md GLTF-462. §3.7.2.1: "if a primitive specifies a vertex color using the attribute
+// GLTF-462. §3.7.2.1: "if a primitive specifies a vertex color using the attribute
 // semantic property COLOR_0, then this value acts as an additional linear multiplier to base
 // color". LINEAR is the operative word and the reason there is no transfer function here: the
 // attribute is a normalized integer already in linear space, unlike the base-colour TEXTURE. Both
@@ -1592,7 +1592,7 @@ std::string("#version 300 es\n") +
 "layout(location=4) in vec4 aBoneWeights;\n"
 "layout(location=5) in vec4 aBoneIndices;\n"
 + (dualUv ? "layout(location=6) in vec2 aUV1;\n"
-          // plans/plan_gltf.md GLTF-463: only the stride-76/80 program declares the colour, for the same
+          // GLTF-463: only the stride-76/80 program declares the colour, for the same
           // reason the rigid pair splits -- an unused varying added to the stride-68 program moved
           // llvmpipe fragments by one RGB unit, and stride 80 is the only skinned PBR record that
           // HAS a colour slot.
@@ -1690,14 +1690,14 @@ std::string("#version 300 es\n") +
 "uniform vec3 uEmissiveColor;\n"
 "uniform float uMetallicFactor;\n"
 "uniform float uRoughnessFactor;\n"
-// plans/plan_gltf.md GLTF-343/344: same shader-ready dielectric Fresnel endpoints as unskinned PBR.
+// GLTF-343/344: same shader-ready dielectric Fresnel endpoints as unskinned PBR.
 "uniform vec4 uDielectricFresnel;\n"
 "uniform vec4 uSpecularFresnelInputs;\n"
-// plans/plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
+// GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
 // emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
 // than a branch, so every fragment costs the same whichever way it is set.
 "uniform vec4 uSrgb;\n"
-// plans/plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
+// GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
 // uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
 // already uses everywhere.
 "uniform float uNormalScale;\n"
@@ -1755,7 +1755,7 @@ CNA_GL_PUNCTUAL_DECL
 // glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
 // the sample is decoded -- transferring both would apply it twice to one of them.
 "    vec3 baseRGB=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x);\n"
-// plans/plan_gltf.md GLTF-463. §3.7.2.1: COLOR_0 "acts as an additional linear multiplier to base color".
+// GLTF-463. §3.7.2.1: COLOR_0 "acts as an additional linear multiplier to base color".
 // LINEAR is why there is no transfer function here -- the attribute is a normalized integer already
 // in linear space, unlike the base-colour TEXTURE -- and both RGB and alpha are multiplied because
 // §3.9.2's base colour is an RGBA product. Identical to the rigid program's own term.

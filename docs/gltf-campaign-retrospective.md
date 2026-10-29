@@ -1,9 +1,10 @@
 # glTF campaign retrospective
 
-Status: written 2026-08-18 (`GLTF-460`). Scope: `plans/plan_gltf.md`'s 475 rows, from the 2026-08-11
+Status: written 2026-08-18 (`GLTF-460`). Scope: the campaign plan's 475 rows, from the 2026-08-11
 forensic audit to the milestone in force today.
 
-This is not a summary of what was done — `plans/plan_gltf.md` is that, row by row, and it is the record.
+This is not a summary of what was done — the campaign plan was that, row by row; it was deleted on
+2026-10-29 and its record is in Git history.
 This is the part a row cannot carry: **which kind of evidence caught which kind of defect**, and what
 that implies for the next subsystem campaign. It is written to be reusable, so every claim below is
 tied to a specific defect that actually happened rather than to a principle that sounds right.
@@ -92,7 +93,7 @@ only because no encode existed to disable.
 ## 3. Three things that cost more than they should have
 
 **Inventories drift toward fiction, and prose counts drift fastest.** `GLTF-344`'s row said "3 of 15"
-while the machine-checked test beside it already said otherwise; §27.2's row 12 said four renderers
+while the machine-checked test beside it already said otherwise; `GLTF ROBUST`'s row 12 said four renderers
 were missing on the strength of a continuity summary whose own data was a week old. The correction
 that worked was structural: *the count comes from the state column, the evidence comes from the rows,
 and a prose number is a comment.* Where a claim is worth keeping honest, it is written as a test —
@@ -125,7 +126,7 @@ ceiling — the first subtraction in that list, and what the ratchet was for.
 looks like churn and was not. Each cycle was driven by a specific, checkable argument:
 
 1. **2026-08-17** — a re-audit against the pinned specification found four core divergences inside
-   rows that were already green (§27.1.2). The declaration had been made from the row set, and the
+   rows that were already green. The declaration had been made from the row set, and the
    row set did not ask about them.
 2. **2026-08-18** — the project owner rejected the unqualified name over one row: a renderer that
    *accepts* a valid asset and substitutes the white identity renders a visibly wrong surface, and a
@@ -139,7 +140,8 @@ as one only if it happens before any incompatible vertex-layout interpretation a
 submission* — and the fact that both are machine-checked rather than remembered.
 
 **The milestone in force is `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT`**, with renderer coverage
-stated beside it rather than inside it. `GLTF ROBUST` remains open on §27.2's rows 3, 6 and 12.
+stated beside it rather than inside it. `GLTF ROBUST` remains open on rows 6 and 12
+([`gltf-conformance.md`](gltf-conformance.md) §8.3).
 
 ---
 

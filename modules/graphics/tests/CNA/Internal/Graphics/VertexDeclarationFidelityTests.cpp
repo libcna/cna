@@ -427,7 +427,7 @@ TEST(VertexDeclarationFidelityTest, StockProgramRefusesUnknownFormatForConsumedS
                  System::NotSupportedException);
 }
 
-// --- plans/plan_gltf.md GLTF-155: the importer's strides and the canonical table are one set ----------
+// --- GLTF-155: the importer's strides and the canonical table are one set ----------
 //
 // The table exists so there is a single source of truth for what a byte stride means. That is only
 // worth anything if every producer's strides are actually in it: a stride the importer emits but

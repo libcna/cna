@@ -226,7 +226,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             SkinnedColoredFragment,
             PbrVertex,
             PbrSkinnedVertex,
-            // plans/plan_gltf.md GLTF-462/GLTF-463: stride-60 and stride-80 twins that declare COLOR_0.
+            // GLTF-462/GLTF-463: stride-60 and stride-80 twins that declare COLOR_0.
             PbrColorVertex,
             PbrSkinnedColorVertex,
             PbrFragment,
@@ -7324,7 +7324,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             SdlGpuFailurePointEXT::PbrSkinnedVertexShaderCreation, skinnedVsInfo,
             "CNA SDL_GPU: failed to create pbr_skinned3d vertex shader: ");
 
-        // plans/plan_gltf.md GLTF-462/GLTF-465: the stride-60 and stride-80 twins. Same uniform/sampler
+        // GLTF-462/GLTF-465: the stride-60 and stride-80 twins. Same uniform/sampler
         // shape as the two above -- only the vertex input set differs -- so they are created the same
         // way and cost nothing until a colour-carrying draw actually selects one.
         SDL_GPUShaderCreateInfo colorVsInfo = vsInfo;
@@ -7368,7 +7368,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (auto& [key, entry] : pbrSkinnedPipelines_)
             ReleaseGraphicsPipeline(entry.pipeline);
         pbrSkinnedPipelines_.clear();
-        // plans/plan_gltf.md GLTF-465: the two colour-carrying caches and their shaders, released the same
+        // GLTF-465: the two colour-carrying caches and their shaders, released the same
         // way -- a pipeline cache nobody frees is exactly the leak this function exists to prevent.
         for (auto& [key, entry] : pbrColorPipelines_)
             ReleaseGraphicsPipeline(entry.pipeline);
@@ -7576,7 +7576,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_GPUVertexBufferDescription vbDesc{};
         vbDesc.slot = 0;
-        // plans/plan_gltf.md GLTF-462/GLTF-463: strides 60 and 80 are the same records with TEXCOORD_1 and
+        // GLTF-462/GLTF-463: strides 60 and 80 are the same records with TEXCOORD_1 and
         // a packed COLOR_0 appended. Both are bound: each map samples the coordinate set its
         // material names (GLTF-182/183), and glTF 3.9.2 makes the colour a term in base colour.
         vbDesc.pitch = skinned ? (colored ? 80 : 68) : (colored ? 60 : 48);
@@ -8105,7 +8105,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             throw System::NotSupportedException(
                 "CNA SDL_GPU: PbrEffect requires POSITION0/ NORMAL0 Vector3 and TEXCOORD0 Vector2; "
                 "optional TANGENT0 Vector4, TEXCOORD1 Vector2 and COLOR0 Color");
-        // plans/plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the same two records with
+        // GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the same two records with
         // TEXCOORD_1 and a packed COLOR_0 appended, and glTF 3.9.2 makes that colour a multiplier on
         // base colour. They select the colour-carrying shader variants, which also read TEXCOORD_1.
         const bool colored = skinned ? (stride == 80u) : (stride == 60u);
@@ -9174,7 +9174,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                     command.addressV, command.maxAnisotropy,
                                                     "Pbr3D", command.maxMipLevel,
                                                     /*lodBias=*/0.0f, command.addressW);
-        // plans/plan_gltf.md GLTF-465: slot 0 was the one PBR map with no fallback, so a material
+        // GLTF-465: slot 0 was the one PBR map with no fallback, so a material
         // with only a baseColorFactor -- glTF's own default material, and what both COLOR_0
         // corpus fixtures author -- had to be refused upstream instead of multiplying the
         // factor by white. Same neutral-white contract as slots 1..6, and as every other

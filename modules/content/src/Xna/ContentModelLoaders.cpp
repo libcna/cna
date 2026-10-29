@@ -353,7 +353,7 @@ namespace Microsoft::Xna::Framework::Content
             std::size_t Pos = 0;
 
             /// Bytes left unread. Lets a reader tell "this optional trailing block is absent" from
-            /// "this file is truncated" without guessing (plans/plan_gltf.md GLTF-245).
+            /// "this file is truncated" without guessing (GLTF-245).
             [[nodiscard]] std::size_t Remaining() const { return Pos <= Data.size() ? Data.size() - Pos : 0u; }
 
             template <typename T>
@@ -420,7 +420,7 @@ namespace Microsoft::Xna::Framework::Content
         /**
          * @brief One entry of a Model .cnj's own "bones" array: a node of the imported scene graph.
          *
-         * @note CNAEXT — not part of the XNA 4.0 API. plans/plan_gltf.md GLTF-129 (Phase 5). `transform`
+         * @note CNAEXT — not part of the XNA 4.0 API. GLTF-129 (Phase 5). `transform`
          * is the bone-LOCAL transform in XNA row-major order; world transforms are composed by
          * `Model::CopyAbsoluteBoneTransformsTo`, never stored.
          */
@@ -431,7 +431,7 @@ namespace Microsoft::Xna::Framework::Content
             Matrix transform = Matrix::getIdentityProperty();
         };
 
-        // plans/plan_gltf.md GLTF-129 (Phase 5): parses a Model .cnj's "bones" array into a flat,
+        // GLTF-129 (Phase 5): parses a Model .cnj's "bones" array into a flat,
         // parent-before-child node list. Returns empty when the field is absent, so a cnjVersion-1
         // file (no "bones" at all) and a name-only one both degrade to the previous single-Root
         // behavior rather than failing. Entry 0 is the root; its "parent" defaults to -1 and every
@@ -488,7 +488,7 @@ namespace Microsoft::Xna::Framework::Content
             return json.substr(os, oe - os);
         }
 
-        // plans/plan_gltf.md GLTF-317 … GLTF-321: one of the file's own cameras. The projection is
+        // GLTF-317 … GLTF-321: one of the file's own cameras. The projection is
         // built from the source's own parameters here rather than at use time, so an application
         // never has to reimplement glTF's infinite-far-plane case to draw what the author framed.
         // The run-time glTF import and the compiled .cnj/.cnb carriers all build their cameras
@@ -502,7 +502,7 @@ namespace Microsoft::Xna::Framework::Content
             out.IsPerspective = camera.perspective;
             if (camera.perspective)
             {
-                // plans/plan_gltf.md GLTF-322. §3.10.3: an absent aspectRatio means "use the
+                // GLTF-322. §3.10.3: an absent aspectRatio means "use the
                 // viewport's", which an importer has no way to know. One is assumed -- and the
                 // assumption is RECORDED. Without the flag a consumer cannot tell an author who
                 // framed a square shot from one who deliberately left the decision to the
@@ -801,11 +801,11 @@ namespace Microsoft::Xna::Framework::Content
             // Task 941: owns the skeleton/animation-clip data attached to the returned Model's
             // own Tag property. Null for a rigid, non-skinned model with no skeleton.
             std::unique_ptr<Graphics::SkinningData>               skinningData;
-            // plans/plan_gltf.md GLTF-265: the first skin stays in `skinningData` so Model::Tag keeps
+            // GLTF-265: the first skin stays in `skinningData` so Model::Tag keeps
             // the established XNA sample convention. Every additional runtime glTF skin lives
             // here and is exposed through Model::SkinsEXT with its own mesh set and palette.
             std::vector<std::unique_ptr<Graphics::SkinningData>>  additionalSkinningData;
-            // plans/plan_gltf.md GLTF-294: owns the rigid (non-joint) animation clips attached to an
+            // GLTF-294: owns the rigid (non-joint) animation clips attached to an
             // UNSKINNED model's Tag. Null for a skinned model, whose Tag carries the skeleton --
             // Tag holds one object, and that collision is a recorded limitation (GLTF-295).
             std::unique_ptr<Graphics::ModelAnimationsEXT>         modelAnimations;
@@ -904,7 +904,7 @@ namespace Microsoft::Xna::Framework::Content
             }
             skinnedFx->setTextureProperty(res.gltfWhiteBaseColorTexture);
         }
-        // plans/plan_gltf.md GLTF-037. `std::vector<std::uint8_t>::data()` is only guaranteed to be
+        // GLTF-037. `std::vector<std::uint8_t>::data()` is only guaranteed to be
         // aligned for a byte, so casting it to `const std::uint32_t*` and dereferencing is a
         // misaligned load -- undefined behaviour by the standard, an outright fault on targets
         // without unaligned access, and exactly the class of finding GLTF-036's sanitizer job
@@ -927,7 +927,7 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         /// Widens a packed index buffer to the 32-bit form the morph blend's flat-normal
-        /// recomputation needs (plans/plan_gltf.md `GLTF-461`), whatever width the mesh was uploaded in.
+        /// recomputation needs (`GLTF-461`), whatever width the mesh was uploaded in.
         std::vector<std::uint32_t> WidenedIndicesEXT(const std::vector<std::uint8_t>& bytes,
                                                      bool use32BitIndices)
         {
@@ -962,7 +962,7 @@ namespace Microsoft::Xna::Framework::Content
             Graphics::GraphicsDevice& device, ContentManager& cm, int stride, int numVertices,
             const std::vector<std::uint8_t>& vertBytes)
         {
-            // plans/plan_gltf.md GLTF-159. A stride is enough to choose one of the importer's packing
+            // GLTF-159. A stride is enough to choose one of the importer's packing
             // branches, but it is not a VertexDeclaration: renderers need the semantic, format
             // and offset of every element as well. The old capacity-only constructor left that
             // declaration empty, so EasyGL fell back to its duplicated magic-stride switch and
@@ -1072,13 +1072,13 @@ namespace Microsoft::Xna::Framework::Content
                 // byte-compatible stride-68 prefix.
                 vb->SetDataRaw(vertBytes.data(), numVertices, 76);
             } else if (stride == 80) {
-                // plans/plan_gltf.md GLTF-463: the stride-76 skinned PBR record with a packed COLOR_0
+                // GLTF-463: the stride-76 skinned PBR record with a packed COLOR_0
                 // appended -- the skinned counterpart of stride 60's own colour slot.
                 vb->SetDataRaw(vertBytes.data(), numVertices, 80);
             }
             else
             {
-                // plans/plan_gltf.md GLTF-157, the importer's half of it. There used to be no else: an
+                // GLTF-157, the importer's half of it. There used to be no else: an
                 // unlisted stride fell out of the chain and the freshly constructed, EMPTY
                 // VertexBuffer was returned as though it had been filled. The mesh then drew from
                 // whatever the buffer object happened to contain, which is the same class of
@@ -1219,7 +1219,7 @@ namespace Microsoft::Xna::Framework::Content
             }
         }
 
-        // plans/plan_gltf.md GLTF-128: every imported layout starts with a tightly-packed float3
+        // GLTF-128: every imported layout starts with a tightly-packed float3
         // Position. Keep the extraction here, next to the one upload helper that owns that ABI,
         // so the runtime and .cnj paths cannot invent separate offset tables while constructing
         // the local ModelMesh::BoundingSphere that XNA callers expect.
@@ -1253,7 +1253,7 @@ namespace Microsoft::Xna::Framework::Content
             auto* lit = dynamic_cast<Graphics::IEffectLights*>(&fx);
             if (!lit) { return; }
 
-            // plans/plan_gltf.md GLTF-215 fallback policy (CNAEXT). glTF does not require a scene to
+            // GLTF-215 fallback policy (CNAEXT). glTF does not require a scene to
             // declare any light, and most authored assets do not: lighting is normally the
             // viewer's business. That was harmless while an untextured mesh imported through
             // BasicEffect, whose own defaults are visible. Once GLTF-215 made metallic-roughness
@@ -1286,7 +1286,7 @@ namespace Microsoft::Xna::Framework::Content
             }
         }
 
-        // plans/plan_gltf.md GLTF-337: KHR_materials_unlit -> BasicEffect/SkinnedEffect with lighting off.
+        // GLTF-337: KHR_materials_unlit -> BasicEffect/SkinnedEffect with lighting off.
         //
         // One of the few extensions that MAPS rather than approximates: the extension means "shade
         // this surface with its base colour and nothing else", and `LightingEnabled = false` is
@@ -1624,7 +1624,7 @@ namespace Microsoft::Xna::Framework::Content
                 // present in the vertex buffer but the shader ignores them.
                 // SkinnedEffect's VertexColorEnabled is a CNAEXT addition (real XNA's
                 // SkinnedEffect has no such property at all).
-                // plans/plan_gltf.md GLTF-462 adds strides 60 and 80 to that list: a
+                // GLTF-462 adds strides 60 and 80 to that list: a
                 // vertex-coloured metallic-roughness primitive keeps its PBR material
                 // and multiplies COLOR_0 into base colour, so the PBR effects need the
                 // same flag as BasicEffect and SkinnedEffect.
@@ -1685,7 +1685,7 @@ namespace Microsoft::Xna::Framework::Content
         // limitation, not a bug. unitScale is always 1.0 (no CLI-argument equivalent exists for
         // runtime loading); a source file not authored in meters needs the offline tool instead.
 
-        // plans/plan_gltf.md GLTF-315. Shared by both extraction paths so a skinned and an unskinned
+        // GLTF-315. Shared by both extraction paths so a skinned and an unskinned
         // file report their animations the same way. Everything the report counts is a place an
         // animation arrived incompletely and the result cannot say so on its own, so a lost
         // channel is a warning while the shape of what did arrive is a debug line.
@@ -1746,7 +1746,7 @@ namespace Microsoft::Xna::Framework::Content
             struct DataGuard { cgltf_data* d; ~DataGuard() { cgltf_free(d); } } guard{data};
             Graphics::GltfImportReportEXT importReport;
 
-            // plans/plan_gltf.md GLTF-032/GLTF-198: refuse a file that names something outside its own
+            // GLTF-032/GLTF-198: refuse a file that names something outside its own
             // directory, BEFORE cgltf_load_buffers -- that call resolves external buffer URIs
             // itself and offers no hook to veto one, so the only place to stand is in front of it.
             try
@@ -1773,7 +1773,7 @@ namespace Microsoft::Xna::Framework::Content
                     "' in '" + path + "' -- only glTF 2.0 is supported.");
             }
 
-            // plans/plan_gltf.md GLTF-021..GLTF-024: structural validation, extensionsRequired
+            // GLTF-021..GLTF-024: structural validation, extensionsRequired
             // enforcement and an ignored-extension report, before a single byte is decoded. A
             // failure here is a rejection rather than a warning because every constraint
             // cgltf_validate checks is one whose violation would read outside the file's buffers.
@@ -1794,7 +1794,7 @@ namespace Microsoft::Xna::Framework::Content
                 AppendGltfValidationWarningsEXT(importReport, validationWarnings);
             }
 
-            // plans/plan_gltf.md GLTF-113/GLTF-114 (Phase 5): the default scene's node graph, flattened
+            // GLTF-113/GLTF-114 (Phase 5): the default scene's node graph, flattened
             // parent-before-child with composed world transforms. Every ModelBone below mirrors one
             // of these nodes, so a mesh is placed by its node exactly as glTF specifies rather than
             // landing at the origin in mesh-local space.
@@ -1805,7 +1805,7 @@ namespace Microsoft::Xna::Framework::Content
                 throw ContentLoadException("glTF file '" + path + "' contains no mesh instances to import.");
             }
 
-            // plans/plan_gltf.md GLTF-145: retain the human-readable debug summary as well as copying
+            // GLTF-145: retain the human-readable debug summary as well as copying
             // the same facts into Model's programmatically reachable GLTF-034 report.
             const NodeGraphReportEXT graphReport = BuildNodeGraphReportEXT(sceneGraph, groups);
             AppendGltfNodeGraphReportEXT(importReport, graphReport);
@@ -1818,7 +1818,7 @@ namespace Microsoft::Xna::Framework::Content
                 std::to_string(graphReport.cameraNodeCount) + " camera node(s), " +
                 std::to_string(graphReport.lightNodeCount) + " light node(s).");
 
-            // plans/plan_gltf.md GLTF-146/GLTF-352: EXT_mesh_gpu_instancing. CNA has
+            // GLTF-146/GLTF-352: EXT_mesh_gpu_instancing. CNA has
             // DrawInstancedPrimitives, so this is implementable -- but it is not implemented, and
             // the failure mode without a word is a forest that renders as a single tree at the
             // node's own transform, which reads as missing content rather than as an unsupported
@@ -1834,7 +1834,7 @@ namespace Microsoft::Xna::Framework::Content
                     "so the file renders one copy where it describes many (GLTF-146, a documented "
                     "limit).");
             }
-            // plans/plan_gltf.md GLTF-137/GLTF-265. CollectMeshGroups makes one group per distinct skin
+            // GLTF-137/GLTF-265. CollectMeshGroups makes one group per distinct skin
             // plus one for unskinned placements. Runtime used to retain the first skin only,
             // because Model::Tag has room for one SkinningData. Model::SkinsEXT now carries the
             // complete skin-to-mesh mapping while Tag remains the compatibility alias for the
@@ -1853,7 +1853,7 @@ namespace Microsoft::Xna::Framework::Content
             LightReportEXT lightReport;
             const std::vector<LightOut> punctualLights = ExtractPunctualLightsEXT(data, lightReport);
             AppendGltfLightReportEXT(importReport, lightReport, punctualLights.size());
-            // plans/plan_gltf.md GLTF-242: how many lights actually reached the effects, always -- not
+            // GLTF-242: how many lights actually reached the effects, always -- not
             // only when something was dropped. `PbrEffect` defaults to zero ambient with every
             // light disabled, which is correct XNA behaviour and renders **black**; a file that
             // declares no light at all therefore imports perfectly and shows nothing, and "zero
@@ -1866,7 +1866,7 @@ namespace Microsoft::Xna::Framework::Content
                        "PbrEffect's own defaults) until the application sets its own lighting."
                      : "."));
 
-            // plans/plan_gltf.md GLTF-326: the approximation is documented, but it was not visible.
+            // GLTF-326: the approximation is documented, but it was not visible.
             if (lightReport.droppedLightCount > 0)
             {
                 CNA::Logger::Warn(
@@ -1898,7 +1898,7 @@ namespace Microsoft::Xna::Framework::Content
             }
             if (lightReport.ignoredRangeCount > 0 || lightReport.ignoredConeAngleCount > 0)
             {
-                // plans/plan_gltf.md GLTF-327. Reported apart from the approximation above because it is
+                // GLTF-327. Reported apart from the approximation above because it is
                 // a different loss: that one is about the light's KIND, this one about its REACH.
                 // A directional light has no falloff and no cone, so a lamp the author scoped to
                 // one room lights the whole scene -- and the error grows with distance from the
@@ -1917,7 +1917,7 @@ namespace Microsoft::Xna::Framework::Content
             {
                 const MeshGroup& group = groups[gi];
                 if (group.skin == nullptr) { continue; }
-                // plans/plan_gltf.md GLTF-245: the skeleton needs the joints' full scene ancestry,
+                // GLTF-245: the skeleton needs the joints' full scene ancestry,
                 // which the skin alone cannot supply. The node instancing the skinned mesh plays no
                 // part -- glTF ignores its transform (CNASTREET-SKINDRAW).
                 groupSkeletons[gi] = BuildSkeleton(group.skin, sceneGraph, 1.0f);
@@ -1976,8 +1976,9 @@ namespace Microsoft::Xna::Framework::Content
                         skinningData->SkeletonRootPrefix[ui] =
                             skeleton.bones[ui].parentWorldPrefix;
                     }
-                    // plans/plan_gltf.md GLTF-249: the declared rig root, carried so an application can
-                    // find it. Read nowhere in transform arithmetic, by design -- see §15.1.1.
+                    // GLTF-249: the declared rig root, carried so an application can
+                    // find it. Read nowhere in transform arithmetic, by design -- see
+                    // docs/gltf-conventions.md.
                     skinningData->SkeletonRootNodeIndexEXT =
                         skeleton.declaredSkeletonRootNodeIndex;
                     skinningData->SkeletonRootNameEXT = skeleton.declaredSkeletonRootName;
@@ -2066,7 +2067,7 @@ namespace Microsoft::Xna::Framework::Content
             }
             else
             {
-                // plans/plan_gltf.md GLTF-294: rigid (non-joint) node animation. Only for an unskinned
+                // GLTF-294: rigid (non-joint) node animation. Only for an unskinned
                 // model -- a skinned one's Tag already carries the skeleton, and that collision is
                 // a recorded limitation rather than something to resolve silently (GLTF-295).
                 std::vector<std::string> clipWarnings;
@@ -2185,7 +2186,7 @@ namespace Microsoft::Xna::Framework::Content
             // How many placements each glTF mesh has, so a name only carries its node when the
             // node is what distinguishes it (GLTF-141). Appending the node name unconditionally
             // would rename every mesh in the ordinary one-placement file for no gain.
-            // plans/plan_gltf.md GLTF-238: one Effect per (material, import shape, packed UV mapping),
+            // GLTF-238: one Effect per (material, import shape, packed UV mapping),
             // shared by every primitive that lands on it. The last component matters when the
             // same source material is used by primitives with different available TEXCOORD sets:
             // source set 1 can become packed channel 0 on one and channel 1 on another.
@@ -2341,7 +2342,7 @@ namespace Microsoft::Xna::Framework::Content
 
                 if (meshOut.colored)
                 {
-                    // plans/plan_gltf.md GLTF-462: the PBR effects join the list. §3.7.2.1 makes COLOR_0
+                    // GLTF-462: the PBR effects join the list. §3.7.2.1 makes COLOR_0
                     // an additional linear multiplier on base colour, so a vertex-coloured
                     // metallic-roughness primitive is shaded by PbrEffect with its colour applied
                     // instead of being downgraded off the material model entirely.
@@ -2387,7 +2388,7 @@ namespace Microsoft::Xna::Framework::Content
                     instance.node != nullptr && instance.node->name != nullptr
                         ? instance.node->name : "<unnamed>";
                 AppendGltfInstanceReportEXT(importReport, instance, instanceSubject);
-                // plans/plan_gltf.md GLTF-116/GLTF-117: a mirroring placement. §3.7.4 asks for the
+                // GLTF-116/GLTF-117: a mirroring placement. §3.7.4 asks for the
                 // winding to be reversed at draw time; CNA carries the fact rather than applying
                 // it, for the same reason GLTF-231 carries `doubleSided` -- the cull mode is
                 // per-draw device state an XNA application owns, and reversing the shared index
@@ -2403,7 +2404,7 @@ namespace Microsoft::Xna::Framework::Content
                         "placement's front faces are back-facing under the default cull mode "
                         "(GLTF-116, a documented limit).");
                 }
-                // plans/plan_gltf.md GLTF-139: XNA's shape is one ModelMesh per mesh with one
+                // GLTF-139: XNA's shape is one ModelMesh per mesh with one
                 // ModelMeshPart per primitive, and this loop builds exactly that -- the parts are
                 // collected here and the mesh is created once, after them. A ModelMesh per
                 // PRIMITIVE (what this loader used to build) gives every primitive its own
@@ -2432,7 +2433,7 @@ namespace Microsoft::Xna::Framework::Content
                     std::vector<std::uint8_t> boundsVertexBytes = meshOut.vertexBytes;
 
                     // CNBF-100: the same builder the .cnj reader and the .cnb decoder use.
-                    // plans/plan_gltf.md GLTF-078: the primitive count follows the part's own
+                    // GLTF-078: the primitive count follows the part's own
                     // topology, which the builder derives.
                     ModelPartGeometryEXT geometry;
                     geometry.vertexBytes = &meshOut.vertexBytes;
@@ -2446,9 +2447,9 @@ namespace Microsoft::Xna::Framework::Content
                     std::shared_ptr<Graphics::VertexBuffer> vb = std::move(built.vertexBuffer);
                     std::shared_ptr<Graphics::IndexBuffer> ib = std::move(built.indexBuffer);
                     const int numVertices = built.vertexCount;
-                    // plans/plan_gltf.md GLTF-073: the topology travels to the draw rather than being
+                    // GLTF-073: the topology travels to the draw rather than being
                     // assumed there.
-                    // plans/plan_gltf.md GLTF-241: a vertex-coloured primitive whose material is
+                    // GLTF-241: a vertex-coloured primitive whose material is
                     // metallic-roughness cannot be imported as PBR, and says so rather than
                     // arriving quietly as a BasicEffect with its material gone.
                     if (!meshOut.unsupportedMaterialModelEXT.empty())
@@ -2463,7 +2464,7 @@ namespace Microsoft::Xna::Framework::Content
                             ") with its vertex colours; the material's factors and maps are not "
                             "applied (GLTF-241).");
                     }
-                    // plans/plan_gltf.md GLTF-349: an archived specular-glossiness material, converted
+                    // GLTF-349: an archived specular-glossiness material, converted
                     // to metallic-roughness rather than refused. Reported at a severity that
                     // tracks the size of the loss: dropping a near-zero specular is bookkeeping,
                     // dropping a strong coloured one visibly changes the surface.
@@ -2481,7 +2482,7 @@ namespace Microsoft::Xna::Framework::Content
                         if (meshOut.droppedSpecularStrengthEXT > 0.1f) { CNA::Logger::Warn(detail); }
                         else { CNA::Logger::Debug(detail); }
                     }
-                    // plans/plan_gltf.md GLTF-200/GLTF-350: a map whose pixels are in a format CNA has no
+                    // GLTF-200/GLTF-350: a map whose pixels are in a format CNA has no
                     // decoder for. The file said the texture exists; without this the model simply
                     // drew untextured and nothing anywhere said why.
                     for (const std::string& unsupported : meshOut.unsupportedTextureSourcesEXT)
@@ -2492,7 +2493,7 @@ namespace Microsoft::Xna::Framework::Content
                             ". That map is not applied; the primitive draws as though it had none "
                             "(GLTF-200).");
                     }
-                    // plans/plan_gltf.md GLTF-339: transmission approximated as alpha blending. Always
+                    // GLTF-339: transmission approximated as alpha blending. Always
                     // reported -- an approximation nobody is told about is indistinguishable from
                     // a bug, which is exactly how the opaque-glass defect presented.
                     if (meshOut.transmissionApproximatedEXT)
@@ -2512,7 +2513,7 @@ namespace Microsoft::Xna::Framework::Content
                                    "the single factor."
                                  : ""));
                     }
-                    // plans/plan_gltf.md GLTF-173/GLTF-461: normals CNA derived rather than the file
+                    // GLTF-173/GLTF-461: normals CNA derived rather than the file
                     // authoring them. The split itself is Debug -- it is an exact, lossless
                     // transformation of the same surface, and a warning per faceted mesh would be
                     // noise nobody reads. What stays a warning is the residue: a vertex whose
@@ -2570,7 +2571,7 @@ namespace Microsoft::Xna::Framework::Content
                             "and each morphed pose's flat normals are computed instead "
                             "(GLTF-461).");
                     }
-                    // plans/plan_gltf.md GLTF-273: the skin's own import report. Every quantity in it is
+                    // GLTF-273: the skin's own import report. Every quantity in it is
                     // a place a rig is imported approximately, and each is silent on its own.
                     if (entry.skeleton != nullptr)
                     {
@@ -2587,7 +2588,7 @@ namespace Microsoft::Xna::Framework::Content
                             (skinReport.hasDeclaredSkeletonRoot ? "declared." : "not declared."));
                     }
 
-                    // plans/plan_gltf.md GLTF-100: what the selected layout cannot carry, named once from
+                    // GLTF-100: what the selected layout cannot carry, named once from
                     // the decision table rather than re-derived per symptom. The individual
                     // reports below (a dropped normal, a dropped tangent, a dropped material) each
                     // catch one consequence; this catches the combination, which is what an author
@@ -2601,7 +2602,7 @@ namespace Microsoft::Xna::Framework::Content
                             ", which cannot carry " + meshOut.unrepresentableForStrideEXT +
                             " (GLTF-100).");
                     }
-                    // plans/plan_gltf.md GLTF-082: a topology conversion, reported rather than silent.
+                    // GLTF-082: a topology conversion, reported rather than silent.
                     // A strip or fan becomes a triangle list at import, which is a rewrite of the
                     // index list -- so the triangle a consumer draws is not at the index the file
                     // put it at, and anything mapping a picked triangle or a debug index back to
@@ -2618,7 +2619,7 @@ namespace Microsoft::Xna::Framework::Content
                             "(GLTF-081/GLTF-082).");
                     }
 
-                    // plans/plan_gltf.md GLTF-095/GLTF-257: influence sets past the first. The dropped
+                    // GLTF-095/GLTF-257: influence sets past the first. The dropped
                     // share is what says whether it matters -- a fifth influence weighted 0.002 is
                     // exporter noise and one weighted 0.4 is a visibly different pose.
                     if (meshOut.extraInfluenceSetsEXT > 0)
@@ -2632,7 +2633,7 @@ namespace Microsoft::Xna::Framework::Content
                             "% of a vertex's influence was dropped. The retained weights are "
                             "renormalised, so the skin is coarser, not collapsed (GLTF-257).");
                     }
-                    // plans/plan_gltf.md GLTF-256: joint weights that did not sum to 1 were renormalised.
+                    // GLTF-256: joint weights that did not sum to 1 were renormalised.
                     // Never silent -- a sum far from 1 is a broken file, not exporter quantisation,
                     // and the deviation is what tells the two apart.
                     if (meshOut.renormalisedWeightVertexCountEXT > 0)
@@ -2654,7 +2655,7 @@ namespace Microsoft::Xna::Framework::Content
                             " vertex/vertices whose joint weights sum to zero. They are left "
                             "unweighted rather than assigned to an arbitrary joint (GLTF-256).");
                     }
-                    // plans/plan_gltf.md GLTF-086: an authored tangent basis with nowhere to live.
+                    // GLTF-086: an authored tangent basis with nowhere to live.
                     if (meshOut.droppedTangentForStrideEXT)
                     {
                         CNA::Logger::Warn(
@@ -2665,7 +2666,7 @@ namespace Microsoft::Xna::Framework::Content
                             std::to_string(meshOut.stride) +
                             ", so the authored tangent basis is discarded (GLTF-086).");
                     }
-                    // plans/plan_gltf.md GLTF-188: GLTF-182/183 carry two distinct sampled TEXCOORD
+                    // GLTF-188: GLTF-182/183 carry two distinct sampled TEXCOORD
                     // sets. A third remains outside the adopted vertex ABI and is reported by map.
                     if (!meshOut.uvSetMismatchedMapsEXT.empty())
                     {
@@ -2681,7 +2682,7 @@ namespace Microsoft::Xna::Framework::Content
                             "two sampled sets, so these maps fall back to packed channel 0 "
                             "(GLTF-188, a documented limit).");
                     }
-                    // plans/plan_gltf.md GLTF-206: imported PNG/JPEG images have one level. Generating
+                    // GLTF-206: imported PNG/JPEG images have one level. Generating
                     // the same RGBA box-filter chain for colour, normal and packed-data maps would
                     // be materially wrong, so the explicit quality deferral is reported per map.
                     if (!meshOut.mipmappedSamplerMapsWithoutMipChainEXT.empty())
@@ -2700,7 +2701,7 @@ namespace Microsoft::Xna::Framework::Content
                             "so level zero is used for every LOD and minification quality may be "
                             "reduced (GLTF-206).");
                     }
-                    // plans/plan_gltf.md GLTF-091: XNA carries one colour channel, so a second set is
+                    // GLTF-091: XNA carries one colour channel, so a second set is
                     // not declined gracefully -- it is data that does not arrive.
                     if (meshOut.extraColorSetsEXT > 0)
                     {
@@ -2710,7 +2711,7 @@ namespace Microsoft::Xna::Framework::Content
                             " COLOR set(s) beyond COLOR_0. XNA's vertex layouts carry one colour "
                             "channel, so only COLOR_0 is imported (GLTF-091, a documented limit).");
                     }
-                    // plans/plan_gltf.md GLTF-092: §3.7.2.1 reserves `_*` for custom semantics and says a
+                    // GLTF-092: §3.7.2.1 reserves `_*` for custom semantics and says a
                     // reader may ignore them -- so this is not an error, only a note that the
                     // geometry a file's own tooling depends on did not come with it.
                     if (!meshOut.ignoredCustomAttributesEXT.empty())
@@ -2726,7 +2727,7 @@ namespace Microsoft::Xna::Framework::Content
                             "' carries application-specific attribute(s) " + names +
                             ", which CNA ignores by design (GLTF-092).");
                     }
-                    // plans/plan_gltf.md GLTF-079: an index count that is not a whole number of
+                    // GLTF-079: an index count that is not a whole number of
                     // primitives. The tail was dropped rather than drawn past the end of the run,
                     // and saying so is the difference between a diagnosable export bug and a model
                     // that is quietly missing a face.
@@ -2746,7 +2747,7 @@ namespace Microsoft::Xna::Framework::Content
                             std::to_string(meshOut.stride) + ") has no normal slot, so the "
                             "normals are discarded and the primitive cannot be lit (GLTF-241).");
                     }
-                    // plans/plan_gltf.md GLTF-202/GLTF-203: the file's own sampler state, per texture
+                    // GLTF-202/GLTF-203: the file's own sampler state, per texture
                     // slot. Without this every imported texture drew with whatever the device
                     // happened to have -- LinearWrap -- so a CLAMP_TO_EDGE asset with UVs outside
                     // [0,1] tiled instead of clamping. CNBF-100: applied by the shared helper, so
@@ -2771,12 +2772,12 @@ namespace Microsoft::Xna::Framework::Content
                         {
                             morph->PositionDeltas.push_back(meshOut.morphPositionDeltas[t]);
                             morph->NormalDeltas.push_back(meshOut.morphNormalDeltas[t]);
-                            // plans/plan_gltf.md GLTF-279: without these a morphed PBR surface kept its
+                            // GLTF-279: without these a morphed PBR surface kept its
                             // rest-pose tangent basis, so normal mapping lit the deformed surface
                             // with the undeformed basis.
                             morph->TangentDeltas.push_back(meshOut.morphTangentDeltas[t]);
                         }
-                        // plans/plan_gltf.md GLTF-461: a primitive with no authored NORMAL has its flat
+                        // GLTF-461: a primitive with no authored NORMAL has its flat
                         // normals recomputed from the morphed positions at every pose, so the blend
                         // needs the connectivity as well as the deltas.
                         morph->RecomputeFlatNormalsEXT = meshOut.morphedFlatNormalsEXT;
@@ -2788,7 +2789,7 @@ namespace Microsoft::Xna::Framework::Content
                         // GLTF-281: the instancing node's own weights win over the mesh's.
                         morph->Weights = GetMeshDefaultWeights(mesh, targetCount, instance.node);
 
-                        // plans/plan_gltf.md GLTF-291: what the targets actually carry. A target missing
+                        // GLTF-291: what the targets actually carry. A target missing
                         // a delta kind is legal (§3.7.2.2) and simply does not move that stream --
                         // but a normal-mapped surface whose targets carry positions and no
                         // tangents deforms with a rest-pose tangent basis, which lights wrongly
@@ -2913,7 +2914,7 @@ namespace Microsoft::Xna::Framework::Content
                                 morph->PositionDeltas = variantMesh.morphPositionDeltas;
                                 morph->NormalDeltas = variantMesh.morphNormalDeltas;
                                 morph->TangentDeltas = variantMesh.morphTangentDeltas;
-                                // plans/plan_gltf.md GLTF-461, per variant: a variant's own layout can
+                                // GLTF-461, per variant: a variant's own layout can
                                 // differ, so its connectivity and split come from its own MeshOut
                                 // rather than from the default material's.
                                 morph->RecomputeFlatNormalsEXT = variantMesh.morphedFlatNormalsEXT;
@@ -2992,7 +2993,7 @@ namespace Microsoft::Xna::Framework::Content
                     ++meshCounter;
                 }
 
-                // plans/plan_gltf.md GLTF-139/GLTF-141: one ModelMesh per placement, named after the
+                // GLTF-139/GLTF-141: one ModelMesh per placement, named after the
                 // glTF mesh it instances and -- when the same mesh is placed by several nodes --
                 // after the placing node too, so a name traces back to the file rather than to a
                 // counter. An unnamed mesh falls back to its node's name before it falls back to
@@ -3030,7 +3031,7 @@ namespace Microsoft::Xna::Framework::Content
                         instancePartPtrs[e]->setEffectProperty(instanceEffects[e]);
                     }
 
-                    // plans/plan_gltf.md GLTF-114: the mesh is parented to the bone of the node that
+                    // GLTF-114: the mesh is parented to the bone of the node that
                     // instantiates it, so Model::Draw composes the glTF world transform for free.
                     // A skinned instance is parented to the identity root instead: glTF requires a
                     // skinned mesh's own node transform to be ignored, because its joints already
@@ -3087,12 +3088,12 @@ namespace Microsoft::Xna::Framework::Content
                 CNA::Internal::Graphics::ConfigureModelMaterialVariantsEXT(
                     model, std::move(variantNames), std::move(materialVariantBindings));
             }
-            // plans/plan_gltf.md GLTF-265/GLTF-294: the first skin stays on Model::Tag for compatibility
+            // GLTF-265/GLTF-294: the first skin stays on Model::Tag for compatibility
             // with the XNA Skinned Model Sample convention. Model::SkinsEXT carries every skin;
             // an unskinned model's Tag carries its rigid clips instead.
             if (res->skinningData)      { model.setTagProperty(res->skinningData.get()); }
             else if (res->modelAnimations) { model.setTagProperty(res->modelAnimations.get()); }
-            // plans/plan_gltf.md GLTF-262: a skinned effect's palette defaults to identity matrices,
+            // GLTF-262: a skinned effect's palette defaults to identity matrices,
             // which means "every joint matrix is the identity" -- not "no skinning". Drawn that
             // way the mesh is posed in joint space and glTF's own inverse(meshNodeWorld)
             // cancellation never applies, so a model nobody has animated yet renders wrong rather
@@ -3108,7 +3109,7 @@ namespace Microsoft::Xna::Framework::Content
                     }
                 }
             }
-            // plans/plan_gltf.md GLTF-317 … GLTF-321: the file's own cameras.
+            // GLTF-317 … GLTF-321: the file's own cameras.
             {
                 std::vector<Graphics::ModelCameraEXT> cameras;
                 for (const CameraOut& camera : ExtractCamerasEXT(data, sceneGraph, 1.0f))
@@ -3173,7 +3174,7 @@ namespace Microsoft::Xna::Framework::Content
                     ParseGltfImportReportEXT(json);
 
                 const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
-                // plans/plan_gltf.md GLTF-129: Model is the one type with a version 2 -- it adds the
+                // GLTF-129: Model is the one type with a version 2 -- it adds the
                 // "bones" hierarchy and the per-mesh "parentBone" index. Every other type still
                 // accepts version 1 only, so an unknown future version stays a hard error there.
                 CNA::Internal::ValidateCnjEnvelope(envelope, "Model", path, /*maxVersion=*/2);
@@ -3189,7 +3190,7 @@ namespace Microsoft::Xna::Framework::Content
                 std::vector<Graphics::ModelBone*> boneRawPtrs;
                 std::vector<Graphics::ModelMesh*> meshRawPtrs;
 
-                // plans/plan_gltf.md GLTF-129/GLTF-130 (Phase 5): a cnjVersion-2 Model .cnj carries the
+                // GLTF-129/GLTF-130 (Phase 5): a cnjVersion-2 Model .cnj carries the
                 // whole node graph in "bones" (parent-before-child, index 0 the identity root) and
                 // each mesh names its own "parentBone" index into it. Rebuilding that tree here is
                 // what makes the offline .cnj path place geometry identically to the runtime
@@ -3272,7 +3273,7 @@ namespace Microsoft::Xna::Framework::Content
                     for (int i = 0; i < boneCount; ++i)
                         skinningData->InverseBindPose[static_cast<std::size_t>(i)] = skelReader.ReadMatrix();
 
-                    // plans/plan_gltf.md GLTF-245/GLTF-247: an optional third matrix block, the per-root
+                    // GLTF-245/GLTF-247: an optional third matrix block, the per-root
                     // prefix carrying the joints' scene ancestry and the skinned mesh node's
                     // cancellation. Appended after the original two blocks precisely so a sidecar
                     // written before it still loads: when the bytes are absent the array is left
@@ -3299,7 +3300,7 @@ namespace Microsoft::Xna::Framework::Content
                 }
                 else
                 {
-                    // plans/plan_gltf.md GLTF-294: a .cnj with no skeleton may still carry rigid
+                    // GLTF-294: a .cnj with no skeleton may still carry rigid
                     // (non-joint) clips, whose track indices are Model::Bones indices. Before
                     // this, the "animations" array was read only inside the skeleton branch, so an
                     // unskinned model's clips were parsed by nobody -- the reader half of D6.
@@ -3371,7 +3372,7 @@ namespace Microsoft::Xna::Framework::Content
 
                 // Meshes
                 //
-                // plans/plan_gltf.md GLTF-139: one entry per primitive, grouped into one ModelMesh per
+                // GLTF-139: one entry per primitive, grouped into one ModelMesh per
                 // placement by the optional "partOfMesh" field. Collected first and built after
                 // the loop, because a ModelMesh takes its whole part list at construction.
                 struct PendingCnjMesh
@@ -3423,7 +3424,7 @@ namespace Microsoft::Xna::Framework::Content
                             const std::string textureFile = ExtractJsonStringField(mg, "texture");
                             const std::string texture2File = ExtractJsonStringField(mg, "texture2");
                             const bool vertexColorEnabled = JsonBool(mg, "vertexColorEnabled", false);
-                            // plans/plan_gltf.md GLTF-236/GLTF-237: rebuild the same coherent material
+                            // GLTF-236/GLTF-237: rebuild the same coherent material
                             // carrier the direct glTF path consumes. Defaults are glTF's own, so a
                             // .cnj written before an optional field existed keeps its old meaning.
                             const std::string normalMapFile = ExtractJsonStringField(mg, "normalMap");
@@ -3479,14 +3480,14 @@ namespace Microsoft::Xna::Framework::Content
                                     mg, FindKeyArray(mg, "specularTextureTransforms"));
                             material.textureTransformsEXT[5] = specularTextureTransforms[0];
                             material.textureTransformsEXT[6] = specularTextureTransforms[1];
-                            // plans/plan_gltf.md GLTF-228/GLTF-229/GLTF-231. Absent from a .cnj written
+                            // GLTF-228/GLTF-229/GLTF-231. Absent from a .cnj written
                             // before them, whose defaults are glTF's own -- so an older asset loads
                             // as the opaque, single-sided material it could only ever have been.
                             material.alphaMode = CNA::Internal::GltfImport::AlphaModeEXTFromName(
                                 ExtractJsonStringField(mg, "alphaMode"));
                             material.alphaCutoff = JsonFloat(mg, "alphaCutoff", 0.5f);
                             material.doubleSided = JsonBool(mg, "doubleSided", false);
-                            // plans/plan_gltf.md GLTF-337: KHR_materials_unlit, carried so the two
+                            // GLTF-337: KHR_materials_unlit, carried so the two
                             // loaders agree. Absent from a .cnj written before it, whose default is
                             // "lit" -- which is what such a file could only ever have meant.
                             const bool unlit = JsonBool(mg, "unlit", false);
@@ -3551,7 +3552,7 @@ namespace Microsoft::Xna::Framework::Content
                             const std::vector<float> morphWeightsField =
                                 JsonFloatArrayN(mg, FindKeyArray(mg, "morphWeights"));
                             const std::string morphWeightTrackJson = ExtractJsonObjectFieldEXT(mg, "morphWeightTrack");
-                            // plans/plan_gltf.md GLTF-461: the source primitive authored no NORMAL, so
+                            // GLTF-461: the source primitive authored no NORMAL, so
                             // its flat normals depend on the morph weights and the blend has to
                             // recompute them. Only the decision is serialized -- the connectivity
                             // the recomputation needs is the index sidecar this reader already
@@ -3584,7 +3585,7 @@ namespace Microsoft::Xna::Framework::Content
                             // 16-bit, which silently mis-decoded the index buffer (wrong element
                             // count, wrong byte offsets) for any larger mesh.
                             const bool use32BitIndices = numVertices > 65535;
-                            // plans/plan_gltf.md GLTF-073/GLTF-078: the part's own topology, defaulting
+                            // GLTF-073/GLTF-078: the part's own topology, defaulting
                             // to TRIANGLES for a .cnj written before the field existed -- which
                             // could only ever have held a triangle list anyway.
                             const auto topology =
@@ -3811,7 +3812,7 @@ namespace Microsoft::Xna::Framework::Content
                             AppendPositionsForMeshBoundsEXT(
                                 boundsVertexBytes, stride, partBoundsPositions);
 
-                            // plans/plan_gltf.md GLTF-139: the .cnj "meshes" array is per PRIMITIVE, and
+                            // GLTF-139: the .cnj "meshes" array is per PRIMITIVE, and
                             // XNA's shape is one ModelMesh per mesh with one part per primitive.
                             // An entry may therefore name the placement it belongs to
                             // ("partOfMesh"), and consecutive entries sharing that value become
@@ -3849,7 +3850,7 @@ namespace Microsoft::Xna::Framework::Content
                             // cannon/hatch bone lookups) via Model.Bones["PartName"]. Mesh names
                             // in every currently-known .model.json asset already match the bone
                             // names real ported game code expects.
-                            // plans/plan_gltf.md GLTF-114/GLTF-129: a cnjVersion-2 file already carries a
+                            // GLTF-114/GLTF-129: a cnjVersion-2 file already carries a
                             // real bone per scene node, so the mesh is attached to the one its own
                             // "parentBone" names -- that is what makes the offline path place
                             // geometry where glTF says, instead of at the identity root.
@@ -3989,7 +3990,7 @@ namespace Microsoft::Xna::Framework::Content
                                 pending.parts[e]->setEffectProperty(pending.effects[e]);
                             }
 
-                            // plans/plan_gltf.md GLTF-114/GLTF-129: a cnjVersion-2 file already carries a
+                            // GLTF-114/GLTF-129: a cnjVersion-2 file already carries a
                             // real bone per scene node, so the mesh is attached to the one its own
                             // "parentBone" names -- that is what makes the offline path place
                             // geometry where glTF says, instead of at the identity root.
@@ -4053,10 +4054,10 @@ namespace Microsoft::Xna::Framework::Content
                 // convention -- game code retrieves it via
                 // static_cast<Graphics::SkinningData*>(model.getTagProperty()). Left null (Tag's
                 // own default) for a rigid, non-skinned .model.json with no "skeleton" field.
-                // plans/plan_gltf.md GLTF-294: an unskinned model's Tag carries its rigid clips instead.
+                // GLTF-294: an unskinned model's Tag carries its rigid clips instead.
                 if (res->skinningData)      { model.setTagProperty(res->skinningData.get()); }
                 else if (res->modelAnimations) { model.setTagProperty(res->modelAnimations.get()); }
-                // plans/plan_gltf.md GLTF-262, exactly as on the .gltf path above: an unposed skinned
+                // GLTF-262, exactly as on the .gltf path above: an unposed skinned
                 // model is not merely unanimated, it is wrong.
                 if (res->skinningData)
                 {

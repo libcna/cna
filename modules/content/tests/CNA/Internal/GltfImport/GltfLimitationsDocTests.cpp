@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-447: `docs/gltf-limitations.md`, held to the code it describes.
+// GLTF-447: `docs/gltf-limitations.md`, held to the code it describes.
 //
 // A limitations document that drifts is worse than none: it reads as a promise about what a caller
 // will be told, and a caller who believes it stops looking. Two things keep it true, and both are
@@ -9,7 +9,7 @@
 //   * Its extension table is GENERATED from `GltfExtensionRegistryEXT()` -- the same registry the
 //     `extensionsRequired` gate reads -- and compared row by row here, with the corrected table
 //     printed on failure so fixing the document is a paste rather than a reading exercise. This is
-//     the same rule plans/plan_gltf.md §19 lives under (`GLTF-334`), for the same reason.
+//     the rule `GLTF-334` set for the registry's human-readable table.
 //   * Every report field the document names must still be DECLARED in `GltfImportCore.hpp`. The
 //     document's whole organising claim is "each loss names the field that reports it", so a
 //     renamed field must break the document that promised it instead of leaving a dead name behind.

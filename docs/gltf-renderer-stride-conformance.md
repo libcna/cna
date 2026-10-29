@@ -10,21 +10,27 @@ description passed by the glTF path.
 
 ## Canonical layouts emitted by glTF
 
-Every usage index is zero. `Color` is four normalized unsigned bytes and `Byte4` is four unsigned
-integer bytes; every other format below is IEEE-754 `float`.
+Every usage index is zero except the second `TextureCoordinate`, which is usage index 1. `Color` is
+four normalized unsigned bytes and `Byte4` is four unsigned integer bytes; every other format below
+is IEEE-754 `float`. The importer selects a row through `VertexLayoutTableEXT` (`GLTF-099`).
 
 | Stride | Declaration order: semantic @ byte offset (`VertexElementFormat`) | Corpus witness |
 |---:|---|---|
-| 20 | Position @ 0 (`Vector3`), TextureCoordinate @ 12 (`Vector2`) | `tex-dual-texture-stride` |
-| 24 | Position @ 0 (`Vector3`), Color @ 12 (`Color`), TextureCoordinate @ 16 (`Vector2`) | `normalized-u8-color` |
+| 24 | Position @ 0 (`Vector3`), Color @ 12 (`Color`), TextureCoordinate @ 16 (`Vector2`) | `mat-unlit-vertex-color-alpha` |
+| 28 | Position @ 0 (`Vector3`), TextureCoordinate @ 12 (`Vector2`), TextureCoordinate1 @ 20 (`Vector2`) | `tex-dual-texture-stride` |
 | 32 | Position @ 0 (`Vector3`), Normal @ 12 (`Vector3`), TextureCoordinate @ 24 (`Vector2`) | `mat-unlit` |
 | 48 | Position @ 0 (`Vector3`), Normal @ 12 (`Vector3`), Tangent @ 24 (`Vector4`), TextureCoordinate @ 40 (`Vector2`) | `mat-authored-tangent` |
 | 52 | Position @ 0 (`Vector3`), Normal @ 12 (`Vector3`), TextureCoordinate @ 24 (`Vector2`), BlendWeight @ 32 (`Vector4`), BlendIndices @ 48 (`Byte4`) | `skin-unlit` |
 | 56 | The stride-52 declaration plus Color @ 52 (`Color`) | `skin-vertex-color` |
+| 60 | The stride-48 declaration plus TextureCoordinate1 @ 48 (`Vector2`) and Color @ 56 (`Color`) | `uv1-material`, `normalized-u8-color`, `mat-vertex-color-pbr` |
 | 68 | Position @ 0 (`Vector3`), Normal @ 12 (`Vector3`), Tangent @ 24 (`Vector4`), TextureCoordinate @ 40 (`Vector2`), BlendWeight @ 48 (`Vector4`), BlendIndices @ 64 (`Byte4`) | `skin-parented-joints` |
+| 76 | The stride-68 declaration plus TextureCoordinate1 @ 68 (`Vector2`) | — |
+| 80 | The stride-76 declaration plus Color @ 76 (`Color`) | `skin-vertex-color-pbr` |
 
-Stride 16 (`Position` + `Color`) is also in the shared built-in table, but the current glTF
-packing policy does not emit it; it is therefore outside this seven-stride matrix.
+Strides 16 (`Position` + `Color`) and 20 (`Position` + `TextureCoordinate`) are also in the shared
+built-in table, but the current glTF packing policy emits neither. The renderer matrix and the
+first two tests below cover the seven strides that the witness test loads (28, 32, 48, 52, 56, 60
+and 68); strides 24, 76 and 80 have no witness there.
 
 ## Renderer matrix
 
@@ -43,25 +49,25 @@ EasyGL consumes the declaration directly. STUB and HEADLESS keep honest non-rend
 
 ## Automated evidence
 
-- `GltfStrideAndBuffer.EveryImportedGltfStrideCarriesItsCanonicalVertexDeclaration` loads the
-  seven corpus witnesses and compares stride, element count, ordered offsets, formats, semantics
-  and usage indices with the canonical table.
+- `GltfStrideAndBuffer.EveryImportedGltfStrideCarriesItsCanonicalVertexDeclaration` (the witness
+  test) loads eight corpus witnesses of those seven strides and compares stride, element count,
+  ordered offsets, formats, semantics and usage indices with the canonical table.
 - `RendererStrideConformance.EveryGltfStrideReachesTheNativeDrawBoundary` draws and presents all
-  seven on every renderer with `ThreeD`; STUB's capability skip is deliberate and checked in CI.
+  eight on every renderer with `ThreeD`; STUB's capability skip is deliberate and checked in CI.
   Since `GLTF-473` its contract is **reach the draw boundary, or refuse with a named layout
   incompatibility** rather than a plain `EXPECT_NO_THROW` — which is stricter, because a
   fixed-function renderer's failure mode is not throwing.
 - `RendererStrideConformance.AColourCarryingPbrPrimitiveEitherDrawsOrRefusesByName` (`GLTF-472`)
-  and `RendererStrideConformance.NoPbrOrSkinnedRecordIsEverReadThroughAnIncompatibleLayout`
-  (`GLTF-473`) draw the colour-carrying and the whole PBR/skinned record families through a **live
-  device**. These are standing renderer-conformance gates, not artefacts of the glTF campaign that
-  found the bugs, and the reason to keep them is empirical: between them they found three defects
-  (`SDL_GPU`'s and `DILIGENT`'s (retired 2026-09-17) unreachable `COLOR_0` shaders and `OPENGLES1`'s
-  (retired 2026-09-17) misread PBR records)
-  that **every static inventory in this repository reported as correct**, and the search they
-  prompted found two more (`GLTF-475`). A source audit can only see what a renderer declares; only a
-  draw sees what it reads.
-- `CrossRendererContract.NoRendererPaintsAVertexAttributeInsteadOfTheEffectsDiffuseColour`
+  draws both colour-carrying PBR records (strides 60 and 80) through a **live device**, and
+  `RendererStrideConformance.EveryPbrAndSkinnedFixtureImportsToItsCanonicalStride` pins the stride
+  every PBR and skinned fixture imports to. These are standing renderer-conformance gates, not
+  artefacts of the glTF campaign that found the bugs, and the reason to keep them is empirical:
+  between them they found three defects (`SDL_GPU`'s and `DILIGENT`'s (retired 2026-09-17)
+  unreachable `COLOR_0` shaders and `OPENGLES1`'s (retired 2026-09-17) misread PBR records) that
+  **every static inventory in this repository reported as correct**, and the search they prompted
+  found two more (`GLTF-475`). A source audit can only see what a renderer declares; only a draw
+  sees what it reads.
+- `CrossRendererContractTest.NoRendererPaintsAVertexAttributeInsteadOfTheEffectsDiffuseColour`
   (`GLTF-475`) is the same tier applied one level lower: not "does the draw arrive?" but "is the
   answer the one the caller asked for?". It draws a plain XNA `VertexPositionNormalTangentTexture`
   buffer (stride 48) with a `BasicEffect` whose `DiffuseColor` is opaque red, then reads the centre
@@ -71,8 +77,6 @@ EasyGL consumes the declaration directly. STUB and HEADLESS keep honest non-rend
   black (both renderers have since been retired), where the plan row that opened the investigation had predicted one renderer. It needs a
   multi-renderer build (`CNA_MULTI_RENDERER`) and colour readback, so it is not in the CI matrix
   below; it runs in `cmake-build-multi`.
-- `FixedFunctionArrayLayout.*` (`GLTF-473`) pins the shared fixed-function layout guard's decision
-  as a table over every canonical stride. It needs no device, so it runs in every build.
 - `.github/workflows/gltf-renderer-stride-ci.yml` builds and runs those tests for `STUB`,
   `HEADLESS`, `OPENGLES3`, `SDL_GPU` and `SOFTWARE` on every relevant push and pull request.
 - `scripts/gltf-renderer-parity.sh` compares each renderer against the same committed L1–L5

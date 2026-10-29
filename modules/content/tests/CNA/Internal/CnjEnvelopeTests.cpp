@@ -208,7 +208,7 @@ TEST(ValidateCnjEnvelopeTest, NegativeCnjVersionThrows)
     EXPECT_THROW(ValidateCnjEnvelope(env, "SpriteFont", "wrong.cnj"), ContentLoadException);
 }
 
-// plans/plan_gltf.md GLTF-129 (Phase 5): the version ceiling is a PER-TYPE argument, not a global
+// GLTF-129 (Phase 5): the version ceiling is a PER-TYPE argument, not a global
 // constant. Model understands version 2 (the "bones" hierarchy and per-mesh "parentBone"); every
 // other type still understands only version 1. The four cases below are the whole contract --
 // raising the ceiling globally would have made SpriteFont silently accept a version whose meaning

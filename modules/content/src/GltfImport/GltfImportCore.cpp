@@ -50,7 +50,7 @@
 
 #include "CNA/Internal/ContentPath.hpp"
 
-// CNJ CNB-91 / plans/plan_gltf.md GLTF-353: KHR_draco_mesh_compression decoding. The normal
+// CNJ CNB-91 / GLTF-353: KHR_draco_mesh_compression decoding. The normal
 // build uses CNA's pinned Draco submodule; CNA_DRACO_AVAILABLE remains conditional so packagers
 // and the conformance gate can deliberately exercise the decoder-free refusal path.
 #ifdef CNA_DRACO_AVAILABLE
@@ -148,7 +148,7 @@ namespace CNA::Internal::GltfImport
                 g[12], g[13], g[14], 1.0f);
         }
 
-        // plans/plan_gltf.md GLTF-062: a CONFIRMED bug in the vendored parser, worked around here.
+        // GLTF-062: a CONFIRMED bug in the vendored parser, worked around here.
         //
         // §3.6.2.3 makes a sparse accessor's `values` array TIGHTLY PACKED -- its bufferView must
         // not declare a byteStride at all. cgltf's reader walks it with
@@ -217,7 +217,7 @@ namespace CNA::Internal::GltfImport
             }
         }
 
-        // plans/plan_gltf.md GLTF-056: the SECOND confirmed defect in the vendored parser, and a smaller
+        // GLTF-056: the SECOND confirmed defect in the vendored parser, and a smaller
         // one than GLTF-062 only in blast radius.
         //
         // §3.6.2.2 gives the signed normalized conversions as `max(c / 127, -1)` and
@@ -246,7 +246,7 @@ namespace CNA::Internal::GltfImport
 
         // The last byte an accessor-like walk touches: offset + (count-1)*stride + elementSize,
         // computed so that an overflow throws instead of wrapping into a small, plausible span
-        // that would then pass the bounds check (plans/plan_gltf.md §8.1).
+        // that would then pass the bounds check.
         std::size_t RequiredSpan(std::size_t byteOffset, std::size_t count, std::size_t stride,
                                   std::size_t elementSize, const std::string& context)
         {
@@ -267,7 +267,7 @@ namespace CNA::Internal::GltfImport
             return byteOffset + walk + elementSize;
         }
 
-        // plans/plan_gltf.md GLTF-039/GLTF-040: an allocation a malformed file asked for, refused by
+        // GLTF-039/GLTF-040: an allocation a malformed file asked for, refused by
         // name.
         //
         // An accessor with **no** bufferView is initialised with zeros (§3.6.2.1), so nothing in
@@ -311,7 +311,7 @@ namespace CNA::Internal::GltfImport
         /// Reserves capacity for @p elements items of @p bytesPerElement, refusing by name when the
         /// product overflows or the allocation fails.
         ///
-        /// plans/plan_gltf.md `GLTF-040`. A `reserve` is an optimisation, and an optimisation must not be
+        /// `GLTF-040`. A `reserve` is an optimisation, and an optimisation must not be
         /// the thing that decides how a malformed file fails: an accessor count no buffer backs
         /// reached `vertexBytes.reserve()` before any decode, and the run ended in
         /// `std::length_error: vector::reserve` -- naming neither the primitive nor the number.
@@ -363,7 +363,7 @@ namespace CNA::Internal::GltfImport
                     std::string("Accessor '") + context + "' has " + std::to_string(actualComponents) +
                     " components per element, expected " + std::to_string(expectedComponents) + ".");
             }
-            // plans/plan_gltf.md GLTF-039. The span guard again, at the point of allocation.
+            // GLTF-039. The span guard again, at the point of allocation.
             // `ValidateGltfEXT` runs it first on every production load, but `ExtractMesh` is
             // reachable without it -- the conformance harness and the offline converter both call
             // the extraction path directly -- and an accessor whose declared count wraps its own
@@ -414,7 +414,7 @@ namespace CNA::Internal::GltfImport
             return out;
         }
 
-        // plans/plan_gltf.md GLTF-063: the index accessor's own decode path.
+        // GLTF-063: the index accessor's own decode path.
         //
         // Indices are NOT read through cgltf_accessor_read_index. That function returns 0 -- with
         // no error channel, as its own upstream comment concedes -- for a sparse accessor and for
@@ -454,7 +454,7 @@ namespace CNA::Internal::GltfImport
 
         // Reads one unsigned index component. std::memcpy rather than a cast through a pointer to
         // the wider type: a bufferView may legally start at any byte offset, so the source address
-        // is not guaranteed to satisfy the alignment of uint16_t/uint32_t (plans/plan_gltf.md §8.4).
+        // is not guaranteed to satisfy the alignment of uint16_t/uint32_t.
         std::uint32_t ReadIndexComponent(const std::uint8_t* at, cgltf_component_type type)
         {
             switch (type)
@@ -656,7 +656,7 @@ namespace CNA::Internal::GltfImport
             int duplicateTimes = 0;
         };
 
-        // plans/plan_gltf.md GLTF-313. §3.11 requires a sampler's input times to be **strictly
+        // GLTF-313. §3.11 requires a sampler's input times to be **strictly
         // increasing**, and every reader here takes that on trust: `FindBracket` walks the array
         // once looking for the first pair straddling t, and `BuildTrack` merges channel times with
         // a sort-then-unique that assumes the inputs were already ordered.
@@ -700,7 +700,7 @@ namespace CNA::Internal::GltfImport
             return result;
         }
 
-        // plans/plan_gltf.md GLTF-301. STEP holds the sample at the START of the interval it is in, and
+        // GLTF-301. STEP holds the sample at the START of the interval it is in, and
         // §3.6's intervals are half-open: `times[i]`'s value applies on `[times[i], times[i+1])`,
         // so at exactly `times[i+1]` the NEXT sample is already in force.
         //
@@ -1006,7 +1006,7 @@ namespace CNA::Internal::GltfImport
 
         /// Computes §3.7.2.1's flat normals for a primitive that authors no `NORMAL`.
         ///
-        /// plans/plan_gltf.md `GLTF-461`. §3.7.2.1 is a MUST: "When normals are not specified, client
+        /// `GLTF-461`. §3.7.2.1 is a MUST: "When normals are not specified, client
         /// implementations MUST calculate flat normals". Flat shading gives a vertex one normal
         /// **per face**, so a vertex shared between differently oriented faces has to be duplicated
         /// once per orientation — there is no single value that is both faces' normal. CNA used to
@@ -1649,7 +1649,7 @@ namespace CNA::Internal::GltfImport
         // No scene graph available: every root joint keeps an identity prefix, which is only
         // correct when the joint set already reaches the scene root. Callers that can build the
         // graph must use the three-argument overload -- both model loaders do
-        // (plans/plan_gltf.md GLTF-245).
+        // (GLTF-245).
         return BuildSkeleton(skin, SceneGraphOut{}, unitScale);
     }
 
@@ -1658,10 +1658,11 @@ namespace CNA::Internal::GltfImport
     {
         SkeletonResult result;
 
-        // GLTF-249: read the declared root, and read it ONLY to report it. §15.1.1 makes the rule
-        // explicit -- skin.skeleton names the rig's semantic root, and an implementation that used
-        // it to stop walking ancestors would recreate D8 under a new name. Nothing below consults
-        // these two fields; the ancestry that feeds parentWorldPrefix comes from the scene graph.
+        // GLTF-249: read the declared root, and read it ONLY to report it. docs/gltf-conventions.md
+        // makes the rule explicit -- skin.skeleton names the rig's semantic root, and an
+        // implementation that used it to stop walking ancestors would recreate D8 under a new name.
+        // Nothing below consults these two fields; the ancestry that feeds parentWorldPrefix comes
+        // from the scene graph.
         if (skin->skeleton != nullptr)
         {
             result.declaredSkeletonRootName =
@@ -1681,7 +1682,7 @@ namespace CNA::Internal::GltfImport
         result.paletteIndexToSceneNodeIndex.assign(n, -1);
         if (n == 0) { return result; }
 
-        // plans/plan_gltf.md GLTF-261. The GPU palette is MaxBones (72) mat4s, a real XNA constant that
+        // GLTF-261. The GPU palette is MaxBones (72) mat4s, a real XNA constant that
         // every renderer's uniform array is sized by, so raising it is not a local change. A rig
         // above the limit is therefore refused -- clearly, here, naming the file's own joint count
         // and the limit -- rather than left to surface later as SetBoneTransforms' generic
@@ -1698,7 +1699,7 @@ namespace CNA::Internal::GltfImport
                 "' has " + std::to_string(n) + " joints, but the GPU bone palette holds " +
                 std::to_string(kMaxPaletteBones) +
                 ". Truncating would leave every vertex bound to a joint past the limit collapsed "
-                "toward the origin, so the skin is refused instead (plans/plan_gltf.md GLTF-261).");
+                "toward the origin, so the skin is refused instead (GLTF-261).");
         }
 
         std::vector<const cgltf_node*> oldNodes(n);
@@ -1848,7 +1849,7 @@ namespace CNA::Internal::GltfImport
         ///
         /// Shared by the joint-palette and scene-node extractors so the two cannot drift: the ONLY
         /// difference between rigid and skinned animation is which index space a target node
-        /// resolves into (§15.1.2). Everything after this -- union resampling, bind-pose fallback,
+        /// resolves into (`GLTF-252`). Everything after this -- union resampling, bind-pose fallback,
         /// unit scaling -- is identical, and D6 existed precisely because the two were never
         /// separated in the first place.
         ///
@@ -2104,7 +2105,7 @@ namespace CNA::Internal::GltfImport
             std::size_t skippedTargets = 0;
             int duplicateTimes = 0;
             // The same gatherer the scene-node path uses -- the only difference between the two is
-            // which index space a target node resolves into (§15.1.2), and keeping the resolution
+            // which index space a target node resolves into (`GLTF-252`), and keeping the resolution
             // as the sole parameter is what stops the joint and rigid readers drifting apart.
             const std::unordered_map<int, BoneChannels> byBone = GatherChannels(
                 anim, unitScale,
@@ -2179,7 +2180,7 @@ namespace CNA::Internal::GltfImport
         return clips;
     }
 
-    // plans/plan_gltf.md GLTF-199: what the bytes ARE, not what the file says they are. A `data:` URI's
+    // GLTF-199: what the bytes ARE, not what the file says they are. A `data:` URI's
     // media type and an `image` object's `mimeType` are both author-supplied strings, and an
     // exporter that writes `image/png` above JPEG bytes is not hypothetical -- it is what a
     // "convert to PNG" step that failed silently produces. The extension travels with the bytes
@@ -2255,7 +2256,7 @@ namespace CNA::Internal::GltfImport
                 return result;
             }
 
-            // plans/plan_gltf.md GLTF-198: percent-decoding and containment together, so an image URI
+            // GLTF-198: percent-decoding and containment together, so an image URI
             // cannot reach outside the asset's directory. ContentManager already refused this file
             // before a byte was read; this is the second gate, for the offline tool and for any
             // caller that reaches ExtractImage without the up-front sweep.
@@ -2320,7 +2321,7 @@ namespace CNA::Internal::GltfImport
         return result;
     }
 
-    // plans/plan_gltf.md GLTF-200/GLTF-350: the image a texture's pixels actually come from, and -- when
+    // GLTF-200/GLTF-350: the image a texture's pixels actually come from, and -- when
     // there is none CNA can read -- which extension took it away.
     //
     // `KHR_texture_basisu` and `EXT_texture_webp` both attach their own image to the texture and
@@ -2371,7 +2372,7 @@ namespace CNA::Internal::GltfImport
                                           std::vector<std::string>* unsupportedOut = nullptr)
     {
         if (!prim.material) { return nullptr; }
-        // plans/plan_gltf.md GLTF-349: a specular-glossiness material's `diffuseTexture` is its base
+        // GLTF-349: a specular-glossiness material's `diffuseTexture` is its base
         // colour under a different name, and it is the only texture such a material carries that
         // survives the conversion -- so reading only `pbrMetallicRoughness` would leave an
         // archived-but-valid asset untextured on top of losing its specular tint.
@@ -2834,7 +2835,7 @@ namespace CNA::Internal::GltfImport
     MeshOut ExtractMesh(const cgltf_data* data, const cgltf_primitive& prim, const std::string& name,
                          const SkeletonResult* skel, float unitScale)
     {
-        // plans/plan_gltf.md GLTF-071: read mesh.primitive.mode before anything else, and never
+        // GLTF-071: read mesh.primitive.mode before anything else, and never
         // reinterpret it. GLTF-072 then converts the two topologies that have an exact triangle-
         // list equivalent; the line and point topologies stay rejected here with their real mode
         // named, because they decode fine but have nowhere to be drawn yet. The behaviour this
@@ -2868,7 +2869,7 @@ namespace CNA::Internal::GltfImport
                 std::string(PrimitiveTopologyName(sourceTopology)) +
                 " together with KHR_draco_mesh_compression, whose specification permits only "
                 "TRIANGLES or TRIANGLE_STRIP. The primitive is refused before decoding rather "
-                "than drawn as another topology (plans/plan_gltf.md GLTF-080/GLTF-362).");
+                "than drawn as another topology (GLTF-080/GLTF-362).");
         }
 
 #ifdef CNA_DRACO_AVAILABLE
@@ -2950,7 +2951,7 @@ namespace CNA::Internal::GltfImport
         // VertexColorEnabled addition (real XNA's SkinnedEffect has no such property).
         out.colored = (colorAcc != nullptr);
 
-        // plans/plan_gltf.md GLTF-091/GLTF-092: attributes the file authored and CNA has nowhere to put.
+        // GLTF-091/GLTF-092: attributes the file authored and CNA has nowhere to put.
         // Neither is an error -- §3.7.2.1 reserves the `_` prefix for custom semantics precisely so
         // a reader may ignore them, and XNA simply has one colour channel -- but both are data
         // that silently does not arrive, and a mesh whose real tint is in COLOR_1 imports looking
@@ -3002,7 +3003,7 @@ namespace CNA::Internal::GltfImport
         // imported through SkinnedPbrEffect (stride 68) instead of plain SkinnedEffect -- the
         // vertex-color combo (usePbr && colored) is still not attempted, matching PbrEffect's own
         // unskinned scope cut (no PBR shader currently reads a vertex Color stream).
-        // plans/plan_gltf.md GLTF-215/GLTF-217: the selection rule is the MATERIAL MODEL the file
+        // GLTF-215/GLTF-217: the selection rule is the MATERIAL MODEL the file
         // declares, not which texture maps it happens to carry. glTF's default material *is*
         // metallic-roughness (§3.9), so a primitive with no material at all is not "unlit white" --
         // it is baseColor (1,1,1,1), metallic 1, roughness 1. The old rule
@@ -3022,14 +3023,14 @@ namespace CNA::Internal::GltfImport
         // have missed a material that carries only a normalTexture, which is metallic-roughness
         // with defaults and is exactly the shape the tangent fixture authors.
         //
-        // plans/plan_gltf.md GLTF-349: a specular-glossiness material now counts as metallic-roughness
+        // GLTF-349: a specular-glossiness material now counts as metallic-roughness
         // too, because it is CONVERTED to one below rather than excluded. The extension is
         // archived by Khronos but present in older assets, so refusing it would reject content
         // that is otherwise perfectly importable -- and leaving it on the non-PBR path, as it was,
         // silently dropped every factor it carries.
         const bool metallicRoughnessMaterial =
             (prim.material == nullptr) || !prim.material->unlit;
-        // plans/plan_gltf.md GLTF-462. The rule used to be `(!out.colored) && metallicRoughnessMaterial`,
+        // GLTF-462. The rule used to be `(!out.colored) && metallicRoughnessMaterial`,
         // and the `!colored` half was the defect: §3.7.2.1 makes COLOR_0 "an additional linear
         // multiplier to base color", which is a term in the metallic-roughness base-colour product
         // -- not a reason to abandon the material model. A vertex-coloured primitive therefore
@@ -3038,20 +3039,20 @@ namespace CNA::Internal::GltfImport
         // dropped together, and only the drop was reported. The colour now rides in the four bytes
         // stride 60 had reserved as a discriminator (skinned: stride 80), so nothing has to be
         // chosen between.
-        // plans/plan_gltf.md GLTF-463 closed the last exclusion. A SKINNED vertex-coloured primitive used
+        // GLTF-463 closed the last exclusion. A SKINNED vertex-coloured primitive used
         // to stay out because the skinned PBR record (stride 76) is exactly its seven fields, with no
         // reserved bytes for a colour the way stride 60 had -- so it needed a stride of its own.
         // Stride 80 is that stride, and the rule is now simply the material MODEL, with no
         // attribute combination able to take a material away from a primitive that declares one.
         out.usePbr = metallicRoughnessMaterial;
-        // plans/plan_gltf.md GLTF-337. Its own flag rather than "not usePbr", because the two mean
+        // GLTF-337. Its own flag rather than "not usePbr", because the two mean
         // different things: a vertex-coloured metallic-roughness primitive is also non-PBR
         // (GLTF-241) and must still be LIT. Conflating them would darken a surface the file asked
         // to be shaded, which is the same class of silent wrongness as leaving unlit lit.
         out.unlitEXT = (prim.material != nullptr) && (prim.material->unlit != 0);
         // GLTF-238: the material's identity, for effect sharing in the loaders.
         out.material.sourceMaterialEXT = prim.material;
-        // plans/plan_gltf.md GLTF-241/GLTF-462/GLTF-463: `colored && metallicRoughnessMaterial` used to be
+        // GLTF-241/GLTF-462/GLTF-463: `colored && metallicRoughnessMaterial` used to be
         // refused outright, then only in its skinned half, and is now carried in both. Nothing sets
         // `unsupportedMaterialModelEXT` any more: a material CNA genuinely cannot shade as
         // metallic-roughness is one declaring a different MODEL, and KHR_materials_unlit is reported
@@ -3071,7 +3072,7 @@ namespace CNA::Internal::GltfImport
             const cgltf_float* base = prim.material->pbr_metallic_roughness.base_color_factor;
             out.material.baseColorFactor = Vector4(base[0], base[1], base[2], base[3]);
         }
-        // plans/plan_gltf.md GLTF-343/GLTF-344: cgltf already parses these extensions, but nothing in
+        // GLTF-343/GLTF-344: cgltf already parses these extensions, but nothing in
         // CNA copied their factor state before this point. Keep the raw values in MaterialOut;
         // PbrEffect/SkinnedPbrEffect derive shader-ready dielectric F0/F90 when filling the draw
         // block. GLTF-344 carries the two optional texture views independently below.
@@ -3131,7 +3132,7 @@ namespace CNA::Internal::GltfImport
             out.material.iridescenceThicknessMaximumEXT =
                 prim.material->iridescence.iridescence_thickness_max;
         }
-        // plans/plan_gltf.md GLTF-349: KHR_materials_pbrSpecularGlossiness, converted rather than
+        // GLTF-349: KHR_materials_pbrSpecularGlossiness, converted rather than
         // refused. Khronos archived it, but it is what a decade of older assets are authored in,
         // and rejecting them would be a worse answer than an approximation with a name.
         //
@@ -3160,7 +3161,7 @@ namespace CNA::Internal::GltfImport
         }
         if (prim.material)
         {
-            // plans/plan_gltf.md GLTF-228/GLTF-229/GLTF-231: the alpha and sidedness state, read for any
+            // GLTF-228/GLTF-229/GLTF-231: the alpha and sidedness state, read for any
             // material rather than only a PBR-selected one. These are the last three fields of the
             // factor-only material D7 recorded as entirely lost.
             using Microsoft::Xna::Framework::Graphics::AlphaModeEXT;
@@ -3180,7 +3181,7 @@ namespace CNA::Internal::GltfImport
             out.material.alphaCutoff = prim.material->alpha_cutoff;
             out.material.doubleSided = prim.material->double_sided != 0;
 
-            // plans/plan_gltf.md GLTF-339. KHR_materials_transmission was read by nobody, so a glass
+            // GLTF-339. KHR_materials_transmission was read by nobody, so a glass
             // material imported fully opaque -- the ChronographWatch defect, where the crystal
             // hides the dial it is supposed to reveal.
             //
@@ -3214,7 +3215,7 @@ namespace CNA::Internal::GltfImport
                     out.material.baseColorFactor.W *= (1.0f - out.transmissionFactorEXT);
                 }
             }
-            // plans/plan_gltf.md GLTF-224/GLTF-225. Read for ANY material, not only one that selected
+            // GLTF-224/GLTF-225. Read for ANY material, not only one that selected
             // PBR -- the same ungating GLTF-219/221 applied to the scalar factors, and for the
             // same reason: a value the file states should reach MeshOut whether or not the effect
             // chosen for it happens to consume it.
@@ -3234,7 +3235,7 @@ namespace CNA::Internal::GltfImport
             out.material.normalScale = viewScalar(prim.material->normal_texture);
             out.material.occlusionStrength = viewScalar(prim.material->occlusion_texture);
 
-            // plans/plan_gltf.md GLTF-202: one sampler per texture slot, read from the texture each view
+            // GLTF-202: one sampler per texture slot, read from the texture each view
             // names. A slot with no texture keeps glTF's default with `declared` false.
             const auto slot = [](TextureSlotEXT s) { return static_cast<std::size_t>(s); };
             // FindBaseColorImage gives the archived specular-glossiness diffuse texture
@@ -3332,7 +3333,7 @@ namespace CNA::Internal::GltfImport
                              (out.material.occlusionImage != nullptr) &&
                              (out.material.baseColorImage != nullptr);
 
-        // plans/plan_gltf.md GLTF-206: glTF's ordinary PNG/JPEG inputs decode to one texture level, so
+        // GLTF-206: glTF's ordinary PNG/JPEG inputs decode to one texture level, so
         // an authored *_MIPMAP_* minFilter cannot actually choose a lower-resolution level. Do not
         // silently synthesize one generic RGBA chain: base colour/emissive are sRGB data, normals
         // must be renormalised, and metallic-roughness/occlusion are linear packed channels. Name
@@ -3452,14 +3453,14 @@ namespace CNA::Internal::GltfImport
                                                     out.hasSecondTexcoordEXT};
         const VertexLayoutRuleEXT& layoutRule = SelectVertexLayoutEXT(layoutRequest);
         out.stride = layoutRule.stride;
-        // plans/plan_gltf.md GLTF-100: what this row cannot carry, taken from the table rather than
+        // GLTF-100: what this row cannot carry, taken from the table rather than
         // re-derived at each site that cares. A downgrade decided by which ternary branch happened
         // to be taken is a downgrade nobody can enumerate.
         out.unrepresentableForStrideEXT = layoutRule.unrepresentable;
 
         const cgltf_size vertexCount = posAcc->count;
 
-        // plans/plan_gltf.md GLTF-060. §3.7.2.1 requires every attribute of a primitive to have the SAME
+        // GLTF-060. §3.7.2.1 requires every attribute of a primitive to have the SAME
         // count, and CNA relies on it absolutely: POSITION's count drives the loop that indexes
         // every other decoded stream, so a shorter NORMAL reads past the end of its own vector. A
         // malformed file therefore had to be caught here or become undefined behaviour a few lines
@@ -3624,7 +3625,7 @@ namespace CNA::Internal::GltfImport
         std::vector<float> positions = unpackSemantic(cgltf_attribute_type_position, 0, posAcc, 3, "POSITION");
         // Only the unskinned stride-24 (Position+Color+TextureCoordinate) and stride-20
         // (DualTextureEffect) layouts have no room for a per-vertex Normal.
-        // plans/plan_gltf.md GLTF-241: strides 24 and 20 have no Normal slot, so a primitive that lands
+        // GLTF-241: strides 24 and 20 have no Normal slot, so a primitive that lands
         // on one loses its authored NORMAL entirely -- and therefore cannot be lit at all, not
         // merely lit without a PBR material. That is the same limitation one layer deeper, and it
         // is recorded rather than left for a reader to deduce from a stride.
@@ -3636,7 +3637,7 @@ namespace CNA::Internal::GltfImport
         std::vector<float> normals = (normAcc && strideHasNormalSlot)
             ? unpackSemantic(cgltf_attribute_type_normal, 0, normAcc, 3, "NORMAL") : std::vector<float>();
 
-        // plans/plan_gltf.md GLTF-173/GLTF-461. §3.7.2.1: "When normals are not specified, client
+        // GLTF-173/GLTF-461. §3.7.2.1: "When normals are not specified, client
         // implementations MUST calculate flat normals." CNA first wrote a fabricated (0,0,1) for
         // every vertex (a surface facing +Z regardless of where it actually points), and then --
         // GLTF-173 -- the AREA-WEIGHTED VERTEX NORMAL, which is the flat normal exactly wherever no
@@ -3727,7 +3728,7 @@ namespace CNA::Internal::GltfImport
         std::vector<float> weights = out.skinned
             ? unpackSemantic(cgltf_attribute_type_weights, 0, weightsAcc, 4, "WEIGHTS_0") : std::vector<float>();
 
-        // plans/plan_gltf.md GLTF-256: RENORMALISE, and report when it was needed.
+        // GLTF-256: RENORMALISE, and report when it was needed.
         //
         // §3.7.3.3 requires a vertex's joint weights to sum to 1, but a file is not guaranteed to
         // honour it and CNA never checked. The failure is not cosmetic: the skin equation is a
@@ -3741,7 +3742,7 @@ namespace CNA::Internal::GltfImport
         // because a sum that is *far* off is a different thing from float error and the caller
         // should be able to see the difference. An all-zero weight set is left alone: it means the
         // vertex is unweighted, and 0/0 is not a normalisation.
-        // plans/plan_gltf.md GLTF-095/GLTF-257: influence sets past the first.
+        // GLTF-095/GLTF-257: influence sets past the first.
         //
         // glTF allows any number of JOINTS_n/WEIGHTS_n sets, four joints each; XNA's BlendIndices
         // and BlendWeight carry exactly four, and no CNA vertex layout or shader has room for more.
@@ -3840,7 +3841,7 @@ namespace CNA::Internal::GltfImport
         // ComputeTangentsEXT's own doc comment for the algorithm and its documented divergence
         // from full MikkTSpace) when absent, exactly as the glTF spec itself recommends.
         std::vector<Vector4> tangents;
-        // plans/plan_gltf.md GLTF-086: only strides 48 and 68 have a tangent slot, and those are exactly
+        // GLTF-086: only strides 48 and 68 have a tangent slot, and those are exactly
         // the PBR layouts -- so a file that authored a tangent basis for any other primitive has it
         // dropped. It cannot be carried: there is nowhere to put it. Reported instead, which is the
         // other outcome GLTF-086's acceptance allows, because a file that went to the trouble of
@@ -3852,7 +3853,7 @@ namespace CNA::Internal::GltfImport
         if (out.usePbr)
         {
             const cgltf_accessor* tangentAcc = standardTangentAcc;
-            // plans/plan_gltf.md GLTF-461. §3.7.2.1 does not merely require flat normals when NORMAL is
+            // GLTF-461. §3.7.2.1 does not merely require flat normals when NORMAL is
             // absent -- it continues "and the provided tangents (if present) MUST be ignored", and
             // §3.7.2.2 repeats it for morph targets. The reason is not arbitrary: an authored
             // tangent basis was built against the authored normals the file then failed to supply,
@@ -3945,7 +3946,7 @@ namespace CNA::Internal::GltfImport
                         oldJointIdx >= 0 &&
                         static_cast<std::size_t>(oldJointIdx) < skel->oldToNew.size();
 
-                    // plans/plan_gltf.md GLTF-254. An index outside the skin's own joints array used to
+                    // GLTF-254. An index outside the skin's own joints array used to
                     // fall back to joint 0 unconditionally -- which binds the vertex to the root
                     // and drags it there, the same collapse this campaign exists to remove, from a
                     // malformed file rather than a bug.
@@ -3965,7 +3966,7 @@ namespace CNA::Internal::GltfImport
                             std::to_string(oldJointIdx) + ", but the skin declares only " +
                             std::to_string(skel->oldToNew.size()) +
                             " joints. Binding it to the root instead would drag the vertex there, "
-                            "so the file is refused (plans/plan_gltf.md GLTF-254).");
+                            "so the file is refused (GLTF-254).");
                     }
 
                     const int newJointIdx =
@@ -3985,7 +3986,7 @@ namespace CNA::Internal::GltfImport
                 }
             };
 
-            // plans/plan_gltf.md GLTF-462: the PBR branch runs FIRST now. It used to sit behind the
+            // GLTF-462: the PBR branch runs FIRST now. It used to sit behind the
             // coloured one, which is how a vertex-coloured metallic-roughness primitive ended up on
             // the stride-24 layout with no Normal slot; the material model decides the layout, and
             // the colour is a stream that layout carries.
@@ -4077,12 +4078,12 @@ namespace CNA::Internal::GltfImport
             else { AppendUint16(out.indexBytes, static_cast<std::uint16_t>(v)); }
         }
 
-        // CNB-64 (Phase 13B): morph target position/normal deltas. plans/plan_gltf.md GLTF-279 adds the
+        // CNB-64 (Phase 13B): morph target position/normal deltas. GLTF-279 adds the
         // tangent ones: the scope cut that skipped them predated PbrEffect's real tangent-space
         // normal mapping, so a morphed PBR surface kept its rest-pose tangent basis while its
         // positions and normals moved -- normal mapping then lit the deformed surface with the
         // undeformed basis.
-        // plans/plan_gltf.md GLTF-290: the same sanity bound the .cnj reader has applied since CNB-83.
+        // GLTF-290: the same sanity bound the .cnj reader has applied since CNB-83.
         // The two paths load the same content and had different limits: a target count the offline
         // reader refuses as impossible was accepted here and then allocated, one delta array per
         // target, from a number the file chose. Refusing at the same threshold on both paths is
@@ -4103,7 +4104,7 @@ namespace CNA::Internal::GltfImport
         {
             const cgltf_morph_target& target = prim.targets[ti];
 
-            // plans/plan_gltf.md GLTF-292. The resize is INSIDE the branch, and that is the fix rather
+            // GLTF-292. The resize is INSIDE the branch, and that is the fix rather
             // than a detail: it used to run unconditionally, so a target authoring no POSITION got
             // a zero-filled delta array indistinguishable from one authoring zeros. Two things
             // followed. `MorphReportEXT::targetsWithoutPositions` could never fire -- a diagnostic
@@ -4123,7 +4124,7 @@ namespace CNA::Internal::GltfImport
                                                : Vector3::Zero;
             };
 
-            // plans/plan_gltf.md GLTF-466. §3.7.2.2 asks for POSITION/NORMAL/TANGENT and makes morphed
+            // GLTF-466. §3.7.2.2 asks for POSITION/NORMAL/TANGENT and makes morphed
             // TEXCOORD_n / COLOR_n a MAY. CNA does not carry those, which is permitted -- but a file
             // animating its UVs or its vertex colours through morph targets imported as though it
             // had asked for nothing, and a permitted scope cut that nobody is told about is
@@ -4291,7 +4292,7 @@ namespace CNA::Internal::GltfImport
         }
         else
         {
-            // plans/plan_gltf.md GLTF-399 / `scene-no-scenes`. §3.5 permits a file with no `scenes` array
+            // GLTF-399 / `scene-no-scenes`. §3.5 permits a file with no `scenes` array
             // and says nothing is *required* to be rendered -- which is not "nothing may be", and
             // CNA's own decision (docs/gltf-conventions.md) is to import everything. This used to
             // return an EMPTY graph here, so the caller's "fall back to every mesh" imported the
@@ -4609,7 +4610,7 @@ namespace CNA::Internal::GltfImport
         return report;
     }
 
-    // plans/plan_gltf.md GLTF-099. §2.3's stride table as DATA. It was a nested ternary chain, which has
+    // GLTF-099. The stride table as DATA. It was a nested ternary chain, which has
     // three problems a table does not: it cannot be enumerated (so no test can walk its rows), it
     // cannot be asked what a row loses (GLTF-100), and every renderer's ApplyLayout is an implicit
     // restatement of the same rule with no way to check the two agree.
@@ -4620,7 +4621,7 @@ namespace CNA::Internal::GltfImport
     {
         static const std::vector<VertexLayoutRuleEXT> table = {
             // Skinned. A skinned primitive always carries a Normal, so nothing here loses one.
-            // plans/plan_gltf.md GLTF-463: a skinned, vertex-coloured metallic-roughness primitive keeps
+            // GLTF-463: a skinned, vertex-coloured metallic-roughness primitive keeps
             // its material. Stride 76 is exactly the skinned PBR record's seven fields -- unlike
             // stride 60 it has no reserved bytes a colour could occupy -- so it gets stride 80: the
             // whole stride-76 record as a byte-for-byte prefix with the colour appended. Both UV
@@ -4694,16 +4695,16 @@ namespace CNA::Internal::GltfImport
         return "UNSUPPORTED";
     }
 
-    // plans/plan_gltf.md GLTF-334. One table, and everything about extensions reads from it: the
-    // extensionsRequired gate (IsGltfExtensionSupportedEXT below), §19's own classification table
-    // (asserted against this by GltfExtensionRegistry), docs/gltf-limitations.md §1 (asserted by
-    // GltfLimitationsDoc, which additionally compares the `claimed` column -- the one a caller
-    // acts on), and the fixture-coverage rule of GLTF-335.
+    // GLTF-334. One table, and everything about extensions reads from it: the
+    // extensionsRequired gate (IsGltfExtensionSupportedEXT below), docs/gltf-limitations.md §1
+    // (asserted by GltfLimitationsDoc, which also compares the `claimed` column -- the one a
+    // caller acts on), and the fixture-coverage rule of GLTF-335.
     //
-    // Two hand-maintained lists is the failure this replaces. The support list and §19's table
-    // already disagreed in spirit -- §19 called KHR_texture_transform PARTIAL while the gate
-    // claimed it -- and neither said why. The `claimed` column now carries that decision
-    // explicitly, per record, instead of leaving it implicit in which of two files you read.
+    // Two hand-maintained lists is the failure this replaces. The support list and the campaign's
+    // classification table already disagreed in spirit -- the table called KHR_texture_transform
+    // PARTIAL while the gate claimed it -- and neither said why. The `claimed` column now carries
+    // that decision explicitly, per record, instead of leaving it implicit in which of two files
+    // you read.
     const std::vector<GltfExtensionRecordEXT>& GltfExtensionRegistryEXT()
     {
         static const std::vector<GltfExtensionRecordEXT> registry = [] {
@@ -5079,7 +5080,7 @@ namespace CNA::Internal::GltfImport
         // loaded. The alternative considered -- read misaligned data through memcpy and carry on --
         // would mean replacing cgltf's whole element reader, which GLTF-041 exists to prevent.
         //
-        // WHY THIS RUNS BEFORE cgltf_validate (plans/plan_gltf.md GLTF-040's second finding). It used to
+        // WHY THIS RUNS BEFORE cgltf_validate (GLTF-040's second finding). It used to
         // run after, which is one call too late: `cgltf_validate` walks an index accessor's actual
         // BYTES through `cgltf_calc_index_bound` to bound its maximum index, and does so with a
         // raw `*(const uint16_t*)` cast. A file whose index bufferView is oddly offset therefore
@@ -5153,7 +5154,7 @@ namespace CNA::Internal::GltfImport
         // dangerous: an unchecked-but-honest 2^62 would simply fail the bounds check.
         //
         // `RequiredSpan` is the same arithmetic with each step guarded, and it is what the index
-        // decode path already uses (§8.1); this brings every accessor in the file under it,
+        // decode path already uses; this brings every accessor in the file under it,
         // including the two sparse arrays, before anything reads a byte. Rejection, for the same
         // reason as (1): a wrapped span is not a file CNA can decode at all.
         {
@@ -5361,7 +5362,7 @@ namespace CNA::Internal::GltfImport
 
         const std::unordered_set<const cgltf_node*> reachable = CollectSceneReachableNodes(data);
 
-        // plans/plan_gltf.md GLTF-326. XNA's stock effects light with three directional lights and
+        // GLTF-326. XNA's stock effects light with three directional lights and
         // nothing else, so importing a glTF light rig is lossy by construction -- and until this
         // report existed, invisibly so: a scene lit by six point lights imported as three
         // directionals aimed at the origin and said nothing. The loop below is unchanged; every
@@ -5448,7 +5449,7 @@ namespace CNA::Internal::GltfImport
         std::vector<float> weights(targetCount, 0.0f);
         if (mesh == nullptr) { return weights; }
 
-        // plans/plan_gltf.md GLTF-281. §3.7.2.2: `node.weights` OVERRIDES `mesh.weights` -- it does not
+        // GLTF-281. §3.7.2.2: `node.weights` OVERRIDES `mesh.weights` -- it does not
         // merge with it and does not fill in only the entries it names. That distinction matters:
         // a node declaring [1,0] for a mesh whose own weights are [0,1] must produce [1,0], not
         // [1,1]. So the node's array is used INSTEAD of the mesh's when present, and a node array

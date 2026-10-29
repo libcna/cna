@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: MS-PL
 """The corpus registry: which fixtures exist, in which owning group, and what they emit.
 
-`plans/plan_gltf.md` §24.1's ownership model is enforced structurally here: a fixture is defined in
-exactly one ``defs`` module, that module's name *is* its owning group, and the distinct-asset count
-is the sum of the owning-group counts. Referencing a fixture from another group never re-counts it.
+The corpus's ownership model -- one asset, exactly one owning group -- is enforced structurally
+here: a fixture is defined in exactly one ``defs`` module, that module's name *is* its owning group,
+and the distinct-asset count is the sum of the owning-group counts. Referencing a fixture from
+another group never re-counts it.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from .defs import (accessors, animation, cameras, component_types, container, dr
                    transforms)
 from .manifest import OPEN_DEFECT_STATUSES, Fixture, dumps
 
-#: The final §24.2 inventory, stated once in executable form.  A generated fixture must already
+#: The final corpus inventory, stated once in executable form.  A generated fixture must already
 #: have a place in this inventory; adding an unplanned id fails generation instead of silently
 #: moving the campaign's finish line.  Conversely, ``corpus_manifest`` emits every not-yet-built
 #: entry as ``missingAssets``, so the distance to GLTF-399 cannot be reconstructed differently by

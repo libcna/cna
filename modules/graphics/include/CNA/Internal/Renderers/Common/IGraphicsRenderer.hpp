@@ -1539,13 +1539,13 @@ namespace CNA::Internal::Renderers
         const ITextureRenderer* pbrSpecularMap = nullptr;
         /// KHR_materials_specular colour map; RGB is sRGB-encoded by default.
         const ITextureRenderer* pbrSpecularColorMap = nullptr;
-        /// plans/plan_gltf.md GLTF-182/GLTF-183: bit i selects packed TextureCoordinate1 for PBR
+        /// GLTF-182/GLTF-183: bit i selects packed TextureCoordinate1 for PBR
         /// texture slot i (base colour, normal, metallic-roughness, emissive, occlusion,
         /// specular strength, specular colour); a clear
         /// bit selects TextureCoordinate0. The importer maps arbitrary glTF source TEXCOORD_n
         /// indices onto these two collision-free renderer channels before filling the effect.
         std::uint32_t pbrTextureCoordinateSetMask = 0;
-        /// plans/plan_gltf.md GLTF-184: two affine rows per core PBR map, in base-colour, normal,
+        /// GLTF-184: two affine rows per core PBR map, in base-colour, normal,
         /// metallic-roughness, emissive, occlusion order. For row vectors `r0` and `r1`, the
         /// transformed coordinate is `{dot(float3(uv,1),r0.xyz),
         /// dot(float3(uv,1),r1.xyz)}`. The fourth component is deterministic padding for native
@@ -1565,12 +1565,12 @@ namespace CNA::Internal::Renderers
         /// PbrEffect: roughness factor [0,1], multiplied with pbrMetallicRoughnessMap's G channel
         /// when bound (or used alone as a constant when it isn't).
         float pbrRoughnessFactor = 1.0f;
-        /// plans/plan_gltf.md GLTF-343/GLTF-344: dielectric normal-incidence reflectance after applying
+        /// GLTF-343/GLTF-344: dielectric normal-incidence reflectance after applying
         /// KHR_materials_ior and the factor-only part of KHR_materials_specular. Core glTF's
         /// default is 0.04 in every channel. Kept separate from the metallic F0, which remains the
         /// material's base colour, and from F90 below because specularFactor can reduce grazing
         /// reflectance independently. Every PBR-capable renderer consumes both endpoints -- as of
-        /// plans/plan_gltf.md GLTF-476, which found that claim had been written while `IGL` consumed
+        /// GLTF-476, which found that claim had been written while `IGL` consumed
         /// neither and hard-coded 0.04 in its shader. It is now machine-checked by
         /// `GltfRendererPbrFallbackPolicy.EveryPbrRendererConsumesEveryUniversalPbrDrawParameter`
         /// rather than asserted here.
@@ -1582,12 +1582,12 @@ namespace CNA::Internal::Renderers
         float pbrDielectricF0Unclamped[3] = {0.04f, 0.04f, 0.04f};
         /// GLTF-344: authored scalar strength, retained separately for texture-driven evaluation.
         float pbrSpecularFactor = 1.0f;
-        /// plans/plan_gltf.md GLTF-224: glTF `normalTexture.scale`. Scales the sampled tangent-space
+        /// GLTF-224: glTF `normalTexture.scale`. Scales the sampled tangent-space
         /// normal's x and y before the tangent basis is applied -- 0 flattens the map to the
         /// geometric normal, 1 is the map as authored, and glTF puts no upper bound on it. Only
         /// meaningful when `pbrNormalMap` is bound.
         float pbrNormalScale = 1.0f;
-        /// plans/plan_gltf.md GLTF-225: glTF `occlusionTexture.strength`, applied as the specification's
+        /// GLTF-225: glTF `occlusionTexture.strength`, applied as the specification's
         /// own `1 + strength * (sampled - 1)`. At 0 the result is 1 -- no occlusion at all,
         /// whatever the map holds -- and at 1 it is the map unchanged. Only meaningful when
         /// `pbrOcclusionMap` is bound.
@@ -1596,19 +1596,19 @@ namespace CNA::Internal::Renderers
         /// reversed, so it is lit from the side that shows it. Culling stays the application's
         /// RasterizerState; this only decides the shading normal of the faces it lets through.
         bool pbrDoubleSided = false;
-        /// plans/plan_gltf.md GLTF-210: the base-colour texture's samples are sRGB-ENCODED and must be
+        /// GLTF-210: the base-colour texture's samples are sRGB-ENCODED and must be
         /// decoded to linear before lighting (glTF §3.9.2). The `DiffuseColor` FACTOR is already
         /// linear and must NOT be decoded -- the two multiply, and decoding both would apply the
         /// transfer twice to one of them. Renderers that do not implement colour management ignore
         /// this, the established accepted-and-ignored pattern for a field they do not yet honour.
         bool pbrBaseColorTextureIsSrgb = true;
-        /// plans/plan_gltf.md GLTF-210: the emissive texture is sRGB-encoded, on the same terms as
+        /// GLTF-210: the emissive texture is sRGB-encoded, on the same terms as
         /// `pbrBaseColorTextureIsSrgb`. `emissiveColor` (the factor, possibly scaled above 1 by
         /// KHR_materials_emissive_strength) is linear and is not decoded.
         bool pbrEmissiveTextureIsSrgb = true;
         /// KHR_materials_specular colour-map RGB follows glTF's sRGB encoding rule.
         bool pbrSpecularColorTextureIsSrgb = true;
-        /// plans/plan_gltf.md GLTF-212: encode the fragment's RGB from linear back to sRGB before it
+        /// GLTF-212: encode the fragment's RGB from linear back to sRGB before it
         /// reaches the framebuffer. Alpha is never encoded -- glTF §3.9.4 makes it coverage, not
         /// colour. Normal, occlusion and metallic-roughness maps carry no flag at all because
         /// §3.9.2 declares them linear unconditionally; a flag would imply a choice that does not

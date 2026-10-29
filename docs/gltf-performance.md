@@ -1,7 +1,7 @@
-# glTF import performance and lifetime (`plans/plan_gltf.md` Phase 22)
+# glTF import performance and lifetime (`GLTF-433`…`GLTF-443`)
 
 What the import path costs, measured rather than estimated, and the decision each measurement led
-to. Every row of `plans/plan_gltf.md` Phase 22 accepts *"measured; fixed or documented with numbers"* —
+to. Every one of those rows accepted *"measured; fixed or documented with numbers"* —
 this file is the numbers, and `GltfPerformanceTests.cpp` is where they come from.
 
 ## How to reproduce
@@ -172,7 +172,7 @@ is 145 assets, including four real Draco streams, and remains inside every exist
 raising one. Future rows must remeasure after materially increasing either fixture size or the
 number of subprocess-based tool cases; no further extrapolation is needed for `GLTF-399`.
 
-## Large-asset budgets (`GLTF ROBUST` §27.2 row 9)
+## Large-asset budgets (`GLTF ROBUST` row 9)
 
 Measured 2026-08-15 against `GLTF-405`'s fetched, pinned reference models. The assets are **not**
 committed — `GLTF-019` decided a benchmark input is fetched rather than carried, because it is an

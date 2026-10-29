@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-003/GLTF-004 -- see GltfFixtureCorpus.hpp. Test scope only.
+// GLTF-003/GLTF-004 -- see GltfFixtureCorpus.hpp. Test scope only.
 
 #include "GltfFixtureCorpus.hpp"
 

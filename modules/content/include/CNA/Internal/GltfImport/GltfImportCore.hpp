@@ -48,7 +48,7 @@ namespace CNA::Internal::GltfImport
          * @brief The transform a **root** bone's own local transform composes against; identity
          * for any bone whose parent is inside the skin's joint set.
          *
-         * @note CNAEXT — plans/plan_gltf.md GLTF-245/GLTF-247 (Phase 5). glTF's joint matrix is
+         * @note CNAEXT — GLTF-245/GLTF-247 (Phase 5). glTF's joint matrix is
          * `inverse(globalTransform(meshNode)) * globalTransform(joint) * inverseBindMatrix`, and
          * both leading terms live *above* the joint set: `globalTransform(joint)` includes every
          * scene ancestor -- joints or not, and regardless of `skin.skeleton` -- while
@@ -80,7 +80,7 @@ namespace CNA::Internal::GltfImport
          * @brief Maps each stable `sceneNodeIndex` to this skin's `paletteIndex`, or -1 when that
          * scene node is not a joint of this skin.
          *
-         * plans/plan_gltf.md `GLTF-252`. The vector has the same length as `SceneGraphOut::nodes` when
+         * `GLTF-252`. The vector has the same length as `SceneGraphOut::nodes` when
          * the scene-aware `BuildSkeleton` overload is used. It is deliberately not `oldToNew`:
          * `skin.joints[]` order is a third, file-local index space and the scene graph must never
          * be reordered to make either one coincide with the GPU palette.
@@ -98,10 +98,10 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief The `sceneNodeIndex` of the node `skin.skeleton` names, or -1 when it names none.
          *
-         * plans/plan_gltf.md `GLTF-249`. This is a **hint**, recorded so an application can locate and
+         * `GLTF-249`. This is a **hint**, recorded so an application can locate and
          * name the rig; it is deliberately **not** consulted anywhere in the transform arithmetic.
-         * §15.1.1 is explicit that truncating the ancestry walk at `skin.skeleton` reproduces D8
-         * in a new disguise, so the walk above stays driven by the scene graph alone and this
+         * docs/gltf-conventions.md is explicit that truncating the ancestry walk at `skin.skeleton`
+         * reproduces D8 in a new disguise, so the walk above stays driven by the scene graph alone and this
          * field exists to be *reported*, never to bound anything.
          *
          * -1 also when the skin declares a `skeleton` node that is not in the default scene.
@@ -125,7 +125,7 @@ namespace CNA::Internal::GltfImport
     };
 
     /**
-     * @brief Which index space a clip's `TrackOut::boneIndex` values live in (§15.1.2).
+     * @brief Which index space a clip's `TrackOut::boneIndex` values live in (`GLTF-252`).
      *
      * @note CNAEXT — not part of the XNA 4.0 API. The two spaces are deliberately distinct and
      * must never be silently interchanged: a joint's palette slot has nothing to do with its
@@ -197,7 +197,7 @@ namespace CNA::Internal::GltfImport
      * numbers, so a value round-trips through the file format unchanged. This is deliberately the
      * *source* topology rather than an XNA `PrimitiveType`: three of the seven modes have no XNA
      * equivalent at all, and deciding what each becomes is a separate concern from reading what
-     * the file actually declares (plans/plan_gltf.md §10.1).
+     * the file actually declares (`GLTF-072`).
      */
     enum class PrimitiveTopology
     {
@@ -218,7 +218,7 @@ namespace CNA::Internal::GltfImport
     };
 
     /**
-     * @brief The XNA sampler state one glTF `sampler` maps to (plans/plan_gltf.md `GLTF-202`/`GLTF-203`).
+     * @brief The XNA sampler state one glTF `sampler` maps to (`GLTF-202`/`GLTF-203`).
      *
      * `cgltf_sampler` had **zero occurrences** in CNA before this: every imported texture was drawn
      * with whatever `SamplerState` the device happened to have, which defaults to `LinearWrap`. For
@@ -297,8 +297,8 @@ namespace CNA::Internal::GltfImport
     /**
      * @brief One decoded glTF material, independent of the effect class that will consume it.
      *
-     * @note CNAEXT — internal import data, not new public API. plans/plan_gltf.md `GLTF-236` used to
-     * scatter every §13.1 value across `MeshOut`; the runtime loader and the offline `.cnj` writer
+     * @note CNAEXT — internal import data, not new public API. `GLTF-236` used to
+     * scatter every material value across `MeshOut`; the runtime loader and the offline `.cnj` writer
      * then selected their own subsets, which is how `normalTexture.scale`,
      * `occlusionTexture.strength`, `baseColorFactor` and alpha were silently lost on the offline
      * path. One carrier makes the contract explicit: both paths receive the same complete record,
@@ -407,7 +407,7 @@ namespace CNA::Internal::GltfImport
     };
 
     /**
-     * @brief Maps a glTF sampler's four fields onto XNA sampler state (plans/plan_gltf.md §14.2).
+     * @brief Maps a glTF sampler's four fields onto XNA sampler state.
      *
      * Takes raw glTF enum values rather than a `cgltf_sampler` so the whole table is testable
      * without a file. A zero value means "undefined", which §3.8.4 says to treat as the
@@ -444,7 +444,7 @@ namespace CNA::Internal::GltfImport
                                             int index);
 
     /**
-     * @brief One glTF camera as instanced by a scene node (plans/plan_gltf.md `GLTF-317`).
+     * @brief One glTF camera as instanced by a scene node (`GLTF-317`).
      *
      * `cgltf_camera` had **zero occurrences** in CNA: a file's cameras were dropped entirely, so an
      * asset that shipped its own framing had no way to express it and every viewer had to invent
@@ -456,7 +456,7 @@ namespace CNA::Internal::GltfImport
     {
         /** @brief The camera's name, or the node's when the camera is unnamed; may be empty. */
         std::string name;
-        /** @brief The instancing node's `sceneNodeIndex` (§15.1.2), so it indexes `Model::Bones`. */
+        /** @brief The instancing node's `sceneNodeIndex` (`GLTF-252`), so it indexes `Model::Bones`. */
         int sceneNodeIndex = -1;
         /** @brief True for a perspective camera, false for an orthographic one. */
         bool perspective = true;
@@ -532,7 +532,7 @@ namespace CNA::Internal::GltfImport
          */
         std::array<int, 2> packedTexcoordSourceSetsEXT{0, -1};
         /**
-         * @brief `COLOR_1` and beyond, all of them ignored (plans/plan_gltf.md `GLTF-091`).
+         * @brief `COLOR_1` and beyond, all of them ignored (`GLTF-091`).
          *
          * @note CNAEXT — not part of the XNA 4.0 API. XNA's vertex layouts carry exactly one
          * colour channel, so a second is not a feature CNA can decline gracefully — it is data the
@@ -543,7 +543,7 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief Application-specific `_*` attributes the importer ignored (§3.7.2.1).
          *
-         * @note CNAEXT — not part of the XNA 4.0 API. plans/plan_gltf.md `GLTF-092`. The specification
+         * @note CNAEXT — not part of the XNA 4.0 API. `GLTF-092`. The specification
          * reserves the underscore prefix for custom semantics precisely so a reader may ignore
          * them, and ignoring one is **not** an error. Naming them is still worth it: a file whose
          * geometry depends on `_BATCHID` or `_FEATURE_ID` imports as ordinary geometry, and the
@@ -562,7 +562,7 @@ namespace CNA::Internal::GltfImport
          */
         bool legacyTangentBasisEXT = false;
         /**
-         * @brief The complete decoded material record (plans/plan_gltf.md `GLTF-236`).
+         * @brief The complete decoded material record (`GLTF-236`).
          *
          * Kept separate from the flags below that choose an effect/layout: the file's material is
          * data, while `usePbr`/`useDualTexture` are CNA representation policy. Both the runtime
@@ -572,7 +572,7 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief Names the material model this primitive could not be imported with, or empty.
          *
-         * plans/plan_gltf.md `GLTF-241`, `GLTF-462`, `GLTF-463`. **No attribute combination sets this any
+         * `GLTF-241`, `GLTF-462`, `GLTF-463`. **No attribute combination sets this any
          * more, and that is the current state rather than an oversight.** It existed for a primitive
          * carrying `COLOR_0` **and** a metallic-roughness material, which `GLTF-241` imported through
          * `BasicEffect` because no vertex layout carried a colour alongside a tangent. `GLTF-462` gave
@@ -587,7 +587,7 @@ namespace CNA::Internal::GltfImport
          */
         std::string unsupportedMaterialModelEXT;
         /**
-         * @brief True when the material declares `KHR_materials_unlit` (plans/plan_gltf.md `GLTF-337`).
+         * @brief True when the material declares `KHR_materials_unlit` (`GLTF-337`).
          *
          * The extension means "shade this surface with its base colour and nothing else" — no
          * lighting term at all. XNA expresses exactly that as `LightingEnabled = false` on
@@ -602,7 +602,7 @@ namespace CNA::Internal::GltfImport
         bool unlitEXT = false;
         /**
          * @brief True when the material declared `KHR_materials_pbrSpecularGlossiness` and was
-         * converted to metallic-roughness (plans/plan_gltf.md `GLTF-349`).
+         * converted to metallic-roughness (`GLTF-349`).
          *
          * The extension is **archived** by Khronos but present in older assets, so refusing it
          * outright would reject content that is otherwise perfectly importable. It is converted
@@ -618,7 +618,7 @@ namespace CNA::Internal::GltfImport
          */
         bool convertedFromSpecularGlossinessEXT = false;
         /**
-         * @brief What the selected vertex stride cannot carry, or empty (plans/plan_gltf.md `GLTF-100`).
+         * @brief What the selected vertex stride cannot carry, or empty (`GLTF-100`).
          *
          * Taken from the `GLTF-099` decision table's own row rather than re-derived wherever a
          * caller happens to care. Every downgrade CNA performs is one of these — a coloured
@@ -640,7 +640,7 @@ namespace CNA::Internal::GltfImport
          * @brief True when the chosen vertex layout has no Normal slot and an authored NORMAL was
          * therefore discarded.
          *
-         * plans/plan_gltf.md `GLTF-241`. Strides 24 and 20 carry no normal, so a primitive that lands on
+         * `GLTF-241`. Strides 24 and 20 carry no normal, so a primitive that lands on
          * one loses its authored normals entirely and cannot be lit at all -- not merely lit
          * without a PBR material. It is the same limitation one layer deeper, recorded here rather
          * than left for a reader to deduce from a stride.
@@ -649,7 +649,7 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief Number of trailing indices dropped because they did not complete a primitive.
          *
-         * plans/plan_gltf.md `GLTF-079`. §3.7.2.1 requires the index count to be a whole number of
+         * `GLTF-079`. §3.7.2.1 requires the index count to be a whole number of
          * primitives for the declared `mode` — a multiple of 3 for `TRIANGLES`, of 2 for `LINES`,
          * and at least 3 (respectively 2) for a strip, fan or loop. `cgltf_validate` does not
          * check it, and neither reading the remainder as a further primitive (which runs off the
@@ -663,7 +663,7 @@ namespace CNA::Internal::GltfImport
          * @brief True when the file authors `TANGENT` but the chosen vertex layout has no tangent
          * slot, so it was discarded.
          *
-         * plans/plan_gltf.md `GLTF-086`. Only strides 48 and 68 carry a tangent, and those are exactly
+         * `GLTF-086`. Only strides 48 and 68 carry a tangent, and those are exactly
          * the PBR layouts — so an authored tangent basis on any other primitive is dropped. It
          * cannot be *carried*: there is nowhere to put it. `GLTF-086`'s acceptance allows the other
          * outcome, reported, and this is it. Worth reporting rather than shrugging at, because a
@@ -673,7 +673,7 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief One entry per material map whose image CNA could not read, naming the map and why.
          *
-         * plans/plan_gltf.md `GLTF-200` / `GLTF-350`. A texture can carry its pixels in a format CNA has
+         * `GLTF-200` / `GLTF-350`. A texture can carry its pixels in a format CNA has
          * no decoder for — `KHR_texture_basisu` (KTX2/Basis) and `EXT_texture_webp` are the two the
          * ecosystem actually ships. Both are designed so a file may *also* declare a plain PNG/JPEG
          * `source` as a fallback, in which case CNA uses it and nothing is lost; both are also
@@ -696,7 +696,7 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief Sampled material maps whose declared minification filter needs missing mip levels.
          *
-         * plans/plan_gltf.md `GLTF-206`. `Texture2D::FromStream` decodes glTF's PNG/JPEG images as a
+         * `GLTF-206`. `Texture2D::FromStream` decodes glTF's PNG/JPEG images as a
          * single level. CNA deliberately does not synthesize a generic RGBA chain: colour maps
          * need sRGB-aware filtering, normal maps need vector renormalisation, and packed PBR maps
          * need linear per-channel filtering. Until role-aware generation exists, the GPU samples
@@ -707,7 +707,7 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief How many `JOINTS_n`/`WEIGHTS_n` sets beyond set 0 the primitive authored.
          *
-         * plans/plan_gltf.md `GLTF-095` / `GLTF-257`. glTF allows any number of influence sets, four
+         * `GLTF-095` / `GLTF-257`. glTF allows any number of influence sets, four
          * joints each; XNA's `BlendIndices`/`BlendWeight` carry exactly four. Every set past the
          * first is therefore dropped, and until this field existed it was dropped without a word —
          * a mesh authored for eight influences imported as though the author had asked for four.
@@ -765,7 +765,7 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief True when the runtime must recompute this primitive's flat normals per pose.
          *
-         * plans/plan_gltf.md `GLTF-461`. §3.7.2.2: "When the base mesh primitive does not specify
+         * `GLTF-461`. §3.7.2.2: "When the base mesh primitive does not specify
          * normals, client implementations MUST calculate flat normals for each morph target." A
          * `POSITION` delta can rotate a face, so the normals baked at rest are only correct at
          * weight zero; and §3.7.2.2 also makes an original attribute a precondition for a target
@@ -810,7 +810,7 @@ namespace CNA::Internal::GltfImport
          * @brief The largest share of a single vertex's total influence that set truncation
          * discarded, in [0,1].
          *
-         * plans/plan_gltf.md `GLTF-095`. The count alone does not say whether the truncation matters: a
+         * `GLTF-095`. The count alone does not say whether the truncation matters: a
          * fifth influence weighted 0.002 is exporter noise, and one weighted 0.4 is a visibly
          * different pose. This is the number that tells them apart, measured before `GLTF-256`'s
          * renormalisation runs.
@@ -822,7 +822,7 @@ namespace CNA::Internal::GltfImport
          */
         float worstDroppedInfluenceEXT = 0.0f;
         /**
-         * @brief How many vertices had their joint weights renormalised (plans/plan_gltf.md `GLTF-256`).
+         * @brief How many vertices had their joint weights renormalised (`GLTF-256`).
          *
          * §3.7.3.3 requires a vertex's weights to sum to 1, but a file is not guaranteed to honour
          * it. The failure is not cosmetic: the skin equation is a weighted sum of joint matrices,
@@ -838,7 +838,7 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief How many vertices had joint weights summing to zero, and were left alone.
          *
-         * plans/plan_gltf.md `GLTF-256`. An all-zero weight set means the vertex is unweighted, and
+         * `GLTF-256`. An all-zero weight set means the vertex is unweighted, and
          * `0/0` is not a normalisation — so these are counted and reported rather than "fixed" into
          * an arbitrary joint.
          */
@@ -846,7 +846,7 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief The largest `|sum - 1|` seen before renormalisation; 0 when nothing was off.
          *
-         * plans/plan_gltf.md `GLTF-256`. Carried because the *size* of the deviation is what separates a
+         * `GLTF-256`. Carried because the *size* of the deviation is what separates a
          * quantised exporter (a few 1e-3) from a genuinely broken file, and a count alone cannot
          * say which one a caller is looking at.
          */
@@ -868,7 +868,7 @@ namespace CNA::Internal::GltfImport
          * @brief Per-target, per-vertex tangent deltas, or an empty inner vector for a target with
          * no TANGENT delta. Only meaningful for strides with a Tangent slot (48/68).
          *
-         * plans/plan_gltf.md `GLTF-279`. glTF morph TANGENT deltas are `VEC3`, not `VEC4`: the
+         * `GLTF-279`. glTF morph TANGENT deltas are `VEC3`, not `VEC4`: the
          * handedness `w` is a property of the UV winding and is **not** morphed, so it is carried
          * on the base vertex and left alone by the blend. Storing these as `Vector3` is what makes
          * that impossible to get wrong.
@@ -917,7 +917,7 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief The PBR maps whose TEXCOORD set does not fit the two carried channels, by name.
          *
-         * plans/plan_gltf.md `GLTF-181`/`GLTF-188`. GLTF-182/183 carry at most two distinct authored
+         * `GLTF-181`/`GLTF-188`. GLTF-182/183 carry at most two distinct authored
          * sets through `PbrEffect`/`SkinnedPbrEffect`. A material using a third distinct set still
          * has no attribute/varying for it and falls back to packed channel 0. This lists exactly
          * which maps were remapped, so the report names the remaining loss.
@@ -945,14 +945,14 @@ namespace CNA::Internal::GltfImport
     /**
      * @brief One node of the imported scene graph — the `sceneNodeIndex` identity space.
      *
-     * @note CNAEXT — not part of the XNA 4.0 API. plans/plan_gltf.md GLTF-103/GLTF-113 (Phase 5): glTF
+     * @note CNAEXT — not part of the XNA 4.0 API. GLTF-103/GLTF-113 (Phase 5): glTF
      * places a mesh through the node that instantiates it, and a node's world transform is the
      * product of its ancestors' local transforms with its own. Reproducing that graph as CNA
      * `ModelBone`s (rather than baking it into vertex positions) is what preserves mesh instancing,
      * rigid node animation, node-attached cameras/lights, and a hierarchy game code can walk.
      *
      * This is the **scene-node identity space**, and it is deliberately distinct from a skin's own
-     * GPU bone-palette index space (see `SkeletonResult::oldToNew`, and plans/plan_gltf.md §15.1.2): the
+     * GPU bone-palette index space (see `SkeletonResult::oldToNew`, and docs/gltf-conventions.md): the
      * scene graph is ordered by the glTF node graph and must never be reordered to suit a palette.
      */
     struct SceneNodeOut
@@ -991,7 +991,7 @@ namespace CNA::Internal::GltfImport
     /**
      * @brief One placement of one glTF mesh by one glTF node.
      *
-     * @note CNAEXT — not part of the XNA 4.0 API. plans/plan_gltf.md GLTF-113. A mesh referenced by
+     * @note CNAEXT — not part of the XNA 4.0 API. GLTF-113. A mesh referenced by
      * several nodes produces one instance per node, each with its own transform — the shape that
      * makes real instancing expressible, which baking world transforms into vertices would destroy.
      */
@@ -1013,13 +1013,13 @@ namespace CNA::Internal::GltfImport
          * place the geometry — so a caller building CNA bones must parent a skinned instance to the
          * identity scene root rather than to its own node's bone. Completing that rule (the
          * `inverse(globalTransform(meshNode))` term, and the joint ancestry `BuildSkeleton` still
-         * drops) is plans/plan_gltf.md GLTF-245/GLTF-247/GLTF-260, not this type.
+         * drops) is GLTF-245/GLTF-247/GLTF-260, not this type.
          */
         bool skinned = false;
         /**
          * @brief True when this placement's composed world transform mirrors the geometry.
          *
-         * plans/plan_gltf.md `GLTF-116`/`GLTF-117`. The determinant of the world 3×3 is negative, so
+         * `GLTF-116`/`GLTF-117`. The determinant of the world 3×3 is negative, so
          * §3.7.4 requires the triangle winding to be reversed for the primitive's front faces to
          * stay front-facing. The property belongs to the **composed** transform, never to the
          * instancing node's own scale: an odd number of mirroring ancestors mirrors, an even
@@ -1045,7 +1045,7 @@ namespace CNA::Internal::GltfImport
     };
 
     /**
-     * @brief What one file's node graph turned into (plans/plan_gltf.md `GLTF-145`).
+     * @brief What one file's node graph turned into (`GLTF-145`).
      *
      * @note CNAEXT — not part of the XNA 4.0 API. This internal, computation-oriented form feeds
      * the public @c GltfImportReportEXT attached to @c Model; keeping it separate avoids coupling
@@ -1075,7 +1075,7 @@ namespace CNA::Internal::GltfImport
     };
 
     /**
-     * @brief What one skinned primitive's joint data turned into (plans/plan_gltf.md `GLTF-273`).
+     * @brief What one skinned primitive's joint data turned into (`GLTF-273`).
      *
      * @note CNAEXT — not part of the XNA 4.0 API, internal for the same reason
      * @ref NodeGraphReportEXT is.
@@ -1114,7 +1114,7 @@ namespace CNA::Internal::GltfImport
     SkinReportEXT BuildSkinReportEXT(const MeshOut& mesh, const SkeletonResult* skeleton);
 
     /**
-     * @brief What one primitive's morph targets turned into (plans/plan_gltf.md `GLTF-291`).
+     * @brief What one primitive's morph targets turned into (`GLTF-291`).
      *
      * @note CNAEXT — not part of the XNA 4.0 API. This internal form feeds the public aggregate
      * @c GltfImportReportEXT.
@@ -1289,7 +1289,7 @@ namespace CNA::Internal::GltfImport
 
     /**
      * @brief Topologically reorders a glTF skin's joints and resolves what the one-argument overload
-     * cannot see: the joints' full scene ancestry (plans/plan_gltf.md GLTF-245, Phase 5).
+     * cannot see: the joints' full scene ancestry (GLTF-245, Phase 5).
      *
      * A joint's global transform includes **every** scene ancestor, whether or not that ancestor is
      * itself a joint and whether or not it lies above `skin.skeleton` — the declared skeleton root
@@ -1314,7 +1314,7 @@ namespace CNA::Internal::GltfImport
                                   float unitScale);
 
     /**
-     * @brief What one file's animations turned into (plans/plan_gltf.md `GLTF-315`).
+     * @brief What one file's animations turned into (`GLTF-315`).
      *
      * @note CNAEXT — not part of the XNA 4.0 API. This internal form feeds the public aggregate
      * @c GltfImportReportEXT.
@@ -1587,7 +1587,7 @@ namespace CNA::Internal::GltfImport
      * `TriangleStrip` / `TriangleFan` are **converted to a triangle list at import**
      * (`ConvertToTriangleList`). That conversion is deliberately chosen over plumbing new
      * topologies through every renderer — it is provable at L3 and L5, needs no renderer change,
-     * and cannot regress an existing renderer (plans/plan_gltf.md §10.1).
+     * and cannot regress an existing renderer (`GLTF-072`).
      *
      * All seven core glTF modes import. Triangle strips/fans and line loops take the exact
      * conversions documented by `GLTF-072`/`GLTF-076`; the remaining modes retain their source
@@ -1660,7 +1660,7 @@ namespace CNA::Internal::GltfImport
         bool decodedDracoFaceList);
 
     /**
-     * @brief How many primitives an index run of a given topology describes (§12.3, `GLTF-078`).
+     * @brief How many primitives an index run of a given topology describes (`GLTF-078`).
      *
      * `TriangleList` → `n / 3`, `LineList` → `n / 2`, `LineStrip` and `LineLoop` → `n - 1`,
      * `Points` → `n`. `TriangleStrip` and `TriangleFan` are converted to a triangle list at import
@@ -1772,7 +1772,7 @@ namespace CNA::Internal::GltfImport
 
     /**
      * @brief Flattens the file's default scene into a parent-before-child node list with composed
-     * world transforms (plans/plan_gltf.md GLTF-113, Phase 5).
+     * world transforms (GLTF-113, Phase 5).
      *
      * Index 0 is always a synthetic identity root named "Root"; every node reachable from the
      * default scene (`data->scene`, or the first scene when that is unset) follows, each preceded
@@ -1793,7 +1793,7 @@ namespace CNA::Internal::GltfImport
      *
      * Each placement is a `MeshInstanceOut` carrying the instancing node and that node's composed
      * world transform, so a mesh instantiated by several nodes yields several distinct instances
-     * rather than one anonymous duplicate (plans/plan_gltf.md GLTF-113).
+     * rather than one anonymous duplicate (GLTF-113).
      *
      * @param data The parsed glTF file.
      * @param scene The graph `BuildSceneGraph` produced for the same file, used to resolve each
@@ -1872,8 +1872,8 @@ namespace CNA::Internal::GltfImport
     /**
      * @brief The attribute combination one primitive presents to the stride selector.
      *
-     * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-099`). Exactly the four
-     * flags §2.3's table is indexed by, named so a row reads as a sentence rather than as a
+     * @note CNAEXT — not part of the XNA 4.0 API (`GLTF-099`). Exactly the four
+     * flags the stride table is indexed by, named so a row reads as a sentence rather than as a
      * position in a nested ternary.
      */
     struct VertexLayoutRequestEXT
@@ -1891,7 +1891,7 @@ namespace CNA::Internal::GltfImport
     };
 
     /**
-     * @brief One row of the vertex-stride decision table (plans/plan_gltf.md §2.3, `GLTF-099`).
+     * @brief One row of the vertex-stride decision table (`GLTF-099`).
      *
      * @note CNAEXT — not part of the XNA 4.0 API.
      */
@@ -1904,7 +1904,7 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief What this row cannot carry, or empty when it carries everything asked for.
          *
-         * plans/plan_gltf.md `GLTF-100`. A row whose stride has no slot for something the primitive
+         * `GLTF-100`. A row whose stride has no slot for something the primitive
          * authored is a **downgrade**, and the point of naming it here is that the downgrade stops
          * being a property of whichever ternary branch happened to be taken. Empty means the
          * combination is represented exactly.
@@ -1915,7 +1915,7 @@ namespace CNA::Internal::GltfImport
     /**
      * @brief The whole stride decision table, in a stable order.
      *
-     * @note CNAEXT — not part of the XNA 4.0 API. §2.3's table as data rather than as a nested
+     * @note CNAEXT — not part of the XNA 4.0 API. The stride table as data rather than as a nested
      * ternary chain: every renderer's `ApplyLayout` is an implicit restatement of it, and a rule
      * spelled as an expression cannot be enumerated, tested row by row, or asked what it loses.
      *
@@ -1935,7 +1935,7 @@ namespace CNA::Internal::GltfImport
     const VertexLayoutRuleEXT& SelectVertexLayoutEXT(const VertexLayoutRequestEXT& request);
 
     /**
-     * @brief How completely CNA implements one glTF extension (plans/plan_gltf.md `GLTF-334`, §19).
+     * @brief How completely CNA implements one glTF extension (`GLTF-334`, docs/gltf-limitations.md §1).
      *
      * @note CNAEXT — not part of the XNA 4.0 API. The enumerators are ordered from most to least
      * complete, so a comparison expresses "at least as good as".
@@ -1967,7 +1967,7 @@ namespace CNA::Internal::GltfImport
         NotDesired,
     };
 
-    /** @brief One extension's entry in the registry (plans/plan_gltf.md `GLTF-334`). */
+    /** @brief One extension's entry in the registry (`GLTF-334`). */
     struct GltfExtensionRecordEXT
     {
         /** @brief The extension's glTF name, e.g. "KHR_texture_transform". */
@@ -1995,8 +1995,8 @@ namespace CNA::Internal::GltfImport
     /**
      * @brief The extension registry: every extension CNA has classified, in a stable order.
      *
-     * @note CNAEXT — not part of the XNA 4.0 API. Single source of truth for plans/plan_gltf.md §19's
-     * table and for @ref IsGltfExtensionSupportedEXT, which is a lookup here rather than a second
+     * @note CNAEXT — not part of the XNA 4.0 API. Single source of truth for docs/gltf-limitations.md
+     * §1's table and for @ref IsGltfExtensionSupportedEXT, which is a lookup here rather than a second
      * hand-maintained list — the arrangement `GLTF-334` exists to create. Two lists would drift,
      * and a drifted list means a file is refused or accepted for a reason nobody wrote down.
      *
@@ -2023,7 +2023,7 @@ namespace CNA::Internal::GltfImport
      * @note CNAEXT — not part of the XNA 4.0 API.
      *
      * @param support The classification.
-     * @return Its name as plans/plan_gltf.md §19 spells it, e.g. "PARSED_BUT_IGNORED".
+     * @return Its name as docs/gltf-limitations.md §1 spells it, e.g. "PARSED_BUT_IGNORED".
      */
     std::string GltfExtensionSupportNameEXT(GltfExtensionSupportEXT support);
 
@@ -2194,7 +2194,7 @@ namespace CNA::Internal::GltfImport
      * @return The default weight vector, exactly @p targetCount entries long.
      */
     /**
-     * @brief The morph weights a mesh instance starts at (plans/plan_gltf.md `GLTF-281`).
+     * @brief The morph weights a mesh instance starts at (`GLTF-281`).
      *
      * §3.7.2.2 gives the instancing **node** the final say: `node.weights` *overrides*
      * `mesh.weights` rather than merging with it, so a node declaring `[1,0]` for a mesh whose own

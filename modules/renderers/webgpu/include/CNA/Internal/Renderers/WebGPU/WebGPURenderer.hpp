@@ -5410,7 +5410,7 @@ namespace CNA::Internal::Renderers::WebGPU
             /// plans/plan_street_webgpu.md STREETW-0001/0004: this draw's per-instance world
             /// matrices, or a disabled state for an ordinary draw.
             WebGPUInstanceStreamEXT instance{};
-            /// plans/plan_gltf.md GLTF-465: true for stride 60, the record that carries COLOR_0.
+            /// GLTF-465: true for stride 60, the record that carries COLOR_0.
             bool colored = false;
             bool indexed = false;
             bool index32 = false;
@@ -5423,7 +5423,7 @@ namespace CNA::Internal::Renderers::WebGPU
             /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
             std::array<float, 44> uniforms{};
             std::array<float, 68> lightUniforms{};
-            /// plans/plan_gltf.md GLTF-344: the base 56 floats plus specular F0/factor and the two
+            /// GLTF-344: the base 56 floats plus specular F0/factor and the two
             /// specular map transforms (76), then the glTF doubleSided sign: 80 (320 bytes).
             std::array<float, 80> pbrFactors{};
             bool depthTest = false;
@@ -5450,7 +5450,7 @@ namespace CNA::Internal::Renderers::WebGPU
             WebGPUSampledTextureEXT metallicRoughnessMap;
             WebGPUSampledTextureEXT emissiveMap;
             WebGPUSampledTextureEXT occlusionMap;
-            /// plans/plan_gltf.md GLTF-344: KHR_materials_specular's strength and colour maps.
+            /// GLTF-344: KHR_materials_specular's strength and colour maps.
             WebGPUSampledTextureEXT specularMap;
             WebGPUSampledTextureEXT specularColorMap;
             int textureFilter = 0;
@@ -5487,7 +5487,7 @@ namespace CNA::Internal::Renderers::WebGPU
                               ReplayState& state);
 
         WGPUShaderModule pbrShader_ = nullptr;
-        /// plans/plan_gltf.md GLTF-465: the stride-60 twin, whose vertex input declares COLOR_0.
+        /// GLTF-465: the stride-60 twin, whose vertex input declares COLOR_0.
         WGPUShaderModule pbrColorShader_ = nullptr;
         /// plans/plan_street_webgpu.md STREETW-0001: the instanced twins of both, whose vertex
         /// input declares the four world-matrix columns at locations 12-15.
@@ -5497,7 +5497,7 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUBindGroupLayout pbrBindGroupLayout1_ = nullptr;  ///< group 1: sampler + 5 textures
         WGPUPipelineLayout pbrPipelineLayout_ = nullptr;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> pbrPipelines_;
-        /// plans/plan_gltf.md GLTF-465: the stride-60 pipelines; a separate cache because the vertex
+        /// GLTF-465: the stride-60 pipelines; a separate cache because the vertex
         /// layout and the shader module both differ, so the key alone cannot separate them.
         std::unordered_map<std::uint64_t, WGPURenderPipeline> pbrColorPipelines_;
         /// plans/plan_street_webgpu.md STREETW-0001: the instanced pipelines, separate for the
@@ -5674,7 +5674,7 @@ namespace CNA::Internal::Renderers::WebGPU
             /** @brief STREETPERF-0004: storage bound in place instead of `vertexData`/`indexData`. */
             ResidentGeometryEXT resident;
             std::vector<std::uint8_t> indexData;
-            /// plans/plan_gltf.md GLTF-463/GLTF-465: true for stride 80.
+            /// GLTF-463/GLTF-465: true for stride 80.
             bool colored = false;
             bool indexed = false;
             bool index32 = false;
@@ -5687,7 +5687,7 @@ namespace CNA::Internal::Renderers::WebGPU
             /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
             std::array<float, 44> uniforms{};
             std::array<float, 68> lightUniforms{};
-            /// plans/plan_gltf.md GLTF-344: the base 56 floats plus specular F0/factor and the two
+            /// GLTF-344: the base 56 floats plus specular F0/factor and the two
             /// specular map transforms (76), then the glTF doubleSided sign: 80 (320 bytes).
             std::array<float, 80> pbrFactors{};
             std::array<float, 4 + 72 * 16> skinningParams{};
@@ -5715,7 +5715,7 @@ namespace CNA::Internal::Renderers::WebGPU
             WebGPUSampledTextureEXT metallicRoughnessMap;
             WebGPUSampledTextureEXT emissiveMap;
             WebGPUSampledTextureEXT occlusionMap;
-            /// plans/plan_gltf.md GLTF-344: KHR_materials_specular's strength and colour maps.
+            /// GLTF-344: KHR_materials_specular's strength and colour maps.
             WebGPUSampledTextureEXT specularMap;
             WebGPUSampledTextureEXT specularColorMap;
             int textureFilter = 0;
@@ -5748,7 +5748,7 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUShaderModule skinnedPbrShader_ = nullptr;
         /// STREETW-0005: its instanced twin.
         WGPUShaderModule skinnedPbrInstancedShader_ = nullptr;
-        /// plans/plan_gltf.md GLTF-463/GLTF-465: the stride-80 twin.
+        /// GLTF-463/GLTF-465: the stride-80 twin.
         WGPUShaderModule skinnedPbrColorShader_ = nullptr;
         /// STREETW-0005: its instanced twin.
         WGPUShaderModule skinnedPbrColorInstancedShader_ = nullptr;
@@ -5757,7 +5757,7 @@ namespace CNA::Internal::Renderers::WebGPU
         std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPbrPipelines_;
         /// STREETW-0005: its instanced twin's cache.
         std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPbrInstancedPipelines_;
-        /// plans/plan_gltf.md GLTF-463/GLTF-465: the stride-80 pipelines.
+        /// GLTF-463/GLTF-465: the stride-80 pipelines.
         std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPbrColorPipelines_;
         /// STREETW-0005: its instanced twin's cache.
         std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPbrColorInstancedPipelines_;

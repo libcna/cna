@@ -911,7 +911,7 @@ template<typename T>
     const MorphTargetDataEXT& data,
     const std::vector<float>& weights)
 {
-    // plans/plan_gltf.md GLTF-278 taught this lesson once already, in BlendMorphTargetsEXT: a
+    // GLTF-278 taught this lesson once already, in BlendMorphTargetsEXT: a
     // restated stride list goes stale against the canonical table it copies. This one had, and
     // the three it still admitted were exactly the layouts carrying no tangent, so every
     // PBR morph target -- 48 unskinned, 68 skinned -- was refused outright. Ask the table.

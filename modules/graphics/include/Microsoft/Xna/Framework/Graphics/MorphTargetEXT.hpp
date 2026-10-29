@@ -91,7 +91,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Per-target, per-vertex tangent deltas, or an empty inner vector for a target with
          * no TANGENT delta.
          *
-         * @note CNAEXT — plans/plan_gltf.md `GLTF-279`. `Vector3`, not `Vector4`: glTF morphs the tangent
+         * @note CNAEXT — `GLTF-279`. `Vector3`, not `Vector4`: glTF morphs the tangent
          * **direction** only. The handedness `w` describes the UV winding and cannot be
          * interpolated — blending `+1` and `−1` passes through `0`, which is not a handedness — so
          * it stays on the base vertex and the blend never touches it. Only meaningful for strides
@@ -105,7 +105,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief True when the blend must recompute flat normals from the morphed positions.
          *
-         * @note CNAEXT — plans/plan_gltf.md `GLTF-461`. §3.7.2.2: "When the base mesh primitive does not
+         * @note CNAEXT — `GLTF-461`. §3.7.2.2: "When the base mesh primitive does not
          * specify normals, client implementations **MUST** calculate flat normals for each morph
          * target." A `POSITION` delta can rotate a face, so a normal baked at rest is only right at
          * weight zero — and the same section makes an original attribute a precondition for a
@@ -117,7 +117,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief The triangle list the recomputation needs, three indices per face.
          *
-         * @note CNAEXT — plans/plan_gltf.md `GLTF-461`. Only read when @ref RecomputeFlatNormalsEXT is
+         * @note CNAEXT — `GLTF-461`. Only read when @ref RecomputeFlatNormalsEXT is
          * true, and empty otherwise, so an ordinary morph target costs nothing for it. Held here
          * rather than read back from the part's `IndexBuffer` because index readback is not
          * something every renderer can offer. A vertex that several faces still reach — which the

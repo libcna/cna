@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-004: the eight proven defects D1-D8, as executable tests.
+// GLTF-004: the eight proven defects D1-D8, as executable tests.
 //
 // EVERY TEST IN THIS FILE IS GREEN WHILE CNA IS BROKEN. That inversion is deliberate and is the
 // mechanism that makes a known defect visible and reproducible without turning the ordinary suite
@@ -180,7 +180,7 @@ namespace
 // known-defect tests here any more. All seven glTF modes import: the three triangle modes as a
 // triangle list (converted where needed, winding preserved), a LINE_LOOP as a LINE_STRIP carrying
 // the closing segment glTF leaves implicit in the mode, and the rest as themselves with a real
-// PrimitiveType on the part and a §12.3 primitive count. GltfConformanceL3/L5 and
+// PrimitiveType on the part and a GLTF-078 primitive count. GltfConformanceL3/L5 and
 // GltfPrimitiveTopology assert all seven in full, so any of it regressing fails an ordinary green
 // test. The record stays in the corpus as the regression witness with the audit's original
 // measurement under priorActual.
@@ -282,7 +282,7 @@ TEST(GltfKnownDefect, EveryOpenDefectInTheCorpusLedgerHasAnExecutableTestHere)
     }
 }
 
-// --- plans/plan_gltf.md GLTF-241/GLTF-462: vertex-coloured PBR, carried rather than reported ----------
+// --- GLTF-241/GLTF-462: vertex-coloured PBR, carried rather than reported ----------
 
 // This used to be the one material combination CNA could not import as the file asks.
 // `mat-vertex-color-pbr` carries COLOR_0 and a metallic-roughness material, and GLTF-241 chose the

@@ -211,7 +211,7 @@ TEST_F(CrossRendererContractTest, SelectingEveryRendererInTurnLeavesNoFallbackRe
     });
 }
 
-// plans/plan_gltf.md GLTF-475. A renderer picks its shader program from the vertex stride; the effect the
+// GLTF-475. A renderer picks its shader program from the vertex stride; the effect the
 // caller applied says what that program should COMPUTE. Where those two are conflated, the renderer
 // draws a wrong picture and reports success -- and no static inventory in this repository can see
 // it, because every declaration involved is correct.

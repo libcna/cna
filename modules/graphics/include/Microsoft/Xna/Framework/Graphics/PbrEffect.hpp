@@ -255,7 +255,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Whether the bound base-colour texture's samples are sRGB-encoded.
          *
-         * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-210`). glTF §3.9.2
+         * @note CNAEXT — not part of the XNA 4.0 API (`GLTF-210`). glTF §3.9.2
          * declares `baseColorTexture` sRGB-encoded, so `true` is the default and is what an
          * imported glTF material wants. It is a property rather than a constant because this
          * effect is reachable from content that is not glTF, where a caller may bind a texture it
@@ -269,7 +269,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief How far the bound normal map perturbs the surface (glTF `normalTexture.scale`).
          *
-         * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-224`). Scales the sampled
+         * @note CNAEXT — not part of the XNA 4.0 API (`GLTF-224`). Scales the sampled
          * tangent-space normal's x and y before the tangent basis is applied: 0 flattens the map to
          * the geometric normal, 1 is the map as authored, and values above 1 exaggerate it — glTF
          * puts no upper bound on it, so neither does this.
@@ -287,7 +287,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief How far the bound occlusion map darkens (glTF `occlusionTexture.strength`).
          *
-         * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-225`). Applied as
+         * @note CNAEXT — not part of the XNA 4.0 API (`GLTF-225`). Applied as
          * `1 + strength * (sampled - 1)`, the specification's own formula: at 0 the result is 1 —
          * no occlusion at all, whatever the map holds — and at 1 it is the map unchanged.
          *
@@ -308,7 +308,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * occlusion. Each value is 0 or 1 and selects the matching `TextureCoordinate` usage
          * index in the current vertex declaration. All entries default to 0.
          *
-         * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-182/GLTF-183`). This
+         * @note CNAEXT — not part of the XNA 4.0 API (`GLTF-182/GLTF-183`). This
          * carries glTF's per-texture `texCoord` choice after the importer has packed its at-most
          * two sampled source sets into the renderer-facing UV0/UV1 channels.
          * @return The five per-texture packed UV selectors.
@@ -331,7 +331,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * The five entries are base colour, normal, metallic-roughness, emissive and occlusion.
          * Every entry defaults to the identity transform.
          *
-         * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-184`). Transform state
+         * @note CNAEXT — not part of the XNA 4.0 API (`GLTF-184`). Transform state
          * is independent of the five UV-channel selectors: first the selected coordinate is
          * scaled, rotated and translated, then that result is sampled.
          * @return The five per-texture transforms.
@@ -368,7 +368,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Whether the bound emissive texture's samples are sRGB-encoded.
          *
-         * @note CNAEXT — plans/plan_gltf.md `GLTF-210`, on the same terms as
+         * @note CNAEXT — `GLTF-210`, on the same terms as
          * @ref getBaseColorTextureIsSrgbEXTProperty. The emissive **factor** is linear and is not
          * decoded, which matters because `KHR_materials_emissive_strength` can legitimately push
          * it above 1.
@@ -386,7 +386,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Whether the lit result is encoded from linear back to sRGB for display.
          *
-         * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-212`). Unlike the two
+         * @note CNAEXT — not part of the XNA 4.0 API (`GLTF-212`). Unlike the two
          * decode flags, this is a genuine policy choice rather than a fact about a texture: an
          * application drawing into an sRGB render target, or doing its own tone mapping, must turn
          * it off or the transfer is applied twice. It defaults to `true` because the common case
@@ -468,7 +468,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Gets or sets whether the per-vertex `COLOR_0` stream multiplies the base colour.
          *
-         * @note CNAEXT — not part of the XNA 4.0 API. plans/plan_gltf.md `GLTF-462`. Real XNA has no PBR
+         * @note CNAEXT — not part of the XNA 4.0 API. `GLTF-462`. Real XNA has no PBR
          * effect at all, and `BasicEffect`/`SkinnedEffect`'s own `VertexColorEnabled` is the shape
          * this mirrors. glTF §3.7.2.1 makes `COLOR_0` "an additional linear multiplier to base
          * color", so the product a fragment sees is
@@ -608,7 +608,7 @@ namespace Microsoft::Xna::Framework::Graphics
         float fogEnd_   = 1.0f;
 
 
-        // plans/plan_gltf.md GLTF-228/GLTF-229/GLTF-231: glTF's material-level alpha and sidedness state.
+        // GLTF-228/GLTF-229/GLTF-231: glTF's material-level alpha and sidedness state.
         AlphaModeEXT alphaMode_ = AlphaModeEXT::Opaque;
         float        alphaCutoff_ = 0.5f;
         bool         doubleSided_ = false;

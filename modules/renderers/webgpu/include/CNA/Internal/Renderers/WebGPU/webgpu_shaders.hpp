@@ -1129,7 +1129,7 @@ struct LitLightParams {
 struct PbrFactors {
     metallicRoughness: vec4f,
     alphaTest: vec4f,
-    // plans/plan_gltf.md GLTF-344: w decodes the specular COLOUR sample from sRGB.
+    // GLTF-344: w decodes the specular COLOUR sample from sRGB.
     srgbFlags: vec4f,
     dielectricFresnel: vec4f,
     textureTransformRows: array<vec4f, 10>,
@@ -1148,7 +1148,7 @@ struct PbrFactors {
 @group(1) @binding(3) var metallicRoughnessTex: texture_2d<f32>;
 @group(1) @binding(4) var emissiveTex: texture_2d<f32>;
 @group(1) @binding(5) var occlusionTex: texture_2d<f32>;
-// plans/plan_gltf.md GLTF-344: KHR_materials_specular's own two inputs, at the same slots every other
+// GLTF-344: KHR_materials_specular's own two inputs, at the same slots every other
 // sampling renderer uses -- strength in the scalar map's ALPHA, colour in the colour map's RGB.
 @group(1) @binding(6) var specularTex: texture_2d<f32>;
 @group(1) @binding(7) var specularColorTex: texture_2d<f32>;
@@ -1234,7 +1234,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
 @fragment fn fs_main(input: VertexOutput, @builtin(front_facing) frontFacing: bool) -> @location(0) vec4f {
     let baseColorSample = textureSample(baseColorTex, texSampler, pbrTransformUv(input.uv, 0u));
     let baseColor = select(baseColorSample.rgb, srgbToLinear(baseColorSample.rgb), pf.srgbFlags.x > 0.5);
-    // plans/plan_gltf.md GLTF-465: glTF 3.9.2 makes COLOR_0 an additional LINEAR multiplier on the whole
+    // GLTF-465: glTF 3.9.2 makes COLOR_0 an additional LINEAR multiplier on the whole
     // base-colour product, alpha included -- the alpha half is where a BLEND-mode vertex-coloured
     // primitive's transparency comes from. Expanded to the opaque-white identity in the variants
     // whose vertex layout supplies no colour, so one fragment body serves both.
@@ -1280,7 +1280,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
     let metallic = clamp(mr.b * pf.metallicRoughness.x, 0.0, 1.0);
 
     let eye = normalize(lp.eyePos.xyz - input.worldPos);
-    // plans/plan_gltf.md GLTF-344: KHR_materials_specular. strength comes from the scalar map's ALPHA and
+    // GLTF-344: KHR_materials_specular. strength comes from the scalar map's ALPHA and
     // colour from the colour map's sRGB-decoded RGB, each through its own affine transform; the
     // dielectric F0 is min(unclampedF0 * colourSample, 1) * strength, which is the extension's own
     // ordering and the reason the unclamped value is uploaded. A material without either map samples
@@ -1893,7 +1893,7 @@ struct LitLightParams {
 struct PbrFactors {
     metallicRoughness: vec4f,
     alphaTest: vec4f,
-    // plans/plan_gltf.md GLTF-344: w decodes the specular COLOUR sample from sRGB.
+    // GLTF-344: w decodes the specular COLOUR sample from sRGB.
     srgbFlags: vec4f,
     dielectricFresnel: vec4f,
     textureTransformRows: array<vec4f, 10>,
@@ -1918,7 +1918,7 @@ struct SkinningParams {
 @group(1) @binding(3) var metallicRoughnessTex: texture_2d<f32>;
 @group(1) @binding(4) var emissiveTex: texture_2d<f32>;
 @group(1) @binding(5) var occlusionTex: texture_2d<f32>;
-// plans/plan_gltf.md GLTF-344: KHR_materials_specular's own two inputs, at the same slots every other
+// GLTF-344: KHR_materials_specular's own two inputs, at the same slots every other
 // sampling renderer uses -- strength in the scalar map's ALPHA, colour in the colour map's RGB.
 @group(1) @binding(6) var specularTex: texture_2d<f32>;
 @group(1) @binding(7) var specularColorTex: texture_2d<f32>;
@@ -2047,7 +2047,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
 @fragment fn fs_main(input: VertexOutput, @builtin(front_facing) frontFacing: bool) -> @location(0) vec4f {
     let baseColorSample = textureSample(baseColorTex, texSampler, pbrTransformUv(input.uv, 0u));
     let baseColor = select(baseColorSample.rgb, srgbToLinear(baseColorSample.rgb), pf.srgbFlags.x > 0.5);
-    // plans/plan_gltf.md GLTF-465: glTF 3.9.2 makes COLOR_0 an additional LINEAR multiplier on the whole
+    // GLTF-465: glTF 3.9.2 makes COLOR_0 an additional LINEAR multiplier on the whole
     // base-colour product, alpha included -- the alpha half is where a BLEND-mode vertex-coloured
     // primitive's transparency comes from. Expanded to the opaque-white identity in the variants
     // whose vertex layout supplies no colour, so one fragment body serves both.
@@ -2093,7 +2093,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
     let metallic = clamp(mr.b * pf.metallicRoughness.x, 0.0, 1.0);
 
     let eye = normalize(lp.eyePos.xyz - input.worldPos);
-    // plans/plan_gltf.md GLTF-344: KHR_materials_specular. strength comes from the scalar map's ALPHA and
+    // GLTF-344: KHR_materials_specular. strength comes from the scalar map's ALPHA and
     // colour from the colour map's sRGB-decoded RGB, each through its own affine transform; the
     // dielectric F0 is min(unclampedF0 * colourSample, 1) * strength, which is the extension's own
     // ordering and the reason the unclamped value is uploaded. A material without either map samples

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-202/GLTF-203: glTF sampler state, and the §14.2 mapping table.
+// GLTF-202/GLTF-203: glTF sampler state, and its mapping table.
 //
 // `cgltf_sampler`, `mag_filter` and `wrap_s` had ZERO occurrences in CNA. Every imported texture
 // was drawn with whatever `SamplerState` the device happened to have, which defaults to
@@ -40,7 +40,7 @@ namespace
     constexpr int kUndefined            = 0;
 }
 
-// §14.2's filter table, every row. XNA turns out to cover glTF's filter space EXACTLY -- its nine
+// The filter table, every row. XNA turns out to cover glTF's filter space EXACTLY -- its nine
 // TextureFilter values express all eight min x mag x mip combinations -- so none of these is an
 // approximation, which is worth asserting because the plan originally assumed otherwise.
 TEST(GltfSamplerMapping, EveryMinMagCombinationMapsToItsExactXnaFilter)
@@ -108,7 +108,7 @@ TEST(GltfSamplerMapping, ANonMipmappedMinFilterIsFlaggedRatherThanSilentlyApprox
     }
 }
 
-// §14.2's wrap table. The two axes are independent, which is the point: a texture may repeat in U
+// The wrap table. The two axes are independent, which is the point: a texture may repeat in U
 // and clamp in V, and a mapping that read one field for both would pass every symmetric test.
 TEST(GltfSamplerMapping, WrapModesMapPerAxisIndependently)
 {
@@ -307,7 +307,7 @@ TEST(GltfSamplerMapping, ConvertedSpecularGlossinessDiffuseKeepsItsTextureState)
     EXPECT_EQ("baseColorTexture", converted.mipmappedSamplerMapsWithoutMipChainEXT.front());
 }
 
-// --- plans/plan_gltf.md GLTF-060 / GLTF-097: attribute count agreement, as a shared assertion ------------
+// --- GLTF-060 / GLTF-097: attribute count agreement, as a shared assertion ------------
 //
 // GLTF-097 asks for the same check GLTF-060 landed, stated once and applied to every stream rather
 // than to the pair someone happened to think of. It is one assertion in ExtractMesh, driven by the
@@ -392,7 +392,7 @@ TEST(GltfSamplerMapping, AttributeCountAgreementCoversEveryDeclaredStreamNotJust
            "nothing";
 }
 
-// --- plans/plan_gltf.md GLTF-214: vertex colours are linear, and stay that way ---------------------------
+// --- GLTF-214: vertex colours are linear, and stay that way ---------------------------
 //
 // glTF §3.7.2.1 declares COLOR_0 a LINEAR value -- unlike baseColorTexture and emissiveTexture,
 // which §3.9.2 declares sRGB-encoded. So the colour-space work GLTF-210 landed must NOT touch it:

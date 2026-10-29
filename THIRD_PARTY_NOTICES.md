@@ -172,7 +172,7 @@ exactly the standard this campaign exists to replace. So real models are a *supp
 deliberately (`GLTF-405`, `GLTF-411`), not part of the gate.
 
 **The one asset that would change this** is a large one for the performance budgets `GLTF ROBUST`
-§27.2 row 9 asks for — ≥ 50 MB, ≥ 200 k triangles, ≥ 150 joints. Even that should be fetched, not
+row 9 asks for — ≥ 50 MB, ≥ 200 k triangles, ≥ 150 joints. Even that should be fetched, not
 committed: it is a benchmark input, not evidence.
 
 ## Microsoft XNA 4.0 Stock Effects HLSL (D3D9 backend)

@@ -535,7 +535,7 @@ TEST_F(SkinnedPbrEffectDefaultsTest, FillGpuDrawParamsCarriesFactorsFogAndBoneCo
 
 TEST_F(SkinnedPbrEffectDefaultsTest, VertexColorEnabledDefaultsOffAndOverridesTheDrawParamDefault)
 {
-    // plans/plan_gltf.md GLTF-465. §3.7.2.1: a COLOR_0 attribute "acts as an additional linear multiplier
+    // GLTF-465. §3.7.2.1: a COLOR_0 attribute "acts as an additional linear multiplier
     // to base color", so a renderer needs to know whether the colour slot in the vertex record means
     // anything. Since GLTF-462 the rigid PBR record (stride 60) and since GLTF-463 the skinned one
     // (stride 80) ALWAYS carry that slot -- filled with the authored colour, or with opaque white --

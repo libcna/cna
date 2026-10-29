@@ -73,7 +73,7 @@ The glTF differential campaign has a deliberately narrower executable renderer s
 project-wide tables below: STUB establishes importer independence, HEADLESS observes the native
 draw boundary without rasterising, and OPENGLES3 provides real graphics-API and framebuffer
 evidence. This table records the four renderer-sensitive features named by
-`plans/plan_gltf.md`; it does not turn a boundary-only result into pixel support.
+the glTF campaign; it does not turn a boundary-only result into pixel support.
 
 Status here is specific: ✅ means a real native draw or framebuffer assertion; ◇ means the complete
 value/topology reaches an observable non-rasterising boundary; ❌ means the renderer explicitly has

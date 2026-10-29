@@ -8383,7 +8383,7 @@ namespace CNA::Internal::Renderers::EasyGL
             // GLTF-182/183: collision-free rigid PBR dual-UV layout. Bytes 0..47 are the
             // established stride-48 prefix and UV1 is appended at 48.
             //
-            // plans/plan_gltf.md GLTF-462: bytes 56..59 were reserved padding and are the packed COLOR_0
+            // GLTF-462: bytes 56..59 were reserved padding and are the packed COLOR_0
             // slot now, which is what lets a vertex-coloured metallic-roughness primitive keep its
             // material instead of falling back to a layout with no Normal at all. Location 5
             // mirrors the stride-52/56 precedent exactly: the slot is always bound, and
@@ -8487,7 +8487,7 @@ namespace CNA::Internal::Renderers::EasyGL
             vao.set_attribute_pointer(6, 2, ::easygl::DataType::Float, false, s, (void*)68);
             break;
         case 80:
-            // plans/plan_gltf.md GLTF-463: the stride-76 skinned PBR record with a packed COLOR_0
+            // GLTF-463: the stride-76 skinned PBR record with a packed COLOR_0
             // appended at 76 -- the skinned counterpart of stride 60's own colour slot. Locations
             // 0..6 stay byte-for-byte identical to stride 76, so one shader serves both, and
             // GpuDrawParams::vertexColorEnabled (from SkinnedPbrEffect::VertexColorEnabledEXT)
@@ -8510,7 +8510,7 @@ namespace CNA::Internal::Renderers::EasyGL
             vao.set_attribute_pointer(7, 4, ::easygl::DataType::UnsignedByte, true, s, (void*)76);
             break;
         default:
-            // plans/plan_gltf.md GLTF-157: a byte stride does not describe which attributes exist.
+            // GLTF-157: a byte stride does not describe which attributes exist.
             // Treating every unknown record as position-only left the other locations in stale
             // VAO state and rendered normals, UVs or skin weights from unrelated buffers. Refuse
             // it loudly; a genuinely custom layout reaches the generic declaration path above.
@@ -10173,7 +10173,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
                 params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor);
         }
-        // plans/plan_gltf.md GLTF-210/GLTF-212. Three independent decisions, so three independent
+        // GLTF-210/GLTF-212. Three independent decisions, so three independent
         // components: two about what a bound texture contains, one about where the fragment is
         // going. A renderer that ignored this field entirely would keep the pre-GLTF-209
         // behaviour exactly, which is what makes adopting it a per-renderer step.

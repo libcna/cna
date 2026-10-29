@@ -1,6 +1,6 @@
 #pragma once
 
-// plans/plan_gltf.md GLTF-465: the shared refusal for a core glTF semantic a renderer cannot honour.
+// GLTF-465: the shared refusal for a core glTF semantic a renderer cannot honour.
 //
 // glTF 2.0 §3.7.2.1/§3.9.2 make `COLOR_0` "an additional linear multiplier to base color" -- a term
 // in the metallic-roughness product, alpha included. CNA's importer, `.cnj` path, vertex ABI and both
@@ -72,7 +72,7 @@ namespace CNA::Internal::Renderers
             " renderer: this metallic-roughness primitive carries a COLOR_0 vertex colour (stride " +
             std::to_string(strideInBytes) +
             "), and glTF 2.0 3.9.2 makes that an additional linear multiplier on base colour "
-            "including its alpha. This renderer does not evaluate it yet (plans/plan_gltf.md GLTF-465), so "
+            "including its alpha. This renderer does not evaluate it yet (GLTF-465), so "
             "the draw is refused rather than rendered with the opaque-white identity, which would be "
             "a visibly wrong surface reported as a successful draw. Use a renderer that implements it "
             "(EasyGL: OPENGLES3/OPENGL33/WEBGL2, SOFTWARE, "

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Transform fixtures -- owning group ``transforms`` (plans/plan_gltf.md §11.4, §24.2).
+"""Transform fixtures -- owning group ``transforms``.
 
 These are the L4 ladder's first rungs and the fixtures that prove D1, D2 and D3: CNA's import
 data model carries no ``cgltf_node`` and no matrix, so every mesh primitive is emitted in
@@ -210,7 +210,7 @@ def xf_matrix_node() -> Fixture:
 
 
 def xf_scale_nonuniform() -> Fixture:
-    """§11.4's non-uniform-scale rung -- the case that separates a normal matrix from a world one.
+    """The transform ladder's non-uniform-scale rung -- what separates a normal matrix from a world one.
 
     Positions only ever need the world matrix, so every other transform fixture is satisfied by it.
     Normals are not: under a non-uniform scale the correct normal transform is
@@ -241,7 +241,7 @@ def xf_scale_nonuniform() -> Fixture:
 
 
 def xf_negative_scale() -> Fixture:
-    """§11.4's mirroring rung -- a node whose transform has a negative determinant.
+    """The transform ladder's mirroring rung -- a node whose transform has a negative determinant.
 
     A negative scale is the one transform that changes something no world matrix multiplication
     expresses: the triangle's *facing*. Positions mirror the way any other affine transform moves
@@ -301,7 +301,7 @@ def xf_mirror_child() -> Fixture:
     )
 
 
-# --- §11.4's remaining ladder rungs (`GLTF-399`) -------------------------------------------------
+# --- the transform ladder's remaining rungs (`GLTF-399`) ----------------------------------------------
 #
 # One node-graph shape each, with an exactly computable world-space vertex set. `world_positions`
 # derives the expectation from the builder's own node graph and cross-checks it against cgltf, so

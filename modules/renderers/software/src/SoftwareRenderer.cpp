@@ -4764,7 +4764,7 @@ namespace CNA::Internal::Renderers::Software
                     std::memcpy(&out.u1, raw.At(48), sizeof(float));
                     std::memcpy(&out.v1, raw.At(52), sizeof(float));
                 }
-                // plans/plan_gltf.md GLTF-462: stride 60's last four bytes were reserved padding and are
+                // GLTF-462: stride 60's last four bytes were reserved padding and are
                 // the packed COLOR_0 now. §3.7.2.1 makes it "an additional linear multiplier to base
                 // color", and this raster path already multiplies out.r/g/b/a into the sampled base
                 // colour -- so reading it here is the whole of vertex-coloured PBR for this
@@ -4789,7 +4789,7 @@ namespace CNA::Internal::Renderers::Software
                     std::memcpy(&out.u1, raw.At(68), sizeof(float));
                     std::memcpy(&out.v1, raw.At(72), sizeof(float));
                 }
-                // plans/plan_gltf.md GLTF-463: stride 80 is the stride-76 skinned PBR record with a packed
+                // GLTF-463: stride 80 is the stride-76 skinned PBR record with a packed
                 // COLOR_0 appended. This raster path already multiplies out.r/g/b/a into the sampled
                 // base colour, so reading it here is the whole of skinned vertex-coloured PBR for
                 // this renderer -- and `!params.vertexColorEnabled` further down replaces it with

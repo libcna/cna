@@ -472,7 +472,7 @@ TEST(RuntimeGltfModelTest, LoadsUnskinnedTexturedModelDirectlyFromGltf)
     // selection follow the material MODEL the file declares rather than which maps are present.
     // This assertion said BasicEffect until the first run on a renderer that reports ThreeD --
     // STUB does not, so nothing below the skip above had executed since GLTF-215 landed
-    // (plans/plan_gltf.md GLTF-383).
+    // (GLTF-383).
     auto* pbrFx = dynamic_cast<PbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
     ASSERT_NE(pbrFx, nullptr) << "a metallic-roughness material must select PbrEffect";
     Texture2D* tex = pbrFx->getTextureProperty();

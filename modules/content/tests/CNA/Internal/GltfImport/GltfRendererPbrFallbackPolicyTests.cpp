@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_gltf.md GLTF-163/184/373/374/379/394: repository-wide renderer contracts are tested from the
+// GLTF-163/184/373/374/379/394: repository-wide renderer contracts are tested from the
 // renderer sources even when the current host cannot compile or execute a particular backend.
 // This covers 32-bit index-factory ownership as well as PBR texture bindings, packed-channel
 // semantics and neutral fallbacks.
@@ -1029,7 +1029,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderHonorsTransportedFresnelEndpoi
     }
 }
 
-// plans/plan_gltf.md GLTF-476. The inventory below this one partitions the PBR renderers by whether they
+// GLTF-476. The inventory below this one partitions the PBR renderers by whether they
 // sample KHR_materials_specular's two maps, and it once labelled a renderer "factor-only" -- which was
 // never checked against anything. It was false: that renderer consumed 6 of the 20 PBR draw
 // parameters, and the 14 it dropped included four CORE glTF 2.0 material inputs (normalTexture.scale,
@@ -1706,7 +1706,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsI
     }
 }
 
-// --- plans/plan_gltf.md GLTF-462/GLTF-465: the stride-60 record, per renderer ---------------------------
+// --- GLTF-462/GLTF-465: the stride-60 record, per renderer ---------------------------
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherBindsTheStride60RecordOrIsNamedAsNotYet)
 {
@@ -1779,7 +1779,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherBindsTheStride60Record
 
 TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrRendererEitherBindsTheStride80RecordOrRefusesIt)
 {
-    // plans/plan_gltf.md GLTF-463: stride 80 is the whole stride-76 skinned PBR record with a packed
+    // GLTF-463: stride 80 is the whole stride-76 skinned PBR record with a packed
     // COLOR_0 appended, and it is where a SKINNED vertex-coloured metallic-roughness primitive now
     // imports to -- so it is ordinary content, not a corner case. Unlike stride 60 there is no
     // pre-existing row to grow a meaning: a renderer either declares the layout and its shader's
@@ -1944,7 +1944,7 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
         {"easygl", "p.loc_vertexcolor"},
         {"fna3d", "useVertexColor ? 1.0f : 0.0f"},
         // SDL_GPU's PC block already carried the flag -- its own comment called it "unused".
-        {"sdl-gpu", "float vertexColorEnabled; // plans/plan_gltf.md GLTF-465: gates the COLOR_0 product below"},
+        {"sdl-gpu", "float vertexColorEnabled; // GLTF-465: gates the COLOR_0 product below"},
     }};
     for (const VertexColourPbrAudit& audit : upload)
     {
@@ -2001,7 +2001,7 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherAppliesVertexColourOrRefusesTheDrawExplicitly)
 {
-    // plans/plan_gltf.md GLTF-465, and the reason this test exists rather than another prose row: the
+    // GLTF-465, and the reason this test exists rather than another prose row: the
     // project owner rejected `GLTF CORE 2.0 CORRECT` on 2026-08-18 with an argument that decides the
     // shape of the whole task. A renderer that ACCEPTS a valid glTF asset carrying COLOR_0 on a
     // metallic-roughness material and then substitutes the opaque-white identity renders a visibly
@@ -2076,7 +2076,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherAppliesVertexColourOrR
 
 TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarryingStrides)
 {
-    // plans/plan_gltf.md GLTF-465, and the hole the two tests above cannot see. They ask whether a
+    // GLTF-465, and the hole the two tests above cannot see. They ask whether a
     // renderer DECLARES the colour -- a layout row at offset 56/76, a shader that multiplies
     // `cnaVertexColor` into albedo. Neither asks whether a stride-60 or stride-80 draw ever REACHES
     // that shader, and in a renderer whose PBR route is chosen from an explicit stride list those

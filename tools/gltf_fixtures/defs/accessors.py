@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""bufferView / accessor fixtures -- owning group ``accessors`` (plans/plan_gltf.md §24.2).
+"""bufferView / accessor fixtures -- owning group ``accessors``.
 
 Two of these lock behaviour the forensic audit **verified correct** (`GLTF-041`): interleaving with
 non-zero offsets on both the bufferView and the accessor, and a sparse *attribute* accessor with no
@@ -45,7 +45,7 @@ _SPARSE_INTERLEAVED_NORMALS = [(0.0, 0.0, 1.0)] * 4
 def interleaved_position_normal() -> Fixture:
     """f5 -- POSITION and NORMAL interleaved in one strided bufferView. **Verified correct.**
 
-    Exercises all three address terms of §8.1's effective-address equation at once with distinct
+    Exercises all three address terms of the effective-address equation at once with distinct
     non-zero values: ``bufferView.byteOffset = 16``, ``byteStride = 24``, and
     ``accessor.byteOffset = 12`` for NORMAL. A decoder that ignored any one of them would produce
     visibly wrong positions.
@@ -370,7 +370,7 @@ def mat3_padded() -> Fixture:
     )
 
 
-# --- §24.2's remaining accessor rungs (`GLTF-399`) -----------------------------------------------
+# --- the remaining accessor rungs (`GLTF-399`) --------------------------------------------------
 
 _UV = [(0.0, 0.0), (0.75, 0.125), (0.25, 0.875)]
 

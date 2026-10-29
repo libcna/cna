@@ -3,9 +3,10 @@
 > Historical review: references below to the optional `CNA::Graphics::PbrMaterial` bridge
 > describe a removed alpha-stage extension. Runtime glTF loading still configures the core
 > `PbrEffect` and `SkinnedPbrEffect` directly. Its OpenGL4, DirectX11 and Vulkan evidence predates
-> those renderers' retirement (2026-09-28 and 2026-10-13).
+> those renderers' retirement (2026-09-28 and 2026-10-13). Section numbers from §12 up refer to the
+> glTF campaign plan, deleted on 2026-10-29 and kept in Git history.
 
-`plans/plan_gltf.md` §25's gate: **every proposed public or CNAEXT member is reviewed here, with its
+The campaign plan's §25 gate: **every proposed public or CNAEXT member is reviewed here, with its
 problem, shape, compatibility, migration and test recorded, before it is implemented.** A row that
 has not been through this file must not appear in a header.
 

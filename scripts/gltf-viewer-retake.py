@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute plans/plan_gltf.md Gate C's exact 14-row viewer retake matrix.
+"""Execute Gate C's exact 14-row viewer retake matrix (docs/gltf-conformance.md §5.6).
 
 The script is deliberately opt-in: it requires an already-built production OPENGLES3 viewer, the
 pinned Khronos reference renderer, and a sparse checkout containing Fox, DamagedHelmet and Sponza
@@ -411,7 +411,7 @@ def main() -> int:
                         help="optional aggregate JSON report path")
     parser.add_argument("--goldens", type=Path,
                         help="renderer-owned L7 golden directory (default: tests/gltf-l7/easygl). "
-                             "Gate C must run on more than one renderer (plans/plan_gltf.md §27.2 row 12) "
+                             "Gate C must run on more than one renderer (GLTF ROBUST row 12) "
                              "and each renderer owns its own goldens, exactly as the whole-corpus "
                              "gate selects them with --policy.")
     parser.add_argument("--timeout", type=int, default=300,

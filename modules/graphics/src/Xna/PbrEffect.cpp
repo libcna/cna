@@ -380,7 +380,7 @@ namespace Microsoft::Xna::Framework::Graphics
     bool    PbrEffect::getEncodeOutputToSrgbEXTProperty() const { return encodeOutputToSrgb_; }
     void    PbrEffect::setEncodeOutputToSrgbEXTProperty(bool v) { encodeOutputToSrgb_ = v; }
 
-    // plans/plan_gltf.md GLTF-228/GLTF-229/GLTF-231. Plain carried state: nothing here touches the
+    // GLTF-228/GLTF-229/GLTF-231. Plain carried state: nothing here touches the
     // device, and the renderer reads it through FillGpuDrawParams like every other material value.
     AlphaModeEXT PbrEffect::getAlphaModeEXTProperty() const { return alphaMode_; }
     void PbrEffect::setAlphaModeEXTProperty(AlphaModeEXT v) { alphaMode_ = v; }
@@ -511,7 +511,7 @@ namespace Microsoft::Xna::Framework::Graphics
         p.pbr             = true;
         p.textureEnabled  = true;
         p.lightingEnabled = true;
-        // plans/plan_gltf.md GLTF-462: §3.7.2.1 makes COLOR_0 "an additional linear multiplier to base
+        // GLTF-462: §3.7.2.1 makes COLOR_0 "an additional linear multiplier to base
         // color", so a vertex-coloured metallic-roughness primitive is shaded by this effect rather
         // than downgraded away from it. Set explicitly rather than left at GpuDrawParams' own
         // default of true, because the stride-60 and stride-80 records always HAVE a colour slot:
@@ -563,7 +563,7 @@ namespace Microsoft::Xna::Framework::Graphics
         p.emissiveColor[1] = emissiveFactor_.Y;
         p.emissiveColor[2] = emissiveFactor_.Z;
 
-        // plans/plan_gltf.md GLTF-210/GLTF-212: which bound textures are sRGB-encoded, and whether the
+        // GLTF-210/GLTF-212: which bound textures are sRGB-encoded, and whether the
         // lit result is encoded back. Carried as three separate facts because they are three
         // separate decisions -- two about what a texture contains, one about where the fragment
         // is going.
@@ -633,7 +633,7 @@ namespace Microsoft::Xna::Framework::Graphics
         p.pbrDielectricF0Unclamped[2] = dielectricFresnel.unclampedF0[2];
         p.pbrSpecularFactor = dielectricFresnel.specularFactor;
 
-        // plans/plan_gltf.md GLTF-372: a MASK material's cutoff is the one piece of glTF alpha coverage
+        // GLTF-372: a MASK material's cutoff is the one piece of glTF alpha coverage
         // that is fragment-program work rather than device state, and every PBR shader already
         // discards on this vector -- it was simply never filled in, so a mask rendered opaque.
         const std::array<float, 4> alphaTest =
