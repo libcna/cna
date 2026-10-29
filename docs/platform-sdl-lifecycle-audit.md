@@ -73,7 +73,7 @@ if (!presentationParameters_.getHeadlessEXTProperty())
 }
 ```
 
-`HeadlessEXT` is what lets a device run with no display server at all — `plans/plan_headless.md`'s
+`HeadlessEXT` is what lets a device run with no display server at all — the headless renderer's
 central promise ("`SDL_INIT_VIDEO` never called") depends on this branch. This historical
 asymmetry was removed by PLAT-62's recorded conditional release, while the platform contract still
 keeps unpaired release tolerant for cleanup after partial initialization.

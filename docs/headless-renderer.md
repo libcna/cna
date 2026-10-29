@@ -10,7 +10,7 @@ cmake -S . -B cmake-build-headless \
   -DCNA_GRAPHICS_RENDERER=HEADLESS \
   -DCMAKE_BUILD_TYPE=Debug \
   -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-headless -j
+cmake --build cmake-build-headless --parallel 8
 ```
 
 No extra dependencies are needed — the Headless renderer never links against SDL's graphics
@@ -34,6 +34,12 @@ lifecycle tracking, draw-call/state-change counters) instead of talking to a GPU
 or misused an API." **What it does *not* prove:** anything about pixel correctness. If you need to
 know whether something actually *looks* right, use one of the real GPU renderers' pixel-asserted
 tests (see `docs/graphics-renderer-feature-matrix.md`) — Headless renders nothing, by design.
+
+**The one rule it lives by:** Headless never silently accepts something a real renderer would
+reject, because its value is being a trustworthy stand-in. Where a real renderer's answer to some
+misuse is ambiguous or undocumented, settle that answer first rather than guessing one here, and
+keep Headless-only needs out of the shared `IGraphicsRenderer`/`GpuDrawParams` interface unless a
+genuine common need justifies them.
 
 ## Runtime modes
 
@@ -100,7 +106,16 @@ Key APIs on `HeadlessRenderer` (all `CNAEXT`, not part of the XNA surface):
 - "Disposed state object" validation (`BlendState`/`DepthStencilState`/etc.) is not implemented —
   `IGraphicsRenderer`'s `ApplyBlendState()`/etc. take raw `int`/`bool`/`float` parameters, not object
   references, so there is no state-object identity left for the renderer to check by the time a call
-  reaches it. This is a real, permanent interface constraint, not a temporary gap.
+  reaches it. This is a real, permanent interface constraint, not a temporary gap (HEADLESS-24).
+- Nor is there a "disposed resource" guard on the renderer's own resource objects (HEADLESS-19):
+  each is owned by exactly one `std::unique_ptr` in its XNA wrapper, so a disposed one is destroyed,
+  never left callable. What exists instead is registration on construction and removal on
+  destruction, which is what leak detection reads.
+- Leak detection is the explicit `AssertNoLeaks()`, not a check in the renderer's destructor
+  (HEADLESS-34/35): at an ordinary `Game` shutdown a game's `SpriteBatch` and textures are often
+  still alive, destroyed in no fixed order relative to the renderer, so an automatic check would
+  report false leaks. Call it where a test wants the answer, mid-run included, and compare against a
+  baseline when long-lived resources are legitimately alive.
 - `SpriteBatch`'s captured `LastBatch()` draw-call data (texture/rects/color/rotation/effects per
   `Draw()` call) is implemented but not yet separately asserted on by any test — only the aggregate
   `drawCallCount` is checked.
@@ -171,7 +186,8 @@ which is just a position counter). `FormatTraceLogDiff()` renders either a one-l
 summary or the first diverging entry from each log side-by-side, plus an entry-count note if the
 logs are different lengths.
 
-See `plans/plan_headless.md` for the full task-by-task status and design rationale.
+The task record (`HEADLESS-1`..`HEADLESS-64`, 2026-07-13) is in Git history; comments cite its rows
+as "HEADLESS-nn".
 
 ## Real-world validation
 

@@ -556,7 +556,7 @@ Separate contract, separate selection variable, per design decision 7.
 This phase is what makes the abstraction *real* rather than nominal: a contract with one
 implementation is just indirection. `HeadlessPlatform` is deliberately chosen as the second
 implementation instead of SDL2 — it is genuinely useful now (CI without a display server, the
-same argument `plan_headless.md` already made for the renderer), it is cheap, and it exercises
+same argument the former `plan_headless.md` made for the renderer), it is cheap, and it exercises
 every capability-refusal path that a limited platform would.
 
 | ID | Task | Status | Acceptance criteria / Notes |

@@ -518,7 +518,7 @@ namespace CNA::Internal::Renderers::Headless
 
     bool HeadlessEffectRenderer::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
     {
-        // Never actually compiled -- accepts any source string (plans/plan_headless.md HEADLESS-16). A genuinely
+        // Never actually compiled -- accepts any source string (HEADLESS-16). A genuinely
         // empty source on both stages is still flagged in Validation/Trace mode since that is
         // never a legitimate custom-effect call from anywhere in this codebase.
         Require(state_, !vertSrc.empty() || !fragSrc.empty(),

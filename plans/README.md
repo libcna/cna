@@ -236,7 +236,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   renderers. Deleted on 2026-10-28 (Git history only); the DirectX9 contract is pinned by
   `directx9_frame_recovery_test.cpp`, `directx9_resize_state_test.cpp` and
   `spritebatch_presentation_test.cpp`.
-- [`plan_headless.md`](plan_headless.md) — headless rendering.
+- `plan_headless.md` — the `HEADLESS` renderer (`HEADLESS-1`..`HEADLESS-64`, 2026-07-13): every row
+  done, `HEADLESS-19`/`24` permanently narrowed by the renderer interface; deleted on 2026-10-29
+  (Git history only). Purpose, modes, the trustworthy-stand-in rule and every limitation, the
+  untested `LastBatch()` data included, are [`../docs/headless-renderer.md`](../docs/headless-renderer.md);
+  comments cite rows as "HEADLESS-nn".
 - `plan_pre_sdlgpu_closeout.md` — PSG-0001..0013 (2026-09-23): the WebGPU merge, the bounded
   GoogleTest runner (`../tools/tests/run_gtest_bounded.sh`) and the measured hand-off to the SDL_GPU
   workstream; deleted on 2026-10-28 (Git history only). Comments cite rows as

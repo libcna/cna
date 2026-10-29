@@ -19,12 +19,12 @@ the same scene — a strictly stronger bar than the EasyGL column's ✅. This is
 open). See `docs/directx9-renderer.md` and `docs/d3d9-divergence-report.md` for the full detail this
 column's cells summarize.
 
-The **Headless** renderer (`CNA_GRAPHICS_RENDERER=HEADLESS`, tracked in `../plans/plan_headless.md`) is deliberately
+The **Headless** renderer (`CNA_GRAPHICS_RENDERER=HEADLESS`, [`headless-renderer.md`](headless-renderer.md)) is deliberately
 **not** a column in this matrix: it never renders a single pixel, so none of the below
 correctness/parity rows are meaningful for it. It exists for a different purpose entirely — running
 game logic headlessly (no window, no GPU, no display server) for fast CI tests — and validates
 itself via argument checks, resource-lifecycle tracking, and draw-call/state-change counters instead
-of pixel output. See `plans/plan_headless.md` for its own status.
+of pixel output. See [`headless-renderer.md`](headless-renderer.md) for its own status.
 
 The **Software** renderer (`CNA_GRAPHICS_RENDERER=SOFTWARE`, tracked in
 `../plans/plan_software.md`) is a first-class independent CPU renderer for the classic XNA/Core

@@ -1042,7 +1042,7 @@ Stated use cases (verbatim, translated): headless CI; deterministic screenshot t
 without a GPU; verifying basic XNA primitive operations; server environments; diagnosing
 differences between backends; fallback when GPU initialization fails.
 
-**How this differs fundamentally from the `HEADLESS` backend** (see `plan_headless.md`): Headless
+**How this differs fundamentally from the `HEADLESS` backend** (see `docs/headless-renderer.md`): Headless
 proves "this code ran, with these arguments, this many times, and nothing leaked" but never
 produces a real pixel — `ReadBackbuffer()` just reports the last `Clear()` color for every pixel.
 Software is the opposite: it actually rasterizes real triangles into a real, CPU-owned RGBA8
@@ -1079,7 +1079,7 @@ when run under Xvfb.
    renderer's stated value proposition; adding such a mode would be a new presentation product,
    not Software/EasyGL parity work.
 4. **No window by default**, mirroring `HEADLESS`'s own `GraphicsDevice`/`Game::Run()` integration
-   (`plan_headless.md` design decision 2): `#ifdef CNA_BACKEND_HEADLESS` guards in
+   (the former `plan_headless.md`'s design decision 2): `#ifdef CNA_BACKEND_HEADLESS` guards in
    `GraphicsDevice.cpp`'s constructor and `createOrAttachWindow()` are extended to also cover
    `CNA_BACKEND_SOFTWARE` (`#if defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_SOFTWARE)`) —
    a small, mechanical extension of an existing pattern, not a new one.
@@ -1108,7 +1108,7 @@ when run under Xvfb.
 
 ## Historical v1 execution order
 
-1. Phase S1 (CMake integration + skeleton) unblocks everything else, exactly as `plan_headless.md`
+1. Phase S1 (CMake integration + skeleton) unblocks everything else, exactly as the former `plan_headless.md`
    Phase N1 did for that backend.
 2. Phase S2 (framebuffer/render targets) and Phase S3 (vertex/index storage + format inference) are
    independent of each other and can be done in either order, but both must land before Phase S4.
@@ -1118,7 +1118,7 @@ when run under Xvfb.
    features on top.
 4. Phase S5 (blending/texture/vertex-color) builds directly on S4's per-pixel loop.
 5. Phase S6 (effect integration, SpriteBatch reuse) is the actual point of this backend — like
-   `plan_headless.md` Phase N6, it should be verified continuously against Phase S4/S5's already-
+   the former `plan_headless.md`'s Phase N6, it should be verified continuously against Phase S4/S5's already-
    proven core, not left to the end.
 6. Phase S7 (tests) — per this project's own convention (`CLAUDE.md`), add test coverage in the
    same task that implements each capability, not bolted on afterward. `SOFTWARE-60`'s pixel tests
