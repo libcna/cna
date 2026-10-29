@@ -3,7 +3,7 @@
 // plans/plan_runtimerenderer.md phase P11: EasyGL's GL profile as a RUNTIME value.
 //
 // EasyGL is the one implementation family serving several public renderer identities -- OPENGLES3,
-// OPENGL33 and WEBGL2 (plans/plan_glbackends.md). Until this header existed the choice
+// OPENGL33 and WEBGL2 (docs/renderer-registry.md). Until this header existed the choice
 // between them was a compile definition (CNA_GL_PROFILE_*), which is why two of them could never
 // coexist in one binary: the same translation units would have had to be compiled twice with
 // different defines, an ODR violation rather than a mere name clash.

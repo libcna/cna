@@ -672,7 +672,7 @@ namespace CNA::Internal::Renderers::EasyGL
         }
     }
 
-    // plans/plan_glbackends.md Phase B (GLB-10/11): every embedded shader in this file is authored
+    // GLB-10/11: every embedded shader in this file is authored
     // once, against GLSL ES 3.00 (the OPENGLES3/WEBGL2 profiles' native syntax). Body syntax
     // (in/out, texture(), no varying/attribute) is shared with desktop GLSL 3.30 core -- only
     // the "#version ...\nprecision ... float;\n" header two lines differ, so OPENGL33 does not
@@ -692,7 +692,7 @@ namespace CNA::Internal::Renderers::EasyGL
     // is only ever invoked when IsDesktopCoreProfile() holds.
     namespace
     {
-        // plans/plan_glbackends.md GLB-40: desktop GL core profile -- unlike GLES/WebGL, which always
+        // GLB-40: desktop GL core profile -- unlike GLES/WebGL, which always
         // honor a vertex shader's gl_PointSize output automatically for GL_POINTS primitives --
         // requires this capability explicitly enabled, or gl_PointSize is silently ignored and
         // every point renders at the fixed 1.0-pixel default size. Found investigating why
@@ -5058,7 +5058,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // profile a RUNTIME value so all three identities can be compiled in at once, so each guard
         // becomes the equivalent runtime question about the profile in hand.
 
-        // plans/plan_glbackends.md GLB-8: context attributes depend on which of the 3 public GL
+        // GLB-8: context attributes depend on which of the 3 public GL
         // profiles this renderer serves. OPENGLES3/WEBGL2 request GLES 3.0; OPENGL33 requests a
         // desktop GL 3.3 core profile context instead of an ES profile.
         // RequestedGlContext() carries those version/profile requirements together with the

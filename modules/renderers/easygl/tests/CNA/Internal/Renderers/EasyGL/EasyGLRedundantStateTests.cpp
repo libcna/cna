@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-// plans/plan_glbackends.md GLB-41: GraphicsDevice re-applies all sixteen pixel samplers and
+// GLB-41: GraphicsDevice re-applies all sixteen pixel samplers and
 // the rasterizer state before every draw. EasyGL records what it last wrote, so an unchanged state
 // costs no GL call -- under WebGL every call crosses into JavaScript, and the anisotropy limit and
 // viewport reads were synchronous round trips to the GPU process. These tests pin both halves of

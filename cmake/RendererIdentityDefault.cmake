@@ -14,7 +14,7 @@
 # Restating the rule in the second file would be one line of duplication and one future evening
 # spent working out why an SDL-free configuration stopped being SDL-free when the default moved.
 #
-# plans/plan_glbackends.md: EasyGL is an internal implementation family, not a public renderer
+# docs/renderer-registry.md: EasyGL is an internal implementation family, not a public renderer
 # name. It is selected publicly via one of 3 GL-profile names -- OPENGLES3/OPENGL33
 # (desktop/mobile, non-Emscripten) and WEBGL2 (Emscripten only). WEBGL2 is the default under
 # Emscripten. Windows, macOS and iOS default to SDL_GPU, CNA's modern native path (SDL's Direct3D 12

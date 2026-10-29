@@ -124,7 +124,7 @@ endif()
 # No-op on macOS and on every non-Apple target.
 cna_apple_validate_renderer("${CNA_GRAPHICS_RENDERER}")
 
-# plans/plan_glbackends.md Phase A/GLB-7: the 3 GL-family public renderers (OPENGLES3/OPENGL33
+# GLB-7: the 3 GL-family public renderers (OPENGLES3/OPENGL33
 # desktop, WEBGL2 Emscripten) share one internal implementation (EasyGL, on top of the sibling
 # easy-gl library) -- this block sets it up once regardless of which of the 3 was selected.
 if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
@@ -190,11 +190,11 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL 
     set(RENDERER_TARGET "cna_renderer_easygl")
     # CNA_RENDERER_EASYGL is the internal implementation identity -- existing #ifdef
     # CNA_RENDERER_EASYGL guards elsewhere in the codebase keep working unmodified regardless of
-    # which of the 3 public GL profiles below was selected (plans/plan_glbackends.md GLB-3).
+    # which of the 3 public GL profiles below was selected (GLB-3).
     list(APPEND _cna_identity_defines CNA_RENDERER_EASYGL)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_EASYGL")
     # CNA_GL_PROFILE_* selects the GL context/shader profile within the shared EasyGL
-    # implementation -- see plans/plan_glbackends.md Phase B/GLB-8 for how EasyGLRenderer.cpp
+    # implementation -- see GLB-8 for how EasyGLRenderer.cpp
     # uses this to choose context-creation attributes and shader headers.
     list(APPEND _cna_identity_defines "CNA_GL_PROFILE_${CNA_GRAPHICS_RENDERER}")
     # FX-062: compiled XNA effects on this renderer go through MojoShader's own OpenGL

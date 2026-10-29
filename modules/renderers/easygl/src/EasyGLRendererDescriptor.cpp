@@ -2,7 +2,7 @@
 //
 // EasyGL is the one family serving MORE than one public identity: OPENGLES3, OPENGL33
 // (desktop/mobile) and WEBGL2 (Emscripten) all compile into this same archive, told apart
-// by the CNA_GL_PROFILE_* compile definition (plans/plan_glbackends.md). getCurrentGraphicsRendererType()
+// by the CNA_GL_PROFILE_* compile definition (docs/renderer-registry.md). getCurrentGraphicsRendererType()
 // already resolves that to the right one of the three, so the descriptor's identity follows it
 // rather than being hardcoded here. Making the profile itself a RUNTIME choice -- which is what
 // would let two GL profiles coexist in one binary -- is plans/plan_runtimerenderer.md phase P11, not

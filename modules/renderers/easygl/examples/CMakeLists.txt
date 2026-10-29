@@ -31,7 +31,7 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 # EASYGL/VULKAN renderers), so EasyGL's test suite has always additionally required
 # CNA_BUILD_EXAMPLES=ON, unlike every other renderer's test block. Preserved verbatim here as its
 # own self-contained condition rather than silently dropped during the file split.
-# plans/plan_glbackends.md GLB-6: widened to the non-Emscripten public GL profiles
+# GLB-6: widened to the non-Emscripten public GL profiles
 # (OPENGLES3/OPENGL33) -- WEBGL2 is already excluded by the NOT EMSCRIPTEN guard below, matching
 # its Emscripten-only gate in RendererSelection.cmake.
 #

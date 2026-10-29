@@ -500,6 +500,20 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   opens `SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK`, so a change of the system default is whatever SDL3
   does with a default-device stream; the ALSA backend does not reopen a PCM that disappears.
   Neither case has been measured (former AUD-04-010/011; capture devices do report a lost device).
+- **EasyGL re-sends per-draw state the previous draw already set** (performance only; no picture
+  is wrong). GLB-41 removed the sampler, viewport and polygon-mode traffic; two costs remain.
+  GLB-42: the stock-program semantic remap re-specifies a vertex buffer's VAO before each draw and
+  restores the buffer's own layout after it (`ConfigureDeclarationForStockProgramEXT` /
+  `RestoreDeclarationLayoutEXT`) -- in cna-car-simulator's `WEBGL2` scene (1,156 draws, 2026-09-19)
+  about 23,000 `disableVertexAttribArray` and 23,000 `vertexAttribDivisor` calls a frame plus the
+  matching enable/pointer/VAO binds; caching the remapped layout needs every path that relies on the
+  restored one (custom and compiled effects) audited first. GLB-43 (cna-street CNA-F19,
+  2026-09-30): `BindDrawParams` uploads every uniform the stock program declares and rebinds every
+  texture unit on every draw, about 9 µs a draw on either GL renderer, because easy-gl's
+  `Program::set_uniform` and `Texture::active_bind` keep no record. Proposed: a per-program record
+  of the last value at each uniform location (sampler-unit uniforms set once at link) and a per-unit
+  bound-texture record, dropped on context loss, texture deletion and relink as GLB-41's records
+  are, with real-context tests like `EasyGLRedundantStateTests.cpp`.
 - **Three audio reports from the 2026-07-17 audit stay unconfirmed, not open:** high-pitched sound
   effects, missing audio files, and distorted or sped-up gameplay audio. They were never
   reproduced against the game they came from, which is not available. The audit narrowed the

@@ -176,7 +176,12 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   `AsciiPostProcessEffect`, and the plan was deleted on 2026-10-28 (Git history only). The optional
   perf-only `ASCII-42` was not carried forward as active work. Current behavior and migration
   commits are in [`../docs/ascii-post-process-effect.md`](../docs/ascii-post-process-effect.md).
-- [`plan_glbackends.md`](plan_glbackends.md) — OpenGL backend restructuring.
+- `plan_glbackends.md` — EasyGL as an internal family behind public GL identities (`GLB-1`..`GLB-43`,
+  2026-07/09). Every row done, decided against (`GLB-14`, no rename) or moot after the 2026-10-06
+  retirement of `WEBGL1`/`OPENGLES2` (`GLB-37`); deleted on 2026-10-29 (Git history only). Its two
+  open performance rows, `GLB-42`/`GLB-43` (EasyGL's per-draw VAO remap and uniform/texture
+  re-sends), are in `../handoff.md` §5.2; `GLB-25`'s missing `WEBGL2` test run is in
+  [`../docs/webgl2-renderer.md`](../docs/webgl2-renderer.md). Comments cite rows as "GLB-nn".
 - `plan_fna3d.md` — the FNA3D renderer (`FNA3D-0`..`FNA3D-63`, 2026-08/10): every task closed
   except `FNA3D-34`'s native Direct3D 11 and macOS/iOS runs, which need hardware this host does
   not have; deleted on 2026-10-29 (Git history only). The renderer, its divergences from XNA,

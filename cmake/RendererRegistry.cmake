@@ -22,7 +22,7 @@
 # Entries are "<identity>;<namespace>" or "<identity>;<namespace>|<descriptor accessor>"; the
 # accessor defaults to GetDescriptor.
 #
-# EasyGL is the one family serving several identities (plans/plan_glbackends.md), and since
+# EasyGL is the one family serving several identities (docs/renderer-registry.md), and since
 # plans/plan_runtimerenderer.md phase P11 made its GL profile a runtime value, all three can be compiled in
 # at once -- each reached through its own accessor on the single EasyGL target.
 function(_cna_renderer_identity_map out_var)

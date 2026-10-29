@@ -35,6 +35,8 @@ selected context, shader language/profile, and supported platform differ. `EASYG
 an accepted selector, and neither is any retired name: `cmake/RendererIdentities.cmake` refuses a
 retired selector by name, with its reserved value, rather than falling back to a default, and
 `GraphicsRendererSelection` refuses one at run time with a message that says it was retired.
+The family's own examples and tests keep the `easygl_`/`EasyGL_` prefix: it names the shared
+implementation they exercise, whichever of the three profiles builds them (GLB-14).
 
 ## Capability classes
 

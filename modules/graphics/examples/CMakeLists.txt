@@ -145,7 +145,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
     # The 3D house demo exercises the shared BasicEffect 3D path. The target is enabled
     # only with renderers that support every graphics operation used by the scene: a GL-family
     # public renderer (OPENGLES3/OPENGL33/WEBGL2, all implemented by EasyGL -- see
-    # plans/plan_glbackends.md), WEBGPU (its 3D BasicEffect path is verified both natively
+    # docs/renderer-registry.md), WEBGPU (its 3D BasicEffect path is verified both natively
     # and, via this demo, in the browser -- WEBGPU-121), or FNA3D.
     add_executable(cna_house3d_demo house3d_demo.cpp)
 

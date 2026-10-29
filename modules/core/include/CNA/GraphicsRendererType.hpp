@@ -57,7 +57,7 @@ namespace CNA
      * (e.g. static_assert(CNA::getCurrentGraphicsRendererType() == CNA::GraphicsRendererType::OpenGLES3)).
      *
      * The 3 GL-family public renderers (OPENGLES3/OPENGL33/WEBGL2) all share the internal
-     * CNA_RENDERER_EASYGL identity (see plans/plan_glbackends.md) -- the CNA_GL_PROFILE_*
+     * CNA_RENDERER_EASYGL identity (see docs/renderer-registry.md) -- the CNA_GL_PROFILE_*
      * compile definition set alongside it distinguishes which of the 3 public names was selected.
      *
      * @return The active GraphicsRendererType, determined at compile time by CNA_GRAPHICS_RENDERER.

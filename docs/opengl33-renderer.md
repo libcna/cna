@@ -1,11 +1,12 @@
 # OPENGL33 (desktop OpenGL 3.3 core profile) Renderer — Status
 
-`OPENGL33` is one of the three public GL-family `CNA_GRAPHICS_RENDERER` values (introduced by
-`plans/plan_glbackends.md`) — it shares its entire implementation with `OPENGLES3`/`WEBGL2`
-(`modules/renderers/easygl/`, on top of the sibling `easy-gl` library), distinguished at
-compile time by the `CNA_GL_PROFILE_OPENGL33` definition. Unlike the other profiles (all
-OpenGL ES / WebGL, GLSL ES syntax), `OPENGL33` requests a real desktop `SDL_GL_CONTEXT_PROFILE_CORE`
-context, GL 3.3.
+`OPENGL33` is one of the three public GL-family `CNA_GRAPHICS_RENDERER` values (introduced by the GL
+renderer plan, `GLB-1`..`GLB-43`, Git history) — it shares its entire implementation with
+`OPENGLES3`/`WEBGL2` (`modules/renderers/easygl/`, on top of the sibling `easy-gl` library),
+distinguished by its GL profile -- a runtime `GlProfile` (`GlProfile.hpp`) since
+`plans/plan_runtimerenderer.md` P11, with the `CNA_GL_PROFILE_OPENGL33` definition supplying only a
+single-renderer build's default. Unlike the other profiles (all OpenGL ES / WebGL, GLSL ES syntax),
+`OPENGL33` requests a real desktop `SDL_GL_CONTEXT_PROFILE_CORE` context, GL 3.3.
 
 **Status legend:** ✅ implemented and verified; 🟨 code exists but not fully verified; ⬜ not done.
 
@@ -13,12 +14,12 @@ context, GL 3.3.
 
 - ✅ **Context creation** — `EasyGLRenderer`'s constructor requests
   `SDL_GL_CONTEXT_PROFILE_CORE`, major 3 / minor 3 when compiled with `CNA_GL_PROFILE_OPENGL33`
-  (`plans/plan_glbackends.md` GLB-8).
+  (GLB-8).
 - ✅ **Shader compilation** — every embedded shader in `EasyGLRenderer.cpp` is authored once
   against GLSL ES 3.00 syntax; `AdaptGlslEs300ForActiveProfile()` rewrites the
   `#version 300 es` / `precision ... float;` header pair to `#version 330 core` (dropping the
-  precision line) for this profile at first-use time — no shader is duplicated (`plans/plan_glbackends.md`
-  GLB-10/GLB-11).
+  precision line) for this profile at first-use time — no shader is duplicated
+  (GLB-10/GLB-11).
 - ✅ **Real driver verification** — built and ran, against a real desktop Mesa 4.5 core-profile GL
   context (not a mock/headless stub), 7 examples covering `BasicEffect` (default lighting),
   `DualTextureEffect`, `SkinnedEffect`, `SkinnedPbrEffect`, `AlphaTestEffect`,
@@ -33,7 +34,7 @@ context, GL 3.3.
   (all in unrelated Media/Content/XNB/Audio/Video subsystems — no ffmpeg-decodable fixtures/real
   media devices in this sandbox), zero new failures, zero Graphics/EasyGL/shader-related failures.
 - ✅ **Full example/pixel-test suite — all 241 `cna_easygl_test`-registered binaries, not a
-  sample** (`plans/plan_glbackends.md` GLB-22, upgraded from an earlier 7-binary sample). Built all 241
+  sample** (GLB-22, upgraded from an earlier 7-binary sample). Built all 241
   (`cmake --build --target <all 241 names>`, exit 0) and ran every one of them
   (`DISPLAY=:99` Xvfb, from the repo root so relative-path golden-image/fixture lookups resolve
   correctly): **236/241 pass, 0 crash, 5 fail** (updated after the `GLB-40` fix below — was
@@ -59,11 +60,11 @@ context, GL 3.3.
     `#ifdef CNA_GL_PROFILE_OPENGL33`-gated `glEnable` call, loaded via a runtime function pointer
     (matching this project's "no static `libGL` linkage" convention). All 4 of the test's checks
     now `[PASS]` under `OPENGL33`; re-verified no regression under `OPENGLES3`. See
-    `plans/plan_glbackends.md`'s `GLB-40` entry for full detail.
+    `GLB-40`'s plan entry (Git history) for full detail.
 
 ## What's not yet done
 - ⬜ **CI/CTest identity** — `cmake/Tests/EasyGLTests.cmake`'s guard was widened to cover both
-  `OPENGLES3` and `OPENGL33` (`plans/plan_glbackends.md` GLB-6), but there is no dedicated
+  `OPENGLES3` and `OPENGL33` (GLB-6), but there is no dedicated
   `OPENGL33`-only CTest label distinguishing it from an `OPENGLES3` run.
 - ⬜ **Non-Linux desktop verification** — only verified on Linux (Mesa). Windows/macOS desktop GL
   3.3 core-profile drivers (especially older/proprietary NVIDIA/AMD Windows drivers, which are
@@ -71,7 +72,7 @@ context, GL 3.3.
 
 ## Relationship to the other GL-family renderers
 
-See `plans/plan_glbackends.md` §2's table. In short: `OPENGLES3` is today's original `EasyGL` public
+See `docs/renderer-registry.md`'s identity table. In short: `OPENGLES3` is today's original `EasyGL` public
 renderer renamed (GLES 3.0, unchanged behavior); `WEBGL2` is the same GLES 3.0 path under
 Emscripten.
 
