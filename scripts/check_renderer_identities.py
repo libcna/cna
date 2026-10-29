@@ -55,7 +55,6 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # into something this check cannot see is itself a failure, reported as such.
 COUNTED_DOCUMENTS = {
     "docs/runtime-renderer-selection.md": True,
-    "docs/renderer-expansion-candidates.md": True,
     "docs/physical-modules.md": True,
     # This one deliberately states no total: it used to, and now names the registry instead, which
     # is the outcome this check recommends in its own failure message. Listed rather than dropped
