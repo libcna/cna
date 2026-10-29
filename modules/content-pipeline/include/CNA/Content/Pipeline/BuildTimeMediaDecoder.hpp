@@ -134,8 +134,8 @@ namespace CNA::Content::Pipeline
          * compiled video needs no decoder -- so the canonical `VideoImporter` takes its probe from
          * whoever registers it. This is that probe. It answers nothing when this build has no
          * decoder or when the file is not one it can read, which leaves the processor requiring
-         * the metadata as parameters exactly as it did before (plans/plan_xnapipeline_parity.md
-         * `XNAPP-021`).
+         * the metadata as parameters exactly as it did before
+         * (`XNAPP-021`).
          *
          * @return A probe suitable for RegisterVideoContentPipeline().
          */
@@ -147,7 +147,7 @@ namespace CNA::Content::Pipeline
          * The same arrangement `MakeVideoMetadataProbe` has: `cna_content` owns no decoder, so the
          * importer takes this from whoever registers it. Without it a `Song` carries duration
          * zero, which is what a genuine XNA 4.0 runtime then reports
-         * (plans/plan_xnapipeline_parity.md `XNAPP-281`).
+         * (`XNAPP-281`).
          *
          * @return The probe, or an empty function when this build has no media decoder.
          */
@@ -161,7 +161,7 @@ namespace CNA::Content::Pipeline
          * come back at 44100 Hz with the channel count preserved, which is the rate the genuine
          * importer reports for this route (measured, `tests/reference/xna40/media`, cases `mp3/*`;
          * `docs/xna-content-pipeline-media.md` section 2), and with no loop region, which is what
-         * the same measurement answers (plans/plan_xnapipeline_parity.md `XNAPP-332`).
+         * the same measurement answers (`XNAPP-332`).
          *
          * @return The decoder, or an empty function when this build has no media decoder.
          */

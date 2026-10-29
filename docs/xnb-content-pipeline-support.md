@@ -29,7 +29,7 @@ FNA's own `ContentManager`/`ContentReader`/`ContentTypeReaderManager` read-side 
 scope permanently -- this document said so, and said CNA "has no need to generate them itself" --
 and that is **no longer true**. CNA now has a native C++ XNB writer and a content pipeline that
 compiles source assets to `.xnb`: see `docs/xnb-interoperability.md` for what it writes and how
-strongly each type is verified, and `plans/plan_xnapipeline.md` for the task history. This document
+strongly each type is verified (the task history, `XNAP-*`, is in Git history). This document
 remains about the **read** side only.
 
 ## Getting started: registering the built-in readers

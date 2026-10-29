@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-45: a fuzz corpus over the *writer's inputs*.
+// XNAP-45: a fuzz corpus over the *writer's inputs*.
 //
 // XnbContainerFuzzTests.cpp mutates finished `.xnb` bytes and loads them, which exercises the
 // reader. This is the other direction, and it is the one the writer's own limits exist for: the

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-160, 161, 136 and 200: the audio intermediate types -- AudioContent,
+// XNAPP-160, 161, 136 and 200: the audio intermediate types -- AudioContent,
 // AudioFormat and the three enumerations -- against what the genuine XNA 4.0 pipeline answers for
 // the same WAV files (tests/reference/xna40/audio/audio-content-oracle.json, cases enums/*,
 // audiocontent/* and refusals/*).
@@ -1037,7 +1037,7 @@ TEST(XnaWavImporter, ImportAndItsRefusalsMatchXna)
     EXPECT_THROW((void)importer.Import(garbage, context), InvalidContentException);
 }
 
-// plans/plan_xnapipeline_parity.md XNAPP-021, Phase 13: what a sound effect answers for each of
+// XNAPP-021, Phase 13: what a sound effect answers for each of
 // XNA's three targets.
 //
 // This is the one target leg measured so far where the target changes the answer, and it changes

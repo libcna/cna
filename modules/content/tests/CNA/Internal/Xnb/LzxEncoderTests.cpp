@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-81: CNA's LZX encoder.
+// XNAP-81: CNA's LZX encoder.
 //
 // Three independent oracles judge it, and they are deliberately independent:
 //
@@ -490,7 +490,7 @@ TEST(LzxEncoderTest, LzxIsAcceptedOnAnXna40TargetWhereLz4IsNot)
 
 // -- what a genuine XNA 4.0 runtime requires ----------------------------------------------------
 
-// plans/plan_xnapipeline_parity.md XNAPP-281. Every compressed payload ends with five zero bytes,
+// XNAPP-281. Every compressed payload ends with five zero bytes,
 // and this test exists because nothing in CNA could have noticed they were missing.
 //
 // CNA's own decoder stops once it has the declared number of decompressed bytes and never reads

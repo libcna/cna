@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-240, XNAPP-242: reading an XNA content project.
+// XNAPP-240, XNAPP-242: reading an XNA content project.
 //
 // A `.contentproj` is an MSBuild project and CNA does not host MSBuild. What it is, for building
 // content, is a list of source assets with their importer, processor and parameters plus a few

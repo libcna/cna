@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-262: the build-time XMA codec seam.
+// XNAPP-262: the build-time XMA codec seam.
 //
 // XMA is the one format in this plan CNA cannot produce and cannot be made to produce here. The
 // audit is recorded in docs/xma-encoder-backend.md; what this file is, is the answer to the second

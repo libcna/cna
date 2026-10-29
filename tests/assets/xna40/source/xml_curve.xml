@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    plans/plan_xnapipeline_parity.md XNAPP-260: a framework-defined reference type with a nested
+    XNAPP-260: a framework-defined reference type with a nested
     collection, which is the shape a real game's .xml asset usually has. A curve key is five
     tokens: position, value, tangentIn, tangentOut, continuity.
 -->

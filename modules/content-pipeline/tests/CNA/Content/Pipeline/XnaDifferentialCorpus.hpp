@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// plans/plan_xnapipeline_parity.md XNAPP-265/XNAPP-267 (§23): what the two differential corpora
+// XNAPP-265/XNAPP-267: what the two differential corpora
 // share.
 //
 // `tools/xna-pipeline-oracle/differential/` runs Microsoft's own `BuildContent` over a committed
@@ -327,7 +327,7 @@ namespace CNA::Tests::XnaDifferential
             // bytes on every machine. The corpus names the family Wine already resolves for XNA;
             // the same face is put beside the description under that name, which is where CNA
             // looks first. One committed copy of the font, presented to each side the way that
-            // side resolves one (plans/plan_xnapipeline_parity.md XNAPP-267).
+            // side resolves one (XNAPP-267).
             if (sourceExtension == ".spritefont")
             {
                 std::error_code copyError;

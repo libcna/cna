@@ -330,7 +330,7 @@ static int validate_wav_import(void)
     /* A build-time importer gives a loopless source the whole sound, as XNA's
        SoundEffectProcessor does, so the two frames here are the loop region rather than
        nothing (CNA::Content::Cnb::SoundEffectLoopPolicy::WholeSoundWhenUnset,
-       plans/plan_xnapipeline_parity.md XNAPP-266). A runtime reader keeps what its file
+       XNAPP-266). A runtime reader keeps what its file
        declares, which CnbSoundEffectCodecTests covers separately. */
     REQUIRE(info.loop_start == 0U && info.loop_length == 2U);
     {

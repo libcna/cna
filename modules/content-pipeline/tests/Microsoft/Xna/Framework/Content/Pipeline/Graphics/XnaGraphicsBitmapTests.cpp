@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-090..092, 098: the BitmapContent family, the mipmap
+// XNAPP-090..092, 098: the BitmapContent family, the mipmap
 // chains, the TextureContent types and VectorConverter against what the genuine XNA 4.0 pipeline
 // measured (tests/reference/xna40/graphics/graphics-content-oracle.json). Layouts, conversions,
 // sizes, messages and tables are compared exactly; resampled pixels are compared within a

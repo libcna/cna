@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-160, XNAPP-161: black-box behaviour oracle for the XNA 4.0
+// XNAPP-160, XNAPP-161: black-box behaviour oracle for the XNA 4.0
 // content pipeline's audio intermediate types -- AudioContent, AudioFormat and the three
 // enumerations -- and for what ConvertFormat does at each quality.
 //
@@ -408,7 +408,7 @@ namespace Cna.Xna40.AudioOracle
             // hands the file to the Windows Media encoder, which spins forever under this Wine
             // prefix -- eleven minutes of full-core CPU and a zero-byte output before the run was
             // killed -- and the second needs the Xbox 360 XMA encoder the Windows install does not
-            // carry. Both stay EXTERNAL_BLOCKED; see plans/plan_xnapipeline_parity.md XNAPP-161.
+            // carry. Both stay EXTERNAL_BLOCKED; see XNAPP-161.
             // ---- refusals ------------------------------------------------------------------------
             Record("refusals/missing_file", () =>
             {

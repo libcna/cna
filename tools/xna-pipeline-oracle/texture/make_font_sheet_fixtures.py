@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plans/plan_xnapipeline_parity.md XNAPP-139: the font sheets `FontTextureProcessor` reads.
+"""XNAPP-139: the font sheets `FontTextureProcessor` reads.
 
 XNA's `FontTextureProcessor` takes a texture whose glyphs are separated by magenta and turns it
 into a `SpriteFont`. These four sheets are what that behaviour was measured from, and each answers

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xnapipeline_parity.md XNAPP-011: compile and run the XNA 4.0 Content Pipeline
+# XNAPP-011: compile and run the XNA 4.0 Content Pipeline
 # public-API oracle against a legally installed XNA Game Studio 4.0 and write the inventory.
 #
 # The oracle is plain C# with no XNA compile-time reference, so it is compiled here with mono's

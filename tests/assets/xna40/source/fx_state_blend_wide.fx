@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-191: every blend state this corpus classifies, in one
+// XNAPP-191: every blend state this corpus classifies, in one
 // pass, so the container's dense numbering for each is read rather than assumed and the group bit
 // they all produce is confirmed on more than one member.
 float4x4 WorldViewProjection;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-139: the `FontTextureProcessor` route.
+// XNAPP-139: the `FontTextureProcessor` route.
 //
 // This is the twelfth of XNA's twelve processors and the last one the canonical graph could not
 // route: the class existed and a build could not name it, so a `.contentproj` asking for it was

@@ -7,7 +7,7 @@ namespace CNA::Internal::Xnb
 {
     /**
      * @brief Sanity bounds consulted by every count-driven `.xnb` write
-     *        (plans/plan_xnapipeline.md `XNAP-11`).
+     *        (`XNAP-11`).
      *
      * The writer's inputs are build-time content, which is no more trustworthy than a runtime
      * asset: a source file, an imported document, or a processor parameter can all carry a count
@@ -51,7 +51,7 @@ namespace CNA::Internal::Xnb
 
     /**
      * @brief Rejects a limit set that would disable the ceilings it is supposed to impose
-     *        (plans/plan_xnapipeline.md `XNAP-85`).
+     *        (`XNAP-85`).
      *
      * Every field is signed, and every check that consults one casts it to `std::size_t`. A zero
      * or negative value therefore does not mean "small" -- it means "effectively unbounded",

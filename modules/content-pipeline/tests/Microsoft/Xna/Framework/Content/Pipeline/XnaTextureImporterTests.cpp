@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-166: TextureImporter -- what each source format becomes --
+// XNAPP-166: TextureImporter -- what each source format becomes --
 // against what the genuine XNA 4.0 importer answers for the same four pixels
 // (tests/reference/xna40/graphics/graphics-content-oracle.json, cases textureimporter/*).
 //

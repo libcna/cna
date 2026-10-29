@@ -19,7 +19,7 @@ namespace CNA::Content::Pipeline
      * Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentCompiler before
      * the build runs -- its serializer for reading it and its `ContentTypeWriter` for writing it.
      * Everything this route needed already existed; what was missing was the route
-     * (plans/plan_xnapipeline_parity.md `XNAPP-260`).
+     * (`XNAPP-260`).
      *
      * Three registrations, and no second build engine:
      *

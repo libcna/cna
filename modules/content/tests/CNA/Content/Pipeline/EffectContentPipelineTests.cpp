@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-84: the compiled-effect source route.
+// XNAP-84: the compiled-effect source route.
 //
 // The point of these tests is the boundary as much as the route. CNA serializes bytecode it is
 // given; it does not compile HLSL, and `docs/fx-compiled-effects.md` §1 records that as a standing decision

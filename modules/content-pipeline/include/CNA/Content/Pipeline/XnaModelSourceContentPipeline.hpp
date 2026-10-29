@@ -5,8 +5,8 @@
 
 /**
  * @file
- * @brief The canonical `.x` and `.fbx` source routes (plans/plan_xnapipeline_parity.md
- *        `XNAPP-021`, Phases 15 and 16).
+ * @brief The canonical `.x` and `.fbx` source routes
+ *        (`XNAPP-021`, Phases 15 and 16).
  *
  * The two model readers and the XNA `ModelProcessor` were implemented and measured against the
  * genuine runtime before this file existed, and none of them was registered: `XnaComponentNames`

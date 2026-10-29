@@ -11,7 +11,7 @@ namespace CNA::Content::Pipeline
 {
     /**
      * @brief How much of the source an XMA encode keeps
-     *        (plans/plan_xnapipeline_parity.md `XNAPP-262`).
+     *        (`XNAPP-262`).
      *
      * The three levels XNA's `ConversionQuality` has, spelled here rather than taken from the
      * façade so the seam stays free of the XNA type -- exactly as @ref EffectSourceProfile is its

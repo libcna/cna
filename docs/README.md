@@ -66,7 +66,7 @@ on it) rather than assuming either way.
   Unicode paths, custom extensions, and the exact stable/experimental boundary.
 - **[`xna-content-pipeline-compat-api.md`](xna-content-pipeline-compat-api.md)** — the design
   contract of the `Microsoft::Xna::Framework::Content::Pipeline` façade over that engine
-  (`plans/plan_xnapipeline_parity.md`); `xna-content-pipeline-parity-report.md` is the generated
+  (`XNAPP-*`); `xna-content-pipeline-parity-report.md` is the generated
   member-by-member parity report.
 - **[`xna-content-pipeline-migration.md`](xna-content-pipeline-migration.md)** — porting an
   existing XNA content project: building the `.contentproj` you already have, the source-directory

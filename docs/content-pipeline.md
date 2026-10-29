@@ -122,7 +122,7 @@ property the processor has not got, a value it cannot convert to that property's
 that nothing else in a build will notice, and refusing is how an author finds out.
 
 Microsoft's XNA warns and carries on for all three, measured case by case in
-[`plans/plan_xnapipeline_parity.md`](../plans/plan_xnapipeline_parity.md) `XNAPP-267`. A host that
+`XNAPP-267` (`tests/reference/xna40/differential-errors/`). A host that
 has to reproduce that behaviour passes `--xna-compatible`:
 
 ```bash
@@ -467,7 +467,7 @@ the fingerprint, so changing one rebuilds.
 **Not verified against a genuine Microsoft `fxc`.** None exists in the environment this was
 written in. The route's own tests substitute the compiler, or drive a project-owned stand-in
 across a real process boundary; neither is a claim about `fxc` compatibility
-(`plans/plan_xnapipeline.md` `XNAP-A4`).
+(`XNAP-A4`).
 
 ### glTF scenes and generated children
 
@@ -1200,7 +1200,7 @@ a cross-cutting profile is justified only after more than a label is shared.
 One route now looks at the container it is building for, and only that far: a `.spritefont`'s glyph
 atlas is block-compressed to DXT3 when the build is producing an `.xnb`, because XNA's own
 `FontDescriptionProcessor` hands the writer a DXT3 atlas -- measured over seven descriptions at
-five sizes (`plans/plan_xnapipeline_parity.md` `XNAPP-182`). A `.cnb` keeps the lossless 8-bit
+five sizes (`XNAPP-182`). A `.cnb` keeps the lossless 8-bit
 atlas: that container is CNA's own and nothing about it obliges a 2010 memory budget. The
 difference is not marginal, 16 KB against 128 KB for a 95-glyph font, which is why it is reproduced
 rather than left as a divergence.

@@ -2002,7 +2002,7 @@ TEST(ContentPipelineCliTest, VideoBuildRequiresExplicitFrameMetadata)
     // Which sentence appears depends on whether this build has a media decoder: with one, the
     // processor says it could not read the file and names the parameters that would let the build
     // proceed anyway; without one, it says the parameters are required. Both name 'width', which
-    // is the part that is true either way (plans/plan_xnapipeline_parity.md XNAPP-021).
+    // is the part that is true either way (XNAPP-021).
     EXPECT_NE(log.find("'width'"), std::string::npos) << log;
     EXPECT_FALSE(std::filesystem::exists(output));
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-031..042, XNAPP-045: behaviour and compile-parity tests
+// XNAPP-031..042, XNAPP-045: behaviour and compile-parity tests
 // for the pipeline-core facade -- every type here is an XNA 4.0 public type, exercised through
 // the C++ spelling docs/xna-content-pipeline-compat-api.md defines, and bridged into the one
 // canonical registry.

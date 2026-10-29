@@ -59,7 +59,7 @@ way to repeat the experiment after scheduler changes.
 
 ## XNAP-93: XNB output and texture-policy costs
 
-> Status: developer performance evidence for `plans/plan_xnapipeline.md` `XNAP-93`, measured
+> Status: developer performance evidence for `XNAP-93`, measured
 > 2026-09-03. Not a released guarantee and not a CI threshold.
 
 These are end-to-end `cna-content` wall-clock times — process start, source decode, processing,
@@ -89,7 +89,7 @@ What the differences say:
   endpoint seeds per block (the colour bounding box and the most distant texel pair) rather than
   one, which is what stops a red-and-blue block collapsing to flat magenta. `refinementRounds` is
   the dial — 0 skips the least-squares refinement entirely — and quality is recorded in
-  `plans/plan_xnapipeline.md` `XNAP-53`.
+  `XNAP-53`.
 - **LZ4 runs at roughly 20 MB/s** and took this texture to 85% of its uncompressed size; the
   synthetic source has per-texel noise, so it is close to a worst case. A flat 32x32 texture goes
   from 4283 to 478 bytes.

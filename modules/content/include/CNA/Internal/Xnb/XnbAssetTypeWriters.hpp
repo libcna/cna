@@ -21,7 +21,7 @@ namespace CNA::Internal::Xnb
 {
     /**
      * @brief A `Texture2D` asset ready for serialization
-     *        (plans/plan_xnapipeline.md `XNAP-23`).
+     *        (`XNAP-23`).
      *
      * `XnbTextureData` already carries a @ref XnbTextureKind discriminant, but a registry keyed by
      * C++ type needs three distinct types to select between `Texture2DReader`, `Texture3DReader`
@@ -58,8 +58,8 @@ namespace CNA::Internal::Xnb
     };
 
     /**
-     * @brief An already-compiled `Effect` ready for serialization (plans/plan_xnapipeline.md
-     *        `XNAP-29`).
+     * @brief An already-compiled `Effect` ready for serialization
+     *        (`XNAP-29`).
      *
      * The writer serializes bytecode it is given; it never compiles shader source and never
      * embeds source text pretending to be bytecode. Producing bytecode a genuine XNA 4.0 runtime

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    plans/plan_xnapipeline_parity.md XNAPP-021: the committed .xml source.
+    XNAPP-021: the committed .xml source.
 
     A list of strings is the shape XmlImporter answers with no type of its own to build: the
     importer builds whatever the document's Asset Type names, and this one names the type the

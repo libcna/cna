@@ -129,7 +129,7 @@ namespace CNA::Internal::Graphics
         // before anything is sized from it: a mutated header naming 1 929 379 840 levels would
         // otherwise reach `resize` and ask for forty-odd gigabytes of empty vectors, which is not
         // a refusal, a crash or a diagnostic -- it is a build that stops answering
-        // (plans/plan_xnapipeline_parity.md XNAPP-290).
+        // (XNAPP-290).
         std::uint32_t maximumLevels = 1u;
         for (std::uint32_t side = std::max({result.width, result.height, result.depth});
              side > 1u; side >>= 1)

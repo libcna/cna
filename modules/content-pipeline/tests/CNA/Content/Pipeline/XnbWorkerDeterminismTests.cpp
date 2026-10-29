@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-44: identical inputs produce identical files, across worker
+// XNAP-44: identical inputs produce identical files, across worker
 // counts and across process runs.
 //
 // The row's remaining scope was "the multi-worker CLI case", and the only existing coverage

@@ -220,7 +220,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
      * `BlendIndices` are `Byte4`. These types are structs without the `XnaTypeName` member the
      * generic `ContentTypeName` looks for, and their names are already spelled once in
      * `PixelTraits` -- so they are taken from there rather than written a second time
-     * (plans/plan_xnapipeline_parity.md `XNAPP-266`).
+     * (`XNAPP-266`).
      */
     template<typename T>
         requires(!requires { { T::XnaTypeName } -> std::convertible_to<std::string_view>; } &&

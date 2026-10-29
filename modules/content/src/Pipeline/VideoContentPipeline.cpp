@@ -194,7 +194,7 @@ namespace CNA::Content::Pipeline
         // WmvImporter maps onto this importer, so a `.wmv` that the façade accepted had no
         // canonical route and never reached an `.xnb`. This importer does not decode -- it records
         // a reference to media that stays external -- so the container makes no difference to it
-        // (plans/plan_xnapipeline_parity.md XNAPP-021).
+        // (XNAPP-021).
         return {".wmv", ".mp4", ".ogv", ".webm", ".mkv", ".avi", ".mov"};
     }
 

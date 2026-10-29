@@ -28,7 +28,7 @@ namespace CNA::Internal::Xnb
 
     /**
      * @brief One-call entry point producing a complete `.xnb` file image
-     *        (plans/plan_xnapipeline.md `XNAP-16`).
+     *        (`XNAP-16`).
      *
      * Everything the file needs is decided here: the type-reader table is interned in first-use
      * order as the graph is written, shared resources are serialized after the root object, and
@@ -75,7 +75,7 @@ namespace CNA::Internal::Xnb
          * @brief Canonical, assembly-free reader name the root object dispatched to.
          *
          * An `.xnb`'s compatibility identity, recorded from the write itself
-         * (plans/plan_xnapipeline.md `XNAP-99`).
+         * (`XNAP-99`).
          */
         std::string rootReaderName;
     };

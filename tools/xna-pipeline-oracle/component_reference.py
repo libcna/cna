@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xnapipeline_parity.md XNAPP-320: the component reference, generated rather than written.
+"""XNAPP-320: the component reference, generated rather than written.
 
 The parity report answers *is it there*. This answers the question somebody porting a project
 actually asks: **what does this importer accept, what does this processor produce, what are its

@@ -78,7 +78,7 @@ namespace
          * sitting in the same folder that the project does not list is not part of it -- XNA never
          * built it, and building it here produces outputs XNA has not got and, when two unlisted
          * neighbours share a name, refuses a project XNA builds
-         * (plans/plan_xnapipeline_parity.md XNAPP-330).
+         * (XNAPP-330).
          */
         bool onlyConfiguredAssets = false;
 
@@ -457,7 +457,7 @@ namespace
                 // it cannot recognise or convert, and a character the font has no glyph for. This
                 // tool's own default is to refuse both, because each is a mistake in the project
                 // that nothing else in the build will notice
-                // (plans/plan_xnapipeline_parity.md XNAPP-267).
+                // (XNAPP-267).
                 command.strictness = Pipeline::ContentStrictness::XnaCompatible;
             }
             else if (IsOption(argument, "--only-configured-assets"))
@@ -517,7 +517,7 @@ namespace
             }
             else if (IsOption(argument, "--xnb-allow-unverified-xbox"))
             {
-                // plans/plan_xnapipeline.md XNAP-82: the escape hatch has to be reachable from
+                // XNAP-82: the escape hatch has to be reachable from
                 // the tool, or the only way to produce a candidate Xbox file for somebody with
                 // real hardware to test is to write a custom compiler.
                 command.xnbOptions.allowUnverifiedXboxPayloads = true;
@@ -1404,7 +1404,7 @@ namespace
      * check is actually asking is whether the *route* is still the recorded one, and the answer to
      * that is whether the writer still emits what it emitted; anything extra in the record belongs
      * to a nested build, whose own inputs are fingerprinted separately
-     * (plans/plan_xnapipeline_parity.md XNAPP-300).
+     * (XNAPP-300).
      *
      * @param recorded The schemas the manifest entry carries, the node's own and its nested ones.
      * @param declared The schemas this writer emits.
@@ -2524,7 +2524,7 @@ namespace
      * drives -- and that task runs this very coordinator with the project's own platform, profile,
      * compression and per-asset metadata. What this function adds is the two things a command line
      * has to do and a task does not: report what happened, and copy the `Content`/`None` items,
-     * which XNA's targets copy rather than build (plans/plan_xnapipeline_parity.md XNAPP-240).
+     * which XNA's targets copy rather than build (XNAPP-240).
      *
      * @param command The parsed command line.
      * @param createRegistry The registry factory this invocation was given, passed on so a
@@ -2864,7 +2864,7 @@ namespace
         // The host-level facts every component of this build is entitled to know: which target the
         // content is for, which profile it must respect, where the artefacts go, and how strictly
         // this invocation refuses what XNA would only warn about. Built once, before any node runs,
-        // because it is the same for all of them (plans/plan_xnapipeline_parity.md XNAPP-267).
+        // because it is the same for all of them (XNAPP-267).
         Pipeline::ContentBuildEnvironment buildEnvironment;
         switch (command.xnbOptions.platform)
         {
@@ -3414,7 +3414,7 @@ namespace CNA::Content::Pipeline
         // The XMA encoder this process's builds use, attached before any source is discovered.
         // Nothing here needs one -- the built-in `.wav` route writes PCM for every target -- but
         // `AudioContent::ConvertFormat(Xma, ...)` is XNA's own API for asking, and a game's own
-        // processor may call it (plans/plan_xnapipeline_parity.md XNAPP-262).
+        // processor may call it (XNAPP-262).
         ExternalXmaEncoderOptions xma;
         xma.executable = options.xmaEncoderExecutable;
         xma.launcher = options.xmaEncoderLauncher;

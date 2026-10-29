@@ -3,8 +3,8 @@
 > **Generated** by `tools/xna-pipeline-oracle/parity_report.py` from
 > `tests/reference/xna40/content-pipeline-api.json` (the denominator, read from the genuine
 > XNA Game Studio 4.0 Refresh assemblies) and `tests/reference/xna40/content-pipeline-parity-map.json`
-> (CNA's answer). Do not edit by hand; edit the map and regenerate. Task log and decisions:
-> `plans/plan_xnapipeline_parity.md`.
+> (CNA's answer). Do not edit by hand; edit the map and regenerate. Each decision is the note
+> on its row; the task log (`XNAPP-*`) is in Git history.
 
 ## 1. Coverage summary
 

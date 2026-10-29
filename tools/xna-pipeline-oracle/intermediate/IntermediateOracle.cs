@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-074: the black-box oracle for XNA 4.0's intermediate XML
+// XNAPP-074: the black-box oracle for XNA 4.0's intermediate XML
 // serialization.
 //
 // WHAT THIS IS

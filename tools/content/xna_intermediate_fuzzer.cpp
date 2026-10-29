@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-075: fuzz harness for the XNA intermediate-XML reader.
+// XNAPP-075: fuzz harness for the XNA intermediate-XML reader.
 //
 // One entry point deserializes untrusted bytes as every root shape the serializer supports --
 // a described class with members of every kind, `object`, a packed list, a string -- and lets

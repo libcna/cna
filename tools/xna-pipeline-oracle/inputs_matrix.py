@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xnapipeline_parity.md XNAPP-021: the source-extension parity matrix and its gate.
+"""XNAPP-021: the source-extension parity matrix and its gate.
 
 The input-parity denominator is not a list anybody types. It is
 `content-pipeline-api.json`'s `extensionIndex`, read from the `ContentImporterAttribute` metadata

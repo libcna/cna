@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-191: every depth and stencil state this corpus
+// XNAPP-191: every depth and stencil state this corpus
 // classifies, for the same reason as fx_state_blend_wide.fx.
 float4x4 WorldViewProjection;
 

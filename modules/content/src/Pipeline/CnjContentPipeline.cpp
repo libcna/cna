@@ -73,7 +73,7 @@ namespace CNA::Content::Pipeline
             // It matters here because XNA has *one* texture processor over three content types and
             // CNA has three: a `.contentproj` naming TextureProcessor for a cube map carries that
             // processor's parameters, and the cube processor has none of them
-            // (plans/plan_xnapipeline_parity.md XNAPP-255).
+            // (XNAPP-255).
             for (const auto& [name, value] : parameters.Values())
             {
                 static_cast<void>(value);
@@ -187,7 +187,7 @@ namespace CNA::Content::Pipeline
             imported.authoredColorKey = CNA::Internal::ReadCnjColorKey(
                 root, "Texture2D .cnj '" +
                           CNA::Internal::ContentPathToUtf8(context.SourcePath()) + "'");
-            // plans/plan_xnapipeline.md XNAP-96: the processor premultiplies by default now,
+            // XNAP-96: the processor premultiplies by default now,
             // matching XNA 4.0. CNJ version 1 has no premultiplyAlpha member, so what a v1
             // document compiles to is already defined -- straight alpha -- and CompileCnjToCnb
             // pins it. Say so here rather than changing what an existing .cnj means. A build that

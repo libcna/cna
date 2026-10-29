@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plans/plan_xnapipeline_parity.md XNAPP-008: does the provenance gate actually catch anything?
+"""XNAPP-008: does the provenance gate actually catch anything?
 
 A gate that has never failed is a gate nobody has tested. This builds a throwaway Git repository,
 plants one of each thing the gate exists to find, and checks that it finds exactly that -- so the

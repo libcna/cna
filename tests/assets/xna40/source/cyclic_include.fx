@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-267: a source that includes itself.
+// XNAPP-267: a source that includes itself.
 //
 // The only cycle an effect build can actually contain: an `#include` graph that never terminates.
 // A cyclic *content* reference needs two assets and an ExternalReference each way, which the

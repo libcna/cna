@@ -83,7 +83,7 @@ namespace
         return std::vector<std::uint8_t>(fileBytes.begin(), fileBytes.end());
     }
 
-    // plans/plan_xnapipeline.md XNAP-71: the same asset in the form a real content pipeline
+    // XNAP-71: the same asset in the form a real content pipeline
     // writes it -- every field dispatched through the object protocol rather than laid out
     // inline. VideoReader selects between the two forms from the type-reader table's size, and
     // that selection is only meaningful if both forms are actually exercised end to end.
@@ -185,7 +185,7 @@ TEST_F(ContentManagerVideoXnbTest, LoadRealFixtureEndToEndProducesAPlayableVideo
 
 TEST_F(ContentManagerVideoXnbTest, TheObjectReferencedFormLoadsToTheSameValuesAsTheInlineOne)
 {
-    // plans/plan_xnapipeline.md XNAP-71. A real content pipeline dispatches every one of a
+    // XNAP-71. A real content pipeline dispatches every one of a
     // Video's fields through the object protocol; CNA's own hand-built fixtures used the inline
     // form, so until now only one of VideoReader's two branches was ever taken end to end.
     ContentManager cm(nullptr, "tests/assets/media/video");

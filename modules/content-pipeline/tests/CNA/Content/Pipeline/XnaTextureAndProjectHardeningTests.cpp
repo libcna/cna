@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-290: the readers this plan added, under hostile input.
+// XNAPP-290: the readers this plan added, under hostile input.
 //
 // `XnaModelImporterHardeningTests.cpp` did the two modelling readers and
 // `XnaIntermediateSerializerHardeningTests.cpp` the intermediate XML. These are the rest of what

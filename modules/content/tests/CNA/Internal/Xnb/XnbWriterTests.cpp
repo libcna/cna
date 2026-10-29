@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-10/11/12/14/15/16/17/20/21/22/40/41/45: the `.xnb` serializer
+// XNAP-10/11/12/14/15/16/17/20/21/22/40/41/45: the `.xnb` serializer
 // core and its built-in primitive, framework and collection writers.
 //
 // The strongest test in this file is GoldenXna40ListOfStringsIsByteIdentical: CNA writes the same
@@ -592,7 +592,7 @@ TEST_F(XnbWriterTest, GoldenXna40ListOfStringsIsByteIdentical)
 
 TEST_F(XnbWriterTest, GoldenMonoGameTexture2DIsByteIdentical)
 {
-    // plans/plan_xnapipeline.md XNAP-42. The golden test above proves the container and the
+    // XNAP-42. The golden test above proves the container and the
     // collection protocol against Microsoft's own output; this one proves an *asset* writer's
     // field layout against a second, independently produced file -- MonoGame's smallest real
     // Texture2D fixture, a single opaque white pixel, from its own test corpus.
@@ -622,7 +622,7 @@ TEST_F(XnbWriterTest, GoldenMonoGameTexture2DIsByteIdentical)
 
 TEST_F(XnbWriterTest, GoldenMonoGameSoundEffectIsByteIdentical)
 {
-    // plans/plan_xnapipeline.md XNAP-42, third golden. A SoundEffect exercises a different part of
+    // XNAP-42, third golden. A SoundEffect exercises a different part of
     // the format from a texture: a length-prefixed WAVEFORMATEX block whose fields are written
     // individually, then the samples, then the loop region and duration. The sample bytes are
     // taken from the fixture itself -- the claim under test is the *framing*, not that CNA can
@@ -1236,7 +1236,7 @@ TEST_F(XnbWriterTest, ListOfMatrixAndArrayOfVector3RoundTripThroughTheBuiltInReg
 {
     using namespace Microsoft::Xna::Framework;
 
-    // plans/plan_xnapipeline.md XNAP-9D. Both of these instantiations already had readers in
+    // XNAP-9D. Both of these instantiations already had readers in
     // CNA's runtime registry -- a real XNA `Model` names ArrayReader<Vector3> in its own type
     // table -- and neither had a writer, so the writer side was narrower than the reader side for
     // no reason. `XnbArray<T>` is how a registry keyed by C++ type tells `Vector3[]` apart from

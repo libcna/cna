@@ -28,7 +28,7 @@
 /**
  * @file
  * @brief The bridge between the XNA-shaped public API and the canonical engine
- *        (plans/plan_xnapipeline_parity.md `XNAPP-038`–`XNAPP-044`,
+ *        (`XNAPP-038`–`XNAPP-044`,
  *        docs/xna-content-pipeline-compat-api.md §1, §4–§6).
  *
  * Nothing here is XNA API; it is how an importer or processor written against
@@ -436,7 +436,7 @@ namespace CNA::Content::Pipeline
     /**
      * @brief Registers a canonical `.xnb` writer for every type a `ContentCompiler` can write, so
      *        an XNA-shaped processor's output reaches `.xnb` through the one pipeline
-     *        (plans/plan_xnapipeline_parity.md `XNAPP-063`).
+     *        (`XNAPP-063`).
      *
      * One canonical writer is registered per known .NET type name (its stable processed type);
      * each compiles the boxed value with the compiler under the given platform/profile/container

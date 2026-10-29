@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-262: the build-time XMA codec seam.
+// XNAPP-262: the build-time XMA codec seam.
 //
 // XMA is the one format in this plan CNA cannot produce: Microsoft's own Xbox 360 codec, with no
 // public specification sufficient to implement a conforming encoder, no licensable encoder, and

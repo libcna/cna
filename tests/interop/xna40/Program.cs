@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-32/XNAP-33: the Microsoft XNA Game Studio 4.0 interoperability
+// XNAP-32/XNAP-33: the Microsoft XNA Game Studio 4.0 interoperability
 // harness for CNA-generated .xnb files.
 //
 // WHAT THIS IS FOR
@@ -480,7 +480,7 @@ namespace Cna.Xna40.Interop
                 // one of the output families needs the larger one: XNA refuses a Texture3D under
                 // Reach outright -- `XNA Framework Reach profile does not support Texture3D` --
                 // and a corpus that cannot ask about volume textures is not covering that family
-                // (plans/plan_xnapipeline_parity.md XNAPP-281). Every Reach asset loads on a HiDef
+                // (XNAPP-281). Every Reach asset loads on a HiDef
                 // device; the reverse is what does not hold.
                 manager.GraphicsProfile = GraphicsProfile.HiDef;
                 // RunOneFrame() is what a game does, and on some hosts it never reaches device

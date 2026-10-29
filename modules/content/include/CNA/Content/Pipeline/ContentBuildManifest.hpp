@@ -38,7 +38,7 @@ namespace CNA::Content::Pipeline
 
         /**
          * @brief Root `ContentTypeReader` name for an `.xnb` output; empty for a CNB one
-         *        (plans/plan_xnapipeline.md `XNAP-99`).
+         *        (`XNAP-99`).
          *
          * The `.xnb` counterpart of the three CNB fields above. A compiled `.xnb` carries no asset
          * type id and no schema version; the reader its root object dispatches to is what decides

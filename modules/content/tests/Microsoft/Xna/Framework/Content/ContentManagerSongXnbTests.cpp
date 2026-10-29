@@ -111,7 +111,7 @@ TEST_F(ContentManagerSongXnbTest, LoadRealMonoGameFixtureEndToEnd)
     // 3005 ms, cross-checked against the companion .ogg itself: its last Ogg page's granule
     // position is 132480 samples at 44100 Hz = 3004.08 ms. The value this test asserted before
     // (769282 ms, nearly 13 minutes for a 72 KB clip) came from reading the duration's own
-    // Int32Reader dispatch byte as part of the Int32 -- see plans/plan_xnapipeline.md XNAP-70.
+    // Int32Reader dispatch byte as part of the Int32 -- see XNAP-70.
     EXPECT_EQ(song.getDurationProperty().getTicksProperty(),
               System::TimeSpan::FromMilliseconds(3005).getTicksProperty());
 }

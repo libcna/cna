@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    plans/plan_xnapipeline_parity.md XNAPP-267: a description asking for glyphs the font has not
+    XNAPP-267: a description asking for glyphs the font has not
     got.
 
     Liberation Mono covers Latin; this asks for U+4E00..U+4E0F, which is CJK. Whether that is an

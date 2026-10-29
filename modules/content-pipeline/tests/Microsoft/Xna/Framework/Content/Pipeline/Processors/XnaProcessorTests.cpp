@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-130, 131, 137, 138: the processor enumerations, the three
+// XNAPP-130, 131, 137, 138: the processor enumerations, the three
 // texture processors and the pass-through processor against what the genuine XNA 4.0 pipeline does
 // (tests/reference/xna40/graphics/graphics-content-oracle.json, cases processor/* and
 // textureprocessor/*).
@@ -2666,7 +2666,7 @@ TEST(XnaEffectProcessor, DebugModeAutoFollowsTheBuildConfiguration)
     }
 }
 
-// plans/plan_xnapipeline_parity.md XNAPP-021, Phase 13: what a model and a font answer for each
+// XNAPP-021, Phase 13: what a model and a font answer for each
 // of XNA's three targets.
 //
 // The texture route's five legs were measured first, because a texture is the one asset whose
@@ -2771,7 +2771,7 @@ namespace
     }
 }
 
-// plans/plan_xnapipeline_parity.md XNAPP-021, XNAPP-191/192: the `.fx` route against the genuine
+// XNAPP-021, XNAPP-191/192: the `.fx` route against the genuine
 // EffectProcessor, with the compiler XNA itself used.
 //
 // Every other `.fx` test in this tree drives a scripted compiler, which measures the plumbing and

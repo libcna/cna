@@ -536,7 +536,7 @@ TEST(BoundingSphereTest, CreateMergedAdditionalContainsOriginal)
 
 // --- CreateFromPoints against the genuine runtime -------------------------------------------
 //
-// plans/plan_xnapipeline_parity.md XNAPP-266. The sphere is seeded from the widest axis, and when
+// XNAPP-266. The sphere is seeded from the widest axis, and when
 // two axes tie something has to break it. FNA keeps the earlier axis and CNA followed it; XNA keeps
 // the later one, which is why a right triangle's mesh bounding sphere came out mirrored in the
 // model differential. Measured directly rather than inferred from a model

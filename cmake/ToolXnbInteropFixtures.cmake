@@ -1,4 +1,4 @@
-# plans/plan_xnapipeline.md XNAP-30/XNAP-31: writes the CNA-generated XNB corpus and each
+# XNAP-30/XNAP-31: writes the CNA-generated XNB corpus and each
 # fixture's expected-value manifest.
 #
 # Deliberately a tool rather than a test helper: the corpus is committed so that an XNA-capable

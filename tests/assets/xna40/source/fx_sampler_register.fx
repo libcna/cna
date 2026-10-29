@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-191: one sampler, pinned to register s3.
+// XNAPP-191: one sampler, pinned to register s3.
 //
 // The discriminator for what XNA's second header dword holds. If it is a mask of the sampler
 // registers an effect binds, this answers 8; if it merely counts samplers, it answers 1.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xnapipeline_parity.md XNAPP-330: the mission's own definition of done, executed.
+"""XNAPP-330: the mission's own definition of done, executed.
 
 The mission that opened this plan ends with twenty-six conditions, in seven groups, that must all
 hold before the local work can be called complete. Written as prose they are twenty-six claims
@@ -222,10 +222,9 @@ def render(answers):
              "> **Generated** by `tools/xna-pipeline-oracle/final_audit.py`. Twenty-six conditions,"
              " in the mission's own order and words, each checked against the file or the test that"
              " is its evidence. Do not edit by hand. The ctest `XnaPipelineFinalAuditIsGreen` runs"
-             " it. Task log: `plans/plan_xnapipeline_parity.md` `XNAPP-330`.\n",
+             " it (`XNAPP-330`; the task log is in Git history).\n",
              "A check answers whether a row's evidence exists and says what the row claims. Whether"
-             " that evidence *passes* is the test suite's own question, and section 33.1 of the plan"
-             " records the suite's baseline.\n",
+             " that evidence *passes* is the test suite's own question.\n",
              "| # | Group | Condition | | Evidence |",
              "|---:|---|---|---|---|"]
     for index, ((group, statement, _, _), (ok, evidence)) in enumerate(zip(CHECKS, answers), 1):

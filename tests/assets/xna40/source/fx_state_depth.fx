@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-191: one arm of the state-group experiment. XNA writes
+// XNAPP-191: one arm of the state-group experiment. XNA writes
 // two dwords into its own effect-container header, and these fixtures each assign exactly one
 // kind of state so that what those dwords count can be read off rather than guessed.
 float4x4 WorldViewProjection;

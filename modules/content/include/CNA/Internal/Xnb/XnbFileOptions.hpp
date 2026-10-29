@@ -11,7 +11,7 @@ namespace CNA::Internal::Xnb
 {
     /**
      * @brief Target platform identifiers CNA's `.xnb` writer can emit
-     *        (plans/plan_xnapipeline.md `XNAP-12`, §2.2).
+     *        (`XNAP-12`, docs/xnb-interoperability.md §2.2).
      *
      * Only @ref Windows, @ref WindowsPhone and @ref Xbox360 were ever produced by Microsoft's own
      * XNA 4.0 Content Pipeline. Every other member is an **extended XNB ecosystem** identifier
@@ -122,7 +122,7 @@ namespace CNA::Internal::Xnb
 
         /**
          * @brief Permits writing an Xbox 360 (`x`) payload whose byte order is not verified
-         *        (plans/plan_xnapipeline.md `XNAP-82`).
+         *        (`XNAP-82`).
          *
          * The Xbox 360 is big-endian, and CNA has exactly one piece of Xbox-specific payload
          * handling: the `SoundEffect` WAVEFORMATEX fields are byte-swapped. Nothing else is --

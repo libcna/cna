@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    plans/plan_xnapipeline_parity.md XNAPP-021: the .spritefont source that actually builds.
+    XNAPP-021: the .spritefont source that actually builds.
 
     probe.spritefont beside this one names a font family, which is what a real XNA description does
     and what the importer differential measures. A family name is not buildable here on purpose:
@@ -11,7 +11,7 @@
     list.
 
     Nothing in an XML comment may contain two hyphens in a row; XNA's intermediate reader refuses
-    the document outright when one does (plans/plan_xnapipeline_parity.md XNAPP-267).
+    the document outright when one does (XNAPP-267).
 -->
 <XnaContent xmlns:Graphics="Microsoft.Xna.Framework.Content.Pipeline.Graphics">
   <Asset Type="Graphics:FontDescription">

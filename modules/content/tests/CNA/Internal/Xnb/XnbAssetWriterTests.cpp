@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-23..2B, XNAP-40, XNAP-45: the built-in asset type writers.
+// XNAP-23..2B, XNAP-40, XNAP-45: the built-in asset type writers.
 //
 // Every round-trip here goes out through the writer, to a real file, and back in through
 // DecodeXnbCanonicalAsset() -- CNA's own independent reader path, which additionally proves the
@@ -282,7 +282,7 @@ TEST(XnbAssetWriterTest, ASpriteFontRoundTripsWithEveryGlyphList)
     // In the character table on purpose: SpriteFont::setDefaultCharacterProperty rejects a
     // fallback the font cannot render, so U+003F here would have produced an
     // .xnb that CNA's own runtime refuses to load. The writer now refuses it instead
-    // (plans/plan_xnapipeline.md XNAP-45).
+    // (XNAP-45).
     source.defaultCharacter = u'A';
 
     const XnbCanonicalAsset asset = RoundTrip(scratch, "font", source);
@@ -398,7 +398,7 @@ TEST(XnbAssetWriterTest, ASoundEffectTargetingXbox360ByteSwapsItsWaveFormat)
     XnbFileOptions options;
     options.platform = XnbTargetPlatform::Xbox360;
 
-    // plans/plan_xnapipeline.md XNAP-82: an Xbox 360 target is refused by default, because the
+    // XNAP-82: an Xbox 360 target is refused by default, because the
     // WAVEFORMATEX swap below is the only Xbox byte-order handling in this build -- the sample
     // bytes are not swapped, and CNA's own reader already refuses to transcode Xbox samples for
     // that reason. The opt-in exists so somebody with real hardware can produce a candidate.
@@ -423,8 +423,8 @@ TEST(XnbAssetWriterTest, ASoundEffectTargetingXbox360ByteSwapsItsWaveFormat)
 
 // A Texture2D is converted for the Xbox 360 rather than refused: its payload is reversed by the
 // format's component width, which is measured against the genuine pipeline
-// (plans/plan_xnapipeline_parity.md XNAPP-252). The types nobody has converted still refuse, which
-// is what plans/plan_xnapipeline.md XNAP-82 asks for and why the refusal lives in code.
+// (XNAPP-252). The types nobody has converted still refuse, which
+// is what XNAP-82 asks for and why the refusal lives in code.
 TEST(XnbAssetWriterTest, ATextureIsByteSwappedForXbox360RatherThanRefused)
 {
     XnbFileOptions windows;
@@ -470,7 +470,7 @@ TEST(XnbAssetWriterTest, ATextureIsByteSwappedForXbox360RatherThanRefused)
 
 TEST(XnbAssetWriterTest, AnUnconvertedAssetTypeStillRefusesAnXbox360TargetOutright)
 {
-    // plans/plan_xnapipeline.md XNAP-82. Writing 'x' into the header over Windows-layout payloads
+    // XNAP-82. Writing 'x' into the header over Windows-layout payloads
     // would claim a compatibility this build cannot deliver, so the refusal is in code rather
     // than only in documentation, and it names the task that would close the gap.
     XnbFileOptions options;

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plans/plan_xnapipeline_parity.md XNAPP-023: the defaults test says what it was measured against.
+"""XNAPP-023: the defaults test says what it was measured against.
 
 `XnaProcessorDefaultsTests.cpp` constructs each XNA processor CNA provides and checks every property
 against the value Microsoft's own class answered. That is only worth something if the table it

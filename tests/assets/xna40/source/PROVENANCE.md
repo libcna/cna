@@ -1,6 +1,6 @@
 # Source corpus for the extensions with no binary format (authored)
 
-`plans/plan_xnapipeline_parity.md` `XNAPP-021`. Three text sources, written for this repository:
+`XNAPP-021`. Three text sources, written for this repository:
 a `.spritefont` that names every element of the font-description schema, an `.fx` with one
 technique, one pass, a matrix parameter, a texture and a sampler, and an `.xml` naming a type the
 intermediate serializer already knows. Nothing here was taken from a sample, a tutorial or another
@@ -8,7 +8,7 @@ project.
 
 ## The failure fixtures
 
-`plans/plan_xnapipeline_parity.md` `XNAPP-267` added six more, all written here and all meant to
+`XNAPP-267` added six more, all written here and all meant to
 go wrong in one specific way, because a failure class needs a source that produces it:
 
 * `broken.fx` -- an undeclared identifier, so the *compiler's* refusal reaches the build rather
@@ -41,7 +41,7 @@ there before they measured anything.
 
 ## The font metric sweep
 
-`plans/plan_xnapipeline_parity.md` `XNAPP-182` added seven more descriptions of one face:
+`XNAPP-182` added seven more descriptions of one face:
 `control_font.spritefont` and `font_size10/18/24/32.spritefont` are the same document at five
 sizes, `font_spacing.spritefont` changes every policy element without touching the rasterization
 (`<Spacing>`, `<UseKerning>false`, a `<DefaultCharacter>`), and `font_regions.spritefont` lists two
@@ -57,7 +57,7 @@ nothing.
 
 ## The effect sweep
 
-`plans/plan_xnapipeline_parity.md` `XNAPP-191`/`XNAPP-192` added fifteen `.fx` files and one
+`XNAPP-191`/`XNAPP-192` added fifteen `.fx` files and one
 `.fxh`. `fx_minimal.fx` is the smallest effect the corpus has -- one parameter, one technique, one
 pass, shader model 2.0, nothing else -- and every other file is that one plus exactly one feature,
 which is what makes a difference in the compiled container attributable to something:
@@ -101,7 +101,7 @@ members' defaults back from that build (`tests/reference/xna40/effect-struct-def
 
 ## The `.xml` documents
 
-`plans/plan_xnapipeline_parity.md` `XNAPP-261` added five more beside `probe.xml`, written here,
+`XNAPP-261` added five more beside `probe.xml`, written here,
 each naming one shape the intermediate serializer has to resolve from a document rather than from a
 C++ caller: `xml_int.xml` a primitive, `xml_vector3.xml` a framework value type, `xml_curve.xml` a
 framework reference type with a nested collection of keys, `xml_dictionary.xml` a

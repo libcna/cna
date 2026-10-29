@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-61: every processed type the production pipeline can reach either
+// XNAP-61: every processed type the production pipeline can reach either
 // has a writer for each container, or a recorded reason it cannot.
 //
 // The row this closes listed nine types by hand, and by the time it was read the list was wrong in

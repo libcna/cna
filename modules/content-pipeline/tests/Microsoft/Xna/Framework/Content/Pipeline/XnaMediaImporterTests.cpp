@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-201, XNAPP-202, XNAPP-220, XNAPP-136, XNAPP-043: the three
+// XNAPP-201, XNAPP-202, XNAPP-220, XNAPP-136, XNAPP-043: the three
 // source formats XNA reads through Windows Media, and the video family they need.
 //
 // The expectations are tests/reference/xna40/media/media-content-oracle.json, measured black-box
@@ -733,7 +733,7 @@ TEST(XnaSongProcessor, TheQualityChoosesTheBitRate)
     std::filesystem::remove_all(scratch);
 }
 
-// plans/plan_xnapipeline_parity.md XNAPP-021, Phase 13: the video and song target legs.
+// XNAPP-021, Phase 13: the video and song target legs.
 //
 // XNA's own answer for these two is not measurable in this environment and the recorded corpus
 // says so rather than leaving it blank: every `videoprocessor/target_*` case is

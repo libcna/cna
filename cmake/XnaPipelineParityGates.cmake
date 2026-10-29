@@ -1,5 +1,5 @@
 # =====================================================================================
-# XNA 4.0 Content Pipeline parity gates (plans/plan_xnapipeline_parity.md XNAPP-015, XNAPP-021)
+# XNA 4.0 Content Pipeline parity gates (XNAPP-015, XNAPP-021)
 #
 # Two things these gates exist to stop, both of which happened before they did.
 #
@@ -44,7 +44,6 @@ add_test(NAME XnaPipelineParityReportIsCurrent
                  --map "${_xnapp_reference}/content-pipeline-parity-map.json"
                  --inputs "${_xnapp_reference}/content-pipeline-inputs.json"
                  --output "${CMAKE_CURRENT_SOURCE_DIR}/docs/xna-content-pipeline-parity-report.md"
-                 --plan "${CMAKE_CURRENT_SOURCE_DIR}/plans/plan_xnapipeline_parity.md"
                  --check)
 
 add_test(NAME XnaPipelineInputParityMatrixIsCurrent
@@ -83,7 +82,7 @@ add_test(NAME XnaPipelineFinalAuditIsGreen
 set_tests_properties(XnaPipelineFinalAuditIsGreen PROPERTIES LABELS "parity;xnapipeline")
 
 # =====================================================================================
-# The rest of the plan's §29 gates, as ctests (plans/plan_xnapipeline_parity.md XNAPP-310).
+# The rest of the parity work's completion gates, as ctests (XNAPP-310).
 #
 # `--check` above answers "is the committed report a regeneration?". This one answers the other
 # question -- "is the parity itself complete?" -- and fails on any MISSING type, member or enum

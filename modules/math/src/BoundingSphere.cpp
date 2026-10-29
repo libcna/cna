@@ -239,7 +239,7 @@ namespace Microsoft::Xna::Framework
         // (tests/reference/xna40/framework/framework-packing-oracle.json, cases boundingsphere/*),
         // after a model's mesh bounding sphere disagreed with XNA's in the build differential.
         // FNA uses greater-than here, and this is one of the places FNA and XNA differ
-        // (plans/plan_xnapipeline_parity.md XNAPP-266).
+        // (XNAPP-266).
         float span = spanX;
         if (spanY >= spanX && spanY >= spanZ)
         {

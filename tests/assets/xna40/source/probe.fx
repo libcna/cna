@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-021: the committed .fx source.
+// XNAPP-021: the committed .fx source.
 //
 // One technique with one pass, a matrix parameter, a texture and a sampler: the smallest effect
 // that still exercises every kind of reflection an EffectProcessor reports.

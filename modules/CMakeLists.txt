@@ -386,7 +386,7 @@ if(CNA_FFMPEG_AVAILABLE)
     target_link_libraries(cna_media PRIVATE cna_video_ffmpeg)
 endif()
 add_subdirectory(content)
-# plans/plan_xnapipeline.md XNAP-90: build-time-only pipeline components, kept out of every
+# XNAP-90: build-time-only pipeline components, kept out of every
 # runtime game's link closure by living in their own module that only the content compiler links.
 add_subdirectory(content-pipeline)
 add_subdirectory(storage)

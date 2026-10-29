@@ -14,7 +14,7 @@ namespace CNA::Content::Pipeline
 {
     /**
      * @brief Stable identifiers for the XNB root types CNA can emit
-     *        (plans/plan_xnapipeline.md `XNAP-61`).
+     *        (`XNAP-61`).
      *
      * The build manifest records an output's asset type as a number so a schema change invalidates
      * stale artifacts. CNB output uses CNB's own asset type IDs; XNB output uses this parallel,
@@ -45,7 +45,7 @@ namespace CNA::Content::Pipeline
         Effect = 10u,
         /**
          * @brief Any object written by an XNA-shaped `ContentTypeWriter` through the
-         *        `ContentCompiler` façade (plans/plan_xnapipeline_parity.md `XNAPP-063`); the
+         *        `ContentCompiler` façade (`XNAPP-063`); the
          *        manifest tells these apart by their asset type name.
          */
         XnaObject = 11u,

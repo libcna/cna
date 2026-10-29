@@ -228,7 +228,7 @@ package for the complete license texts and notices that apply to the selected bi
 
 ## FreeType (optional SpriteFont content-pipeline dependency)
 
-The `.spritefont` source route (`plans/plan_xnapipeline.md` `XNAP-51`) rasterizes glyphs with
+The `.spritefont` source route (`XNAP-51`) rasterizes glyphs with
 [FreeType 2](https://freetype.org/). No FreeType source is vendored: CNA's CMake integration
 (`modules/content-pipeline/CMakeLists.txt`) probes for a system FreeType with
 `find_package(Freetype)` and links the imported `Freetype::Freetype` target when one is present.

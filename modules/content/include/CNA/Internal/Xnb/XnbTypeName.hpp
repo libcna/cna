@@ -36,7 +36,7 @@ namespace CNA::Internal::Xnb
          * simply be part of @ref baseName without reordering the canonical form. A rank specifier
          * is `[]`, or `[,]`, `[,,]`… for a multidimensional array, and several may follow each
          * other for a jagged array (`[][]`). Held verbatim so the canonical key of an array type
-         * is the one .NET itself would produce (plans/plan_xnapipeline.md `XNAP-9C`).
+         * is the one .NET itself would produce (`XNAP-9C`).
          */
         std::string arraySuffix;
 

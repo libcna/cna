@@ -1,6 +1,6 @@
 # XNA Game Studio 4.0 Content Pipeline oracle
 
-`plans/plan_xnapipeline_parity.md` Phase 1 (`XNAPP-010`–`XNAPP-013`).
+The XNA Content Pipeline parity campaign, Phase 1 (`XNAPP-010`–`XNAPP-013`).
 
 This directory holds the programs that turn a legally installed **Microsoft XNA Game Studio 4.0
 Refresh** into a machine-readable, deterministic description of its Content Pipeline — the

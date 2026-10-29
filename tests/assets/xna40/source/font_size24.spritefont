@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    plans/plan_xnapipeline_parity.md XNAPP-182: control_font.spritefont at a larger size.
+    XNAPP-182: control_font.spritefont at a larger size.
 
     The same face and the same characters, rasterized at 24 rather than 14. What this measures is
     the size-dependent half of the answer: line spacing, the glyph boxes, the atlas the packer

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-53/XNAP-54: the compressed texture route, end to end.
+// XNAP-53/XNAP-54: the compressed texture route, end to end.
 //
 // These live in the build-time module rather than beside the processor's own tests because the
 // encoder does: a registry assembled from cna_content alone has no block encoder, and proving

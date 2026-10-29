@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    plans/plan_xnapipeline_parity.md XNAPP-182: the same face and size as control_font.spritefont,
+    XNAPP-182: the same face and size as control_font.spritefont,
     with every policy element changed.
 
     <Spacing> is added to each advance, <UseKerning> false drops the face's kerning pairs, and

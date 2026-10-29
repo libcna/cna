@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-260: a third party's content pipeline, written the way
+// XNAPP-260: a third party's content pipeline, written the way
 // XNA's documentation tells a game to write one.
 //
 // Everything here is a *user's* code. It defines its own intermediate types, its own source

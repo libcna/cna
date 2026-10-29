@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-191: two samplers, so a header field that counts them can
+// XNAPP-191: two samplers, so a header field that counts them can
 // be told from one that merely records that there are any.
 float4x4 WorldViewProjection;
 texture First;

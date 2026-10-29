@@ -6,7 +6,7 @@ namespace CNA::Internal::Xnb
     namespace
     {
         // The XNA 4.0 assembly identities, read verbatim out of the committed fixtures' own
-        // type-reader tables (plans/plan_xnapipeline.md §2.5). They are file content, not
+        // type-reader tables (docs/xnb-interoperability.md §2.4). They are file content, not
         // implementation detail: every one of them is visible in a hex dump of any XNA-4.0-era
         // .xnb and in the assembly references of any XNA project file.
         constexpr const char* kMscorlib =

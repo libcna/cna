@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-167: the per-extension source differential.
+// XNAPP-167: the per-extension source differential.
 //
 // Every extension TextureImporter declares gets a committed fixture in tests/assets/xna40/texture,
 // and both the genuine XNA importer and this one read the same bytes -- which is the point. The

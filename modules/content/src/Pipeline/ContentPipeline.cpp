@@ -1426,7 +1426,7 @@ namespace CNA::Content::Pipeline
             // survive: a parameter it has not got, and one whose written value is not of the
             // property's type. Every other refusal still fails the build, because honouring it is
             // impossible rather than merely wrong -- a missing DXT encoder defaulted past would
-            // ship a texture nobody asked for (plans/plan_xnapipeline_parity.md XNAPP-267).
+            // ship a texture nobody asked for (XNAPP-267).
             ContentProcessorParameters effective = request.parameters;
             if (request.environment.strictness == ContentStrictness::XnaCompatible)
             {
@@ -1434,7 +1434,7 @@ namespace CNA::Content::Pipeline
                 // a pass that removes none has either succeeded or thrown something leniency does
                 // not cover. Re-reading the count each time would shrink the bound along with the
                 // set and leave the last refusals unhandled, which is a failure that only appears
-                // once two parameters are wrong (plans/plan_xnapipeline_parity.md XNAPP-255).
+                // once two parameters are wrong (XNAPP-255).
                 const std::size_t attempts = effective.Values().size() + 1u;
                 for (std::size_t attempt = 0; attempt < attempts; ++attempt)
                 {

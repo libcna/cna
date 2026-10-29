@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-60..65: the XNB output format axis.
+// XNAP-60..65: the XNB output format axis.
 //
 // The point of these tests is that nothing about the source side changes: the same importers and
 // processors that produce a .cnb produce a .xnb, and only the writer differs.
@@ -335,7 +335,7 @@ TEST(XnbOutputContentPipelineTest, AnImageSourceBuildsToTexture2DXnbThroughTheSa
 
 TEST(XnbOutputContentPipelineTest, PremultipliedAlphaDefaultReachesBothContainersIdentically)
 {
-    // plans/plan_xnapipeline.md XNAP-96. The premultiply policy lives in the processor, which is
+    // XNAP-96. The premultiply policy lives in the processor, which is
     // shared, so the same source must produce the same texels through the CNB writer and through
     // the XNB writer. If it ever did not, the processor would have been forked -- which is the one
     // mistake the two-writer/one-processor architecture exists to prevent.
@@ -738,7 +738,7 @@ TEST(XnbOutputCliTest, ChangingTheTargetPlatformRebuildsRatherThanReusingStaleBy
 
 TEST(XnbOutputCliTest, LzxCompressionProducesASmallerFileAndInvalidatesTheOldOne)
 {
-    // plans/plan_xnapipeline.md XNAP-81. `--xnb-compress lzx` used to be refused with a message
+    // XNAP-81. `--xnb-compress lzx` used to be refused with a message
     // naming the task; it now produces a real LZX-compressed file. Three things are asserted: the
     // header announces LZX, the file is smaller, and the values survive -- read back through
     // CNA's own reader, which decompresses the payload as part of loading it.

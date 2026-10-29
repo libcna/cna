@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MS-PL
 """Checks that build-time-only dependencies never reach a runtime link closure.
 
-plans/plan_xnapipeline.md XNAP-90. `cna_content` is linked by every game that loads content at run
+XNAP-90. `cna_content` is linked by every game that loads content at run
 time. A font rasterizer, a block-compression encoder and an external-process effect compiler are
 needed only while content is being *built*. The boundary between them exists -- `cna_content_pipeline`
 is linked by `cna_content_compiler` and by nothing else -- but it was held up by convention and by

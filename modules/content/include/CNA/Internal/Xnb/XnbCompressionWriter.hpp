@@ -8,7 +8,7 @@
 namespace CNA::Internal::Xnb
 {
     /**
-     * @brief Compresses a payload into one raw LZ4 block (plans/plan_xnapipeline.md `XNAP-80`).
+     * @brief Compresses a payload into one raw LZ4 block (`XNAP-80`).
      *
      * This is the exact counterpart of @ref DecompressXnbLz4Payload: a **single raw block**, not
      * an LZ4 frame. There is no frame magic, no checksum, no dictionary and no block

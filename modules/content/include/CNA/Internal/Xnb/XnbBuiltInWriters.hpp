@@ -41,7 +41,7 @@ namespace CNA::Internal::Xnb
 {
     /**
      * @brief A built-in `.xnb` type writer described declaratively by its reader identity and a
-     *        stateless payload function (plans/plan_xnapipeline.md `XNAP-20`, `XNAP-21`).
+     *        stateless payload function (`XNAP-20`, `XNAP-21`).
      *
      * The stock format has many types whose payload is a fixed field sequence and nothing else.
      * Expressing each as data plus one free function keeps the sixteen primitive writers and the
@@ -137,7 +137,7 @@ namespace CNA::Internal::Xnb::Detail
      * `T[]` and `List<T>`. `XnbArray<T>` is the writing side's separate carrier for the array
      * case, and without this specialization the default (`false`) applied: a `List<Int32[]>`
      * wrote its elements with no dispatch index while `ListReader<Int32[]>` read one, and every
-     * following field in the file shifted (plans/plan_xnapipeline.md `XNAP-9C`).
+     * following field in the file shifted (`XNAP-9C`).
      */
     template<typename T>
     struct IsSerializedReferenceType<XnbArray<T>> : std::true_type {};
@@ -477,7 +477,7 @@ namespace CNA::Internal::Xnb
 
     /**
      * @brief Writer for a .NET enum, serialized as its underlying `Int32`
-     *        (plans/plan_xnapipeline.md `XNAP-98`).
+     *        (`XNAP-98`).
      *
      * XNA's `EnumReader<T>` reads a single `Int32` and casts, so the writer is its exact inverse.
      * The enum's .NET name cannot be recovered from the C++ type, so it is supplied at

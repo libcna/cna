@@ -280,7 +280,7 @@ namespace CNA::Content::Pipeline
         // only because CNA declined to put it there; XNA adds it, and the character list it writes
         // is sorted, so the fallback lands wherever its code point belongs. Measured on
         // font_regions.spritefont, whose regions cover 42 characters and whose font carries 43
-        // (plans/plan_xnapipeline_parity.md XNAPP-182).
+        // (XNAPP-182).
         if (description.defaultCharacter.has_value())
         {
             characters.insert(*description.defaultCharacter);
@@ -463,7 +463,7 @@ namespace CNA::Content::Pipeline
                                  // Widest first among equals, which is XNA's own tie-break:
                                  // a sheet of 4x6, 7x6 and 3x6 cells comes out at (1,1), (10,1)
                                  // and (1,9) there, and that is the widest, then the next, then
-                                 // the wrap (plans/plan_xnapipeline_parity.md XNAPP-139).
+                                 // the wrap (XNAPP-139).
                                  return glyphs[left].width > glyphs[right].width;
                              });
 
@@ -563,7 +563,7 @@ namespace CNA::Content::Pipeline
          *        CNA's own and whose atlas is a recorded divergence either way; **two** for a font
          *        sheet, where it is measured -- three 5x7 glyphs come out at (1,1), (8,1) and
          *        (1,10) in a 16x32 atlas, which is a one-texel margin and a two-texel gap and no
-         *        other rule (plans/plan_xnapipeline_parity.md XNAPP-139).
+         *        other rule (XNAPP-139).
          * @return False when the glyphs do not fit any allowed atlas.
          */
         [[nodiscard]] bool ChooseAtlas(const std::vector<RasterGlyph>& glyphs, std::uint32_t& side,
@@ -682,7 +682,7 @@ namespace CNA::Content::Pipeline
                 // which is the one thing this pipeline will not do, so the character is drawn
                 // with the font's own glyph 0 -- the box a font supplies for exactly this. The
                 // font ends up covering the same characters XNA's does; what is inside the cell
-                // differs, and the warning says so (plans/plan_xnapipeline_parity.md XNAPP-267).
+                // differs, and the warning says so (XNAPP-267).
                 warnings.push_back(
                     "'" + origin + "' has no glyph for " + codepoint +
                     ", so it is drawn with the font's own .notdef glyph. XNA substitutes the "
@@ -748,7 +748,7 @@ namespace CNA::Content::Pipeline
         // own atlases have: 128x64 at size 10, 128x128 at 14, 128x256 at 18, 256x256 at 24 and
         // 256x512 at 32 for the same face and character set. Choosing a square first and trimming
         // the height afterwards -- what this did before -- transposes three of those five
-        // (plans/plan_xnapipeline_parity.md XNAPP-182).
+        // (XNAPP-182).
         //
         std::vector<PackedGlyph> placements;
         std::uint32_t side = 0u;
@@ -802,7 +802,7 @@ namespace CNA::Content::Pipeline
         // Liberation Mono's five sizes -- this one, and the sum of the separately rounded ascent
         // and descent -- and they disagree on Arial, whose line height is 21.465 px at size 14
         // where its rounded ascent and descent sum to 21 and XNA answers 22
-        // (plans/plan_xnapipeline_parity.md XNAPP-182).
+        // (XNAPP-182).
         const int lineHeight26_6 = static_cast<int>(
             FT_MulFix(face.Handle()->height, face.Handle()->size->metrics.y_scale));
         const int lineSpacing = (lineHeight26_6 + 63) >> 6;
@@ -813,7 +813,7 @@ namespace CNA::Content::Pipeline
         // Courier New and Liberation Mono are metrically identical and answer 41 at size 24 where
         // Arial, whose line height is larger, answers 40. Recorded rather than fitted -- a formula
         // that matched one face and broke on the next is what the eleven measurements above were
-        // for (plans/plan_xnapipeline_parity.md XNAPP-182, decisions.json `font_*`).
+        // for (XNAPP-182, decisions.json `font_*`).
         const int cellHeight = lineSpacing;
 
         font.lineSpacing = lineSpacing;
@@ -860,7 +860,7 @@ namespace CNA::Content::Pipeline
             // (4, 3, 4) and leaves the cropping rectangle's X at zero. This pipeline used to fold
             // the whole advance into B and shift the ink with the cropping rectangle, which keeps
             // the text at its metric width -- reasonable, and not what XNA does, so a description
-            // asking for tight text got loose text (plans/plan_xnapipeline_parity.md XNAPP-182).
+            // asking for tight text got loose text (XNAPP-182).
             const int inkWidth = glyph.blank ? 1 : static_cast<int>(glyph.width);
             const int croppingX = 0;
             float a = 0.0f;
@@ -1465,7 +1465,7 @@ namespace CNA::Content::Pipeline
          * XNA's own `FontDescriptionProcessor` hands the writer a DXT3 atlas: measured on four
          * descriptions, at two sizes, and the format is `Dxt3` in every one
          * (`tests/reference/xna40/differential/font_description*.xnb`,
-         * plans/plan_xnapipeline_parity.md XNAPP-182). DXT3 rather than DXT1 or DXT5 because a
+         * XNAPP-182). DXT3 rather than DXT1 or DXT5 because a
          * glyph is a coverage mask and DXT3's four explicit alpha bits per texel are what a mask
          * wants; DXT5's interpolated alpha would band it. The size difference is not marginal:
          * 16 KB against 128 KB for the same 95-glyph font.
@@ -1559,8 +1559,8 @@ namespace CNA::Content::Pipeline
             // glyphs in it; that is what says the separator colour is fixed rather than read from
             // the image. And a sheet whose *corner* texel is white while the rest of its border is
             // magenta still answers exactly its three glyphs, which is what says the scan starts at
-            // the first magenta texel rather than at the origin (plans/plan_xnapipeline_parity.md
-            // XNAPP-139).
+            // the first magenta texel rather than at the origin
+            // (XNAPP-139).
             std::uint32_t originX = width;
             std::uint32_t originY = height;
             for (std::uint32_t y = 0u; y < height && originY == height; ++y)

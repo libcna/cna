@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-9B: there must be exactly one XNB writer architecture.
+// XNAP-9B: there must be exactly one XNB writer architecture.
 //
 // For a while there were two. Two branches independently implemented the same subsystem in
 // different directories (§0, §0.5), the histories were reconciled, and one implementation
@@ -90,7 +90,7 @@ TEST(XnbArchitectureUniquenessTest, TheSupersededWriterArchitecturesPathsDoNotEx
 {
     if (!RepositoryRootIsCurrentDirectory()) { GTEST_SKIP() << "not run from the repository root"; }
 
-    // plans/plan_xnapipeline.md §0.5.1's removal table, asserted. A directory reappearing here
+    // The superseded writer's removal table (XNAP-97..XNAP-9A), asserted. A directory reappearing here
     // means a second writer architecture is back in the tree.
     for (const char* path : {
              "modules/content/include/CNA/Content/Xnb",
@@ -103,7 +103,7 @@ TEST(XnbArchitectureUniquenessTest, TheSupersededWriterArchitecturesPathsDoNotEx
     {
         EXPECT_FALSE(std::filesystem::exists(path))
             << path << " is a path of the superseded XNB writer architecture "
-            << "(plans/plan_xnapipeline.md §0.5.1). One writer, not two.";
+            << "(the provenance note in docs/xnb-interoperability.md). One writer, not two.";
     }
 }
 

@@ -47,7 +47,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
          * XNA marks two of its processors obsolete and warns when a project names one, which is
          * something a project reads and acts on. Measured from the genuine build rather than
          * assumed: `SpriteTextureProcessor` and `ModelTextureProcessor` warn, the other ten do not
-         * (tests/reference/xna40/differential-errors/, plans/plan_xnapipeline_parity.md
+         * (tests/reference/xna40/differential-errors/,
          * XNAPP-267).
          *
          * Second-to-last of the fields, before @ref known, because the tables are written as
@@ -64,7 +64,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
          * `colorKey`. Without the translation a project's own value reaches a processor that has
          * never heard of it, and -- since XNA warns rather than fails for an unknown parameter --
          * is dropped with a warning and silently replaced by a default
-         * (plans/plan_xnapipeline_parity.md XNAPP-251).
+         * (XNAPP-251).
          *
          * Matched without regard to case, as MSBuild matches metadata. A name whose two spellings
          * differ only in case needs no entry; the merge already keeps the canonical one.
@@ -85,7 +85,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
          *
          * A mapping that sets this contributes its defaults and its parameter names and leaves the
          * processor unnamed, which is what makes the graph pick by the type the importer actually
-         * produced (plans/plan_xnapipeline_parity.md XNAPP-255).
+         * produced (XNAPP-255).
          */
         bool chooseByImportedType = false;
 
@@ -98,7 +98,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
          * name and a project that writes them is right. A name XNA has never defined is a project
          * that will not build against a real XNA toolchain either, and XNA answers
          * `Cannot find importer "..."` rather than quietly building something else
-         * (plans/plan_xnapipeline_parity.md XNAPP-267).
+         * (XNAPP-267).
          *
          * Last of the fields because the tables above are written as aggregates without it; the
          * lookup sets it.
@@ -114,7 +114,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
      * streaming source and the same file read for `SoundEffectProcessor` is decoded PCM. The pair
      * is what decides, so the pair is what this takes -- 14 of the sample corpus's `.wma` items
      * ask for a sound effect and 14 of its `.wav` items ask for a song
-     * (plans/plan_xnapipeline_parity.md `XNAPP-332`).
+     * (`XNAPP-332`).
      *
      * @param xnaName The class name a content project wrote, with or without its namespace.
      * @param processorName The processor the same item names, empty when it names none.

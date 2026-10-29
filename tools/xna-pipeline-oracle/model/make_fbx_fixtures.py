@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xnapipeline_parity.md XNAPP-215, XNAPP-217: the FBX corpus.
+"""XNAPP-215, XNAPP-217: the FBX corpus.
 
 Written in FBX 6.1 ASCII, by hand, for one measured reason: XNA's importer carries FBX SDK
 2011.3.1, and every FBX a current tool writes is version 7400 or 7500, which that SDK refuses --
@@ -271,7 +271,7 @@ def main():
     # from the first on the next written at the *start* of the next line. Every FBX in the public
     # samples is written that way and nothing written here was, which is why a reader that ended a
     # list at the newline read all six fixtures and none of the 149 real ones
-    # (plans/plan_xnapipeline_parity.md XNAPP-242).
+    # (XNAPP-242).
     wrapped = mesh_model("Loose", [(0, 0, 0), (2, 0, 0), (0, 2, 0)], [[0, 1, 2]])
     wrapped = wrapped.replace("Vertices: 0,0,0,2,0,0,0,2,0",
                               "Vertices: 0,0,0,2,0,0\n\t\t\t,0,2,0")

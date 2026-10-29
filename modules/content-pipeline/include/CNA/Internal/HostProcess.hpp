@@ -7,7 +7,7 @@
 
 namespace CNA::Internal
 {
-    /** @brief The complete outcome of one child process (plans/plan_xnapipeline.md `XNAP-A1`). */
+    /** @brief The complete outcome of one child process (`XNAP-A1`). */
     struct HostProcessResult
     {
         /** @brief Whether the process was started at all. False means the executable is unusable. */

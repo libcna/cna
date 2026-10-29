@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-301: the routes at size.
+// XNAPP-301: the routes at size.
 //
 // The committed corpus exists to cover *shapes*: every fixture in it is a few kilobytes, because
 // what those tests ask is what a format means and not what it costs. A pipeline can answer every

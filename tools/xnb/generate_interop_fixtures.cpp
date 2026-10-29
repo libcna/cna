@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-30/XNAP-31: the CNA-generated XNB corpus, and the
+// XNAP-30/XNAP-31: the CNA-generated XNB corpus, and the
 // expected-value manifest for each fixture, that a genuine Microsoft XNA 4.0 runtime can be
 // pointed at.
 //
@@ -350,7 +350,7 @@ namespace
         // A Texture3D is a HiDef-only asset: XNA refuses to create one under Reach, and an `.xnb`
         // that declares Reach is asking the runtime to do exactly that. The container's profile
         // flag is per file, so this fixture carries HiDef while the rest of the corpus stays Reach
-        // (plans/plan_xnapipeline_parity.md XNAPP-281).
+        // (XNAPP-281).
         Xnb::XnbFileOptions hiDef = options;
         hiDef.graphicsProfile = Xnb::XnbGraphicsProfile::HiDef;
         fixture.bytes = Xnb::WriteXnbAsset(Xnb::XnbTexture3DContent{texture}, hiDef, fixture.name);
@@ -752,7 +752,7 @@ int main(int argc, char** argv)
     {
         std::cerr << "usage: cna_xnb_interop_fixtures <output-directory> [<lzx-output-directory>]\n"
                   << "Writes the CNA-generated XNB interoperability corpus and its\n"
-                  << "expected-value manifests (plans/plan_xnapipeline.md XNAP-30/XNAP-31).\n"
+                  << "expected-value manifests (XNAP-30/XNAP-31).\n"
                   << "With a second directory, writes the same fixtures again LZX-compressed\n"
                   << "(XNAP-81) -- the same assets, the same expectations, the compression\n"
                   << "Microsoft XNA 4.0 itself produced.\n";
@@ -798,7 +798,7 @@ int main(int argc, char** argv)
         const std::filesystem::path lzxRoot(argv[2]);
         WriteCorpus(lzxRoot, compressed, "lzx",
                     "The same assets as the uncompressed corpus, written with CNA's own LZX "
-                    "encoder (plans/plan_xnapipeline.md XNAP-81) -- the compression Microsoft XNA "
+                    "encoder (XNAP-81) -- the compression Microsoft XNA "
                     "4.0 itself produced, and the only compressed form an XNA 4.0 runtime loads. "
                     "The expectation manifests are identical to the uncompressed corpus's, "
                     "because compression is a container concern and must not change a single "

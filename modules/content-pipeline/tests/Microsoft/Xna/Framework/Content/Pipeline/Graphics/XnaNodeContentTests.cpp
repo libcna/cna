@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-095, 096, 098: the node graph -- NodeContent,
+// XNAPP-095, 096, 098: the node graph -- NodeContent,
 // BoneContent, MeshContent, GeometryContent and their child collections -- together with
 // VertexContent, the vertex channels and the indirect position view, against what the genuine
 // XNA 4.0 pipeline does with the same inputs (tests/reference/xna40/graphics/graphics-content-oracle.json,

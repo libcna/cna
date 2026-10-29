@@ -161,7 +161,7 @@ engineering time — so don't plan a port around them without checking current s
 ## Content pipeline: no longer the other big difference
 
 **This section described the state before the content pipeline existed, and was wrong from the
-moment it did; it is corrected here (`plans/plan_xnapipeline_parity.md` `XNAPP-320`, 2026-09-07).**
+moment it did; it is corrected here (`XNAPP-320`, 2026-09-07).**
 It said that CNA's `ContentManager` does not read `.xnb` at all and that
 `ContentReader`/`ContentTypeReaderManager`/`LzxDecoder` are intentionally not implemented. All of
 that is now false, and the paragraph above ("The former blockers that matter to existing ports")

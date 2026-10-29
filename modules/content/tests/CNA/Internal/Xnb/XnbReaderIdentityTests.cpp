@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-9C: the reader identity model, audited.
+// XNAP-9C: the reader identity model, audited.
 //
 // Porting the Enum<T> writer (XNAP-98) exposed a real defect that had been latent since the
 // collection writers were first written: **a reader's generic arguments are not always the target
@@ -331,7 +331,7 @@ TEST(XnbReaderIdentityTest, EveryBuiltInIdentityObeysTheTargetSharesGenericArgum
 
 TEST(XnbReaderIdentityTest, EveryBuiltInWritersReaderNameResolvesInTheRuntimeReaderRegistry)
 {
-    // plans/plan_xnapipeline.md XNAP-9D. The registry is keyed by C++ type and takes registrations
+    // XNAP-9D. The registry is keyed by C++ type and takes registrations
     // from anywhere, so nothing structurally stops a writer being registered for a name no reader
     // resolves -- which would produce a file CNA itself could not load. This is the check.
     RegisterAllBuiltInXnbReaders();

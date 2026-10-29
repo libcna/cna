@@ -41,7 +41,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                 // -- Byte4=4, Short2=4, HalfSingle=2, Alpha8=1, Rgba64=8 and the rest). Byte4 is
                 // the one that matters most: a model's BlendIndices are Byte4, so without it a
                 // skinned vertex buffer cannot be built at all
-                // (plans/plan_xnapipeline_parity.md XNAPP-266).
+                // (XNAPP-266).
                 {
                     using namespace Microsoft::Xna::Framework::Graphics::PackedVector;
                     add.template operator()<Alpha8>();

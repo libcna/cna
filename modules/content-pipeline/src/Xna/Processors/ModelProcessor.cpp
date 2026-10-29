@@ -309,7 +309,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                 // materials, whose single index buffer is [0,1,2,0,1,2] and whose second part is
                 // at vertexOffset 3 / startIndex 3 -- the indices stay batch-relative, which is
                 // what the vertex offset is for (tests/reference/xna40/differential,
-                // model/x_two_textures; plans/plan_xnapipeline_parity.md XNAPP-266).
+                // model/x_two_textures; XNAPP-266).
                 //
                 // Batches are merged only while their declarations agree. Two batches of one mesh
                 // normally share a channel layout, and what XNA does when they do not has not been
@@ -579,7 +579,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         // stride 36 (measured, modelprocessor/vertex_colors, and again through the genuine
         // BuildContent in tests/reference/xna40/differential/model_x_textured.xnb). Leaving it as
         // Vector4 costs twelve bytes a vertex and is a different element format from the one the
-        // runtime's stock effects expect (plans/plan_xnapipeline_parity.md XNAPP-266).
+        // runtime's stock effects expect (XNAPP-266).
         //
         // Before the premultiply below, not after: the measured rounding is byte arithmetic
         // (modelprocessor/vertex_colors_rounding -- 129 at alpha 3 answers 1, where rounding the

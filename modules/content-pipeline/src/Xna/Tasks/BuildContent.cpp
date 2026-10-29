@@ -96,7 +96,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
          * canonical coordinator, whose diagnostics are its streams: a failure on `cerr`, everything
          * else on `cout`. Without this the task could only report that the build "returned status
          * 1", which names neither the asset nor the reason and is not something a developer can act
-         * on (plans/plan_xnapipeline_parity.md XNAPP-267).
+         * on (XNAPP-267).
          *
          * The redirection is process-wide for the length of one `Execute()`, which is what it has
          * to be: the coordinator writes to the same two objects everything else does.
@@ -615,7 +615,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                     // XNA's own words, because the situation is XNA's: a project naming an importer
                     // no assembly defines does not build there either. Building the source through
                     // whatever route its extension suggests would hide that until the project
-                    // reached a real toolchain (plans/plan_xnapipeline_parity.md XNAPP-267).
+                    // reached a real toolchain (XNAPP-267).
                     LogError("Cannot find importer \"" + importerName + "\". " + mapping.reason);
                     refusedAnAsset = true;
                     continue;
@@ -747,7 +747,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                 // `ColorKeyEnabled` is the half of XNA's colour-key pair the canonical processor
                 // does not have: there, a colour key is on exactly when one is named. So the
                 // project's boolean decides whether the colour survives at all, and the name
-                // itself never reaches a processor (plans/plan_xnapipeline_parity.md XNAPP-251).
+                // itself never reaches a processor (XNAPP-251).
                 const auto colorKeyEnabled = std::find_if(
                     effectiveOrder.begin(), effectiveOrder.end(),
                     [](const std::pair<std::string, std::string>& entry)
@@ -852,14 +852,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         // parameter the processor has not got, writing a value it cannot convert, or asking for
         // characters the font has no glyphs for, builds there with a warning. The canonical tool
         // refuses all three, which is right for it and wrong for a façade standing in for XNA
-        // (plans/plan_xnapipeline_parity.md XNAPP-267).
+        // (XNAPP-267).
         // `--only-configured-assets`: the configuration this task just wrote names exactly the
         // project's `Compile` items, and a project *is* its item list -- a source file sitting in
         // the same folder that the project does not name is not part of it. Without this the build
         // discovers the whole directory, which produces assets XNA never built and, where two
         // unlisted neighbours share a name, refuses a project XNA builds: the Platformer sample's
         // `Sounds/ExitReached.wav` beside the `Sounds/ExitReached.wma` the project actually lists
-        // (plans/plan_xnapipeline_parity.md XNAPP-330).
+        // (XNAPP-330).
         std::vector<std::filesystem::path> arguments{
             "build",    root,              "-o",  output, "--format", "xnb",
             "--config", configurationFile, "--xna-compatible", "--only-configured-assets"};

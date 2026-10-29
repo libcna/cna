@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MS-PL
 """Builds every committed glTF fixture to Model XNB and checks the result against a manifest.
 
-plans/plan_xnapipeline.md XNAP-59. The Model route's test matrix was covered by unit tests plus an
+XNAP-59. The Model route's test matrix was covered by unit tests plus an
 ad-hoc sweep somebody ran once and wrote a sentence about. A sweep nobody can re-run is a claim,
 not a test: it cannot notice a fixture that stopped building, a refusal that started saying
 something else, or a fixture added later whose Model-XNB outcome nobody looked at.
@@ -95,7 +95,7 @@ def load_manifest() -> dict:
 def write_manifest(builds: list[str], refuses: dict[str, str]) -> None:
     document = {
         "comment": [
-            "plans/plan_xnapipeline.md XNAP-59: the expected Model-XNB outcome of every committed",
+            "XNAP-59: the expected Model-XNB outcome of every committed",
             "glTF fixture. tools/xnb/model_corpus_sweep.py (ctest CnaXnbModelCorpusSweep) checks",
             "the corpus against it. A fixture in neither list fails the gate until somebody",
             "records which it is; regenerate with --update and read the diff.",

@@ -92,7 +92,7 @@ TEST(ContentPipelineCMakeIntegrationTest, HelperForwardsConfigurationAndWorkersT
 #endif
 }
 
-// plans/plan_xnapipeline_parity.md XNAPP-320: the input a ported XNA game actually owns. The CLI
+// XNAPP-320: the input a ported XNA game actually owns. The CLI
 // had built a `.contentproj` since XNAPP-240, but CMake could not name one, so the documented
 // migration route ended in a hand-written add_custom_command. `CONTENT_PROJECT` closes that, and
 // this reads what the target produced: the project's own asset name, its `.xnb` container, and the

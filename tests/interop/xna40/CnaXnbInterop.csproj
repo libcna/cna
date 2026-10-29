@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- SPDX-License-Identifier: MS-PL -->
 <!--
-  plans/plan_xnapipeline.md XNAP-32.
+  XNAP-32.
 
   A plain .NET Framework 4.0 console project referencing the Microsoft XNA Game Studio 4.0
   assemblies from their installed GAC/reference location. It deliberately has no NuGet packages,

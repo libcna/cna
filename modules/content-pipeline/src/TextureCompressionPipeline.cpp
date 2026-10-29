@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-53: the seam between the runtime-side texture processor and the
+// XNAP-53: the seam between the runtime-side texture processor and the
 // build-time-only block encoder.
 
 #include "CNA/Content/Pipeline/TextureCompressionPipeline.hpp"

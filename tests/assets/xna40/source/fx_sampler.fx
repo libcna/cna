@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-191/192: fx_minimal.fx plus a texture and its sampler.
+// XNAPP-191/192: fx_minimal.fx plus a texture and its sampler.
 float4x4 WorldViewProjection;
 texture Surface;
 

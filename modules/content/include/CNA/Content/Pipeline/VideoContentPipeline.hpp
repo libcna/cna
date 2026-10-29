@@ -44,7 +44,7 @@ namespace CNA::Content::Pipeline
      * needs no decoder -- so the probe is injected at registration by whoever does
      * (`cna_content_pipeline`, through `BuildTimeMedia::ProbeVideo`). Without one the processor
      * still works and simply requires the metadata as parameters, which is what it did before
-     * (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+     * (`XNAPP-021`).
      */
     struct ProbedVideoMetadata
     {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-30/XNAP-31/XNAP-43/XNAP-44.
+// XNAP-30/XNAP-31/XNAP-43/XNAP-44.
 //
 // Two things are guarded here.
 //
@@ -48,7 +48,7 @@ namespace
 {
     const std::filesystem::path kCorpus =
         "tests/assets/xnb/cna/windows/uncompressed";
-    // plans/plan_xnapipeline.md XNAP-81: the same six assets, LZX-compressed. Committed beside
+    // XNAP-81: the same six assets, LZX-compressed. Committed beside
     // the uncompressed corpus rather than instead of it, because an XNA-capable machine should
     // test both container forms and their expectation manifests are identical by design.
     const std::filesystem::path kLzxCorpus = "tests/assets/xnb/cna/windows/lzx";
@@ -247,7 +247,7 @@ TEST(XnbConformanceTest, TheIndependentParserAcceptsEveryCnaGeneratedFixture)
 
 TEST(XnbConformanceTest, TheIndependentLzxDecoderAcceptsEveryCnaCompressedFixture)
 {
-    // plans/plan_xnapipeline.md XNAP-81/XNAP-9E. This is the verification that a round trip
+    // XNAP-81/XNAP-9E. This is the verification that a round trip
     // between CNA's own encoder and CNA's own decoder cannot provide: the conformance parser has
     // its own LZX decoder, written from the format description in a different language, and it
     // reproduces the *values* of every compressed fixture -- not merely its header. The same
@@ -529,7 +529,7 @@ TEST(XnbConformanceTest, TheIndependentParserDecompressesAndValidatesAnLz4File)
     using namespace CNA::Internal::Xnb;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
-    // plans/plan_xnapipeline.md XNAP-80. The parser has its own LZ4 block decoder, written from
+    // XNAP-80. The parser has its own LZ4 block decoder, written from
     // the published grammar and sharing nothing with CNA's encoder or CNA's decoder, so a
     // compressed file this writer produces is validated by a genuinely second implementation
     // rather than only by the one that made it.

@@ -330,7 +330,7 @@ TEST(CnbProducerTest, MalformedAndUnsupportedWavsAreRefusedByReason)
     adpcm[20] = 2u; // WAVE_FORMAT_ADPCM
     expectMessage(adpcm, "compressed source");
 
-    // 24-bit and 32-bit PCM and 32-bit IEEE float are read (plans/plan_xnapipeline.md XNAP-55);
+    // 24-bit and 32-bit PCM and 32-bit IEEE float are read (XNAP-55);
     // widths outside that set still are not, and the refusal names the width.
     std::vector<std::uint8_t> twelveBit = MakeWav(1u, 44100u, 12u, Pcm16(8u, 1u));
     expectMessage(twelveBit, "12-bit PCM");
@@ -345,7 +345,7 @@ TEST(CnbProducerTest, MalformedAndUnsupportedWavsAreRefusedByReason)
 
 TEST(CnbProducerTest, WiderSourcePcmIsReadAndNarrowedToPcm16)
 {
-    // plans/plan_xnapipeline.md XNAP-55. Both containers store 16-bit PCM, so a wider source is
+    // XNAP-55. Both containers store 16-bit PCM, so a wider source is
     // narrowed; refusing it outright only pushed the same conversion onto the author's audio
     // editor, where it is no less lossy and no more visible.
     std::vector<std::uint8_t> twentyFour(4u * 3u);

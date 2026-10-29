@@ -45,7 +45,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             // optional parameter -- present means keyed -- so the mapping supplies the colour and
             // the absence of it is what "disabled" means. Without this an XNA-named build left
             // every magenta texel opaque where XNA turns it transparent
-            // (plans/plan_xnapipeline_parity.md XNAPP-251).
+            // (XNAPP-251).
             static const std::map<std::string, XnaComponentMapping> map = {
                 {"TextureProcessor",
                  {.canonicalName = "CNA.TextureProcessor",

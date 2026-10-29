@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MS-PL
 """Generates a deterministic large glTF/GLB fixture for the Model-pipeline performance pass.
 
-plans/plan_xnapipeline.md XNAP-93. The one measurement that row was missing was large models: the
+XNAP-93. The one measurement that row was missing was large models: the
 committed corpus is small-model dominated -- it exists to cover *shapes*, not sizes -- and no
 representative large source was available. Downloading one would be neither reproducible nor
 licensable, so this authors one instead.

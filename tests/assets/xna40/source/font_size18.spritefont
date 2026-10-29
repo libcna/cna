@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    plans/plan_xnapipeline_parity.md XNAPP-182: control_font.spritefont at size 18.
+    XNAPP-182: control_font.spritefont at size 18.
 
     One of the sizes the metric sweep needs. Line spacing and the cropping cell are both derived
     from the face's scaled metrics, and a rule cannot be told apart from a coincidence with two

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plans/plan_xnapipeline_parity.md XNAPP-266 (§24): compare XNA's `.xnb` with CNA's, semantically.
+"""XNAPP-266: compare XNA's `.xnb` with CNA's, semantically.
 
 XNAPP-265 established that both builds accept and refuse the same sources. That is the coarsest
 question the corpus can answer. This one asks the next: given that both produced a file, do the two

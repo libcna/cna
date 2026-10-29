@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-191/192: fx_minimal.fx plus one initialized parameter.
+// XNAPP-191/192: fx_minimal.fx plus one initialized parameter.
 float4x4 WorldViewProjection;
 float4 Tint = float4(0.25, 0.5, 0.75, 1);
 

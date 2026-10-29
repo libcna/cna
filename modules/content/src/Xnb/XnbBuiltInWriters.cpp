@@ -94,7 +94,7 @@ namespace CNA::Internal::Xnb
         }
     }
 
-    // -- built-in reader identities (plans/plan_xnapipeline.md §2.5) ---------------------------
+    // -- built-in reader identities (docs/xnb-interoperability.md §2.4) ---------------------------
     //
     // Every `MonoGameFixture`/`Xna40Fixture` entry below was read out of a committed .xnb's own
     // type-reader table. The `DerivedRule` entries apply the rule those fixtures establish -- a
@@ -483,7 +483,7 @@ namespace CNA::Internal::Xnb
         // `.xml` asset naming that type is read by the intermediate serializer into an
         // `OrderedDictionary` -- the container `ContentTypeName` is specialized for, because a
         // dictionary asset is written in its document's order -- and a registry keyed by C++ type
-        // cannot reach the writer above from it (plans/plan_xnapipeline_parity.md XNAPP-260,
+        // cannot reach the writer above from it (XNAPP-260,
         // plans/plan_xna_sample_xnb_sweep.md XNASWEEP-119).
         registry.Register(
             std::make_shared<const XnbDictionaryTypeWriter<
@@ -520,7 +520,7 @@ namespace CNA::Internal::Xnb
 
         // The one array instantiation CNA's runtime reader registry resolves: a real XNA `Model`
         // carries `ArrayReader<Vector3>` in its type table, which is why the reader exists
-        // (plans/plan_xnapipeline.md XNAP-9D). Registered through the XnbArray<T> carrier, because
+        // (XNAP-9D). Registered through the XnbArray<T> carrier, because
         // a registry keyed by C++ type cannot otherwise tell `Vector3[]` from `List<Vector3>` --
         // both are std::vector<Vector3>.
         registry.Register(

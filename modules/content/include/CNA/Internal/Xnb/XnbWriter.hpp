@@ -28,7 +28,7 @@ namespace CNA::Internal::Xnb
 {
     /**
      * @brief The object-graph writer passed to every @ref XnbTypeWriter (the exact counterpart of
-     *        `Microsoft::Xna::Framework::Content::ContentReader`, plans/plan_xnapipeline.md
+     *        `Microsoft::Xna::Framework::Content::ContentReader`,
      *        `XNAP-14`).
      *
      * Owns the three pieces of per-file state a `.xnb` object graph needs:
@@ -206,7 +206,7 @@ namespace CNA::Internal::Xnb
 
         /**
          * @brief Refuses to write a payload whose byte order this build does not produce
-         *        (plans/plan_xnapipeline.md `XNAP-82`).
+         *        (`XNAP-82`).
          *
          * The Xbox 360 is big-endian. CNA has one piece of Xbox-specific payload handling -- the
          * `SoundEffect` WAVEFORMATEX byte swap -- and nothing else, so an `x`-targeted file is
@@ -228,7 +228,7 @@ namespace CNA::Internal::Xnb
          * A writer that converts its own raw payload asks this instead of calling
          * RequireVerifiedPlatformPayload(): the guard exists to refuse a payload nobody has
          * converted, and a writer that converts one has nothing to refuse
-         * (plans/plan_xnapipeline_parity.md XNAPP-252).
+         * (XNAPP-252).
          *
          * @return true for the `x` platform byte.
          */
@@ -282,7 +282,7 @@ namespace CNA::Internal::Xnb
         /**
          * @brief Writes one object with its dispatch index using an explicit type writer -- the
          *        "writer worker" form XNA's `ContentWriter.WriteObject<T>(T, ContentTypeWriter)`
-         *        exposes (plans/plan_xnapipeline_parity.md `XNAPP-060`).
+         *        exposes (`XNAPP-060`).
          *
          * @param writer The type writer to intern and invoke.
          * @param value Pointer to the exact C++ value type @p writer serializes.
@@ -365,7 +365,7 @@ namespace CNA::Internal::Xnb
 
         /**
          * @brief Returns the canonical reader name the root object dispatched to
-         *        (plans/plan_xnapipeline.md `XNAP-99`).
+         *        (`XNAP-99`).
          *
          * An `.xnb` has no asset type id or schema version; the reader its root object dispatches
          * to *is* its compatibility identity, which is what a build manifest has to record. This

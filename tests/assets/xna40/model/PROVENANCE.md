@@ -61,7 +61,7 @@ default.
 
 `missing_texture.x` is `quad_textured.x` with its `TextureFilename` changed to name
 `absent_surface.png`, which is deliberately not committed. It is the error corpus's
-missing-dependency case (`plans/plan_xnapipeline_parity.md` `XNAPP-267`): XNA answers
+missing-dependency case (`XNAPP-267`): XNA answers
 `Missing asset "...absent_surface.png"`, and a build that skipped the material instead would
 produce a model referring to nothing.
 

@@ -299,7 +299,7 @@ namespace CNA::Internal::Graphics
             // the decoder has already refused, which is what keeps this from claiming a file some
             // other format owns; a DIB is added to the shared decoder rather than to the content
             // pipeline so the runtime and a content build still answer the same pixels for the
-            // same bytes (plans/plan_xnapipeline_parity.md XNAPP-021).
+            // same bytes (XNAPP-021).
             const std::span<const std::uint8_t> bytes(data, size);
             if (IsDeviceIndependentBitmap(bytes))
             {

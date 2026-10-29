@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-85: the writer's ceilings are only ceilings if they are
+// XNAP-85: the writer's ceilings are only ceilings if they are
 // validated once, where they enter the system.
 
 #include "CNA/Internal/Xnb/XnbWriteLimits.hpp"

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xnapipeline_parity.md XNAPP-012: join the reflection inventory with the official
+"""XNAPP-012: join the reflection inventory with the official
 IntelliSense XML documentation that ships beside Microsoft.Xna.Framework.Content.Pipeline.dll.
 
 The XML file is public API documentation (summaries, parameter descriptions, return values and

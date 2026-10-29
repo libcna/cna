@@ -141,7 +141,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
          * The names are XNA's own property spellings, which is what a `.contentproj` writes in a
          * `<ProcessorParameters_Name>` element and what `MaterialProcessor` forwards to the
          * texture processor. Without this a build could construct the processor and never
-         * configure it (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+         * configure it (`XNAPP-021`).
          *
          * @param bindings The bindings to add to.
          */

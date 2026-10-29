@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-094, 098: MaterialContent, the six stock materials,
+// XNAPP-094, 098: MaterialContent, the six stock materials,
 // EffectContent and CompiledEffectContent against what the genuine XNA 4.0 pipeline does with the
 // same inputs (tests/reference/xna40/graphics/graphics-content-oracle.json, cases material/*,
 // effectcontent/* and compiledeffect/*).

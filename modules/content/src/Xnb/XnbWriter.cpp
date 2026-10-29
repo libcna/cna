@@ -341,7 +341,7 @@ namespace CNA::Internal::Xnb
                 " byte-swaps its WAVEFORMATEX fields for the big-endian Xbox 360 but not its "
                 "sample bytes, so an 'x' file it writes is only half converted. Set "
                 "XnbFileOptions::allowUnverifiedXboxPayloads to produce one anyway -- see "
-                "plans/plan_xnapipeline.md XNAP-82.");
+                "docs/xnb-interoperability.md section 2.2 (XNAP-82).");
         }
         throw XnbWriteException(
             "'" + assetName_ + "': " + readerName +
@@ -349,7 +349,7 @@ namespace CNA::Internal::Xnb
             "the 'x' platform byte over these payloads would claim a compatibility this build "
             "cannot deliver. Target 'windows' instead, or set "
             "XnbFileOptions::allowUnverifiedXboxPayloads if you can test the result on real "
-            "hardware -- see plans/plan_xnapipeline.md XNAP-82.");
+            "hardware -- see docs/xnb-interoperability.md section 2.2 (XNAP-82).");
     }
 
     std::int32_t XnbWriter::InternTypeWriter(const XnbTypeWriterBase& writer)

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    plans/plan_xnapipeline_parity.md XNAPP-182: two character regions rather than one.
+    XNAPP-182: two character regions rather than one.
 
     The second region is the Latin-1 supplement, which the face covers, and it is written *before*
     the ASCII one on purpose: the character list a SpriteFont carries has to be sorted, and a

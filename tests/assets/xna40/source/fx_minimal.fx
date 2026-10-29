@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-191/192: the smallest effect the corpus has.
+// XNAPP-191/192: the smallest effect the corpus has.
 //
 // One parameter, one technique, one pass, shader model 2.0, and nothing else: no texture, no
 // sampler, no initializer, no state. Every other fixture in this sweep is this one plus exactly

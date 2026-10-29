@@ -8,7 +8,7 @@
 namespace CNA::Internal::Xnb
 {
     /**
-     * @brief Tuning for CNA's LZX encoder (plans/plan_xnapipeline.md `XNAP-81`).
+     * @brief Tuning for CNA's LZX encoder (`XNAP-81`).
      *
      * Every field has a default that matches what an `.xnb` container needs; there is no reason
      * for a content build to change one, and they exist so that the encoder can be exercised at

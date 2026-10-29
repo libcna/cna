@@ -33,7 +33,7 @@ namespace CNA::Internal::Xnb
 
     /**
      * @brief Emits `.xnb` payload primitives in the exact encoding CNA's `.xnb` reader consumes
-     *        (plans/plan_xnapipeline.md `XNAP-10`).
+     *        (`XNAP-10`).
      *
      * The precise counterpart of `System::IO::BinaryReader` as the XNB readers use it: integers
      * are decomposed byte by byte rather than `memcpy`'d, and floating-point values go through

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plans/plan_xnapipeline_parity.md XNAPP-008, XNAPP-315: the provenance gate.
+"""XNAPP-008, XNAPP-315: the provenance gate.
 
 This plan is built by measuring Microsoft's own assemblies and Microsoft's own build task. Nothing
 Microsoft owns may end up *in* the repository as a result, and no implementation may be copied from

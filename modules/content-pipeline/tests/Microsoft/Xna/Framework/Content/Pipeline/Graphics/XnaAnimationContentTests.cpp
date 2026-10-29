@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-097, 098: AnimationKeyframe, AnimationChannel, the two
+// XNAPP-097, 098: AnimationKeyframe, AnimationChannel, the two
 // animation dictionaries and AnimationContent against what the genuine XNA 4.0 pipeline does with
 // the same inputs (tests/reference/xna40/graphics/graphics-content-oracle.json, cases animation/*).
 //

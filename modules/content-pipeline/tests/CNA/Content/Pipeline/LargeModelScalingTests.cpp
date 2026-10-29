@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-93: the Model route at size.
+// XNAP-93: the Model route at size.
 //
 // The committed glTF corpus exists to cover *shapes*, not sizes -- the largest fixture in it is a
 // few hundred kilobytes -- so the performance row was honestly missing its large-model line rather

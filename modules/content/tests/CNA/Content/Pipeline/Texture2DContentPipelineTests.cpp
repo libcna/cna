@@ -332,7 +332,7 @@ TEST(Texture2DContentPipelineTest, ColorKeyPolicyMatchesTheUnchangedProducerExac
     // transparent black -- the colour goes with the alpha -- and the pre-pipeline producer keeps
     // the colour, which is invisible while premultiplication is on and shows the moment it is
     // turned off. Measured on the genuine build (`texture/png4x4_no_premultiply` in the
-    // differential corpus, plans/plan_xnapipeline_parity.md XNAPP-251), and the pipeline follows
+    // differential corpus, XNAPP-251), and the pipeline follows
     // XNA. So the byte-for-byte comparison below is against a producer told not to key at all,
     // and the keyed texel is asserted directly.
     Pipeline::ContentProcessorParameters parameters;
@@ -425,7 +425,7 @@ TEST(Texture2DContentPipelineTest, RejectsUnknownMistypedAndMalformedProcessorPa
     }
 }
 
-// -- texture build policy (plans/plan_xnapipeline.md XNAP-54) -----------------------------------
+// -- texture build policy (XNAP-54) -----------------------------------
 
 TEST(TextureImageOperationsTest, NextPowerOfTwoRoundsUpAndLeavesExactPowersAlone)
 {
@@ -526,7 +526,7 @@ TEST(TextureImageOperationsTest, AMipChainHalvesUntilOneByOne)
 
 namespace
 {
-    // plans/plan_xnapipeline.md XNAP-96. Four texels, chosen so that every rule the premultiply
+    // XNAP-96. Four texels, chosen so that every rule the premultiply
     // policy has is visible in one image:
     //   0: partial alpha 128 -- the rounding case
     //   1: opaque         255 -- must be untouched
@@ -769,7 +769,7 @@ TEST(Texture2DContentPipelineTest, CompressionWithoutAnEncoderSaysWhichBuildProv
     }
 }
 
-// plans/plan_xnapipeline_parity.md XNAPP-021: the four sources XNA's TextureImporter accepts and a
+// XNAPP-021: the four sources XNA's TextureImporter accepts and a
 // plain stb decode does not. Before this the canonical graph had no route for them at all, so a
 // `.dds`, `.dib`, `.pfm` or `.ppm` the XNA façade imported perfectly never reached any container.
 TEST(Texture2DContentPipelineTest, RoutesEveryTextureSourceXnaItselfAccepts)
@@ -860,7 +860,7 @@ TEST(Texture2DContentPipelineTest, DecodesAPortablePixmapAndAHeaderlessBitmap)
 // A `.dds` is three formats wearing one extension, and this importer answers whichever one the
 // header describes -- the same thing XNA's own TextureImporter does. It used to refuse a cube map
 // and name the route that would build it; there was no such route
-// (plans/plan_xnapipeline_parity.md XNAPP-255).
+// (XNAPP-255).
 TEST(Texture2DContentPipelineTest, ADdsCubeIsImportedAsACubeRatherThanRefused)
 {
     ScratchDirectory scratch("dds_cube");

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-021: every declared source extension reads its own
+// XNAPP-021: every declared source extension reads its own
 // committed file.
 //
 // The input-parity gate (tools/xna-pipeline-oracle/inputs_matrix.py) asks each of the eighteen

@@ -108,7 +108,7 @@ namespace CNA::Content::Pipeline
                         // so a comma there is unambiguously this same list continuing. Every FBX
                         // an Autodesk exporter wrote does this and the fixtures written here did
                         // not, which is why it went unnoticed until the public samples were built
-                        // (plans/plan_xnapipeline_parity.md XNAPP-242).
+                        // (XNAPP-242).
                         const std::size_t lineEnd = at_;
                         while (at_ < bytes_.size() &&
                                (bytes_[at_] == '\n' || bytes_[at_] == '\r' || bytes_[at_] == ' ' ||

@@ -161,7 +161,7 @@ namespace CNA::Internal::Xnb
          * a DXT block with each of its 16-bit words reversed. Both are measured against the
          * genuine pipeline -- `xbox/png_texture` reverses `00FF00FF` to `FF00FF00` while leaving
          * the texel order alone, and `xbox/png_texture_dxt` turns `0aca ff79 fdfe` into
-         * `ca0a 79ff fefd` (plans/plan_xnapipeline_parity.md XNAPP-252).
+         * `ca0a 79ff fefd` (XNAPP-252).
          *
          * A format whose components are single bytes needs no swap and answers 1. A format this
          * build has not measured or derived answers 0, and the caller then refuses the platform
@@ -230,7 +230,7 @@ namespace CNA::Internal::Xnb
          * reversals, a `Color` one, a `Byte4` none, a `Short2` two of two bytes. Measured on the
          * genuine pipeline, which turns the eight `1.0f` and eight `-1.0f` of a model's vertex
          * buffer into their big-endian spellings and leaves the nine floats the container itself
-         * writes alone (plans/plan_xnapipeline_parity.md XNAPP-252).
+         * writes alone (XNAPP-252).
          *
          * @param format The declared element format.
          * @param componentBytes Receives the width; 1 means the element needs no swap.
@@ -328,7 +328,7 @@ namespace CNA::Internal::Xnb
             }
             for (std::size_t index = 0u; index < texture.levels.size(); ++index)
             {
-                // plans/plan_xnapipeline.md XNAP-85: a level whose byte count disagrees with the
+                // XNAP-85: a level whose byte count disagrees with the
                 // dimensions and format the same file declares is refused here rather than
                 // written. The reader would refuse it later, but by then the producer that still
                 // held the mismatched data is long gone and the message can only name a file.
@@ -472,7 +472,7 @@ namespace CNA::Internal::Xnb
                 // XNA's own VertexDeclaration constructor rejects this, so writing it produces a
                 // file that throws on load, and a GPU that accepted it would read past the
                 // vertex. Found by the writer-input fuzz corpus
-                // (plans/plan_xnapipeline.md XNAP-45).
+                // (XNAP-45).
                 const std::int64_t end =
                     static_cast<std::int64_t>(element.getOffsetProperty()) +
                     CNA::Internal::Graphics::VertexDeclarationFidelityDetail::FormatSize(
@@ -531,7 +531,7 @@ namespace CNA::Internal::Xnb
 
         /**
          * @brief Refuses a bone hierarchy that contains a cycle
-         *        (plans/plan_xnapipeline.md `XNAP-45`).
+         *        (`XNAP-45`).
          *
          * Every bone reference is individually in range, so nothing below notices that following
          * `parent` never reaches a root. An XNA `Model` walks that chain to compute absolute bone
@@ -568,7 +568,7 @@ namespace CNA::Internal::Xnb
 
         /**
          * @brief Refuses a mesh part whose ranges fall outside the buffers it names
-         *        (plans/plan_xnapipeline.md `XNAP-45`).
+         *        (`XNAP-45`).
          *
          * `DrawIndexedPrimitives` reads `primitiveCount * 3` indices from `startIndex`, and each
          * index addresses a vertex at `vertexOffset`. XNA validates none of it at load: the part
@@ -710,7 +710,7 @@ namespace CNA::Internal::Xnb
                 // tests/reference/xna40/differential/model_x_bare_mesh.xnb, whose bone 0 is null),
                 // while a `Frame {` that declares an empty one gets the empty string (measured on
                 // the genuine importer over SAMPLE-028's `Car.x`, whose unnamed frames answer `""`
-                // and whose synthesized root answers null; plans/plan_xnapipeline_parity.md
+                // and whose synthesized root answers null;
                 // XNAPP-266, plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122).
                 if (bone.nameIsNull) { output.WriteNullObject(); }
                 else { output.WriteObject(bone.name); }
@@ -832,7 +832,7 @@ namespace CNA::Internal::Xnb
                 const XnbTextureData& texture = value.texture;
                 // No platform guard: this writer converts its payload for the Xbox 360, and the
                 // conversion is measured against the genuine pipeline rather than assumed
-                // (plans/plan_xnapipeline_parity.md XNAPP-252). A format whose swap unit is
+                // (XNAPP-252). A format whose swap unit is
                 // unknown is still refused, below, where the unit is asked for.
                 if (output.IsXboxTarget() && XboxByteSwapUnit(texture.surfaceFormat) == 0u)
                 {
@@ -867,7 +867,7 @@ namespace CNA::Internal::Xnb
                 // Converted rather than refused, and proven: `xbox/dds_cube` and
                 // `xbox/dds_volume` are byte-identical to the genuine pipeline's output
                 // now that a route carries a cube and a volume DDS this far
-                // (plans/plan_xnapipeline_parity.md XNAPP-252, XNAPP-255). A surface
+                // (XNAPP-252, XNAPP-255). A surface
                 // format with no measured swap unit is still refused.
                 if (output.IsXboxTarget() && XboxByteSwapUnit(texture.surfaceFormat) == 0u)
                 {
@@ -902,7 +902,7 @@ namespace CNA::Internal::Xnb
                 // Converted rather than refused, and proven: `xbox/dds_cube` and
                 // `xbox/dds_volume` are byte-identical to the genuine pipeline's output
                 // now that a route carries a cube and a volume DDS this far
-                // (plans/plan_xnapipeline_parity.md XNAPP-252, XNAPP-255). A surface
+                // (XNAPP-252, XNAPP-255). A surface
                 // format with no measured swap unit is still refused.
                 if (output.IsXboxTarget() && XboxByteSwapUnit(texture.surfaceFormat) == 0u)
                 {
@@ -942,7 +942,7 @@ namespace CNA::Internal::Xnb
                 // own object protocol, which stays little-endian on every platform. Both
                 // halves are measured: `xbox/font_description`'s kerning triples read
                 // little-endian and equal CNA's, and the DXT swap unit comes from XNA's own
-                // two builds of the same texture (plans/plan_xnapipeline_parity.md XNAPP-252).
+                // two builds of the same texture (XNAPP-252).
                 if (output.IsXboxTarget() &&
                     XboxByteSwapUnit(value.atlas.surfaceFormat) == 0u)
                 {
@@ -969,7 +969,7 @@ namespace CNA::Internal::Xnb
                 // SpriteFont rejects a default character the font cannot render
                 //, so writing one produces an .xnb its own runtime refuses.
                 // Both are cheap here and impossible to diagnose from rendered output
-                // (plans/plan_xnapipeline.md XNAP-45).
+                // (XNAP-45).
                 for (std::size_t index = 1u; index < value.characters.size(); ++index)
                 {
                     if (value.characters[index - 1u] < value.characters[index]) { continue; }
@@ -1018,7 +1018,7 @@ namespace CNA::Internal::Xnb
                 // is no extension -- not the 16-byte PCMWAVEFORMAT that omits cbSize entirely.
                 // CNA's reader accepts both, and both occur in the wild, but the only real
                 // producer whose output is committed here writes 18, and matching an observed
-                // producer beats matching none (plans/plan_xnapipeline.md XNAP-42, which is a
+                // producer beats matching none (XNAP-42, which is a
                 // byte-exact golden test against exactly that file).
                 const std::size_t formatLength = 18u + value.extensionData.size();
                 if (formatLength > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  plans/plan_xnapipeline_parity.md XNAPP-320: the CMake helper's `.contentproj` fixture.
+  XNAPP-320: the CMake helper's `.contentproj` fixture.
 
   This is what an XNA developer has: a content project naming its own platform, profile and
   per-item Importer/Processor, plus a None item the targets copy rather than build. It is built

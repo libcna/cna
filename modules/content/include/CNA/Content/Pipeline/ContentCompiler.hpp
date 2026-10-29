@@ -14,7 +14,7 @@ namespace CNA::Content::Pipeline
 {
     /**
      * @brief Build-tool services that must be configured before the built-in routes are
-     *        registered (plans/plan_xnapipeline.md `XNAP-A5`).
+     *        registered (`XNAP-A5`).
      *
      * A source route whose behaviour depends on an external program cannot be registered before
      * that program has been chosen, because the backend's identity enters the incremental build
@@ -51,7 +51,7 @@ namespace CNA::Content::Pipeline
          * Discovery order, first hit wins: this field; the `CNA_XMA_ENCODER` environment variable;
          * the path baked in by CMake's `CNA_XMA_ENCODER_EXECUTABLE`. There is deliberately no
          * search of `PATH` -- an encoder for the Xbox 360's codec is something a user attaches on
-         * purpose (plans/plan_xnapipeline_parity.md `XNAPP-262`).
+         * purpose (`XNAPP-262`).
          */
         std::filesystem::path xmaEncoderExecutable;
 
@@ -99,7 +99,7 @@ namespace CNA::Content::Pipeline
          * profile and compression the built-in ones are, or a `--xnb-platform windowsphone` build
          * silently produces a project where the game's own types went to a Windows container and
          * everything else did not. The coordinator fills this in before calling the factory
-         * (plans/plan_xnapipeline_parity.md `XNAPP-260`).
+         * (`XNAPP-260`).
          */
         CNA::Internal::Xnb::XnbFileOptions xnbContainer{};
 

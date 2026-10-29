@@ -350,7 +350,7 @@ namespace CNA::Internal::Xnb
 
     /**
      * @brief A reference to another compiled asset, written through `ExternalReferenceReader`
-     *        (plans/plan_xnapipeline.md `XNAP-2B`).
+     *        (`XNAP-2B`).
      *
      * `XnbWriter::WriteExternalReference()` covers the far more common case: a reference sitting
      * inline in a field whose static type is already known, consuming no dispatch index. This
@@ -405,7 +405,7 @@ namespace CNA::Internal::Xnb
 
     /**
      * @brief A material that clones a compiled custom effect and overrides its parameters
-     *        (plans/plan_xnapipeline.md `XNAP-29`).
+     *        (`XNAP-29`).
      *
      * This is the shape XNA's `ModelProcessor` produces when a model's material names an `.fx`
      * file instead of resolving to a stock effect.

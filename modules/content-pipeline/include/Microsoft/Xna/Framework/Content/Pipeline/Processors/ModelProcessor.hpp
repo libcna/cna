@@ -218,7 +218,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
          * The names are XNA's own property spellings, which is what a `.contentproj` writes in a
          * `<ProcessorParameters_Name>` element and what `MaterialProcessor` forwards to the
          * texture processor. Without this a build could construct the processor and never
-         * configure it (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+         * configure it (`XNAPP-021`).
          *
          * @param bindings The bindings to add to.
          */
@@ -269,7 +269,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
          * A vertex names its bones; a vertex buffer indexes them. Without this the channel is left
          * as a `BoneWeightCollection`, which no vertex element format can hold, so the buffer
          * builder drops it and a skinned model reaches the runtime with no skinning data at all
-         * (plans/plan_xnapipeline_parity.md `XNAPP-266`).
+         * (`XNAPP-266`).
          *
          * @param geometry The batch whose channel is converted.
          * @param vertexChannelIndex The channel's index; the two replacements take its place.

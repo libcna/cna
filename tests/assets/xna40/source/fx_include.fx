@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-192: an effect whose parameter and transform come from an
+// XNAPP-192: an effect whose parameter and transform come from an
 // included header, so the include has to be resolved for the effect to compile at all.
 #include "fx_common.fxh"
 

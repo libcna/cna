@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-191: every rasterizer state this corpus classifies.
+// XNAPP-191: every rasterizer state this corpus classifies.
 float4x4 WorldViewProjection;
 
 float4 VertexMain(float4 position : POSITION0) : POSITION0

@@ -27,7 +27,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
      *
      * The metadata names are MSBuild's own and are the ones a `.contentproj` writes: `Importer`,
      * `Processor`, `Name`, `Link` and `ProcessorParameters` (see
-     * `plans/plan_xnapipeline_parity.md` §18).
+     * docs/xna-content-pipeline-migration.md).
      */
     class TaskItem final : public System::Object
     {
@@ -109,7 +109,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
          * project spelled them, and the difference is load-bearing here: a processor parameter is
          * derived from the part of the name after `ProcessorParameters_`, and a processor's own
          * property has a case (`Scale`, `TextureFormat`). Folding the stored name turned every
-         * parameter into one no processor recognised (plans/plan_xnapipeline_parity.md XNAPP-265).
+         * parameter into one no processor recognised (XNAPP-265).
          */
         std::map<std::string, std::pair<std::string, std::string>> metadata_;
     };
@@ -171,7 +171,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
          * *builds* an asset whose processor parameter it could not recognise or convert, and one
          * whose character region the font cannot cover, and says so in a warning. A project that
          * cannot tell those lines from progress messages cannot act on them
-         * (plans/plan_xnapipeline_parity.md XNAPP-267).
+         * (XNAPP-267).
          *
          * @return The lines.
          */

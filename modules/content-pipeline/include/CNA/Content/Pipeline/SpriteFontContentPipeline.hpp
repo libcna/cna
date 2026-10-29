@@ -50,7 +50,7 @@ namespace CNA::Content::Pipeline
 
     /**
      * @brief A parsed `.spritefont`: what to rasterize, not the result of rasterizing it
-     *        (plans/plan_xnapipeline.md `XNAP-50`).
+     *        (`XNAP-50`).
      *
      * The field names are XNA's own, because the file format is XNA's own.
      */
@@ -175,7 +175,7 @@ namespace CNA::Content::Pipeline
      * @param warnings Receives every warning the rasterization produced.
      * @param strictness Whether a character the font has no glyph for refuses the build or is
      *        drawn with the font's own `.notdef` and warned about, which is what XNA does
-     *        (plans/plan_xnapipeline_parity.md XNAPP-267).
+     *        (XNAPP-267).
      * @param profile The graphics profile the atlas must suit: Reach rounds its height up to a
      *        power of two, HiDef up to four (measured, plans/plan_xna_sample_xnb_sweep.md
      *        XNASWEEP-104).
@@ -260,7 +260,7 @@ namespace CNA::Content::Pipeline
      * spacing is the tallest of them, the spacing is zero, each cropping rectangle is the glyph's
      * own size at the origin, and each kerning triple is `(0, width, 0)` -- all four measured from
      * genuine builds of three sheets (`tools/xna-pipeline-oracle/differential/fonttexture.json`,
-     * plans/plan_xnapipeline_parity.md `XNAPP-139`).
+     * `XNAPP-139`).
      *
      * @param width Sheet width in texels.
      * @param height Sheet height in texels.

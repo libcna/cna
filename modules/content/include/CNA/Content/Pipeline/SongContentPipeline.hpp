@@ -34,7 +34,7 @@ namespace CNA::Content::Pipeline
      * decoder and must not grow one, so the importer takes a probe from whoever registers it and
      * the build-time layer supplies one over the media decoder. Without it a `Song` carries
      * duration zero -- which a genuine XNA 4.0 runtime reports as `Song.Duration` of zero, where
-     * XNA's own build reports the real length (plans/plan_xnapipeline_parity.md XNAPP-281).
+     * XNA's own build reports the real length (XNAPP-281).
      *
      * @param source The native media file.
      * @return The duration in milliseconds, or `std::nullopt` when this build cannot read it.
@@ -108,7 +108,7 @@ namespace CNA::Content::Pipeline
      * The counterpart of `CompressedSoundImporter`: XNA's one `AudioContent` lets `WavImporter`
      * feed `SongProcessor` as readily as `SoundEffectProcessor`, and 14 of the sample corpus's
      * `.wav` items ask for the song. It is @ref SelectedByNameOnly, so a convention build of a
-     * `.wav` still reaches the sound-effect route (plans/plan_xnapipeline_parity.md `XNAPP-332`).
+     * `.wav` still reaches the sound-effect route (`XNAPP-332`).
      */
     class WavSongImporter final : public ContentImporter
     {

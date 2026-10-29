@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-84: the achievable half of the Effect story.
+// XNAP-84: the achievable half of the Effect story.
 //
 // Compiling `.fx` source to shader bytecode is a separate major subsystem that this project has
 // deliberately not taken on (docs/fx-compiled-effects.md §1: CNA embeds no HLSL source

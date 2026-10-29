@@ -85,7 +85,7 @@ namespace CNA::Content::Pipeline
          * (`ResolveContainedPathRelativeToFile`), so a root-relative spelling was wrong on both
          * sides at once: a song in a subdirectory resolved to `Content/Sounds/Sounds/Music.wma`
          * and only a song at the content root happened to work
-         * (plans/plan_xnapipeline_parity.md `XNAPP-332`).
+         * (`XNAPP-332`).
          *
          * @param rootRelative The media reference relative to the content root.
          * @param logicalName The asset's own content name, whose directory this is relative to.
@@ -158,7 +158,7 @@ namespace CNA::Content::Pipeline
              *
              * The root reader name comes from the write itself rather than from a per-writer
              * constant, so the identity the build manifest records is the one the file's own type
-             * table dispatches through (plans/plan_xnapipeline.md `XNAP-99`).
+             * table dispatches through (`XNAP-99`).
              *
              * @param written The complete file image and the reader its root dispatched to.
              * @return A populated primary write result.
@@ -371,7 +371,7 @@ namespace CNA::Content::Pipeline
         /**
          * @brief Writes an already-compiled Effect, byte for byte.
          *
-         * plans/plan_xnapipeline.md XNAP-84. This writer serializes bytecode; it never compiles
+         * XNAP-84. This writer serializes bytecode; it never compiles
          * HLSL and never embeds source text pretending to be bytecode. There is no matching CNB
          * writer, and that is deliberate: the CNB container reserves an `Effect` identifier but
          * has no schema for it, because CNA has many renderers and a `.cnb` carrying one API's
@@ -880,7 +880,7 @@ namespace CNA::Content::Pipeline
                         part.externalEffect +
                         "'. An XNA Model references a compiled Effect by external reference, and "
                         "CNA cannot compile an XNA-compatible effect from source "
-                        "(plans/plan_xnapipeline.md XNAP-84), so writing the reference would "
+                        "(XNAP-84), so writing the reference would "
                         "produce a Model that cannot load. Use a stock effect for XNB output.");
             }
             throw XnbWriteException(

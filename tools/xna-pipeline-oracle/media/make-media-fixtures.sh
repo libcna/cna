@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xnapipeline_parity.md XNAPP-201, XNAPP-202, XNAPP-220: the synthetic media corpus for the
+# XNAPP-201, XNAPP-202, XNAPP-220: the synthetic media corpus for the
 # three importers XNA reads through Windows Media -- Mp3Importer, WmaImporter and WmvImporter.
 #
 # Every file here is generated from a deterministic synthetic signal (a sine tone, a test pattern)

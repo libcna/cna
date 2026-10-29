@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-A3: `.fx` source -> Effect XNB.
+// XNAP-A3: `.fx` source -> Effect XNB.
 //
 // The route is deliberately the ordinary one, with the compiler behind an interface:
 //
@@ -91,7 +91,7 @@ namespace CNA::Content::Pipeline
          * into a build-time library to obtain would be the wrong trade.
          *
          * Verified against the corpus's two effects: `probe.fx` answers 2 and
-         * `shader_model_3.fx` answers 3 (plans/plan_xnapipeline_parity.md XNAPP-267). A major
+         * `shader_model_3.fx` answers 3 (XNAPP-267). A major
          * version outside 1..3 is not a shader token -- `0xFFFFFFFF` is the container's own end
          * marker -- and is skipped.
          *
@@ -469,7 +469,7 @@ namespace CNA::Content::Pipeline
         // Windows Phone 7 has a fixed-function graphics stack: no game may ship a shader of its
         // own, and XNA refuses the asset at build time in exactly these words rather than letting
         // a project discover it on a device (measured, `phone/fx_minimal` and `phone/fx_sampler`
-        // in the differential corpus, plans/plan_xnapipeline_parity.md XNAPP-251).
+        // in the differential corpus, XNAPP-251).
         if (context.Environment().targetPlatform == ContentTargetPlatform::WindowsPhone)
         {
             throw ContentLoadException(
@@ -548,7 +548,7 @@ namespace CNA::Content::Pipeline
         // Reach is shader model 2.0 and HiDef is 3.0, and the compiler does not enforce it: an
         // `.fx` saying `compile vs_3_0` compiles happily under fx_2_0 and then fails to load on a
         // Reach device. XNA refuses it at build time, in these words, and so does this
-        // (plans/plan_xnapipeline_parity.md XNAPP-267).
+        // (XNAPP-267).
         if (request.profile == EffectSourceProfile::Reach)
         {
             const unsigned model = HighestShaderModel(compiled.bytecode);

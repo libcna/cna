@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-A6: the `.fx` route's edges, and the process runner's.
+// XNAP-A6: the `.fx` route's edges, and the process runner's.
 //
 // EffectSourceTests.cpp covers the route's ordinary shape and EffectSourceCommandLineTests.cpp
 // covers it as a product. This file covers what is left: the places a scanner, a ceiling, or a

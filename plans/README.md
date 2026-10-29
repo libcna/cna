@@ -196,12 +196,24 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   [`../docs/gltf-limitations.md`](../docs/gltf-limitations.md) §1; comments cite the `GLTF-*` IDs
   bare.
 - [`plan_xnb.md`](plan_xnb.md) — XNB content pipeline.
-- [`plan_xnapipeline.md`](plan_xnapipeline.md) — native XNB output (closed; external verification rows only).
+- `plan_xnapipeline.md` — CNA's native XNB writer (`XNAP-*`, 2026-09-03/09); deleted on 2026-10-29
+  (Git history only). Its last three non-done rows had closed elsewhere: genuine-runtime
+  verification by `XNAPP-280`/`281`, the real effect compiler by `XNAPP-191`, the Emscripten link of
+  `HostProcess` by `AM4-254`. What the writer does, how strongly each type is verified, its source
+  rules and its design decisions are in
+  [`../docs/xnb-interoperability.md`](../docs/xnb-interoperability.md); comments cite the rows as
+  `XNAP-nn`.
 - `plan_xact_build_invocation.md` — `XACTBUILD-001` (2026-10-03): `BuildXact` passes XactBld3 the
   SDK's own `/WINDOWS`/`/XBOX360` switches and Wine paths. Complete; deleted on 2026-10-29 (Git
   history only). The behaviour and the measured XACT2 auto-import are in the `BuildXact.Execute()`
   row of [`../docs/xna-content-pipeline-parity-report.md`](../docs/xna-content-pipeline-parity-report.md).
-- [`plan_xnapipeline_parity.md`](plan_xnapipeline_parity.md) — TRUE XNA 4.0 Content Pipeline public API + input-format parity, measured against the genuine SDK.
+- `plan_xnapipeline_parity.md` — XNA 4.0 Content Pipeline public API and input-format parity
+  (`XNAPP-*`, 2026-09-05/07): 115 of 119 rows done, the other four external (a successful WMV decode
+  without Media Foundation, an XMA encoder, Xenos shader bytecode, a real Xbox 360). Deleted on
+  2026-10-29 (Git history only). The parity numbers and every decision are the generated
+  `../docs/xna-content-pipeline-*.md` documents, built from `tests/reference/xna40/`; its source
+  rules are [`../docs/xnb-interoperability.md`](../docs/xnb-interoperability.md) §9.1; comments
+  cite the rows as `XNAPP-nnn`.
 - `plan_missing.md` — XNA-MISSING-001..020, the 160 runtime members that took coverage from 3,467
   to 3,627/3,627 (closed 2026-09-21; deleted on 2026-10-26, Git history only). The live figure is
   [`../docs/xna-4-runtime-member-coverage.md`](../docs/xna-4-runtime-member-coverage.md).

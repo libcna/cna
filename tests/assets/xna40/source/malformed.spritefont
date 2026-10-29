@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    plans/plan_xnapipeline_parity.md XNAPP-267: a description that is not well-formed XML.
+    XNAPP-267: a description that is not well-formed XML.
 
     The <Size> element is never closed, so the failure happens in the reader before any schema
     question is asked. Kept separate from unknown_type.spritefont, which is well-formed and wrong

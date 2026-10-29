@@ -1,6 +1,6 @@
 # Microsoft XNA 4.0 interoperability harness
 
-`plans/plan_xnapipeline.md` `XNAP-32` / `XNAP-33` / `XNAP-34`.
+`XNAP-32` / `XNAP-33` / `XNAP-34`.
 
 ## Status, stated plainly
 
@@ -27,7 +27,7 @@ XNA runtime: 4.0.0.0
 The host was not Windows. It was Debian with the XNA 4.0 Refresh runtime installed into a Wine
 prefix (`~/.wine-cna-xna40`: the GAC, `XnaNative.dll`, and Direct3D 9 through DXVK), the harness
 compiled with mono's `mcs` against the SDK reference assemblies, and run under
-`DISPLAY=:99` on Xvfb. `plans/plan_xnapipeline_parity.md` `XNAPP-280` records the exact recipe.
+`DISPLAY=:99` on Xvfb. `XNAPP-280` records the exact recipe.
 
 One change to the harness itself was needed, and it is worth knowing about: `Game.RunOneFrame()`
 returns on this host with `GraphicsDeviceManager.GraphicsDevice` still **null**, so every
@@ -132,7 +132,7 @@ value the manifest declares. Those are honest gaps in what a runtime check can p
 
 ## Recording the result
 
-Whatever happens, put it in `plans/plan_xnapipeline.md` under `XNAP-34`:
+Whatever happens, record it in `docs/xnb-interoperability.md` §11:
 
 * the exact XNA runtime version the harness printed,
 * the Windows version,

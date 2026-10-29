@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: MS-PL
 """Independent, specification-based conformance parser for XNB files.
 
-plans/plan_xnapipeline.md ``XNAP-43``.
+``XNAP-43``.
 
 This program is deliberately a *second implementation* of the XNB container and
 of the built-in reader payloads. It shares no code, no headers and no constants
 with CNA, and it is written against the format description recorded in
-``plans/plan_xnapipeline.md`` section 2 plus the byte evidence in the committed
+``docs/xnb-interoperability.md`` section 2 plus the byte evidence in the committed
 fixtures -- not by transcribing CNA's C++ readers. Its whole value is that it
 can disagree with them.
 
@@ -213,7 +213,7 @@ class Cursor:
 
 
 # --- LZX ----------------------------------------------------------------------
-# plans/plan_xnapipeline.md ``XNAP-81``/``XNAP-9E``. An independent LZX decoder,
+# ``XNAP-81``/``XNAP-9E``. An independent LZX decoder,
 # written from the published format description -- the same description CNA's
 # encoder was written against, but by a different program in a different
 # language with no shared code, constants or tables. Its whole purpose is to be
@@ -756,7 +756,7 @@ class Reader:
         # interesting way to be wrong is an ordering one -- faces read in another order, or a depth
         # collapsed to one slice. So the first texel of each face, and of each slice, is reported
         # too: it is the smallest thing that tells those apart, and it is what the interoperability
-        # expectations are written against (plans/plan_xnapipeline_parity.md XNAPP-281).
+        # expectations are written against (XNAPP-281).
         if surface == "Color":
             if kind == "TextureCube":
                 report["size"] = width

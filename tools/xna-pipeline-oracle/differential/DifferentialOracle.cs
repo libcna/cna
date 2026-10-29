@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-265 (§23): run Microsoft's own `BuildContent` task over a
+// XNAPP-265: run Microsoft's own `BuildContent` task over a
 // committed corpus and record, per case, what it produced.
 //
 // Every other oracle in this tree measures one object at a time -- what a processor answers, what a

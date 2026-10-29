@@ -114,7 +114,7 @@ TEST(ImageLoaderTests, RejectsMalformedBuffersAndDimensions)
         std::invalid_argument);
 }
 
-// plans/plan_xnapipeline_parity.md XNAPP-021: a `.dib` is a bitmap that lost its file header, and
+// XNAPP-021: a `.dib` is a bitmap that lost its file header, and
 // the shared decoder is where it is put back -- so a content build and the runtime answer the same
 // pixels for the same bytes.
 TEST(ImageLoaderTests, DecodesADeviceIndependentBitmapThatHasNoFileHeader)

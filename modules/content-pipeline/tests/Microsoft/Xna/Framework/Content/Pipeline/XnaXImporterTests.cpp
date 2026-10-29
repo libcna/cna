@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-220, XNAPP-221: the DirectX `.x` importer, against the
+// XNAPP-220, XNAPP-221: the DirectX `.x` importer, against the
 // graph the genuine one answers for the same committed files.
 //
 // The expectations are tests/reference/xna40/model/model-import-oracle.json, cases `x/*`. The

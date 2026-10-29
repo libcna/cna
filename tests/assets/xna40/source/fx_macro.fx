@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-192: an effect that branches on a preprocessor symbol.
+// XNAPP-192: an effect that branches on a preprocessor symbol.
 //
 // Nothing defines CNA_TINTED here, so a build with no macros takes the untinted arm. XNA's
 // EffectProcessor has no parameter for defines and always compiles with none, which is what this

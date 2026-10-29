@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-A5: a standalone (non-GTest) program that stands in for
+// XNAP-A5: a standalone (non-GTest) program that stands in for
 // Microsoft's legacy `fxc` on the *other* side of a real process boundary.
 //
 // This exists because a FakeEffectCompiler C++ object proves nothing about the parts of the `.fx`

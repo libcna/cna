@@ -189,7 +189,7 @@ namespace CNA::Content::Cnb
      *
      * It is a *build-time* decision, which is why it is a parameter: a runtime reader must
      * reproduce what its file declares, and inventing a region there would give a compiled asset a
-     * loop its author never wrote (plans/plan_xnapipeline_parity.md `XNAPP-266`).
+     * loop its author never wrote (`XNAPP-266`).
      */
     enum class SoundEffectLoopPolicy
     {

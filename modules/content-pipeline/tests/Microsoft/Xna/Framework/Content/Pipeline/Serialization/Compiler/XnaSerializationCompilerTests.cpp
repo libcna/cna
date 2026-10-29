@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-060..063: the Serialization.Compiler façade --
+// XNAPP-060..063: the Serialization.Compiler façade --
 // ContentWriter over the one XnbWriter, ContentTypeWriter<T> as a user's base class,
 // ContentCompiler resolving writers by type -- proven by writing a user type and reading the
 // bytes back through CNA's independent XNB reader.
@@ -473,7 +473,7 @@ namespace
         // registered without any line of code being removed. That is exactly what happened to
         // `Dictionary<string,int>`, whose canonical writer is over `std::unordered_map` while the
         // pipeline holds the type as `std::map`: the line was there, the type was not
-        // (plans/plan_xnapipeline_parity.md XNAPP-260). Spelling the whole set out is what keeps a
+        // (XNAPP-260). Spelling the whole set out is what keeps a
         // silent drop from being silent.
         const Compiler::ContentCompiler compiler;
         std::vector<std::string> names = compiler.KnownTypeNames();

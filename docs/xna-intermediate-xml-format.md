@@ -1,7 +1,7 @@
 # The XNA 4.0 intermediate XML format, as measured
 
 This document is the specification CNA's `IntermediateSerializer` implements
-(`plans/plan_xnapipeline_parity.md`, Phase 5). Every statement in it was measured by running the
+(`XNAPP-070`..`XNAPP-079`). Every statement in it was measured by running the
 genuine XNA Game Studio 4.0 `IntermediateSerializer` over CNA-authored types under the .NET
 Framework 4.0 in Wine; the driver is `tools/xna-pipeline-oracle/intermediate/IntermediateOracle.cs`
 and the resulting corpus is `tests/reference/xna40/intermediate/` (the `manifest.json` there names

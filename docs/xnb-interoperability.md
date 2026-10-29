@@ -6,8 +6,8 @@ involved. This document says exactly what it produces and, for every claim, *how
 checked*.
 
 The read side is a separate document: `docs/xnb-content-pipeline-support.md` covers loading
-already-built `.xnb` files. The task history and the per-decision record are in
-`plans/plan_xnapipeline.md`.
+already-built `.xnb` files. The writer's design decisions are §12 below; its task history (`XNAP-*`)
+is in Git history.
 
 > **Provenance note (2026-09-03) — one implementation, and why the history mentions two.** This
 > document, and the plan behind it, were written believing no XNB writer existed in the repository.
@@ -21,16 +21,17 @@ already-built `.xnb` files. The task history and the per-decision record are in
 > they reappear.
 >
 > So the duplicate implementation is **historical provenance, not a current second architecture**.
-> The mistake stays on the record — `plans/plan_xnapipeline.md` §0 and §0.5 give the full account,
+> The mistake stays on the record — the deleted `plans/plan_xnapipeline.md` §0 and §0.5 (Git history) give the full account,
 > including what it cost — because an audit that checks one branch and concludes something about a
 > repository is a mistake worth being able to find again. Every capability claim below is about the
 > single surviving implementation.
 
-> **The single most important sentence in this document.** No table below claims verification
-> against a genuine Microsoft XNA 4.0 runtime, because no XNA 4.0 runtime — and no Windows, Wine,
-> Mono or .NET Framework — exists in the environment this work was done in. A ready-to-run harness
-> and a fixture corpus are committed so that anyone with an XNA-capable machine can fill that column
-> in; until they do, it stays empty. See **Running the XNA 4.0 harness** at the end.
+> **The genuine runtime has loaded what CNA writes.** The harness in `tests/interop/xna40/` loads
+> CNA-written `.xnb` files through Microsoft's own XNA 4.0 `ContentManager` (runtime 4.0.0.0 under
+> Wine with DXVK, on a real GPU) and asserts every value their manifests declare. The eight committed
+> fixtures pass uncompressed and LZX-compressed, and `Effect`, `Song` and `Video`, built from CNA's
+> own sources, pass too (`XNAPP-280`/`281`; re-run 2026-10-29, 3/3 CTests). The per-type tables below
+> still carry the labels they were written with; §11 says exactly what the runtime has covered.
 
 ---
 
@@ -93,7 +94,7 @@ Every capability table uses these labels, and "supported" is never written witho
 | `cna-rt` | CNA writes it and CNA's own independent **reader** loads it back with the expected values. The reader was written first, from the format, and knows nothing about the writer. |
 | `spec` | An independent, specification-based parser (`tools/xnb/xnb_conformance.py`, Python, sharing no code and no headers with CNA) parses the bytes and its field values match a hand-written expectation manifest. |
 | `golden` | The produced bytes are **identical** to a file produced by external tooling. |
-| `xna40` | Loaded by a genuine Microsoft XNA 4.0 runtime, with values asserted. **Nothing has this label yet.** |
+| `xna40` | Loaded by a genuine Microsoft XNA 4.0 runtime, with values asserted. The tables do not use it per row; §11 lists what the runtime has loaded. |
 | `none` | Not verified. |
 
 These are cumulative in strength but not in coverage: a type can be `cna-rt` without being `spec`
@@ -376,7 +377,7 @@ Stated plainly, because a gap named is worth more than a gap rounded up.
 |---|---|
 | **Compiling `.fx` to shader bytecode** | CNA does not *embed* an HLSL compiler, and that remains a standing decision ([`fx-compiled-effects.md`](fx-compiled-effects.md) §1). What it now does instead is **drive an external one**: the `.fx` route resolves the include tree, records every included file as a build dependency, invokes a compiler behind the `EffectCompilerService` interface, and refuses anything that comes back that is not an Effect Framework 9.1 container. The only compiler known to produce that container is Microsoft's own legacy `fxc` at profile `fx_2_0`, which cannot be vendored; supply it with `--fx-compiler` (or `CNA_FXC`), and `--fx-compiler-launcher wine` (or `CNA_FXC_LAUNCHER`) on a non-Windows build machine — see `docs/content-pipeline.md`, "Effects: `.fxb` and `.fx`", for the full precedence order. **Not verified against a real `fxc`** — none exists in the environment this was written in, so no test uses one: the unit tests substitute the compiler at the `EffectCompilerService` seam and the product-route tests drive a project-owned stand-in across a real process boundary, which proves CNA's own integration and nothing about `fxc` (`XNAP-A4`). It will still never fake a compile by embedding source text in an `Effect` asset. |
 | **Aligned-offset and uncompressed LZX blocks** | CNA *reads* both and emits neither: verbatim blocks are a conforming subset and the other two buy nothing here. See §2.1.1. |
-| **Xbox 360 semantics** | Beyond the `SoundEffect` WAVEFORMATEX byte swap, nothing is endian-corrected or tiled — and the writer refuses an `x` target rather than emitting Windows bytes under an Xbox header. `--xnb-allow-unverified-xbox` overrides it for hardware testing. |
+| **Xbox 360 semantics** | Beyond the `SoundEffect` WAVEFORMATEX byte swap, nothing is endian-corrected or tiled — and the writer refuses an `x` target rather than emitting Windows bytes under an Xbox header. `--xnb-allow-unverified-xbox` overrides it for hardware testing. No CNA output has been loaded on a console, and an Xbox 360 `Effect` would need Xenos shader bytecode, which no compiler available here produces (`XNAPP-257`/`258`). |
 | **Windows Phone semantics** | The header byte is written and the payloads are Windows's, which is very likely correct for a little-endian ARM target and is nonetheless **unverified**: no `m` fixture and no Windows Phone runtime exist here. |
 | **Array-valued effect parameters** | An `EffectMaterial` parameter that is `float[]`, `int[]` or `Matrix[]` is not written. Which reader instantiation XNA writes for one — `ArrayReader` or `ListReader`, over which element type — is not established by any fixture available here, and a guess would produce a file that loads into the wrong shape rather than one that fails to load. CNA's **reader** applies them if some other producer writes them. |
 | **`Decimal`** | Conditional on sharp-runtime's 128-bit integer support, on the read side too. |
@@ -535,6 +536,42 @@ the `.spritefont` route) and the vendored **Liberation Mono** test font (SIL OFL
 `tests/assets/fonts/PROVENANCE.json` carrying upstream, distributor, SHA-256 and the reason it is
 in the tree). Both are build-time and test-time only; no CNA runtime module links or embeds either.
 
+### 9.1 Source rules for the content-pipeline parity work
+
+These are the rules the XNA 4.0 Content Pipeline parity work (`XNAPP-*`) set for itself, carried
+over unchanged from its plan, which was deleted on 2026-10-29. The section numbers they cite
+(§18, §23, §25) are that plan's, in Git history.
+
+**Allowed, and actually used:**
+
+1. Public metadata of the legally obtained XNA Game Studio 4.0 Refresh reference assemblies, read
+   by `System.Reflection` — names, signatures, attributes, enum values, inheritance
+   (`tools/xna-pipeline-oracle/PipelineApiOracle.cs`).
+2. The official IntelliSense documentation `Microsoft.Xna.Framework.Content.Pipeline.xml`
+   shipped in the same SDK — summaries, parameter text, declared exceptions
+   (`merge_xml_docs.py`).
+3. Black-box execution of Microsoft's own tools: constructing built-in processors and reading
+   their public properties; running the `BuildContent` MSBuild task under Wine on synthetic
+   fixtures and observing the `.xnb` it writes (§23); loading CNA-written `.xnb` in the genuine
+   runtime (§25).
+4. The public MSBuild schema in `Microsoft.Xna.GameStudio.ContentPipeline.targets` and the
+   `.contentproj` files of the public XNA samples — item metadata names, property names, the
+   platform/profile spellings (§18).
+5. CNA's existing reader, writer and pipeline, and CNA's own independently authored code.
+6. Published XNB format documentation and the committed black-box fixtures
+   (`tests/assets/xnb/xna40/`, `tests/assets/xnb/monogame/`).
+
+**Forbidden, and enforced:** decompiling any XNA method body; deriving an algorithm from IL or
+native code; reading or copying MonoGame's or FNA's content-*building* source; copying another
+clean-room implementation; committing a Microsoft DLL, EXE, font or SDK component; inventing an
+API member because it "probably existed". `XNAPP-315` is the gate: no file under `tests/` or
+`tools/` may contain a Microsoft binary, and the oracle's compiled output lives only under the
+ignored `build/`.
+
+The **FNA reference tree** (`/rv/data/library/github.com/FNA-XNA/FNA`) is the runtime reference
+and has no content-*building* code, so it is neither needed nor consulted here. Where XNA and FNA
+disagree, XNA wins (`CLAUDE.md`, decided 2026-09-04).
+
 ---
 
 ## 10. Reproducing every claim in this document
@@ -562,5 +599,41 @@ claimed `CurveLoopType.Linear` was ordinal 1 when the file — correctly — sai
 values, not merely that `Load<T>()` returned. Its README carries the build and run instructions and
 the protocol for recording the result.
 
-**It has never been run against a real XNA runtime.** Until someone runs it and records the outcome,
-no table in this repository may claim XNA 4.0 verification, and none does.
+`run-interop-harness.sh` builds and runs it under Wine (`mcs` against the SDK reference assemblies,
+the prefix `~/.wine-cna-xna40` with `XnaNative.dll` and Direct3D 9 through DXVK, a private X
+display). Three CTests drive it, and each skips rather than fails on a machine without that setup:
+
+| CTest | What the genuine runtime loads |
+|---|---|
+| `XnaPipelineGenuineRuntimeInterop` | the eight committed fixtures, uncompressed: `texture2d_color_mips`, `texturecube_six_faces`, `texture3d_two_slices`, `soundeffect_pcm16_mono_22050`, `spritefont_two_glyphs`, `curve_two_keys`, `list_of_strings`, `model_triangle_basiceffect` |
+| `XnaPipelineGenuineRuntimeInteropLzx` | the same eight, LZX-compressed |
+| `XnaPipelineGenuineRuntimeBuiltFamilies` | `Effect`, `Song` and `Video`, built from CNA's own committed sources by `run-built-families-interop.sh` |
+
+The device is HiDef because XNA refuses a `Texture3D` under Reach. Running it found three defects
+nothing else could: the LZX encoder's missing end-of-stream trailer, which the runtime needs
+(`LzxEncoderTest.EveryCompressedPayloadEndsWithTheTrailerXnaRequires`), and two in the built
+families, among them an unqualified `VideoReader` name (`XNAPP-281`). All three pass as of
+2026-10-29.
+
+## 12. Design decisions
+
+* **`XnbByteWriter` rather than `System::IO::BinaryWriter`.** XNB writing needs an in-memory body
+  that the header is prepended to, and a UTF-8 `charcs` overload `BinaryWriter` does not have;
+  `CnbByteWriter` set the precedent of a CNA-owned deterministic writer beside sharp-runtime's
+  reader.
+* **`<FontName>` names a file, not a Windows font family.** XNA asks Windows to resolve a family
+  name through GDI+, so the same `.spritefont` builds differently on different machines, and not
+  at all without the font. CNA looks beside the description first (`Console`, `Console.ttf`,
+  `Console.otf`, `Console.ttc`), so a build is reproducible and the font travels with the project;
+  an installed system font is only a fallback, and using one warns that the build is no longer
+  reproducible. A deliberate divergence from XNA; the XNA spelling still works wherever the font
+  file is present.
+* **Build-time components live in `modules/content-pipeline/`.** FreeType, the block-compression
+  encoder and any future importer stay out of the link closure of a game that only loads content:
+  `cna_content_pipeline` is linked by `cna_content_compiler` and nothing else, so the dependency
+  graph enforces the boundary (`CnaXnbDependencyBoundary`).
+* **Block compression is reached through a callable.** `cna_content` declares the encoder's shape
+  (`TextureBlockEncoder`) and never links one; `cna_content_pipeline` supplies it. A registry
+  without an encoder builds every uncompressed texture and refuses a compressed `textureFormat`
+  with a message naming the configuration that would provide one, rather than quietly writing
+  uncompressed pixels.

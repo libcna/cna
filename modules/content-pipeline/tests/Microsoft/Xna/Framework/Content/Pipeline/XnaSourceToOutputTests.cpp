@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-021, XNAPP-167: the source-to-XNB and source-to-CNB legs
+// XNAPP-021, XNAPP-167: the source-to-XNB and source-to-CNB legs
 // of the input-parity matrix.
 //
 // The matrix (tests/reference/xna40/content-pipeline-inputs.json) holds eighteen extensions and

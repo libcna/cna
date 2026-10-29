@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-150 and 151: MeshBuilder and MeshHelper -- building a
+// XNAPP-150 and 151: MeshBuilder and MeshHelper -- building a
 // mesh a triangle at a time, and the operations on a finished one: normals, tangent frames,
 // skeletons, merging, ordering and whole-scene transforms -- against what the genuine XNA 4.0
 // pipeline does with the same meshes (tests/reference/xna40/graphics/graphics-content-oracle.json,

@@ -384,7 +384,7 @@ TEST(SoundEffectContentPipelineTest, MalformedWavReportsTheImporterStageAndCompo
     }
 }
 
-// -- wider source PCM (plans/plan_xnapipeline.md XNAP-55) ---------------------------------------
+// -- wider source PCM (XNAP-55) ---------------------------------------
 
 namespace
 {

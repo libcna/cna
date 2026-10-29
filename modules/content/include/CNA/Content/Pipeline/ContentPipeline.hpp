@@ -100,7 +100,7 @@ namespace CNA::Content::Pipeline
 
     /**
      * @brief The compiled container one build node emits
-     *        (plans/plan_xnapipeline.md `XNAP-60`).
+     *        (`XNAP-60`).
      *
      * The format is chosen at the writer boundary and nowhere else: importers, processors and the
      * canonical values between them are format-neutral, so a new source route reaches both outputs
@@ -142,7 +142,7 @@ namespace CNA::Content::Pipeline
 
     /**
      * @brief The XNA 4.0 platform a build produces content for
-     *        (plans/plan_xnapipeline_parity.md `XNAPP-040`).
+     *        (`XNAPP-040`).
      *
      * Format-neutral: a processor may consult it to take a platform-specific decision (texture
      * format, profile limits) whatever container the build writes. The XNB writer maps it onto
@@ -174,7 +174,7 @@ namespace CNA::Content::Pipeline
      * project that nothing else in the build will notice, and refusing is how an author finds out.
      *
      * XNA warns and carries on for both, measured case by case in
-     * plans/plan_xnapipeline_parity.md XNAPP-267, so the XNA task façade selects XnaCompatible:
+     * XNAPP-267, so the XNA task façade selects XnaCompatible:
      * a `.contentproj` that builds there has to build here. Every refusal *not* listed as a
      * leniency stays a refusal in both modes -- an impossible request is impossible whoever asked.
      */
@@ -305,7 +305,7 @@ namespace CNA::Content::Pipeline
          * verbosity, and a component uses it for what the author needs to see. Without a level
          * between `Info` and `Warning`, a user's important message either vanishes with the
          * chatter or is dressed up as a warning it is not
-         * (plans/plan_xnapipeline_parity.md `XNAPP-260`).
+         * (`XNAPP-260`).
          */
         Important,
         /** @brief Something the author lost, or is about to. */
@@ -489,7 +489,7 @@ namespace CNA::Content::Pipeline
      * and defaulting past it would produce content nobody asked for.
      *
      * XNA is lenient about exactly these two -- it warns and builds with the default, measured in
-     * plans/plan_xnapipeline_parity.md XNAPP-267 -- and `cna-content` is not, because a typo in a
+     * XNAPP-267 -- and `cna-content` is not, because a typo in a
      * parameter name should stop a build that nothing else will notice.
      */
     enum class ContentParameterFault
@@ -670,7 +670,7 @@ namespace CNA::Content::Pipeline
         /**
          * @brief Returns the process-local C++ type of the stored value, for a component that
          *        dispatches on it without knowing @p T statically (the XNA-shaped
-         *        `ContentCompiler`, plans/plan_xnapipeline_parity.md `XNAPP-062`).
+         *        `ContentCompiler`, `XNAPP-062`).
          *
          * Never serialized: it identifies a type only within this process.
          *
@@ -820,7 +820,7 @@ namespace CNA::Content::Pipeline
          * @param outputFormat Compiled container this build is producing.
          * @param environment Host-level build facts; defaults describe a Windows/Reach build.
          * @param pipeline The coordinator running this build, so a processor can request a
-         *        nested in-process build (plans/plan_xnapipeline_parity.md `XNAPP-044`); null
+         *        nested in-process build (`XNAPP-044`); null
          *        when the context is constructed outside a coordinator.
          */
         ContentProcessorContext(std::filesystem::path sourceRoot, std::filesystem::path source,
@@ -965,7 +965,7 @@ namespace CNA::Content::Pipeline
 
         /**
          * @brief Adds a compiled asset a nested build produced, to be published as an additional
-         *        output of the current node (plans/plan_xnapipeline_parity.md `XNAPP-044`).
+         *        output of the current node (`XNAPP-044`).
          *
          * This is how XNA's `ContentProcessorContext.BuildAsset` reaches the canonical
          * multi-output path: the nested build ran through the same pipeline, its bytes and
@@ -994,7 +994,7 @@ namespace CNA::Content::Pipeline
          * node's schema list -- the first to recognise every output it publishes, the second to
          * invalidate the node when a schema it depends on changes -- so a nested build's schemas
          * have to join that list or the node publishes an output it cannot describe and survives a
-         * change to the codec that wrote it (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+         * change to the codec that wrote it (`XNAPP-021`).
          *
          * Duplicates are ignored, so repeating a schema across nested builds is harmless.
          *
@@ -1098,7 +1098,7 @@ namespace CNA::Content::Pipeline
         /**
          * @brief Returns the stable name of the processor used when a build names none, or
          *        empty to keep the registry's own default resolution
-         *        (plans/plan_xnapipeline_parity.md `XNAPP-038`).
+         *        (`XNAPP-038`).
          *
          * XNA's `ContentImporterAttribute.DefaultProcessor`: the importer, not the registry,
          * knows which processor its output is meant for when several accept the same type. Every
@@ -1131,7 +1131,7 @@ namespace CNA::Content::Pipeline
          * sound effect when a project asks for one -- XNA's `WmaImporter` feeds either processor,
          * and 14 of the sample corpus's `.wma` items ask for `SoundEffectProcessor`. Registering
          * the second reader as an ordinary importer would make every convention build of a `.wma`
-         * ambiguous instead (plans/plan_xnapipeline_parity.md `XNAPP-332`).
+         * ambiguous instead (`XNAPP-332`).
          *
          * @return false for every ordinary importer.
          */
@@ -1196,7 +1196,7 @@ namespace CNA::Content::Pipeline
          * rather than as a route of its own -- the XNA-named `TextureProcessor` that `XNA`'s
          * `MaterialProcessor` builds a model's textures through, which accepts imported images and
          * must not therefore start competing with the built-in texture route for every `.png` in
-         * the tree (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+         * the tree (`XNAPP-021`).
          *
          * @return false for every ordinary processor.
          */
@@ -1232,7 +1232,7 @@ namespace CNA::Content::Pipeline
          *
          * A compiled `.xnb` carries no asset type id and no schema version, so the reader its root
          * object dispatches to is its compatibility identity and what the build manifest records
-         * (plans/plan_xnapipeline.md `XNAP-99`). A CNB writer leaves this empty.
+         * (`XNAP-99`). A CNB writer leaves this empty.
          */
         std::string rootReaderName;
 
@@ -1244,7 +1244,7 @@ namespace CNA::Content::Pipeline
          * nested build's output is a copy of an asset another node may already own -- a model's
          * materials build the textures they name, and a project usually lists those textures as
          * items of its own. In-memory only; the manifest records what was published, not who asked
-         * for it (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+         * for it (`XNAPP-021`).
          */
         bool fromNestedBuild = false;
     };
@@ -1269,7 +1269,7 @@ namespace CNA::Content::Pipeline
          *
          * A compiled `.xnb` carries no asset type id and no schema version, so the reader its root
          * object dispatches to is its compatibility identity and what the build manifest records
-         * (plans/plan_xnapipeline.md `XNAP-99`). A CNB writer leaves this empty.
+         * (`XNAP-99`). A CNB writer leaves this empty.
          */
         std::string rootReaderName;
 
@@ -1348,7 +1348,7 @@ namespace CNA::Content::Pipeline
 
         /**
          * @brief Writes with the build's host-level facts available
-         *        (plans/plan_xnapipeline_parity.md `XNAPP-063`).
+         *        (`XNAPP-063`).
          *
          * The coordinator calls this form; the default forwards to Write() so every existing
          * writer is unchanged. A writer whose bytes depend on the environment -- an XNB object
@@ -1474,7 +1474,7 @@ namespace CNA::Content::Pipeline
          * The pipeline's own routing never needs this: it resolves by extension. It exists so
          * that the *inventory* of what a configuration can build can be derived from the registry
          * rather than restated by hand somewhere it can go stale
-         * (plans/plan_xnapipeline.md `XNAP-61`).
+         * (`XNAP-61`).
          *
          * @return Every importer, ordered by identity name.
          */
@@ -1496,7 +1496,7 @@ namespace CNA::Content::Pipeline
 
         /**
          * @brief Records why one container deliberately has no writer for a processed type
-         *        (plans/plan_xnapipeline.md `XNAP-61`).
+         *        (`XNAP-61`).
          *
          * A missing writer and a *deliberately absent* one produce the same failure otherwise --
          * "no writer is registered" -- which tells a user nothing about whether they hit an
@@ -1753,7 +1753,7 @@ namespace CNA::Content::Pipeline
 
         /**
          * @brief Runs Importer -> Processor for a source and returns the processed value without
-         *        writing it (plans/plan_xnapipeline_parity.md `XNAPP-044`).
+         *        writing it (`XNAPP-044`).
          *
          * The in-process half of a build, for a processor that needs another asset's *processed
          * object* rather than its compiled bytes -- XNA's `BuildAndLoadAsset`. Dependencies the

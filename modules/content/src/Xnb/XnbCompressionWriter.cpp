@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-80: a raw LZ4 block encoder.
+// XNAP-80: a raw LZ4 block encoder.
 //
 // Written from the published LZ4 block format, which is a short and completely specified
 // grammar: a sequence is a token byte whose high nibble is a literal length and whose low nibble

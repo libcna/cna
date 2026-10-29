@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-099: black-box behaviour oracle for the XNA 4.0
+// XNAPP-099: black-box behaviour oracle for the XNA 4.0
 // framework's float-to-integer packing -- the Color constructors, Color.FromNonPremultiplied and
 // the Graphics.PackedVector types. The content pipeline's VectorConverter rounds where CNA (which
 // follows FNA here) truncates, and a converter measurement alone cannot say whether the rounding

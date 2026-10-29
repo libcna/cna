@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-260: the `.xml` source route.
+// XNAPP-260: the `.xml` source route.
 //
 // The pieces were all here before this file was: XNA's `XmlImporter` reads a document and asks the
 // intermediate serializer to build whatever its `Asset Type` names; `ContentCompiler` knows how to
@@ -218,7 +218,7 @@ namespace CNA::Content::Pipeline
             // XNA object graph is what an `.xnb` expresses, and `.cnb` is CNA's own container with
             // its own schema per asset type -- one would have to be invented for every type a
             // game's document might name. Recording it is what makes the refusal say which of the
-            // two it is (plans/plan_xnapipeline_parity.md XNAPP-260).
+            // two it is (XNAPP-260).
             registry.DocumentAbsentWriter(
                 ContentOutputFormat::Cnb, typeName,
                 "the `.xml` source route writes XNA object graphs, which is what an `.xnb` is; "

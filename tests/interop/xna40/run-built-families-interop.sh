@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xnapipeline_parity.md XNAPP-281: the three output families whose fixtures cannot be
+# XNAPP-281: the three output families whose fixtures cannot be
 # committed with the rest, loaded in a genuine XNA 4.0 runtime.
 #
 # Every fixture in `tests/assets/xnb/cna/windows/` is written by `cna_xnb_interop_fixtures`, which

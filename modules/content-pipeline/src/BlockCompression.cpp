@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-53: an independent BC1/BC2/BC3 encoder.
+// XNAP-53: an independent BC1/BC2/BC3 encoder.
 //
 // The design goal that shapes every decision here is that the encoder minimizes the error a
 // *decoder* will actually produce, not the error of an idealized interpolation. So the palette

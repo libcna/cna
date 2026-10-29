@@ -279,7 +279,7 @@ namespace CNA::Content::Pipeline
         {
             // Three components or four. XNA's own `ColorKeyColor` is a Color and a `.contentproj`
             // writes all four of them, so a build that only accepted `R,G,B` refused every project
-            // that named a key at all (plans/plan_xnapipeline_parity.md XNAPP-251). Written with
+            // that named a key at all (XNAPP-251). Written with
             // three, the alpha is 255, which is the only value an opaque source has.
             std::vector<std::string_view> components;
             std::size_t start = 0u;
@@ -395,7 +395,7 @@ namespace CNA::Content::Pipeline
          * Built from the shared surface reader rather than from the older cube decoder beside it,
          * which accepts a narrower set of pixel formats: this route has to take whatever
          * `XNAPP-165`'s reader takes, or a source XNA builds would be one CNA refuses
-         * (plans/plan_xnapipeline_parity.md XNAPP-255).
+         * (XNAPP-255).
          *
          * @param surfaces The whole DDS as the shared reader answered it.
          * @param origin Text naming the source in a diagnostic.
@@ -437,7 +437,7 @@ namespace CNA::Content::Pipeline
          * The same conversion DecodeDdsLevelZero() does, applied slice by slice: a volume's
          * surfaces arrive as one entry per slice, and `ImportedTexture3D` wants them concatenated
          * in slice order, which is the order the CNB and XNB writers store them in
-         * (plans/plan_xnapipeline_parity.md XNAPP-255).
+         * (XNAPP-255).
          *
          * @param surfaces The whole DDS as the shared reader answered it.
          * @param origin Text naming the source in a diagnostic.
@@ -581,7 +581,7 @@ namespace CNA::Content::Pipeline
         // portable anymap `.pnm` already covers. They are listed here rather than only on the XNA
         // façade because the façade is a façade -- a source the XNA importer accepts and the
         // canonical graph cannot route is a source that imports and never reaches an `.xnb`
-        // (plans/plan_xnapipeline_parity.md XNAPP-021).
+        // (XNAPP-021).
         return {".png", ".jpg", ".jpeg", ".bmp", ".tga", ".gif", ".psd", ".hdr",
                 ".pic", ".pnm", ".dds", ".dib", ".pfm", ".ppm"};
     }
@@ -592,7 +592,7 @@ namespace CNA::Content::Pipeline
         // answers a Texture2DContent, a TextureCubeContent or a Texture3DContent depending on what
         // the header says, and this importer does the same: the shape of the source decides, and
         // the graph then resolves whichever processor takes what came out
-        // (plans/plan_xnapipeline_parity.md XNAPP-255).
+        // (XNAPP-255).
         return {ImportedImageType, ImportedTextureCubeType, ImportedTexture3DType};
     }
 
@@ -847,7 +847,7 @@ namespace CNA::Content::Pipeline
                 // Truncated, not rounded. XNA's own pipeline answers 23 for a channel of 30 at
                 // alpha 200 where rounding answers 24, and the difference reaches every texel of
                 // every partially transparent texture (measured: `phone/png_texture` in the
-                // differential corpus, plans/plan_xnapipeline_parity.md XNAPP-251).
+                // differential corpus, XNAPP-251).
                 rgba[texel + channel] = static_cast<std::uint8_t>(
                     (static_cast<std::uint32_t>(rgba[texel + channel]) * alpha) / 255u);
             }
@@ -992,7 +992,7 @@ namespace CNA::Content::Pipeline
         // four-tap {1/16, 7/16, 7/16, 1/16} -- not the 2x2 area average this used to take, which
         // answers 64, 0, 0, 0. A step edge confirms it and confirms the edge rule: taps that fall
         // outside are clamped, and wrapping is wrong by up to 24 units at a border
-        // (plans/plan_xnapipeline_parity.md XNAPP-254).
+        // (XNAPP-254).
         //
         // The kernel reaches one texel beyond the pair it is reducing, which is why an area
         // average is not merely a different rounding of the same thing.
@@ -1003,7 +1003,7 @@ namespace CNA::Content::Pipeline
         // The kernel above describes an exact halving, where every output texel sits over the same
         // two source texels. An odd dimension has no such alignment, and XNA answers the area
         // average there: a 3x2 reduces to the mean of all six texels, exactly on the alpha channel
-        // (plans/plan_xnapipeline_parity.md XNAPP-254).
+        // (XNAPP-254).
         if ((width % 2u) != 0u || (height % 2u) != 0u)
         {
             return HalveRgbaImageByArea(pixels, width, height);
@@ -1102,7 +1102,7 @@ namespace CNA::Content::Pipeline
     ContentComponentIdentity TextureProcessor::Identity() const
     {
         // Build version 3: premultiplyAlpha now defaults to true, matching XNA 4.0's own
-        // TextureProcessor (plans/plan_xnapipeline.md XNAP-96). That changes the bytes of every
+        // TextureProcessor (XNAP-96). That changes the bytes of every
         // alpha-bearing texture, so the version must move or an incremental build would skip
         // artifacts that are no longer current. (Version 2 was the textureFormat/generateMipmaps/
         // premultiplyAlpha/resizeToPowerOfTwo parameter set arriving.)
@@ -1176,9 +1176,9 @@ namespace CNA::Content::Pipeline
         // A key the *build* asked for is XNA's and clears the colour with the alpha; a key a
         // `.cnj` authored is CNA's own and keeps it. The two really do differ, and the difference
         // is invisible until premultiplication is turned off. XNA's rule is measured
-        // (`texture/png4x4_no_premultiply`, plans/plan_xnapipeline_parity.md XNAPP-251); the
+        // (`texture/png4x4_no_premultiply`, XNAPP-251); the
         // authored one is what every existing `.cnj` already compiles to, and changing that would
-        // change what a committed document means (plans/plan_xnapipeline.md XNAP-96).
+        // change what a committed document means (XNAP-96).
         std::optional<std::array<std::uint8_t, 4>> colorKey =
             passThrough ? std::nullopt : ReadColorKey(parameters);
         bool clearKeyedColor = colorKey.has_value();
@@ -1284,7 +1284,7 @@ namespace CNA::Content::Pipeline
         // The graphics profile's own limits on a Texture2D, in XNA's own sentences and in XNA's
         // own order: the size first, then the aspect ratio. Measured by building the same image
         // under both profiles (`profile/*` in the differential corpus,
-        // plans/plan_xnapipeline_parity.md XNAPP-253) -- a 2049x1 is refused by Reach for its size
+        // XNAPP-253) -- a 2049x1 is refused by Reach for its size
         // and by HiDef for its shape, a 4097x1 by HiDef for its size, and a 2048x1 is fine in both.
         //
         // Checked after the resize, because that is the texture the profile has to hold, and only
@@ -1429,7 +1429,7 @@ namespace CNA::Content::Pipeline
                 // (tests/reference/xna40/differential, cases texture/png_texture_dxt,
                 // texture/png3x2_texture_dxt, texture/png4x4_texture_dxt). Without it a project
                 // that asks for DXT on such a texture fails its build under XNA and quietly ships
-                // a padded one from CNA (plans/plan_xnapipeline_parity.md XNAPP-265).
+                // a padded one from CNA (XNAPP-265).
                 //
                 // Only on the path that actually compresses: a `.cnb` keeps the uncompressed
                 // pixels and says so above, so XNA's rule has nothing to refuse there.

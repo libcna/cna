@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-300: the same sources build to the same bytes, however
+// XNAPP-300: the same sources build to the same bytes, however
 // many workers ran and whichever process ran them.
 //
 // A content build that is not deterministic breaks two things at once, quietly. Every incremental

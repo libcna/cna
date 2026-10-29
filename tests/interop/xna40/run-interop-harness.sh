@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xnapipeline_parity.md XNAPP-280: run the interoperability harness against a genuine
+# XNAPP-280: run the interoperability harness against a genuine
 # Microsoft XNA 4.0 runtime.
 #
 # The harness is a Windows program and XNA 4.0 is Windows-only, so this runs it under Wine against

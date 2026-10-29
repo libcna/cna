@@ -44,7 +44,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
 {
     /**
      * @brief Supplies the .NET-style full type name every pipeline value is identified by
-     *        (plans/plan_xnapipeline_parity.md `XNAPP-030`, docs/xna-content-pipeline-compat-api.md §3).
+     *        (`XNAPP-030`, docs/xna-content-pipeline-compat-api.md §3).
      *
      * XNA identifies content by CLR type; C++ has no runtime type name that survives compilers,
      * so the name is supplied explicitly. The primary template reads a class's

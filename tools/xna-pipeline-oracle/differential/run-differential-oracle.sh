@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xnapipeline_parity.md XNAPP-265 (§23): run Microsoft's own BuildContent task over the
+# XNAPP-265: run Microsoft's own BuildContent task over the
 # committed corpus and record what it produced.
 #
 # The driver is compiled with mono's mcs against the XNA Game Studio 4.0 Refresh reference
@@ -73,7 +73,7 @@ cp -a "${CNA_DIFFERENTIAL_SOURCES:-$repo/tests/assets/xna40}/." "$build/run/sour
 # the one the corpus names, so nothing is installed here: copying the repository's own copy into
 # the prefix's Fonts directory actively breaks it, because Wine then reports the family with its
 # Regular style unavailable and every font case fails for a reason that is not XNA's
-# (plans/plan_xnapipeline_parity.md XNAPP-267). The differential test hands CNA the committed copy
+# (XNAPP-267). The differential test hands CNA the committed copy
 # instead, because CNA resolves a file rather than a family; one face, presented to each side the
 # way that side looks for one.
 if command -v fc-list >/dev/null && [ -z "$(fc-list : family | grep -i 'Liberation Mono')" ]; then

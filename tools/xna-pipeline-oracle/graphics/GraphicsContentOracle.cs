@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-098: black-box behaviour oracle for the XNA 4.0 graphics
+// XNAPP-098: black-box behaviour oracle for the XNA 4.0 graphics
 // content object model (Microsoft.Xna.Framework.Content.Pipeline.Graphics). It runs the genuine
 // assemblies and records what they DO -- pixel layouts, conversion rounding, resize filtering,
 // DXT block sizes, mipmap chains, validation messages, VectorConverter tables -- so CNA's

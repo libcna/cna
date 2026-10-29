@@ -286,7 +286,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
-# --- plans/plan_xnapipeline_parity.md XNAPP-290: the .x and FBX reader fuzz harness ---
+# --- XNAPP-290: the .x and FBX reader fuzz harness ---
 # The same two shapes as the intermediate-XML harness below: standalone replay/mutation by
 # default, the libFuzzer entry point on request. Not a ctest test; the deterministic mutation pass
 # that runs on every build is XnaModelReaderHardeningTests in the content-pipeline suite. The
@@ -311,7 +311,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
-# --- plans/plan_xnapipeline_parity.md XNAPP-075: XNA intermediate-XML fuzz harness ---
+# --- XNAPP-075: XNA intermediate-XML fuzz harness ---
 # Same two shapes as the compiled-effect harness: standalone replay/mutation by default, the
 # libFuzzer entry point on request. Not a ctest test; the deterministic mutation pass that does
 # run on every build is XnaIntermediateSerializerHardeningTests in the content-pipeline suite.
@@ -457,7 +457,7 @@ if(CNA_BUILD_TESTS AND CNA_PLATFORM STREQUAL "SDL3" AND NOT (EMSCRIPTEN OR ANDRO
     endif()
 endif()
 
-# --- plans/plan_xnapipeline.md XNAP-A5: fake external effect compiler ---
+# --- XNAP-A5: fake external effect compiler ---
 # A standalone (non-GTest) program that stands in for Microsoft's legacy `fxc` on the other side of
 # a real process boundary, so the `.fx` product route is proven as one chain -- command line,
 # backend discovery, argument quoting, process invocation, both output streams, the processor and

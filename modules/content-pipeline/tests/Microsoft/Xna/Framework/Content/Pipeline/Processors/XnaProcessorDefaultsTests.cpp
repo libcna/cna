@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-023: does a CNA processor, constructed and asked nothing
+// XNAPP-023: does a CNA processor, constructed and asked nothing
 // else, answer what XNA's answered?
 //
-// The plan's §10 is an inventory of every processor property with the default the black-box oracle
-// read off a freshly constructed instance of Microsoft's own class. That inventory is the audit;
-// this is the other half of it, and the half that keeps being true: each property is constructed
-// here and compared with the value recorded there. A default is the most quietly wrong thing a
-// reimplementation can have -- nothing fails, the content is just different -- and three of them
-// were wrong before this plan (`ColorKeyEnabled`, `SpriteTextureProcessor`'s `GenerateMipmaps`, and
-// the font-description style parsing), each found by hand.
+// The parity work's processor inventory lists every processor property with the default the
+// black-box oracle read off a freshly constructed instance of Microsoft's own class. That
+// inventory is the audit; this is the other half of it, and the half that keeps being true: each
+// property is constructed here and compared with the value recorded there. A default is the most
+// quietly wrong thing a reimplementation can have -- nothing fails, the content is just different
+// -- and three of them were wrong before that work (`ColorKeyEnabled`, `SpriteTextureProcessor`'s
+// `GenerateMipmaps`, and the font-description style parsing), each found by hand.
 //
 // Every row below carries an `XNA-DEFAULT:` comment naming the processor, the property and the
 // value. `tools/xna-pipeline-oracle/processor_defaults_gate.py` reads those comments back out of

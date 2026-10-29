@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-070..074: CNA's IntermediateSerializer against the corpus
+// XNAPP-070..074: CNA's IntermediateSerializer against the corpus
 // the genuine XNA 4.0 IntermediateSerializer wrote (tests/reference/xna40/intermediate/). The
 // types below mirror tools/xna-pipeline-oracle/intermediate/IntermediateOracle.cs member for
 // member and value for value, so every `written` case can be compared byte for byte, every

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-230: XmlImporter -- the intermediate serializer reached
+// XNAPP-230: XmlImporter -- the intermediate serializer reached
 // through the importer -- against what the genuine XNA 4.0 importer answers for the same
 // documents (tests/reference/xna40/intermediate/manifest.json, cases importer_*, whose inputs are
 // published beside it as `<case>.importer.xml`).

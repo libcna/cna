@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-50/XNAP-51/XNAP-52: the `.spritefont` source route.
+// XNAP-50/XNAP-51/XNAP-52: the `.spritefont` source route.
 
 #include <cstdint>
 #include <filesystem>
@@ -268,7 +268,7 @@ TEST(FontDescriptionTest, DirectExpansionRetainsEmptyEndpointAndExactLimitBehavi
 
 // A <DefaultCharacter> the regions do not cover joins them, which is what XNA does: measured on
 // font_regions.spritefont, whose two regions cover 42 characters and whose built font carries 43
-// (plans/plan_xnapipeline_parity.md XNAPP-182). Refusing was this pipeline's own idea, and the
+// (XNAPP-182). Refusing was this pipeline's own idea, and the
 // reason it gave -- that such a font could never draw its own fallback -- was true only because it
 // declined to put the glyph there.
 TEST(FontDescriptionTest, ADefaultCharacterOutsideTheRegionsJoinsThem)

@@ -4,7 +4,7 @@
 > Windows Media, measured black-box under Wine by
 > `tools/xna-pipeline-oracle/media/run-media-oracle.sh` into
 > `tests/reference/xna40/media/media-content-oracle.json`. Task rows:
-> `plans/plan_xnapipeline_parity.md` `XNAPP-201`, `XNAPP-202`, `XNAPP-220`, `XNAPP-136`, `XNAPP-043`.
+> `XNAPP-201`, `XNAPP-202`, `XNAPP-220`, `XNAPP-136`, `XNAPP-043`.
 >
 > Nothing here was read out of Microsoft's code. Every line is either an attribute the assemblies
 > publish, a value a public property answered, or the text of an exception a public call threw.

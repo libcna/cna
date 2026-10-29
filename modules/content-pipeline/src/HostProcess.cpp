@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-A1: running one build-time tool and capturing what it said.
+// XNAP-A1: running one build-time tool and capturing what it said.
 //
 // This exists because the `.fx` source route needs an external effect compiler and there is no
 // portable way to run one. Both implementations below avoid a shell entirely: the arguments are a

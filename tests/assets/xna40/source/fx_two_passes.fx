@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-192: fx_minimal.fx with a second pass in one technique,
+// XNAPP-192: fx_minimal.fx with a second pass in one technique,
 // and render state on both, which is the other half of what a pass carries.
 float4x4 WorldViewProjection;
 

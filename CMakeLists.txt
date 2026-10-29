@@ -92,7 +92,7 @@ cna_configure_linker()
 # sibling Sharp Runtime checkout. Disable with -DCNA_USE_CCACHE=OFF when diagnosing launcher issues.
 option(CNA_USE_CCACHE "Use ccache for CNA and sharp-runtime builds when available" ON)
 
-# plans/plan_xnapipeline.md XNAP-51/XNAP-52: FreeType powers the .spritefont source route, and is
+# XNAP-51/XNAP-52: FreeType powers the .spritefont source route, and is
 # a build-time dependency only -- it is linked by cna_content_pipeline, which no runtime game
 # links. OFF/AUTO/ON have the same meaning as CNA_ENABLE_VIDEO's.
 set(CNA_ENABLE_FONT_PIPELINE "AUTO" CACHE STRING
@@ -263,7 +263,7 @@ if(NOT DEFINED SHARP_RUNTIME_COMPONENTS OR SHARP_RUNTIME_COMPONENTS STREQUAL "")
 endif()
 # A build directory configured before a component joined the closure keeps the old list in its
 # cache; merge the closure into it so an incremental reconfigure enables the new component
-# (plans/plan_xnapipeline_parity.md XNAPP-071 added Xml) instead of failing at link time.
+# (XNAPP-071 added Xml) instead of failing at link time.
 set(_cna_sharp_runtime_components "${SHARP_RUNTIME_COMPONENTS}")
 foreach(_cna_component IN LISTS CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS)
     if(NOT _cna_component IN_LIST _cna_sharp_runtime_components)

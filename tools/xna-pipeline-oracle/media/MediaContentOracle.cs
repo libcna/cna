@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-201, XNAPP-202, XNAPP-220, XNAPP-136: black-box behaviour oracle
+// XNAPP-201, XNAPP-202, XNAPP-220, XNAPP-136: black-box behaviour oracle
 // for the three importers XNA reads through Windows Media -- Mp3Importer, WmaImporter and
 // WmvImporter -- for the VideoContent they and the VideoProcessor exchange, and for what
 // SongProcessor and VideoProcessor do with them.

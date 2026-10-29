@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plans/plan_xnapipeline_parity.md XNAPP-016: the denominator is frozen, and unfreezing is an event.
+"""XNAPP-016: the denominator is frozen, and unfreezing is an event.
 
 Every percentage in this plan is a fraction of a denominator measured once from Microsoft's own
 assemblies. A denominator that can move without anyone noticing is not a denominator: a regenerated

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-A5: the `.fx` route as a *product*, not as a registry a test
+// XNAP-A5: the `.fx` route as a *product*, not as a registry a test
 // assembled for itself.
 //
 // EffectSourceTests.cpp verifies the route from the EffectCompilerService seam inwards, with a
@@ -197,7 +197,7 @@ namespace
             // (sharp-runtime Environment.cpp #2313). Flattening it here restored a variable that
             // had been unset as set-to-empty, which every later test in the process then saw --
             // and a check for "is a compiler configured" answered yes to an empty path
-            // (plans/plan_xnapipeline_parity.md XNAPP-265).
+            // (XNAPP-265).
             System::Environment::SetEnvironmentVariable(name_, previous_);
         }
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-265 (§23): CNA's build compared with XNA's own, case for
+// XNAPP-265: CNA's build compared with XNA's own, case for
 // case.
 //
 // `tools/xna-pipeline-oracle/differential/` runs Microsoft's `BuildContent` task -- the one an XNA
@@ -165,7 +165,7 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
     // Beside the oracle's own scratch tree rather than inside it: `run-differential-oracle.sh`
     // begins by removing `build/xna-pipeline-oracle/differential`, so a CNA side published under
     // that directory disappears the next time the oracle runs, and the comparison then reports
-    // every case absent (plans/plan_xnapipeline_parity.md XNAPP-182).
+    // every case absent (XNAPP-182).
     const std::filesystem::path publishRoot =
         Locate("tools/xna-pipeline-oracle").parent_path().parent_path() /
         "build" / "xna-pipeline-oracle" / "cna-differential";
@@ -265,7 +265,7 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
     // And the semantic comparison, here rather than in a test of its own: it reads the directory
     // this test has just written, and two gtest cases are two processes with no ordering between
     // them. Until this ran from the suite it ran only when somebody remembered to type it, which
-    // is the same as not running (plans/plan_xnapipeline_parity.md XNAPP-191).
+    // is the same as not running (XNAPP-191).
     if (!disagreements.empty()) { return; }
     const std::filesystem::path compare =
         Locate("tools/xna-pipeline-oracle/differential/compare.py");

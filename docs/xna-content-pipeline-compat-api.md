@@ -1,6 +1,6 @@
 # The XNA 4.0 Content Pipeline compatibility API in C++
 
-`plans/plan_xnapipeline_parity.md` `XNAPP-030`. This document is the design contract for the
+`XNAPP-030`. This document is the design contract for the
 `Microsoft::Xna::Framework::Content::Pipeline` namespace family: how every public XNA Game Studio
 4.0 Content Pipeline type is spelled in C++, which substitutions C++ forces, and how the façade
 reaches the one canonical engine underneath it. The generated parity matrix is
@@ -171,7 +171,7 @@ Two idioms differ from C# and are worth knowing:
 
 * Byte-for-byte identical `.xnb` output is asserted only where XNA's serialization is
   deterministic and CNA is already golden-tested against it; elsewhere the differential harness
-  compares semantics (`plans/plan_xnapipeline_parity.md` §24).
+  compares semantics (`tools/xna-pipeline-oracle/differential/compare.py`).
 * A type is not "implemented" because its header compiles. The parity map records
   `EXACT_EQUIVALENT`/`SEMANTIC_EQUIVALENT` only once the behaviour is tested; until then the row is
   `MISSING`, however much code exists.

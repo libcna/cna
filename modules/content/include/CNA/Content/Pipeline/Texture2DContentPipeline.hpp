@@ -41,7 +41,7 @@ namespace CNA::Content::Pipeline
      * @brief TextureProcessor parameter (`true`/`false`) multiplying colour by alpha.
      *
      * **Defaults to `true`, exactly as XNA 4.0's `TextureProcessor.PremultiplyAlpha` does**
-     * (plans/plan_xnapipeline.md `XNAP-96`). `BlendState::AlphaBlend` -- what
+     * (`XNAP-96`). `BlendState::AlphaBlend` -- what
      * `SpriteBatch::Begin()` selects when given no blend state -- is the premultiplied blend in
      * both frameworks, so a texture that is *not* premultiplied renders with dark fringes under
      * the default blend state. Setting this to `false` keeps straight alpha, for a game that

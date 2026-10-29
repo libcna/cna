@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xnapipeline_parity.md XNAPP-201, XNAPP-202, XNAPP-220: run the genuine XNA 4.0 media
+# XNAPP-201, XNAPP-202, XNAPP-220: run the genuine XNA 4.0 media
 # importers and processors over the synthetic corpus and record what they do.
 #
 # Compiled with mono's mcs against the XNA Game Studio 4.0 reference assemblies and executed under

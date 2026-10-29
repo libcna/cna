@@ -15,7 +15,7 @@ namespace CNA::Internal::Xnb
 
     /**
      * @brief A process-unique, RTTI-free identity for one serialized C++ type
-     *        (plans/plan_xnapipeline.md `XNAP-15`).
+     *        (`XNAP-15`).
      *
      * The address of a function-local static is unique per instantiation of the enclosing
      * template and stable for the process lifetime, which is exactly what a typed registry key

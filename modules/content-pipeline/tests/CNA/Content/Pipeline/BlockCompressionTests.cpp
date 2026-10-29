@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-53: the BC1/BC2/BC3 encoder.
+// XNAP-53: the BC1/BC2/BC3 encoder.
 //
 // Every quality assertion here decodes with CNA's own runtime decoder
 // (CNA::Internal::Graphics::DxtUtil), which is the decoder a CNA game actually uses on a

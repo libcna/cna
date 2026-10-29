@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xnapipeline_parity.md XNAPP-167: the per-extension texture corpus.
+"""XNAPP-167: the per-extension texture corpus.
 
 The nine extensions `TextureImporter` declares each get a committed fixture here, so the genuine
 XNA importer and CNA's importer read **the same bytes** rather than two encoders' idea of the same

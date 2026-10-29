@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-010 / XNAPP-011: the Microsoft XNA Game Studio 4.0
+// XNAPP-010 / XNAPP-011: the Microsoft XNA Game Studio 4.0
 // Content Pipeline public-API oracle.
 //
 // WHAT THIS IS
@@ -19,7 +19,7 @@
 // each built-in processor with its parameterless constructor and reads the public properties
 // back, which is exactly what MSBuild's BuildContent task does before applying
 // ProcessorParameters_* metadata. That is the sanctioned use in the provenance rules of
-// plans/plan_xnapipeline_parity.md section 2.
+// docs/xnb-interoperability.md section 9.
 //
 // It references no XNA assembly at compile time, so it compiles with `mcs` on Linux or
 // `csc.exe` on Windows with nothing but the base class library, and loads the assemblies from the

@@ -181,7 +181,7 @@ namespace CNA::Content::Pipeline::BuildTimeMedia
         // contains: XNA's seven Platformer sound effects are each exactly 4096 frames shorter
         // than this decoder's output with the skip left in, and byte-identical to it once those
         // frames are dropped (measured against the sample's own genuine build,
-        // plans/plan_xnapipeline_parity.md XNAPP-332).
+        // XNAPP-332).
         const AVCodecID skipCodecId = stream->codecpar->codec_id;
         const bool decoderPriming =
             skipCodecId == AV_CODEC_ID_WMAV1 || skipCodecId == AV_CODEC_ID_WMAV2 ||

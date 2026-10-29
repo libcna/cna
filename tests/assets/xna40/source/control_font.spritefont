@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    plans/plan_xnapipeline_parity.md XNAPP-267: the font case that is meant to build.
+    XNAPP-267: the font case that is meant to build.
 
     missing_glyph.spritefont beside this one differs from it in one element, the character region,
     so that a refusal there is about the glyphs and not about whether the font resolved at all.

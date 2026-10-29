@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-260: does a third party's content pipeline actually work?
+// XNAPP-260: does a third party's content pipeline actually work?
 //
 // `modules/content-pipeline/examples/xna-custom-pipeline.cpp` is a user's code: its own
 // intermediate types, its own source extension, an importer and processor derived from XNA's own

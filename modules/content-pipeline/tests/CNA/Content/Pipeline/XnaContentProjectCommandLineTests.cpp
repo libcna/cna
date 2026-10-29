@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-240: `cna-content build Foo.contentproj`.
+// XNAPP-240: `cna-content build Foo.contentproj`.
 //
 // A `.contentproj` is what an XNA developer has. Reading one was already done -- the whole §18
 // schema, the conditions, the metadata -- and what was missing was the two things a command line
@@ -168,7 +168,7 @@ TEST(XnaContentProjectCommandLine, AProjectIsBuiltWithItsOwnImportersProcessorsA
     EXPECT_NE(invocation.output.find("Assets: 2"), std::string::npos) << invocation.output;
 }
 
-// plans/plan_xnapipeline_parity.md XNAPP-320. Every `.contentproj` a game actually has spells its
+// XNAPP-320. Every `.contentproj` a game actually has spells its
 // item paths the way MSBuild does, with a backslash, because every one of them was written on
 // Windows. The copy path had always resolved that; the *build* path had not, so on a POSIX host a
 // real project failed with "the source asset \"Textures\\hero.png\" does not exist" -- a true
@@ -192,7 +192,7 @@ TEST(XnaContentProjectCommandLine, AnItemPathSpelledTheWayMsBuildSpellsItResolve
         << invocation.output;
 }
 
-// plans/plan_xnapipeline_parity.md XNAPP-330. An item's `Name` metadata is MSBuild's `%(Filename)`:
+// XNAPP-330. An item's `Name` metadata is MSBuild's `%(Filename)`:
 // 8790 of the 8795 `Compile` items in the sample corpus carry a `Name` that is exactly the source
 // file's stem, and the five that differ are what settles what it means. Reading it as the asset's
 // content name flattened every asset in a subdirectory into the output root, and refused outright a
@@ -230,7 +230,7 @@ TEST(XnaContentProjectCommandLine, TheContentNameIsTheItemsDirectoryPlusItsName)
     EXPECT_FALSE(std::filesystem::exists(project.Output() / "probe.xnb"));
 }
 
-// plans/plan_xnapipeline_parity.md XNAPP-330. A project is its item list. A source file sitting in
+// XNAPP-330. A project is its item list. A source file sitting in
 // the same folder that the project does not name is not part of it: XNA never built it, and
 // building it here produces an asset XNA has not got -- or, when the unlisted neighbour shares a
 // name with a listed one, refuses a project XNA builds. The Platformer sample is exactly that:
@@ -254,7 +254,7 @@ TEST(XnaContentProjectCommandLine, AFileTheProjectDoesNotListIsNotBuilt)
     EXPECT_NE(invocation.output.find("Assets: 1"), std::string::npos) << invocation.output;
 }
 
-// plans/plan_xnapipeline_parity.md XNAPP-332. XNA has one `AudioContent`, so its audio importers
+// XNAPP-332. XNA has one `AudioContent`, so its audio importers
 // feed either processor: 14 of the sample corpus's `.wma` items ask for `SoundEffectProcessor` and
 // 14 of its `.wav` items ask for `SongProcessor`. CNA has two imported types, so both crossings
 // used to be refused with "processor 'CNA.SoundEffectProcessor' does not accept imported type
@@ -306,7 +306,7 @@ TEST(XnaContentProjectCommandLine, TheProcessorDecidesWhichReadingOfAnAudioSourc
               std::string::npos);
 }
 
-// plans/plan_xnapipeline_parity.md XNAPP-332. An `.xnb` carries the media file's path relative to
+// XNAPP-332. An `.xnb` carries the media file's path relative to
 // the `.xnb` that names it, not to the content root: XNA's own `Content/Sounds/Music.xnb` names
 // `Music.wma`, `Content-phone/Sounds/NinjAcademy.xnb` names `NinjAcademy_Music.wma`, and
 // NetRumble's root-level song names `One Step Beyond.wma`. CNA's own reader resolves it that way

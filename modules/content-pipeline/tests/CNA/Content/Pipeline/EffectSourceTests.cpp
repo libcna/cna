@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-A1/XNAP-A2/XNAP-A3: the `.fx` source route.
+// XNAP-A1/XNAP-A2/XNAP-A3: the `.fx` source route.
 //
 // No Microsoft `fxc` exists in this environment, and none can be vendored, so every test here
 // drives the pipeline through a substituted EffectCompilerService. That is the whole reason the

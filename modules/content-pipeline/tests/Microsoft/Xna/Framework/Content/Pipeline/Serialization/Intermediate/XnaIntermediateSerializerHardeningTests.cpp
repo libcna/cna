@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-075: the intermediate serializer under hostile input.
+// XNAPP-075: the intermediate serializer under hostile input.
 // A malformed document has exactly two permitted outcomes -- a value, or an InvalidContentException
 // (an XmlException from the parser for text that is not XML) -- never a crash, a hang or another
 // exception type. The mutation pass is deterministic (fixed seed) so a failure reproduces.

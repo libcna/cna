@@ -1056,7 +1056,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 // Normal, Color, TextureCoordinate, while `two_textures.x` declares none and
                 // answers TextureCoordinate, Normal (tests/reference/xna40/model, x/*). The order
                 // is not cosmetic -- it is the order of the elements in the vertex buffer
-                // (plans/plan_xnapipeline_parity.md XNAPP-266).
+                // (XNAPP-266).
                 const auto addNormals = [&]
                 {
                     std::vector<Vector3> channel;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-267 (§23): the builds that are meant to go wrong, compared
+// XNAPP-267: the builds that are meant to go wrong, compared
 // with XNA's own.
 //
 // XNAPP-265 asked whether the two builds accept the same sources and XNAPP-266 whether the files

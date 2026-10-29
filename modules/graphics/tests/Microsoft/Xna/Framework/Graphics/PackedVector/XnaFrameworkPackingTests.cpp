@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-099: CNA's float-to-integer packing against what the
+// XNAPP-099: CNA's float-to-integer packing against what the
 // genuine XNA 4.0 framework does with the same inputs
 // (tests/reference/xna40/framework/framework-packing-oracle.json, produced by
 // tools/xna-pipeline-oracle/framework/run-framework-oracle.sh).
@@ -327,7 +327,7 @@ namespace
      * axes are equally wide, and it is reproduced beside the type it belongs to, in
      * `modules/math/tests/.../BoundingSphereTests.cpp`
      * (`CreateFromPointsBreaksAnAxisTieTheWayXnaDoes`). Named here so this gate still knows the
-     * measurement is used (plans/plan_xnapipeline_parity.md `XNAPP-266`).
+     * measurement is used (`XNAPP-266`).
      */
     const std::set<std::string>& Unreproduced()
     {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline.md XNAP-A2: the build-time effect compiler backend.
+// XNAP-A2: the build-time effect compiler backend.
 //
 // **What XNA 4.0's Effect XNB payload actually contains**, established from this repository's own
 // evidence rather than from memory:
@@ -198,7 +198,7 @@ namespace CNA::Content::Pipeline
          * and the three sets below are measured rather than derived: three fixtures each assign
          * every state of one group and nothing else, and the genuine build answers 1, 2 and 4 for
          * them (`effect/fx_state_blend_wide`, `_depth_wide`, `_raster_wide` in the differential
-         * corpus, plans/plan_xnapipeline_parity.md XNAPP-191). 146 and 147 are the pass's own
+         * corpus, XNAPP-191). 146 and 147 are the pass's own
          * vertex and pixel shader assignments and belong to no device state.
          *
          * A state outside every set is one this repository has not measured. It answers a group
@@ -352,7 +352,7 @@ namespace CNA::Content::Pipeline
          * shader declares: a sampler written `sampler S : register(s0);` with no state block is
          * declared by the shader and is in neither mask, which is what separates it from one
          * written `sampler_state { Texture = <T>; }`. Measured on thirty-one effects built by the
-         * genuine pipeline -- the seventeen of plans/plan_xnapipeline_parity.md XNAPP-191 and
+         * genuine pipeline -- the seventeen of XNAPP-191 and
          * fourteen written to vary one property at a time
          * (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-201).
          *
@@ -663,7 +663,7 @@ namespace CNA::Content::Pipeline
          * measure the processor called *directly* and both answer zero. A build answers something
          * else: the pair says which device state that pass disturbs and which sampler registers it
          * binds, and its length therefore follows the pass count rather than being sixteen bytes
-         * (plans/plan_xnapipeline_parity.md `XNAPP-191`, and @ref SummarizeEffectPasses for the
+         * (`XNAPP-191`, and @ref SummarizeEffectPasses for the
          * rule and the seventeen effects it was measured on).
          *
          * Applied here rather than in the processor because this is where an *fxc result*

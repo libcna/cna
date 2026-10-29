@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-093 and 180, 098: FontDescription and FontDescriptionStyle
+// XNAPP-093 and 180, 098: FontDescription and FontDescriptionStyle
 // against what the genuine XNA 4.0 pipeline does with the same inputs
 // (tests/reference/xna40/graphics/graphics-content-oracle.json, cases font/*).
 //

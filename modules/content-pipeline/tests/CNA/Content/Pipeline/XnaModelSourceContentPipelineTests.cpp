@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-021, Phases 15 and 16: the canonical `.x` and `.fbx`
+// XNAPP-021, Phases 15 and 16: the canonical `.x` and `.fbx`
 // routes.
 //
 // Both readers and XNA's ModelProcessor were implemented and measured before this route existed,
@@ -232,7 +232,7 @@ TEST(XnaModelSourceContentPipelineTest, EveryMalformedModelSourceIsRefused)
     }
 }
 
-// plans/plan_xnapipeline_parity.md XNAPP-021: the video route's frame metadata.
+// XNAPP-021: the video route's frame metadata.
 //
 // XNA's VideoProcessor reads a video's size, rate and length from the file. `cna_content` has no
 // decoder and must not grow one, so the canonical importer takes a probe from whoever registers

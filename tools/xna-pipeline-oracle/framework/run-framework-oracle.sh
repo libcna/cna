@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xnapipeline_parity.md XNAPP-099: run the genuine XNA 4.0 framework over the packing
+# XNAPP-099: run the genuine XNA 4.0 framework over the packing
 # measurements in FrameworkPackingOracle.cs and record what it does.
 #
 # Compiled with mono's mcs on Linux against the XNA Game Studio 4.0 reference assemblies and

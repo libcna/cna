@@ -145,8 +145,8 @@ namespace CNA::Content::Pipeline
      *
      * The decoder lives in the build-time module, which is the only place a media decoder is
      * linked; the canonical route takes it as a value so that a build without one behaves exactly
-     * as it did before rather than growing a dependency (plans/plan_xnapipeline_parity.md
-     * `XNAPP-332`, and `SongDurationProbe`'s own precedent).
+     * as it did before rather than growing a dependency
+     * (`XNAPP-332`, and `SongDurationProbe`'s own precedent).
      *
      * @param source The file to decode.
      * @return The decoded sound, or `std::nullopt` when this build cannot read the format.

@@ -1,6 +1,6 @@
 # XMA: the audit, the measurement, and the seam
 
-`plans/plan_xnapipeline_parity.md` `XNAPP-262`.
+`XNAPP-262`.
 
 XMA is the Xbox 360's audio codec. It is the one thing in the Content Pipeline parity plan CNA
 cannot produce, and this document is why, what was measured about it anyway, and where an encoder

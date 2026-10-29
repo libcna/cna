@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-260: the `.xml` source route, end to end.
+// XNAPP-260: the `.xml` source route, end to end.
 //
 // `.xml` is the one XNA source extension whose meaning is not fixed by the file: the document says
 // what type it is, and the build has to resolve that name, carry the value through a processor and

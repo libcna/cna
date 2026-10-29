@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-267: an effect the shader compiler refuses.
+// XNAPP-267: an effect the shader compiler refuses.
 //
 // The failure is deliberately an ordinary one -- a name that was never declared -- rather than a
 // malformed file, so what is measured is the *compiler's* refusal reaching the build rather than

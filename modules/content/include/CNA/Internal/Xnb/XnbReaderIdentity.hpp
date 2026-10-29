@@ -10,7 +10,7 @@ namespace CNA::Internal::Xnb
 {
     /**
      * @brief How the exact spelling of one reader/target type name was established
-     *        (plans/plan_xnapipeline.md §2.5, §3).
+     *        (docs/xnb-interoperability.md §2.4, §1).
      *
      * Recorded per entry so the emitted type-reader table never presents a guess as a fact, and
      * so a future correction is a one-line data change.
@@ -47,7 +47,7 @@ namespace CNA::Internal::Xnb
          * 4.0 runtime handed an unqualified `Microsoft.Xna.Framework.Content.VideoReader` answers
          * `Cannot find ContentTypeReader`, because it looks for the type in the core assembly and
          * the type is not there. Measured by loading CNA's own `.xnb` in that runtime
-         * (plans/plan_xnapipeline_parity.md XNAPP-281).
+         * (XNAPP-281).
          */
         FrameworkVideo,
     };

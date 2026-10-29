@@ -1,4 +1,4 @@
-# plans/plan_xnapipeline.md XNAP-51/XNAP-52/XNAP-90: build-time-only content pipeline components.
+# XNAP-51/XNAP-52/XNAP-90: build-time-only content pipeline components.
 #
 # This module exists to keep a boundary, not for tidiness. cna_content is linked by every game
 # that loads content at run time; a font rasterizer is needed only while content is being built.
@@ -44,7 +44,7 @@ else()
 endif()
 set(CNA_FREETYPE_AVAILABLE ${CNA_FREETYPE_AVAILABLE} PARENT_SCOPE)
 
-# plans/plan_xnapipeline_parity.md XNAPP-201/202/220: the build-time media decoder.
+# XNAPP-201/202/220: the build-time media decoder.
 #
 # The same three-state shape CNA_ENABLE_FONT_PIPELINE has, and for the same reason: an MP3, a WMA
 # or a WMV source needs a demuxer and a decoder while content is being built, and a game that
@@ -82,7 +82,7 @@ else()
 endif()
 set(CNA_BUILD_MEDIA_AVAILABLE ${CNA_BUILD_MEDIA_AVAILABLE} PARENT_SCOPE)
 
-# plans/plan_xnapipeline_parity.md XNAPP-216: zlib, for the FBX binary encoding.
+# XNAPP-216: zlib, for the FBX binary encoding.
 #
 # A binary FBX stores its long arrays deflated, so a reader without zlib can read the record
 # stream and not the vertices. Optional rather than required: without it a compressed array is
@@ -99,7 +99,7 @@ else()
         "configuration cannot decompress it")
 endif()
 
-# plans/plan_xnapipeline.md XNAP-A5: the effect compiler's configure-time tier.
+# XNAP-A5: the effect compiler's configure-time tier.
 #
 # EffectCompilerService reads CNA_FXC_EXECUTABLE / CNA_FXC_LAUNCHER as compile definitions, and
 # its own "no usable effect compiler" diagnostic tells users to pass them with -D. Until this

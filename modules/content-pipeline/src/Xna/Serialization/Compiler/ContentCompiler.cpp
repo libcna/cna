@@ -501,7 +501,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
                                                                                 std::string>>();
 
         // The processed model graph is a built-in too: it reaches the same canonical model writer
-        // the rest of the engine writes through (plans/plan_xnapipeline_parity.md XNAPP-152).
+        // the rest of the engine writes through (XNAPP-152).
         if (const Xnb::XnbTypeWriterBase* model = builtIns.Find(Xnb::XnbTypeKey<Xnb::XnbModelData>::Id()))
         {
             auto facade = std::make_shared<ModelContentTypeWriter>(*model);

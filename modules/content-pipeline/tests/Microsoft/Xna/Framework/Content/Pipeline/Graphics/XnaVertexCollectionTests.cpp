@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnapipeline_parity.md XNAPP-096, 098: VertexChannelNames, BoneWeight,
+// XNAPP-096, 098: VertexChannelNames, BoneWeight,
 // BoneWeightCollection, IndexCollection and PositionCollection against what the genuine XNA 4.0
 // pipeline does with the same inputs (tests/reference/xna40/graphics/graphics-content-oracle.json,
 // cases vertexnames/*, boneweight/*, indexcollection/* and positioncollection/*).

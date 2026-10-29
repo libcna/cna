@@ -137,7 +137,7 @@ TEST(XnbTypeNameTest, CustomLimitsRejectsNestingThatWouldBeAllowedByDefault)
     EXPECT_THROW(ParseXnbTypeName(BuildNestedTypeName(3), tightLimits), std::invalid_argument);
 }
 
-// plans/plan_xnapipeline.md XNAP-9C: a .NET array type name. Found by auditing the *writer's*
+// XNAP-9C: a .NET array type name. Found by auditing the *writer's*
 // reader-identity model: a `List<int[]>` reader name genuinely contains `System.Int32[]` as a
 // generic argument, and this parser read `System.Int32` followed by what it took to be a
 // malformed generic-argument list and threw. A real `.xnb` whose type table names any array-typed

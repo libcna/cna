@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xnapipeline_parity.md XNAPP-074: run the genuine XNA 4.0 IntermediateSerializer
+# XNAPP-074: run the genuine XNA 4.0 IntermediateSerializer
 # over the CNA-authored corpus in IntermediateOracle.cs and record what it writes and accepts.
 #
 # Compiled with mono's mcs on Linux against the XNA Game Studio 4.0 reference assemblies and

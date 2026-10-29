@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xnapipeline_parity.md XNAPP-014: apply a parity decision to the map.
+"""XNAPP-014: apply a parity decision to the map.
 
 The map (`tests/reference/xna40/content-pipeline-parity-map.json`) is the hand-maintained record of
 CNA's answer per XNA type and member. Editing 700 JSON entries by hand invites typos, so this tool

@@ -38,7 +38,7 @@ if(CNA_BUILD_EXAMPLES OR CNA_BUILD_TESTS)
         target_link_options(cna_custom_content_compiler_example PRIVATE -municode)
     endif()
 
-    # plans/plan_xnapipeline_parity.md XNAPP-260: the same idea one layer up -- a user-owned
+    # XNAPP-260: the same idea one layer up -- a user-owned
     # compiler whose route is written against the XNA façade rather than the canonical API, so the
     # documented way to extend an XNA content pipeline is exercised by something outside CNA.
     add_executable(cna_xna_custom_pipeline_example
@@ -58,7 +58,7 @@ endif()
 # OUTPUT_DIR is relative to its binary directory. Cross builds require an explicit host
 # CONTENT_EXECUTABLE because a target-platform tool cannot be executed by the host build.
 #
-# plans/plan_xnapipeline_parity.md XNAPP-320: the two inputs an XNA game actually has were reachable
+# XNAPP-320: the two inputs an XNA game actually has were reachable
 # from the command line and not from here -- an existing `.contentproj`, and the `.xnb` container.
 # CONTENT_PROJECT names the first and FORMAT/XNB_* select the second, so a ported project needs no
 # hand-written add_custom_command to say what `cna-content` already knows how to do. The values are

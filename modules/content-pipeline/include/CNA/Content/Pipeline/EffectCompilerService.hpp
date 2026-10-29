@@ -11,7 +11,7 @@ namespace CNA::Content::Pipeline
 {
     /**
      * @brief Which XNA graphics profile an effect is being compiled for
-     *        (plans/plan_xnapipeline.md `XNAP-A2`).
+     *        (`XNAP-A2`).
      *
      * XNA 4.0 draws the line at Shader Model 2.0: a Reach game may use `vs_2_0`/`ps_2_0` and a
      * HiDef game may also use `vs_3_0`/`ps_3_0`. CNA does **not** rewrite the `compile` statements
