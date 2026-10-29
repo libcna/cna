@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-190 (harness: WEBGPU-207), the RASTERIZER and VIEWPORT families, plus
+// WEBGPU-190 (harness: WEBGPU-207), the RASTERIZER and VIEWPORT families, plus
 // the two edge cases the row calls out by name: state leakage between batches, and a viewport
 // sub-region combined with a render-target switch.
 //

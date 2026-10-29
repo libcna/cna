@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-164 (harness: WEBGPU-207): a `RenderTarget2D` created with
+// WEBGPU-164 (harness: WEBGPU-207): a `RenderTarget2D` created with
 // `mipMap: true` must have a real, regenerated mip chain -- readable with `GetData` and samplable.
 //
 // XNA allocates every level a target's `LevelCount` declares and refreshes levels 1.. from level 0

@@ -5999,7 +5999,7 @@ namespace CNA::TestSupport
      * globally, or always reads slot 0's. XNA's sampler state is per register: the SAME effect is
      * built here with its sampler at `s2`, and an implementation keyed on slot 0 reads a bias of 0
      * and stays on level 0. One texel per pixel across the target keeps the computed level at
-     * exactly 0, so a +1 bias must select level 1. plans/plan_webgpu.md WEBGPU-208; also carried by
+     * exactly 0, so a +1 bias must select level 1. WEBGPU-208; also carried by
      * the retired METAL renderer.
      *
      * @param device Device whose renderer claims CompiledEffects.
@@ -6078,7 +6078,7 @@ namespace CNA::TestSupport
      * them later would read. An implementation that read the bias at replay gives BOTH halves the
      * last bias, so the left half comes back on level 1 instead of level 0. Each half is its own
      * 8x8 quad with the full 0..1 coordinate range, keeping the computed level at exactly 0.
-     * plans/plan_webgpu.md WEBGPU-208; also carried by the retired METAL renderer.
+     * WEBGPU-208; also carried by the retired METAL renderer.
      *
      * @param device Device whose renderer claims CompiledEffects.
      * @param options Which sampler properties this backend can represent.
@@ -6171,7 +6171,7 @@ namespace CNA::TestSupport
      * one-colour depth slices, so the texel centres sit at w = 0.125, 0.375, 0.625, 0.875, and a
      * coordinate of w = 1.375 separates the three modes: Wrap -> 0.375 (slice 1, green), Clamp ->
      * the last slice (white), Mirror -> 0.625 (slice 2, blue). A renderer that dropped W, or
-     * hard-coded one mode, returns one colour three times. plans/plan_webgpu.md WEBGPU-160; also
+     * hard-coded one mode, returns one colour three times. WEBGPU-160; also
      * carried by the retired METAL renderer.
      *
      * @param device HiDef device whose renderer claims CompiledEffects.
@@ -6251,7 +6251,7 @@ namespace CNA::TestSupport
      * pending-sprite run, batch state the compiled flush skipped, or -- on a renderer that records
      * draws and replays them -- two command families interleaved out of public call order. The three
      * batches draw into separate thirds of one target so all three are readable at once.
-     * FX-112 / plans/plan_webgpu.md WEBGPU-170; also carried by the retired METAL
+     * FX-112 / WEBGPU-170; also carried by the retired METAL
      * renderer.
      *
      * @param device Device whose renderer claims CompiledEffects.

@@ -1,4 +1,4 @@
-# plans/plan_webgpu.md WEBGPU-207: the ONE list of shared cross-renderer behavioural parity fixtures,
+# WEBGPU-207: the ONE list of shared cross-renderer behavioural parity fixtures,
 # and the ONE registration entry point every renderer calls.
 #
 # A parity fixture is a renderer-neutral source in this directory (see ParityFixture.hpp for the

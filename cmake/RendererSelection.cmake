@@ -219,14 +219,14 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_WEBGPU")
     include(cmake/ThirdPartyWebGPU.cmake)
     cna_configure_webgpu()
-    # plans/plan_webgpu.md WEBGPU-167: compiled XNA Effect bytecode through MojoShader's portable
+    # WEBGPU-167: compiled XNA Effect bytecode through MojoShader's portable
     # SPIR-V profile plus the combined-image-sampler split WebGPU's shading model needs. Off by
     # default and shaped exactly like the CNA_EASYGL_COMPILED_EFFECTS and
     # CNA_SDL_GPU_COMPILED_EFFECTS options, for the same reason: MojoShader is a fetched dependency
     # this renderer does not otherwise need. There is no MojoShader-provided WebGPU adapter -- the
     # nine-function effect backend is CNA's own.
     option(CNA_WEBGPU_COMPILED_EFFECTS
-           "Build WebGPU support for compiled XNA Effect bytecode (plans/plan_webgpu.md WEBGPU-167)" OFF)
+           "Build WebGPU support for compiled XNA Effect bytecode (WEBGPU-167)" OFF)
     if(CNA_WEBGPU_COMPILED_EFFECTS)
         # WEBGPU-203/204: browser WebGPU still ingests WGSL and nothing else -- emdawnwebgpu's own
         # createShaderModule switch has a single case, ShaderSourceWGSL. What changed on 2026-09-06

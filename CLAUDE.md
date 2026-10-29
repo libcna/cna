@@ -571,9 +571,9 @@ without a fresh owner instruction -- see `docs/removed-renderers.md`.
 `WEBGPU` is supported (`GraphicsRendererMaturity::Supported` since 2026-10-17, the class `SDL_GPU`
 is in), with a real 3D route (stock effects, instancing, render targets, MSAA, fog parity,
 GPU-native compressed textures, stencil ops) and Emscripten browser support.
-`plans/plan_webgpu.md`'s top-of-file status summary is the single source of truth for current
-`WEBGPU-*` task status — do not duplicate it here. See `docs/webgpu-renderer.md` for
-the capability boundary.
+The *Status* and *Important limitations* sections of `docs/webgpu-renderer.md` are the single source
+of truth for what is verified and what is open, and the rest of that document is the capability
+boundary — do not duplicate them here.
 
 ---
 
@@ -606,16 +606,17 @@ narrower question; new shader-based code must ask it rather than the coarse capa
 The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized
 its renderer implementation, and promoted it from experimental to supported on **2026-10-17**.
 
-- WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-*`; its top-of-file
-  script-counted status summary is the source of truth). Keep task statuses and
-  limitations current as implementation proceeds.
+- The `WEBGPU-*` task plan is complete and was deleted on 2026-10-29 (Git history). The one open
+  item, `WEBGPU-1`, and every limitation are in `docs/webgpu-renderer.md` (*Important
+  limitations*); keep that section current as work proceeds.
 - The native renderer uses pinned **wgpu-native v29.0.1.1**, selected with
   `-DCNA_GRAPHICS_RENDERER=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the
   CMake integration may otherwise download the matching official binary package.
 - It covers stock effects, render targets, MSAA, instancing, stencil and compressed textures
   (see `docs/webgpu-renderer.md`). It is supported, not production: it is verified on Linux x86_64
-  and in headless Chrome only (`WEBGPU-1`). State its parity only in the words of the plan's
-  status summary, which names the shared gaps that still block a project-wide parity claim.
+  and in headless Chrome only (`WEBGPU-1`). State its parity only in the words of
+  `docs/webgpu-renderer.md`'s *Parity, stated precisely*, which names what still blocks a
+  project-wide parity claim.
 - Preserve the established renderers: WebGPU changes should remain renderer-local or common only
   where a common-interface change is genuinely required and verified across existing renderers.
 

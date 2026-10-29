@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-196: the five behaviours whose BROWSER answer is not implied by their
+// WEBGPU-196: the five behaviours whose BROWSER answer is not implied by their
 // native one, driven as one page through scripts/run-webgpu-browser-test.sh.
 //
 // Why these five and not the whole suite. The Emscripten path shares `WebGPURenderer.cpp` and every

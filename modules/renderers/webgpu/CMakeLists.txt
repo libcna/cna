@@ -16,7 +16,7 @@ endif()
 if(APPLE)
     target_link_libraries(${RENDERER_TARGET} PRIVATE "-framework AppKit" "-framework QuartzCore")
 endif()
-# plans/plan_webgpu.md WEBGPU-167: compiled XNA effects go through MojoShader's portable SPIR-V
+# WEBGPU-167: compiled XNA effects go through MojoShader's portable SPIR-V
 # profile plus the translation shared with every other compiled-effect backend. Opt-in, because
 # MojoShader is a fetched dependency this renderer does not otherwise need.
 if(CNA_WEBGPU_COMPILED_EFFECTS)

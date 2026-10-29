@@ -12,7 +12,7 @@ same `WEBGPU` identity, built through Emscripten's emdawnwebgpu port) reached a 
 on 2026-08-26: `cna_demo_2d` renders SpriteBatch frames in headless Chrome with audio and no WebGPU
 validation error, and the 3D `BasicEffect` path plus every stock effect shader
 (`PbrEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/dual-texture/alpha-test) compile and render
-in-browser too (`plans/plan_webgpu.md` `WEBGPU-119`/`120`/`121`/`122` all ✅). Nothing below should be
+in-browser too (`WEBGPU-119`/`120`/`121`/`122` all ✅). Nothing below should be
 read as a status report for either WebGPU path.
 
 ## Status headline: verified WebGL 2 execution, including background content loading

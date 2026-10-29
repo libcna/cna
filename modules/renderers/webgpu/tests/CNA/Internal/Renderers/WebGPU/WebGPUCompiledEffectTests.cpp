@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu.md WEBGPU-167..171: the WebGPU compiled-effect runtime.
+// WEBGPU-167..171: the WebGPU compiled-effect runtime.
 //
 // This backend has no MojoShader-provided adapter (`FX-065`): the
 // nine-function effect context, the constant register files and the uniform packing are all code in
@@ -108,7 +108,7 @@ TEST(WebGPUCompiledEffectTest, TheCapabilityIsTrueAndThePublicBoundaryAcceptsByt
     GraphicsDevice device;
     if (RendererOf(device) == nullptr)
         GTEST_SKIP() << "this build did not select the WebGPU renderer";
-    // plans/plan_webgpu.md WEBGPU-171: true only because the draw route exists. The two report
+    // WEBGPU-171: true only because the draw route exists. The two report
     // false/true together on purpose -- a capability that says true while a compiled draw falls
     // through to a stock shader is exactly the defect FX-080 removed from the other backends.
     EXPECT_TRUE(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects));
@@ -142,7 +142,7 @@ TEST(WebGPUCompiledEffectTest, RealXna4GameEffectsWithShaderModel1PixelShadersPa
     GraphicsDevice device;
     if (RendererOf(device) == nullptr)
         GTEST_SKIP() << "this build did not select the WebGPU renderer";
-    // plans/plan_webgpu.md WEBGPU-166: these two failed to PARSE at all until CNA's
+    // WEBGPU-166: these two failed to PARSE at all until CNA's
     // libcna/mojoshader spirv-texcrd commit, and then produced an illegal entry-point interface
     // until its spirv-ps1x-interface commit. They are the regression guard for both.
     for (const char* name : {"racing-shadow-map-xna4.fxb", "racing-normal-mapping-xna4.fxb"})
@@ -355,7 +355,7 @@ TEST(WebGPUCompiledEffectDrawTest, SharedSamplerPixelContract)
     GraphicsDevice device;
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
-    // plans/plan_webgpu.md WEBGPU-208: every option is on, LOD bias included.
+    // WEBGPU-208: every option is on, LOD bias included.
     // `WGPUSamplerDescriptor` still has no bias field -- it carries `lodMinClamp` and
     // `lodMaxClamp` and nothing else -- but that was never the question. The value reaches the
     // SHADER: `SpirvSamplerLodBias` injects a uniform block into the normalized SPIR-V and turns
@@ -453,7 +453,7 @@ TEST(WebGPUCompiledEffectDrawTest, SharedTruncationContract)
 }
 
 
-// plans/plan_webgpu.md WEBGPU-208 / WEBGPU-160 / WEBGPU-170: renderer-neutral draw contracts that
+// WEBGPU-208 / WEBGPU-160 / WEBGPU-170: renderer-neutral draw contracts that
 // started here and now live in CompiledEffectConformance.hpp, where every compiled-effect family
 // runs them. They matter most on this renderer, which records draws and replays them at Present()
 // in public call order: the per-draw LOD bias and the compiled/stock SpriteBatch alternation are
@@ -555,7 +555,7 @@ TEST(WebGPUCompiledEffectDrawTest, SharedMrtWriteMaskContract)
 }
 
 // -----------------------------------------------------------------------------------------------
-// plans/plan_webgpu.md WEBGPU-203 -- THE BROWSER'S ROUTE, EXECUTED NATIVELY.
+// WEBGPU-203 -- THE BROWSER'S ROUTE, EXECUTED NATIVELY.
 //
 // Browser WebGPU ingests WGSL and nothing else, so a compiled Effect reaches it as WGSL translated
 // from the same MojoShader SPIR-V the native route feeds directly. wgpu-native accepts WGSL too,
@@ -879,7 +879,7 @@ CNA_WEBGPU_WGSL_ROUTE_TEST(SharedOrientationContract,
                            CNA::TestSupport::RunCompiledEffectOrientationContract(device))
 CNA_WEBGPU_WGSL_ROUTE_TEST(SharedEffectSwitchingContract,
                            CNA::TestSupport::RunCompiledEffectSwitchingContract(device))
-// plans/plan_webgpu.md WEBGPU-208. Rung 10's comment claimed "sampler pixels" before this rung
+// WEBGPU-208. Rung 10's comment claimed "sampler pixels" before this rung
 // existed; it does now, and it is the rung that matters most for the two routes AGREEING. The
 // biased sample is the one construct whose SPIR-V spelling (an image operand) and WGSL spelling
 // (a different builtin) genuinely differ, so running the same pixel oracle through both is what

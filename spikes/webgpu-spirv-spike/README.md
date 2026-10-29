@@ -1,4 +1,4 @@
-# WebGPU compiled-Effect translation spike — `plans/plan_webgpu.md` `WEBGPU-166` / `WEBGPU-203`
+# WebGPU compiled-Effect translation spike — `WEBGPU-166` / `WEBGPU-203`
 
 > **Note (2026-10-14).** References below to CNA's Vulkan backend (`VulkanCompiledEffect`,
 > `FX-065`) and to `tools/graphics/mojoshader_vulkan_probe.cpp` describe code that was deleted with
@@ -50,7 +50,7 @@ The binary and `obj/` are gitignored; the sources and this file are the artefact
 
 ## Q1 — is the SPIR-V instance feature askable at runtime? **No, and asking aborts the process.**
 
-`plans/plan_webgpu.md` `WEBGPU-166` was written expecting `wgpuHasInstanceFeature()` to answer
+`WEBGPU-166` was written expecting `wgpuHasInstanceFeature()` to answer
 whether the implementation advertises `WGPUInstanceFeatureName_ShaderSourceSPIRV`. In
 wgpu-native v29.0.1.1 **both** query entry points are exported symbols that panic:
 
@@ -315,7 +315,7 @@ and the browser is the implementation — so this is not a port bug to work arou
 | wgpu-native `…SpirvV` passthrough | **Infeasible in the browser, and unavailable natively** | Q2b; there is no wgpu-native in a browser at all |
 | A MojoShader **WGSL profile** | **Feasible, not affordable here** | the profiles are pluggable (`mojoshader_profile_spirv.c` is the precedent) but that file alone is 4 500 lines; a WGSL twin is a new emitter, not a patch |
 | **SPIR-V → WGSL for MojoShader's own emitted subset**, written in CNA | **Feasible, and the recommended route** | the subset is generated code with a small opcode repertoire; it would reuse this spike's parse/reflect/link/split half unchanged and share the runtime with native |
-| naga or Tint compiled to WebAssembly | **Feasible, rejected on dependency cost** | `cargo`/`rustc` exist in this sandbox but neither naga nor Tint is vendored; both are general-purpose shader translators, which is the "Rosetta Stone" `plans/plan_webgpu.md` `WEBGPU-203` rules out |
+| naga or Tint compiled to WebAssembly | **Feasible, rejected on dependency cost** | `cargo`/`rustc` exist in this sandbox but neither naga nor Tint is vendored; both are general-purpose shader translators, which is the "Rosetta Stone" `WEBGPU-203` rules out |
 
 The browser gap is therefore an **implementation gap with a named route**, not a fundamental
 blocker: nothing about WGSL prevents expressing a Shader Model 2/3 program. `WEBGPU-204` records the

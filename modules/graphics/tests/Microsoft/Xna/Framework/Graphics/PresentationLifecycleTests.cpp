@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-192: presentation parameters, `GraphicsDevice.Reset()` and its events,
+// WEBGPU-192: presentation parameters, `GraphicsDevice.Reset()` and its events,
 // and a programmatic backbuffer resize.
 //
 // Renderer-neutral, mirroring EasyGL's `presentation_parameters`, `present_interval`,

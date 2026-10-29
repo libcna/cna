@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-197 step (a): re-measure the WEBGPU-58 shader-module reuse finding
+// WEBGPU-197 step (a): re-measure the WEBGPU-58 shader-module reuse finding
 // against the current wgpu-native pin.
 //
 // WHAT WEBGPU-58 RECORDED, and why it matters again now. `ClearAllPipelineCaches()` tears down every

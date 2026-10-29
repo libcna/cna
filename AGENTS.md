@@ -465,8 +465,9 @@ real browser (Emscripten) path.
 The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized its
 renderer implementation, and promoted it from experimental to supported on **2026-10-17**.
 
-- WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-*`). Its top-of-file status
-  summary + "Current limitations" is the source of truth; keep both current as work proceeds.
+- The `WEBGPU-*` task plan is complete and was deleted on 2026-10-29 (Git history).
+  `docs/webgpu-renderer.md`'s *Status* (with *Parity, stated precisely*) and *Important
+  limitations* are the source of truth; keep both current as work proceeds.
 - The native renderer uses pinned **wgpu-native v29.0.1.1**, selected with
   `-DCNA_GRAPHICS_RENDERER=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the
   CMake integration may otherwise download the matching official binary package.
@@ -474,8 +475,8 @@ renderer implementation, and promoted it from experimental to supported on **202
   (`WEBGPU-1`). Desktop 3D + every stock effect (with fog parity), instancing,
   render targets, MSAA, `Texture3D`, MRT, occlusion queries, custom WGSL effects, GPU-native
   compressed textures, and an in-browser Emscripten path all work and are tested. The genuinely open
-  items are enumerated in the plan's "Status summary" / "Current limitations" (the authoritative,
-  script-counted list) — do not restate a hard-coded count here that would drift.
+  items are enumerated in `docs/webgpu-renderer.md`'s *Important limitations* — do not restate a
+  hard-coded count here that would drift.
 - Preserve the established renderers: WebGPU changes should remain renderer-local or common only
   where a common-interface change is genuinely required and verified across existing renderers.
 

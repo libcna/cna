@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-183: the `SurfaceFormat` refusal surface, per resource kind.
+// WEBGPU-183: the `SurfaceFormat` refusal surface, per resource kind.
 //
 // Every `SurfaceFormat` against every resource kind -- `Texture2D`, `TextureCube`, `Texture3D`,
 // `RenderTarget2D`, `RenderTargetCube` -- with one rule and no per-renderer expectation table:

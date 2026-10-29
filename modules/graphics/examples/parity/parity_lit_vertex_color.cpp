@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-157 (harness: WEBGPU-207): the vertex the stock XNA `ModelProcessor`
+// WEBGPU-157 (harness: WEBGPU-207): the vertex the stock XNA `ModelProcessor`
 // actually emits for a mesh with a colour channel -- Position + Normal + Color + TextureCoordinate,
 // 36 bytes -- must render LIT and keep its colour.
 //

@@ -2722,7 +2722,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
 
-        # plans/plan_webgpu.md WEBGPU-207: the shared cross-renderer behavioural parity fixtures.
+        # WEBGPU-207: the shared cross-renderer behavioural parity fixtures.
         # ONE renderer-neutral source per behaviour, listed once in ParityFixtures.cmake and built
         # here through this renderer's own example macro -- EasyGL is the reference half of every
         # EasyGL<->WebGPU comparison the WebGPU parity backlog makes.

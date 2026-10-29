@@ -160,7 +160,7 @@ namespace
     /// DualTextureEffect vertex with equal, independently declared texture-coordinate channels.
     struct VtxDualPT { float px, py, pz; float u, v; float u1, v1; };
     static_assert(sizeof(VtxDualPT) == 28, "stride 28");
-    /// plans/plan_webgpu.md WEBGPU-159: a stride-28 Position + TEXCOORD0 + TEXCOORD1 vertex, for the
+    /// WEBGPU-159: a stride-28 Position + TEXCOORD0 + TEXCOORD1 vertex, for the
     /// one assertion below that needs `DualTextureEffect`'s SECOND UV set to exist -- see
     /// `RunM_MultiSlot`'s M3 for why a single-UV mesh cannot carry that assertion.
     struct VtxPTT { float px, py, pz; float u, v; float u1, v1; };
@@ -892,7 +892,7 @@ private:
         std::string why;
         check(BlockUniform(both, kBlock, why),
               "M2: both slots PointClamp -- the combined image is block-uniform. " + why);
-        // plans/plan_webgpu.md WEBGPU-159. M3 used to make this assertion on the SAME single-UV quad
+        // WEBGPU-159. M3 used to make this assertion on the SAME single-UV quad
         // M1/M2 use, and that premise is unsound: `DualTextureEffect` samples Texture2 with
         // TEXCOORD1, and a mesh that declares no TEXCOORD1 supplies (0,0,0,1) for it -- D3D9's rule,
         // which XNA is defined against, and equally OpenGL's disabled generic vertex attribute. So

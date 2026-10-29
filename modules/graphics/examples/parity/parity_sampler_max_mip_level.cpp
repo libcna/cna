@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-161 (harness: WEBGPU-207): `SamplerState.MaxMipLevel` must reach the
+// WEBGPU-161 (harness: WEBGPU-207): `SamplerState.MaxMipLevel` must reach the
 // sampler and change which mip level is read.
 //
 // XNA's `MaxMipLevel` is the HIGHEST-RESOLUTION mip level sampling may use -- 0 means no

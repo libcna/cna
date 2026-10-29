@@ -2292,7 +2292,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Whether a `TextureCube` may be created with the given surface format.
          *
-         * plans/plan_webgpu.md `WEBGPU-163`. Separate from @ref ClassifySurfaceFormatEXT for the same
+         * `WEBGPU-163`. Separate from @ref ClassifySurfaceFormatEXT for the same
          * reason @ref ClassifyRenderTargetFormatEXT is: a renderer may store a format in a 2D
          * texture and have no cube allocation path for it at all. WebGPU is exactly that case --
          * its BC support is real for `Texture2D` and its cube renderer is RGBA8-only -- so one

@@ -931,7 +931,7 @@ class RenderTargetProducerConsumerTest : public Game
     {
         // Whether a renderer supports a mipmapped render target AT ALL is measured, not assumed:
         // WebGPU documents the chain regeneration unimplemented and throws from the constructor
-        // (plans/plan_webgpu.md WEBGPU-53/54). That is a declared capability boundary, not this finding.
+        // (WEBGPU-53/54). That is a declared capability boundary, not this finding.
         std::unique_ptr<RenderTarget2D> owner;
         try
         {

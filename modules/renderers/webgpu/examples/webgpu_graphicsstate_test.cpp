@@ -295,7 +295,7 @@ protected:
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
         }
 
-        // ---- Check G: FillMode.WireFrame renders a WIREFRAME (plans/plan_webgpu.md WEBGPU-153). ----
+        // ---- Check G: FillMode.WireFrame renders a WIREFRAME (WEBGPU-153). ----
         // This arm asserted WEBGPU-115's refusal contract until WEBGPU-153 implemented the state by
         // expanding each triangle's edges into a line list -- the reference renderer's own
         // mechanism, needing no polygon mode on any target. The backbuffer route is checked here;

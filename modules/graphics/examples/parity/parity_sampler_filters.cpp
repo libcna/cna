@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-186 (harness: WEBGPU-207): sampler filters, mip filters, anisotropy,
+// WEBGPU-186 (harness: WEBGPU-207): sampler filters, mip filters, anisotropy,
 // and which sampler slots reach a stock draw.
 //
 // THE ORACLE IS INTERNAL, not a cross-renderer frame diff, and that is deliberate.

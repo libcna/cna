@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-176 (harness: WEBGPU-207): `EnvironmentMapEffect`'s remaining terms --
+// WEBGPU-176 (harness: WEBGPU-207): `EnvironmentMapEffect`'s remaining terms --
 // `EnvironmentMapSpecular`, three lights against one, `EyePosition`, a non-identity world transform,
 // and the Fresnel gradient across a curved surface.
 //

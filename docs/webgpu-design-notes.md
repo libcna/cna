@@ -1,8 +1,8 @@
 # WebGPU renderer: design notes
 
 The choices below follow from the WebGPU / `wgpu-native v29.0.1.1` API surface
-and are deliberate. The per-feature detail lives in `docs/webgpu-renderer.md` and
-the task rows in `plans/plan_webgpu.md`.
+and are deliberate. The per-feature detail lives in `docs/webgpu-renderer.md`; the
+`WEBGPU-nnn` task rows are in Git history.
 
 ## Per-draw data in uniform buffers
 

@@ -50,7 +50,7 @@ on it) rather than assuming either way.
 - **[`cnaext-engine-layer.md`](cnaext-engine-layer.md)** — current standalone ASCII, CRT,
   colour-depth and DebugDraw extensions; the previous modern engine layer has been retired.
 - **[`webgpu-renderer.md`](webgpu-renderer.md)** — current status, build instructions and explicit
-  limitations for the `WEBGPU` renderer; detailed remaining work is in `../plans/plan_webgpu.md`.
+  limitations for the `WEBGPU` renderer, including the one open item (`WEBGPU-1`).
 - **[`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md)** — current
   Microsoft-reference runtime type and member census, with every missing declaration listed;
   the separate [Content Pipeline parity report](xna-content-pipeline-parity-report.md) covers build-time APIs.

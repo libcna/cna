@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plans/plan_webgpu.md WEBGPU-123: cross-backend pixel parity for the WEBGPU renderer.
+# WEBGPU-123: cross-backend pixel parity for the WEBGPU renderer.
 #
 # Renders the shared, renderer-agnostic cross_renderer_diagnostic_scene (one unlit vertex-colour
 # triangle -> 64x64 RGBA8) with the Emscripten WEBGPU build in a real browser, extracts the dump out

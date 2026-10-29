@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-173 (harness: WEBGPU-207): `VertexColorEnabled`, with and without a
+// WEBGPU-173 (harness: WEBGPU-207): `VertexColorEnabled`, with and without a
 // texture, and what happens when the product runs past 1.0.
 //
 // XNA's unlit colour is `DiffuseColor * texture? * vertexColor?`, where each factor is present only

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-180: the three device-loss questions the recovery inventory could not
+// WEBGPU-180: the three device-loss questions the recovery inventory could not
 // answer from source. Standalone on purpose -- SDL3 for a window, wgpu-native v29.0.1.1 for
 // everything else, and no CNA at all, so what it reports is the pinned library's behaviour rather
 // than this project's wrapper around it.

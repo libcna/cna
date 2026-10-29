@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu.md WEBGPU-166: split SPIR-V combined image samplers into the separate image and
+// WEBGPU-166: split SPIR-V combined image samplers into the separate image and
 // sampler pair WebGPU's shading model requires.
 //
 // MojoShader's "spirv" (Vulkan-mode) profile emits one `OpTypeSampledImage` global per D3D9

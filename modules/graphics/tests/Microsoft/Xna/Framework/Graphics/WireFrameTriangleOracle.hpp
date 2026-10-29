@@ -71,7 +71,7 @@ namespace CnaTest::WireFrameOracle
     // capability because SOFTWARE-178 makes EasyGL conditional on the active context's native
     // polygon-mode API (desktop core, GL_NV_polygon_mode or WEBGL_polygon_mode).
     //
-    // plans/plan_webgpu.md WEBGPU-153: WebGPU used to be excluded here, on the grounds that it "has
+    // WEBGPU-153: WebGPU used to be excluded here, on the grounds that it "has
     // no polygon-mode API at all and now refuses the request outright (WEBGPU-115)". The first half
     // was beside the point and the second is no longer true: a wireframe never needed a polygon
     // mode -- the reference renderer has always produced one by expanding triangle edges into a

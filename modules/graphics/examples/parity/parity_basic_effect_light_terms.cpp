@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-173 (harness: WEBGPU-207): every term `BasicEffect` adds to a lit
+// WEBGPU-173 (harness: WEBGPU-207): every term `BasicEffect` adds to a lit
 // surface, each proven to change the picture in the direction it is supposed to.
 //
 // XNA's lit colour is

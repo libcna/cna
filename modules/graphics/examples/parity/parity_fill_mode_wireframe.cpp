@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-153 (harness: WEBGPU-207): `FillMode::WireFrame` draws a triangle's
+// WEBGPU-153 (harness: WEBGPU-207): `FillMode::WireFrame` draws a triangle's
 // EDGES and leaves its interior empty -- and `FillMode::Solid`, the same geometry through the same
 // route, fills it.
 //

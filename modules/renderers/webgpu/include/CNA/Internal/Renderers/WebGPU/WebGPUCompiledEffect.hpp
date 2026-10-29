@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu.md WEBGPU-167..171: compiled XNA Effect Framework bytecode on the WebGPU renderer.
+// WEBGPU-167..171: compiled XNA Effect Framework bytecode on the WebGPU renderer.
 //
 // This backend is shaped like the retired VULKAN renderer's (`FX-065`) rather
 // than like the OpenGL or SDL_GPU ones, because it faces the same two facts: MojoShader ships no
@@ -65,7 +65,7 @@ namespace CNA::Internal::Renderers::WebGPU
     /**
      * @brief One shader compiled by CNA's own MojoShader SPIR-V backend. CNAEXT.
      *
-     * plans/plan_webgpu.md WEBGPU-167. MojoShader's own adapters own a type like this; there is no
+     * WEBGPU-167. MojoShader's own adapters own a type like this; there is no
      * WebGPU adapter, so the reference counting the effect parser expects
      * (`shaderAddRef`/`deleteShader`) lives here. There is deliberately no `WGPUShaderModule` on
      * this type: linking patches the SPIR-V in place and the combined-sampler split rewrites it
@@ -83,7 +83,7 @@ namespace CNA::Internal::Renderers::WebGPU
     /**
      * @brief The MojoShader effect backend's per-renderer state. CNAEXT.
      *
-     * plans/plan_webgpu.md WEBGPU-167. One instance per `WebGPURenderer`, shared by every compiled
+     * WEBGPU-167. One instance per `WebGPURenderer`, shared by every compiled
      * effect that renderer owns -- the same arrangement `MOJOSHADER_glContext` gives the OpenGL
      * backend. The constant register files are therefore SHARED, which is exactly why a deferred
      * draw must snapshot its uniforms at apply time (see
@@ -123,7 +123,7 @@ namespace CNA::Internal::Renderers::WebGPU
     /**
      * @brief Binding the compiled-effect LOD-bias uniform block occupies in the pixel sampler group.
      *
-     * plans/plan_webgpu.md WEBGPU-208. It shares group 2 with the samplers rather than claiming a
+     * WEBGPU-208. It shares group 2 with the samplers rather than claiming a
      * fifth bind group, because WebGPU guarantees only four and MojoShader's fixed descriptor-set
      * model already uses all of them. 32 is the first binding the split cannot reach: it doubles a
      * register into `2*r` and `2*r + 1`, and D3D9 stops at `s15`.
@@ -163,7 +163,7 @@ namespace CNA::Internal::Renderers::WebGPU
     /**
      * @brief One compiled XNA effect owned by the WebGPU renderer.
      *
-     * plans/plan_webgpu.md WEBGPU-167..171. The renderer defers GPU submission, so this must
+     * WEBGPU-167..171. The renderer defers GPU submission, so this must
      * snapshot a pass's uniforms and sampler bindings at apply time rather than reading them back
      * when the draw is finally recorded.
      */
@@ -249,7 +249,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /**
          * @brief CNAEXT. Packs the applied pass's constant registers into their uniform-buffer bytes.
          *
-         * plans/plan_webgpu.md WEBGPU-168. This renderer records a draw's commands at `Present()`,
+         * WEBGPU-168. This renderer records a draw's commands at `Present()`,
          * long after `ApplyPass()` ran, and the constant register files are shared by every effect
          * this renderer owns -- so a later apply would otherwise decide what an earlier draw renders
          * with. Packing here, while the registers still hold exactly what this apply wrote, is what
@@ -303,7 +303,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /**
          * @brief CNAEXT. What one compiled-effect draw needs from the applied pass.
          *
-         * plans/plan_webgpu.md WEBGPU-169. Produced by @ref LinkAndGetShadersEXT and stored by value
+         * WEBGPU-169. Produced by @ref LinkAndGetShadersEXT and stored by value
          * on the deferred draw command, because the draw is recorded at `Present()` long after the
          * pass was applied.
          */
@@ -342,7 +342,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /**
          * @brief CNAEXT. Links the applied pass's shader pair and returns everything a draw needs.
          *
-         * plans/plan_webgpu.md WEBGPU-169. `MOJOSHADER_linkSPIRVShaders` is a separate, explicit step
+         * WEBGPU-169. `MOJOSHADER_linkSPIRVShaders` is a separate, explicit step
          * from parsing: it patches the vertex shader's input types to the actual vertex format,
          * links vertex outputs to pixel inputs, and returns the size of the internal patch table
          * that must be subtracted from `output_len` before the SPIR-V is used. Only then does the

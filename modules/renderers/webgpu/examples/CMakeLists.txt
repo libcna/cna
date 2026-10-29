@@ -94,7 +94,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_Clear_Readback COMMAND cna_test_webgpu_clear_readback
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plans/plan_webgpu.md WEBGPU-123: the shared cross-renderer diagnostic scene built for WEBGPU,
+    # WEBGPU-123: the shared cross-renderer diagnostic scene built for WEBGPU,
     # exactly as EASYGL's cna_diag_easygl and SOFTWARE's cna_diag_software. Deliberately NOT a CTest
     # (mirrors those two): it writes a 64x64 RGBA8 dump for cna_diag_compare to diff against another
     # backend's dump, which is a two-build comparison, not a single-run pass/fail.
@@ -211,7 +211,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_BufferPoolStress COMMAND cna_test_webgpu_buffer_pool_stress
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plans/plan_webgpu.md WEBGPU-197 step (a): re-measures the WEBGPU-58 finding that a shader
+    # WEBGPU-197 step (a): re-measures the WEBGPU-58 finding that a shader
     # module / bind-group layout / pipeline layout reused across a sample-count change silently
     # renders wrong on this pin. WEBGPU-197 made that reuse reachable (pipelines are now built at the
     # bound pass's sample count from shared modules), and WEBGPU-165 is what would make it live, so
@@ -222,7 +222,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_MsaaModuleReuseProbe COMMAND cna_test_webgpu_msaa_module_reuse_probe
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plans/plan_webgpu.md WEBGPU-200: the two optional 32-bit-float adapter features. Every adapter
+    # WEBGPU-200: the two optional 32-bit-float adapter features. Every adapter
     # available here HAS both, so the paths that depend on their absence would be branches no test
     # executes; this one forces the renderer to report them absent and checks that the refusal fires,
     # names the feature, and stays narrow. Reads the concrete WebGPURenderer, so it links
@@ -238,7 +238,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_Float32Features COMMAND cna_test_webgpu_float32_features
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plans/plan_webgpu.md WEBGPU-181: the CPU-side half of the device-loss contract --
+    # WEBGPU-181: the CPU-side half of the device-loss contract --
     # CanBeginDrawEXT()'s baseline, and that the renderer SHARES the framework's pixel buffer by
     # pointer rather than copying it. Reads the concrete WebGPURenderer, so it links WebGPU::WebGPU.
     cna_webgpu_test(cna_test_webgpu_context_recovery webgpu_context_recovery_test.cpp)
@@ -246,7 +246,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_ContextRecovery COMMAND cna_test_webgpu_context_recovery
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plans/plan_webgpu.md WEBGPU-191: resource lifetime against the deferred replay -- a resource
+    # WEBGPU-191: resource lifetime against the deferred replay -- a resource
     # disposed between its queued draw and the flush. Reads the renderer's own uncaptured-error
     # count as the oracle, so it links WebGPU::WebGPU.
     cna_webgpu_test(cna_test_webgpu_resource_lifetime_stress webgpu_resource_lifetime_stress_test.cpp)
@@ -255,7 +255,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         COMMAND cna_test_webgpu_resource_lifetime_stress
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plans/plan_webgpu.md WEBGPU-192: a REAL window resize, driven through GameWindow's public
+    # WEBGPU-192: a REAL window resize, driven through GameWindow's public
     # XNA BeginScreenDeviceChange/EndScreenDeviceChange rather than a native windowing call, so no
     # platform-boundary edge is opened for a renderer example. Reads the renderer's uncaptured-error
     # count to prove the surface was reconfigured, so it links WebGPU::WebGPU.
@@ -494,7 +494,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # registered and failing rather than hidden: 3 of 6 checks in this test currently FAIL because
     # genuine multisample-resolved rendering does not yet work end-to-end through the real
     # GraphicsDevice/BasicEffect draw path, despite the infrastructure above being real and
-    # individually verified -- see this test's own top-of-file comment and plans/plan_webgpu.md's
+    # individually verified -- see this test's own top-of-file comment and the
     # WEBGPU-58 row for the full investigation.
     cna_webgpu_test(cna_test_webgpu_msaa webgpu_msaa_test.cpp)
     cna_register_renderer_test(NAME WebGPU_Msaa COMMAND cna_test_webgpu_msaa
@@ -1125,7 +1125,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_BackbufferReject COMMAND cna_test_webgpu_backbuffer_reject
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plans/plan_webgpu.md WEBGPU-207: the shared cross-renderer behavioural parity fixtures. The SAME
+    # WEBGPU-207: the shared cross-renderer behavioural parity fixtures. The SAME
     # renderer-neutral sources EasyGL builds (modules/renderers/easygl/examples/CMakeLists.txt), listed
     # once in ParityFixtures.cmake -- so a Phase 70 behavioural row adds one fixture rather than a
     # WebGPU test, an EasyGL test and two oracles that can disagree.
@@ -1138,7 +1138,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
-# plans/plan_webgpu.md WEBGPU-121: browser shader coverage. The native effect suites above prove
+# WEBGPU-121: browser shader coverage. The native effect suites above prove
 # every WGSL pair compiles under wgpu-native; this block builds a curated set of the same Game
 # programs for the browser so their WGSL is compiled by emdawnwebgpu's Tint path via
 # createShaderModule too. The set is the shaders with features BasicEffect (already browser-verified
@@ -1169,12 +1169,12 @@ if(EMSCRIPTEN AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU"
     cna_webgpu_effect_page(cna_webgpu_dualtexture3d_page webgpu_dualtexture3d_test.cpp)
     cna_webgpu_effect_page(cna_webgpu_alphatest3d_page   webgpu_alphatest3d_test.cpp)
 
-    # plans/plan_webgpu.md WEBGPU-123: the shared, renderer-agnostic cross-renderer diagnostic scene
+    # WEBGPU-123: the shared, renderer-agnostic cross-renderer diagnostic scene
     # (one unlit vertex-colour triangle -> 64x64 RGBA8 dump), built for WEBGPU exactly as SOFTWARE
     # and EASYGL build it, so the WebGPU output can be pixel-compared against another backend's dump
     # with cna_diag_compare. Under Emscripten it writes into MEMFS; scripts/run-webgpu-parity-test.sh
     # extracts the dump and runs the comparison.
-    # plans/plan_webgpu.md WEBGPU-196: the five behaviours whose browser answer is not implied by
+    # WEBGPU-196: the five behaviours whose browser answer is not implied by
     # their native one -- wireframe (153/154), semantic vertex layouts (155), multi-stream input
     # (172), the custom-WGSL ShaderEffect route compiled by Tint rather than Naga, and device loss
     # (182). One page, one check per frame; see the file's header for why each is here.
@@ -1185,7 +1185,7 @@ if(EMSCRIPTEN AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU"
     cna_webgpu_effect_page(cna_webgpu_canvas_lifetime_page webgpu_canvas_lifetime_test.cpp)
     target_link_libraries(cna_webgpu_canvas_lifetime_page PRIVATE WebGPU::WebGPU)
 
-    # plans/plan_webgpu.md WEBGPU-203: compiled XNA Effects, in a browser. The native suites prove
+    # WEBGPU-203: compiled XNA Effects, in a browser. The native suites prove
     # The translator and every shared contract through it, but two things are open until this runs:
     # whether TINT (not Naga) accepts the generated WGSL, and whether MojoShader's C parser and
     # SPIR-V emitter behave when compiled to WebAssembly. Built only where the compiled-effect

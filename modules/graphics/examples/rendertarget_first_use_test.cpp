@@ -176,7 +176,7 @@ namespace
      * @brief Whether a mipMap=true RenderTarget2D is implemented at all.
      *
      * True everywhere. WEBGPU declared it unimplemented and threw until
-     * `plans/plan_webgpu.md` `WEBGPU-164`, which allocates the chain and regenerates it from level 0
+     * `WEBGPU-164`, which allocates the chain and regenerates it from level 0
      * on unbind through the render-pass downsample cascade `WEBGPU-52`/`114` already built; leg I
      * therefore asserts a value there now rather than a rejection. SOKOL implements it as of
      * plans/plan_sokol.md SOKOL-39 (mip storage allocated via sokol_gfx's num_mipmaps, regenerated from

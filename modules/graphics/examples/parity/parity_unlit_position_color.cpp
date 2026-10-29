@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-158 (harness: WEBGPU-207): the DECLARATION, not the stride, decides
+// WEBGPU-158 (harness: WEBGPU-207): the DECLARATION, not the stride, decides
 // whether a vertex can be lit.
 //
 // Stride 32 is `VertexPositionNormalTexture`'s, so a renderer that reads the layout out of the

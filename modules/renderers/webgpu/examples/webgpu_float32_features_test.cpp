@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-200: the two optional 32-bit-float adapter features, and what this
+// WEBGPU-200: the two optional 32-bit-float adapter features, and what this
 // renderer does when they are absent.
 //
 // `WGPUFeatureName_Float32Filterable` and `Float32Blendable` are ordinary optional features.

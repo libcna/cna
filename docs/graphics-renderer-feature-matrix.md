@@ -3,7 +3,7 @@
 Master, up-to-date cross-renderer feature matrix for CNA's established renderers, written for
 Task 451 (Phase 51) and extended 2026-07-15 with a `DIRECTX9` column (`../the DX9 plan`,
 `D9-130`). The WebGPU renderer is intentionally tracked separately in
-[`webgpu-renderer.md`](webgpu-renderer.md) and `../plans/plan_webgpu.md`; SDL_GPU
+[`webgpu-renderer.md`](webgpu-renderer.md); SDL_GPU
 (`../plans/plan_sdlgpu.md`) and FNA3D ([`fna3d-renderer.md`](fna3d-renderer.md)) have no columns
 here. A cell is only marked ✅ if a real, GPU-facing pixel/behavior check actually exercised it;
 anything implemented but not independently pixel-tested is marked 🟨, and anything not

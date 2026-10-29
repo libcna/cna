@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu.md WEBGPU-208 / plans/plan_sdlgpu.md SDLGPU-122: the SPIR-V half of
+// WEBGPU-208 / plans/plan_sdlgpu.md SDLGPU-122: the SPIR-V half of
 // compiled-effect LOD bias, measured on the committed compiled-effect corpus rather than on one
 // hand-built module.
 //
@@ -543,7 +543,7 @@ namespace
     }
 }
 
-// plans/plan_webgpu.md WEBGPU-208. The whole committed corpus, every pass, both stages.
+// WEBGPU-208. The whole committed corpus, every pass, both stages.
 TEST(MojoShaderSpirvSamplerLodBiasTest, EverySampledRegisterReadsItsOwnBiasAcrossTheCorpus)
 {
     CorpusTally tally;
@@ -568,7 +568,7 @@ TEST(MojoShaderSpirvSamplerLodBiasTest, EverySampledRegisterReadsItsOwnBiasAcros
         << "the combined-sampler route lost a multi-register pass";
 }
 
-// plans/plan_webgpu.md WEBGPU-208. The translator's three cases, built from real modules rather
+// WEBGPU-208. The translator's three cases, built from real modules rather
 // than from hand-written SPIR-V, so the shapes are the ones this route actually produces.
 TEST(MojoShaderSpirvSamplerLodBiasTest, TheTranslatorSpellsEachImageOperandCaseDistinctly)
 {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu.md WEBGPU-198 -- the render-target format query and the `RenderTarget2D`
+// WEBGPU-198 -- the render-target format query and the `RenderTarget2D`
 // constructor's preferred-format selection must agree, for every `SurfaceFormat`, on the adapter
 // actually in front of us.
 //
@@ -484,7 +484,7 @@ TEST(RenderTargetFormatAgreement, EveryRenderableClassicNumericFormatReadsBackEx
     EXPECT_GT(measured, 0) << RendererName() << " exposes no classic numeric render target";
 }
 
-// plans/plan_webgpu.md WEBGPU-202: every transfer path must be sized from the FORMAT, at sizes that
+// WEBGPU-202: every transfer path must be sized from the FORMAT, at sizes that
 // do not divide the staging alignment.
 //
 // A readback stages through a row-aligned buffer -- 256 bytes on WebGPU -- so the row stride and the

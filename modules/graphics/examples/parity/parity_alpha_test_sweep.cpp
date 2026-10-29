@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-174 (harness: WEBGPU-207): all eight `AlphaTestEffect`
+// WEBGPU-174 (harness: WEBGPU-207): all eight `AlphaTestEffect`
 // `CompareFunction`s, each one distinguished from all seven others.
 //
 // WHY THREE ROWS AND NOT ONE. A single alpha value cannot tell the eight functions apart: at

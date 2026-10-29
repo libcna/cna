@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu.md WEBGPU-167..171. See WebGPUCompiledEffect.hpp for why this backend is CNA's
+// WEBGPU-167..171. See WebGPUCompiledEffect.hpp for why this backend is CNA's
 // own rather than a MojoShader-provided adapter, and for the combined-image-sampler split that is
 // the one translation step between MojoShader's SPIR-V and a WebGPU shader module.
 

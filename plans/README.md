@@ -238,6 +238,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - `plan_stub.md` — STUB-1..6, the no-op Stub renderer (done 2026-07-19); deleted on 2026-10-28
   (Git history only). Its design and limitations are in
   [`../docs/stub-renderer.md`](../docs/stub-renderer.md).
-- [`plan_webgpu.md`](plan_webgpu.md) — WebGPU.
+- `plan_webgpu.md` — the WebGPU renderer (`WEBGPU-1`..`WEBGPU-209`, 2026-07/10): 201 of 202 rows
+  done; the open one, `WEBGPU-1` (the Windows, macOS and linux-aarch64 wgpu-native packages),
+  needs hardware this host does not have. Deleted on 2026-10-29 (Git history only), with
+  `tools/count_webgpu_plan_status.sh`, which counted its rows. The status, the precise parity
+  statement and every limitation are [`../docs/webgpu-renderer.md`](../docs/webgpu-renderer.md);
+  comments cite rows as "WEBGPU-nnn".
 - `plan_webgpu_perf.md` — WebGPU's per-draw CPU cost (binding-model redesign); deleted on
   2026-10-11 and available only in Git history.

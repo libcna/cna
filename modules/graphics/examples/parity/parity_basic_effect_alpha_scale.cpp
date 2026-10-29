@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-173 (harness: WEBGPU-207): `EnableDefaultLighting`, the way `Alpha`
+// WEBGPU-173 (harness: WEBGPU-207): `EnableDefaultLighting`, the way `Alpha`
 // composes with `DiffuseColor`, and whether a large world transform costs precision.
 //
 // THE ALPHA LEG IS THE INTERESTING ONE, because the obvious implementation is wrong in a way no

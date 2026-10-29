@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-177 (harness: WEBGPU-207): `SkinnedEffect`'s untested terms -- an
+// WEBGPU-177 (harness: WEBGPU-207): `SkinnedEffect`'s untested terms -- an
 // identity bone, a pure translation bone, a two-bone blend at 50/50, the far end of the bone
 // palette, several lights, specular, and `VertexColorEnabled`.
 //

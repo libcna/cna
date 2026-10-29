@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-178 (harness: WEBGPU-207), the GEOMETRIC half: source rectangles,
+// WEBGPU-178 (harness: WEBGPU-207), the GEOMETRIC half: source rectangles,
 // rotation about a non-zero origin, non-uniform scale, a sub-pixel destination, and `SpriteEffects`
 // flips combined with rotation.
 //

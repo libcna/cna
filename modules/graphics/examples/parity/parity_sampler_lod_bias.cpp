@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-205 (harness: WEBGPU-207): `SamplerState.MipMapLevelOfDetailBias`
+// WEBGPU-205 (harness: WEBGPU-207): `SamplerState.MipMapLevelOfDetailBias`
 // must change which mip level a sample comes from.
 //
 // `WGPUSamplerDescriptor` has NO `lodBias` field -- checked field by field in the pin: it carries

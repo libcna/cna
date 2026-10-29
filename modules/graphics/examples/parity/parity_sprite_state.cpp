@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-178 (harness: WEBGPU-207), the STATE half: `layerDepth` ordering under
+// WEBGPU-178 (harness: WEBGPU-207), the STATE half: `layerDepth` ordering under
 // each `SpriteSortMode`, the `Begin` transform matrix, blend-state leakage between batches, and a
 // destination inside a `RenderTarget2D`.
 //

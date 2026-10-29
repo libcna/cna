@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-179 (harness: WEBGPU-207): a `SpriteFont` string reaches pixels.
+// WEBGPU-179 (harness: WEBGPU-207): a `SpriteFont` string reaches pixels.
 //
 // Glyph placement, spacing, newline handling and the default character are shared, renderer-neutral
 // `SpriteFont`/`SpriteBatch` logic and are already covered by `SpriteFontTests`. What no test

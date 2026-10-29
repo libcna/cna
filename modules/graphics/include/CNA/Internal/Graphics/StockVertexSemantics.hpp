@@ -13,7 +13,7 @@
 
 /**
  * @file
- * @brief plans/plan_webgpu.md WEBGPU-155 -- resolving a stock shader's inputs from a vertex
+ * @brief WEBGPU-155 -- resolving a stock shader's inputs from a vertex
  *        declaration's SEMANTICS rather than from the buffer's byte stride.
  *
  * ## Why this exists

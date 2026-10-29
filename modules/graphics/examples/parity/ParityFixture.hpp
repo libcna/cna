@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-207: the shared EasyGL<->WebGPU behavioural fixture harness.
+// WEBGPU-207: the shared EasyGL<->WebGPU behavioural fixture harness.
 //
 // ## What problem this solves
 //
 // Before this header, a behavioural WebGPU row was verified by writing a WebGPU-only test, and the
 // same behaviour on the reference renderer was verified by a separate, independently written EasyGL
 // test. Two tests of one behaviour are two oracles, and two oracles can disagree without either of
-// them failing. `plans/plan_webgpu.md`'s Phase 70 therefore makes the shared fixture the default and
+// them failing. the WebGPU plan's Phase 70 therefore makes the shared fixture the default and
 // the renderer-specific test the exception (native lifecycle / validation detail only).
 //
 // ## The convention
@@ -285,7 +285,7 @@ namespace CNA::Parity
         /**
          * @brief Asserts a precondition the fixture needs before it draws anything.
          *
-         * plans/plan_webgpu.md WEBGPU-172. A fixture that requires a capability asserts it rather
+         * WEBGPU-172. A fixture that requires a capability asserts it rather
          * than skipping on it: every renderer this harness runs against is expected to have it, so
          * a renderer that stopped supporting it is the finding, and a silent skip would hide it.
          *
@@ -332,7 +332,7 @@ namespace CNA::Parity
         /**
          * @brief Asserts two regions hold the SAME colour, within a tolerance.
          *
-         * plans/plan_webgpu.md WEBGPU-206. The inverse of @ref ExpectDistinct, and the shape a
+         * WEBGPU-206. The inverse of @ref ExpectDistinct, and the shape a
          * fixture needs when its oracle is another region of the same frame rather than a value
          * written into the file -- "this encoding samples like the thing it encodes". Pair it with
          * an `ExpectDistinct` against the background: two regions that both rendered nothing are

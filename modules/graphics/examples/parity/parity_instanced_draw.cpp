@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-193 (harness: WEBGPU-207): one instanced draw, several instances, each
+// WEBGPU-193 (harness: WEBGPU-207): one instanced draw, several instances, each
 // placed and coloured by its own per-instance stream.
 //
 // The corpus milestone's list names an instanced draw and nothing here covered it. What it has to

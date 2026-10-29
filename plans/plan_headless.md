@@ -272,7 +272,7 @@ including against real, unmodified third-party game code.
   moment, not a guess, since `HEADLESS`'s whole value proposition is being a trustworthy stand-in.
 - Do not let `HEADLESS`-specific code leak into the shared `IGraphicsBackend`/`GpuDrawParams` interface
   layer beyond what a genuine common-interface need justifies — same backend-locality rule the
-  other backends (see `CLAUDE.md`, `plan_webgpu.md`'s own boundaries) already follow.
+  other backends (see `CLAUDE.md`, the former `plan_webgpu.md`'s own boundaries) already follow.
 - If `Game::Run()`/`GraphicsDeviceManager`/input code turns out to have deeper assumptions about a
   real window existing than `HEADLESS-4`/`HEADLESS-52` anticipated, treat that as a legitimate finding to
   fix (it's a real bug for headless use in general, not `HEADLESS`-specific scope creep) — but if fixing

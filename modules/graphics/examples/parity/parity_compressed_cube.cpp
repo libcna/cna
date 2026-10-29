@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-206 (harness: WEBGPU-207): a block-compressed `TextureCube` stores
+// WEBGPU-206 (harness: WEBGPU-207): a block-compressed `TextureCube` stores
 // blocks, reads back those exact blocks, and SAMPLES like the uncompressed cube it encodes.
 //
 // WHY THE COMPARISON IS AGAINST A SECOND CUBE, not against a hand-derived reflection vector. What

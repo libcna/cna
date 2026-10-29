@@ -151,7 +151,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// it is not -- the vertex-declaration fidelity guard is still open there, and the stride cases that can be ambiguous have
 /// to ask the declaration by hand's stride-32 case).
 ///
-/// plans/plan_webgpu.md WEBGPU-155 added WebGPU, and there it IS both: `SelectStockVertexShapeEXT`
+/// WEBGPU-155 added WebGPU, and there it IS both: `SelectStockVertexShapeEXT`
 /// chooses the stock family from the declaration's semantics and
 /// `ResolveStockVertexLayoutForDrawEXT` binds each of that family's inputs at the declared
 /// element's own offset and format, with the stride surviving only as the pipeline's arrayStride.

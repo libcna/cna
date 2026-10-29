@@ -1265,7 +1265,7 @@ window/GPU.
   specific real test becomes impractically slow.
 - Do not let `SOFTWARE`-specific code leak into the shared `IGraphicsBackend`/`GpuDrawParams`
   interface layer beyond what a genuine common-interface need justifies — same backend-locality
-  rule the other backends (`CLAUDE.md`, `plan_webgpu.md`/`plan_headless.md`'s own boundaries)
+  rule the other backends (`CLAUDE.md`, the former `plan_webgpu.md`/`plan_headless.md`'s own boundaries)
   already follow.
 - If Phase S4's rasterizer core turns out to need real polygon near-plane clipping sooner than
   expected (visible artifacts in even simple test scenes), treat that as a legitimate scope

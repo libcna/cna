@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plans/plan_webgpu.md WEBGPU-122: run the Emscripten WEBGPU build of cna_demo_2d in a real browser.
+# WEBGPU-122: run the Emscripten WEBGPU build of cna_demo_2d in a real browser.
 #
 # A wasm module loaded under `node` proves nothing for this renderer: its surface is a browser
 # <canvas> reached through navigator.gpu, which only exists in a browser with a WebGPU-capable GPU
@@ -38,7 +38,7 @@ fi
 
 # The steady-state 2D render path is the default smoke. Set CNA_WEBGPU_VALIDATION_SCENE=1 to run the
 # deterministic --webgpu-2d-validation scene instead; that scene also resizes the canvas mid-run,
-# which is a separate, still-open Emscripten code path (see plans/plan_webgpu.md WEBGPU-120).
+# which is a separate, still-open Emscripten code path (see WEBGPU-120).
 if [[ "${CNA_WEBGPU_VALIDATION_SCENE:-0}" == "1" ]]; then
     DEMO_ARGS="'--webgpu-2d-validation', '--smoke', '${FRAMES}'"
 else

@@ -33,4 +33,4 @@ cmake --build build            # -> build/spike.js + build/spike.wasm
 
 A full in-browser bring-up — SDL3 canvas sizing, the `requestAnimationFrame` present loop, WGSL
 shader compilation via `createShaderModule`, and a headless-Chrome smoke test — is the remaining
-browser work tracked as WEBGPU-120/121/122 in `plans/plan_webgpu.md`.
+browser work tracked as WEBGPU-120/121/122.

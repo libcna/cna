@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-191: resource lifetime against this renderer's DEFERRED replay.
+// WEBGPU-191: resource lifetime against this renderer's DEFERRED replay.
 //
 // Why this matters more here than on an immediate renderer. WebGPU queues its draws and replays
 // them at flush time, so a `Texture2D` the game disposes right after `SpriteBatch.End()` is still

@@ -62,12 +62,12 @@
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "System/NotSupportedException.hpp"
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
-// plans/plan_webgpu.md WEBGPU-203: the browser half of the compiled-effect route.
+// WEBGPU-203: the browser half of the compiled-effect route.
 #include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"
 #include "CNA/Internal/Renderers/MojoShader/SpirvToWgsl.hpp"
 #endif
 
-// plans/plan_webgpu.md WEBGPU-201: `WGPUNativeFeature_TextureFormat16bitNorm`, which is what makes
+// WEBGPU-201: `WGPUNativeFeature_TextureFormat16bitNorm`, which is what makes
 // `WGPUTextureFormat_RGBA16Unorm` -- CNA's `SurfaceFormat::Rgba64` -- usable at all, lives in
 // wgpu-native's own extras header rather than in the portable `webgpu.h`. The browser build uses
 // emdawnwebgpu, which has no such header and no such feature, so the include and everything that
@@ -191,7 +191,7 @@ namespace CNA::Internal::Renderers::WebGPU
             return index32 ? WGPUIndexFormat_Uint32 : WGPUIndexFormat_Uint16;
         }
 
-        /// plans/plan_webgpu.md WEBGPU-153: whether a topology has a polygon interior at all.
+        /// WEBGPU-153: whether a topology has a polygon interior at all.
         ///
         /// WebGPU forbids a non-zero depth bias on a line or point topology, so a pipeline built for
         /// the wireframe expansion below has to drop the caller's `RasterizerState.DepthBias` --
@@ -203,7 +203,7 @@ namespace CNA::Internal::Renderers::WebGPU
                    topology == WGPUPrimitiveTopology_TriangleStrip;
         }
 
-        /// plans/plan_webgpu.md WEBGPU-153: rewrites one queued triangle draw into a line-list draw
+        /// WEBGPU-153: rewrites one queued triangle draw into a line-list draw
         /// over the same vertices -- `FillMode::WireFrame`, produced without any polygon-mode state.
         ///
         /// This is the reference renderer's own mechanism (`EasyGLRenderer::DrawWireframe`,
@@ -870,7 +870,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // Instanced3D module it has always used: 20 (VertexPositionTexture) and 32
         // (VertexPositionNormalTexture) carry no COLOR0 at all, and the skinned/PBR strides carry
         // one the instanced route has no bone palette or tangent basis to render anyway.
-        /// plans/plan_webgpu.md WEBGPU-198: bytes per texel of a native colour format, for the
+        /// WEBGPU-198: bytes per texel of a native colour format, for the
         /// render-target readback.
         ///
         /// The readback used to assume four, because a render target could only ever be `Color`.
@@ -881,7 +881,7 @@ namespace CNA::Internal::Renderers::WebGPU
         ///
         /// @param format The native colour format.
         /// @return Bytes per texel, or 0 for a format this renderer does not read back.
-        /// plans/plan_webgpu.md WEBGPU-200: whether a native colour format is one of the 32-bit
+        /// WEBGPU-200: whether a native colour format is one of the 32-bit
         /// float formats whose FILTERING and BLENDING are optional adapter features.
         ///
         /// The 16-bit float formats are deliberately absent: `R16Float`/`RG16Float`/`RGBA16Float`
@@ -916,7 +916,7 @@ namespace CNA::Internal::Renderers::WebGPU
             }
         }
 
-        /// plans/plan_webgpu.md WEBGPU-198: the `SurfaceFormat` -> `WGPUTextureFormat` map for a
+        /// WEBGPU-198: the `SurfaceFormat` -> `WGPUTextureFormat` map for a
         /// RENDER TARGET's colour attachment, which is a strictly narrower question than what this
         /// renderer can STORE (`ClassifyWebGPUTextureFormat`).
         ///
@@ -955,7 +955,7 @@ namespace CNA::Internal::Renderers::WebGPU
             }
         }
 
-        /// plans/plan_webgpu.md WEBGPU-172: refuses a multi-stream draw on a route whose native
+        /// WEBGPU-172: refuses a multi-stream draw on a route whose native
         /// layout is still derived from ONE byte stride.
         ///
         /// The capability this task turns on is true of the stock families, ordinary and instanced,
@@ -3854,7 +3854,7 @@ namespace CNA::Internal::Renderers::WebGPU
             return;
         }
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
-        // plans/plan_webgpu.md WEBGPU-170: a compiled Effect-Framework effect gets its own route.
+        // WEBGPU-170: a compiled Effect-Framework effect gets its own route.
         // Before it existed this threw, which was honest but a hard refusal of an ordinary XNA
         // call: `SpriteBatch.Begin(..., effect)` with a compiled effect is what Microsoft's own
         // SpriteEffects sample does.
@@ -4619,7 +4619,7 @@ namespace CNA::Internal::Renderers::WebGPU
                 "CNA WebGPU: a simulated device loss is refused while a TextureCube, "
                 "RenderTargetCube, Texture3D, occlusion query or custom ShaderEffect is alive -- "
                 "those kinds cannot yet be rebuilt on a new device, and recovering without them "
-                "would leave dead native handles behind (plans/plan_webgpu.md WEBGPU-182)");
+                "would leave dead native handles behind (WEBGPU-182)");
         }
         // Every registered resource gives up its handles BEFORE the device goes, so nothing is
         // released against a destroyed device afterwards.
@@ -5436,7 +5436,7 @@ namespace CNA::Internal::Renderers::WebGPU
             return;
 
         // Uniform layout is the retired VULKAN renderer's 128-byte/32-float FillExtPushConst()
-        // push-constant layout, byte for byte (see plans/plan_webgpu.md's Phase 57 entry-point
+        // push-constant layout, byte for byte (see the WebGPU plan's Phase 57 entry-point
         // note): [0..15] MVP, [16..19] diffuseColor, [20..23] ambient+lightingEnabled,
         // [24..27] light0Dir+textureEnabled, [28..31] light0Diffuse+vertexColorEnabled. Only the
         // fields this minimal DrawColoredPrimitives slice actually reads are named; the rest keep
@@ -5480,7 +5480,7 @@ namespace CNA::Internal::Renderers::WebGPU
     }
 
     // ---------------------------------------------------------------------------------------
-    // plans/plan_webgpu.md WEBGPU-155: the semantic vertex layout.
+    // WEBGPU-155: the semantic vertex layout.
     //
     // Everything below replaces "the buffer stride names a canonical packed struct, and the
     // pipeline's WGPUVertexAttribute array is that struct's offsetof()s" with "the declaration
@@ -6645,7 +6645,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             return;
 
         // Uniform layout is the exact same group-0 UBO as colored3d.wgsl (coloredBindGroupLayout_,
-        // reused verbatim -- see plans/plan_webgpu.md's WEBGPU-13 note). Group 1 (sampler + texture)
+        // reused verbatim -- see WEBGPU-13's note). Group 1 (sampler + texture)
         // mirrors the SpriteBatch bind group layout shape exactly.
         static constexpr const char* shaderSource = webgpu_shaders::kTextured;
 
@@ -10955,7 +10955,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     // libcna.so with two undefined symbols that nothing resolved until the first ShaderEffect
     // draw. No tree had built that configuration before the SDL-free ones of this task.
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
-    // ---- plans/plan_webgpu.md WEBGPU-167..171: compiled XNA Effect Framework draws --------------
+    // ---- WEBGPU-167..171: compiled XNA Effect Framework draws --------------
     //
     // A compiled sampler can name any of the three public texture kinds, and dynamic_cast needs
     // each complete type to sort them apart.
@@ -12425,7 +12425,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     void WebGPURenderer::RequireSupportedFillModeEXT(PrimitiveType primitive,
                                                              const char* route) const
     {
-        // plans/plan_webgpu.md WEBGPU-153. This used to refuse every wireframe polygon draw, on the
+        // WEBGPU-153. This used to refuse every wireframe polygon draw, on the
         // stated grounds that "wgpu-native exposes no polygon mode, so a wireframe request cannot
         // reach any native pipeline state". BOTH halves of that were wrong: the pin does carry
         // `WGPUPrimitiveStateExtras::polygonMode` behind the native-only
@@ -14237,7 +14237,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                               int instanceCount,
                                               const GpuVertexStreamBinding* instanceStream)
     {
-        // plans/plan_webgpu.md WEBGPU-155: ONE dispatch, shared by the indexed and non-indexed
+        // WEBGPU-155: ONE dispatch, shared by the indexed and non-indexed
         // entry points, and one decision inside it. What used to be a ladder of `stride == 16`,
         // `stride == 20 || stride == 24`, `stride == 32` tests -- each of which claimed to know a
         // vertex's semantic content from its byte count -- is now `SelectStockVertexShapeEXT`
@@ -14353,7 +14353,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     {
         RequireSupportedFillModeEXT(primitive, "ordinary-nonindexed");
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
-        // plans/plan_webgpu.md WEBGPU-169: a compiled effect's vertex layout comes from the bound
+        // WEBGPU-169: a compiled effect's vertex layout comes from the bound
         // declarations and is validated against the applied pass's own shader reflection, not
         // against this renderer's fixed stride-to-layout table -- so it dispatches before the
         // stock route's declaration guard rather than after it.
@@ -16575,7 +16575,7 @@ namespace
     }
 
 
-    /// plans/plan_webgpu.md WEBGPU-177: rewrite a skinned vertex stream into CNA's canonical
+    /// WEBGPU-177: rewrite a skinned vertex stream into CNA's canonical
     /// stride-52 (or stride-56 with colour) skinned record.
     ///
     /// XNA's `VertexElementFormat` describes the BYTES in the buffer, not the register the semantic

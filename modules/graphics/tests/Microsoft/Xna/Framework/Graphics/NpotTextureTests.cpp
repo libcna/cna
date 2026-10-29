@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-187: non-power-of-two Texture2D sizes upload, mip, sample and read
+// WEBGPU-187: non-power-of-two Texture2D sizes upload, mip, sample and read
 // back correctly.
 //
 // Renderer-neutral on purpose. NPOT is not a WebGPU-only concern -- `easygl_npot_texture_test` is

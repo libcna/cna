@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu.md WEBGPU-203: translate the SPIR-V this repository's compiled-effect pipeline
+// WEBGPU-203: translate the SPIR-V this repository's compiled-effect pipeline
 // emits into WGSL, so browser WebGPU can run a compiled XNA Effect.
 //
 // WHY THIS EXISTS, AND WHY IT IS NOT A GENERAL SHADER TRANSLATOR

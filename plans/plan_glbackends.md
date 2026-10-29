@@ -38,7 +38,7 @@
 >
 > **Decisions locked in for this plan (asked and answered 2026-07-19):**
 > 1. Track work here first, as a plan document, before large-scale implementation (this project's
->    normal pattern for new backend-shaped initiatives — see `plan_webgpu.md`, `plan_dx3.md`).
+>    normal pattern for new backend-shaped initiatives — see the former `plan_webgpu.md`, `plan_dx3.md`).
 > 2. `EASYGL` is **removed entirely** from the public `CNA_GRAPHICS_BACKEND` CMake selection (no
 >    deprecated alias). Internal directory/target names (`Backends/EasyGL`,
 >    `cna_backend_graphics_easygl`) stay as-is — only the public-facing selection string changes.

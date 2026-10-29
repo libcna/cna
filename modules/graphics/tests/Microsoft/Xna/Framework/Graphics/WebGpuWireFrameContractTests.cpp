@@ -13,7 +13,7 @@
 //     query exists to prevent.
 //   * WEBGPU-115 replaced it with a deterministic refusal, on the stated grounds that "wgpu-native
 //     exposes no polygon mode, so a wireframe request cannot reach any native pipeline state".
-//   * plans/plan_webgpu.md WEBGPU-153 disproved the premise rather than the refusal. A wireframe
+//   * WEBGPU-153 disproved the premise rather than the refusal. A wireframe
 //     never needed a polygon mode: the reference renderer has always produced one by expanding
 //     each triangle's three edges into a 32-bit line-list index buffer, and that route works
 //     natively AND in the browser, where WebGPU genuinely has no polygon mode at all. (The pinned
@@ -1293,7 +1293,7 @@ TEST(WebGpuWireFrameContract, OnlyPolygonTopologiesAreExpanded)
 }
 
 // ---------------------------------------------------------------------------
-// 10. THE MULTI-STREAM WIREFRAME. plans/plan_webgpu.md WEBGPU-154/172.
+// 10. THE MULTI-STREAM WIREFRAME. WEBGPU-154/172.
 //
 // WEBGPU-154 recorded a defect in the reference renderer: EasyGL gates its own edge expansion on
 // `!multiStream`, so once a draw binds several VertexBufferBindings its wireframe request is

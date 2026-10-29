@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-188: the buffer and draw-route surface -- 32-bit indices, the
+// WEBGPU-188: the buffer and draw-route surface -- 32-bit indices, the
 // user-primitive routes, out-of-range draw arguments, `PrimitiveType` validation, a draw with no
 // vertex or index buffer, and `BufferUsage.WriteOnly`'s readback refusal.
 //

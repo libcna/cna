@@ -120,7 +120,7 @@ struct CapabilityExpectation
 // CNA_DIRECTX9_COMPILED_EFFECTS) -- selecting the renderer alone
 // is not enough to expect the capability true for any of them.
 //
-// plans/plan_webgpu.md WEBGPU-171 added the WebGPU arm. Its route is MojoShader's SPIR-V profile
+// WEBGPU-171 added the WebGPU arm. Its route is MojoShader's SPIR-V profile
 // plus the combined-image-sampler rewrite WGSL's shading model requires. WEBGPU-203 removed the
 // "native-only" half of that sentence: browser WebGPU still ingests WGSL and nothing else, but CNA
 // now translates this route's SPIR-V into WGSL, so an Emscripten build configures the option and
@@ -330,7 +330,7 @@ TEST(GraphicsDeviceCapabilityTest, MultiSampleAntiAliasingQueryDoesNotThrow)
     EXPECT_NO_THROW({ (void)gd.SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing); });
 }
 
-// plans/plan_webgpu.md WEBGPU-195: the value is device-dependent and this test still does not
+// WEBGPU-195: the value is device-dependent and this test still does not
 // assert one -- what it asserts is that the DECLARATION and its CONSUMER agree, which is a claim
 // that holds on any machine and fails on exactly the divergence the row exists to stop: a
 // capability reporting true while every requested sample count silently became 1.
@@ -472,7 +472,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     if (CNA_RENDERER_IS(OpenGL33))
         EXPECT_TRUE(reported) << "desktop GL lost core glPolygonMode support";
 #elif defined(CNA_RENDERER_WEBGPU)
-    // plans/plan_webgpu.md WEBGPU-153: true, for exactly the reason the EasyGL arm above is true and
+    // WEBGPU-153: true, for exactly the reason the EasyGL arm above is true and
     // by the same mechanism. WEBGPU-115 asserted false here on the grounds that "wgpu-native has no
     // polygon mode at all" -- true of the API and irrelevant to the question, since a wireframe is
     // produced by expanding triangle edges into a line list and needs no polygon mode on any

@@ -1,6 +1,6 @@
 # Shared cross-renderer parity fixtures
 
-`plans/plan_webgpu.md` **`WEBGPU-207`**.
+**`WEBGPU-207`**.
 
 ## Why this exists
 
@@ -77,7 +77,7 @@ diverging from three other renderers on 57 triangle-edge pixels and nowhere else
   lit, filtered or blended one — with the call site saying *why* the wider one is justified.
 
 A difference that needs more than `kShadingTolerance` is a **finding**, not a tolerance argument. It
-belongs in `plans/plan_webgpu.md` (or the reference renderer's own plan), not in the fourth argument
+belongs in the renderer's own documentation or `handoff.md` §5, not in the fourth argument
 of an assertion.
 
 **When the whole-frame dump does not apply.** A fixture whose picture is *entirely* boundary — a

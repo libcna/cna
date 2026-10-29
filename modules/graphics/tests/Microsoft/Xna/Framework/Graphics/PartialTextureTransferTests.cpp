@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-185: partial-rectangle and partial-box transfers, at level 0 and
+// WEBGPU-185: partial-rectangle and partial-box transfers, at level 0 and
 // above, on every resource kind that has them.
 //
 // Renderer-neutral, mirroring EasyGL's `texture2d_partial_rect` / `texture2d_mip` /

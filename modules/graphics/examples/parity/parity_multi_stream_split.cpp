@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-172 (harness: WEBGPU-207): a vertex split across two
+// WEBGPU-172 (harness: WEBGPU-207): a vertex split across two
 // VertexBufferBindings renders the same picture as the same vertex in one buffer.
 //
 // XNA's `SetVertexBuffers` takes an ARRAY because a vertex's elements may live in several buffers;

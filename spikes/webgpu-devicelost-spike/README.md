@@ -1,4 +1,4 @@
-# WebGPU device-loss spike — `plans/plan_webgpu.md` `WEBGPU-180`
+# WebGPU device-loss spike — `WEBGPU-180`
 
 Three questions the device-loss recovery inventory could not answer from source, and what running
 against the pin actually says. Measured on **wgpu-native v29.0.1.1** (`~/deps/wgpu-native-v29.0.1.1`),

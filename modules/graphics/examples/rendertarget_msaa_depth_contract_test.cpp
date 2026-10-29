@@ -167,7 +167,7 @@ namespace
      *
      * True everywhere. It was false on WEBGPU while that renderer's `RenderTarget2D` constructor
      * raised `std::runtime_error("... mip-chain regeneration (mipMap=true) is not implemented ...")`;
-     * `plans/plan_webgpu.md` `WEBGPU-164` implemented the chain, so leg M14 measures a mipped
+     * `WEBGPU-164` implemented the chain, so leg M14 measures a mipped
      * multisampled target there instead of measuring the shape of its refusal.
      */
     constexpr bool kMipMappedTargetSupported = true;

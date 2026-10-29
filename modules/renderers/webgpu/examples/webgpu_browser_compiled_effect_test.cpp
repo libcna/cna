@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-203: compiled XNA Effects in a REAL BROWSER, driven as one page
+// WEBGPU-203: compiled XNA Effects in a REAL BROWSER, driven as one page
 // through scripts/run-webgpu-browser-test.sh.
 //
 // Why this page has to exist, when the native suites already pass.
@@ -225,7 +225,7 @@ class WebGpuBrowserCompiledEffectTest : public Game
             quad[i] = QuadVertexUVW{kCorners[i][0], kCorners[i][1], 0.0f, u, v, w};
     }
 
-    /// plans/plan_webgpu.md WEBGPU-208. A quad whose texture coordinate RAMPS from 0 to 1 across
+    /// WEBGPU-208. A quad whose texture coordinate RAMPS from 0 to 1 across
     /// the target rather than sitting at one value. Every other check here samples at a constant
     /// coordinate, whose screen-space derivative is zero and whose computed level of detail is
     /// therefore implementation-defined -- fine when the level does not matter, useless when it is
@@ -547,7 +547,7 @@ public:
             }
             case 11:
             {
-                // plans/plan_webgpu.md WEBGPU-208 -- rung 10: SamplerState.MipMapLevelOfDetailBias
+                // WEBGPU-208 -- rung 10: SamplerState.MipMapLevelOfDetailBias
                 // on a compiled Effect, IN THE BROWSER and in pixels.
                 //
                 // This is the rung that cannot be inferred from the native run. The bias reaches

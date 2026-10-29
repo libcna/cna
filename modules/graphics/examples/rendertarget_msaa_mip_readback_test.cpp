@@ -162,7 +162,7 @@ namespace
      * @brief Whether a render target may be built with a mip chain here.
      *
      * True everywhere. This was false on WEBGPU while its `RenderTarget2D` constructor raised a
-     * catchable `std::runtime_error` for `mipMap=true`; `plans/plan_webgpu.md` `WEBGPU-164`
+     * catchable `std::runtime_error` for `mipMap=true`; `WEBGPU-164`
      * allocates the chain and regenerates it from level 0 on unbind, the same timing FNA3D's
      * `ResolveTarget` uses, so the legs below now measure content on that renderer instead of
      * measuring a refusal.

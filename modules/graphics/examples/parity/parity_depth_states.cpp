@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-190 (harness: WEBGPU-207), the DEPTH family: all eight
+// WEBGPU-190 (harness: WEBGPU-207), the DEPTH family: all eight
 // `CompareFunction`s as the depth test, plus depth-write on and off.
 //
 // AN 8x3 SIGNATURE MATRIX, for the same reason `parity_alpha_test_sweep` needs one: a single depth

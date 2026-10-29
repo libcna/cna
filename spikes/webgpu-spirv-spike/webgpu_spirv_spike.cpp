@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu.md WEBGPU-166 existence gate: can the pinned wgpu-native (v29.0.1.1) consume
+// WEBGPU-166 existence gate: can the pinned wgpu-native (v29.0.1.1) consume
 // the SPIR-V the pinned MojoShader emits for a real compiled XNA Effect, and render its pixels?
 //
 // The question has three separable halves and this spike answers each one on its own, because a
@@ -672,7 +672,7 @@ namespace
 
     /// Q6 -- the opcode repertoire MojoShader's SPIR-V profile actually emits, accumulated over
     /// every swept module. This is the measurement that sizes a SPIR-V -> WGSL translator for
-    /// the browser (plans/plan_webgpu.md WEBGPU-203): the question is not "can arbitrary SPIR-V
+    /// the browser (WEBGPU-203): the question is not "can arbitrary SPIR-V
     /// be translated" but "how large is the subset this pipeline can produce".
     std::map<uint32_t, int> g_opcodeHistogram;
     std::map<uint32_t, int> g_glslExtHistogram;

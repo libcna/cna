@@ -1154,7 +1154,7 @@ class RenderTargetBackbufferConsumerTest : public Game
 
         // J2: mipmapped producer, sampled at level 0. Whether a renderer supports a mipmapped render
         // target AT ALL is measured, not assumed: WebGPU documents the chain regeneration
-        // unimplemented (plans/plan_webgpu.md WEBGPU-53/54). That is a declared capability boundary, not
+        // unimplemented (WEBGPU-53/54). That is a declared capability boundary, not
         // an ordering result.
         {
             std::unique_ptr<RenderTarget2D> owner;

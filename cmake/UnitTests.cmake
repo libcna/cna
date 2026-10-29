@@ -881,7 +881,7 @@ if(CNA_BUILD_TESTS)
     # mojoshader.h. The focused object groups copy renderer include directories above, but include
     # directories alone do not carry MojoShader's required public compile definitions (notably
     # MOJOSHADER_NO_VERSION_INCLUDE for its ungenerated source-tree version header).
-    # plans/plan_webgpu.md WEBGPU-167: the same is now true of WebGPU's compiled-effect headers,
+    # WEBGPU-167: the same is now true of WebGPU's compiled-effect headers,
     # which the renderer header includes unconditionally once the option is on -- so the condition
     # is the presence of the MojoShader target, not one family's option. Any family that configured
     # it -- EasyGL, WebGPU, SDL_GPU, SOFTWARE or DirectX 9 -- has public headers a test TU can reach.

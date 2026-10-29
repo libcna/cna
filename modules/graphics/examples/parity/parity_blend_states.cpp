@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-190 (harness: WEBGPU-207), the BLEND family: factors, functions,
+// WEBGPU-190 (harness: WEBGPU-207), the BLEND family: factors, functions,
 // separate colour and alpha, `BlendFactor`, and `ColorWriteChannels`.
 //
 // Blending is closed-form integer arithmetic, so every cell's expected colour is COMPUTED from the

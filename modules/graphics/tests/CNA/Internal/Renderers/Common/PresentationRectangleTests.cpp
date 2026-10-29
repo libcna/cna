@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu.md WEBGPU-162 -- the PHYSICAL presentation rectangle, asked of every renderer
+// WEBGPU-162 -- the PHYSICAL presentation rectangle, asked of every renderer
 // that has one.
 //
 // `GraphicsDevice::UpdateViewportFromWindow()` pushes `IGraphicsRenderer::GetDefaultViewportRect()`
@@ -59,7 +59,7 @@ namespace
     /// and asserting a centred rectangle there would be asserting someone else's contract.
     ///
     /// WEBGPU WAS DELIBERATELY ABSENT UNTIL 2026-09-06, and the history is worth keeping because it
-    /// says what the fix had to contain. `plans/plan_webgpu.md` `WEBGPU-162` first added the override
+    /// says what the fix had to contain. `WEBGPU-162` first added the override
     /// alone and withdrew it: with only the physical rectangle returned here, WebGPU's sprite path
     /// still classified the default viewport as a caller-supplied SUB-viewport, because its test was
     /// "does the viewport differ from the target EXTENT" rather than "from the presentation

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-192, last item: a REAL window resize, as opposed to the programmatic
+// WEBGPU-192, last item: a REAL window resize, as opposed to the programmatic
 // `GraphicsDevice::Reset()` path `PresentationLifecycleTests.cpp` already covers.
 //
 // The row left this open on a boundary question rather than a technical one. The reference test

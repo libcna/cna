@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-184: `NormalizedByte2` and `NormalizedByte4` are stored natively.
+// WEBGPU-184: `NormalizedByte2` and `NormalizedByte4` are stored natively.
 //
 // Renderer-neutral: the two formats are `GraphicsProfile.Reach` formats a real XNA game may use,
 // EasyGL has stored them since the EasyGL 16-bit/normalized storage fix, and WebGPU gained them here by mapping onto core

@@ -1,7 +1,7 @@
 // plans/plan_runtimerenderer.md RTR-P1-D05: the WebGPU family's pre-construction contract.
 //
 // wgpu-native builds its surface from the native window handle, so no graphics-API window intent is
-// required (plans/plan_webgpu.md).
+// required (docs/webgpu-renderer.md).
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"

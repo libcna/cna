@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plans/plan_webgpu.md WEBGPU-207: run ONE shared parity fixture under BOTH renderers and diff the
+# WEBGPU-207: run ONE shared parity fixture under BOTH renderers and diff the
 # two frames.
 #
 # The fixture's own programmatic assertions (see modules/graphics/examples/parity/ParityFixture.hpp)

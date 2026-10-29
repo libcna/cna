@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-174 (harness: WEBGPU-207): the two `AlphaTestEffect` inputs the eight-
+// WEBGPU-174 (harness: WEBGPU-207): the two `AlphaTestEffect` inputs the eight-
 // function sweep (`parity_alpha_test_sweep.cpp`) cannot reach -- a NULL `Texture`, and
 // `VertexColorEnabled` combined with `DiffuseColor`.
 //

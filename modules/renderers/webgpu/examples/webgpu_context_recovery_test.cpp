@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-181: the CPU-side half of the device-loss contract, which can be
+// WEBGPU-181: the CPU-side half of the device-loss contract, which can be
 // proven without a real device destroy.
 //
 // Three claims, and the second is the one with teeth.

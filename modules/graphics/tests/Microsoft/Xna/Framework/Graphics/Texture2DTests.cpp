@@ -842,7 +842,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // them through one branch -- NormalizedByte2 as RG8_SNORM beside NormalizedByte4's
     // RGBA8_SNORM. Both need the ES 3 class of context that has SNORM at all, so this list
     // is deliberately the same one NormalizedByte4Throws uses.
-    // plans/plan_webgpu.md WEBGPU-184 added WEBGPU to this list: core WebGPU has `rg8snorm` and
+    // WEBGPU-184 added WEBGPU to this list: core WebGPU has `rg8snorm` and
     // `rgba8snorm`, so the format is stored natively there too, with no expansion.
     // Software retains the signed values in its canonical CPU sampling plane.
     // Apple M4 AM4-189: FNA3D stores it natively signed-normalized on its OpenGL and

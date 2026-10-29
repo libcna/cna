@@ -5,13 +5,28 @@
 The museum's October 2026 follow-up found browser optional-format and canvas-lifetime defects,
 missing vertex texture fetch and a surface-free start. All are repaired or documented, and the
 museum's reruns of 2026-10-25 (WEBGPU on the GPU through a headless Weston, and the browser build)
-confirm them (`../museum-simulator/docs/CNA_FINDINGS.md`). The top of `plans/plan_webgpu.md` holds
-the current status; older validation results below describe their tested configurations.
+confirm them (`../museum-simulator/docs/CNA_FINDINGS.md`). This section and *Important limitations*
+hold the current status; older validation results below describe their tested configurations.
 
 The WebGPU renderer was activated by the project owner on **2026-07-12** and has been a **supported
 CNA graphics renderer** (`GraphicsRendererMaturity::Supported`) since 2026-10-17 -- one of the project's 10 public renderer identities, native (wgpu-native)
-on desktop and, since 2026-08-26, also in the browser through Emscripten's emdawnwebgpu port. Select
-it with:
+on desktop and, since 2026-08-26, also in the browser through Emscripten's emdawnwebgpu port.
+
+**Parity, stated precisely.** WebGPU has no known locally-actionable implementation gap against
+the currently targeted normal CNA/XNA graphics surface on the tested Linux/native and browser
+environments. That is not a project-wide parity certification: the Windows, macOS and
+linux-aarch64 packages are unverified (`WEBGPU-1`, *Important limitations*), and "verified" in
+this document means verified on Linux x86_64, natively and in headless Chrome, unless it says
+otherwise. Equivalence with EasyGL means equivalent observable XNA-facing behaviour, including
+renderer-side emulation where WebGPU has no matching state (`textureSampleBias` for
+`MipMapLevelOfDetailBias`, triangle-edge expansion for `FillMode::WireFrame`). The shared gaps
+that once qualified this claim are closed: vertex-stage texture sampling (`FX-109`, by the museum
+B8 repair) and `SpriteBatch.Begin`'s complete sampler state (graphics row 1119, by `SDLGPU-64`).
+
+The task record that built the renderer (`WEBGPU-1`..`WEBGPU-209`, 2026-07/10) is in Git history;
+source comments cite its rows as "WEBGPU-nnn".
+
+Select it with:
 
 ```bash
 cmake -S . -B cmake-build-webgpu \
@@ -136,8 +151,8 @@ validation error, a mid-run canvas resize, and clean teardown. Reproduce with
 path (perspective, depth test, texturing) through the same harness, also green in-browser, and
 `CNA_WEBGPU_DEMO=cna_webgpu_{pbr3d,envmap3d,skinned3d,dualtexture3d,alphatest3d}_page` confirm every
 stock effect shader -- `PbrEffect`, cube-map `EnvironmentMapEffect`, bone-palette `SkinnedEffect`,
-`DualTextureEffect` and `AlphaTestEffect` -- compiles and renders in-browser (`plans/plan_webgpu.md`
-`WEBGPU-121`/`122`, both ✅). Since 2026-09-06,
+`DualTextureEffect` and `AlphaTestEffect` -- compiles and renders in-browser
+(`WEBGPU-121`/`122`, both ✅). Since 2026-09-06,
 `CNA_WEBGPU_DEMO=cna_webgpu_compiled_effect_page` drives **compiled XNA Effects** through the same
 harness (13/13; needs `-DCNA_WEBGPU_COMPILED_EFFECTS=ON` on the Emscripten configure):
 
@@ -511,7 +526,7 @@ relied on `BasicEffect`'s default `RasterizerState` (`CullCounterClockwiseFace`)
 `RasterizerState::CullNone` override every other WebGPU 3D test in this suite sets, and the
 triangle's winding is a genuine XNA back face under this renderer's (independently correct)
 `ToWGPUCullMode()` mapping, so it was being legitimately backface-culled regardless of MSAA. See
-`WEBGPU-58`'s `plans/plan_webgpu.md` row for the full investigation. `WebGPU_RenderTarget2D` (8 checks) verifies a Clear-only round
+`WEBGPU-58`'s plan row (Git history) for the full investigation. `WebGPU_RenderTarget2D` (8 checks) verifies a Clear-only round
 trip and a real `BasicEffect` draw round trip via `GetData()`, a depth+stencil-tested target (a
 farther red quad loses to a nearer green one, with a genuine `ClearOptions::Stencil` clear — this
 also closed `WEBGPU-8`/`9`'s previously-unexercised stencil-attachment gap), sampling all 3 targets
@@ -804,7 +819,7 @@ each deferred draw (`VertexVector4TextureAndSamplerReachTheDraw`,
 `VertexSingleTextureAndSamplerReachTheDraw`, `PointVertexTexturesDoNotRequireFloat32Filterable`),
 and `SamplerState.MipMapLevelOfDetailBias` -- see *Compiled-effect LOD bias* below.
 
-**Compiled-effect LOD bias (`plans/plan_webgpu.md` `WEBGPU-208`, 2026-09-06).** All six
+**Compiled-effect LOD bias (`WEBGPU-208`, 2026-09-06).** All six
 `SamplerState` fields a compiled pass can set now reach the GPU. The first five ride
 `WGPUSamplerDescriptor`; the sixth cannot, because that descriptor has no bias field at all, so it
 reaches the **shader** instead -- and it does so in the SPIR-V, before the native and browser routes
@@ -827,7 +842,7 @@ routes. Two corrections this made to what this document used to say: the bullet 
 value was "discarded ... so every stock draw family discards it too" (false since `WEBGPU-205`), and
 then that it was unavailable on the compiled route (false since `WEBGPU-208`).
 
-**The browser route (`plans/plan_webgpu.md` `WEBGPU-203`, 2026-09-06).** Browser WebGPU ingests WGSL
+**The browser route (`WEBGPU-203`, 2026-09-06).** Browser WebGPU ingests WGSL
 and nothing else -- emdawnwebgpu's own `createShaderModule` has a single chained-struct case -- so
 `GetOrCreateCompiledEffectShaderModuleEXT`, the ONE seam where the two targets differ, translates
 the finished SPIR-V into WGSL under Emscripten and hands it over as `WGPUShaderSourceWGSL`.
@@ -1385,7 +1400,7 @@ the full render state (blend, rasterizer/cull, viewport, scissor, depth-stencil 
 `Texture2D`/`TextureCube`/backbuffer readback (`WEBGPU-51`), MRT, occlusion queries, custom WGSL effects,
 GPU-native compressed textures, and -- since 2026-08-26 -- the browser path (`WEBGPU-119`–`122`). Those
 are described in their own sections above and are no longer "limitations". What is **genuinely still
-open** in `plans/plan_webgpu.md`:
+open**:
 
 **Added 2026-09-06 (closeout pass): the list this sentence promises, which the document had stopped
 carrying.** Everything after it is a *supported* feature described with its boundary, so a reader
@@ -1651,4 +1666,4 @@ The WebGPU-specific design choices — push constants → UBO, wireframe by edge
 async → synchronous callback pumping, `Color` → `Unorm8x4` vertex format, and windowing handled by
 the shared platform — are collected in `docs/webgpu-design-notes.md`.
 
-See `plans/plan_webgpu.md` for task-level status and the remaining parity work.
+What is still open is *Important limitations* above; the `WEBGPU-nnn` task record is in Git history.

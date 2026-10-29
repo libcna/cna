@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-156 (harness: WEBGPU-207): BasicEffect lighting on an UNTEXTURED
+// WEBGPU-156 (harness: WEBGPU-207): BasicEffect lighting on an UNTEXTURED
 // Position+Normal mesh -- the vertex layout Microsoft's own Primitives3D sample uses.
 //
 // Position+Normal is 24 bytes, exactly the stride of `VertexPositionColorTexture`. A renderer that
@@ -31,7 +31,7 @@
 // vertex by an exact pattern match -- `declaredElements[0] == Position@0 &&
 // declaredElements[1] == Normal@12` -- so any other declaration order falls through to the unlit
 // colour program and the normal is dropped. That is a defect in the REFERENCE, recorded against
-// `WEBGPU-156` in plans/plan_webgpu.md rather than cloned into WebGPU; a shared fixture asserts
+// `WEBGPU-156` rather than cloned into WebGPU; a shared fixture asserts
 // what both renderers must satisfy, so this leg would be permanently red for the wrong reason.
 // Declaration-ORDER independence is still covered for the unlit families by
 // `parity_vertex_semantics`'s leg D, which both renderers pass.

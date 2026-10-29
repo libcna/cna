@@ -87,7 +87,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "TextureCube: SurfaceFormat " + std::to_string(static_cast<int>(format)) +
                 " is not available for a cube on the selected GraphicsProfile.");
         }
-        // plans/plan_webgpu.md WEBGPU-163: the CUBE verdict, not the 2D one. A renderer may store a
+        // WEBGPU-163: the CUBE verdict, not the 2D one. A renderer may store a
         // format in a Texture2D and have no cube allocation path for it, and asking the 2D question
         // here is how a format got promised at construction and refused by every SetData.
         switch (device.GetRenderer().ClassifyTextureCubeFormatEXT(static_cast<int>(format)))

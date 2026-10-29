@@ -206,7 +206,7 @@ namespace CNA::Internal::Graphics
         /**
          * @brief The shader location this input binds to, when it is not the input's own index.
          *
-         * plans/plan_webgpu.md WEBGPU-172. Every stock program written before the instanced family
+         * WEBGPU-172. Every stock program written before the instanced family
          * numbers its inputs 0, 1, 2 ... in declaration order, and -1 (the default) keeps saying
          * exactly that. The instanced program is the exception: its per-instance world matrix
          * occupies locations 4-7 in already-written shader source, leaving a deliberate gap so the

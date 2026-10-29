@@ -6,7 +6,7 @@
 //
 // Usage: cna_diag_compare <fileA> <fileB> [tolerance=1] [WxH=64x64]
 //
-// plans/plan_webgpu.md WEBGPU-207: the optional 4th argument is the frame size, so the shared
+// WEBGPU-207: the optional 4th argument is the frame size, so the shared
 // EasyGL<->WebGPU parity fixtures (modules/graphics/examples/parity/) can dump at whatever
 // resolution their scene needs and still be judged by THIS comparator rather than by a second one
 // that would drift from it. Omitted, it stays the 64x64 the two original diagnostic scenes use, so

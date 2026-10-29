@@ -431,7 +431,7 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   at the top of `docs/devices-hardware-checklist.md`.
 - `WEBGPU` is supported (promoted from experimental on 2026-10-17) and verified on Linux x86_64
   and in headless Chrome only; its Windows, macOS and linux-aarch64 wgpu-native packages are
-  unverified (`WEBGPU-1`, `plans/plan_webgpu.md`).
+  unverified (`WEBGPU-1`, `docs/webgpu-renderer.md`).
 - `SOFTWARE` is a bounded CPU renderer, and `HEADLESS` and `STUB` make no pixel claim
   (`docs/renderer-registry.md`, "Capability classes").
 - Per-subsystem capability boundaries, by design rather than defect, are in the documents listed

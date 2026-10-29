@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-155 (harness: WEBGPU-207): one mesh, four vertex declarations that
+// WEBGPU-155 (harness: WEBGPU-207): one mesh, four vertex declarations that
 // differ only in element ORDER, element OFFSET and buffer STRIDE, and therefore must render
 // identically.
 //

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-189: render-target semantics -- `RenderTargetUsage`, a mid-run MSAA
+// WEBGPU-189: render-target semantics -- `RenderTargetUsage`, a mid-run MSAA
 // change, and the public properties a target reports about itself.
 //
 // Renderer-neutral, mirroring EasyGL's `render_target_usage`, `msaa_change`,

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-175 (harness: WEBGPU-207): every factor in `DualTextureEffect`'s
+// WEBGPU-175 (harness: WEBGPU-207): every factor in `DualTextureEffect`'s
 // blend, each one able to change the pixel on its own.
 //
 // FNA's `PSDualTexture` is four multiplications and one of them is easy to lose:

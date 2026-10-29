@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-190 (harness: WEBGPU-207), the STENCIL family: all eight
+// WEBGPU-190 (harness: WEBGPU-207), the STENCIL family: all eight
 // `StencilOperation`s, and two-sided stencil.
 //
 // EACH CELL ASKS THE BUFFER WHAT THE OPERATION PRODUCED, rather than looking at a colour and

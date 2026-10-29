@@ -1,7 +1,7 @@
 #pragma once
 
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
-// plans/plan_webgpu.md WEBGPU-167: the compiled-effect runtime's types appear in this renderer's own
+// WEBGPU-167: the compiled-effect runtime's types appear in this renderer's own
 // members and signatures. The runtime header depends on no renderer type, so there is no cycle.
 #include "CNA/Internal/Renderers/WebGPU/WebGPUCompiledEffect.hpp"
 #endif
@@ -1603,7 +1603,7 @@ namespace CNA::Internal::Renderers::WebGPU
         }
         /// WEBGPU-12/59: lifetime count of transient per-draw buffers served from the pool (reuses).
         /**
-         * @brief plans/plan_webgpu.md WEBGPU-160: how many distinct native samplers the slot cache holds.
+         * @brief WEBGPU-160: how many distinct native samplers the slot cache holds.
          *
          * `SamplerState.AddressW` is observable in PIXELS only where a renderer samples a volume
          * texture, and this one has no public route that does (`IEffectRenderer::BindTexture3D` is
@@ -1913,7 +1913,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // queue time for slot 0 (see each command's textureFilter/addressU/addressV capture).
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         /**
-         * @brief plans/plan_webgpu.md WEBGPU-160: the third addressing axis of a `SamplerState`.
+         * @brief WEBGPU-160: the third addressing axis of a `SamplerState`.
          *
          * Separate from `ApplySamplerState` in the interface because it is observable only where a
          * renderer samples a volume texture, so each renderer adopts it explicitly. It was not
@@ -1925,7 +1925,7 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         void ApplySamplerAddressW(int slot, int addressW) override;
         /**
-         * @brief plans/plan_webgpu.md WEBGPU-161: `SamplerState.MaxMipLevel` reaches the sampler.
+         * @brief WEBGPU-161: `SamplerState.MaxMipLevel` reaches the sampler.
          *
          * `ApplySamplerMipState` was not overridden, so `MaxMipLevel` was discarded in silence.
          * XNA's `MaxMipLevel` is the highest-resolution mip level sampling may use -- level 0 means
@@ -1943,7 +1943,7 @@ namespace CNA::Internal::Renderers::WebGPU
         void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
 
         /**
-         * @brief plans/plan_webgpu.md WEBGPU-205: the routes that do not apply a sampler LOD bias.
+         * @brief WEBGPU-205: the routes that do not apply a sampler LOD bias.
          *
          * The state is implemented on every stock 3D route by WGSL `textureSampleBias`. Three
          * routes do not carry it, and the row's rule is that no route may ignore it in silence --
@@ -1976,12 +1976,12 @@ namespace CNA::Internal::Renderers::WebGPU
         // the exact same colored3d.wgsl/GetOrCreatePipelineColored3D() infrastructure as
         // DrawColoredPrimitives(), but fills the uniform buffer from the caller's real
         // DiffuseColor/VertexColorEnabled instead of hardcoded white/true. Other strides (20/24/32,
-        // needing textured3d/lit_textured3d -- not yet written, see plans/plan_webgpu.md Phase 58) and
+        // needing textured3d/lit_textured3d -- not yet written, see the WebGPU plan's Phase 58) and
         // other effects (alpha test/dual texture/env map/skinned) fall back to
         // DrawColoredPrimitives()/DrawIndexedColoredPrimitives(), replicating exactly what
         // IGraphicsRenderer's own default implementation already did before this override existed.
         /**
-         * @brief plans/plan_webgpu.md WEBGPU-155: the ONE stock dispatch, shared by the indexed and
+         * @brief WEBGPU-155: the ONE stock dispatch, shared by the indexed and
          *        non-indexed entry points.
          *
          * Selects the stock family from the vertex declaration's semantics plus the effect state,
@@ -2113,7 +2113,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
         /**
-         * @brief plans/plan_webgpu.md WEBGPU-171: compiled XNA Effect Framework bytecode runs here.
+         * @brief WEBGPU-171: compiled XNA Effect Framework bytecode runs here.
          *
          * True only because the whole draw route exists: MojoShader's SPIR-V profile, the
          * combined-image-sampler rewrite WGSL's shading model requires, MojoShader's four fixed
@@ -2141,7 +2141,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /**
          * @brief CNAEXT. How a compiled effect's finished SPIR-V is handed to WebGPU.
          *
-         * plans/plan_webgpu.md WEBGPU-203. This is the ONE place the native and browser
+         * WEBGPU-203. This is the ONE place the native and browser
          * compiled-effect routes differ; everything above it -- Effect parsing, MojoShader,
          * reflection, constants, samplers, techniques, vertex declarations, parameter snapshots,
          * SpriteBatch, multi-pass -- is the same code.
@@ -2283,7 +2283,7 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override { return true; }
         /**
-         * @brief plans/plan_webgpu.md WEBGPU-163: the CUBE storage verdict, which is narrower here.
+         * @brief WEBGPU-163: the CUBE storage verdict, which is narrower here.
          *
          * `WEBGPU-144` made block-compressed `Texture2D` real, and `ClassifySurfaceFormatEXT`
          * answers `Supported` for BC whenever the device enabled the feature. That one classifier
@@ -2993,7 +2993,7 @@ namespace CNA::Internal::Renderers::WebGPU
         CNA::Internal::Graphics::SpriteTextureBinding activeSpriteTextureBinding_;
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
         /**
-         * @brief plans/plan_webgpu.md WEBGPU-170: one sprite vertex of a compiled-effect batch.
+         * @brief WEBGPU-170: one sprite vertex of a compiled-effect batch.
          *
          * Deliberately NOT the stock `SpriteVertex`: that one carries clip-space positions baked at
          * enqueue, and a compiled effect's own vertex shader expects the sprite's coordinates in the
@@ -3116,7 +3116,7 @@ namespace CNA::Internal::Renderers::WebGPU
         void ApplyDrawScissor(WGPURenderPassEncoder pass, const WebGPUScissorSnapshot& snapshot);
 
         /**
-         * @brief plans/plan_webgpu.md WEBGPU-155: which stock shader family one draw is bound to.
+         * @brief WEBGPU-155: which stock shader family one draw is bound to.
          *
          * Chosen from the DECLARATION's semantics plus the effect state, never from the buffer's
          * byte stride: 24 bytes is `VertexPositionColorTexture` and also `Position+Normal`, 32 is
@@ -3783,7 +3783,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // plain-texture mip behaviour genuinely BETTER (never garbage/undefined content at
         // level>0) but ALSO genuinely DIFFERENT from FNA and every sibling CNA renderer for the
         // identical public Texture2D/TextureCube(mipMap=true) constructor call -- see
-        // plans/plan_webgpu.md's WEBGPU-52 row and docs/webgpu-renderer.md for the full investigation
+        // WEBGPU-52 and docs/webgpu-renderer.md for the full investigation
         // this finding is based on. Explicit per-level SetData(level>0, ...) calls made AFTER
         // construction are, as before, never auto-regenerated (matches every other renderer).
         // WEBGPU-114: the blit pipeline's colour-target format must equal the texture being
@@ -4055,7 +4055,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // 3D pipeline's WGPUStencilFaceState (FillWGPUStencilState, folded into the pipeline cache
         // key since WebGPU keeps masks as pipeline state), with the reference applied per draw via
         // wgpuRenderPassEncoderSetStencilReference. Two-sided front/back winding is pixel-verified
-        // (WebGPU_StencilTwoSided) -- see plans/plan_webgpu.md's WEBGPU-83 row.
+        // (WebGPU_StencilTwoSided) -- see WEBGPU-83.
         bool stencilEnable_ = false;
         int stencilFunc_ = 0;
         int stencilPass_ = 0;
@@ -4212,7 +4212,7 @@ namespace CNA::Internal::Renderers::WebGPU
         int InitStockColorTargetsEXT(std::array<WGPUColorTargetState, 4>& out) const;
 
         // Phase 57/63 vertical slice: DrawColoredPrimitives()/DrawIndexedColoredPrimitives() only
-        // (VertexPositionColor, stride 16 -- see plans/plan_webgpu.md's Phase 57 entry-point note). The
+        // (VertexPositionColor, stride 16 -- see the WebGPU plan's Phase 57 entry-point note). The
         // 128-float uniform layout was taken byte-for-byte from the retired VULKAN renderer's
         // FillExtPushConst() so the same shader/uniform shape can be reused once DrawPrimitivesEx
         // (full BasicEffect dispatch) lands -- IGraphicsRenderer::DrawPrimitivesEx's own default
@@ -5840,7 +5840,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
         /**
-         * @brief plans/plan_webgpu.md WEBGPU-169: one deferred compiled-XNA-effect draw.
+         * @brief WEBGPU-169: one deferred compiled-XNA-effect draw.
          *
          * Everything a compiled pass decided is captured BY VALUE here, because the draw is
          * recorded at `Present()` long after `ApplyPass()` ran and the MojoShader register files

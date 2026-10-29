@@ -227,7 +227,7 @@ namespace
      *
      * True everywhere. It was false on WEBGPU while that renderer's `RenderTarget2D`
      * constructor raised a catchable `std::runtime_error` for `mipMap=true`;
-     * `plans/plan_webgpu.md` `WEBGPU-164` allocates the chain and regenerates it from level 0
+     * `WEBGPU-164` allocates the chain and regenerates it from level 0
      * on unbind, so the legs below measure a value there rather than a refusal.
      */
     constexpr bool kMipmappedRenderTargetSupported = true;
@@ -1744,7 +1744,7 @@ void main() {
 
         if (!kMipmappedRenderTargetSupported)
             boundary(std::string("J1 ") + kRendererName + " does not implement a mipMap=true "
-                     "RenderTarget2D at all (plans/plan_webgpu.md WEBGPU-53/54) -- boundary recorded");
+                     "RenderTarget2D at all (WEBGPU-53/54) -- boundary recorded");
 
         // A mipmapped target must still be sampleable at level 0 through a 3D effect.
         if (kMipmappedRenderTargetSupported)

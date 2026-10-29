@@ -3806,5 +3806,5 @@ this plan.
   rows into a single commit, and update this file's status column in the same commit that closes
   a task.
 - Update the phase-level summary at the top of this file once the Phase `SDLGPU-5` 2D vertical
-  slice is verified, the same way `plan_webgpu.md`'s header was rewritten once its own 2D
+  slice is verified, the same way the former `plan_webgpu.md`'s header was rewritten once its own 2D
   baseline landed — do not let the header go stale relative to the task table below it.

@@ -175,7 +175,7 @@ TEST(VertexDeclarationFidelityTest, PositionOnlyAtAListedStrideIsRepresentable)
 TEST(VertexDeclarationFidelityTest, ARendererThatRefusesTheStrideKeepsItsOwnRejection)
 {
     // Software, the three D3D renderers and WebGPU's remaining stride-derived routes (skinned, PBR,
-    // instanced -- plans/plan_webgpu.md WEBGPU-155 converted its stock families to bind by semantic
+    // instanced -- WEBGPU-155 converted its stock families to bind by semantic
     // and they no longer reach this predicate) throw on an out-of-table stride themselves. The
     // guard must abstain there rather than substitute its own message for an established
     // boundary -- including for a declaration it could not otherwise represent.

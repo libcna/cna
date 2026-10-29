@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu.md WEBGPU-163 -- construction and use must agree about a block-compressed
+// WEBGPU-163 -- construction and use must agree about a block-compressed
 // `TextureCube`.
 //
 // THE DEFECT THIS MEASURES, stated as a renderer-neutral invariant rather than as one renderer's

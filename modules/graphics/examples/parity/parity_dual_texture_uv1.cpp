@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-159 (harness: WEBGPU-207): `DualTextureEffect` must consume TEXCOORD0
+// WEBGPU-159 (harness: WEBGPU-207): `DualTextureEffect` must consume TEXCOORD0
 // and TEXCOORD1 INDEPENDENTLY.
 //
 // That is the whole point of the effect -- lightmapping puts the base map on the mesh's own UVs and

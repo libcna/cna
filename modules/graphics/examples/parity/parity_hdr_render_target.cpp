@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-199 (harness: WEBGPU-207): a half-float render target really holds
+// WEBGPU-199 (harness: WEBGPU-207): a half-float render target really holds
 // values above 1.0, and sampling one gives the same picture on both renderers.
 //
 // THE PROBLEM WITH MEASURING THIS IN 8-BIT OUTPUT. A target holding 2.0 and a target that clamped

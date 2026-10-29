@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu.md WEBGPU-160 -- `SamplerState.AddressW` reaches the native sampler.
+// WEBGPU-160 -- `SamplerState.AddressW` reaches the native sampler.
 //
 // WHY THIS TEST COUNTS SAMPLERS INSTEAD OF READING PIXELS. `AddressW` is the third addressing axis:
 // it is observable in output only where a renderer samples a VOLUME texture, and this renderer has

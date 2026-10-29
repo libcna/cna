@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu.md WEBGPU-203. See SpirvToWgsl.hpp for what this translates and why the input
+// WEBGPU-203. See SpirvToWgsl.hpp for what this translates and why the input
 // language is a small fixed subset rather than SPIR-V at large.
 
 #include "CNA/Internal/Renderers/MojoShader/SpirvToWgsl.hpp"
@@ -866,7 +866,7 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                 EmitBlockChain(blocks_.front().label, 0);
 
                 out_ = "// Generated from MojoShader SPIR-V by CNA "
-                       "(plans/plan_webgpu.md WEBGPU-203). Do not edit.\n";
+                       "(WEBGPU-203). Do not edit.\n";
                 out_ += globals;
                 out_ += "\nfn " + entryName_ + "_body() {\n";
                 out_ += body_;
