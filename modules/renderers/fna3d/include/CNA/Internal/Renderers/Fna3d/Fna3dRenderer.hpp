@@ -3,6 +3,7 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dApi.hpp"
+#include "CNA/Internal/Renderers/Fna3d/Fna3dNativeAllocation.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dPresentation.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dStockEffects.hpp"
 

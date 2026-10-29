@@ -71,6 +71,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     cna_register_renderer_test(NAME Fna3d_Device_Lifetime
         COMMAND cna_test_fna3d_device_lifetime TIMEOUT 120 LABELS "Fna3d")
 
+    # FNA3D-50: every native creation failed in turn through the renderer's allocation seam. The
+    # compiled-effect cases parse a committed stock effect binary from the source tree.
+    cna_fna3d_test(cna_test_fna3d_allocation_failure fna3d_allocation_failure_test.cpp)
+    target_compile_definitions(cna_test_fna3d_allocation_failure PRIVATE
+        CNA_FNA3D_TEST_EFFECTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../effects")
+    cna_register_renderer_test(NAME Fna3d_AllocationFailure
+        COMMAND cna_test_fna3d_allocation_failure TIMEOUT 120 LABELS "Fna3d")
+
     cna_fna3d_test(cna_test_fna3d_sampler fna3d_sampler_test.cpp)
     cna_register_renderer_test(NAME Fna3d_Sampler COMMAND cna_test_fna3d_sampler
         TIMEOUT 120 LABELS "Fna3d")

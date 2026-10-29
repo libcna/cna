@@ -186,7 +186,7 @@ namespace CNA::Internal::Renderers::Fna3d
         presentation_.displayOrientation = FNA3D_DISPLAYORIENTATION_DEFAULT;
         presentation_.renderTargetUsage = FNA3D_RENDERTARGETUSAGE_DISCARDCONTENTS;
 
-        device_ = FNA3D_CreateDevice(&presentation_, 0);
+        device_ = Detail::CreateDevice(&presentation_, 0);
         if (device_ == nullptr)
         {
             throw std::runtime_error(
@@ -319,7 +319,7 @@ namespace CNA::Internal::Renderers::Fna3d
             {
                 effect.Destroy(device_);
             }
-            FNA3D_DestroyDevice(device_);
+            Detail::DestroyDevice(device_);
             device_ = nullptr;
             deviceState_->device = nullptr;
             throw;
@@ -345,11 +345,11 @@ namespace CNA::Internal::Renderers::Fna3d
             // FNA3D has no dedicated query-capability function. Its SDL_GPU driver is explicit
             // that queries are unsupported; the other current drivers expose a real CreateQuery
             // implementation, whose allocation is the narrowest public-API probe available.
-            FNA3D_Query* probe = FNA3D_CreateQuery(device_);
+            FNA3D_Query* probe = Detail::CreateQuery(device_);
             supportsOcclusionQueries_ = probe != nullptr;
             if (probe != nullptr)
             {
-                FNA3D_AddDisposeQuery(device_, probe);
+                Detail::DisposeQuery(device_, probe);
             }
         }
 
@@ -514,7 +514,7 @@ namespace CNA::Internal::Renderers::Fna3d
         std::uint8_t readback[4] = { 0xAB, 0xAB, 0xAB, 0xAB };
 
         FNA3D_Texture* probe =
-            FNA3D_CreateTexture3D(device_, FNA3D_SURFACEFORMAT_COLOR, 1, 1, 1, 1);
+            Detail::CreateTexture3D(device_, FNA3D_SURFACEFORMAT_COLOR, 1, 1, 1, 1);
         if (probe == nullptr)
         {
             texture3DReadbackSupported_ = false;
@@ -531,7 +531,7 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_GetTextureData3D(device_, probe, 0, 0, 0, 1, 1, 1, 0, readback, sizeof(readback));
         FNA3D_HookLogFunctions(ForwardInfo, ForwardWarn, ForwardError);
 
-        FNA3D_AddDisposeTexture(device_, probe);
+        Detail::DisposeTexture(device_, probe);
 
         texture3DReadbackSupported_ = std::memcmp(kUploaded, readback, sizeof(kUploaded)) == 0;
         CNA::Logger::Info(
@@ -564,7 +564,7 @@ namespace CNA::Internal::Renderers::Fna3d
         std::uint8_t readback[8] = { 0xAB, 0xAB, 0xAB, 0xAB, 0xAB, 0xAB, 0xAB, 0xAB };
 
         FNA3D_Texture* probe =
-            FNA3D_CreateTexture2D(device_, FNA3D_SURFACEFORMAT_DXT1, 4, 4, 1, 0);
+            Detail::CreateTexture2D(device_, FNA3D_SURFACEFORMAT_DXT1, 4, 4, 1, 0);
         if (probe == nullptr)
         {
             return;
@@ -577,7 +577,7 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_GetTextureData2D(device_, probe, 0, 0, 4, 4, 0, readback, sizeof(readback));
         FNA3D_HookLogFunctions(ForwardInfo, ForwardWarn, ForwardError);
 
-        FNA3D_AddDisposeTexture(device_, probe);
+        Detail::DisposeTexture(device_, probe);
 
         compressedReadbackSupported_ = std::memcmp(kUploaded, readback, sizeof(kUploaded)) == 0;
         CNA::Logger::Info(
@@ -614,7 +614,7 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             effect.Destroy(device_);
         }
-        FNA3D_DestroyDevice(device_);
+        Detail::DestroyDevice(device_);
         device_ = nullptr;
         deviceState_->device = nullptr;
     }

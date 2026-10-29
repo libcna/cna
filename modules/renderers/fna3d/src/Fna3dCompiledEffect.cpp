@@ -79,7 +79,7 @@ namespace CNA::Internal::Renderers::Fna3d
             if (effect == nullptr) return;
             if (CanSafelyDisposeNativeEffect(effectData))
             {
-                FNA3D_AddDisposeEffect(device, effect);
+                Detail::DisposeEffect(device, effect);
                 return;
             }
 
@@ -87,7 +87,7 @@ namespace CNA::Internal::Renderers::Fna3d
             // Calling the public disposal entry point for an unexpected-EOF sentinel would make
             // FNA3D call MOJOSHADER_deleteEffect on static storage. Free only the driver wrapper
             // in this narrowly identified failure case; no shaders or parser allocations exist.
-            SDL_free(effect);
+            Detail::FreeSentinelEffect(effect, SDL_free);
         }
     }
 
@@ -102,8 +102,9 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             throw std::invalid_argument("FNA3D compiled effect: invalid bytecode buffer.");
         }
-        FNA3D_CreateEffect(device_, const_cast<std::uint8_t*>(effectCode),
-                           static_cast<std::uint32_t>(effectCodeLength), &effect_, &effectData_);
+        Detail::CreateEffect(device_, const_cast<std::uint8_t*>(effectCode),
+                             static_cast<std::uint32_t>(effectCodeLength), &effect_,
+                             &effectData_);
         try
         {
             MojoShaderEffect::ValidateNativeEffect(effectData_, "create");
@@ -135,7 +136,7 @@ namespace CNA::Internal::Renderers::Fna3d
         , device_(renderer.GetDeviceEXT())
         , techniqueIndex_(cloneSource.techniqueIndex_)
     {
-        FNA3D_CloneEffect(device_, cloneSource.effect_, &effect_, &effectData_);
+        Detail::CloneEffect(device_, cloneSource.effect_, &effect_, &effectData_);
         try
         {
             MojoShaderEffect::ValidateNativeEffect(effectData_, "clone");
@@ -165,7 +166,7 @@ namespace CNA::Internal::Renderers::Fna3d
     {
         if (effect_ != nullptr && device_ != nullptr)
         {
-            FNA3D_AddDisposeEffect(device_, effect_);
+            Detail::DisposeEffect(device_, effect_);
         }
         effect_ = nullptr;
         effectData_ = nullptr;

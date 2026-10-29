@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Fna3d/Fna3dStockEffects.hpp"
+#include "CNA/Internal/Renderers/Fna3d/Fna3dNativeAllocation.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -10,7 +11,7 @@ namespace CNA::Internal::Renderers::Fna3d
     void Fna3dStockEffect::Load(FNA3D_Device* device, const unsigned char* blob,
                                 unsigned int blobBytes, const char* debugName)
     {
-        FNA3D_CreateEffect(
+        Detail::CreateEffect(
             device,
             const_cast<uint8_t*>(static_cast<const uint8_t*>(blob)),
             blobBytes,
@@ -48,7 +49,7 @@ namespace CNA::Internal::Renderers::Fna3d
     {
         if (effect_ != nullptr && device != nullptr)
         {
-            FNA3D_AddDisposeEffect(device, effect_);
+            Detail::DisposeEffect(device, effect_);
         }
         effect_ = nullptr;
         effectData_ = nullptr;

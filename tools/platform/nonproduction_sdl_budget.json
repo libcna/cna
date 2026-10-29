@@ -229,6 +229,10 @@
       "category": "renderer-integration-executable",
       "max_references": 8
     },
+    "modules/renderers/fna3d/examples/fna3d_allocation_failure_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 19
+    },
     "modules/renderers/fna3d/examples/fna3d_device_lifetime_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 16

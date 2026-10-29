@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <cstring>
 #include <vector>
+#include <utility>
 
 namespace CNA::Internal::Renderers::Fna3d
 {
@@ -334,11 +335,12 @@ namespace CNA::Internal::Renderers::Fna3d
         if (spriteIndexBuffer_ == nullptr || quadCount > spriteIndexQuadCapacity_)
         {
             // Quad indices are a pure function of the quad count, so the buffer is rebuilt only
-            // when a batch is larger than any seen so far, never per frame.
-            spriteIndexQuadCapacity_ = quadCount > 256 ? quadCount : 256;
-            std::vector<std::uint16_t> indices(
-                static_cast<std::size_t>(spriteIndexQuadCapacity_) * 6);
-            for (int quad = 0; quad < spriteIndexQuadCapacity_; ++quad)
+            // when a batch is larger than any seen so far, never per frame. The capacity is
+            // recorded only once the new buffer holds its indices, so a failed rebuild cannot
+            // leave a smaller buffer serving a batch it does not cover.
+            const int quadCapacity = quadCount > 256 ? quadCount : 256;
+            std::vector<std::uint16_t> indices(static_cast<std::size_t>(quadCapacity) * 6);
+            for (int quad = 0; quad < quadCapacity; ++quad)
             {
                 const auto base = static_cast<std::uint16_t>(quad * 4);
                 const std::size_t offset = static_cast<std::size_t>(quad) * 6;
@@ -349,9 +351,11 @@ namespace CNA::Internal::Renderers::Fna3d
                 indices[offset + 4] = static_cast<std::uint16_t>(base + 2);
                 indices[offset + 5] = static_cast<std::uint16_t>(base + 3);
             }
-            spriteIndexBuffer_ = std::make_unique<Fna3dIndexBufferRenderer>(
+            auto rebuilt = std::make_unique<Fna3dIndexBufferRenderer>(
                 deviceState_, static_cast<int>(indices.size()), false);
-            spriteIndexBuffer_->SetData16(indices.data(), static_cast<int>(indices.size()));
+            rebuilt->SetData16(indices.data(), static_cast<int>(indices.size()));
+            spriteIndexBuffer_ = std::move(rebuilt);
+            spriteIndexQuadCapacity_ = quadCapacity;
         }
 
         // XNA's SpriteBatch projection: pixel coordinates with the origin at the top-left, half a

@@ -242,7 +242,9 @@ fixed from the descriptor's own request.
 - `RenderTarget2D` and `RenderTargetCube`: MSAA colour renderbuffers with resolve-on-unbind, mip
   generation, per-target depth/stencil renderbuffers, `PreserveContents`, MRT sets, readback.
 - Vertex and index buffers (16- and 32-bit) with `SetDataOptions` forwarded verbatim, growing the
-  GPU allocation on demand and rejecting byte counts beyond FNA3D's signed 32-bit ABI limit.
+  GPU allocation on demand and rejecting byte counts beyond FNA3D's signed 32-bit ABI limit. A
+  growth allocates the replacement first, so one that fails keeps the buffer, its contents and
+  its index width.
 - The caller's own `VertexDeclaration` bound verbatim per stream; a stride-keyed table stands in
   only for the internal routes that bind no public buffer (SpriteBatch, `DrawUser*`).
 - Blend / depth-stencil / rasterizer / sampler state, colour write masks, multisample mask, blend
@@ -338,12 +340,13 @@ mipmapped `Texture2D` does the same. CNA reports it rather than working around i
 
 | Kind | Status |
 |---|---|
-| Native runtime (Linux, isolated display, FNA3D OpenGL driver) | **Performed** — all nineteen native `Fna3d_*` CTest binaries pass, including the sequential-device/post-device lifetime regression, punctual-light paths, split-sum IBL, double-sided PBR, independent UV0/UV1 material maps and the shared nine-check shadow oracle. The complete `Fna3d` label is 50/50 without failures (48 pass plus two intentional shader-backend skips). |
+| Native runtime (Linux, isolated display, FNA3D OpenGL driver) | **Performed** — all twenty native `Fna3d_*` CTest binaries pass, including the sequential-device/post-device lifetime regression, native-allocation failure injection, punctual-light paths, split-sum IBL, double-sided PBR, independent UV0/UV1 material maps and the shared nine-check shadow oracle. The complete `Fna3d` label is 66/66 without failures (64 pass plus two intentional shader-backend skips, 2026-10-29). |
 | XNA 4.0 oracle corpus (39 scenes vs real XNA reference images) | **Performed** — `Fna3d_XNA_Oracle`; every scene renders, 10/39 exact at the EasyGL baseline. This is the only coverage DualTextureEffect, EnvironmentMapEffect and SkinnedEffect have. See [`fna3d-parity-report.md`](fna3d-parity-report.md) |
 | Unit tests (`CnaTests`, `Fna3d*` plus the generic disposed-`Texture2D` regression) | **Performed** — format-region and shared transfer-contract coverage pass |
 | Compiled-effect unit/pixel tests (`Fna3dCompiledEffectTest`) | **Performed** — 34 focused tests cover fixture hashes, parse/apply, reflection, padded matrix arrays, clone/disposal, malformed cleanup, general draws, SpriteBatch pixels, and a legally reproducible synthetic multi-technique/pass/default/annotation/render-state conformance binary |
 | Sanitizers (ASan + UBSan), renderer suite | **Performed** — the enlarged 13-test suite passes, including post-device lifetime and the >16-bit SpriteBatch path. Leak detection is disabled for the external graphics stack; UBSan still reports the pre-existing MojoShader decimal-parser signed overflow, but found no CNA-originating defect (FNA3D-47). |
 | Sanitizers for the new arbitrary compiled-effect path | **Partial** — all 31 targeted FX/XNB/capability tests pass in the ASan/UBSan build with no ASan finding. LeakSanitizer is unavailable under the managed ptrace environment; pinned upstream MojoShader still reports known UBSan findings in float formatting and zero-length clone copies, so the full `plans/plan_fx.md` production gate remains open. |
+| Native-allocation failure (FNA3D-50) | **Performed** — `Fna3d_AllocationFailure` fails every native creation and owning-wrapper allocation in turn, on the OpenGL and the SDL_GPU driver: each failure is reported, leaves every native object family at its prior count, and does not stop the same operation succeeding next. The seam is `Fna3dAllocationFailureInjectionEXT` (`Fna3dNativeAllocation.hpp`), through which every native creation and release passes. |
 | Existence-gate spikes | **Performed** — `fna3d-spike/` |
 | SDL_GPU driver | **Exercised on AMD Radeon 780M / RADV**: the 13 registered FNA3D renderer executables, compiled-effect contracts and XNA oracle complete as a 66-test selection with 65 passes plus one intentional Reach-profile skip. The Linux sample corpus and focused pixel-centre/SpriteBatch contracts also run through this default driver. |
 | Direct3D 11 driver | **Cross-build only**: the patched driver and seven-renderer sample executable compile with MinGW-w64. No native Windows GPU execution has occurred, so runtime qualification remains an external gate. |
@@ -368,6 +371,7 @@ mipmapped `Texture2D` does the same. CNA reports it rather than working around i
 | `Fna3d_Sampler` | Point vs Linear magnification, Clamp/Wrap/Mirror past u=1, independent U/V addressing, Anisotropic, and the LOD controls |
 | `Fna3d_Lifetime` | Invalid levels and regions, undersized destinations, disposed resources, draw-range validation, documented refusals, and resource-before-device teardown |
 | `Fna3d_Device_Lifetime` | Resources, render targets, buffers, queries and SpriteBatch survive destruction of their device wrapper safely; post-device use and binds from a sequential replacement device are rejected; environment sampler 1 is exercised through live→null and foreign-device paths; buffer-overflow requests never reach FNA3D |
+| `Fna3d_AllocationFailure` | Every allocation point of renderer construction, all texture, render-target, buffer, query and compiled-effect factories, effect cloning, SpriteBatch's own buffer growth and the lazily created internal textures fails in turn and is rolled back; a failed vertex/index buffer growth keeps drawing the old contents; every native object is released at the end |
 | `Fna3d_XNA_Oracle` | All 39 XNA oracle scenes render, and each is diffed against the real XNA 4.0 reference image |
 | `Fna3d_Compressed` | Hand-built DXT5 blocks uploaded through `IGraphicsRenderer::CreateTexture` decode as the right colour in the right quadrant, including a 6×6 level whose tail blocks are padded; `GetData` matches the driver's real compressed-readback answer; a compressed cube and an out-of-range sampler slot are refused by name |
 
