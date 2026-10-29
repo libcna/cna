@@ -293,20 +293,20 @@ coverage are measured separately from historical API shape.
 
 ### Previous ABI 0.31.0
 
-The ABI was **0.31.0** (`RRC-012`). It **retires three public renderer
-identities** -- `DIRECT2D` (`16`), `FREEDIRECT` (`21`) and `PORTABLEGL` (`46`) -- together with the
-three `CNA_GRAPHICS_RENDERER_*` constants that named them, and moves
-`CNA_GRAPHICS_RENDERER_MAXIMUM` from `46` (`PORTABLEGL`) to `44` (`SVG_DOM`, the highest surviving
-identity). CNA now has 22 public renderer identities (`plans/plan_renderer_cleanup.md`,
-`docs/removed-renderers.md`). No route, structure, field, capability bit or exported symbol changes,
-and no surviving identity is renumbered: a binding that passes `CNA_GRAPHICS_RENDERER_VULKAN` (`8`)
-or `CNA_GRAPHICS_RENDERER_GDI` (`40`) passes the same integer as before. What breaks is a binding
-that names one of the three removed constants (it no longer compiles), passes one of their integers
-(every route now refuses it with `CNA_RESULT_INVALID_ARGUMENT`), or compares against
-`CNA_GRAPHICS_RENDERER_MAXIMUM` (the ceiling moved down). The three values join the permanently
-reserved set, which is now `7`, `10`, `16`, `19`--`21`, `23`--`30`, `32`, `34`--`39`, `41` and
-`45`--`51`; a future identity still takes **`52`**. That is an incompatible change, which under the
-`0.x` rule below takes this minor increment, these release notes and an updated baseline.
+The ABI was **0.31.0** (`RRC-012`). It **retires three public renderer identities** -- `DIRECT2D`
+(`16`), `FREEDIRECT` (`21`) and `PORTABLEGL` (`46`) -- together with the three
+`CNA_GRAPHICS_RENDERER_*` constants that named them, and moves `CNA_GRAPHICS_RENDERER_MAXIMUM` from
+`46` (`PORTABLEGL`) to `44` (`SVG_DOM`, the highest surviving identity). CNA now has 22 public
+renderer identities (`docs/removed-renderers.md`). No route, structure, field, capability bit or
+exported symbol changes, and no surviving identity is renumbered: a binding that passes
+`CNA_GRAPHICS_RENDERER_VULKAN` (`8`) or `CNA_GRAPHICS_RENDERER_GDI` (`40`) passes the same integer
+as before. What breaks is a binding that names one of the three removed constants (it no longer
+compiles), passes one of their integers (every route now refuses it with
+`CNA_RESULT_INVALID_ARGUMENT`), or compares against `CNA_GRAPHICS_RENDERER_MAXIMUM` (the ceiling
+moved down). The three values join the permanently reserved set, which is now `7`, `10`, `16`,
+`19`--`21`, `23`--`30`, `32`, `34`--`39`, `41` and `45`--`51`; a future identity still takes
+**`52`**. That is an incompatible change, which under the `0.x` rule below takes this minor
+increment, these release notes and an updated baseline.
 
 ### Previous ABI 0.30.0
 
@@ -338,12 +338,12 @@ Skia's bounded `SkVertices`/SkSL submission (`SKIA-144`--`157`). Skia was retire
 after the 2026-09-17 curation to 25 identities **no renderer in the tree implemented it** -- the
 `ISpriteBatchRenderer` base threw `std::runtime_error` for every backend, which
 `cna_sprite_batch_draw_mesh_ext` converted into `CNA_RESULT_NOT_SUPPORTED`. A C caller could
-therefore reach it, but never succeed on any supported renderer. Keeping a route that every
-renderer refuses is a permanently dead branch of the ABI, so while the ABI is still `0.x` and
-experimental the surface was deleted instead of fossilized (`plans/plan_renderer_cleanup.md`
-`RRC-009`). There is no replacement route and no compatibility stub: a caller that used it was
-already getting `CNA_RESULT_NOT_SUPPORTED` from every renderer, so no working program loses
-behaviour -- what breaks is compilation of a binding that names the function or the struct.
+therefore reach it, but never succeed on any supported renderer. Keeping a route that every renderer
+refuses is a permanently dead branch of the ABI, so while the ABI is still `0.x` and experimental
+the surface was deleted instead of fossilized (`RRC-009`). There is no replacement route and no
+compatibility stub: a caller that used it was already getting `CNA_RESULT_NOT_SUPPORTED` from every
+renderer, so no working program loses behaviour -- what breaks is compilation of a binding that
+names the function or the struct.
 
 `0.28.0` **retired twenty-five public renderer identities** -- `BGFX`, `MAGNUM`,
 `BLEND2D`, `DIRECTX1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`, `DIRECTX6`, `DIRECTX7`, `DIRECTX8`,
@@ -351,7 +351,7 @@ behaviour -- what breaks is compilation of a binding that names the function or 
 `OPENVG`, `TINYGL`, `IGL`, `PIXIJS`, `NANOVG` and `RLGL` -- together with the twenty-five
 `CNA_GRAPHICS_RENDERER_*` constants that named them, and it moves `CNA_GRAPHICS_RENDERER_MAXIMUM`
 from `51` to `46` (`PORTABLEGL`, the highest surviving identity). CNA now has 25 public renderer
-identities (`plans/plan_renderer_cleanup.md`). That too was an incompatible change and took its own
+identities (`docs/removed-renderers.md`). That too was an incompatible change and took its own
 minor increment, release notes and regenerated baseline. The retirement decisions it recorded are
 unchanged by `0.29.0`: the 25 surviving identities keep their values and the retired ones stay
 reserved.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_x11.md X11-0162: capture through ALSA, against ALSA's own `null` device and its `file`
+// X11-0162: capture through ALSA, against ALSA's own `null` device and its `file`
 // device reading a known tone -- real libasound, real capture streams, and never a microphone.
 // Every session here opens a PCM the test names; the one test that asks what the machine has only
 // enumerates.

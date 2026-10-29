@@ -251,7 +251,7 @@ TEST_F(GraphicsDeviceWindowDescriptionTest,
         << "XNA GameWindow.AllowUserResizing defaults to false";
 }
 
-// plans/plan_x11.md X11-0104. The renderer half of every guard in this file used to be inverted:
+// X11-0104. The renderer half of every guard in this file used to be inverted:
 // it ran the block only for HEADLESS/SOFTWARE/STUB/PORTABLEGL/TINYGL -- exactly the renderers whose
 // descriptor sets `needsWindow = false`, so `GraphicsDevice` creates no window at all and the
 // assertions below have nothing to observe. The contradiction was invisible because the block also
@@ -266,7 +266,7 @@ TEST_F(GraphicsDeviceWindowDescriptionTest,
 TEST(GraphicsDevicePlatformWindowTests,
      OwnsThePlatformWindowAndReleasesVideoAfterItsDestruction)
 {
-    // plans/plan_x11.md X11-0104: this test cannot run in ANY configuration CNA currently has,
+    // X11-0104: this test cannot run in ANY configuration CNA currently has,
     // and saying so is more useful than the three ways it previously hid that.
     //
     // It asserts that `GraphicsDevice` creates, sizes, syncs and destroys a platform window, and
@@ -297,7 +297,7 @@ TEST(GraphicsDevicePlatformWindowTests,
 TEST(GraphicsDevicePlatformWindowTests,
      ConstructorFailureDestroysTheWindowBeforeReleasingVideo)
 {
-    // plans/plan_x11.md X11-0104: this test cannot run in ANY configuration CNA currently has,
+    // X11-0104: this test cannot run in ANY configuration CNA currently has,
     // and saying so is more useful than the three ways it previously hid that.
     //
     // It asserts that `GraphicsDevice` creates, sizes, syncs and destroys a platform window, and
@@ -328,7 +328,7 @@ TEST(GraphicsDevicePlatformWindowTests,
 TEST(GraphicsDevicePlatformWindowTests,
      ExternalWindowTokenIsInterpretedOnlyByThePlatform)
 {
-    // plans/plan_x11.md X11-0104: this test cannot run in ANY configuration CNA currently has,
+    // X11-0104: this test cannot run in ANY configuration CNA currently has,
     // and saying so is more useful than the three ways it previously hid that.
     //
     // It asserts that `GraphicsDevice` creates, sizes, syncs and destroys a platform window, and
@@ -388,7 +388,7 @@ TEST(GraphicsDevicePlatformWindowTests,
 TEST(GraphicsDevicePlatformWindowTests,
      DeviceCreationStillFailsOnAWindowThatRefusesItsDrawableSize)
 {
-    // plans/plan_x11.md X11-0104: this test cannot run in ANY configuration CNA currently has,
+    // X11-0104: this test cannot run in ANY configuration CNA currently has,
     // and saying so is more useful than the three ways it previously hid that.
     //
     // It asserts that `GraphicsDevice` creates, sizes, syncs and destroys a platform window, and

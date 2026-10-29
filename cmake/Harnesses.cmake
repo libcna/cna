@@ -61,7 +61,7 @@ endif()
 # sharing that binary. See tools/devices/shutdown_ordering_harness.cpp's own top-of-file comment
 # for the "--skip-shutdown-call" flag used to exercise the process-exit fallback when the normal
 # explicit coordinator call is omitted.
-# plans/plan_x11.md X11-0090: and only where SDL3 is configured at all. This harness exists to
+# X11-0090: and only where SDL3 is configured at all. This harness exists to
 # call the real SDL_Quit(); in a build that never configured SDL there is no such call to order.
 if(CNA_BUILD_TESTS AND TARGET SDL3::SDL3)
     add_executable(cna_devices_shutdown_ordering_harness
@@ -266,7 +266,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
            OFF)
     add_executable(cna_compiled_effect_fuzzer tools/graphics/compiled_effect_fuzzer.cpp)
     target_link_libraries(cna_compiled_effect_fuzzer PRIVATE CNA SHARP_RUNTIME)
-    # plans/plan_x11.md X11-0090: SDL3 is this tool's platform edge only when SDL3 is the
+    # X11-0090: SDL3 is this tool's platform edge only when SDL3 is the
     # configured platform. An SDL-free build reaches the same graphics device through whatever
     # platform it did select, so the link edge is conditional rather than the tool.
     if(TARGET SDL3::SDL3)

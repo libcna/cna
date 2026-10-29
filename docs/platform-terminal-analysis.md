@@ -75,7 +75,7 @@ simply another device that can accept that buffer — it just quantises instead 
 2026-09-17, was the one before it, and between those two points no renderer in the tree requested
 a presenter at all.
 
-**What that gap cost while it lasted** (`plans/plan_renderer_cleanup.md` `RRC-010`). The terminal
+**What that gap cost while it lasted** (`RRC-010`). The terminal
 platform itself was never affected: it is compiled into every POSIX build, and its unit tests —
 including the 36 pseudo-TTY tests that drive `TerminalSurfacePresenter` directly — ran and passed
 in `CnaPlatformTests` throughout. What could not happen was a *game* reaching the terminal, because

@@ -6,7 +6,7 @@
 
 namespace CNA::Platform {
 
-    // The defaults of a clipboard that holds text only (plans/plan_x11.md X11-0158): nothing but
+    // The defaults of a clipboard that holds text only (X11-0158): nothing but
     // text to read, and a refusal naming the capability for anything else -- never a write that
     // is accepted and dropped.
 

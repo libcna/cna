@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_x11.md X11-0151: the ALSA playback device, against ALSA's own `null` and `file`
+// X11-0151: the ALSA playback device, against ALSA's own `null` and `file`
 // devices -- real libasound, real PCM configuration, real writes, and never a sound. `file`
 // records exactly what the device handed ALSA, so what the callback produced can be compared with
 // what came out, byte for byte.

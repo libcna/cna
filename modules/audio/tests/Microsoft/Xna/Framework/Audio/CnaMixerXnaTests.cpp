@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_x11.md X11-0151: the XNA audio classes over CNA's own mixer and the ALSA device --
+// X11-0151: the XNA audio classes over CNA's own mixer and the ALSA device --
 // SoundEffect, SoundEffectInstance and DynamicSoundEffectInstance through the real facade, on
 // ALSA's `null` device, which keeps real time and makes no sound.
 //
@@ -41,7 +41,7 @@ namespace {
 // Every test binary of an ALSA build plays to ALSA's silent `null` device unless told otherwise:
 // the mixer opens its device once per process, the first time anything makes a sound, so this has
 // to be settled before any test runs. ctest sets the same value; this covers a binary started by
-// hand. An explicit CNA_AUDIO_DEVICE wins. Since plans/plan_x11.md X11-0162 the same goes for
+// hand. An explicit CNA_AUDIO_DEVICE wins. Since X11-0162 the same goes for
 // capture: no test records from the machine's microphone -- a room is not test data.
 const bool kSilentByDefault = [] {
     if (!System::Environment::GetEnvironmentVariable("CNA_AUDIO_DEVICE").has_value())
@@ -211,7 +211,7 @@ TEST_F(CnaMixerXna, WavOggMp3AndFlacFilesLoadAndOtherFormatsAreRefusedByName)
     const SoundEffect ogg(Locate("tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg").string());
     EXPECT_NEAR(ogg.getDurationProperty().getTotalSecondsProperty(), 2.0, 0.001);
 
-    // plans/plan_x11.md X11-0161: 21 MPEG frames of 1152, and one lossless second.
+    // X11-0161: 21 MPEG frames of 1152, and one lossless second.
     const SoundEffect mp3(Locate("tests/assets/xna40/media/mp3_mono_44100_128k.mp3").string());
     EXPECT_NEAR(mp3.getDurationProperty().getTotalSecondsProperty(), 24192.0 / 44100.0, 0.001);
     const SoundEffect flac(

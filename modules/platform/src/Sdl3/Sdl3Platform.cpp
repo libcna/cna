@@ -304,7 +304,7 @@ namespace CNA::Platform::Sdl3 {
 
         // System services: implemented.
         capabilities.clipboard = true;
-        // SDL_SetClipboardData and friends, by MIME type (plans/plan_x11.md X11-0158).
+        // SDL_SetClipboardData and friends, by MIME type (X11-0158).
         capabilities.clipboardData = true;
         capabilities.powerInfo = true;
         capabilities.managedEntrypoint = true;
@@ -312,7 +312,7 @@ namespace CNA::Platform::Sdl3 {
         capabilities.dragAndDrop = true;
         // Only X11 and Wayland desktops have a primary selection, and SDL's drivers for them own
         // the real one. Elsewhere SDL would keep one inside the process, which is not the
-        // desktop's (plans/plan_x11.md X11-0157).
+        // desktop's (X11-0157).
 #if defined(__unix__) && !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
         capabilities.primarySelection = true;
 #endif

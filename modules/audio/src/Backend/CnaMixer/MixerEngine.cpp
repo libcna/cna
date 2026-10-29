@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
 // MixerEngine.hpp over CNA's own mixer (Backend/CnaMixer/CnaMixer.hpp), for the audio platforms
-// that have no SDL3_mixer (plans/plan_x11.md X11-0151). The SDL3_mixer implementation of the same
+// that have no SDL3_mixer (X11-0151). The SDL3_mixer implementation of the same
 // facade is Backend/Sdl3Mixer/MixerEngine.cpp; exactly one of the two is compiled.
 //
 // One process-wide mixer, created with the selected output device the first time anything needs

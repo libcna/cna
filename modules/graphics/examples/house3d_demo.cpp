@@ -1315,7 +1315,7 @@ public:
 
     [[nodiscard]] DepthProbe GetDepthProbe() const { return depthProbe_; }
 
-    // plans/plan_x11.md X11-0172: the smoke run looks at the back buffer as well as drawing into
+    // X11-0172: the smoke run looks at the back buffer as well as drawing into
     // it. Frames were drawn and the test passed while every wall showed through every other: the
     // window's GL visual had no depth buffer. Two planes over the back buffer's centre, the nearer
     // drawn first under the default depth state -- what is seen must still be the nearer.
@@ -1368,7 +1368,7 @@ public:
 
     // Starts in fullscreen at a back-buffer size, the way an XNA game asks for it -- IsFullScreen
     // on the GraphicsDeviceManager -- which is exclusive fullscreen: the monitor switches to the
-    // display mode that fits (plans/plan_x11.md X11-0153).
+    // display mode that fits (X11-0153).
     void SetFullScreen(int width, int height)
     {
         graphics_->setPreferredBackBufferWidthProperty(width);

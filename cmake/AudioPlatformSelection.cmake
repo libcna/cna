@@ -12,7 +12,7 @@ cmake_policy(SET CMP0057 NEW)
 
 set(CNA_AUDIO_PLATFORM "SDL3" CACHE STRING "Audio platform implementation (SDL3 | NULL | ALSA)")
 
-# ALSA (plans/plan_x11.md X11-0151) is the one native, SDL-free implementation: playback through
+# ALSA (X11-0151) is the one native, SDL-free implementation: playback through
 # libasound, loaded at run time, mixed by CNA's own mixer (modules/audio/src/Backend/CnaMixer/).
 set(_cna_audio_platforms_available SDL3 NULL ALSA)
 

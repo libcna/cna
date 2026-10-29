@@ -15,7 +15,7 @@
 namespace CNA::Audio::Platform::Alsa {
 
     /**
-     * @brief Capture through ALSA, for `CNA_AUDIO_PLATFORM=ALSA` (plans/plan_x11.md X11-0162).
+     * @brief Capture through ALSA, for `CNA_AUDIO_PLATFORM=ALSA` (X11-0162).
      *
      * A thread reads the PCM as it fills and queues what it read, so a game that polls once a frame
      * -- XNA's `Microphone` does -- loses nothing to the device's own buffer running over between

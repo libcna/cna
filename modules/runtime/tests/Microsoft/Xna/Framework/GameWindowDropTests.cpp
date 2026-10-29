@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_x11.md X11-0154: a drop reaches an XNA game as GameWindow's CNAEXT FileDropEXT and
+// X11-0154: a drop reaches an XNA game as GameWindow's CNAEXT FileDropEXT and
 // TextDropEXT. The platform's DropEvent sequence is scripted here and run through a real
 // Game::RunOneFrame(); the SDL3 implementation produces that sequence in its own suite
 // (Sdl3EventMapperTests).

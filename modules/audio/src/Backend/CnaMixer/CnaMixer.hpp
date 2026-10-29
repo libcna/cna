@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// CNA's own mixer: what MixerEngine.hpp promises, without SDL3_mixer (plans/plan_x11.md X11-0151).
+// CNA's own mixer: what MixerEngine.hpp promises, without SDL3_mixer (X11-0151).
 //
 // The facade the XNA layer talks to (MixerEngine.hpp) was written against SDL3_mixer, so the
 // semantics here are SDL3_mixer's, read from its source rather than guessed: a track's data is

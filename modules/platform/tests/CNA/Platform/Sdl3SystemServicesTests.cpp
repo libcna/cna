@@ -287,7 +287,7 @@ protected:
 
 TEST_F(Sdl3DisplayTest, ThePrimarySelectionIsSeparateFromTheClipboard)
 {
-    // plans/plan_x11.md X11-0157. It takes the X server's selections, so only on the X11 test
+    // X11-0157. It takes the X server's selections, so only on the X11 test
     // launcher's own server -- never a desktop's.
     const char* privateServer = std::getenv("CNA_X11_PRIVATE_TEST_SERVER");
     if (privateServer == nullptr || std::string(privateServer) != "1")
@@ -311,7 +311,7 @@ TEST_F(Sdl3DisplayTest, ThePrimarySelectionIsSeparateFromTheClipboard)
 
 TEST_F(Sdl3DisplayTest, TheClipboardCarriesFormatsOtherThanText)
 {
-    // plans/plan_x11.md X11-0158, through SDL's clipboard-data calls. Takes the X server's
+    // X11-0158, through SDL's clipboard-data calls. Takes the X server's
     // clipboard, so only on the X11 test launcher's own server.
     const char* privateServer = std::getenv("CNA_X11_PRIVATE_TEST_SERVER");
     if (privateServer == nullptr || std::string(privateServer) != "1")

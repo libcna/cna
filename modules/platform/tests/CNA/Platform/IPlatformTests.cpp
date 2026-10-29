@@ -311,7 +311,7 @@ TEST(IPlatformTests, UnsupportedServicesReturnNullRatherThanASilentStub)
 
 TEST(IPlatformTests, ATextOnlyClipboardHasNoOtherFormatsAndRefusesThem)
 {
-    // plans/plan_x11.md X11-0158: a clipboard that implements only text inherits these.
+    // X11-0158: a clipboard that implements only text inherits these.
     class TextOnlyClipboard final : public IPlatformClipboard
     {
     public:

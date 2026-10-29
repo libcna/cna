@@ -24,7 +24,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
     macro(cna_headless_test target src)
         add_executable(${target} ${src})
         target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
-        # plans/plan_x11.md X11-0090: the headless renderer needs no window system, and these
+        # X11-0090: the headless renderer needs no window system, and these
         # tests exist precisely to prove that. SDL3 was linked here because it used to be the only
         # platform CNA had; it is kept where it is configured, and simply absent where it is not.
         if(TARGET SDL3::SDL3)

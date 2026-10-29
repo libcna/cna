@@ -28,7 +28,7 @@ namespace CNA::Devices
         // Wayland) or as the display's content scale (Windows, X11, where a window's pixels are
         // its logical units) -- so the larger of the two is the scale to size content by; a
         // product would double-count a backend reporting the same density both ways.
-        // (plans/plan_x11.md X11-0156: X11 reported the session's Xft.dpi as the window's display
+        // (X11-0156: X11 reported the session's Xft.dpi as the window's display
         // scale, which it is not; the content scale now comes from the display.)
         float scale = platformWindow->GetDisplayScale();
         if (CNA::Platform::HasCurrentPlatform())

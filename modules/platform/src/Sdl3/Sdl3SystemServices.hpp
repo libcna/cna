@@ -38,7 +38,7 @@ namespace CNA::Platform::Sdl3 {
     };
 
     /**
-     * @brief SDL3-backed primary selection (plans/plan_x11.md X11-0157).
+     * @brief SDL3-backed primary selection (X11-0157).
      *
      * SDL's X11 and Wayland video drivers own the desktop's real one; under any other driver SDL
      * keeps it inside the process, which is what the capability's platform gate accounts for.

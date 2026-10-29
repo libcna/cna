@@ -21,7 +21,7 @@ namespace CNA::Audio::Platform {
 #if defined(CNA_AUDIO_PLATFORM_SDL3)
         return std::make_unique<Sdl3::Sdl3AudioRecordingDeviceProvider>();
 #elif defined(CNA_AUDIO_PLATFORM_ALSA)
-        // plans/plan_x11.md X11-0162: capture through ALSA.
+        // X11-0162: capture through ALSA.
         return std::make_unique<Alsa::AlsaAudioRecordingDeviceProvider>();
 #elif defined(CNA_AUDIO_PLATFORM_NULL)
         return nullptr;

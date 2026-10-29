@@ -56,7 +56,7 @@ namespace CNA::Audio::Platform::Alsa {
         decltype(&::snd_pcm_avail_update) PcmAvailUpdate = nullptr;
         decltype(&::snd_strerror) StrError = nullptr;
 
-        // --- capture (plans/plan_x11.md X11-0162) -----------------------------------------------
+        // --- capture (X11-0162) -----------------------------------------------
         decltype(&::snd_pcm_readi) PcmReadi = nullptr;
         decltype(&::snd_pcm_start) PcmStart = nullptr;
 

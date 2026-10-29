@@ -741,7 +741,7 @@ TEST(AudioEngineTest, RendererDetailsReportsExactlyOneSdlMixerEntry)
     const auto& details = engine.getRendererDetailsProperty();
     ASSERT_EQ(details.size(), 1u);
 #if defined(CNA_AUDIO_PLATFORM_ALSA)
-    // plans/plan_x11.md X11-0151: an ALSA build's one backend is CNA's own mixer.
+    // X11-0151: an ALSA build's one backend is CNA's own mixer.
     EXPECT_EQ(details[0].getFriendlyNameProperty(), "CNA mixer (ALSA)");
     EXPECT_EQ(details[0].getRendererIdProperty(), "ALSA");
 #else

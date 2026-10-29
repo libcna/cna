@@ -2366,7 +2366,7 @@ namespace Microsoft::Xna::Framework::Graphics
         friend class Microsoft::Xna::Framework::GraphicsDeviceManager;
         friend class Microsoft::Xna::Framework::Game;
         friend class Microsoft::Xna::Framework::Content::ContentReader;
-        // plans/plan_x11.md X11-0104. GraphicsDevicePlatformWindowTests reproduces what
+        // X11-0104. GraphicsDevicePlatformWindowTests reproduces what
         // GameWindow.ClientSizeChanged runs -- a viewport refresh driven from the frame's event
         // pump -- and GameWindow is a friend above precisely because that call is internal. The
         // test reached it directly, which compiled only for an SDL3 selection (where its own

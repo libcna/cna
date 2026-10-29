@@ -3,7 +3,7 @@
 
 // SDL3_mixer's own mixer handle, for the SDL3 audio platform only. SOUND_ENABLED means "a mixer
 // exists", and under CNA_AUDIO_PLATFORM=ALSA that mixer is CNA's own (Backend/CnaMixer), which has
-// no MIX_Mixer to hand out (plans/plan_x11.md X11-0151).
+// no MIX_Mixer to hand out (X11-0151).
 #if defined(SOUND_ENABLED) && defined(CNA_AUDIO_PLATFORM_SDL3)
 #include <cstdint>
 

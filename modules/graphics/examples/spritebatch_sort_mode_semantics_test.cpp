@@ -34,7 +34,7 @@
 //      involving Immediate and allowed for two Deferred batches. Leg B2 asserts all three, which
 //      fails the moment Begin() stops recording the mode. It replaces an earlier probe that used
 //      `SpriteBatch::DrawMeshEXT`'s Immediate-only refusal as the instrument; that entry point was
-//      removed with the renderer curation (plan_renderer_cleanup.md RRC-009) because no renderer
+//      removed with the renderer curation (RRC-009) because no renderer
 //      implemented it. The mutual-exclusion route needs no renderer capability at all, so unlike
 //      the mesh probe it means the same thing on every renderer.
 //

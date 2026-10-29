@@ -319,8 +319,8 @@ jobs:
   # Every other Linux cell above configures with CNA_ENABLE_SDL left at its AUTO default, so none
   # of them proves a genuinely SDL-free CNA build stays buildable. This one sets
   # CNA_ENABLE_SDL=OFF explicitly. With no window there is nothing SDL3 would be needed for: the
-  # HEADLESS platform and renderer, and ALSA playback through CNA's own mixer (plans/plan_x11.md
-  # X11-0151; the runner has no sound card, so everything plays to ALSA's silent `null` device).
+  # HEADLESS platform and renderer, and ALSA playback through CNA's own mixer (X11-0151;
+  # the runner has no sound card, so everything plays to ALSA's silent `null` device).
   # cna_content is built and tested here specifically because DecodeWavToPcm16
   # (modules/audio/src/Internal/WavDecoder.cpp) is the dependency this cell exists to keep SDL-free
   # -- see plans/plan_native_platforms_integration.md's WAV decoder section for the history of why

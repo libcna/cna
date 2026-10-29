@@ -1,6 +1,5 @@
 # =====================================================================================
-# CNA renderer identity default (extracted from cmake/RendererSelection.cmake, plans/plan_x11.md
-# X11-0090)
+# CNA renderer identity default (extracted from cmake/RendererSelection.cmake by X11-0090)
 #
 # Settles `_cna_default_renderer` -- which renderer a build uses when the user names none -- and
 # nothing else. It is its own file because two independent consumers need the answer at two

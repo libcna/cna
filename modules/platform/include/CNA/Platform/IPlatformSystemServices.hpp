@@ -27,7 +27,7 @@ namespace CNA::Platform {
      * @brief Reads and writes the system clipboard.
      *
      * Text is the part every platform has. Other formats -- an image, HTML beside its plain text --
-     * are the `ClipboardData` capability's (plans/plan_x11.md X11-0158); a clipboard without it
+     * are the `ClipboardData` capability's (X11-0158); a clipboard without it
      * inherits the defaults below, which read as empty and refuse to write.
      */
     class IPlatformClipboard

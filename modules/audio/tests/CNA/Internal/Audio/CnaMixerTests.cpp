@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_x11.md X11-0151: CNA's own mixer, driven directly -- no device, no thread, no timing.
+// X11-0151: CNA's own mixer, driven directly -- no device, no thread, no timing.
 //
 // The mixer stands in for SDL3_mixer behind MixerEngine.hpp, and the XNA layer above it was
 // written against SDL3_mixer's behaviour. So each rule SDL3_mixer has, and the XNA layer relies on,
@@ -504,7 +504,7 @@ TEST(CnaMixer, WavAndOggVorbisDecodeAndEverythingElseIsRefusedByName)
     EXPECT_EQ(predecoded->encoding, MixerAudioData::Encoding::Pcm16);
     EXPECT_EQ(predecoded->frames, 88200);
 
-    // plans/plan_x11.md X11-0161: MP3 and FLAC too, recognised by content -- an MP3 named .wav
+    // X11-0161: MP3 and FLAC too, recognised by content -- an MP3 named .wav
     // is an MP3 -- and anything else still refused with the list of what is played.
     const std::vector<std::byte> mp3 = ReadFile(Locate("tests/assets/xna40/media/mp3_mono_44100_128k.mp3"));
     const auto mp3Data = DecodeMixerAudio(mp3, "song.mp3", true, error);

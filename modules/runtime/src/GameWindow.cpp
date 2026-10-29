@@ -551,7 +551,7 @@ namespace Microsoft::Xna::Framework
 
     void GameWindow::OnDropEXT(const CNA::Platform::DropEvent& drop)
     {
-        // plans/plan_x11.md X11-0154. The platform reports a drop step by step; a game gets it as
+        // X11-0154. The platform reports a drop step by step; a game gets it as
         // MonoGame does, once it is complete: every file of it together, then each text.
         switch (drop.kind)
         {

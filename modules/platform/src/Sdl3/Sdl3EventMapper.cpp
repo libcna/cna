@@ -220,7 +220,7 @@ namespace CNA::Platform::Sdl3 {
             }
 
             // --- drag and drop -------------------------------------------------------------------
-            // plans/plan_x11.md X11-0154: DropEvent is SDL3's drop sequence in CNA's vocabulary,
+            // X11-0154: DropEvent is SDL3's drop sequence in CNA's vocabulary,
             // so the mapping is one to one. SDL owns `data` only for the lifetime of the event,
             // hence the copy.
             case SDL_EVENT_DROP_BEGIN:

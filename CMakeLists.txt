@@ -208,7 +208,7 @@ unset(_cna_enable_video_normalized)
 # and the live desktop is opt-in; see cmake/TestDisplayPolicy.cmake (GTI-0001).
 include(cmake/TestDisplayPolicy.cmake)
 
-# Renderer identities (plans/plan_renderer_cleanup.md RRC-002): the public set, and the refusal of a
+# Renderer identities (RRC-002): the public set, and the refusal of a
 # retired or unknown renderer name through any of CNA_GRAPHICS_RENDERER, CNA_GRAPHICS_RENDERERS or a
 # CNA_RENDERER_<X> switch. First, before the SDL availability gate reads the selection, so
 # a refused name fails before any dependency is configured instead of falling back to a default.
@@ -221,7 +221,7 @@ include(cmake/ApplePlatform.cmake)
 
 # Platform, audio and renderer selection must be settled BEFORE the vendored SDL sub-build is
 # decided, because whether SDL is needed at all is a consequence of those three choices
-# (plans/plan_x11.md X11-0090). Before that task, cna_configure_vendored_sdl() ran
+# (X11-0090). Before that task, cna_configure_vendored_sdl() ran
 # unconditionally here and made SDL an existential dependency of CNA: a configuration referencing
 # no SDL symbol anywhere still could not be configured without it.
 #

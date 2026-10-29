@@ -12,7 +12,7 @@ It is two pieces, both CNA's own:
 - **a mixer** (`modules/audio/src/Backend/CnaMixer/`) behind `MixerEngine.hpp`, the facade the
   XNA audio classes were already written against — the one SDL3_mixer implements for SDL3 builds.
 
-The plan and the evidence are `plans/plan_x11.md` X11-0151.
+The plan and the evidence are X11-0151.
 
 ---
 
@@ -64,7 +64,7 @@ exposes today.
   or a suspend is recovered from; a device that is gone stops the thread.
 - **Devices with no clock:** ALSA's `null` and `file` devices take any amount at once. For those
   the thread keeps real time itself, so a 100 ms sound lasts 100 ms there as well.
-- **Capture** (`plans/plan_x11.md` X11-0162): `Microphone` records through ALSA — see below.
+- **Capture** (X11-0162): `Microphone` records through ALSA — see below.
 
 ## Capture
 
@@ -123,7 +123,7 @@ callback reaches into XNA objects while the process's statics are destroyed.
 | WAV — PCM 8/16/24/32-bit, IEEE float, MS-ADPCM, IMA-ADPCM | CNA's own decoder (`WavDecoder.cpp`), the one XNB content already uses |
 | XNB sound effects, WaveBank PCM/ADPCM entries | the same |
 | Ogg Vorbis | [stb_vorbis](https://github.com/nothings/stb) v1.22, vendored as `third_party/stb/stb_vorbis.c` (public domain / MIT). Sound effects are decoded when loaded; **Songs are decoded as they play**, so a long track costs its file size in memory, not its decoded size |
-| MP3 (MPEG-1, 2 and 2.5 layer III — 8 to 48 kHz — CBR or VBR) | [dr_mp3](https://github.com/mackron/dr_libs) v0.7.3, vendored as `third_party/dr_libs/dr_mp3.h` (public domain / MIT No Attribution). Decoded when loaded for sound effects, as they play for Songs, like Vorbis (`plans/plan_x11.md` X11-0161) |
+| MP3 (MPEG-1, 2 and 2.5 layer III — 8 to 48 kHz — CBR or VBR) | [dr_mp3](https://github.com/mackron/dr_libs) v0.7.3, vendored as `third_party/dr_libs/dr_mp3.h` (public domain / MIT No Attribution). Decoded when loaded for sound effects, as they play for Songs, like Vorbis (X11-0161) |
 | FLAC, native or in Ogg | dr_flac v0.13.3, `third_party/dr_libs/dr_flac.h`, the same way |
 | Ogg Opus, WMA/xWMA, XMA | **not decoded.** Loading one fails with a message naming what is played — `SoundEffect` throws `NotSupportedException`, `MediaPlayer.Play()` plays nothing |
 

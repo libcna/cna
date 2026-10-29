@@ -41,7 +41,7 @@ namespace
     // once, all writing the same fixture files. Written in place, one process could read another's
     // half-written file ("Engine initialization failed!"); written beside it and renamed over it,
     // a reader sees either no file or a whole one. The contents are identical, so which process's
-    // rename wins does not matter (plans/plan_x11.md X11-0151).
+    // rename wins does not matter (X11-0151).
     void WriteFileAtomically(const std::filesystem::path& file, const std::vector<uint8_t>& bytes)
     {
         std::random_device entropy;
@@ -933,7 +933,7 @@ namespace
     // Same layout as BuildVolXwbFixtureBytes above -- one mono 16-bit PCM entry of silence, but a
     // full second of it: the hierarchy tests assert IsPlaying right after Play(), and 200 bytes
     // (~2 ms) finished before the assertion whenever the thread was preempted under a parallel
-    // ctest (plans/plan_x11.md X11-0151, where this suite first ran on a non-SDL3 mixer).
+    // ctest (X11-0151, where this suite first ran on a non-SDL3 mixer).
     std::vector<uint8_t> BuildCategoryHierarchyXwbFixtureBytes()
     {
         constexpr uint32_t headerSize        = 48;

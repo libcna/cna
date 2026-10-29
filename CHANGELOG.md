@@ -368,7 +368,7 @@ Every other dependency is still pinned by this repository through submodule gitl
   `DIRECTX6`, `DIRECTX7`, `DIRECTX8`, `DIRECTX10`, `OPENGLES1`, `OPENGL1`, `OPENGL2`, `WICKED`,
   `SOKOL`, `DILIGENT`, `GLIDE`, `LLGL`, `OPENVG`, `TINYGL`, `IGL`, `PIXIJS`, `NANOVG` and `RLGL`,
   with their implementations, dependencies, patches, CI jobs and documentation
-  (`plans/plan_renderer_cleanup.md`, [`docs/removed-renderers.md`](docs/removed-renderers.md)).
+  (`RRC-002`/`RRC-003`, [`docs/removed-renderers.md`](docs/removed-renderers.md)).
   Selecting one is now a configure error naming the identity and its reserved C ABI value, never a
   silent fallback to another renderer. No surviving identity is renumbered: their C ABI values are
   unchanged, the retired values are permanently reserved, and the C ABI is `0.28.0` with
@@ -381,12 +381,12 @@ Every other dependency is still pinned by this repository through submodule gitl
   succeeded on any supported renderer. Deleted rather than left as a permanently dead ABI branch
   while the ABI is still experimental; there is no replacement and no compatibility stub. This
   advances the experimental C ABI to `0.29.0`, with exported symbols 4,056 → 4,055 and recorded
-  struct layouts 222 → 221 (`plans/plan_renderer_cleanup.md` `RRC-009`).
+  struct layouts 222 → 221 (`RRC-009`).
 - **Three more renderer identities**, `DIRECT2D`, `FREEDIRECT` and `PORTABLEGL`, leaving 22 public
   identities over 18 implementation families: their implementation families, the PortableGL
   FetchContent pin, the `../free-direct` sibling checkout, the Direct2D Wine/Proton runners,
   debug-log gates and Windows CI leg, their tests and their documentation
-  (`plans/plan_renderer_cleanup.md` `RRC-012`, [`docs/removed-renderers.md`](docs/removed-renderers.md)).
+  (`RRC-012`, [`docs/removed-renderers.md`](docs/removed-renderers.md)).
   They are refused by name at configure time like the earlier retirements. `GDI` and `SOFTWARE` are
   unchanged. Their C ABI values 16, 21 and 46 are permanently reserved,
   `CNA_GRAPHICS_RENDERER_MAXIMUM` moves to 44 (`SVG_DOM`), and the experimental C ABI goes to

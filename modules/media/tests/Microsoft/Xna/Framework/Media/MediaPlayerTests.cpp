@@ -353,7 +353,7 @@ TEST_F(MediaPlayerTest, VisualizationEnabledStateStaysConsistentWithGetVisualiza
 }
 
 #if defined(CNA_AUDIO_PLATFORM_ALSA)
-// plans/plan_x11.md X11-0161: an MP3 and a FLAC song stream through CNA's own mixer to their end.
+// X11-0161: an MP3 and a FLAC song stream through CNA's own mixer to their end.
 // MediaPlayer's position is a clock, not the mixer's, so what proves the file was decoded and
 // played is the song finishing on its own -- which only the mixer, reaching the stream's last
 // frame on ALSA's real-time `null` device, can make happen.

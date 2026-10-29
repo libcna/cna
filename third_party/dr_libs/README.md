@@ -12,5 +12,5 @@ each file.
 Byte-identical to the copies SDL_mixer ships (`third_party/SDL_mixer/src/dr_libs/`), taken from
 there rather than from the submodule at build time so that CNA's own mixer -- the SDL-free audio
 path, `CNA_AUDIO_PLATFORM=ALSA` -- builds from a checkout without submodules
-(`plans/plan_x11.md` X11-0161). They are compiled in one translation unit,
+(X11-0161). They are compiled in one translation unit,
 `modules/audio/src/Backend/CnaMixer/DrLibs.cpp`, with warnings off, and never edited here.

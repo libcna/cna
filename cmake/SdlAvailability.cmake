@@ -1,5 +1,5 @@
 # =====================================================================================
-# CNA SDL availability gate (plans/plan_x11.md Task X11-0090)
+# CNA SDL availability gate (X11-0090)
 #
 # Until this file existed, `cna_configure_vendored_sdl()` ran unconditionally from the root
 # CMakeLists.txt, before platform, audio and renderer selection. That made SDL an

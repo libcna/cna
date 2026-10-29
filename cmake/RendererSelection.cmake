@@ -1,6 +1,6 @@
 # --- Graphics Renderer Selection ---
 # The renderer identity and its per-host default are settled by cmake/RendererIdentityDefault.cmake
-# so that the SDL availability gate (cmake/SdlAvailability.cmake, plans/plan_x11.md X11-0090) can
+# so that the SDL availability gate (cmake/SdlAvailability.cmake, X11-0090) can
 # ask which renderer this build will use BEFORE the vendored SDL sub-build is decided, without
 # either file restating the default rule and the two drifting apart.
 include(cmake/RendererIdentityDefault.cmake)

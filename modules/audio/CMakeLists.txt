@@ -10,7 +10,7 @@ if(NOT CNA_AUDIO_PLATFORM STREQUAL "SDL3")
     list(FILTER CNA_AUDIO_SOURCES EXCLUDE REGEX ".*/src/Platform/Sdl3/.*\\.cpp$")
     list(FILTER CNA_AUDIO_SOURCES EXCLUDE REGEX ".*/src/Backend/Sdl3Mixer/.*\\.cpp$")
 endif()
-# plans/plan_x11.md X11-0151: ALSA playback and CNA's own mixer, the SDL-free pair. The mixer is
+# X11-0151: ALSA playback and CNA's own mixer, the SDL-free pair. The mixer is
 # the other implementation of MixerEngine.hpp, so it must never be compiled beside Sdl3Mixer.
 if(NOT CNA_AUDIO_PLATFORM STREQUAL "ALSA")
     list(FILTER CNA_AUDIO_SOURCES EXCLUDE REGEX ".*/src/Platform/Alsa/.*\\.cpp$")
@@ -39,7 +39,7 @@ elseif(CNA_AUDIO_PLATFORM STREQUAL "ALSA")
     target_include_directories(cna_audio PRIVATE ${ALSA_INCLUDE_DIR} ${CNA_SOURCE_DIR}/third_party/stb
         ${CNA_SOURCE_DIR}/third_party/dr_libs)
     target_link_libraries(cna_audio PRIVATE ${CMAKE_DL_LIBS})
-    # stb_vorbis and dr_libs (plans/plan_x11.md X11-0161) are third-party code kept identical to
+    # stb_vorbis and dr_libs (X11-0161) are third-party code kept identical to
     # upstream; their warnings are not ours to fix.
     set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/src/Backend/CnaMixer/StbVorbis.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/Backend/CnaMixer/DrLibs.cpp"

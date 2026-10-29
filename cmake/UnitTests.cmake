@@ -289,7 +289,7 @@ if(CNA_BUILD_TESTS)
         # suite with a non-SDL3 audio selection: the plan's own HEADLESS regression runs kept the
         # default SDL3 audio, and the CI cell that does select NULL audio builds CnaTests without
         # running it. Both gaps are closed alongside this line.
-        # plans/plan_x11.md X11-0151: under ALSA a mixer exists -- CNA's own -- and
+        # X11-0151: under ALSA a mixer exists -- CNA's own -- and
         # AudioCategoryTests asserts XACT playback through the public API alone, so it runs there.
         # The rest read SDL3_mixer's own track handles and stay SDL3-only.
         set(_cna_sdl3_mixer_tests
@@ -1276,7 +1276,7 @@ if(CNA_BUILD_TESTS)
     # CTest runs then fail to find fixture files that the same binary finds fine when run
     # directly from the repo root. Mirrors the already-correct pattern in
     # the module-local renderer example registrations.
-    # plans/plan_x11.md X11-0151: an ALSA build's tests play to ALSA's silent `null` device, never
+    # X11-0151: an ALSA build's tests play to ALSA's silent `null` device, never
     # to the machine's speakers -- and, since X11-0162, record from its `null` device, never from
     # the machine's microphone. The test binary defaults to both on its own as well (see
     # CnaMixerXnaTests.cpp); this states it where ctest runs them.
@@ -1438,7 +1438,7 @@ if(CNA_BUILD_TESTS)
         COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:*AudioDeviceConformanceTests.*:NullAudioDeviceTests.*:AudioPlatformSelectionCompileTests.*:Sdl3AudioDeviceTests.*:Sdl3AudioRecordingDeviceTests.*:AudioMixerPlatformContractTests.* --gtest_shuffle --gtest_repeat=3
         LABELS "audio;platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy;CNA_AUDIO_DEVICE=null;CNA_AUDIO_RECORDING_DEVICE=null")
 
-    # plans/plan_x11.md X11-0151: the ALSA device, CNA's own mixer, the XNA audio classes over the
+    # X11-0151: the ALSA device, CNA's own mixer, the XNA audio classes over the
     # two, and the XACT category suite that needs a real mixer -- all on ALSA's silent device.
     if(CNA_AUDIO_PLATFORM STREQUAL "ALSA")
         cna_register_renderer_test(NAME CnaAudioAlsaTests

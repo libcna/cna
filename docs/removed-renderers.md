@@ -250,11 +250,11 @@ renderer, example and benchmark targets build, and each renderer runs in headles
 `DIRECTX12`, `SOFTWARE` and `HEADLESS` compiles and links, and under Wine its benchmark runs with
 `SOFTWARE` and with `DIRECTX11`. **Not run:** native Windows (MSVC, the
 `DIRECTX9`/`11`/`12` runtimes), macOS (`METAL`), and a WebGL-1-only browser. Details:
-`plans/plan_renderer_cleanup.md` `RRC-015`–`RRC-017`.
+`RRC-015`–`RRC-017`.
 
 ## The 2026-09-27 retirement
 
-An intentional, permanent scope reduction (`plans/plan_renderer_cleanup.md` `RRC-012`): `DIRECT2D`,
+An intentional, permanent scope reduction (`RRC-012`): `DIRECT2D`,
 `FREEDIRECT` and `PORTABLEGL` were removed in one commit, found with `git log --grep=RRC-012`, leaving
 22 public renderer identities over 18 implementation families. None of the three was replaced, and
 each was already covered by a renderer that stayed (`GDI` was itself retired on 2026-09-28):
@@ -373,7 +373,7 @@ symbols; that combination rule left with it.
 
 ## The 2026-09-17 retirement
 
-`plans/plan_renderer_cleanup.md` retired twenty-five identities in one workstream, removed in commit
+The renderer curation (`RRC-*`) retired twenty-five identities in one workstream, removed in commit
 `fc1b6a537` (`refactor(Task RRC-002/RRC-003)`), leaving 25 public renderer identities over 21
 implementation families. The set that stays covers every platform CNA targets with at least one
 native renderer, keeps a CPU renderer and a no-pixel renderer for tests, and keeps FNA3D as the
@@ -443,7 +443,7 @@ through `Magnum::GL`.
 backbuffer handed to `IPlatformSurfacePresenter`, including on the `TERMINAL` platform, where it was
 the renderer the terminal integration test ran. **Consequence to know about:** no surviving renderer
 requests a surface presenter, so the `TERMINAL` platform's CI leg now builds `SOFTWARE`
-(`plans/plan_renderer_cleanup.md`, findings).
+(the renderer curation's findings).
 
 ### DIRECTX1, DIRECTX2, DIRECTX3, DIRECTX5, DIRECTX6, DIRECTX7, DIRECTX8
 

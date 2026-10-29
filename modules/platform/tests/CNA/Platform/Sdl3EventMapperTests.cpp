@@ -435,7 +435,7 @@ TEST(Sdl3EventMapperTests, TouchEventsMapToTheirKinds)
 
 // --- devices (PLAT-36) ---------------------------------------------------------------------------------
 
-// --- drag and drop (plans/plan_x11.md X11-0154) -----------------------------------------------------
+// --- drag and drop (X11-0154) -----------------------------------------------------
 
 TEST(Sdl3EventMapperTests, DropEventsMapToTheirKindsWithPositionAndData)
 {

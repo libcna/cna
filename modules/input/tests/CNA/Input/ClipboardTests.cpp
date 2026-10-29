@@ -102,7 +102,7 @@ TEST(CnaInputClipboardWithoutAServiceTest, ReportsEmptyAndIgnoresWritesRatherTha
     EXPECT_FALSE(Clipboard::HasTextEXT());
 }
 
-// --- the primary selection (plans/plan_x11.md X11-0157) ----------------------------------------------
+// --- the primary selection (X11-0157) ----------------------------------------------
 
 namespace
 {
@@ -179,7 +179,7 @@ TEST(CnaInputPrimarySelectionTest, WithoutOneItReadsAsEmptyAndIgnoresWrites)
     EXPECT_TRUE(platform.clipboard.text.empty()) << "and it never falls back to the clipboard";
 }
 
-// --- formats other than text (plans/plan_x11.md X11-0158) --------------------------------------------
+// --- formats other than text (X11-0158) --------------------------------------------
 
 namespace
 {

@@ -304,7 +304,7 @@ if(EMSCRIPTEN)
 endif()
 
 # SOUND_ENABLED means "a mixer exists behind MixerEngine.hpp": SDL3_mixer for SDL3 audio, CNA's
-# own mixer for ALSA (plans/plan_x11.md X11-0151). NULL transport audio has no mixer, so the XNA
+# own mixer for ALSA (X11-0151). NULL transport audio has no mixer, so the XNA
 # facade is compiled without one there rather than against an implementation that cannot exist in
 # the resulting binary.
 if(CNA_AUDIO_PLATFORM STREQUAL "SDL3" OR CNA_AUDIO_PLATFORM STREQUAL "ALSA")

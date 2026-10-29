@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_x11.md X11-0101/X11-0102: run a command against a private X server.
+# X11-0101/X11-0102: run a command against a private X server.
 #
 # A test that talks to X11 -- SDL3's x11 video driver, its clipboard and primary selection, the
 # Xlib error-handler regression -- needs a real X connection, and a build machine usually has no
@@ -86,7 +86,7 @@ export DISPLAY
 CNA_X11_PRIVATE_TEST_SERVER=1
 export CNA_X11_PRIVATE_TEST_SERVER
 
-# plans/plan_x11.md X11-0169: a platform asks the session bus for the desktop portal (SDL3's file
+# X11-0169: a platform asks the session bus for the desktop portal (SDL3's file
 # dialogs do), and a file chooser opened there would open on the desktop of whoever runs the tests.
 # The command gets no session bus at all.
 DBUS_SESSION_BUS_ADDRESS="unix:path=/nonexistent/cna-x11-test-no-session-bus"

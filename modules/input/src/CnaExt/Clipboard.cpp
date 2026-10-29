@@ -46,7 +46,7 @@ namespace CNA::Input
         return clipboard != nullptr && clipboard->HasText();
     }
 
-    // plans/plan_x11.md X11-0157: the same three answers over the primary selection, which only
+    // X11-0157: the same three answers over the primary selection, which only
     // X11 and Wayland desktops have. Where there is none, it reads as empty and ignores writes,
     // exactly as an absent clipboard does above.
 
@@ -83,7 +83,7 @@ namespace CNA::Input
         return selection != nullptr && selection->HasText();
     }
 
-    // plans/plan_x11.md X11-0158: formats other than text. A clipboard that carries only text
+    // X11-0158: formats other than text. A clipboard that carries only text
     // inherits the contract's defaults -- nothing to read, a refusal to write -- which read here
     // as empty and as false.
 
