@@ -1,4 +1,4 @@
-// plans/plan_fx.md FX-005: render deterministic pixels through FNA's public compiled Effect API.
+// FX-005: render deterministic pixels through FNA's public compiled Effect API.
 //
 // Every committed compiler-produced fixture is loaded as an ordinary Effect, configured with the
 // same flat textures, transforms, and vertex data, and rendered one technique/pass at a time into
@@ -129,7 +129,7 @@ namespace CNA.FnaReference
 
 				JsonWriter effects = DescribeEffects(device, effectDirectory);
 				var root = new JsonWriter()
-					.Add("generator", "FnaReference --effect-pixels (plans/plan_fx.md FX-005)")
+					.Add("generator", "FnaReference --effect-pixels (FX-005)")
 					.Add("fnaAssemblyVersion", assemblyVersion.ToString())
 					.Add("fna3dLinkedVersion", (int) linkedVersion)
 					.Add("renderTargetSize", TargetSize)

@@ -3,7 +3,7 @@
 // plans/plan_xnapipeline.md XNAP-84: the compiled-effect source route.
 //
 // The point of these tests is the boundary as much as the route. CNA serializes bytecode it is
-// given; it does not compile HLSL, and `plans/plan_fx.md` records that as a standing decision
+// given; it does not compile HLSL, and `docs/fx-compiled-effects.md` §1 records that as a standing decision
 // rather than a gap someone forgot. So a `.fxb` builds, a `.fx` has no importer at all, and a
 // file that merely claims to be an effect is refused by its signature.
 

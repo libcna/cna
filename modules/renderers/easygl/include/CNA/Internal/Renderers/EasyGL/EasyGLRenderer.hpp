@@ -815,7 +815,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /// texture by construction, so the answer is resolved when the source is bound, not once
         /// per sprite. Meaningless while current_texture_ is null.
         ///
-        /// plans/plan_fx.md FX-118: false for a batch that flushes through the compiled-effect
+        /// FX-118: false for a batch that flushes through the compiled-effect
         /// route, which corrects row order per sampler slot instead. See
         /// ResolveCurrentTextureRowOrder().
         bool current_texture_bottom_up_ = false;
@@ -824,7 +824,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         std::unique_ptr<EasyGLCompiledEffect> spriteCompiledEffect_;
         std::uint32_t spriteMatrixParameterIndex_ = 0;
-        /// plans/plan_fx.md FX-120: the compiled route's own geometry, retained rather than created
+        /// FX-120: the compiled route's own geometry, retained rather than created
         /// per flush. The shared vertex array object records them, so a per-flush buffer would
         /// leave it holding a deleted name -- which WebGL 2 refuses to draw with.
         std::unique_ptr<IVertexBufferRenderer> compiledSpriteVertexBuffer_;
@@ -928,7 +928,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * @brief Answers whether the batch currently being built will flush through the
          *        compiled-Effect route.
          *
-         * plans/plan_fx.md FX-118. The two routes correct a render target's row order in two
+         * FX-118. The two routes correct a render target's row order in two
          * different places -- the stock route mirrors V in the sprite's own vertex data
          *, the compiled route binds a row-reversed copy of the source per sampler
          * slot (FX-099) -- and applying both to one draw flips the image. The route is fixed for
@@ -941,12 +941,12 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief Recomputes current_texture_bottom_up_ for the currently bound source.
          *
-         * plans/plan_fx.md FX-118. Called when the source changes and when the effect changes,
+         * FX-118. Called when the source changes and when the effect changes,
          * because either one can change the answer.
          */
         void ResolveCurrentTextureRowOrder();
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
-        /// plans/plan_fx.md FX-080: the compiled-Effect half of FlushBatch(). Separate because it shares
+        /// FX-080: the compiled-Effect half of FlushBatch(). Separate because it shares
         /// nothing with the stock/ShaderEffect route -- different program, different vertex array,
         /// no projection uniform of this renderer's own -- and because keeping it out of the
         /// common path leaves that path byte-for-byte unchanged when no compiled effect is set.
@@ -1119,14 +1119,14 @@ namespace CNA::Internal::Renderers::EasyGL
         void GetGlViewport(int& x, int& y, int& width, int& height);
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         friend class EasyGLCompiledEffect;
-        // plans/plan_fx.md FX-062: one MojoShader GL context per this renderer's whole lifetime, created
+        // FX-062: one MojoShader GL context per this renderer's whole lifetime, created
         // lazily on first CreateCompiledEffect() call (see GetMojoShaderContextEXT() in
         // EasyGLCompiledEffect.cpp).
         MOJOSHADER_glContext* mojoShaderContext_ = nullptr;
         /// Device-wide legacy D3D9 texture-stage values consumed by TEXBEM/L and BEM uniforms.
         std::array<CompiledEffectLegacyBumpMapEnvState, 16>
             compiledLegacyBumpMapEnvs_{};
-        /// plans/plan_fx.md FX-108: the meta-gl context generation `mojoShaderContext_` (and every
+        /// FX-108: the meta-gl context generation `mojoShaderContext_` (and every
         /// program MojoShader linked inside it) belongs to. A recreated context bumps the counter,
         /// and every one of those programs is then a dead GL name -- see
         /// RequireCompiledEffectContextEXT().
@@ -1134,7 +1134,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /// Apple M4 AM4-062: `mojoShaderContext_` translates to GLSL ES 3.00 and
         /// compiles it as desktop core GLSL, because this context refuses GLSL 1.20.
         bool mojoShaderEs3OnDesktopCore_ = false;
-        // plans/plan_fx.md FX-082: see EnsureCompiledEffectVaoEXT(). One array object, shared by every
+        // FX-082: see EnsureCompiledEffectVaoEXT(). One array object, shared by every
         // compiled-effect draw (ordinary, indexed, instanced and SpriteBatch alike).
         ::easygl::VertexArray compiledEffectVao_;
         bool compiledEffectVaoCreated_ = false;
@@ -1145,7 +1145,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief One slot's row-order-corrected copy of a render target being sampled. CNAEXT.
          *
-         * plans/plan_fx.md FX-099. See AcquireCompiledEffectFlippedSourceEXT() for why a copy is what a
+         * FX-099. See AcquireCompiledEffectFlippedSourceEXT() for why a copy is what a
          * compiled Effect needs where a stock shader needs only a uniform.
          */
         struct CompiledEffectFlippedSourceEXT
@@ -1693,7 +1693,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         /**
-         * @brief Parses a compiled XNA effect for this device (plans/plan_fx.md FX-062).
+         * @brief Parses a compiled XNA effect for this device (FX-062).
          * @param effectCode Compiled effect bytes.
          * @param effectCodeBytes Number of bytes at @p effectCode.
          * @return The runtime, or null if MojoShader has no context for this device.
@@ -1703,7 +1703,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         /**
          * @brief True: this renderer executes compiled XNA Effect Framework bytecode
-         * (plans/plan_fx.md FX-062, FX-080/FX-082/FX-083).
+         * (FX-062, FX-080/FX-082/FX-083).
          *
          * Every draw route recognises a compiled effect: ordinary, indexed, instanced,
          * multi-stream and SpriteBatch, each verified by the FX-060 shared conformance suite's own
@@ -1731,7 +1731,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief CNAEXT. One vertex stream a compiled-effect draw may read attributes from.
          *
-         * plans/plan_fx.md FX-082: a compiled effect's vertex shader declares arbitrary semantics, and
+         * FX-082: a compiled effect's vertex shader declares arbitrary semantics, and
          * XNA lets any of them come from any bound `VertexBufferBinding`. Each stream therefore
          * carries its own buffer, its own stride, its own starting byte offset and its own instance
          * frequency -- never the combined-layout stride the stock programs dispatch on.
@@ -1761,7 +1761,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * attributes, pixel-stage sampler textures and sampler state, and pushes its uniforms --
          * everything a compiled-effect draw needs immediately before issuing the GL draw call.
          *
-         * plans/plan_fx.md FX-062/FX-071: EasyGL draws immediately (no `Present()`-deferred queue), so
+         * FX-062/FX-071: EasyGL draws immediately (no `Present()`-deferred queue), so
          * this is called directly from the `Draw*PrimitivesEx` compiled-effect branches rather
          * than captured for later replay the way SDL_GPU's draw route has to. Every shader input
          * is resolved against the whole bound stream set, so a shader consuming attributes from
@@ -1804,7 +1804,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief CNAEXT. The one vertex array object every compiled-effect draw binds.
          *
-         * plans/plan_fx.md FX-082: MojoShader's OpenGL adapter remembers which attribute arrays it has
+         * FX-082: MojoShader's OpenGL adapter remembers which attribute arrays it has
          * enabled in its own context state, not per VAO, so routing compiled draws through each
          * vertex buffer's own VAO both desynchronised that belief and overwrote the stock
          * attribute pointers `ApplyLayout()` had installed there. A dedicated array object keeps
@@ -1817,7 +1817,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief CNAEXT. Forgets every compiled-effect GL object across a context recreation.
          *
-         * plans/plan_fx.md FX-108. These objects are deliberately not `easygl::RecoverableResource`s --
+         * FX-108. These objects are deliberately not `easygl::RecoverableResource`s --
          * an empty array object and a scratch copy have no content worth restoring -- so the
          * registry's own release/recreate pass does not reach them, and their creation flags would
          * otherwise stay true while their names became dead. Called from the context-loss
@@ -1828,7 +1828,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief CNAEXT. Validates that compiled-effect state belongs to the active GL context.
          *
-         * plans/plan_fx.md FX-108. This renderer supports context loss and recreation, and its own
+         * FX-108. This renderer supports context loss and recreation, and its own
          * resources recover through easy-gl's registry. Live compiled effects retain their source
          * bytecode and parameter values and are rebuilt by the renderer's first recovery entry.
          * This guard remains as a hard failure if a caller ever reaches stale MojoShader state
@@ -1843,7 +1843,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief CNAEXT. Returns a row-order-corrected copy of @p source for a compiled sampler.
          *
-         * plans/plan_fx.md FX-099. This renderer never flips geometry for a framebuffer object, so a
+         * FX-099. This renderer never flips geometry for a framebuffer object, so a
          * render target's colour texture stores its rows bottom-up relative to an uploaded
          * `Texture2D`. Every shader this renderer authors corrects for that at sample time through
          * the `uRtFlipV` uniform and the `cnaSampleUV` helper, and `GetData` mirrors
@@ -2126,7 +2126,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief Applies XNA's `SamplerState.MaxMipLevel`/`MipMapLevelOfDetailBias` to a slot.
          *
-         * plans/plan_fx.md FX-083. `MaxMipLevel` becomes the sampler object's `GL_TEXTURE_MIN_LOD`, the
+         * FX-083. `MaxMipLevel` becomes the sampler object's `GL_TEXTURE_MIN_LOD`, the
          * sampler-object expression of "never sample a level more detailed than this" -- the same
          * mapping FNA3D's SDL_GPU driver makes (`min_lod = maxMipLevel`). FNA3D's own OpenGL
          * driver instead writes `GL_TEXTURE_BASE_LEVEL` on the texture object, which is not
@@ -2145,7 +2145,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief Applies XNA's `SamplerState.AddressW` to a slot.
          *
-         * plans/plan_fx.md FX-092. `GL_TEXTURE_WRAP_R` is the third addressing axis, observable wherever
+         * FX-092. `GL_TEXTURE_WRAP_R` is the third addressing axis, observable wherever
          * this renderer samples a volume texture; before this the axis was accepted and dropped, so
          * a game or a compiled Effect that asked for a W mode got GL's own default instead.
          *

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_fx.md FX-061: built only when CNA_SDL_GPU_COMPILED_EFFECTS is on, because MojoShader is a
+// FX-061: built only when CNA_SDL_GPU_COMPILED_EFFECTS is on, because MojoShader is a
 // fetched dependency this renderer does not otherwise need. The whole translation unit is guarded
 // rather than excluded from the source glob, so the renderer's source list stays the plain
 // directory contents every other renderer family uses.
@@ -118,7 +118,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         /// Resolves a public texture to the SDL_GPU resource behind it, or null if it is not one.
-        /// plans/plan_fx.md FX-099: a `RenderTarget2D` is a `Texture2D` whose renderer is an
+        /// FX-099: a `RenderTarget2D` is a `Texture2D` whose renderer is an
         /// SdlGpuRenderTargetRenderer, not an SdlGpuTextureRenderer. Recognising only the latter
         /// refused every rendered source outright, so the most ordinary use a compiled Effect has
         /// -- post-processing a scene the game just drew -- could not be expressed at all, even
@@ -139,7 +139,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             return nullptr;
         }
 
-        /// plans/plan_fx.md FX-110: whether this renderer owns @p texture at all, whatever its dimension.
+        /// FX-110: whether this renderer owns @p texture at all, whatever its dimension.
         ///
         /// `ITextureRenderer`, `ITexture3DRenderer` and `ITextureCubeRenderer` are three unrelated
         /// interfaces rather than a hierarchy, so a cube or volume texture cannot be answered by
@@ -611,7 +611,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         MOJOSHADER_sdlUnmapUniformBufferMemory(context_);
     }
 
-    // ---- SdlGpuRenderer hooks (plans/plan_fx.md FX-061) ------------------------------------------
+    // ---- SdlGpuRenderer hooks (FX-061) ------------------------------------------
     //
     // Defined here rather than in SdlGpuRenderer.cpp so the whole compiled-effect surface lives in
     // one guarded translation unit; nothing else in the renderer changes when the option is off.

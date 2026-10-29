@@ -92,7 +92,7 @@ thanks to Tasks 364–369's fixes already being in place.
 as 1 — not because the effect clamps, but because the **unlit** path writes the value to
 `vout.Diffuse`, which `Structures.fxh` declares `COLOR0`, and **Direct3D 9 saturates a vertex
 shader's colour output registers before interpolation**. It is the same `oD0`/`oD1` rule
-`plans/plan_fx.md` FX-123 measured for the vertex-lit programs.
+FX-123 measured for the vertex-lit programs.
 
 **Measured on the real XNA 4.0 runtime** (`spikes/xna-diffuse-color-clamp-spike/`), with a **grey**
 `(100,100,100)` texture — never white, or both answers saturate at the output and the probe could
@@ -138,7 +138,7 @@ layouts are 24 and 36 bytes:
 | Declaration | Bytes | Where it comes from |
 |---|---|---|
 | Position + Normal | 24 | Microsoft's Primitives3D sample (`SAMPLE-002`) — the **same stride** as `VertexPositionColorTexture` |
-| Position + Normal + Colour + TexCoord | 36 | what the stock `ModelProcessor` emits for a mesh with a colour channel (`plans/plan_fx.md` `FX-125`) |
+| Position + Normal + Colour + TexCoord | 36 | what the stock `ModelProcessor` emits for a mesh with a colour channel (`FX-125`) |
 
 **EasyGL** renders both: `SelectStockProgramShape` matches the first as a declaration test and the
 second as a stride case, and its lit programs carry a colour attribute. `FX-125` is the record of

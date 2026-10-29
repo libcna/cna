@@ -2277,7 +2277,7 @@ TEST(GltfRendererPointTopologyPolicy, Direct3DBackendsMapPointsOrRejectBeforeSub
     // GLTF-394 closes the last known silent POINTS reinterpretations. D3D9 duplicates its native
     // mapper in seven independently compiled draw implementations, so checking only the ordinary
     // path would leave PBR (the glTF path), stock, skinned-colour, instanced, compiled-effect or
-    // punctual-light draws behind. The sixth is D3D9CompiledEffect.cpp, added by plans/plan_fx.md
+    // punctual-light draws behind. The sixth is D3D9CompiledEffect.cpp, added by
     // FX-070; the seventh is D3D9BasicPunctualDraw.cpp.
     const std::filesystem::path renderers =
         RepositoryRoot() / "modules" / "renderers";

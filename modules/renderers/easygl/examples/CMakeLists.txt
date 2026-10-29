@@ -1633,7 +1633,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_BasicEffectFog COMMAND cna_test_easygl_basiceffect_fog
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_fx.md FX-123: D3D9 saturates a vertex shader's colour output registers before
+        # FX-123: D3D9 saturates a vertex shader's colour output registers before
         # interpolating them; the per-vertex-lit program's varyings must do the same.
         cna_easygl_test(cna_test_easygl_basiceffect_vertex_color_clamp
                         easygl_basiceffect_vertex_color_clamp_test.cpp)
@@ -1641,7 +1641,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_basiceffect_vertex_color_clamp
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_fx.md FX-124: the per-pixel-lit fragment stage normalizes a world-space view
+        # FX-124: the per-pixel-lit fragment stage normalizes a world-space view
         # vector, so mediump's fp16 range destroys specular on a large scene. Scale invariance.
         cna_easygl_test(cna_test_easygl_basiceffect_world_scale_precision
                         easygl_basiceffect_world_scale_precision_test.cpp)
@@ -1649,7 +1649,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_basiceffect_world_scale_precision
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_fx.md FX-125: a lit, vertex-coloured 36-byte vertex must be BOTH lit and
+        # FX-125: a lit, vertex-coloured 36-byte vertex must be BOTH lit and
         # coloured; it used to fall through to the unlit vertex-colour program.
         cna_easygl_test(cna_test_easygl_basiceffect_lit_vertex_color
                         easygl_basiceffect_lit_vertex_color_test.cpp)
@@ -1657,7 +1657,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_basiceffect_lit_vertex_color
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_fx.md FX-127: a BLENDINDICES element declared Vector4 rather than Byte4 is
+        # FX-127: a BLENDINDICES element declared Vector4 rather than Byte4 is
         # equally legal XNA -- the format describes the bytes, the shader register is a float4
         # either way -- and EasyGL refused it outright.
         cna_easygl_test(cna_test_easygl_skinnedeffect_vector4_bone_indices

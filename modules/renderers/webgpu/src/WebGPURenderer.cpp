@@ -11899,7 +11899,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                           pendingCompiledSpriteAddressV_, 1);
 
         // XNA draws the run once per pass of the effect's current technique
-        // (plans/plan_fx.md FX-102), which makes the submission order pass-major over the run.
+        // (FX-102), which makes the submission order pass-major over the run.
         auto* technique = activeSpriteCompiledEffect_->getCurrentTechniqueProperty();
         const int passCount =
             technique != nullptr ? technique->getPassesProperty().getCountProperty() : 0;
@@ -16581,7 +16581,7 @@ namespace
     /// XNA's `VertexElementFormat` describes the BYTES in the buffer, not the register the semantic
     /// arrives in: a `BLENDINDICES` element may legitimately be declared `Vector4` as well as
     /// `Byte4` -- the stock `SkinnedModelProcessor` writes `ConvertChannelContent<Vector4>` and real
-    /// XNA draws it (`plans/plan_fx.md` FX-127, and EasyGL's own
+    /// XNA draws it (FX-127, and EasyGL's own
     /// `easygl_skinnedeffect_vector4_bone_indices_test`). This renderer's skinned pipeline declares
     /// one fixed attribute array and its WGSL takes `vec4<u32>` bone indices, and WebGPU has no
     /// vertex format that reads unsigned bytes as un-normalized floats -- the trick EasyGL uses to

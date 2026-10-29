@@ -310,7 +310,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void EffectParameter::RequireNumericParameter(const char* operation) const
     {
-        // plans/plan_fx.md FX-105: the other direction of the type check FX-089 added.
+        // FX-105: the other direction of the type check FX-089 added.
         //
         // A compiled effect's OBJECT parameters -- strings, textures, samplers, shaders -- do not
         // store a value in the register file at all. What sits at their byte offset is the effect

@@ -4371,7 +4371,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLSpriteBatchRenderer::ResolveCurrentTextureRowOrder()
     {
-        // plans/plan_fx.md FX-118: the compiled route corrects a bottom-up source per sampler slot
+        // FX-118: the compiled route corrects a bottom-up source per sampler slot
         // (AcquireCompiledEffectFlippedSourceEXT), so the sprite's own V must be left alone there.
         // Doing both mirrors the image -- and only the compiled route can correct a slot the
         // sprite quad does not own, such as the base image a bloom combine reads from slot 1.
@@ -4477,7 +4477,7 @@ namespace CNA::Internal::Renderers::EasyGL
         if (pending_vertices_.empty()) return;
 
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
-        // plans/plan_fx.md FX-080: a compiled XNA Effect gets its own route. Before this branch existed
+        // FX-080: a compiled XNA Effect gets its own route. Before this branch existed
         // the code below silently kept the stock sprite program for one -- GetEffectRendererPtr()
         // returns null for a compiled effect, so `prog` stayed `&program_` -- and rendered the
         // batch with a shader the game never asked for, reporting nothing.
@@ -4734,7 +4734,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const int vertexCount = static_cast<int>(pending_vertices_.size());
         const int indexCount = static_cast<int>(pending_indices_.size());
 
-        // plans/plan_fx.md FX-120: these two buffers are RETAINED, not created per flush.
+        // FX-120: these two buffers are RETAINED, not created per flush.
         //
         // The compiled route records them in a single long-lived vertex array object
         // (EnsureCompiledEffectVaoEXT), so a buffer created and destroyed inside one flush
@@ -7675,7 +7675,7 @@ namespace CNA::Internal::Renderers::EasyGL
         WriteSamplerParameter(slot, SamplerShadowField::WrapT,
                               ::easygl::SamplerParameter::WrapT, toWrap(addressV));
 
-        // plans/plan_fx.md FX-092: samplers_[slot] is ONE long-lived GL object, mutated in place and
+        // FX-092: samplers_[slot] is ONE long-lived GL object, mutated in place and
         // reused for every later application on that slot -- the same shape that made the sampler-completeness fix
         // necessary for anisotropy. Every property this call does not write therefore survives from
         // whoever wrote it last, and ApplySamplerMipState (a compiled Effect's own MaxMipLevel and
@@ -7780,7 +7780,7 @@ namespace CNA::Internal::Renderers::EasyGL
     const ::easygl::Texture& EasyGLRenderer::AcquireCompiledEffectFlippedSourceEXT(
         int slot, const EasyGLRenderTargetRenderer& source)
     {
-        // plans/plan_fx.md FX-099. See the declaration for why the correction is applied to the pixels
+        // FX-099. See the declaration for why the correction is applied to the pixels
         // rather than to the sampling coordinate.
         if (slot < 0 || slot >= kMaxSamplerSlots)
         {
@@ -7927,7 +7927,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
     void EasyGLRenderer::ReleaseCompiledEffectGlObjectsForContextLossEXT()
     {
-        // plans/plan_fx.md FX-108. Handles are dropped WITHOUT a GL call: the names belong to a context
+        // FX-108. Handles are dropped WITHOUT a GL call: the names belong to a context
         // that is gone, and deleting them would either be a no-op or address someone else's object
         // in the replacement context. The `*Created`/extent bookkeeping is reset with them so the
         // lazy creators rebuild on next use instead of trusting a stale flag.
@@ -8584,7 +8584,7 @@ namespace CNA::Internal::Renderers::EasyGL
         } else {
             // None (or first-ever upload): standard glBufferData.
             //
-            // plans/plan_fx.md FX-131: sized by the buffer's own CAPACITY, not by this upload. XNA fixes a
+            // FX-131: sized by the buffer's own CAPACITY, not by this upload. XNA fixes a
             // VertexBuffer's VertexCount at construction and SetData(data, startIndex,
             // elementCount) writes a PREFIX, leaving the rest of the buffer as it was -- so a
             // short upload must not shrink the storage a later draw is entitled to read. Sizing
@@ -10922,7 +10922,7 @@ namespace CNA::Internal::Renderers::EasyGL
         }
 
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
-        /// plans/plan_fx.md FX-082: the streams a compiled-effect draw reads its attributes from, in
+        /// FX-082: the streams a compiled-effect draw reads its attributes from, in
         /// public binding-slot order. The internal staged routes (`DrawUser*`, SpriteBatch,
         /// `DrawColoredPrimitives`) bind no public `VertexBufferBinding` and leave
         /// `vertexStreamCount` at 0; they contribute the one buffer the draw named, at its own
@@ -11075,7 +11075,7 @@ namespace CNA::Internal::Renderers::EasyGL
             clippedPolygons);
         ApplyStencilPrimitiveTopology(primitive, stockLineLoop);
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
-        // plans/plan_fx.md FX-062: a compiled effect's vertex layout is arbitrary and validated against
+        // FX-062: a compiled effect's vertex layout is arbitrary and validated against
         // the applied pass's own shader reflection (BindCompiledEffectForDrawEXT), not against the
         // fixed-stride table RequireDeclarationFitsStockProgramEXT enforces below -- so this
         // dispatches before that guard runs, not after.
@@ -11213,7 +11213,7 @@ namespace CNA::Internal::Renderers::EasyGL
             params, visibleWireTriangles, clippedWirePolygons);
         ApplyStencilPrimitiveTopology(primitive, stockIndexedLineLoop);
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
-        // plans/plan_fx.md FX-062: see DrawPrimitivesEx's own compiled-effect branch for why this
+        // FX-062: see DrawPrimitivesEx's own compiled-effect branch for why this
         // dispatches before RequireDeclarationFitsStockProgramEXT runs.
         if (params.compiledEffectRuntime != nullptr)
         {
@@ -11371,7 +11371,7 @@ namespace CNA::Internal::Renderers::EasyGL
             StockLightingFollowsDeclarationEXT(vb_in, requestedParams, unlitParams);
         ApplyStencilPrimitiveTopology(primitive);
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
-        // plans/plan_fx.md FX-082: an instanced draw recognizes a compiled effect exactly as the other
+        // FX-082: an instanced draw recognizes a compiled effect exactly as the other
         // two routes do. Before this branch existed the compiled runtime was ignored here and the
         // draw silently fell through to SelectProgram() -- a stock shader rendering geometry the
         // game had asked a compiled Effect to render. The per-instance streams keep their real

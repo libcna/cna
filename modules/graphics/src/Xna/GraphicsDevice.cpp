@@ -1626,7 +1626,7 @@ namespace Microsoft::Xna::Framework::Graphics
             only.combinedByteBase = 0;
             only.vertexOffset = 0;
             only.instanceFrequency = 0;
-            // plans/plan_fx.md FX-131: a stream's length is the VertexBuffer's own VertexCount -- the capacity it
+            // FX-131: a stream's length is the VertexBuffer's own VertexCount -- the capacity it
             // was constructed with, which XNA fixes there and never changes -- not how many
             // vertices the last SetData happened to carry. SetData(data, startIndex, elementCount)
             // writes a PREFIX of the buffer and leaves the rest as it was; validating against the
@@ -1689,7 +1689,7 @@ namespace Microsoft::Xna::Framework::Graphics
             stream.strideInBytes =
                 buffer->getVertexDeclarationProperty().getVertexStrideProperty();
             stream.instanceFrequency = binding.getInstanceFrequencyProperty();
-            stream.vertexCount = buffer->getVertexCountProperty();  // plans/plan_fx.md FX-131, see above
+            stream.vertexCount = buffer->getVertexCountProperty();  // FX-131, see above
             // One usage table covers per-vertex and per-instance streams, exactly as
             // FNA3D's native drivers do. Keep every stream: even a fully colliding declaration can
             // become usage indices 1..15 and be consumed by the active shader.
@@ -2307,7 +2307,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // Upload to a temporary vertex buffer and draw.
         //
-        // plans/plan_fx.md FX-081: the staged buffer carries the vertex type's own canonical
+        // FX-081: the staged buffer carries the vertex type's own canonical
         // VertexDeclaration, exactly as FNA's DrawUserPrimitives<T> uses VertexDeclarationCache<T>.
         // Without it a renderer has only the byte stride to work from, which is enough for the
         // stock shader families but not for a compiled Effect, whose vertex shader declares

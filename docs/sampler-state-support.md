@@ -89,7 +89,7 @@ count, so using a mip-aware GL filter unconditionally for the common non-mipmapp
 texture case would render it GL-incomplete (typically solid black). Documented as an accepted
 tradeoff, tracked as part of Task 867's scope.
 
-## 6b. `MaxMipLevel` and `MipMapLevelOfDetailBias` (plans/plan_fx.md FX-083, 2026-08-17)
+## 6b. `MaxMipLevel` and `MipMapLevelOfDetailBias` (FX-083, 2026-08-17)
 
 `IGraphicsRenderer::ApplySamplerMipState(slot, maxMipLevel, lodBias)` carries XNA's two LOD states
 across the renderer-neutral boundary. It has a default no-op body, so a renderer that has not
@@ -194,7 +194,7 @@ every nonzero native bias; a 27-pass structural corpus additionally proves each 
 sample reads its own register. A real Metal execution remains platform-validation work, not an
 unimplemented sampler semantic.
 
-### 6b.1 Sampler identity and state lifetime (plans/plan_fx.md FX-091, FX-092, 2026-08-18)
+### 6b.1 Sampler identity and state lifetime (FX-091, FX-092, 2026-08-18)
 
 Two follow-up findings, both about the same thing: what a renderer's sampler is a function OF.
 

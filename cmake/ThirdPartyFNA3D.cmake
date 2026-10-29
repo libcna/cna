@@ -56,7 +56,7 @@ option(CNA_FNA3D_ALLOW_SOURCE_DRIFT
     "Build a FetchContent-populated FNA3D checkout that is not at CNA_FNA3D_GIT_TAG, has a MojoShader other than the one it records, or has local changes, with a warning instead of an error"
     OFF)
 
-# plans/plan_fx.md FX-061/FX-062/FX-063/FX-065: fetches the pin and publishes `cna_mojoshader` alone --
+# FX-061/FX-062/FX-063/FX-065: fetches the pin and publishes `cna_mojoshader` alone --
 # the Effect Framework parser plus the OpenGL, SDL_GPU and D3D11 adapters, with no FNA3D linked.
 # A renderer other than FNA3D calls this directly, so it can read a compiled effect without
 # depending on a second graphics API it does not use. `cna_configure_fna3d()` builds on top of it.
@@ -198,7 +198,7 @@ function(cna_configure_mojoshader)
         endif()
     endforeach()
 
-    # plans/plan_fx.md FX-061/FX-062/FX-063/FX-065: the Effect Framework parser is not FNA3D's. FNA3D
+    # FX-061/FX-062/FX-063/FX-065: the Effect Framework parser is not FNA3D's. FNA3D
     # merely happens to be how CNA obtains it, because MojoShader ships as FNA3D's submodule and
     # FNA3D's own CMakeLists.txt already builds it as a separate `mojoshader` archive carrying the
     # OpenGL, SDL_GPU and D3D11 adapters. Publishing it as its own interface target is what lets a

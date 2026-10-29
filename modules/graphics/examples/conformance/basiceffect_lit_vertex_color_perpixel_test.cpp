@@ -4,7 +4,7 @@
 // conformance suite runs it -- the per-pixel half of the lit, vertex-coloured,
 // 36-byte layout.
 //
-// `easygl_basiceffect_lit_vertex_color_test.cpp` (plans/plan_fx.md FX-125) covers this layout on
+// `easygl_basiceffect_lit_vertex_color_test.cpp` (FX-125) covers this layout on
 // the family XNA selects by default, and it says so in its own source: it sets
 // `PreferPerPixelLighting(false)` explicitly. So it exercises `VSBasicVertexLightingTxVc` and says
 // nothing at all about `VSBasicPixelLightingTxVc`, whose vertex-colour handling is a different

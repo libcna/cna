@@ -5,7 +5,7 @@
 // UNLIT path. The property setter does not clamp (`BasicEffect.cs:117`), the value reaches the
 // shader through `EffectHelpers.SetMaterialColor` and is written to `vout.Diffuse`, which
 // `Structures.fxh` declares `COLOR0` -- so Direct3D 9 should saturate it before interpolation, the
-// same `oD0` rule `plans/plan_fx.md` FX-123 measured for the LIT programs and `VULKAN-196` measured
+// same `oD0` rule FX-123 measured for the LIT programs and `VULKAN-196` measured
 // for `EnvironmentMapEffect`'s `oD1`.
 //
 // A GREY texture, never a white one: with a white texture both answers saturate at the output and

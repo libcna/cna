@@ -197,7 +197,7 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL 
     # implementation -- see plans/plan_glbackends.md Phase B/GLB-8 for how EasyGLRenderer.cpp
     # uses this to choose context-creation attributes and shader headers.
     list(APPEND _cna_identity_defines "CNA_GL_PROFILE_${CNA_GRAPHICS_RENDERER}")
-    # plans/plan_fx.md FX-062: compiled XNA effects on this renderer go through MojoShader's own OpenGL
+    # FX-062: compiled XNA effects on this renderer go through MojoShader's own OpenGL
     # adapter, which emits GLSL/GLSLES/GLSLES3 source text for whichever profile it is asked for --
     # entirely in parallel to EasyGL's own GLSL ES 3.00-authored-and-string-rewritten stock shaders.
     # Off by default because it pulls a fetched dependency into a renderer that does not otherwise
@@ -205,7 +205,7 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL 
     # the sibling CNA_SDL_GPU_COMPILED_EFFECTS option below: an opt-in flag, not a per-identity
     # define every build of this renderer needs.
     option(CNA_EASYGL_COMPILED_EFFECTS
-           "Build EasyGL support for compiled XNA Effect bytecode (plans/plan_fx.md FX-062)" OFF)
+           "Build EasyGL support for compiled XNA Effect bytecode (FX-062)" OFF)
     if(CNA_EASYGL_COMPILED_EFFECTS)
         include(cmake/ThirdPartyFNA3D.cmake)
         cna_configure_mojoshader()
@@ -272,10 +272,10 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     set(RENDERER_TARGET "cna_renderer_directx9")
     list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX9)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX9")
-    # plans/plan_fx.md FX-070: compiled XNA effects already contain native D3D9 tokens;
+    # FX-070: compiled XNA effects already contain native D3D9 tokens;
     # MojoShader is optional and is used only for the container runtime and reflection.
     option(CNA_DIRECTX9_COMPILED_EFFECTS
-           "Build DirectX 9 support for compiled XNA Effect bytecode (plans/plan_fx.md FX-070)" OFF)
+           "Build DirectX 9 support for compiled XNA Effect bytecode (FX-070)" OFF)
     if(CNA_DIRECTX9_COMPILED_EFFECTS)
         include(cmake/ThirdPartyFNA3D.cmake)
         cna_configure_mojoshader()
@@ -303,12 +303,12 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         include(cmake/ThirdPartySDLShaderCross.cmake)
         cna_configure_sdl_shadercross()
     endif()
-    # plans/plan_fx.md FX-061: compiled XNA effects on this renderer go through MojoShader's own SDL_GPU
+    # FX-061: compiled XNA effects on this renderer go through MojoShader's own SDL_GPU
     # adapter, which emits SPIR-V -- the format this renderer already builds its pipelines from.
     # Off by default because it pulls a fetched dependency into a renderer that does not otherwise
     # need one; the capability stays false until the FX-060 shared suite passes here.
     option(CNA_SDL_GPU_COMPILED_EFFECTS
-           "Build SDL_GPU support for compiled XNA Effect bytecode (plans/plan_fx.md FX-061)" OFF)
+           "Build SDL_GPU support for compiled XNA Effect bytecode (FX-061)" OFF)
     if(CNA_SDL_GPU_COMPILED_EFFECTS)
         include(cmake/ThirdPartyFNA3D.cmake)
         cna_configure_mojoshader()

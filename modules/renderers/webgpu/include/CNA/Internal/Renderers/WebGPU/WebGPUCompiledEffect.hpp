@@ -2,7 +2,7 @@
 //
 // plans/plan_webgpu.md WEBGPU-167..171: compiled XNA Effect Framework bytecode on the WebGPU renderer.
 //
-// This backend is shaped like the retired VULKAN renderer's (`plans/plan_fx.md` `FX-065`) rather
+// This backend is shaped like the retired VULKAN renderer's (`FX-065`) rather
 // than like the OpenGL or SDL_GPU ones, because it faces the same two facts: MojoShader ships no
 // WebGPU adapter, so the nine-function `MOJOSHADER_effectShaderContext` is CNA's own, written
 // directly against `MOJOSHADER_parse()` with the portable SPIR-V profile; and the renderer defers

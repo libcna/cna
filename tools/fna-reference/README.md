@@ -82,7 +82,7 @@ how to run the comparison.
 Task 480 (the rest of this phase) documents how to regenerate this reference data — not yet
 started.
 
-## `--effects`: compiled Effect Framework reflection (plans/plan_fx.md FX-005)
+## `--effects`: compiled Effect Framework reflection (FX-005)
 
 `FnaReference.exe --effects <directory-of-fxb> [output.json]` emits FNA's own reflection of every
 `.fxb` in a directory. This is the FX-005 oracle: every other reflection check in the compiled
@@ -127,7 +127,7 @@ MONO_PATH="$FNA_ROOT/bin/Debug" \
 `Fna3dCompiledEffectTest.StockFixtureReflectionMatchesTheFnaOracle` reads that checked-in JSON and
 compares CNA's reflection of the same seven binaries against it, subtree by subtree.
 
-## `--effect-states`: what FNA installs when a pass is applied (plans/plan_fx.md FX-005)
+## `--effect-states`: what FNA installs when a pass is applied (FX-005)
 
 `FnaReference.exe --effect-states <directory-of-fxb> [output.json]` is the state half of the same
 oracle. Where `--effects` compares the object graph CNA *reads*, this compares what CNA *does* with
@@ -157,7 +157,7 @@ the first four slots), so a pass that assigns nothing is recorded as leaving tha
 "Unchanged" is as much a result as "replaced", and
 `Fna3dEffectStateOracleTest.EveryPassInstallsTheStateFnaInstalls` checks both.
 
-## `--effect-pixels`: what FNA renders for every compiled pass (plans/plan_fx.md FX-005)
+## `--effect-pixels`: what FNA renders for every compiled pass (FX-005)
 
 `FnaReference.exe --effect-pixels <directory-of-fxb> [output.json]` renders every technique/pass
 of all seven committed compiler-produced effects through FNA's public `Effect` and

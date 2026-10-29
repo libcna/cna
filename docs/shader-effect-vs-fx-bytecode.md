@@ -89,8 +89,8 @@ reads pixels back for every draw shape it covers.
 
 Future programmable backends should implement the renderer-neutral `ICompiledEffectRuntime` and
 pass the same reflection, mutation, clone, draw, SpriteBatch, state, sampler, malformed-input, and
-lifecycle suite before enabling the capability. The audited rollout and backend-specific feasibility work are tracked in
-[`plans/plan_fx.md`](../plans/plan_fx.md).
+lifecycle suite before enabling the capability. The rollout was tracked as `FX-nnn` tasks (Git history); the current
+per-renderer state is [`fx-compiled-effects.md`](fx-compiled-effects.md) §10.
 
 ## `ShaderEffect` remains useful
 

@@ -34,7 +34,7 @@
 // `Vector4`, not `Byte4`, at stride 64. XNA's `VertexElementFormat` describes the BYTES in the
 // buffer, not the register the semantic arrives in, so a content processor may write either -- the
 // stock `SkinnedModelProcessor` writes `ConvertChannelContent<Vector4>("BlendIndices0")` and real
-// XNA draws it (`plans/plan_fx.md` FX-127). Row 1 uses the 68-byte layout found in legacy XNB model
+// XNA draws it (FX-127). Row 1 uses the 68-byte layout found in legacy XNB model
 // content: POSITION, BLENDINDICES, BLENDWEIGHT, NORMAL, TEXCOORD, TANGENT. Its byte count collides
 // with CNA's canonical skinned-PBR record even though its declared semantics unambiguously describe
 // a regular SkinnedEffect vertex. Both cells draw the SAME scene as a canonical cell and must land

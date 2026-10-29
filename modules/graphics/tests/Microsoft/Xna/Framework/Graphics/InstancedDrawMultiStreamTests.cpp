@@ -2527,7 +2527,7 @@ TEST_F(InstancedDrawMultiStreamTest, UnsupportedRendererRejectsMixedStreamInstan
         // A FIFTH measured outcome (docs/fna3d-renderer.md): this renderer claims MultiStreamVertexInput
         // because several PER-VERTEX streams genuinely re-slot -- FNA3D_ApplyVertexBufferBindings
         // takes an array of per-stream declarations natively. Its instancing boundary moved when
-        // plans/plan_fx.md's compiled-effect support landed: FNA3D now issues a real instanced draw when
+        // the compiled-effect support (FX-036) landed: FNA3D now issues a real instanced draw when
         // the selected effect is a compiled Direct3D 9 Effect whose vertex shader consumes the bound
         // per-instance stream, which is exactly how hardware instancing works in real XNA. This draw
         // selects no such effect, so it still reaches a declared boundary rather than stacking every

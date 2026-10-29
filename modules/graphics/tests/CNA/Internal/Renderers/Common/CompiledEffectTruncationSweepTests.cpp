@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_fx.md FX-111: a compiled effect truncated at every length is refused, or parsed whole,
+// FX-111: a compiled effect truncated at every length is refused, or parsed whole,
 // by the selected renderer's own compiled-effect runtime -- and never wedges the test run. Moved
 // from the retired VULKAN suite (VulkanCompiledEffectTest.MalformedBytecodeIsRejectedWithoutCrashing).
 //

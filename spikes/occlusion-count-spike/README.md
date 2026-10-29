@@ -1,7 +1,7 @@
 # occlusion-count-spike
 
 Existence gate for the precise-target path in `EasyGLOcclusionQueryRenderer`
-(`plans/plan_fx.md`-adjacent work for SAMPLE-041, LensFlare).
+(compiled-effect-adjacent work for SAMPLE-041, LensFlare).
 
 ## What it proves
 

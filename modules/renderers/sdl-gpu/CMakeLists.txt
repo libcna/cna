@@ -16,7 +16,7 @@ if(CNA_SDL_GPU_SHADERCROSS)
     target_compile_definitions(${RENDERER_TARGET} PRIVATE CNA_SDL_GPU_SHADERCROSS)
 endif()
 
-# plans/plan_fx.md FX-061: compiled XNA effects go through MojoShader's own SDL_GPU adapter plus the
+# FX-061: compiled XNA effects go through MojoShader's own SDL_GPU adapter plus the
 # translation shared with every other compiled-effect backend. Opt-in, because MojoShader is a
 # fetched dependency this renderer does not otherwise need.
 if(CNA_SDL_GPU_COMPILED_EFFECTS)

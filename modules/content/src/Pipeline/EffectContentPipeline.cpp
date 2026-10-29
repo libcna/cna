@@ -3,8 +3,8 @@
 // plans/plan_xnapipeline.md XNAP-84: the achievable half of the Effect story.
 //
 // Compiling `.fx` source to shader bytecode is a separate major subsystem that this project has
-// deliberately not taken on (plans/plan_fx.md: "Out of scope; CNA will not embed an HLSL source
-// compiler"). What is achievable, and what this file does, is the other half: a project that
+// deliberately not taken on (docs/fx-compiled-effects.md §1: CNA embeds no HLSL source
+// compiler). What is achievable, and what this file does, is the other half: a project that
 // already has a compiled Effect Framework binary can build it into an `Effect` .xnb through the
 // ordinary pipeline instead of hand-assembling a container.
 

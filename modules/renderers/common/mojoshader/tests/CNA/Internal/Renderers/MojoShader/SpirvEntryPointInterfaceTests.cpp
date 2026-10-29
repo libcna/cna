@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_fx.md FX-134: the module-level invariants of MojoShader's SPIR-V profile, measured on
+// FX-134: the module-level invariants of MojoShader's SPIR-V profile, measured on
 // the committed compiled-effect corpus.
 //
 // This suite belongs to the SHARED MojoShader half rather than to any one renderer because the

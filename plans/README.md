@@ -168,7 +168,7 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 
 - `plan_graphics.md` — the original graphics API backlog (Tasks 1–1120 in Phases 1–83, written
   for SDL_Renderer, EasyGL, Vulkan and Bgfx). Every row was done, withdrawn with a retired
-  renderer, or superseded (compiled effects by `plan_fx.md`, samples by `cna-samples/plan.md`),
+  renderer, or superseded (compiled effects by the FX plan, samples by `cna-samples/plan.md`),
   and the plan was deleted on 2026-10-26 (Git history only). Comments elsewhere cite its rows as
   "graphics Task N" or "graphics row N".
 - `plan_ascii.md` — the former SDL-windowed ASCII renderer campaign (`ASCII-1`..`ASCII-82`,
@@ -184,7 +184,14 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   included, are [`../docs/fna3d-renderer.md`](../docs/fna3d-renderer.md); the XNA oracle
   measurement is [`../docs/fna3d-parity-report.md`](../docs/fna3d-parity-report.md). Comments
   cite rows as "FNA3D-nn".
-- [`plan_fx.md`](plan_fx.md) — compiled XNA effect bytecode.
+- `plan_fx.md` — compiled XNA effect bytecode (`FX-001`..`FX-147`, 2026-08/10): every task done,
+  withdrawn with a retired renderer (`FX-066` Metal, `FX-068` bgfx), or, for the optional MGFX,
+  offline-compiler and runtime-`.fx` evaluations `FX-095`..`FX-097`, made moot by standing
+  decisions; deleted on 2026-10-29 (Git history only). The porter guide, the support matrix, the
+  shared-contract and promotion rules and the standing decisions are
+  [`../docs/fx-compiled-effects.md`](../docs/fx-compiled-effects.md); its two XNA-over-FNA
+  rulings are in [`../docs/xna-fna-behavior-decisions.md`](../docs/xna-fna-behavior-decisions.md).
+  Comments cite rows as "FX-nnn".
 
 ## Graphics backends and renderers
 

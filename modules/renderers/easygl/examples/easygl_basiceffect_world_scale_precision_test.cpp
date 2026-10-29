@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_fx.md FX-124: EasyGL's per-pixel-lit fragment shaders normalize a WORLD-SPACE view
+// FX-124: EasyGL's per-pixel-lit fragment shaders normalize a WORLD-SPACE view
 // vector, normalize(uEyePosition - vWorldPos). GLSL ES's `mediump` guarantees only fp16 RANGE
 // (about +/-65504), and normalize() computes dot(v, v) first -- so an eye a few thousand world
 // units from the geometry overflows, inversesqrt returns 0, the view direction collapses to the

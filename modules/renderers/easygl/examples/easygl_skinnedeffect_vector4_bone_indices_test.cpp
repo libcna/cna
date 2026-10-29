@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_fx.md FX-127: a BLENDINDICES element may be declared Vector4, not only Byte4.
+// FX-127: a BLENDINDICES element may be declared Vector4, not only Byte4.
 //
 // XNA's VertexElementFormat describes the bytes in the buffer. A content processor is free to
 // write either form, and XNA renders both. CustomModelAnimation's own SkinnedModelProcessor does

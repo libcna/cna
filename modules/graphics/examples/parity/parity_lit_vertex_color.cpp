@@ -4,7 +4,7 @@
 // 36 bytes -- must render LIT and keep its colour.
 //
 // 36 is in no renderer's canonical stride table, so a stride-keyed dispatch matches nothing and the
-// draw falls through to whatever the fallback is: on EasyGL, before `plans/plan_fx.md` FX-125, that
+// draw falls through to whatever the fallback is: on EasyGL, before FX-125, that
 // was the unlit colour program, and SAMPLE-047's shaded sphere rendered as a flat green disc; on
 // WebGPU it was an outright refusal. XNA's own answer is `BasicEffect`'s "Vc" family
 // (`VSBasicVertexLightingVc` and friends), which multiplies the lit diffuse by the vertex colour.

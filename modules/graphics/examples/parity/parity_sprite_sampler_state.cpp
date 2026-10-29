@@ -97,7 +97,7 @@ namespace
     }
 }
 
-/// plans/plan_fx.md section 10.5: on the OpenGL ES profiles `MipMapLevelOfDetailBias` is a Case 1
+/// docs/fx-compiled-effects.md §7: on the OpenGL ES profiles `MipMapLevelOfDetailBias` is a renderer-wide
 /// limitation for stock sampling -- ES has no `GL_TEXTURE_LOD_BIAS`, which is why FNA3D's own GL
 /// driver skips it too. There the documented answer is that a bias changes nothing, and the fixture
 /// measures that rather than skipping, so whoever emulates it on ES updates that row as well

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_fx.md FX-125: BasicEffect.VertexColorEnabled has a "Vc" variant of every lit family in
+// FX-125: BasicEffect.VertexColorEnabled has a "Vc" variant of every lit family in
 // XNA -- VSBasicVertexLightingVc and friends -- which multiplies the lit diffuse by the per-vertex
 // colour. EasyGL's lit programs had no colour input at all, and SelectStockProgramShape dispatched
 // on stride alone with cases for 20, 24 and 32 only. A Position+Normal+Color+TextureCoordinate

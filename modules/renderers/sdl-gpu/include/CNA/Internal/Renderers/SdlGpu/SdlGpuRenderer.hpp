@@ -65,7 +65,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     /**
      * @brief The complete identity of one native `SDL_GPUSampler`, as a comparable value. CNAEXT.
      *
-     * plans/plan_fx.md FX-091. This replaces a hand-packed `std::uint64_t` whose 32-bit LOD-bias field
+     * FX-091. This replaces a hand-packed `std::uint64_t` whose 32-bit LOD-bias field
      * was shifted to bit 40 and therefore lost its top eight bits -- the float's sign and seven of
      * its eight exponent bits -- so `0.0`, `+/-0.5`, `+/-2.0` and `+/-8.0` all produced the same
      * key and were served the same native sampler. Every field a sampler is built from is a named
@@ -1626,7 +1626,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Records whether this batch is in `SpriteSortMode::Immediate`.
          *
-         * plans/plan_fx.md FX-102: the two modes need different compiled-Effect pass granularity, and
+         * FX-102: the two modes need different compiled-Effect pass granularity, and
          * XNA's own `SpriteBatch` is where the difference comes from. See @ref End.
          *
          * @param immediate True when `SpriteSortMode::Immediate` is active for this batch.
@@ -1675,7 +1675,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief One deferred sprite, held until the batch flushes. CNAEXT.
          *
-         * plans/plan_fx.md FX-102. Only a compiled Effect in a non-Immediate batch needs this: XNA runs
+         * FX-102. Only a compiled Effect in a non-Immediate batch needs this: XNA runs
          * the whole batch once per pass, so the sprites cannot be queued as they arrive.
          */
         struct PendingSpriteEXT
@@ -1874,7 +1874,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap,
             Skinned, Sprite, Pbr, CustomEffect3D
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-            // plans/plan_fx.md FX-071: guarded like every other compiled-effect member in this header,
+            // FX-071: guarded like every other compiled-effect member in this header,
             // so a build without the option never declares an enumerator no switch handles.
             , CompiledEffect
 #endif
@@ -1988,11 +1988,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressU = 0;
             int addressV = 0;
             int maxAnisotropy = 4;
-            /// plans/plan_fx.md FX-083: XNA's SamplerState.MaxMipLevel and MipMapLevelOfDetailBias,
+            /// FX-083: XNA's SamplerState.MaxMipLevel and MipMapLevelOfDetailBias,
             /// recorded by ApplySamplerMipState and captured by every stock/compiled draw route.
             int maxMipLevel = 0;
             float lodBias = 0.0f;
-            /// plans/plan_fx.md FX-091: XNA's SamplerState.AddressW, recorded by ApplySamplerAddressW.
+            /// FX-091: XNA's SamplerState.AddressW, recorded by ApplySamplerAddressW.
             /// Carried to SDL_gpu's native W address mode, observable for volume sampling.
             int addressW = 1;
         };
@@ -2033,14 +2033,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressU = 0;
             int addressV = 0;
             int maxAnisotropy = 4;
-            /// plans/plan_fx.md FX-083: the effect's own MaxMipLevel/MipMapLevelOfDetailBias, which
+            /// FX-083: the effect's own MaxMipLevel/MipMapLevelOfDetailBias, which
             /// SDL_GPU expresses through min_lod plus a native or shader-side bias. Before this
             /// they were published on GraphicsDevice.SamplerStates and then dropped on the way to
             /// the GPU. SDLGPU-122 snapshots the compiled value into its own per-register fragment
             /// uniform and uses zero in the native descriptor so Vulkan/D3D12 cannot apply it twice.
             int maxMipLevel = 0;
             float lodBias = 0.0f;
-            /// plans/plan_fx.md FX-091: the effect's own AddressW. Carried into the sampler cache key so
+            /// FX-091: the effect's own AddressW. Carried into the sampler cache key so
             /// two passes differing only in W cannot share one native sampler; volume compiled
             /// samplers observe this axis directly.
             int addressW = 1;
@@ -2063,7 +2063,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         };
 
         /**
-         * @brief plans/plan_fx.md FX-071: everything a compiled-effect draw needs from the applied pass,
+         * @brief FX-071: everything a compiled-effect draw needs from the applied pass,
          * captured once so an ordinary 3D draw (`QueueCompiledEffectDraw`) and a SpriteBatch draw
          * (`QueueSprite`) share one implementation (`BuildCompiledEffectBindingEXT`) rather than two
          * that could silently drift apart. `vertexShader == nullptr` means "no compiled effect was
@@ -2158,7 +2158,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             /** @brief SMG-0010: the fragment counterpart. */
             std::shared_ptr<const std::vector<SpirvResourceBindingEXT>> customFragmentUniforms;
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-            // plans/plan_fx.md FX-071: the compiled-effect counterpart of customEffect/customUniforms
+            // FX-071: the compiled-effect counterpart of customEffect/customUniforms
             // above -- mutually exclusive with them, since one Effect is either ShaderEffect-derived
             // or compiled, never both. compiledEffect.vertexShader == nullptr means "not used",
             // matching customEffect's own not-set convention.
@@ -2755,7 +2755,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         /**
-         * @brief plans/plan_fx.md FX-071: one compiled-effect draw, deferred like every other draw kind.
+         * @brief FX-071: one compiled-effect draw, deferred like every other draw kind.
          *
          * Unlike the eight stock-shader commands above, this one's shader pair, vertex attribute
          * set and uniform buffer bytes are captured at `Queue*Draw()` time rather than selected
@@ -2872,7 +2872,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         /**
-         * @brief Parses a compiled XNA effect for this device (plans/plan_fx.md FX-061).
+         * @brief Parses a compiled XNA effect for this device (FX-061).
          * @param effectCode Compiled effect bytes.
          * @param effectCodeBytes Number of bytes at @p effectCode.
          * @return The runtime, or null if MojoShader has no context for this device.
@@ -2882,7 +2882,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         /**
          * @brief True: this renderer executes compiled XNA Effect Framework bytecode
-         * (plans/plan_fx.md FX-071, FX-080/FX-083).
+         * (FX-071, FX-080/FX-083).
          *
          * Ordinary and indexed 3D draws and SpriteBatch all have a working compiled-effect route,
          * verified by a real (not simulated) golden-pixel test and by the FX-060 shared
@@ -3395,7 +3395,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Records XNA's `SamplerState.MaxMipLevel`/`MipMapLevelOfDetailBias` for a slot.
          *
-         * plans/plan_fx.md FX-083 and plans/plan_sdlgpu.md SDLGPU-121. `MaxMipLevel` maps to
+         * FX-083 and plans/plan_sdlgpu.md SDLGPU-121. `MaxMipLevel` maps to
          * `SDL_GPUSamplerCreateInfo::min_lod`. Stock 3D and stock SpriteBatch carry the bias in a
          * fragment uniform and apply the SPIR-V Bias image operand because SDL's Metal driver
          * documents native `mip_lod_bias` as a no-op. SDLGPU-122 applies the same shader-side rule
@@ -3410,7 +3410,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Records XNA's `SamplerState.AddressW` for a slot.
          *
-         * plans/plan_fx.md FX-091. AddressW participates in the complete sampler identity and is
+         * FX-091. AddressW participates in the complete sampler identity and is
          * observable through ordinary compiled-effect volume sampling; the parity oracle
          * distinguishes Wrap from Clamp across deliberately different first/last slices.
          *
@@ -3762,8 +3762,8 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @param maxAnisotropy Public `SamplerState.MaxAnisotropy`, clamped to 1..16; applied only
          *        for `TextureFilter::Anisotropic`, but always part of the cache key.
          * @param family Public draw family, for `CNA_SDLGPU_SAMPLER_TRACE` only.
-         * @param maxMipLevel Public `SamplerState.MaxMipLevel`; becomes `min_lod` (plans/plan_fx.md
-         *        FX-083), the same mapping FNA3D's own SDL_GPU driver makes.
+         * @param maxMipLevel Public `SamplerState.MaxMipLevel`; becomes `min_lod`
+         *        (FX-083), the same mapping FNA3D's own SDL_GPU driver makes.
          * @param lodBias Native `SDL_GPUSamplerCreateInfo::mip_lod_bias`. Stock and compiled-XNA
          *        shaders pass zero here and carry the public value in Bias uniforms instead; the
          *        CNAEXT custom-shader route still passes its caller-supplied native value.
@@ -4206,7 +4206,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                          SDL_GPUGraphicsPipeline*& boundPipeline);
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-        // plans/plan_fx.md FX-071: compiled-effect draw route. Unlike every stock family above, there is
+        // FX-071: compiled-effect draw route. Unlike every stock family above, there is
         // no fixed shader/pipeline table -- the pipeline is keyed on the applied pass's own linked
         // shader pair, vertex layout and render state, all captured at queue time (see
         // CompiledEffectDrawCommand's own doc comment for why).
@@ -4700,7 +4700,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::uint64_t programIdentity);
         void ExpireCompiledProgramIdentityEXT(std::uint64_t programIdentity) noexcept;
 
-        // plans/plan_fx.md FX-071: unlike every stock family's cache above, this one is keyed on a
+        // FX-071: unlike every stock family's cache above, this one is keyed on a
         // linked program rather than a fixed shader field, since arbitrary compiled effects share
         // it across effect instances. The exact 64-bit program identity is the outer key; each
         // program's immutable state/layout hash is local to that identity and cannot alias another

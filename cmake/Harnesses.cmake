@@ -252,7 +252,7 @@ if(CNA_BUILD_TESTS)
     )
 endif()
 
-# --- plans/plan_fx.md FX-051: compiled Effect Framework fuzz harness ---
+# --- FX-051: compiled Effect Framework fuzz harness ---
 # One entry point covering construction, reflection, clone, technique/pass selection, apply and
 # disposal of an untrusted compiled effect binary. Built by default in its standalone replay
 # shape, which is how a committed corpus is exercised and how a campaign's crashing input is
@@ -334,7 +334,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
-# --- plans/plan_fx.md FX-053: compiled Effect Framework performance baseline ---
+# --- FX-053: compiled Effect Framework performance baseline ---
 # Measures construction, clone, dirty upload, clean apply and draw so the immutable-artifact-cache
 # question is decided on numbers. Manually invoked and never registered with ctest: wall-clock
 # timings on a shared machine are a baseline to compare, not a pass/fail signal.
@@ -346,7 +346,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
-# plans/plan_fx.md FX-061/FX-062/FX-063/FX-065 existence gate: proves the pinned MojoShader parses a
+# FX-061/FX-062/FX-063/FX-065 existence gate: proves the pinned MojoShader parses a
 # compiled Effect Framework binary while linking only MojoShader -- no FNA3D and no CNA. Every
 # backend planned after FNA3D depends on that being true, and it was not obvious: MojoShader is
 # FNA3D's submodule, its include root is absent from FNA3D's install surface, and its header hides
@@ -371,7 +371,7 @@ if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/compiled-effects/racing-shadow-map-xna4.fxb")
 endif()
 
-# plans/plan_fx.md FX-061 existence gate: proves the pinned MojoShader's SDL_GPU adapter binds a
+# FX-061 existence gate: proves the pinned MojoShader's SDL_GPU adapter binds a
 # committed effect's shader pairs against a device this machine can create, linking only MojoShader
 # and SDL3. CNA's SDL_GPU renderer already builds pipelines from SPIR-V and MojoShader has both a
 # SPIR-V profile and an SDL_GPU adapter, so the pairing looks obvious on paper -- what the probe
@@ -386,7 +386,7 @@ if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND TARGET SDL3::SDL3 AND NOT EMSCR
     target_link_libraries(cna_mojoshader_sdlgpu_probe PRIVATE cna_mojoshader SDL3::SDL3)
 endif()
 
-# plans/plan_fx.md FX-062 existence gate: proves the pinned MojoShader's OpenGL adapter (mojoshader_
+# FX-062 existence gate: proves the pinned MojoShader's OpenGL adapter (mojoshader_
 # opengl.c) links and renders a committed effect's shader pair against a real GLES3 context this
 # machine can create, linking only MojoShader and SDL3 -- no CNA, no EasyGL. EasyGL is the shared
 # implementation behind OPENGLES3/OPENGL33/WEBGL2, and its own stock

@@ -2119,7 +2119,7 @@ namespace CNA::Internal::Renderers::WebGPU
          * combined-image-sampler rewrite WGSL's shading model requires, MojoShader's four fixed
          * descriptor sets as WebGPU bind groups, and the deferred-replay uniform snapshot. A
          * capability that said true while a compiled draw fell through to a stock shader is exactly
-         * the defect `plans/plan_fx.md` `FX-080` removed from the other backends.
+         * the defect `FX-080` removed from the other backends.
          */
         [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
 
@@ -3027,7 +3027,7 @@ namespace CNA::Internal::Renderers::WebGPU
          * @brief WEBGPU-170: draws the accumulated run once per pass of the effect's technique.
          *
          * XNA runs a compiled Effect's passes at FLUSH granularity over a whole contiguous run of
-         * same-texture sprites (`plans/plan_fx.md` `FX-102`), so the submission order is pass-major.
+         * same-texture sprites (`FX-102`), so the submission order is pass-major.
          */
         void FlushCompiledSpriteBatchEXT();
         /// WEBGPU-170: appends one sprite's six vertices to the current run, flushing on a texture change.

@@ -21,7 +21,7 @@ namespace CNA::Content::Pipeline
      * @brief An already-compiled Effect Framework binary, as read from a `.fxb` file.
      *
      * The pipeline serializes bytecode it is given. It does not compile HLSL: see
-     * `plans/plan_fx.md`, which records the standing decision that CNA will not embed an HLSL
+     * `docs/fx-compiled-effects.md` §1, which records the standing decision that CNA will not embed an HLSL
      * source compiler, and `docs/xnb-interoperability.md` for what that means for interop.
      */
     struct ImportedCompiledEffect

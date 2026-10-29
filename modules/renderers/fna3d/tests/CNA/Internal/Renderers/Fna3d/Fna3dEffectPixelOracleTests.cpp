@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_fx.md FX-005: replay FNA's checked-in compiled-effect pixel observations through
+// FX-005: replay FNA's checked-in compiled-effect pixel observations through
 // CNA's public Effect and GraphicsDevice APIs. The managed generator and this test deliberately
 // use the same flat resources, vertex declaration, parameter values, and clean state baseline.
 

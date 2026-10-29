@@ -3,7 +3,7 @@
 // VULKAN-197 (finding F-36's CNA-wide sibling) -- Direct3D 9 saturates `oD0`, and
 // `BasicEffect`'s unlit path writes `DiffuseColor` straight into it.
 //
-// `plans/plan_fx.md` FX-123 measured that saturation for the vertex-LIT programs and `VULKAN-196`
+// FX-123 measured that saturation for the vertex-LIT programs and `VULKAN-196`
 // measured it for `EnvironmentMapEffect`'s `oD1`. The same rule governs `vout.Diffuse : COLOR0`,
 // which the unlit path fills with `DiffuseColor` -- and with `VertexColorEnabled`, with
 // `vin.Color * DiffuseColor`. `BasicEffect.DiffuseColor` has no clamp in its setter

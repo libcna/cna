@@ -18,7 +18,7 @@ namespace CNA.FnaReference
     {
         public static int Main(string[] args)
         {
-            // plans/plan_fx.md FX-005: a second mode that reflects compiled Effect Framework binaries
+            // FX-005: a second mode that reflects compiled Effect Framework binaries
             // through FNA's own parser instead of emitting the non-rendering reference values.
             if (args.Length > 0 && args[0] == "--effects")
             {
@@ -35,7 +35,7 @@ namespace CNA.FnaReference
                 return EffectReflectionReference.Run(args[1], effectsOutput);
             }
 
-            // plans/plan_fx.md FX-005: the state half of the oracle -- what FNA itself installs on the
+            // FX-005: the state half of the oracle -- what FNA itself installs on the
             // public GraphicsDevice properties when a compiled pass is applied.
             if (args.Length > 0 && args[0] == "--effect-states")
             {
@@ -52,7 +52,7 @@ namespace CNA.FnaReference
                 return EffectStateReference.Run(args[1], statesOutput);
             }
 
-            // plans/plan_fx.md FX-005: the pixel half of the oracle -- deterministic render-target
+            // FX-005: the pixel half of the oracle -- deterministic render-target
             // samples produced by FNA's public Effect and GraphicsDevice APIs.
             if (args.Length > 0 && args[0] == "--effect-pixels")
             {

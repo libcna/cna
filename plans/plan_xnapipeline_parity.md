@@ -14,7 +14,7 @@
 > typed view over that engine. **No second pipeline, no second writer**: `plan_xnapipeline.md` §0
 > records what that mistake cost once, and `XnbArchitectureUniquenessTest` fails if a superseded
 > path returns. CNB (`docs/cnb-format.md`) is never weakened for XNB; the runtime XNB reader
-> (`plan_xnb.md`) is not reopened; shader *compilation* stays with `plan_fx.md`.
+> (`plan_xnb.md`) is not reopened; shader *compilation* stays out of scope (`docs/fx-compiled-effects.md` §1).
 >
 > **Task IDs.** `XNAPP-###`, three digits, allocated in phase ranges (§32). Never reuse an ID;
 > never renumber; append new tasks at the tail of their phase or in a new phase.

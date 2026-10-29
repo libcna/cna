@@ -761,7 +761,7 @@ Verified by the shared EasyGL↔WebGPU parity fixtures (`WEBGPU-207`, see
 `Effect(GraphicsDevice&, byte[])` -- the XNA Effect Framework binary a game's `.xnb` carries --
 runs on this renderer **natively**, behind the off-by-default `CNA_WEBGPU_COMPILED_EFFECTS` option
 (MojoShader is a fetched dependency the renderer does not otherwise need, the same arrangement
-SDL_GPU and EasyGL use). It passes the shared `plans/plan_fx.md` `FX-060` conformance suite with
+SDL_GPU and EasyGL use). It passes the shared `FX-060` conformance suite with
 no skips -- 66/66 compiled-effect tests on 2026-10-29, native and WGSL routes -- and
 `GraphicsCapability::CompiledEffects` reports true at the `GraphicsDevice` seam.
 
@@ -793,8 +793,8 @@ pixel shaders works too -- **all 27 committed technique/pass pairs across all ni
 needed four additive MojoShader fixes, now commits on libcna/mojoshader: `TEXCRD` in the SPIR-V profile,
 a `Location` on `ps_1_x`'s `r0`-as-colour-output, a unique `OpEntryPoint` interface, and a
 `gl_PointCoord` patch-up guarded on the variable it belongs to rather than on the `attrib_offsets`
-slot it shares. The last two closed the six passes that used to be refused (`plans/plan_fx.md`
-`FX-134`); every one of them is a gap the GLSL profile does not have, and the shared SPIR-V linker
+slot it shares. The last two closed the six passes that used to be refused
+(`FX-134`); every one of them is a gap the GLSL profile does not have, and the shared SPIR-V linker
 means SDL_GPU gained them too. **And the browser**: the same effects run under
 Emscripten, through WGSL translated from the same SPIR-V.
 

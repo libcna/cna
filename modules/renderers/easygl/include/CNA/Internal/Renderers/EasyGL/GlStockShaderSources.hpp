@@ -549,7 +549,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec3 aNormal;\n"
 "layout(location=2) in vec2 aUV;\n"
-// plans/plan_fx.md FX-125: BasicEffect.VertexColorEnabled has a "Vc" variant of every
+// FX-125: BasicEffect.VertexColorEnabled has a "Vc" variant of every
 // lit family in XNA (VSBasicVertexLightingVc and friends), which multiplies the lit
 // diffuse by the per-vertex colour. These programs had no colour input at all, so a mesh
 // that is BOTH lit and vertex-coloured could not be drawn by them; selection fell through
@@ -587,7 +587,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
-// plans/plan_fx.md FX-124: this fragment stage normalizes a WORLD-SPACE vector --
+// FX-124: this fragment stage normalizes a WORLD-SPACE vector --
 // normalize(uEyePosition - vWorldPos) -- and `mediump` guarantees only fp16 RANGE (~65504).
 // dot(v, v) is computed first, so an eye a few thousand units from the geometry overflows,
 // inversesqrt returns 0, the view direction collapses to the zero vector, and the specular term
@@ -677,7 +677,7 @@ CNA_GL_PUNCTUAL_DECL
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec3 aNormal;\n"
 "layout(location=2) in vec2 aUV;\n"
-// plans/plan_fx.md FX-125: BasicEffect.VertexColorEnabled has a "Vc" variant of every
+// FX-125: BasicEffect.VertexColorEnabled has a "Vc" variant of every
 // lit family in XNA (VSBasicVertexLightingVc and friends), which multiplies the lit
 // diffuse by the per-vertex colour. These programs had no colour input at all, so a mesh
 // that is BOTH lit and vertex-coloured could not be drawn by them; selection fell through
@@ -741,7 +741,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
 "    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
 "    vec3 lightSum=uAmbientColor+uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
-// plans/plan_fx.md FX-123: Direct3D 9 clamps a vertex shader's colour output registers
+// FX-123: Direct3D 9 clamps a vertex shader's colour output registers
 // (oD0/oD1) to [0,1] BEFORE interpolating them, so XNA's own VSBasicVertexLighting /
 // VSSkinnedVertexLighting hand a saturated colour to the rasterizer even though the .fx
 // source never writes a saturate(). These are plain varyings, which nothing clamps, so an
@@ -963,7 +963,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // EnvironmentMapAmount 5 that turned XNA's orange rim yellow-white and cost 4.5 % of the frame
 // (SAMPLE-037). Clamp here, at the vertex, so the interpolation starts from the same values
 // D3D9's register file would hold -- clamping per fragment instead would interpolate the
-// unclamped value first and give a different gradient (plans/plan_fx.md FX-122 is the same
+// unclamped value first and give a different gradient (FX-122 is the same
 // distinction for translated effects).
 "    vFresnel=clamp((uFresnelEnabled>0.5)\n"
 "        ? pow(max(1.0-abs(viewAngle),0.0),uFresnelFactor)*uEnvMapAmount\n"
@@ -1104,7 +1104,7 @@ CNA_GL_SKIN_NORMAL_DECL
 
         static const char* fsrc =
 "#version 300 es\n"
-// plans/plan_fx.md FX-124: this fragment stage normalizes a WORLD-SPACE vector --
+// FX-124: this fragment stage normalizes a WORLD-SPACE vector --
 // normalize(uEyePosition - vWorldPos) -- and `mediump` guarantees only fp16 RANGE (~65504).
 // dot(v, v) is computed first, so an eye a few thousand units from the geometry overflows,
 // inversesqrt returns 0, the view direction collapses to the zero vector, and the specular term
@@ -1274,7 +1274,7 @@ CNA_GL_SKIN_NORMAL_DECL
 "    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
 // Same FNA-fidelity fix as EnsureSkinnedProgram above - see its own comment for the full
 // reasoning; this vertex-lit sibling had the identical emissive-multiplied-twice bug.
-// plans/plan_fx.md FX-123: Direct3D 9 clamps a vertex shader's colour output registers
+// FX-123: Direct3D 9 clamps a vertex shader's colour output registers
 // (oD0/oD1) to [0,1] BEFORE interpolating them, so XNA's own VSBasicVertexLighting /
 // VSSkinnedVertexLighting hand a saturated colour to the rasterizer even though the .fx
 // source never writes a saturate(). These are plain varyings, which nothing clamps, so an
@@ -1387,7 +1387,7 @@ CNA_GL_DIRECTION_HANDEDNESS_DECL
             dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.y)" : "vUV";
         const std::string fsrc =
 std::string("#version 300 es\n") +
-// plans/plan_fx.md FX-124: this fragment stage normalizes a WORLD-SPACE vector --
+// FX-124: this fragment stage normalizes a WORLD-SPACE vector --
 // normalize(uEyePosition - vWorldPos) -- and `mediump` guarantees only fp16 RANGE (~65504).
 // dot(v, v) is computed first, so an eye a few thousand units from the geometry overflows,
 // inversesqrt returns 0, the view direction collapses to the zero vector, and the specular term
@@ -1659,7 +1659,7 @@ CNA_GL_SKIN_NORMAL_DECL
             dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.y)" : "vUV";
         const std::string fsrc =
 std::string("#version 300 es\n") +
-// plans/plan_fx.md FX-124: this fragment stage normalizes a WORLD-SPACE vector --
+// FX-124: this fragment stage normalizes a WORLD-SPACE vector --
 // normalize(uEyePosition - vWorldPos) -- and `mediump` guarantees only fp16 RANGE (~65504).
 // dot(v, v) is computed first, so an eye a few thousand units from the geometry overflows,
 // inversesqrt returns 0, the view direction collapses to the zero vector, and the specular term

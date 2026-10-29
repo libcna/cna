@@ -71,7 +71,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 #endif
 
-    // plans/plan_fx.md FX-091: the sampler cache's key. The key must be
+    // FX-091: the sampler cache's key. The key must be
     // the COMPLETE sampler description; FX-083 then added the LOD clamp and bias to it by hand-
     // packing them into a uint64, which silently discarded the top eight bits of the 32-bit bias
     // -- a float's sign and most of its exponent -- and so aliased whole families of distinct
@@ -2744,7 +2744,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         ReleaseCompiledEffectsForRendererTeardownEXT();
         compiledProgramLeases_.clear();
         compiledProgramLifetimeState_->owner = nullptr;
-        // plans/plan_fx.md FX-061: released after its queued leases and pipelines, but before the
+        // FX-061: released after its queued leases and pipelines, but before the
         // SDL_GPU device it was created against.
         if (mojoShaderContext_ != nullptr)
         {
@@ -5230,7 +5230,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                               int addressW)
     {
         const int clampedAniso = std::clamp(maxAnisotropy, 1, 16);
-        // plans/plan_fx.md FX-083: XNA's MaxMipLevel is the most detailed level the sampler may use,
+        // FX-083: XNA's MaxMipLevel is the most detailed level the sampler may use,
         // i.e. a lower bound on the computed level of detail -- SDL_GPU's min_lod. That is the
         // same translation FNA3D's own SDL_GPU driver makes.
         // XNA writes MaxMipLevel into Direct3D 9's UNSIGNED sampler field, so a negative value is a
@@ -6087,7 +6087,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             command.customFragmentUniforms = customEffect->SnapshotFragmentUniformsEXT();
         }
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-        // plans/plan_fx.md FX-071: the compiled-effect counterpart of the customEffect snapshot above --
+        // FX-071: the compiled-effect counterpart of the customEffect snapshot above --
         // captured NOW for the same reason (SpriteCommand's own doc comment) and against the same
         // fixed SpriteVertex layout every sprite shares, since SpriteBatch's vertex data is CNA's
         // own generated geometry, never a caller-supplied VertexDeclaration.
@@ -8501,7 +8501,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                         std::string("CNA SDL_GPU: this compiled effect's ") + stageName + " shader samples '" +
                         name + "', but no texture is bound to it.");
                 }
-                // plans/plan_fx.md FX-110: the shader's declared sampler dimension decides which resolver
+                // FX-110: the shader's declared sampler dimension decides which resolver
                 // the bound texture has to go through, and the two must agree. SDL_GPU binds a texture
                 // by handle rather than by target, so a cube bound where the shader declared sampler2D
                 // is a validation error at best and a wrongly-sampled image at worst -- named here
@@ -11136,7 +11136,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (!BufferedDrawWindowIsServableEXT(vb, nullptr, primitive, primitiveCount, params))
             return;
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-        // plans/plan_fx.md FX-071: a compiled effect's vertex layout is arbitrary and validated against
+        // FX-071: a compiled effect's vertex layout is arbitrary and validated against
         // the applied pass's own shader reflection (BuildCompiledEffectVertexAttributes), not
         // against the fixed-stride table RequireFaithfulDeclarationEXT enforces below -- so this
         // dispatches before that guard runs, not after.
@@ -11159,7 +11159,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (!BufferedDrawWindowIsServableEXT(vb, &ib, primitive, primitiveCount, params))
             return;
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-        // plans/plan_fx.md FX-071: see DrawPrimitivesEx's identical guard for why this dispatches before
+        // FX-071: see DrawPrimitivesEx's identical guard for why this dispatches before
         // RequireFaithfulDeclarationEXT rather than after.
         if (params.compiledEffectRuntime != nullptr)
         {
@@ -13661,7 +13661,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (begun_)
             throw std::logic_error("CNA SDL_GPU SpriteBatch.Begin called twice without End");
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-        // plans/plan_fx.md FX-102: a batch starts empty even if the previous one threw out of its flush.
+        // FX-102: a batch starts empty even if the previous one threw out of its flush.
         // Nothing else clears this, and a leftover sprite would be replayed into an unrelated batch
         // with that batch's transform and sampler.
         pendingSprites_.clear();
@@ -13719,7 +13719,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (pendingSprites_.empty()) return;
 
-        // plans/plan_fx.md FX-102: XNA's own batching granularity, reproduced exactly.
+        // FX-102: XNA's own batching granularity, reproduced exactly.
         //
         // FNA's SpriteBatch.FlushBatch walks the (already sorted) sprites and splits them into
         // CONTIGUOUS RUNS OF ONE TEXTURE; DrawPrimitives then draws each run once per pass of the
@@ -13860,7 +13860,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             customEffect_->Apply();
             textureBinding_.Apply();
         }
-        // plans/plan_fx.md FX-071: customEffect_ is either ShaderEffect-derived (resolved above) or a
+        // FX-071: customEffect_ is either ShaderEffect-derived (resolved above) or a
         // compiled effect (resolved here), never both -- Effect::GetCompiledRuntimePtr() returns
         // null for a ShaderEffect and GetEffectRendererPtr() returns null for a compiled effect.
         ICompiledEffectRuntime* compiledEffectRuntime =
@@ -13868,7 +13868,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         if (compiledEffectRuntime != nullptr)
         {
-            // plans/plan_fx.md FX-080: SpriteBatch applies the effect's passes itself, exactly as FNA's
+            // FX-080: SpriteBatch applies the effect's passes itself, exactly as FNA's
             // SpriteBatch.DrawPrimitives does -- once per pass of the current technique, drawing
             // the sprite again for each. Before this the route silently relied on the caller
             // having applied a pass already, so a game using only the public

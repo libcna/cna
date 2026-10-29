@@ -33,7 +33,7 @@
 > constructs compiled XNA/FNA Effect Framework effects on renderers that advertise
 > `GraphicsCapability::CompiledEffects` (currently FNA3D). Non-FNA3D renderers still fail
 > explicitly with asset context. Historical rows below are retained rather than rewritten; use
-> [`plan_fx.md`](plan_fx.md) and `docs/xnb-content-pipeline-support.md` for current status.
+> [`../docs/fx-compiled-effects.md`](../docs/fx-compiled-effects.md) and `docs/xnb-content-pipeline-support.md` for current status.
 
 > **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope (Phase 0/A/B/B2/B3/C) complete; Phase D
 > (LZX decompression) fully complete; Phase E (`SpriteFont`, stock effects, `SoundEffect`/`Song`,

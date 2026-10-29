@@ -132,7 +132,7 @@ foreach(_cna_renderer_dir IN LISTS CNA_RENDERER_DIRS)
     list(APPEND CNA_SELECTED_RENDERER_FAMILIES "${_cna_renderer_family}")
 endforeach()
 
-# plans/plan_fx.md FX-061: the MojoShader-to-CNA translation shared by every backend that executes
+# FX-061: the MojoShader-to-CNA translation shared by every backend that executes
 # compiled XNA effects. Entered only where cna_mojoshader was configured, which today means the
 # FNA3D renderer, or an opt-in SDL_GPU, EasyGL, WebGPU, SOFTWARE or DirectX 9
 # compiled-effect build with that family's CNA_*_COMPILED_EFFECTS option on.

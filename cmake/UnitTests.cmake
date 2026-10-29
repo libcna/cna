@@ -215,12 +215,12 @@ if(CNA_BUILD_TESTS)
             "modules/renderers/*/tests/*.cpp"
             # The shared renderer halves (modules/renderers/common/<name>) sit one directory
             # deeper than a renderer family, and `*` does not cross a separator, so their tests
-            # need their own entry. plans/plan_fx.md FX-134 put the first suite there.
+            # need their own entry. FX-134 put the first suite there.
             "modules/renderers/common/*/tests/*.cpp"
             "tests/*.cpp"
     )
 
-    # plans/plan_fx.md FX-111 and plans/plan_samples_multirenderer.md MSR-038: this is test-harness
+    # FX-111 and plans/plan_samples_multirenderer.md MSR-038: this is test-harness
     # policy, not an integration-test case.  Keep it out of the module grouping below and compile
     # it into every test executable.  Otherwise only CnaTests/CnaIntegrationTests receive the
     # non-interactive SDL assertion policy, while a focused executable such as CnaRendererTests
@@ -825,7 +825,7 @@ if(CNA_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/common
     )
 
-    # plans/plan_fx.md FX-060: the shared compiled-effect conformance suite is header-only test support
+    # FX-060: the shared compiled-effect conformance suite is header-only test support
     # (fixtures plus the contract assertions every CompiledEffects backend must satisfy). It lives
     # under the top-level tests/ tree because it belongs to no single renderer module -- the point
     # is that a new backend runs the identical contract with only its own device setup.

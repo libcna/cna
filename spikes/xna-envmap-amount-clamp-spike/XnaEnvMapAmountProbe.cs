@@ -8,7 +8,7 @@
 // clamp it to 1 before interpolation, and the fragment stage's `lerp(color, envmap, Specular.rgb)`
 // should replace with the environment map rather than extrapolate past it.
 //
-// `plans/plan_fx.md` FX-123 established that saturation against real XNA frames for `oD0`/`oD1` in
+// FX-123 established that saturation against real XNA frames for `oD0`/`oD1` in
 // the LIT programs. This probe asks the same question of the env-map factor directly, on the effect
 // that carries it, so VULKAN-196 rests on a measurement of its own subject rather than on an
 // inherited one.

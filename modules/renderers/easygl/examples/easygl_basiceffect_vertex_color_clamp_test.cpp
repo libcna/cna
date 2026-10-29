@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_fx.md FX-123: Direct3D 9 clamps a vertex shader's colour output registers (oD0/oD1)
+// FX-123: Direct3D 9 clamps a vertex shader's colour output registers (oD0/oD1)
 // to [0,1] BEFORE the rasterizer interpolates them, so real XNA's own VSBasicVertexLighting hands
 // a SATURATED colour to the rasterizer even though Lighting.fxh never writes a saturate(). EasyGL's
 // per-vertex-lit program carries the lit and specular RGB in plain varyings, and a plain varying is

@@ -3,7 +3,7 @@
 
 /**
  * @file SdlGpuCompiledEffect.hpp
- * @brief plans/plan_fx.md FX-061: compiled XNA Effect Framework bytecode on the SDL_GPU renderer.
+ * @brief FX-061: compiled XNA Effect Framework bytecode on the SDL_GPU renderer.
  *
  * MojoShader's own SDL_GPU adapter owns translation, shader creation, program linking and
  * uniform-buffer mapping; the renderer-neutral reflection and state translation live in
@@ -24,14 +24,11 @@
  * both have run since FX-071, and the capability flipped with them. `SdlGpuCompiledEffectTests.cpp`
  * runs the shared suite and every drawing section of it.
  *
- * What is still refused, explicitly and by name rather than drawn incorrectly (plans/plan_fx.md
- * section 10.5 classifies it):
- *
- * - a compiled effect's vertex shader sampling a texture -- renderer-wide, since no CNA renderer
- *   implements vertex-stage sampling through the public surface at all (FX-109);
- *
- * Render targets, cube and volume textures are accepted as compiled pixel samplers. Multiple
- * per-vertex/per-instance streams and ordinary compiled-effect instancing are supported as well.
+ * Nothing in the shared contract is refused any more. Vertex-stage textures arrive from the public
+ * `VertexTextures`/`VertexSamplerStates` and are captured with each deferred draw (FX-109's
+ * former renderer-wide refusal, closed by the museum B8 repair); render targets, cube and volume
+ * textures are accepted as compiled pixel samplers. Multiple per-vertex/per-instance streams and
+ * ordinary compiled-effect instancing are supported as well.
  */
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
@@ -144,7 +141,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @brief CNAEXT. Packs the currently applied pass's constant register values into the exact
          * byte layout its vertex and pixel shaders' uniform buffers expect.
          *
-         * plans/plan_fx.md FX-071: this renderer defers a draw's actual GPU submission to `Present()`, by
+         * FX-071: this renderer defers a draw's actual GPU submission to `Present()`, by
          * when a later `ApplyPass()` on this same effect (or a different one sharing this renderer's
          * one MojoShader context) may have overwritten the native constant register files. Capturing
          * the packed bytes immediately after `ApplyPass()` -- while the register files still hold
@@ -166,7 +163,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief CNAEXT. Returns the texture and sampler state currently bound to one sampler slot.
          *
-         * plans/plan_fx.md FX-071: this renderer does not route a compiled effect's texture/sampler
+         * FX-071: this renderer does not route a compiled effect's texture/sampler
          * bindings through `GraphicsDevice`'s public collections the way stock effects' fixed
          * texture0/texture1/envMap slots do (a compiled effect's bindings are arbitrary, and its
          * texture may be 2D, 3D or a cube, which `GpuDrawParams` has no single field type for).
@@ -294,7 +291,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::array<Microsoft::Xna::Framework::Graphics::SamplerState,
                    Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
             boundVertexSamplers_{};
-        // plans/plan_fx.md FX-083: which of those slots an applied pass has actually assigned. A
+        // FX-083: which of those slots an applied pass has actually assigned. A
         // default-constructed SamplerState is a legitimate value, so "assigned" cannot be inferred
         // from the value -- and an unassigned slot must keep whatever the game selected on the
         // device instead of being overwritten with defaults.

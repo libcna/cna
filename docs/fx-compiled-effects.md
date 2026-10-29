@@ -5,7 +5,10 @@ to load a compiled effect it shipped as content. It covers what the format bound
 load, inspect, apply and clone an effect, which renderer supports it, and how to read every error
 the path can produce.
 
-For the architectural background and the remaining backend rollout, see [`plans/plan_fx.md`](../plans/plan_fx.md).
+The architecture is one renderer-neutral `ICompiledEffectRuntime` per effect: the graphics layer
+owns the reflected XNA object graph and every instance's mutable values, and the renderer owns the
+native shaders, pass application and device-bound resources. The tasks that built it
+(`FX-001`..`FX-147`, 2026-08/10) are in Git history; source comments cite them as "FX-nnn".
 For the difference from the CNAEXT source-based shader API, see
 [`shader-effect-vs-fx-bytecode.md`](shader-effect-vs-fx-bytecode.md). For fuzzing, see
 [`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md).
@@ -24,7 +27,7 @@ The binary is untrusted input. It is bounded at 64 MiB, its reflected object gra
 arithmetic-checked, and every rejection is a specific exception rather than a generic failure.
 
 **Trust boundary.** A coverage-guided fuzz campaign is clean on both FNA3D drivers past the bar
-`plans/plan_fx.md` FX-051 set for it -- over three million executions on OpenGL/GLSL and over two and a
+FX-051 set for it -- over three million executions on OpenGL/GLSL and over two and a
 half million on SDL_GPU/SPIR-V, under AddressSanitizer with asserts fatal, no new crash. Getting
 there fixed forty-one distinct ways untrusted bytecode crashed the process.
 
@@ -34,6 +37,11 @@ effects with confidence, and treat a user-supplied one as untrusted input that h
 harder to weaponise rather than as safe.
 [`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md) records what the bound covers and what it does
 not.
+
+**Standing decisions, not gaps.** CNA embeds no HLSL compiler, reads no MonoGame MGFX, and never
+translates a compiled effect into a `ShaderEffect`. A `.fx` source is compiled by the XNA/FNA
+toolchain first; CNA's content pipeline can drive such an external compiler, but never fakes a
+compile by embedding source text ([`xnb-interoperability.md`](xnb-interoperability.md)).
 
 ## 2. Loading
 
@@ -202,7 +210,7 @@ pixel and compares it against the texel the requested sampler state selects. Add
 from coordinates outside `[0,1]` with two probes per axis, so `Wrap`, `Clamp` and `Mirror` have
 three distinct signatures; the filter check samples a quarter of the way between two texel centres,
 away from any boundary; `MaxMipLevel` and the LOD bias are checked against a mipmapped texture whose
-levels are different colours (`plans/plan_fx.md` FX-093). The cube/volume contract proves the
+levels are different colours (FX-093). The cube/volume contract proves the
 dimensioned paths.
 
 `MipMapLevelOfDetailBias` has no OpenGL ES equivalent at all -- `GL_TEXTURE_LOD_BIAS` is a desktop
@@ -215,7 +223,7 @@ carries an explicit level: there the bias is added to that level in the generate
 [`sampler-state-support.md`](sampler-state-support.md)).
 
 `AddressW` is carried through the renderer-neutral contract by
-`IGraphicsRenderer::ApplySamplerAddressW` (`plans/plan_fx.md` FX-026). FNA3D, EasyGL, SDL_GPU and
+`IGraphicsRenderer::ApplySamplerAddressW` (FX-026). FNA3D, EasyGL, SDL_GPU and
 WebGPU apply it; SDL_GPU and WebGPU prove it on a volume texture through the shared
 `RunCompiledEffectAddressWContract`. It only matters for volume textures.
 
@@ -259,7 +267,7 @@ shared.
 | EasyGL family (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (off by default) | MojoShader's OpenGL adapter; passes the full shared contract, including multi-stream and instanced draws |
 | `WEBGPU` | **true** | `CNA_WEBGPU_COMPILED_EFFECTS` (off by default) | CNA's MojoShader SPIR-V binding, translated to WGSL for the browser (`plans/plan_webgpu.md` WEBGPU-167, WEBGPU-203/204) |
 | `SOFTWARE` | **true** | `CNA_SOFTWARE_COMPILED_EFFECTS` (off by default) | The CPU executor runs the shared public contract (`plans/plan_software.md` SOFTWARE-162/165) |
-| `DIRECTX9` | **true** | `CNA_DIRECTX9_COMPILED_EFFECTS` (off by default) | Native D3D9 shader tokens from the effect; MojoShader only for the container and reflection (`plans/plan_fx.md` FX-070) |
+| `DIRECTX9` | **true** | `CNA_DIRECTX9_COMPILED_EFFECTS` (off by default) | Native D3D9 shader tokens from the effect; MojoShader only for the container and reflection (FX-070) |
 | every other renderer identity | false | — | No compiled-effect runtime, or no programmable shader target at all |
 
 EasyGL selects the MojoShader source dialect from the renderer instance that owns the GL context:
@@ -291,9 +299,12 @@ non-filtering layouts for point-sampled float32 textures; its native and WGSL ro
 same pixel oracle. The museum's `fx-compiled` room confirms both on RADV (2026-10-25); the exact
 repair evidence is in Git history (`git show 9d49828f4:CNA_MUSEUM_REPAIR_HANDOFF.md`).
 A **compiled-Effect-specific** limitation is one
-the renderer supports elsewhere but this draw route cannot preserve. `plans/plan_fx.md` section
-10.5 is the authoritative per-renderer table. In particular, cube sampling is no longer a
-limitation: FNA3D, SDL_GPU and EasyGL all pass the compiled cube-sampler contract.
+the renderer supports elsewhere but this draw route cannot preserve; it is a debt of the
+compiled-effect work, and its refusal must say so rather than imply the renderer cannot do it.
+Neither kind is ever a silent fallback, a substituted texture, an ignored state or an ignored pass.
+§11 lists the refusals a supported backend still makes. Cube and volume sampling are no longer
+among them: FNA3D, SDL_GPU and WebGPU pass the shared cube/volume contract, and EasyGL's GLSL ES
+profiles accept a volume sampler since FX-143.
 
 Running EasyGL's Shader Model 1-3 sections on the MojoShader SPIR-V route (Apple M4
 AM4-144) found silent wrong-pixel defects shared by every SPIR-V backend, all fixed for `SDL_GPU`
@@ -308,8 +319,6 @@ with no attachment becomes a private variable, which Vulkan's validation layer o
 and on WebGPU, whose viewport cannot leave its attachment, the vertex stage's clip position moves
 by XNA's pixel-centre correction (SDL_GPU moves the viewport, as FNA3D's SDL_GPU driver does).
 ps_1_4 `BEM` stays refused by name: the SPIR-V profile has no implementation of it.
-`plans/plan_fx.md` Phase G tracks the rollout, and its own section 10.3 -- not the one below, which
-belongs to this page -- classifies every renderer identity.
 
 ### What "passes the shared contract" means
 
@@ -349,6 +358,12 @@ stream, applied the wrong pass, or dropped the pass's sampler state produces a d
 instead of passing quietly. `RunCompiledEffectContract`'s own doc comment carries the authoritative
 list of the drawing sections a backend must run; this table is a description of what they mean, not
 a second copy of the list.
+
+**Promotion rule.** A backend reports `CompiledEffects == true` only after it has run every section
+through the public `Effect`/`GraphicsDevice` API on a real device. Parsing the bytecode or producing
+shader text proves nothing on its own, and no backend is written blind behind the capability. A
+section a backend cannot run skips on its own named refusal, never on silence or on a capability
+that does not describe the shape.
 
 ### 10.1 Depth convention on EasyGL
 
@@ -435,7 +450,7 @@ CNA therefore translates fragment shaders at `highp`
 (libcna/mojoshader `fragment-precision`). GLSL ES 3.00 requires fragment
 `highp`, so `WEBGL2`, `OPENGLES3` and the desktop GL profile get it unconditionally.
 
-Found on `NormalMappingSample_4_0` (`plans/plan_fx.md` FX-121).
+Found on `NormalMappingSample_4_0` (FX-121).
 
 ### 10.4 Vertex colour output clamping in the GLSL profiles
 
@@ -462,7 +477,7 @@ for every GLSL profile, desktop and ES alike: at the end of `main()`, or, when a
 ends `main()` ahead of its subroutines, in an epilogue function defined once every colour register
 those subroutines write is known.
 
-Found on `PerPixelLightingSample_4_0` (`plans/plan_fx.md` FX-122). The tell was that red and
+Found on `PerPixelLightingSample_4_0` (FX-122). The tell was that red and
 green matched the original exactly and only blue differed, and only where blue would exceed 1.
 
 ## 11. Error guide
@@ -478,9 +493,9 @@ green matched the original exactly and only blue differed, and only where blue w
 | `Shader parameter not found in effect.` | `std::runtime_error` | A shader's constant table names a parameter the effect does not declare |
 | `unsupported render state <n>` / `unsupported sampler state <n>` | `std::runtime_error` | A token CNA does not translate; report it with the effect that produced it |
 | `Border and MirrorOnce sampler addressing are not representable...` | `std::runtime_error` | Addressing mode outside XNA 4.0 |
-| A backend/profile-specific `Texture3D`/`sampler3D` refusal | `NotSupportedException` | Volume sampling remains renderer/profile-dependent; cube sampling is supported by every compiled-Effect backend (`plans/plan_fx.md` FX-110) |
+| A backend/profile-specific `Texture3D`/`sampler3D` refusal | `NotSupportedException` | Volume sampling remains renderer/profile-dependent; cube sampling is supported by every compiled-Effect backend (FX-110) |
 | `...samples slot N, but no texture is bound there.` | `NotSupportedException` | The effect's texture parameter was never assigned, and nothing was selected on `GraphicsDevice.Textures` |
-| A vertex-stage texture sampling refusal | `NotSupportedException` | Check the selected renderer's compiled-effect path; this is no longer a universal CNA limitation (`plans/plan_fx.md` FX-109 and the museum B8 repair) |
+| A vertex-stage texture sampling refusal | `NotSupportedException` | Check the selected renderer's compiled-effect path; this is no longer a universal CNA limitation (FX-109 and the museum B8 repair) |
 | `...cannot run after the GL context was recreated...` | `NotSupportedException` | EasyGL only: a compiled draw reached the renderer before it had restored its MojoShader state for a recreated GL context. Recovery rebuilds every live compiled effect from its retained bytecode, values, textures and technique (FX-107), so this is a draw issued between the loss and that recovery |
 | `...cannot sample the RenderTarget2D it is drawing into.` | `NotSupportedException` | EasyGL only: reading and writing one target in a single draw, which is undefined in XNA too |
 | Any of the above while loading an asset | `ContentLoadException` | Same cause, wrapped with the asset name |
@@ -564,5 +579,5 @@ What the numbers say:
 **Decision on the immutable artifact cache:** not justified. The expensive step is native shader
 translation during construction, and `Clone()` already reuses it without sharing any mutable value,
 texture, selected technique or pass state. A bytecode-keyed cache would add cross-instance sharing
-risk for a case the existing API already covers. `plans/plan_fx.md` FX-053 records this as decided, to be
+risk for a case the existing API already covers. FX-053 records this as decided, to be
 revisited only if a real port shows repeated construction of identical bytecode in a hot path.

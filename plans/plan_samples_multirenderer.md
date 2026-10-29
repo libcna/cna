@@ -231,7 +231,7 @@ changed the authentic `CnaConformanceEffect.fxb` pixel from the established FNA-
 The independent managed-FNA reflection and pixel oracles prove this is not an implementation gap
 that CNA may silently reinterpret: FNA 26.5 reads the same compiled bytes with the pinned parser's
 zero-element non-array behavior, and the project already documents CNA's one deliberate public
-member-offset divergence in `plans/plan_fx.md`.
+member-offset divergence in `docs/xna-fna-behavior-decisions.md`.
 
 The parser change was therefore discarded.  The synthetic expectation and its misleading fixture
 comment now describe the existing FNA/MojoShader storage contract: `Intensity` is `0.5`, CNA's

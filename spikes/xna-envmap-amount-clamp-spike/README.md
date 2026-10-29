@@ -11,7 +11,7 @@
 *before* interpolation, so the pixel stage's `lerp(color, envmap, Specular.rgb)` should **replace**
 with the environment map rather than extrapolate past it.
 
-`plans/plan_fx.md` FX-123 established that saturation against real XNA frames — but for the *lit*
+FX-123 established that saturation against real XNA frames — but for the *lit*
 programs' `oD0`/`oD1`. This probe asks the same question of the env-map factor directly, on the
 effect that carries it, so the fix rests on a measurement of its own subject.
 

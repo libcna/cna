@@ -2,7 +2,7 @@
 //
 // plans/plan_webgpu.md WEBGPU-167..171: the WebGPU compiled-effect runtime.
 //
-// This backend has no MojoShader-provided adapter (`plans/plan_fx.md` `FX-065`): the
+// This backend has no MojoShader-provided adapter (`FX-065`): the
 // nine-function effect context, the constant register files and the uniform packing are all code in
 // this repository, so they need their own evidence rather than borrowed trust. It also
 // REWRITES the emitted SPIR-V -- WGSL has no combined image sampler -- so the tests that matter most
@@ -168,7 +168,7 @@ TEST(WebGPUCompiledEffectTest, EveryPassOfTheRealXna4GameEffectsCreatesBothShade
     GraphicsDevice device;
     if (RendererOf(device) == nullptr)
         GTEST_SKIP() << "this build did not select the WebGPU renderer";
-    // plans/plan_fx.md FX-134. Until the two ps_1_x linker patches landed, six of the eighteen
+    // FX-134. Until the two ps_1_x linker patches landed, six of the eighteen
     // passes across these two fixtures produced a fragment module wgpu refused with
     // "Multiple bindings at location 1 are present" -- so this suite could claim parse and
     // reflection only. It can now claim the thing that matters: EVERY pass links and creates both
@@ -439,7 +439,7 @@ TEST(WebGPUCompiledEffectDrawTest, SharedManyDrawsContract)
     GraphicsDevice device;
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
-    // plans/plan_fx.md FX-112: 600 compiled draws, which on this renderer means 600 transient
+    // FX-112: 600 compiled draws, which on this renderer means 600 transient
     // uniform-buffer acquisitions crossing the pool's recycle point (WEBGPU-12/59).
     CNA::TestSupport::RunCompiledEffectManyDrawsContract(device);
 }

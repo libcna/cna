@@ -197,7 +197,7 @@ replaced the renderer descriptor's `prepareWindowFlags` hook with static data
 (`windowKind = OpenGL`, `glFramebuffer = 24/8/double`), which is the right shape for the window's
 visual -- CNA states those requirements through `WindowDescription` and the platform applies them.
 What went with the hook, unnoticed, was the only production call to
-`FNA3D_PrepareWindowAttributes()`, and from then until `plans/plan_fx.md` FX-090 **no FNA3D device could
+`FNA3D_PrepareWindowAttributes()`, and from then until FX-090 **no FNA3D device could
 be created at all**: every test failed at `GraphicsDevice device;`.
 
 `Fna3dRenderer`'s constructor now calls it before `FNA3D_CreateDevice`. The GL attributes it also

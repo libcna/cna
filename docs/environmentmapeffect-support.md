@@ -138,7 +138,7 @@ in narrow isolation but compose correctly when combined in one scene.
 game can hand the shader a value above 1. XNA still renders it as 1, and the reason is not in the
 effect at all: the factor is written to `vout.Specular.rgb` (`ComputeEnvMapVSOutput`), and
 `Structures.fxh:156` declares that member `Specular : COLOR1`, so **Direct3D 9 saturates it before
-interpolation** — the same `oD0`/`oD1` rule `plans/plan_fx.md` FX-123 measured for the lit programs.
+interpolation** — the same `oD0`/`oD1` rule FX-123 measured for the lit programs.
 
 **Measured on the real XNA 4.0 runtime**, not inferred from the semantic:
 `spikes/xna-envmap-amount-clamp-spike/`, a quad with a `(60,60,60)` base texture and a

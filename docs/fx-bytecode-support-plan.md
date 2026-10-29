@@ -1,7 +1,7 @@
 # Plan: XNA compiled effect (`.fx`) bytecode support
 
 > Historical design record. This document's original dependency and backend assumptions were
-> superseded by [`plans/plan_fx.md`](../plans/plan_fx.md). The implemented FNA3D contract and current format/
+> superseded by the compiled-effect plan (`FX-nnn`; deleted 2026-10-29, Git history). The implemented FNA3D contract and current format/
 > renderer matrix are documented in
 > [`shader-effect-vs-fx-bytecode.md`](shader-effect-vs-fx-bytecode.md); do not use the milestones
 > below as current implementation status.
@@ -100,7 +100,7 @@ WebGPU renderer (Phases 56–69), which is why it gets its own dedicated phase a
 ## Phase 74 task breakdown
 
 The original task list was graphics Phase 74 (Tasks 10200–10208); its rows are superseded by
-[`plans/plan_fx.md`](../plans/plan_fx.md) and survive in Git history. Summary:
+the compiled-effect plan's `FX-nnn` tasks, and both survive in Git history. Summary:
 
 1. Vendor MojoShader as a `third_party/mojoshader` submodule + `cmake/ThirdPartyMojoShader.cmake`
    + `THIRD_PARTY_NOTICES.md` entry.
