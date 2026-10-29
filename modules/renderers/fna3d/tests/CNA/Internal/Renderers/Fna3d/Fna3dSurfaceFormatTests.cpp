@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_fna3d.md FNA3D-19: GTest coverage for the FNA3D renderer's transfer byte arithmetic.
+// FNA3D-19: GTest coverage for the FNA3D renderer's transfer byte arithmetic.
 //
 // This is the arithmetic that decides how many bytes reach FNA3D_SetTextureData2D and come back
 // from FNA3D_GetTextureData2D. Before it existed the renderer assumed `width * height * 4` for

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_fna3d.md FNA3D-28/29: the two buffer claims FNA3D-9 made without a behaviour test behind
+// FNA3D-28/29: the two buffer claims FNA3D-9 made without a behaviour test behind
 // them.
 //
 // FNA3D-28 -- `MultiStreamVertexInput` is reported **true** by this renderer, and until now the

@@ -177,7 +177,13 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   perf-only `ASCII-42` was not carried forward as active work. Current behavior and migration
   commits are in [`../docs/ascii-post-process-effect.md`](../docs/ascii-post-process-effect.md).
 - [`plan_glbackends.md`](plan_glbackends.md) — OpenGL backend restructuring.
-- [`plan_fna3d.md`](plan_fna3d.md) — FNA3D renderer integration.
+- `plan_fna3d.md` — the FNA3D renderer (`FNA3D-0`..`FNA3D-63`, 2026-08/10): every task closed
+  except `FNA3D-34`'s native Direct3D 11 and macOS/iOS runs, which need hardware this host does
+  not have; deleted on 2026-10-29 (Git history only). The renderer, its divergences from XNA,
+  its unreachable FNA3D entry points and its validation status, the open driver matrix
+  included, are [`../docs/fna3d-renderer.md`](../docs/fna3d-renderer.md); the XNA oracle
+  measurement is [`../docs/fna3d-parity-report.md`](../docs/fna3d-parity-report.md). Comments
+  cite rows as "FNA3D-nn".
 - [`plan_fx.md`](plan_fx.md) — compiled XNA effect bytecode.
 
 ## Graphics backends and renderers

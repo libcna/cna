@@ -4,7 +4,7 @@
 real XNA 4.0 reference images (`tools/xna-oracle/reference/*.png`), same `scripts/xna-diff.py`
 tolerance-0 comparison the D3D9 (`D9-A6`), EasyGL and OpenGLES1 (retired 2026-09-17,
 `OPENGLES1-78`) measurements
-already use — now also run through the FNA3D renderer (`plans/plan_fna3d.md` FNA3D-26).
+already use — now also run through the FNA3D renderer (FNA3D-26).
 
 Run: `scripts/run-oracle-corpus-diff-fna3d.sh ./cmake-build-fna3d/cna_oracle_render_fna3d`,
 Linux / Xvfb / Mesa 25.2.8 llvmpipe, `FNA3D_FORCE_DRIVER=OpenGL`.

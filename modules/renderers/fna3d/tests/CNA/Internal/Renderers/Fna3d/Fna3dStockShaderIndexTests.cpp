@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_fna3d.md FNA3D-15: GTest coverage for the FNA3D renderer's shader-variant selection.
+// FNA3D-15: GTest coverage for the FNA3D renderer's shader-variant selection.
 //
 // FNA3D executes XNA's actual compiled stock effects, each of which carries exactly one technique
 // with one pass; the shader variant is chosen by an `int ShaderIndex` parameter that the effect's

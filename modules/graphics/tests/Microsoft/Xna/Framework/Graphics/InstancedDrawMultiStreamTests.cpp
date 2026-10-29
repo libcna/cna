@@ -2524,7 +2524,7 @@ TEST_F(InstancedDrawMultiStreamTest, UnsupportedRendererRejectsMixedStreamInstan
     }
     else if (CNA_RENDERER_IS(Fna3d))
     {
-        // A FIFTH measured outcome (plans/plan_fna3d.md): this renderer claims MultiStreamVertexInput
+        // A FIFTH measured outcome (docs/fna3d-renderer.md): this renderer claims MultiStreamVertexInput
         // because several PER-VERTEX streams genuinely re-slot -- FNA3D_ApplyVertexBufferBindings
         // takes an array of per-stream declarations natively. Its instancing boundary moved when
         // plans/plan_fx.md's compiled-effect support landed: FNA3D now issues a real instanced draw when

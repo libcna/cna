@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_fna3d.md FNA3D-27a: regression coverage for the `float4x3` parameter packing.
+// FNA3D-27a: regression coverage for the `float4x3` parameter packing.
 //
 // This is the arithmetic that puts SkinnedEffect's bone palette into the shader. It shipped wrong
 // and no test caught it, because the failure mode is invisible to every obvious check: a wrongly

@@ -239,6 +239,11 @@ fixed from the descriptor's own request.
   SDL_GPU drivers (`FNA3D-52` / `MSR-019`). `NormalizedByte2` is stored as `NormalizedByte4` with B
   and A at +1, so every driver samples Direct3D 9's (R, G, 1, 1) -- no FNA3D driver swizzles, and
   its SDL_GPU driver samples RG8 SNORM as (R, G, 0, 1) (`AM4-193`).
+- `Texture3D::GetData` where the driver has no volume readback -- FNA3D's OpenGL driver
+  implements no `GetTextureData3D` -- is served from a CPU mirror of the uploads, kept only where
+  a 1×1×1 probe at device creation finds the readback missing. XNA's volume textures have no GPU
+  write path, so the mirror is exact; it records which voxels were supplied and refuses a read
+  that includes one that was not, leaving the destination untouched (FNA3D-38).
 - `RenderTarget2D` and `RenderTargetCube`: MSAA colour renderbuffers with resolve-on-unbind, mip
   generation, per-target depth/stencil renderbuffers, `PreserveContents`, MRT sets, readback.
 - Vertex and index buffers (16- and 32-bit) with `SetDataOptions` forwarded verbatim, growing the
@@ -246,7 +251,9 @@ fixed from the descriptor's own request.
   growth allocates the replacement first, so one that fails keeps the buffer, its contents and
   its index width.
 - The caller's own `VertexDeclaration` bound verbatim per stream; a stride-keyed table stands in
-  only for the internal routes that bind no public buffer (SpriteBatch, `DrawUser*`).
+  only for the internal routes that bind no public buffer (SpriteBatch, `DrawUser*`). Binding a
+  draw allocates nothing: bindings and declarations use fixed storage bounded by the 16-stream
+  ceiling, and oversized input is refused (FNA3D-36).
 - Blend / depth-stencil / rasterizer / sampler state, colour write masks, multisample mask, blend
   factor, standalone reference stencil, scissor and viewport.
 - XNA/D3D9 integer pixel centres for ordinary triangle draws across FNA3D's OpenGL, SDL_GPU and
@@ -257,7 +264,9 @@ fixed from the descriptor's own request.
   tint, source rectangles, rotation about a scaled origin, both flips, layer depth, sampler filter
   and address modes, Immediate flushing; large batches are split at 16,384 quads before their
   16-bit indices can wrap, and deferred texture renderers are retained through backend `End` so
-  queued submissions cannot dangle.
+  queued submissions cannot dangle. Sprites are submitted with culling off -- their fixed winding
+  has nothing to do with the game's `RasterizerState.CullMode`, and XNA's 2D pipeline is not culled
+  in practice -- and the tracked rasterizer state is restored straight after.
 - 3D through the stock effects, rigid/skinned metallic-roughness PBR extensions, and
   caller-supplied compiled effects. Hardware instancing is available only to a compiled vertex
   shader declaring the instance inputs.
@@ -350,7 +359,7 @@ mipmapped `Texture2D` does the same. CNA reports it rather than working around i
 | Existence-gate spikes | **Performed** — `fna3d-spike/` |
 | SDL_GPU driver | **Exercised on AMD Radeon 780M / RADV**: the 13 registered FNA3D renderer executables, compiled-effect contracts and XNA oracle complete as a 66-test selection with 65 passes plus one intentional Reach-profile skip. The Linux sample corpus and focused pixel-centre/SpriteBatch contracts also run through this default driver. |
 | Direct3D 11 driver | **Cross-build only**: the patched driver and seven-renderer sample executable compile with MinGW-w64. No native Windows GPU execution has occurred, so runtime qualification remains an external gate. |
-| Driver matrix (`plans/plan_fna3d.md` FNA3D-34) | **Open only on native D3D11 execution.** OpenGL and SDL_GPU each complete the same 66-test renderer/compiled-effect/oracle selection (65 pass plus one intentional profile skip), and each visually restores `PrimitivesSample`'s one-pixel geometry. Driver-dependent readback/query behaviour still must not be conflated. |
+| Driver matrix (FNA3D-34) | **Open only on native D3D11 execution.** OpenGL and SDL_GPU each complete the same 66-test renderer/compiled-effect/oracle selection (65 pass plus one intentional profile skip), and each visually restores `PrimitivesSample`'s one-pixel geometry. Driver-dependent readback/query behaviour still must not be conflated. |
 | macOS / iOS | Not exercised. External gate. |
 
 ## Tests

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_fna3d.md FNA3D-16: GTest coverage for the FNA3D renderer's presentation geometry.
+// FNA3D-16: GTest coverage for the FNA3D renderer's presentation geometry.
 //
 // FNA3D presents through FNA3D_SwapBuffers(device, sourceRect, destinationRect, window), so CNA's
 // presentation modes are expressed directly as a destination rectangle rather than through a

@@ -1,4 +1,4 @@
-# plans/plan_fna3d.md: the FNA3D renderer draws through FNA3D (fetched and pinned by
+# docs/fna3d-renderer.md: the FNA3D renderer draws through FNA3D (fetched and pinned by
 # cmake/ThirdPartyFNA3D.cmake), which itself dispatches onto SDL_GPU, Direct3D 11 or OpenGL at
 # runtime. SDL3 supplies the window FNA3D presents into -- the same window every other windowed
 # renderer uses; FNA3D's own only dependency is that same SDL3.

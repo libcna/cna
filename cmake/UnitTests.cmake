@@ -443,7 +443,7 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Devices/Detail/DevicesShutdownOrderingTests\\.cpp$")
     endif()
 
-    # plans/plan_fna3d.md: the FNA3D renderer's own GTest suites live under
+    # docs/fna3d-renderer.md: the FNA3D renderer's own GTest suites live under
     # modules/renderers/fna3d/tests/ and include the renderer's headers, which resolve only when
     # the FNA3D renderer is configured (the FNA3D/MojoShader include roots come with the renderer
     # target). Excluded from every other renderer's corpus -- an unconditional glob of a
@@ -1286,7 +1286,7 @@ if(CNA_BUILD_TESTS)
     if(CNA_AUDIO_PLATFORM STREQUAL "ALSA")
         list(APPEND _cna_unit_tests_environment "CNA_AUDIO_DEVICE=null" "CNA_AUDIO_RECORDING_DEVICE=null")
     endif()
-    # plans/plan_fna3d.md FNA3D-53: the module-local renderer examples receive this selection
+    # FNA3D-53: the module-local renderer examples receive this selection
     # directly in their own directory, but PRE_TEST-discovered CnaTests cases do not exist yet and
     # cannot inherit those properties. Give the compiled-effect/unit lane the same explicit FNA3D
     # driver so a 66-test qualification cannot silently exercise a different internal backend.

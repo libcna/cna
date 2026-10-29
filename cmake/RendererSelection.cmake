@@ -28,7 +28,7 @@ option(CNA_RENDERER_STUB "Enable Stub (no-op) graphics renderer" OFF)
 option(CNA_RENDERER_DIRECTX9 "Enable Direct3D 9 graphics renderer (Windows only)" OFF)
 option(CNA_RENDERER_SDL_GPU "Enable SDL_gpu graphics renderer" OFF)
 
-# plans/plan_fna3d.md: FNA3D (https://github.com/FNA-XNA/FNA3D) -- the XNA-shaped C graphics library FNA
+# docs/fna3d-renderer.md: FNA3D (https://github.com/FNA-XNA/FNA3D) -- the XNA-shaped C graphics library FNA
 # itself renders through. It names a portable middleware layer rather than one native API: FNA3D picks SDL_GPU, Direct3D 11 or OpenGL at RUNTIME (overridable
 # with the FNA3D_FORCE_DRIVER SDL hint). Shaders are Direct3D 9 Effect Framework binaries executed
 # through MojoShader -- FNA3D has no other shader entry point at all, so the stock-effect blobs are

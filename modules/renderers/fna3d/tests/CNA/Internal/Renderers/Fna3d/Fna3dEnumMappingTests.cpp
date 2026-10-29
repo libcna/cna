@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_fna3d.md FNA3D-17: GTest coverage for the XNA-ordinal to FNA3D-enumerator bridge and for
+// FNA3D-17: GTest coverage for the XNA-ordinal to FNA3D-enumerator bridge and for
 // the stride-keyed vertex layout table.
 //
 // Most FNA3D ordinals match Microsoft XNA. BlendFunction::Min and Max are reversed in FNA3D,

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_fna3d.md FNA3D-4: the vertical-slice proof for the FNA3D graphics renderer -- selection,
+// FNA3D-4: the vertical-slice proof for the FNA3D graphics renderer -- selection,
 // device creation, resource creation, real rendering, readback oracle and teardown, all in one
 // process running entirely under CNA_GRAPHICS_RENDERER=FNA3D.
 //

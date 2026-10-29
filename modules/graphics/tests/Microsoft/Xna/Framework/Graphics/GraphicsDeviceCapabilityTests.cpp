@@ -78,7 +78,7 @@ struct CapabilityExpectation
     using CNA::GraphicsRendererType;
     switch (CNA::GraphicsRendererSelection::GetSelected())
     {
-        // plans/plan_fna3d.md: FNA3D's only shader entry point is FNA3D_CreateEffect, which takes a
+        // docs/fna3d-renderer.md: FNA3D's only shader entry point is FNA3D_CreateEffect, which takes a
         // *compiled* Direct3D 9 Effect Framework binary and runs it through MojoShader; nothing in
         // the library compiles a GLSL/HLSL source string, which is what
         // IEffectRenderer/CreateEffectRenderer is handed. The false is therefore structural, not
