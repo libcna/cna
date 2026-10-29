@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnb.md XNB-18B/XNB-18C: unit tests for the Decimal/DateTime/TimeSpan .xnb readers.
+// XNB-18B/XNB-18C: unit tests for the Decimal/DateTime/TimeSpan .xnb readers.
 
 #include <any>
 #include <gtest/gtest.h>

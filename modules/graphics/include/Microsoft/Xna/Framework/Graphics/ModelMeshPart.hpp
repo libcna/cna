@@ -176,7 +176,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * CNAEXT: real XNA's `ModelMeshPart.VertexOffset` setter is content-pipeline-only
          * (`internal set`) rather than a public game-facing API; the content pipeline is the only
-         * real caller (plans/plan_xnb.md XNB-38's `ModelReader`), so this stays a CNAEXT-marked method
+         * real caller (XNB-38's `ModelReader`), so this stays a CNAEXT-marked method
          * rather than a bare public setter.
          * @param value The new vertex offset.
          */

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnb.md XNB-34: unit tests for SongReader's own behavior (registration, extension-probing
+// XNB-34: unit tests for SongReader's own behavior (registration, extension-probing
 // fallback) -- see SongContentManagerXnbTests.cpp for the full end-to-end test through
 // ContentManager against a real fixture.
 

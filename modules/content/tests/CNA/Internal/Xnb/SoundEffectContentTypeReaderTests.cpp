@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnb.md XNB-33/XNB-33A + audio AUD-06 (2026-07-17 deep audit): SoundEffectReader
+// XNB-33/XNB-33A + audio AUD-06 (2026-07-17 deep audit): SoundEffectReader
 // support-matrix survey + reader unit tests. Real, externally-produced fixtures (MonoGame's own
 // Tests/Assets/Audio/tone_*.xnb, vendored at tests/assets/xnb/monogame/windows/uncompressed/audio/)
 // cover every WaveFormatEx variant this matrix cares about -- never hand-crafted, since a

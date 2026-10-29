@@ -7,7 +7,7 @@
 
 // MEDIA-70: VideoReader -- see SongContentTypeReader.hpp's own note on why this
 // lives in CNA::Internal::Xnb (FNA's VideoReader is `internal class`, never subclassed by game
-// code). No CNA equivalent existed before this task; plans/plan_xnb.md never planned one either.
+// code). No CNA equivalent existed before this task; the XNB reader plan never planned one either.
 
 namespace CNA::Internal::Xnb
 {

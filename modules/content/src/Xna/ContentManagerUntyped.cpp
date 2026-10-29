@@ -151,7 +151,7 @@ namespace Microsoft::Xna::Framework::Content
             case CNA::Internal::Xnb::XnbCompression::Lz4:
                 throw ContentLoadException(
                     "'" + xnbPath + "' uses MonoGame's Lz4 compression, which CNA does not yet "
-                    "support (plans/plan_xnb.md XNB-30C).");
+                    "support (XNB-30C).");
             case CNA::Internal::Xnb::XnbCompression::Unknown:
             default:
                 throw ContentLoadException(

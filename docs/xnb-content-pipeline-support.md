@@ -2,9 +2,9 @@
 
 Covers CNA's real, binary-`.xnb`-compatible content loader (`Microsoft::Xna::Framework::Content::
 ContentManager`/`ContentReader`/`ContentTypeReaderManager`, plus the individual readers under
-`CNA::Internal::Xnb`) — the closing documentation task for `plans/plan_xnb.md`'s Phase G (XNB-45),
-written once Phase A through Phase G's other tasks (XNB-42/42A/43/44/46) had landed. See
-`plans/plan_xnb.md` for the full, numbered task history.
+`CNA::Internal::Xnb`) — the closing documentation task of the XNB reader work's Phase G (XNB-45),
+written once Phase A through Phase G's other tasks (XNB-42/42A/43/44/46) had landed. The numbered
+task history (`XNB-*`) is in Git history.
 
 A `.xnb` file is not a source asset in a wrapper. It is the XNA Content Pipeline's serialized object
 graph: a table of type readers, then a root object, then shared resources that earlier nodes refer
@@ -57,7 +57,7 @@ below) — both need their own explicit registration.
 | Math (`Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `Plane`, `Point`, `Rectangle`, `BoundingBox`, `BoundingSphere`, `BoundingFrustum`, `Ray`) | ✅ Full | |
 | `Decimal`/`DateTime`/`TimeSpan` | ✅ Full | Faithful field-for-field decoding, not a lossy `double` shortcut |
 | `Curve` | ✅ Full | |
-| `Texture2DReader` | ✅ all 20 classic XNA formats | All 17 uncompressed formats preserve the serialized format and exact mip bytes. DXT1/3/5 blocks stay compressed when the active renderer supports exact compressed transfer; other renderers losslessly software-decompress them to `Color`, matching FNA's backend-capability fallback |
+| `Texture2DReader` | ✅ all 20 classic XNA formats | All 17 uncompressed formats preserve the serialized format and exact mip bytes. DXT1/3/5 blocks stay compressed when the active renderer supports exact compressed transfer; other renderers losslessly software-decompress them to `Color`, matching FNA's backend-capability fallback. A non-power-of-two DXT texture under Reach takes the same `Color` path: the genuine Platformer `Fonts/Hud.xnb` is a 128×132 Dxt3 atlas that XNA loads under Reach, while the public `Texture2D` constructor still refuses Reach NPOT DXT (`SAMPLE-013`) |
 | `Texture3DReader` | ✅ all 15 legal XNA HiDef volume formats | Preserves the serialized uncompressed format and each mip's exact bytes; DXT1/3/5 are correctly refused because XNA excludes compressed volume textures. No real fixture exists anywhere in the available test-asset library (volume textures are rare in real XNA content), so all formats and a depth-dominant chain are verified through hand-constructed streams matching FNA's exact field order |
 | `TextureCubeReader` | ✅ all 18 XNA-permitted cube formats | Preserves the 15 legal uncompressed formats and exact face/mip bytes; `NormalizedByte2/4` are rejected because XNA excludes them from ordinary cubes. DXT1/3/5 use the same exact-transfer-or-Color-fallback policy as 2D. A real MonoGame fixture covers all 6 faces and a full DXT1 mip chain, including sub-4×4 block rounding |
 | `SpriteFontReader` | ✅ Full | Depends on `Texture2DReader` and 3 closed generic-collection readers (see below) |
@@ -287,6 +287,25 @@ allocation both methods used to make directly from an attacker-controlled length
 closing an allocation-bomb vector (a single 5-byte 7-bit-encoded prefix can declare up to ~2GB)
 without changing either method's observable behavior for any valid input.
 
+## Content manifest (CNAEXT)
+
+`ContentManager` can describe what its content root holds, for tools such as asset validators or an
+editor's content view. None of this is XNA API.
+
+* `RefreshContentManifest()` scans the root and rebuilds the manifest. It is not called by the
+  constructor; the first `GetContentManifest()` or `GetXnbReaderUsageSummary()` runs it lazily. A
+  scan is a snapshot, with no file watching. CNA's own pipeline bookkeeping (`.cna-content.lock`,
+  `.cna-content-manifest.json`, `.cna-contentproj` intermediate directories) is excluded.
+* `GetContentManifest()` returns one `ContentManifestEntry` per logical asset name (the relative
+  path without its extension): whether a `.xnb` and a `.cnj` exist, every other extension found,
+  and `xnbReaderNames`, the type-reader names the `.xnb`'s reader table lists.
+* `GetXnbReaderUsageSummary()` aggregates those names into one `ContentManifestReaderUsage` row each:
+  how many files use the reader, and whether `ContentTypeReaderManager` has it registered -- the
+  quick answer to "which readers would this content need that the game has not registered".
+
+A malformed `.xnb` is not a scan failure; its entry just has no reader names. Neither, today, has a
+**compressed** one -- see *Known gaps* (`XNB-65`..`XNB-67`).
+
 ## Known gaps / limitations
 
 | Area | Status |
@@ -294,6 +313,7 @@ without changing either method's observable behavior for any valid input.
 | Automatic reflection over an undeclared C++ type | ❌ Not supported by design; implicit `ReflectiveReader<T>` payloads are supported when the game declares their serialized members through `ReflectiveTypeReaderBuilder<T>` |
 | General `EffectReader` on a renderer without `CompiledEffects` | ❌ loading fails with an asset-specific capability diagnostic rather than a silent shader fallback. FNA3D supports it unconditionally; SDL_GPU, the EasyGL family, WEBGPU, SOFTWARE and DIRECTX9 support it behind their compiled-effect build options |
 | LZ4 compression | ✅ MonoGame's raw-block XNB representation is supported; generic LZ4 frames are intentionally not an XNB format |
+| Reader names of a compressed `.xnb` in the content manifest | ❌ `xnbReaderNames` stays empty for an LZX- or LZ4-compressed file, and `GetXnbReaderUsageSummary()` does not count it: the scan reads only an uncompressed type-reader table, although loading decompresses both (`XNB-61b`) |
 | Generic collection readers for an unregistered `T` combination | ❌ Not supported — each closed combination needs its own explicit registration |
 | `SoundEffect` XMA2 and unknown codecs | ❌ Not supported — see the audio support matrix above |
 | Platform identifiers MonoGame added after FNA's fork point (`'b'`/`'5'`/`'O'`/`'S'`/`'V'`) | ❌ Not accepted, matching FNA exactly (deliberate, not an oversight) |

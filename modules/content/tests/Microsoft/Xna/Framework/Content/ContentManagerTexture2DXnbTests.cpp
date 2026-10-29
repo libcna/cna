@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnb.md XNB-23/24/26: end-to-end milestone test -- content.Load<Texture2D>("fixture")
+// XNB-23/24/26: end-to-end milestone test -- content.Load<Texture2D>("fixture")
 // against a real, externally-produced .xnb fixture, going through ContentManager (not a
 // standalone parser call). This is the M2 milestone goal line.
 
@@ -110,7 +110,7 @@ namespace
     void CopyRealFixture(const std::filesystem::path& destDir, const std::string& destName)
     {
         // Real, externally-produced fixture (MonoGame's own Tests/Assets/Textures/white-1.xnb),
-        // vendored at tests/assets/xnb/monogame/windows/uncompressed/ (plans/plan_xnb.md XNB-17A).
+        // vendored at tests/assets/xnb/monogame/windows/uncompressed/ (XNB-17A).
         std::error_code ec;
         std::filesystem::copy_file(
             "tests/assets/xnb/monogame/windows/uncompressed/white-1.xnb",
@@ -180,7 +180,7 @@ TEST_F(ContentManagerTexture2DXnbTest, MissingCultureSuffixedTextureThrowsConten
 
 TEST_F(ContentManagerTexture2DXnbTest, LoadRealLzxCompressedFixtureEndToEnd)
 {
-    // plans/plan_xnb.md XNB-30B: re-runs the same end-to-end milestone as
+    // XNB-30B: re-runs the same end-to-end milestone as
     // LoadRealMonoGameFixtureEndToEnd, but against a real, externally-produced *LZX-compressed*
     // fixture (MonoGame's own Tests/Interactive/MacOS/SoundTest/Content/Explosion.xnb -- despite
     // the name, its root type-reader is Texture2DReader, confirmed by direct inspection).

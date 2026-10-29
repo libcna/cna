@@ -18,7 +18,7 @@
 
 namespace Microsoft::Xna::Framework::Content
 {
-    class ContentReader; // forward declaration -- see ContentReader.hpp (plans/plan_xnb.md XNB-15/16)
+    class ContentReader; // forward declaration -- see ContentReader.hpp (XNB-15/16)
     class ContentTypeReaderManager;
 
     namespace detail
@@ -91,7 +91,7 @@ namespace Microsoft::Xna::Framework::Content
         [[nodiscard]] virtual int getTypeVersionProperty() const { return 0; }
 
         /**
-         * @brief CNAEXT reader-version enforcement (plans/plan_xnb.md XNB-16B) -- FNA has no equivalent
+         * @brief CNAEXT reader-version enforcement (XNB-16B) -- FNA has no equivalent
          * (it never checks the serialized version against `TypeVersion`, only ever parses and
          * discards it). Default "Strict" mode requires an exact match against
          * @ref getTypeVersionProperty(); a reader supporting multiple on-disk versions

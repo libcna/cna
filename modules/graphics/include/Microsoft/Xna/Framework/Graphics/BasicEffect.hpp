@@ -300,7 +300,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * `setTextureProperty(Texture2D*)` stores a non-owning pointer (used by, e.g., a `Model`
          * that owns a shared texture pool across multiple mesh parts); a standalone content-loaded
-         * effect (`content.Load<BasicEffect>()`, plans/plan_xnb.md XNB-32) has no such external owner,
+         * effect (`content.Load<BasicEffect>()`, XNB-32) has no such external owner,
          * so it must keep its own texture reference alive instead.
          *
          * @param texture The texture to take shared ownership of; also becomes the effect's

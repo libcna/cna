@@ -103,7 +103,7 @@ namespace Microsoft::Xna::Framework::Content
         // Populated by RegisterCnjLoader<T>(); consulted by GenericCnjTypeReader<T> below.
         std::unordered_map<std::type_index, std::unordered_map<std::string, std::any>> cnjNamedLoaders_;
 
-        // plans/plan_xnb.md Phase B3 (XNB-65/66/67): a point-in-time snapshot of the content root,
+        // XNB-65/66/67: a point-in-time snapshot of the content root,
         // built lazily on first access (or explicitly via RefreshContentManifest()). Additive
         // only in this pass -- NOT yet consulted by ResolveAssetPath()/Load<T>()'s own
         // exists()-based resolution, which keeps its existing live-filesystem-check behavior
@@ -359,7 +359,7 @@ namespace Microsoft::Xna::Framework::Content
 
         /**
          * @brief CNAEXT: (re)scans the content root and rebuilds the content manifest
-         *        (plans/plan_xnb.md XNB-65/65A), replacing any previous scan. Not called
+         *        (XNB-65/65A), replacing any previous scan. Not called
          *        automatically after construction -- the first call to GetContentManifest()/
          *        GetXnbReaderUsageSummary() triggers it lazily if it hasn't run yet.
          *
@@ -373,9 +373,9 @@ namespace Microsoft::Xna::Framework::Content
         CNAEXT void RefreshContentManifest();
 
         /**
-         * @brief CNAEXT: returns the content manifest (plans/plan_xnb.md XNB-66), one entry per logical
-         *        asset name found under the content root, building it via RefreshContentManifest()
-         *        first if it hasn't been built yet.
+         * @brief CNAEXT: returns the content manifest (XNB-66), one entry per logical asset name
+         *        found under the content root, building it via RefreshContentManifest() first if
+         *        it hasn't been built yet (docs/xnb-content-pipeline-support.md).
          *
          * @return The current manifest snapshot.
          */
@@ -383,7 +383,7 @@ namespace Microsoft::Xna::Framework::Content
 
         /**
          * @brief CNAEXT: aggregates the manifest's per-file `.xnb` reader-name inventories
-         *        (plans/plan_xnb.md XNB-67) into one row per distinct reader name -- how many files
+         *        (XNB-67) into one row per distinct reader name -- how many files
          *        reference it, and whether `ContentTypeReaderManager` currently has a reader
          *        registered for it. Builds the manifest first via GetContentManifest() if needed.
          *
@@ -617,7 +617,7 @@ namespace Microsoft::Xna::Framework::Content
             // be silently shadowed by CNA's own loose-file/.cnj conveniences). Unlike the
             // loose-file path, .xnb dispatch needs no per-T reader registered on ContentManager
             // at all -- root-object dispatch is entirely driven by the file's own type-reader
-            // table via the process-wide ContentTypeReaderManager registry (plans/plan_xnb.md XNB-17B).
+            // table via the process-wide ContentTypeReaderManager registry (XNB-17B).
             //
             // The virtual seam resolves packaged/disk assets or a derived manager's source.
             // Do not swallow an override's refusal, malformed stream, or an actual I/O failure.
@@ -822,7 +822,7 @@ namespace Microsoft::Xna::Framework::Content
 
         /**
          * @brief Loads @p assetName as a real `.xnb` binary asset from @p xnbPath
-         *        (plans/plan_xnb.md XNB-17B), via ContentReader's root-object dispatch. LZX-compressed
+         *        (XNB-17B), via ContentReader's root-object dispatch. LZX-compressed
          *        and MonoGame LZ4 files are decompressed first.
          *
          * @tparam T        Requested asset type; must match (via `std::any_cast`) whatever the

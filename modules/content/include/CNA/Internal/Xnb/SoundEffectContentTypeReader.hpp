@@ -5,7 +5,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 
-// plans/plan_xnb.md XNB-33/XNB-33A: SoundEffectReader -- see PrimitiveContentTypeReaders.hpp's own note
+// XNB-33/XNB-33A: SoundEffectReader -- see PrimitiveContentTypeReaders.hpp's own note
 // on why this lives in CNA::Internal::Xnb (FNA's SoundEffectReader is `internal class`, never
 // subclassed by game code).
 

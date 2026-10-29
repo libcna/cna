@@ -387,6 +387,11 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   ignore the factors (not measured). Found by SDL_GPU's blend-equation oracle (`SDLGPU-58`,
   formerly `EASYGL-PARITY-1`, 2026-09-10); SDL_GPU evaluates the equation correctly, and EasyGL
   has no regression leg for it yet.
+- An LZ4-compressed `.xnb` reached through a type-erased external reference fails to load:
+  `ContentManager::LoadXnbAssetUntyped` (`ContentManagerUntyped.cpp`) still throws "uses MonoGame's
+  Lz4 compression, which CNA does not yet support", while the typed path decodes LZ4 since
+  `CP-047` (`XnbCanonicalAsset.cpp`). Its LZX branch also skips the typed path's truncation check
+  and decompression limits. Found by reading on 2026-10-29; not yet pinned by a test.
 
 ### 5.2 Limitations
 
@@ -532,6 +537,10 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   transforms keep an ulp-level residue that grows with depth, inside the float tolerance
   (`XNASWEEP-228`..`232`); and `MeshHelper.OptimizeForCache`'s strip termination is empirical
   (9 of 20 probes exact, `XNASWEEP-149`).
+- The CNAEXT content manifest lists no reader names for a compressed `.xnb`:
+  `ContentManager::ScanXnbReaderNames` reads only an uncompressed type-reader table, so an LZX or
+  LZ4 file's `ContentManifestEntry::xnbReaderNames` is empty and `GetXnbReaderUsageSummary()` skips
+  it, although `Load` decompresses both (`XNB-61b`, `docs/xnb-content-pipeline-support.md`).
 
 ### 5.3 External and driver limitations
 

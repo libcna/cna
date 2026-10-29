@@ -1,8 +1,9 @@
 # CNA plans
 
-This directory contains CNA implementation plans and retained task logs. The status recorded inside
-each plan is authoritative; this index deliberately does not duplicate task counts or completion
-percentages that would become stale.
+This directory held CNA's implementation plans and task logs. Every plan has since been finished or
+retired and deleted (the last on 2026-10-29); the plans themselves are in Git history. This index
+records, for each one, where its surviving content now lives and how comments cite its rows.
+Current defects and limitations are [`../handoff.md`](../handoff.md) §5.
 
 Repository-wide contributor rules remain in [`AGENTS.md`](../AGENTS.md), and the per-file porting
 requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
@@ -195,7 +196,15 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   and the extension classification in
   [`../docs/gltf-limitations.md`](../docs/gltf-limitations.md) §1; comments cite the `GLTF-*` IDs
   bare.
-- [`plan_xnb.md`](plan_xnb.md) — XNB content pipeline.
+- `plan_xnb.md` — the runtime `.xnb` reader (`XNB-*`, 2026-07/09): 75 of 80 rows done, Phase H
+  (Lua readers) cancelled. Deleted on 2026-10-29 (Git history only). Two things stayed open:
+  `XNB-61b`, the content manifest's reader names for a compressed file (a limitation in
+  [`../handoff.md`](../handoff.md) §5.2), and Phase I (`XNB-61`..`XNB-64`), an official-sample
+  reader inventory deferred until the owner asked for it and never started; the sample sweep
+  (`tools/xna-sample-sweep/`) and cna-samples now load and rebuild that content. The readers,
+  formats, the content manifest and every known gap are in
+  [`../docs/xnb-content-pipeline-support.md`](../docs/xnb-content-pipeline-support.md); comments
+  cite the rows as `XNB-nn`.
 - `plan_xna_sample_xnb_sweep.md` — the sample `.xnb` sweep (`XNASWEEP-*`, 2026-09-07/11): every
   genuine `.xnb` Microsoft's pipeline built from a public XNA sample, rebuilt through CNA and
   compared; all rows done, run 66 left 4,337 of 7,726 byte-identical and none unexplained. Deleted

@@ -17,7 +17,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 
-// plans/plan_xnb.md XNB-19: math .xnb readers -- see PrimitiveContentTypeReaders.hpp's own note on why
+// XNB-19: math .xnb readers -- see PrimitiveContentTypeReaders.hpp's own note on why
 // these live in CNA::Internal::Xnb (FNA's own equivalents are all internal/default-visibility
 // classes, never subclassed by game code).
 

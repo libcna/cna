@@ -105,7 +105,7 @@ TEST_F(AlphaTestEffectDefaultsTest, TextureDefaultsToNull)
     EXPECT_EQ(fx.getTextureProperty(), nullptr);
 }
 
-// plans/plan_xnb.md XNB-32: SetOwnedTexture() -- content-pipeline-loaded effects need to keep their own
+// XNB-32: SetOwnedTexture() -- content-pipeline-loaded effects need to keep their own
 // texture reference alive (matching real XNA's GC-tracked Effect.Texture), unlike
 // setTextureProperty(Texture2D*)'s non-owning pointer used by Model's shared texture pool.
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnb.md XNB-15/XNB-16/XNB-16B: unit tests for ContentReader's root-object dispatch
+// XNB-15/XNB-16/XNB-16B: unit tests for ContentReader's root-object dispatch
 // (1-based type-reader index), shared-resource fixups, and reader-version enforcement.
 
 #include <gtest/gtest.h>
@@ -424,7 +424,7 @@ TEST_F(ContentReaderTest, RealMonoGameFixtureLoadsEndToEndThroughGenericDispatch
     EXPECT_EQ(result.mipLevelCount, 1);
 }
 
-// plans/plan_xnb.md XNB-43: ReadBytesExactOrThrow() must reject a negative count, throw a clean
+// XNB-43: ReadBytesExactOrThrow() must reject a negative count, throw a clean
 // EndOfStreamException instead of silently returning a short/mismatched buffer when the stream
 // is truncated, and otherwise behave exactly like a normal full-length read.
 

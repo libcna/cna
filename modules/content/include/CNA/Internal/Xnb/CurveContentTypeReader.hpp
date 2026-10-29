@@ -6,7 +6,7 @@
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 
-// plans/plan_xnb.md XNB-20: see PrimitiveContentTypeReaders.hpp's own note on why this lives in
+// XNB-20: see PrimitiveContentTypeReaders.hpp's own note on why this lives in
 // CNA::Internal::Xnb (FNA's CurveReader is `internal class` too).
 
 namespace CNA::Internal::Xnb

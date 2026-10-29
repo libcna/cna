@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnb.md XNB-17B/XNB-17C/XNB-17D/XNB-17E/XNB-17F: ContentManager's .xnb integration --
+// XNB-17B/XNB-17C/XNB-17D/XNB-17E/XNB-17F: ContentManager's .xnb integration --
 // resolution order (.xnb wins first), path/cache-identity reuse, ContentLoadException
 // propagation, and Unload() behavior, proven end-to-end through ContentManager::Load<T>()
 // using only a test-only reader (a real Texture2DReader is Phase C/XNB-23).
@@ -506,7 +506,7 @@ TEST_F(ContentManagerXnbTest, TruncatedLz4ContainerThrowsContentLoadException)
 
 TEST_F(ContentManagerXnbTest, BothCompressionBitsSetThrowsContentLoadException)
 {
-    // plans/plan_xnb.md XNB-27: neither a real LZX nor a real Lz4 signal -- rejected outright rather
+    // XNB-27: neither a real LZX nor a real Lz4 signal -- rejected outright rather
     // than silently picking one.
     ScratchContentRoot root;
     WriteBytes(root.path() / "fixture.xnb", {'X', 'N', 'B', 'w', 5, 0xC0, 0, 0, 0, 0});
@@ -544,7 +544,7 @@ TEST_F(ContentManagerXnbTest, UnregisteredXnbReaderNameThrowsContentLoadExceptio
     EXPECT_THROW((void)cm.Load<TestValue>("fixture"), ContentLoadException);
 }
 
-// plans/plan_xnb.md XNB-43/47: found via a whole-container fuzz test that mutated a real .xnb's own
+// XNB-43/47: found via a whole-container fuzz test that mutated a real .xnb's own
 // totalLength header field independently of the file's actual on-disk size -- confirmed as a real
 // heap-buffer-overflow under -DCNA_SANITIZE=address,undefined (the Lzx branch's compressedSize =
 // totalLength - 14 was used to size a read straight from the just-read file buffer, with nothing

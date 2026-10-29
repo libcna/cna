@@ -393,7 +393,7 @@ namespace Microsoft::Xna::Framework::Content
     }
 
     // ---------------------------------------------------------------------------
-    // Content manifest (plans/plan_xnb.md Phase B3: XNB-65/65A/66/67/61a)
+    // Content manifest (XNB-65/65A/66/67/61a)
     // ---------------------------------------------------------------------------
 
     std::vector<std::string> ContentManager::ScanXnbReaderNames(const std::filesystem::path& xnbPath) const

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnb.md XNB-34: end-to-end test -- content.Load<Song>("fixture") against a real,
+// XNB-34: end-to-end test -- content.Load<Song>("fixture") against a real,
 // externally-produced .xnb fixture, going through ContentManager (not a standalone parser call).
 
 #include <cstdint>

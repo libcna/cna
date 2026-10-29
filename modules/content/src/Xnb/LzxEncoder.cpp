@@ -3,7 +3,7 @@
 // XNAP-81: an LZX encoder for .xnb output.
 //
 // LZX is the compression Microsoft's own XNA 4.0 Content Pipeline produced, and it was the one
-// gap in CNA's XNB writer: CNA has *read* LZX since plans/plan_xnb.md XNB-28. An encoder is a
+// gap in CNA's XNB writer: CNA has *read* LZX since XNB-28. An encoder is a
 // different program from a decoder, and this one is written against the decoder's own observable
 // contract rather than derived from any encoder implementation:
 //

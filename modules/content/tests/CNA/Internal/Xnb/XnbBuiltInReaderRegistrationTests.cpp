@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnb.md XNB-46: before RegisterAllBuiltInXnbReaders() existed, no single call site
+// XNB-46: before RegisterAllBuiltInXnbReaders() existed, no single call site
 // registered every built-in .xnb ContentTypeReader -- a real game had to discover and call all
 // thirteen individual Register*XnbReader()/RegisterXXXReaders() functions itself. This test proves
 // the umbrella function is both complete (every canonical name Phase A-F/D3 implements ends up

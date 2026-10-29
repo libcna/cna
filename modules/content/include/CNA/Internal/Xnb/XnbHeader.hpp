@@ -11,7 +11,7 @@
 namespace CNA::Internal::Xnb
 {
     /**
-     * @brief Compression scheme signaled by a `.xnb` header's flags byte (plans/plan_xnb.md XNB-27).
+     * @brief Compression scheme signaled by a `.xnb` header's flags byte (XNB-27).
      *
      * Both bit values are real, confirmed against MonoGame's own `ContentManager.cs`
      * (`ContentCompressedLzx = 0x80`, `ContentCompressedLz4 = 0x40`) -- FNA itself only ever
@@ -24,7 +24,7 @@ namespace CNA::Internal::Xnb
     {
         /** @brief Neither compression bit is set; the payload follows the header as-is. */
         None,
-        /** @brief Flags bit `0x80` -- FNA's own decoder, implemented (plans/plan_xnb.md XNB-28/29). */
+        /** @brief Flags bit `0x80` -- FNA's own decoder, implemented (XNB-28/29). */
         Lzx,
         /** @brief Flags bit `0x40` -- MonoGame's single raw-LZ4-block XNB representation. */
         Lz4,
@@ -33,7 +33,7 @@ namespace CNA::Internal::Xnb
     };
 
     /**
-     * @brief Parsed fields of a real `.xnb` binary container header (plans/plan_xnb.md XNB-11).
+     * @brief Parsed fields of a real `.xnb` binary container header (XNB-11).
      *
      * Layout, confirmed against FNA's `ContentManager.GetContentReaderFromXnb`
      * (`src/Content/ContentManager.cs`): 3 magic bytes `'X'`, `'N'`, `'B'`; 1 platform

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnb.md XNB-25 (Phase D3): unit tests for Texture3DReader and TextureCubeReader.
+// XNB-25 (Phase D3): unit tests for Texture3DReader and TextureCubeReader.
 // TextureCubeReader is verified end-to-end against a real, externally-produced fixture
 // (MonoGame's SampleCube64DXT1Mips.xnb -- 6 faces, full DXT1 mip chain including the sub-4x4
 // rounding edge cases). No Texture3DReader fixture was found anywhere in the available library

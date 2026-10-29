@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnb.md XNB-65/65A/66/67/61a: unit tests for ContentManager's content-manifest scan.
+// XNB-65/65A/66/67/61a: unit tests for ContentManager's content-manifest scan.
 
 #include <cstdint>
 #include <cstdlib>

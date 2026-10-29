@@ -392,7 +392,7 @@ TEST(LzxEncoderTest, ADeclaredSizeThatDisagreesWithTheStreamIsRefused)
 TEST(LzxEncoderTest, EveryFlippedBitEitherDecodesOrFailsCleanly)
 {
     // A codec's decoder is an attack surface, so a corrupted stream must fail rather than crash.
-    // The decoder's own hardening is plans/plan_xnb.md XNB-30; this checks the pairing holds for
+    // The decoder's own hardening is XNB-30; this checks the pairing holds for
     // streams *this* encoder produced, which are the ones a CNA game will actually be loading.
     const std::vector<std::uint8_t> payload(4096u, 0x21u);
     const std::vector<std::uint8_t> original = CompressXnbLzxPayload(payload);

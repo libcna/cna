@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xnb.md XNB-33A: end-to-end M3 milestone test -- content.Load<SoundEffect>("fixture")
+// XNB-33A: end-to-end M3 milestone test -- content.Load<SoundEffect>("fixture")
 // against a real, externally-produced .xnb fixture, going through ContentManager (not a
 // standalone parser call).
 
