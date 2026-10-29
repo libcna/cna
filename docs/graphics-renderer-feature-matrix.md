@@ -25,12 +25,12 @@ game logic headlessly (no window, no GPU, no display server) for fast CI tests â
 itself via argument checks, resource-lifecycle tracking, and draw-call/state-change counters instead
 of pixel output. See [`headless-renderer.md`](headless-renderer.md) for its own status.
 
-The **Software** renderer (`CNA_GRAPHICS_RENDERER=SOFTWARE`, tracked in
-`../plans/plan_software.md`) is a first-class independent CPU renderer for the classic XNA/Core
-contract. It is represented by the companion matrix below rather than forced into the GPU-native
-columns, because physical swap chains, driver state and context-loss rows are intentionally
-non-applicable. The historical v1 boundary is preserved only in the plan's clearly labeled history;
-the current renderer has behavioral evidence across every in-scope family. See
+The **Software** renderer (`CNA_GRAPHICS_RENDERER=SOFTWARE`,
+[`software-renderer.md`](software-renderer.md)) is a first-class independent CPU renderer for the
+classic XNA/Core contract. It is represented by the companion matrix below rather than forced into
+the GPU-native columns, because physical swap chains, driver state and context-loss rows are
+intentionally non-applicable. The historical v1 boundary survives only in the deleted plan's Git
+history; the current renderer has behavioral evidence across every in-scope family. See
 [`software-renderer.md`](software-renderer.md) and
 [`software-easygl-parity-ledger.md`](software-easygl-parity-ledger.md) for detailed proofs.
 

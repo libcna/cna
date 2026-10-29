@@ -186,7 +186,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
     endif()
 endif()
 
-# --- plans/plan_software.md SOFTWARE-61/84: cross-renderer diagnostic comparator ---
+# --- SOFTWARE-61/84: cross-renderer diagnostic comparator ---
 # Standalone, renderer-independent (no CNA/SHARP_RUNTIME dependency) tool that diffs two raw
 # 64x64 RGBA8 dumps produced by cross_renderer_diagnostic_scene.cpp (built once per renderer by
 # the SOFTWARE and EASYGL suites) within a tolerance. Not wired into a single ctest run --

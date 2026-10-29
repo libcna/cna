@@ -22,7 +22,7 @@ namespace CNA::Internal::Renderers::Software
      * @brief Real CPU-owned RGBA8 colour, depth and optional resolved 4x MSAA storage.
      *
      * This is the Software renderer's actual state, not a bookkeeping fiction
-     * (plans/plan_software.md design decision 3) -- every pixel written here is a genuinely correct
+     * (docs/software-renderer.md design decision 3) -- every pixel written here is a genuinely correct
      * pixel a test can read back and assert on, with no GPU involved at all.
      */
     struct SoftwareFramebuffer
@@ -1289,7 +1289,7 @@ namespace CNA::Internal::Renderers::Software
     public:
         // Mirrors HEADLESS-16: accepts any GLSL/HLSL/WGSL source string without compiling it --
         // this renderer's own fixed pixel-shading path (Phase S5/S6) is what actually renders,
-        // not the supplied shader source (plans/plan_software.md design decision 8).
+        // not the supplied shader source (docs/software-renderer.md design decision 6).
         bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override;
         void Bind() override { bound_ = true; }
         void Unbind() override { bound_ = false; }
@@ -1314,7 +1314,7 @@ namespace CNA::Internal::Renderers::Software
 
     /// Draws are wired to the shared rasterizer core in Phase S6 (SOFTWARE-51) -- a
     /// SpriteBatch::Draw() call is just a textured quad (2 triangles), reusing the same code
-    /// path DrawPrimitivesEx uses (plans/plan_software.md design decision 5).
+    /// path DrawPrimitivesEx uses (docs/software-renderer.md design decision 5).
     class SoftwareSpriteBatchRenderer final : public ISpriteBatchRenderer
     {
     public:
@@ -1424,7 +1424,7 @@ namespace CNA::Internal::Renderers::Software
     /**
      * @brief Software (CPU) rasterizer graphics renderer.
      *
-     * See plans/plan_software.md for the full task breakdown and design rationale. Unlike HEADLESS
+     * See docs/software-renderer.md for its contract and design decisions. Unlike HEADLESS
      * (which only does bookkeeping and never produces a real pixel), this renderer actually
      * rasterizes real triangles into a CPU-owned RGBA8 framebuffer -- GetBackBufferData()/
      * ReadBackbuffer() return genuinely correct pixels, with no GPU, display server, or driver

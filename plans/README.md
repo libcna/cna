@@ -288,7 +288,13 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   [`../docs/sdl-gpu-renderer.md`](../docs/sdl-gpu-renderer.md); the one EasyGL defect its oracle
   found that is still open is in [`../handoff.md`](../handoff.md) §5.1; comments cite the rows as
   `SDLGPU-nnn`.
-- [`plan_software.md`](plan_software.md) — CPU software rasterizer.
+- `plan_software.md` — the Software CPU rasterizer: the v1 renderer (`SOFTWARE-1`..`SOFTWARE-86`)
+  and the Software <-> EasyGL XNA/Core parity campaign (`SOFTWARE-100`..`SOFTWARE-485`,
+  2026-09-07/13), every row done; deleted on 2026-10-29 (Git history only). The renderer, its
+  boundaries and its design decisions are in
+  [`../docs/software-renderer.md`](../docs/software-renderer.md), the campaign evidence in
+  [`../docs/software-easygl-parity-ledger.md`](../docs/software-easygl-parity-ledger.md);
+  comments cite the rows as `SOFTWARE-nnn`.
 - `plan_stub.md` — STUB-1..6, the no-op Stub renderer (done 2026-07-19); deleted on 2026-10-28
   (Git history only). Its design and limitations are in
   [`../docs/stub-renderer.md`](../docs/stub-renderer.md).

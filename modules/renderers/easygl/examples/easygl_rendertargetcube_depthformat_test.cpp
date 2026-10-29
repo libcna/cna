@@ -125,7 +125,7 @@ class RenderTargetCubeDepthFormatTest : public Game
             // Vulkan parity VKPAR-0025: Clear(Color) clears the planes the face has
             // -- depth to 1.0 where there is one. Naming DepthBuffer explicitly on the
             // DepthFormat::None cube is an InvalidOperationException in XNA
-            // (plans/plan_software.md SOFTWARE-333), which FNA would have masked.
+            // (SOFTWARE-333), which FNA would have masked.
             dev.Clear(Color(0, 0, 0, 255));
 
             fx.Apply();

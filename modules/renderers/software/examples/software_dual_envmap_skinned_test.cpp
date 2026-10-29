@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_software.md Phase S9 (SOFTWARE-82): DualTextureEffect, EnvironmentMapEffect, and
+// Software Phase S9 (SOFTWARE-82): DualTextureEffect, EnvironmentMapEffect, and
 // SkinnedEffect support in the Software renderer.
 //
 // This historical combined probe now isolates each effect's original purpose from the completed

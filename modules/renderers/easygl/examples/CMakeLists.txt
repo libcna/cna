@@ -92,7 +92,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_TexturedQuad_Readback COMMAND cna_test_easygl_textured_quad
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_software.md SOFTWARE-61/84: this renderer's half of the cross-renderer diagnostic
+        # SOFTWARE-61/84: this renderer's half of the cross-renderer diagnostic
         # dump -- not registered as a ctest, just a plain executable a developer/script runs by
         # hand alongside SOFTWARE's own cna_diag_software and cna_diag_compare.
         # VULKAN-214: first registered as the control beside the since-retired Vulkan renderer --

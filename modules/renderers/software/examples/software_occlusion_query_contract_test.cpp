@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_software.md SOFTWARE-122: deterministic public CPU occlusion-query contract.
+// SOFTWARE-122: deterministic public CPU occlusion-query contract.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"

@@ -51,8 +51,8 @@
 //   * no sprite is lost -- sprites with different textures still each reach their own destination;
 //   * grouping reorders WITHIN a group exactly as XNA does. XNA sorts with .NET Framework 4's
 //     unstable `Array.Sort` quicksort, which swaps two equal keys, so two overlapping sprites that
-//     share one texture come out REVERSED and the first-issued one wins (plans/plan_software.md
-//     SOFTWARE-354, recovered from XNA's IL; this said `std::stable_sort` and "the second one wins"
+//     share one texture come out REVERSED and the first-issued one wins
+//     (SOFTWARE-354, recovered from XNA's IL; this said `std::stable_sort` and "the second one wins"
 //     until Vulkan parity VKPAR-0022).
 
 #include "Microsoft/Xna/Framework/Color.hpp"

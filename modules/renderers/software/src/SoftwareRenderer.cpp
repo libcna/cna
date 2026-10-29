@@ -4255,7 +4255,7 @@ namespace CNA::Internal::Renderers::Software
         }
 #endif
 
-        /// Transforms a vertex whose byte layout is inferred from `stride` (plans/plan_software.md
+        /// Transforms a vertex whose byte layout is inferred from `stride` (docs/software-renderer.md
         /// design decision 2: 16=VertexPositionColor, 20=VertexPositionTexture,
         /// 24=VertexPositionColorTexture, 32=VertexPositionNormalTexture (SOFTWARE-82,
         /// EnvironmentMapEffect), 48/60=VertexPositionNormalTangentTexture with one/two UV sets,

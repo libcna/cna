@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_software.md SOFTWARE-104: capability promises must agree with the Software
+// SOFTWARE-104: capability promises must agree with the Software
 // renderer's actual factories and execution paths throughout the parity campaign.
 
 #include "CNA/GraphicsCapability.hpp"

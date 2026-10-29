@@ -1,6 +1,6 @@
 // RTR-P1-D08: the Software family's pre-construction contract.
 //
-// A real CPU rasterizer that owns its own framebuffer (plans/plan_software.md design decision 4): no
+// A real CPU rasterizer that owns its own framebuffer (docs/software-renderer.md design decision 4): no
 // window, no GPU library, no platform video subsystem.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"

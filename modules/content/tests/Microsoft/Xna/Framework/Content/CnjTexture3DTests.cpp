@@ -104,8 +104,7 @@ protected:
 };
 
 // Texture3D is a documented, renderer-dependent capability -- Headless has no
-// real GPU resource of any kind, and Software's Texture3D support is an explicit v1 scope boundary
-// (plans/plan_software.md Boundaries). On a renderer that doesn't support it, loading now fails
+// real GPU resource of any kind. On a renderer that doesn't support it, loading now fails
 // cleanly -- Texture3D's own constructor throws System::NotSupportedException -- instead of
 // previously silently succeeding with all-zero pixel data. Since SAMPLE-078 a loose-file load
 // reports that as ContentLoadException, as XNA does, with the cause in its message

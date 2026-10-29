@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_software.md Phase S1/S2/S3 (SOFTWARE-1..14, 20..22): smoke test for the Software
+// Software Phase S1/S2/S3 (SOFTWARE-1..14, 20..22): smoke test for the Software
 // (CPU rasterizer) graphics renderer's foundation -- no window, real framebuffer, real pixel
 // readback, real vertex/index storage. Draw calls do not yet rasterize (Phase S4).
 //

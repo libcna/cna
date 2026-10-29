@@ -431,8 +431,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, ContentManagerStronglyCachesTe
 }
 
 // Texture3D is a documented, renderer-dependent capability -- Headless has no
-// real GPU resource of any kind, and Software's Texture3D support is an explicit v1 scope boundary
-// (plans/plan_software.md Boundaries). On a renderer that doesn't support it, reading now throws a clean
+// real GPU resource of any kind. On a renderer that doesn't support it, reading now throws a clean
 // System::NotSupportedException (from Texture3D's own constructor) instead of previously silently
 // succeeding with all-zero pixel data.
 TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder)

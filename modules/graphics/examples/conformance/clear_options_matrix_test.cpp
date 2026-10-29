@@ -105,7 +105,7 @@ namespace
     constexpr float kRequestedDepth = 0.67f;
     constexpr float kSingleColorDepth = 0.73f;
     // Vulkan parity VKPAR-0022: what Clear(Color) actually clears depth to. Microsoft
-    // XNA uses 1.0 whatever the viewport says (plans/plan_software.md SOFTWARE-334); FNA uses
+    // XNA uses 1.0 whatever the viewport says (SOFTWARE-334); FNA uses
     // Viewport.MaxDepth, which is what this file expected. The restricted viewport below still sets
     // MaxDepth to kSingleColorDepth, so the two rules land on opposite sides of the probes.
     constexpr float kClearColorOverloadDepth = 1.0f;
@@ -384,7 +384,7 @@ class GraphicsDeviceClearOptionsTest final : public Game
     {
         ApplyFullRasterState(device, width, height);
         // VKPAR-0022: only the planes the surface has. XNA refuses to clear a missing depth or
-        // stencil plane (plans/plan_software.md SOFTWARE-333) instead of masking it as FNA does.
+        // stencil plane (SOFTWARE-333) instead of masking it as FNA does.
         ClearOptions seedPlanes = ClearOptions::Target;
         if (hasDepth) seedPlanes = seedPlanes | ClearOptions::DepthBuffer;
         if (hasStencil) seedPlanes = seedPlanes | ClearOptions::Stencil;
@@ -511,8 +511,8 @@ class GraphicsDeviceClearOptionsTest final : public Game
         DrawRect(device, StencilPassRect(width, height), width, height, 0.5f, kBlue);
 
         // Vulkan parity VKPAR-0022: a copy, not the bound object. XNA makes a
-        // state object immutable once a device has bound it (plans/plan_software.md
-        // SOFTWARE-232), so the reject leg needs a state of its own.
+        // state object immutable once a device has bound it
+        // (SOFTWARE-232), so the reject leg needs a state of its own.
         DepthStencilState stencilReject(stencilTest);
         stencilReject.setReferenceStencilProperty(wrongStencil);
         device.setDepthStencilStateProperty(stencilReject);

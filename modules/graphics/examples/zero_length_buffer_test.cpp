@@ -7,7 +7,7 @@
 //
 // Vulkan parity VKPAR-0022: the premise changed underneath it. Microsoft XNA rejects
 // a zero count, not only a negative one -- `vertexCount <= 0` and `indexCount <= 0` in every
-// constructor (plans/plan_software.md SOFTWARE-204) -- so an empty buffer is no longer a legal
+// constructor (SOFTWARE-204) -- so an empty buffer is no longer a legal
 // object and the padding is unreachable through the public API. What is left to prove, on every
 // renderer this is registered for, is that the refusal comes first: XNA's exception, raised before
 // any native allocation, with the device still drawing afterwards.

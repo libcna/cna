@@ -27,7 +27,8 @@ The completed parity-plan verdict is **B — parity with documented language/pla
 Final reconciliation passes all 160 Software-labeled CTests and 2,640 of 2,688 Software graphics
 tests; the remaining 48 are exact negative controls, foreign-renderer selectors, platform-only
 tests or CNAEXT exclusions. The comparison desktop EasyGL build passes 2,635 of 2,688 with 53
-equally classified skips. No open task remains in `plans/plan_software.md`.
+equally classified skips. No task of the campaign (`SOFTWARE-1`…`SOFTWARE-485`, plan in Git history)
+remains open.
 
 Software executes classic Direct3D 9 Effect Framework bytecode when built with the same opt-in
 MojoShader dependency model as EasyGL. `SOFTWARE-162..165` and the focused `SOFTWARE-355..484`
@@ -80,14 +81,44 @@ non-indexed user/buffer draws. That makes it useful for:
 - **Cross-renderer diagnostics**: comparing a real GPU renderer's output against this renderer's
   independently-implemented rasterizer can help localize whether a rendering bug is in shared
   code, a specific GPU renderer, or expected-but-undocumented behavior (see "Cross-renderer
-  diagnostic" below, `plans/plan_software.md` `SOFTWARE-61`/`SOFTWARE-84`).
+  diagnostic" below, `SOFTWARE-61`/`SOFTWARE-84`).
 
 Software is a first-class stock-effect correctness renderer: an XNA-style CNA application that does
 not use compiled custom Effects can rely on the verified CPU contract without a GPU. It is not
 optimized to match GPU throughput—there is no SIMD, multithreading or tile binning—because
 determinism and fidelity remain the primary goals. `SOFTWARE-86` closes speculative optimization
 as an explicit non-goal; a future performance task requires a measured impractical test rather
-than a general throughput objective (see `plans/plan_software.md` design decision 1).
+than a general throughput objective (design decision 1 below).
+
+The owner's other stated use case, falling back to Software when GPU initialization fails, is not
+this renderer's own behaviour: a multi-renderer build that compiles Software in can name it in an
+opt-in runtime fallback chain (`SetFallbackChain()`; see
+[`runtime-renderer-selection.md`](runtime-renderer-selection.md)).
+
+## Design decisions
+
+These date from the first version (`SOFTWARE-1`…`SOFTWARE-86`) and still hold; comments cite them
+by number.
+
+1. **Correctness and determinism over performance.** Plain scalar loops, no SIMD, threads or
+   tiling: a slow but obviously correct rasterizer is worth more here than a fast one that is
+   subtly wrong (`SOFTWARE-86`).
+2. **A vertex layout can be inferred from its stride.** The canonical XNA records (16, 20, 24, 32,
+   48/60 and 52 bytes) are recognised by stride, the convention the other renderers already
+   used. It is now the fallback: a `VertexDeclaration`, including multi-stream input, takes
+   precedence.
+3. **The CPU framebuffer is the renderer's real state.** RGBA8 colour, depth/stencil and optional
+   4x MSAA storage back every operation, so every pixel a test reads back is a real
+   result. `Present()` completes without a physical swap (`SOFTWARE-85`).
+4. **No window.** The device is windowless, as `HEADLESS`'s is.
+5. **SpriteBatch goes through the same triangle rasterizer as 3D draws.** A sprite is a
+   textured quad, so 2D output is pixel-correct for free.
+6. **Shader source does not run on the CPU.** A source-shader effect (`ShaderEffect`) is accepted
+   without compiling it and drawn with the stock pixel path; compiled XNA Effect bytecode does
+   run (see *Investigating a compiled Effect regression*).
+
+The first version also drew without lighting or fog and with only two blend modes; the parity
+campaign replaced both with the complete XNA behaviour.
 
 ## Writing a Software test
 
@@ -127,7 +158,7 @@ A reminder that both real games and this renderer's own tests need to remember: 
 `VertexColorEnabled` defaults to `false` in real XNA/FNA — a plain `BasicEffect` with no explicit
 opt-in ignores vertex colors entirely (this renderer faithfully reproduces that, and it's exactly
 what caused `Software_Rasterizer`'s tests to briefly fail while `DrawPrimitivesEx` was first wired
-up — see `plans/plan_software.md` `SOFTWARE-50`'s notes for the full story).
+up in `SOFTWARE-50`).
 
 ## Cross-renderer differential infrastructure (SOFTWARE-61/84/103/156)
 
@@ -175,7 +206,7 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 ## Investigating a compiled Effect regression
 
 The compiled-Effect parity work (`SOFTWARE-164/165`, `SOFTWARE-355..484`) settled on one procedure,
-recorded only task by task in `plans/plan_software.md` and the ledger. Follow it for any new
+recorded task by task in the ledger. Follow it for any new
 compiled Effect regression:
 
 1. Inspect one MojoShader `state_*` validator, opcode-table restriction, FIXME, or Software
@@ -1183,4 +1214,4 @@ can execute an opcode and still accept invalid classic bytecode.
   cross-renderer image comparator. `SOFTWARE-85` closes the historical opt-in window-blit idea as
   non-applicable; a window-owning platform blitter would be a separate presentation mode.
 
-See `plans/plan_software.md` for the full task-by-task status and design rationale.
+The task-by-task evidence is [`software-easygl-parity-ledger.md`](software-easygl-parity-ledger.md).

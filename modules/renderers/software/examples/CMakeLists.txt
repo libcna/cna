@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plans/plan_software.md: Software (CPU rasterizer) graphics renderer tests. Deliberately no
+# Software (CPU rasterizer) graphics renderer tests. Deliberately no
 # SDL_VIDEODRIVER/DISPLAY environment -- like HEADLESS, this renderer never needs either.
 
 # Example/test executables historically live at the build root (scripts, docs and
@@ -1158,7 +1158,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_vertex_declaration
         TIMEOUT 30 LABELS "Software")
 
-    # plans/plan_software.md SOFTWARE-61/84: this renderer's half of the cross-renderer diagnostic dump --
+    # SOFTWARE-61/84: this renderer's half of the cross-renderer diagnostic dump --
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.
     cna_software_test(cna_diag_software ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)

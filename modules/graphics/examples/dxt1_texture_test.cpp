@@ -59,7 +59,7 @@ public:
     }
 
     // Vulkan parity VKPAR-0025: seekable, because XNA refuses an image stream that
-    // is not (plans/plan_software.md SOFTWARE-305).
+    // is not (SOFTWARE-305).
     [[nodiscard]] bool getCanSeekProperty() const override { return true; }
     [[nodiscard]] System::IO::intcs getPositionProperty() const override { return pos_; }
     void setPositionProperty(System::IO::intcs value) override { pos_ = value; }

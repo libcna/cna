@@ -1,7 +1,7 @@
 # Software <-> EasyGL XNA/Core parity ledger
 
-This ledger is the durable evidence map for the parity campaign in
-`plans/plan_software.md`. It was started on 2026-09-07 at CNA commit
+This ledger is the durable evidence map for the Software parity campaign (`SOFTWARE-100` onward;
+its plan is in Git history). It was started on 2026-09-07 at CNA commit
 `cde325ecd4d771d50b7d8ec3ef99f1657ad217ac` on branch `software`.
 
 The behavioral authority order is measured Microsoft XNA 4.0/IL, FNA, EasyGL, current Software,
@@ -23,7 +23,7 @@ coverage passed 15/15. Opt-out builds remain dependency-free and truthfully repo
 
 ## Final plan reconciliation (2026-09-13)
 
-All rows in `plans/plan_software.md` are complete or explicitly complete-as-N/A. The final verdict
+All rows of the campaign plan are complete or explicitly complete-as-N/A. The final verdict
 is **B — parity with documented language/platform boundaries**. The complete Software label passes
 160/160, compiled-effect-enabled Software `CnaGraphicsTests` passes 2,640/2,688 with 48 classified
 skips, and desktop EasyGL passes 2,635/2,688 with 53 classified skips; the complete EasyGL

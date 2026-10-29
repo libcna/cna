@@ -82,7 +82,7 @@ namespace
         }
 
         // Vulkan parity VKPAR-0025: seekable, because XNA refuses an image stream
-        // that is not (plans/plan_software.md SOFTWARE-305).
+        // that is not (SOFTWARE-305).
         [[nodiscard]] bool getCanSeekProperty() const override { return true; }
         [[nodiscard]] System::IO::intcs getPositionProperty() const override { return position_; }
         void setPositionProperty(System::IO::intcs value) override { position_ = value; }
@@ -272,7 +272,7 @@ class DxtTextureCubeTest final : public Game
         FillCube(cube, block);
 
         // VKPAR-0025: bytes, not Color. XNA's format-size oracle gives a DXT cube one byte per
-        // element, so only byte transfers are legal (plans/plan_software.md SOFTWARE-277); what
+        // element, so only byte transfers are legal (SOFTWARE-277); what
         // reads back is the exact block that was stored. The sampling leg below still checks the
         // decoded colour.
         std::vector<std::uint8_t> readback(block.size(), 0xCDu);
@@ -349,7 +349,7 @@ class DxtTextureCubeTest final : public Game
             const std::vector<std::uint8_t> ddsBytes = BuildDxt1Dds();
             VectorStream ddsStream(ddsBytes);
             // VKPAR-0025: DDS is CNA's named extension, not classic FromStream, which accepts only
-            // the image formats XNA's does (plans/plan_software.md SOFTWARE-306).
+            // the image formats XNA's does (SOFTWARE-306).
             Texture2D dds = Texture2D::DDSFromStreamEXT(device, ddsStream);
             Check(dds.getFormatProperty() ==
                       (directDxt1 ? SurfaceFormat::Dxt1 : SurfaceFormat::Color) &&
