@@ -592,7 +592,7 @@ TEST(Sdl3PlatformLinuxHintsTest, ClassicJoystickDiscoveryIsTheDefaultButHostOver
 TEST_F(Sdl3PlatformTest, TheControllerSubsystemStartsOnDemandRatherThanWithThePlatform)
 {
     // The gamepad subsystem used to cost a full udev device enumeration to start -- ~1.9 seconds
-    // on this project's Linux reference machine. plans/plan_platform.md PLAT-83 first removed that
+    // on this project's Linux reference machine. PLAT-83 first removed that
     // work from Game::DoInitialize(), and CNA now also selects SDL's cheap classic discovery as its
     // desktop-Linux default. The platform still starts the subsystem only when something asks for
     // the service: constructing a platform must not start it, and asking for the gamepad must.

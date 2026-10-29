@@ -216,7 +216,7 @@ namespace CNA::Internal::Renderers
          */
         bool needsVideoSubsystem = false;
 
-        // MERGE (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md P2): a
+        // MERGE (PLAT-8 x plans/plan_runtimerenderer.md P2): a
         // `std::uint32_t (*prepareWindowFlags)()` hook returning a raw windowing-library flag
         // bitmask used to live here; every descriptor's hook only mapped windowKind onto those
         // flags, which GraphicsDevice does once, behind the platform contract. Its one exception,
@@ -227,7 +227,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Framebuffer attributes that must be fixed before the window exists.
          *
-         * MERGE (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md P2): this replaces
+         * MERGE (PLAT-8 x plans/plan_runtimerenderer.md P2): this replaces
          * `void (*applyPreWindowAttributes)(const RendererPreWindowRequest&)`, whose every
          * implementation called into the windowing library directly. The platform contract already
          * carries these as data on WindowDescription::openGlFramebuffer, so a hook bought nothing
@@ -246,7 +246,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Whether this family is handed a platform surface presenter.
          *
-         * MERGE (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md design decision 2): next chose
+         * MERGE (PLAT-8 x plans/plan_runtimerenderer.md design decision 2): next chose
          * the platform services a renderer receives with `#if defined(CNA_RENDERER_<X>)` chains in
          * GraphicsDevice::createRenderer(). In a multi-renderer binary those chains answer for
          * whichever macros are defined rather than for the family being constructed, so the

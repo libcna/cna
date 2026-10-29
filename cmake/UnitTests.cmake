@@ -260,7 +260,7 @@ if(CNA_BUILD_TESTS)
     # links, runs the smoke app and exits without running a single test.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/apple/.*\\.cpp$")
 
-    # plans/plan_platform.md PLAT-119: the platform module's SDL3-specific tests exercise
+    # PLAT-119: the platform module's SDL3-specific tests exercise
     # CNA::Platform::Sdl3, which is compiled only when CNA_PLATFORM=SDL3. Under any other
     # platform selection they would reference symbols that do not exist and fail to link -- found
     # by actually configuring CNA_PLATFORM=HEADLESS rather than by inspection. The
@@ -269,7 +269,7 @@ if(CNA_BUILD_TESTS)
     if(NOT CNA_PLATFORM STREQUAL "SDL3")
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Sdl3.*\\.cpp$")
     endif()
-    # plans/plan_platform.md PLAT-94: like the general platform implementation above, the native
+    # PLAT-94: like the general platform implementation above, the native
     # SDL3 audio test directly exercises a private implementation compiled only for its selected
     # audio platform. Contract/selection tests remain implementation-neutral.
     if(NOT CNA_AUDIO_PLATFORM STREQUAL "SDL3")
@@ -329,7 +329,7 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*XnaIntermediateSerializerTests\\.cpp$")
     endif()
 
-    # plans/plan_platform.md PLAT-130: TerminalPlatform is built on termios and pseudo-terminals, so
+    # PLAT-130: TerminalPlatform is built on termios and pseudo-terminals, so
     # both it and its tests are POSIX-only -- excluded on Windows for the same reason the
     # implementation directory is (modules/platform/CMakeLists.txt), not gated line-by-line.
     # Everywhere else they always build, whatever CNA_PLATFORM says, because the implementation
@@ -807,7 +807,7 @@ if(CNA_BUILD_TESTS)
             # namespace path (CNA/RendererTestGate.hpp), matching how every module's public headers
             # are spelled.
             ${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics/tests
-            # plans/plan_platform.md PLAT-77/PLAT-90: modules/platform/tests holds shared test
+            # PLAT-77/PLAT-90: modules/platform/tests holds shared test
             # scaffolding (PlatformTestDecorator.hpp) that tests in other modules include to drive
             # CNA against a controlled platform. It replaces the eight per-subsystem injectable
             # backend seams modules/input used to carry for the same purpose, so it has to be
@@ -1219,7 +1219,7 @@ if(CNA_BUILD_TESTS)
     endif()
 
     if(TARGET cna_platform_terminal_restoration_harness)
-        # plans/plan_platform.md PLAT-131: same reasoning as cna_net_two_process_harness above, and more
+        # PLAT-131: same reasoning as cna_net_two_process_harness above, and more
         # sharply -- four of the five exit paths TerminalSession must restore on destroy the
         # process, so they cannot be asserted inside this binary at all.
         add_dependencies(${CNA_TEST_OBJECT_TARGET_platform} cna_platform_terminal_restoration_harness)
@@ -1229,7 +1229,7 @@ if(CNA_BUILD_TESTS)
     endif()
 
     if(TARGET cna_platform_terminal_resize_harness)
-        # plans/plan_platform.md PLAT-136: see cna_platform_terminal_restoration_harness above.
+        # PLAT-136: see cna_platform_terminal_restoration_harness above.
         add_dependencies(${CNA_TEST_OBJECT_TARGET_platform} cna_platform_terminal_resize_harness)
         target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
             CNA_PLATFORM_TERMINAL_RESIZE_HARNESS_PATH="$<TARGET_FILE:cna_platform_terminal_resize_harness>"
@@ -1430,7 +1430,7 @@ if(CNA_BUILD_TESTS)
             TIMEOUT 300 LABELS "gltf-conformance" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     endforeach()
 
-    # plans/plan_platform.md PLAT-91: audio has its own platform contract and selection axis rather
+    # PLAT-91: audio has its own platform contract and selection axis rather
     # than inheriting from CNA::Platform. Keep its native-SDK-free/lifecycle/buffer-granularity
     # contract visible as a dedicated CTest; the shared conformance suite runs every implementation
     # compiled into the selected build (SDL3 + NULL by default, NULL in the SDL-free build).
@@ -1465,7 +1465,7 @@ if(CNA_BUILD_TESTS)
     set_tests_properties(CnaPlatformSelection_Retired
         PROPERTIES LABELS "platform;configuration;retirement")
 
-    # plans/plan_platform.md PLAT-93: test the cache default, every implemented value, every reserved
+    # PLAT-93: test the cache default, every implemented value, every reserved
     # future identifier, an unknown value, and the retired SDL2 value without spawning full nested
     # project configs.
     # The selection file is intentionally script-mode-safe for exactly this validation path.
@@ -1682,7 +1682,7 @@ if(CNA_BUILD_TESTS)
                             "not '${CNA_PLATFORM_CTEST_BINARY}'")
     endif()
 
-    # plans/plan_platform.md PLAT-30/31/32: the Sdl3Window tests need a live video subsystem, and they
+    # PLAT-30/31/32: the Sdl3Window tests need a live video subsystem, and they
     # get one from SDL's dummy driver rather than a display server. That only works in a process
     # where nothing has already committed SDL to a driver -- inside the shared CnaTests binary
     # another suite usually has, so these skip there and would otherwise contribute no coverage

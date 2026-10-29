@@ -372,7 +372,7 @@ add_subdirectory(diagnostics)
 add_subdirectory(inspector)
 add_subdirectory(math)
 add_subdirectory(design)
-# The platform contract (plans/plan_platform.md): composed before the subsystems that will consume
+# The platform contract (docs/platform-abstraction.md): composed before the subsystems that will consume
 # it, so the read order matches the dependency direction even though CMake does not require it.
 add_subdirectory(platform)
 add_subdirectory(graphics)

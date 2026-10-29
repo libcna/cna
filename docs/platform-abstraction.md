@@ -2,8 +2,8 @@
 
 This is the implementer's guide to `CNA::Platform`. It describes the contract a platform backend
 must satisfy and the checks that keep the rest of CNA independent from its native host library.
-For migration history and task evidence, see `plans/plan_platform.md`; for the SDL lifecycle derivation,
-see `docs/platform-sdl-lifecycle-audit.md`.
+The migration that built it is tasks `PLAT-1`..`PLAT-141` (2026-08) in Git history; for the SDL
+lifecycle derivation, see `docs/platform-sdl-lifecycle-audit.md`.
 
 ## What the boundary owns
 
@@ -243,7 +243,32 @@ The platform boundary is outside inner draw, audio-callback and input-element lo
 The checked-in performance baseline and PLAT-120 comparison define the measured noise floor; a
 regression beyond it is investigated rather than waived.
 
+## Design decisions
+
+- **`CNA::Platform` is not XNA API.** It never appears in a `Microsoft::Xna::Framework` header and
+  therefore never needs `CNAEXT`; where an XNA type must reach a platform object (`GameWindow`, for
+  one), that XNA-side accessor is the `CNAEXT`-tagged part.
+- **No host-library type in a contract header**, not even a forward declaration such as
+  `struct SDL_Window;`. Native handles cross the boundary as the untyped fields of
+  `NativeWindowHandle`, read according to its `system`.
+- **Compile-time selection, runtime polymorphism.** `CNA_PLATFORM` picks the default
+  implementation, yet `IPlatform` stays virtual: the conformance suite needs several
+  implementations live in one process, which a devirtualized `using ActivePlatform = …` would rule
+  out for a gain the performance contract below already calls irrelevant.
+- **Two renderers depend on SDL3, for two different reasons.** `SDL_GPU` is an SDL3 API by
+  identity. `FNA3D` depends on SDL3 through the third-party library it wraps, while CNA's own
+  sources for it stay platform-neutral. Both declare `REQUIRES_PLATFORM SDL3` and are the explicit
+  allowlist of `tools/platform/renderer_sdl_audit.py`; every other renderer is SDL-free.
+- **Audio is its own contract.** `CNA::Audio::Platform::IAudioDevice` lives in `modules/audio`, is
+  chosen by `CNA_AUDIO_PLATFORM` and does not derive from `IPlatform`, so an audio backend needs no
+  matching window implementation -- ALSA is one.
+- **Gamepads belong to the input contract.** The differences between the SDL1 joystick, SDL2
+  GameController and SDL3 Gamepad APIs are capability differences, which the capability model
+  already expresses. A separate gamepad module is warranted only once a second implementation
+  shows that seam is wrong.
+
 ## Implementations
+
 
 | `CNA_PLATFORM` | Implementation | Availability | Capability boundary |
 |---|---|---|---|
@@ -261,6 +286,22 @@ SDL3 on a real window system is tested on servers private to the run, never on t
 run the SDL3 window suite and the window conformance suite with `SDL_VIDEODRIVER` forced, and
 `Sdl3WindowTest.NativeHandleMatchesTheVideoDriver` asserts the native handle each driver hands a
 renderer. Each skips (77) where its server is not installed.
+
+## Implementations CNA does not have, and why
+
+None of these exists. They are recorded because the contract was shaped to admit them, and the
+reserved `CNA_PLATFORM`/`CNA_AUDIO_PLATFORM` values refuse at configure time by pointing here.
+
+| Candidate | Why it does not exist |
+|---|---|
+| `Sdl12Platform` (`CNA_PLATFORM=SDL12`, reserved) | SDL 1.2 is deprecated upstream (last release 1.2.15), so CNA would own it indefinitely. Its profile would be a basic window, keyboard and mouse, the old joystick API, timing, basic audio, a GL or software surface and basic fullscreen, with clipboard, text input, gamepads and HiDPI declared unsupported, never emulated. |
+| `EmscriptenPlatform` (`CNA_PLATFORM=EMSCRIPTEN`, reserved) | A direct browser platform for the web renderers: one window, no native dialogs. SDL3's Emscripten driver serves the browser today. |
+| Direct `Win32`, `X11` and `Wayland` platforms | Implemented, then retired on 2026-10-06: a second copy of what SDL3 already drives was not worth its upkeep. The Win32 one needed no change to any contract header, which is the best evidence the contract is not SDL-shaped. |
+| `TERMINAL` on Windows | `TerminalPlatform` is built on termios and pseudo-terminals; there is no Windows console path. |
+| A separate gamepad module | See *Design decisions*: on evidence, not in advance. |
+| OpenAL and WASAPI audio (`CNA_AUDIO_PLATFORM`, reserved) | The audio contract is separate so that they would need no platform implementation; ALSA exists ([`audio-alsa.md`](audio-alsa.md)), these do not. |
+| `sdl2-compat`/`sdl12-compat` test configurations | They run on SDL3 underneath and reach no new operating system: a test configuration, never a substitute for an implementation. |
+| A legacy C++ or toolchain profile | Separating SDL3 is necessary but not sufficient for genuinely old targets: an older compiler, a language level below C++23, standard-library restrictions and possibly a C ABI between a modern core and a legacy host are separate problems. |
 
 ## Adding an implementation
 
@@ -322,5 +363,57 @@ more to keep correct than the independence from SDL they bought.
   event injection.
 
 The generated SDL inventory and ratchet treat any new native reference outside the platform/audio
-and four renderer exceptions as a boundary regression. A test that genuinely verifies SDL3 may
+and two renderer exceptions as a boundary regression. A test that genuinely verifies SDL3 may
 remain native-specific, but production consumers do not gain that exception.
+
+## SDL inventory (generated)
+
+Regenerate with `python3 tools/platform/sdl_inventory.py --update`; `--check` (one of the gates
+above) fails when it is stale. Do not hand-edit the block. A reference counts when it is a textual
+SDL identifier or an `SDL3/`-rooted include, forward declarations and doc comments in SDL's
+vocabulary included. Two CNA spellings that only look like SDL are excluded: the
+`CNA_RENDERER_SDL_RENDERER`/`CNA_RENDERER_SDL_GPU` build macros and the bare identity names
+`SDL_GPU`/`SDL_RENDERER`.
+
+<!-- BEGIN GENERATED: tools/platform/sdl_inventory.py -->
+
+| Metric | Value |
+|---|---|
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **959** |
+| Files referencing SDL (all) | **134** |
+| Production files (`src/` + `include/`) referencing SDL | **50** |
+| …of which are renderer production files | **13** |
+| Test/example files referencing SDL | **84** |
+| Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **9** |
+| Renderer families reaching for `SDL_GL_*` directly | **0** |
+
+Production SDL surface per module (`src/` + `include/` only):
+
+| Module | Files | Dominant concern |
+|---|---:|---|
+| `modules/platform` | 31 | - |
+| `modules/audio` | 6 | audio device/stream, mixer, microphone |
+| `modules/renderers/*` | 13 | native window handle, GL context, SDL GPU device (2 families) |
+
+The native-window properties actually consumed today — these define the minimum
+`NativeWindowHandle` surface, so the struct is derived from measured need, not guessed:
+
+```text
+SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER
+SDL_PROP_WINDOW_COCOA_WINDOW_POINTER
+SDL_PROP_WINDOW_EMSCRIPTEN_CANVAS_ID_STRING
+SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER
+SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER
+SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER
+SDL_PROP_WINDOW_WIN32_HWND_POINTER
+SDL_PROP_WINDOW_X11_DISPLAY_POINTER
+SDL_PROP_WINDOW_X11_WINDOW_NUMBER
+```
+
+Renderer families calling `SDL_GL_*` directly, freed as a group by one `IPlatformGlContext`:
+
+```text
+
+```
+
+<!-- END GENERATED: tools/platform/sdl_inventory.py -->

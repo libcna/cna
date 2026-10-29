@@ -211,7 +211,7 @@ if(CNA_BUILD_TESTS AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
-# plans/plan_platform.md PLAT-7/120: one renderer-agnostic fixed-scene
+# PLAT-7/120: one renderer-agnostic fixed-scene
 # benchmark, built against whichever renderer this configure selected. Browser builds publish via
 # JavaScript as before; native builds use steady_clock and emit the raw samples as JSON. Keeping
 # this under either examples or tests makes a lean benchmark-only configure possible.

@@ -1213,7 +1213,7 @@ namespace Microsoft::Xna::Framework
         }
         const auto contextLease = AcquireGameThreadContextLease();
 
-        // No controller subsystem is acquired here. plans/plan_platform.md PLAT-83 did, to make
+        // No controller subsystem is acquired here. PLAT-83 did, to make
         // already-connected pads visible in frame one, and the cost turned out to be a full udev
         // device enumeration -- ~1.9 seconds on this project's Linux reference machine, paid
         // before the first frame by every game whether or not it ever reads a controller, and seen

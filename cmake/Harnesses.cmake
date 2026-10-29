@@ -404,7 +404,7 @@ if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND TARGET SDL3::SDL3 AND NOT EMSCR
     target_link_libraries(cna_mojoshader_gl_probe PRIVATE cna_mojoshader SDL3::SDL3)
 endif()
 
-# --- plans/plan_platform.md PLAT-131: terminal restoration harness ---
+# --- PLAT-131: terminal restoration harness ---
 # A tiny standalone (non-GTest) executable that takes the terminal over with a TerminalSession and
 # then dies in a chosen way: normally, by SIGINT/SIGTERM/SIGHUP, by abort(), or by letting an
 # exception escape main. Four of those five destroy the process, so none can be asserted inside
@@ -427,7 +427,7 @@ if(CNA_BUILD_TESTS AND NOT WIN32)
     )
 endif()
 
-# --- plans/plan_platform.md PLAT-136: terminal resize harness ---
+# --- PLAT-136: terminal resize harness ---
 # TerminalPlatform installs its SIGWINCH watcher only when attached to a terminal and reads the new
 # size from its own stdout -- neither of which holds inside CnaTests, where CI redirects output. So
 # the resize assertions run here, in a process whose standard descriptors really are a

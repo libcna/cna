@@ -406,7 +406,7 @@ Every other dependency is still pinned by this repository through submodule gitl
   helpers), their tests, desktop-validation harnesses, the standalone platform harness (broken since
   2026-09-28 and used only by the Win32 lanes), Windows validation scripts, CMake discovery
   modules (`cmake/PlatformX11.cmake`, `cmake/PlatformWayland.cmake`), CI cells, spikes and
-  capability documents (`plans/plan_platform.md` §11c, PLAT-142). **Windows, X11 and Wayland remain
+  capability documents (PLAT-142). **Windows, X11 and Wayland remain
   supported, through SDL3**: SDL3 is CNA's one graphical platform, reaching each window system
   through SDL's own `windows`, `x11` and `wayland` video drivers, and `IPlatformWindow::
   GetNativeHandle()` still hands renderers the `HWND`, `Display*` + XID or `wl_display*` +

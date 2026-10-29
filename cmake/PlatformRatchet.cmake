@@ -1,5 +1,5 @@
 # =====================================================================================
-# CNA platform ratchet (plans/plan_platform.md Task PLAT-8)
+# CNA platform ratchet (PLAT-8)
 #
 # Reports, at configure time, how much of CNA calls SDL directly outside the PLAT-3
 # production allowlist, and audits every surviving test/example use against PLAT-123's
@@ -113,7 +113,7 @@ endif()
 add_custom_target(cna_platform_ratchet
     COMMAND "${Python3_EXECUTABLE}" "${_ratchet_script}" --repo "${CMAKE_CURRENT_SOURCE_DIR}"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    COMMENT "Reporting remaining direct SDL coupling (plans/plan_platform.md PLAT-8)"
+    COMMENT "Reporting remaining direct SDL coupling (PLAT-8)"
     VERBATIM)
 
 if(EXISTS "${_nonproduction_audit_script}")
@@ -121,6 +121,6 @@ if(EXISTS "${_nonproduction_audit_script}")
         COMMAND "${Python3_EXECUTABLE}" "${_nonproduction_audit_script}"
                 --repo "${CMAKE_CURRENT_SOURCE_DIR}" --check
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        COMMENT "Auditing justified SDL use in tests/examples (plans/plan_platform.md PLAT-123)"
+        COMMENT "Auditing justified SDL use in tests/examples (PLAT-123)"
         VERBATIM)
 endif()

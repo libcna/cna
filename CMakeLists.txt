@@ -343,18 +343,18 @@ cna_generate_renderer_registry(CNA_RENDERER_REGISTRY_SOURCE ${_cna_renderer_iden
 # The descriptor compilation gate reads the same registry map, so it must follow that include.
 # It defines its target from modules/renderers/CMakeLists.txt, once the selected families are known.
 include(cmake/RendererDescriptorGate.cmake)
-# Platform implementation selection (plans/plan_platform.md PLAT-11). A separate axis from
+# Platform implementation selection (PLAT-11). A separate axis from
 # CNA_GRAPHICS_RENDERER decides how pixels are produced; CNA_PLATFORM decides where the window,
 # events and input come from. Both selections, and the audio one, are resolved much earlier --
 # just before the vendored SDL sub-build, which needs to know whether any of them wants SDL at
 # all. See the SdlAvailability.cmake include above.
 
-# Platform ratchet (plans/plan_platform.md PLAT-8): reports how much of CNA still calls SDL
+# Platform ratchet (PLAT-8): reports how much of CNA still calls SDL
 # directly outside the PLAT-3 allowlist, and warns when that count has gone up. Warning
 # only until PLAT-121 flips it strict; skips itself cleanly with no Python 3 present.
 include(cmake/PlatformRatchet.cmake)
 
-# Hot-path lint (plans/plan_platform.md PLAT-9): rejects platform calls inside per-pixel,
+# Hot-path lint (PLAT-9): rejects platform calls inside per-pixel,
 # per-vertex, per-fragment, per-sample and per-event loops, per design decision 4. A hard
 # error rather than a warning like the ratchet above: this one starts at zero violations
 # and every regression is a single deliberate line with an obvious fix or an annotation.

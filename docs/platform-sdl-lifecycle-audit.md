@@ -1,7 +1,7 @@
 # SDL subsystem lifecycle audit (PLAT-4)
 
 > Audit of every `SDL_Init*` / `SDL_Quit*` call site in CNA production code, and of the mechanisms
-> that coordinate them. `plans/plan_platform.md` PLAT-29 must reproduce this behaviour exactly — the
+> that coordinate them. PLAT-29 must reproduce this behaviour exactly — the
 > ordering here is subtle, was arrived at deliberately (Tasks `SDLCORE-001`, `SDLCORE-011`,
 > `P7-1`, `VIB2-003/004`), and already has dedicated regression tests. This document exists so
 > PLAT-29 is a port, not a redesign.

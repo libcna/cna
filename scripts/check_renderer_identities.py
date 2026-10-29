@@ -48,7 +48,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # "SDL renderer/GPU (5 families)") is not reported as a stale total. The cost of that precision is
 # recall: a count phrased any other way is not checked at all, and a check that cannot see a count
 # leaves it exactly as unowned as one nobody wrote down. That is not hypothetical -- the first
-# attempt at plans/plan_platform.md's rule 5 wrote "is **49** today" and this check sailed straight past
+# attempt at the platform plan's rule 5 wrote "is **49** today" and this check sailed straight past
 # it.
 #
 # So a document marked True must keep stating its count in the canonical phrasing. Rewording it
@@ -57,11 +57,6 @@ COUNTED_DOCUMENTS = {
     "docs/runtime-renderer-selection.md": True,
     "docs/renderer-expansion-candidates.md": True,
     "docs/physical-modules.md": True,
-    # plans/plan_platform.md states the count in three load-bearing places -- rule 5 ("no task may
-    # reduce renderer coverage"), PLAT-76's allowlist evidence and the definition of done -- and
-    # every one of them read "46" for three identities after the count moved. It is the document
-    # a reviewer checks the boundary against, so a stale number there is worse than elsewhere.
-    "plans/plan_platform.md": True,
     # This one deliberately states no total: it used to, and now names the registry instead, which
     # is the outcome this check recommends in its own failure message. Listed rather than dropped
     # so that a count reappearing in it is still checked.
@@ -80,7 +75,7 @@ COUNTED_DOCUMENTS = {
 #
 # The family pattern needs a whole-registry marker for the same reason the identity pattern needs
 # "public", and "renderer families" is NOT one -- it is how sub-counts are phrased too. Adding
-# plans/plan_platform.md produced three false positives in one run, each a true statement:
+# the platform plan produced three false positives in one run, each a true statement:
 #
 #   "SDL renderer/GPU (5 families)"                 the families touching a native window
 #   "(11 renderer families need it)"                the families needing IPlatformGlContext

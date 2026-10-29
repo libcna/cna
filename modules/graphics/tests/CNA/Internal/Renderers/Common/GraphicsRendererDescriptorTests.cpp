@@ -85,7 +85,7 @@ TEST(GraphicsRendererDescriptorTest, DefaultsAreInertRatherThanPlausible)
     EXPECT_FALSE(descriptor.needsWindow);
     EXPECT_FALSE(descriptor.needsVideoSubsystem);
     EXPECT_EQ(descriptor.windowKind, RendererWindowKind::None);
-    // MERGE (plans/plan_platform.md PLAT-8): the pre-window hook became data. An inert default now
+    // MERGE (PLAT-8): the pre-window hook became data. An inert default now
     // means "asks the platform for nothing", which is the same guarantee one step earlier: a
     // forgotten registry entry cannot silently acquire a GL visual.
     EXPECT_EQ(descriptor.glFramebuffer.depthBits, 0);

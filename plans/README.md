@@ -17,7 +17,12 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   modularization campaign, closed and promoted on 2026-08-10; deleted on 2026-10-28 (Git history
   only). The current architecture and its permanent validators are in
   [`../docs/physical-modules.md`](../docs/physical-modules.md).
-- [`plan_platform.md`](plan_platform.md) — platform abstraction.
+- `plan_platform.md` — the platform abstraction (`PLAT-1`..`PLAT-141` and lettered follow-ups,
+  2026-08, re-audited 2026-08-17): every decision implemented except `PLAT-45`, cut on evidence;
+  its SDL2 phase and direct Win32/X11/Wayland platforms were retired in 2026-10. Deleted on
+  2026-10-29 (Git history only). The contract, its design decisions, the implementations CNA
+  deliberately lacks and the generated SDL inventory are
+  [`../docs/platform-abstraction.md`](../docs/platform-abstraction.md); comments cite tasks as "PLAT-nn".
 - `plan_apple.md` (`APPLE-1`..`APPLE-20`, macOS/iOS platform subsystem) and `plan_apple_m4.md`
   (`AM4-*`, the Mac mini M4 qualification campaign of 2026-10-07/08) — deleted on 2026-10-28
   (Git history only). The current support boundary, design and known gaps are in

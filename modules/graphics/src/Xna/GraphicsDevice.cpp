@@ -259,7 +259,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return (static_cast<int>(options) & static_cast<int>(flag)) != 0;
         }
 
-        // MERGE (plans/plan_platform.md PLAT-8): LogWindowDebugState() lived here on this branch and
+        // MERGE (PLAT-8): LogWindowDebugState() lived here on this branch and
         // printed a window's raw flag bitmask after creation. It was a debug aid for the
         // window-kind work, its one call site was inside the creation path that now goes through
         // the platform contract, and it cannot be expressed without reaching past that contract to
@@ -306,7 +306,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return false;
         }
 
-        // MERGE (plans/plan_runtimerenderer.md P1/P3 x plans/plan_platform.md PLAT-*): `next` added
+        // MERGE (plans/plan_runtimerenderer.md P1/P3 x PLAT-*): `next` added
         // RendererWindowRequirements and filled it with one `#ifdef CNA_RENDERER_<X>` per family --
         // the pattern P1/P3 removed from this file and that
         // scripts/check_runtime_renderer_discipline.py pins as absent. Neither design is discarded:
@@ -3986,7 +3986,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // GraphicsDeviceManager preferences are applied.
         description.resizable = false;
 
-        // MERGE (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md P1/P2): next derived the render
+        // MERGE (PLAT-8 x plans/plan_runtimerenderer.md P1/P2): next derived the render
         // intent and the framebuffer bits from #if defined(CNA_RENDERER_*) chains. That is exactly
         // the construct P1/P3 removed, and it cannot be right in a multi-renderer binary: several
         // families are compiled in at once, so the chains describe whichever macros happen to be
@@ -4064,7 +4064,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::setVideoSubsystemAcquired(const bool acquired)
     {
-        // MERGE DEFECT (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md RTR-P5-15), fixed here:
+        // MERGE DEFECT (PLAT-8 x plans/plan_runtimerenderer.md RTR-P5-15), fixed here:
         // both campaigns independently added an AcquireSubsystem(Video) -- `next` in
         // createOrAttachWindow(), where a window is about to be created, and this plan in
         // resolveRenderer(), per fallback candidate -- and the merge kept both while keeping the
@@ -4127,7 +4127,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 Microsoft::Xna::Framework::Input::Mouse::INTERNAL_setWindow(0, 0);
             }
 
-            // MERGE (plans/plan_platform.md PLAT-8): destroying the window is the platform wrapper's job.
+            // MERGE (PLAT-8): destroying the window is the platform wrapper's job.
             // The wrapper created by CreateWindow() owns its window; the one returned by
             // AdoptWindowHandle() does not, so resetting a borrowed wrapper cannot destroy a
             // caller's window even if ownsWindow_ were ever wrong.
@@ -4372,7 +4372,7 @@ namespace Microsoft::Xna::Framework::Graphics
             args.surface.drawableSize = platformWindow_->GetPixelSize();
             args.surface.displayScale = platformWindow_->GetDisplayScale();
         }
-        // MERGE (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md design decision 2): next picked
+        // MERGE (PLAT-8 x plans/plan_runtimerenderer.md design decision 2): next picked
         // these services with `#if defined(CNA_RENDERER_<X>)` chains. The descriptor of the family
         // actually being constructed answers the same question correctly in a multi-renderer build,
         // where several of those macros can be defined at once.

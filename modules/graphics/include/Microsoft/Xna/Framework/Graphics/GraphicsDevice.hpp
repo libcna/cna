@@ -1907,7 +1907,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // GraphicsDevice). The platform outlives both the window and this device.
         CNA::Platform::IPlatform* platform_;
         std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow_;
-        /// MERGE (plans/plan_runtimerenderer.md RTR-P5-12 x plans/plan_platform.md PLAT-8): the platform wrapper
+        /// MERGE (plans/plan_runtimerenderer.md RTR-P5-12 x PLAT-8): the platform wrapper
         /// already records whether destroying it destroys the underlying window, so this is no longer
         /// a lifetime flag. It survives as a policy flag: a caller-supplied window must not be torn
         /// down and rebuilt for a fallback candidate needing a different window kind, so the device

@@ -540,8 +540,8 @@ python3 tools/platform/sdl_ratchet.py --check
 python3 tools/platform/hot_path_lint.py
 ```
 
-See `docs/platform-abstraction.md` for the contract and implementation checklist. The migration
-task/evidence log is `plans/plan_platform.md`.
+See `docs/platform-abstraction.md` for the contract, its design decisions and implementation
+checklist. The migration task log (`PLAT-*`) is in Git history.
 
 Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 (`OPENGLES3` | `OPENGL33` | `WEBGL2` | `WEBGPU` | `HEADLESS` | `SOFTWARE` | `STUB` | `DIRECTX9` |

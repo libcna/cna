@@ -253,7 +253,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
     namespace
     {
-        // MERGE (plans/plan_platform.md PLAT-* x plans/plan_runtimerenderer.md P11): the version/profile the
+        // MERGE (PLAT-* x plans/plan_runtimerenderer.md P11): the version/profile the
         // platform is asked for is DATA, so it is computed from the runtime profile rather than
         // from `#if defined(CNA_GL_PROFILE_*)`. The compile-time form could only ever describe one
         // profile, which is exactly what P11 removed: a single binary may hold up to three, and the

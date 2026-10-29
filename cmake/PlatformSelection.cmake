@@ -1,5 +1,5 @@
 # =====================================================================================
-# CNA platform selection (plans/plan_platform.md Task PLAT-11)
+# CNA platform selection (PLAT-11)
 #
 # Chooses which CNA::Platform implementation is compiled. Exactly one is built into a
 # binary; the interfaces stay virtual anyway, because the conformance suite (PLAT-116)
@@ -25,7 +25,7 @@ set(CNA_PLATFORM "SDL3" CACHE STRING
         "Platform implementation (SDL3 | HEADLESS | TERMINAL)")
 
 # Implemented today. TERMINAL is host-conditional: it is built on termios, and there is no
-# Windows console path for it (plans/plan_platform.md Phase 10). Offering it on Windows would
+# Windows console path for it (PLAT Phase 10). Offering it on Windows would
 # produce a configure that succeeds and a build that does not.
 set(_cna_platforms_available SDL3 HEADLESS)
 if(NOT WIN32)
@@ -34,7 +34,7 @@ endif()
 
 # Reserved-but-unimplemented. These are recognised so that configuring with one fails
 # LOUDLY, naming the plan, instead of silently falling back to SDL3 and producing a
-# binary that is not what the user asked for. plans/plan_platform.md §12 records why each is
+# binary that is not what the user asked for. docs/platform-abstraction.md records why each is
 # out of scope; PLAT-11 is explicit that a reserved identifier must never degrade
 # quietly.
 #
@@ -69,9 +69,9 @@ if(CNA_PLATFORM IN_LIST _cna_platforms_reserved)
     message(FATAL_ERROR
         "CNA: CNA_PLATFORM=${CNA_PLATFORM} is a reserved identifier that is NOT implemented.\n"
         "Only ${_cna_platforms_available} are available today.\n"
-        "See plans/plan_platform.md -- SDL 1.2 and Emscripten are recorded in "
-        "\"Possible future implementations (NOT in scope)\".\n"
-        "TERMINAL exists (plans/plan_platform.md Phase 10) but is POSIX-only: it is built on "
+        "See docs/platform-abstraction.md -- SDL 1.2 and Emscripten are recorded in "
+        "\"Implementations CNA does not have, and why\".\n"
+        "TERMINAL exists but is POSIX-only: it is built on "
         "termios and has no Windows console path.\n"
         "This is a hard error on purpose: falling back to SDL3 would build something other "
         "than what you asked for.")
