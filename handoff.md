@@ -22,12 +22,14 @@ Repositories and branches:
 - Museum and cna-engine inventories are consumer-owned. Do not edit them from CNA; their agents
   move pins/findings after published CNA commits are available.
 
-Campaign accounting from `CNA_DEMOS_REPAIR_MATRIX.json`: **156 historical IDs, 156 final
-dispositions**: 119 `FIXED_VALIDATED`, 23 `DOCUMENTATION_CORRECTED`, 8 `ALREADY_FIXED`, 3
-`FIXED_PLATFORM_VALIDATION_PENDING` (003 SpriteBatch Textures[0], 101 video URI resolution, 152
-StorageContainer FileShare: each needs a native Windows/XNA run this machine cannot do), one
-`DEMO_EXPECTATION_BUG`, one `DUPLICATE_ROOT_CAUSE` and one `UNSUPPORTED_CONTRACT_CORRECTED`. The
-three graphics findings outside the historical count are resolved and recorded in the matrix:
+Campaign accounting from the repair matrix `CNA_DEMOS_REPAIR_MATRIX.json` (deleted on 2026-10-29
+once every row had its final disposition; `git show 9c2b3e2d4:CNA_DEMOS_REPAIR_MATRIX.json`):
+**156 historical IDs, 156 final dispositions**: 119 `FIXED_VALIDATED`, 23
+`DOCUMENTATION_CORRECTED`, 8 `ALREADY_FIXED`, 3 `FIXED_PLATFORM_VALIDATION_PENDING` (003
+SpriteBatch Textures[0], 101 video URI resolution, 152 StorageContainer FileShare: each needs a
+native Windows/XNA run this machine cannot do; §8.2 says what to run), one `DEMO_EXPECTATION_BUG`,
+one `DUPLICATE_ROOT_CAUSE` and one `UNSUPPORTED_CONTRACT_CORRECTED`. The three graphics findings
+outside the historical count were resolved too:
 `DC-R1` `FIXED_VALIDATED` and `DC-R2` `UNSUPPORTED_CONTRACT_CORRECTED` on the owner's decisions,
 and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
@@ -56,8 +58,8 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   requirement as ISSUE-003 and ISSUE-101. No product source changed. A fresh cna-demos validation
   against this CNA tree passed all 732 enabled CTests (687 PASS, 45 declared SKIP; three manual
   tests disabled), and the complete 719-ID sweeps were SOFTWARE 671/0/45/3 and OPENGLES3
-  709/0/7/3. The only remaining campaign actions are the three native-Windows checks and the
-  consumer-owned museum reruns described under "Exact next task".
+  709/0/7/3. The only remaining campaign actions are the three native-Windows checks (§8.2) and
+  the consumer-owned museum reruns described under "Exact next task".
 - Consumer intake, museum `docs/CNA_FINDINGS.md` Open section (2026-10-24): every entry was checked
   against HEAD; the museum reran them all on 2026-10-25 against `9d49828f4` and moved each one it
   verified to its "Fixed in CNA" section (see "Exact next task"). Fixed here: MouseState/GamePadState text as XNA's IL
@@ -149,7 +151,7 @@ The museum Pipeline Workshop items are all answered: 1 (build-wide nested names,
 `419723275`), 9 (`bbed8c61e` on Sharp Runtime `f990d074`, measured against
 genuine XNA, demos `9598b43`) and 16 (owner: the documentation half is enough; the task sources
 stay in `modules/content-pipeline`). What remains needs a host this machine does not have: the
-three Windows/XNA platform validations (003, 101, 152). The museum's reruns of
+three Windows/XNA platform validations (003, 101, 152; §8.2). The museum's reruns of
 2026-10-25 against `9d49828f4` are in `../museum-simulator/docs/CNA_FINDINGS.md`: every finding it
 can run here is verified fixed or documented, the ThreadSanitizer races and ENet's UBSan shift
 included (a `-fsanitize=thread,undefined` museum tree: no report), and so is the Android emulator's
@@ -175,16 +177,15 @@ validation when its required tree or hardware is absent.
 Build discipline remains: existing build directories only, shared
 `CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv`, at most 8 jobs and preferably one compiler under
 the established 4 GiB high / 6 GiB max / no-swap scope. All GPU/UI tests go through
-`tools/platform/run_gpu_tests_private.sh`. Never weaken a demo/test oracle, and update the matrix,
+`tools/platform/run_gpu_tests_private.sh`. Never weaken a demo/test oracle, and update the
 permanent issue history and handoff after every accepted batch.
 
-**§5 plus `CNA_DEMOS_REPAIR_MATRIX.json` are the authoritative current defect inventories during
-this campaign.** §5 records the ordinary CNA maintenance list; the matrix additionally records
-every historical cna-demos finding, including pending items that are not yet confirmed defects.
-Capability documents describe supported behavior, tests are executable evidence, and Git history
-preserves measurement history. Every implementation plan has been retired and `plans/` removed
-(2026-10-29); `docs/task-id-index.md` says where each one's content went. Do not let an issue disappear
-from either applicable list.
+**§5 is the authoritative current defect inventory; the three fixes still awaiting a native
+Windows run are §8.2.** The repair matrix that recorded every historical cna-demos finding is in
+Git history (above). Capability documents describe supported behavior, tests are executable
+evidence, and Git history preserves measurement history. Every implementation plan has been retired
+and `plans/` removed (2026-10-29); `docs/task-id-index.md` says where each one's content went. Do
+not let an issue disappear from §5 or §8.
 
 Ready to pick up next, when the owner asks: the near-future tasks of §8, starting with `XNB-61b`
 (§8.1).
@@ -691,3 +692,51 @@ reached through a type-erased external reference, which CNA's own writer can pro
 `GetContentManifest()` over a large content root slower. The type-reader table sits at the start
 of the body, so decoding only the first LZX frame would be enough, but that is 1-2 more hours and
 should wait for a measurement that shows the scan is too slow.
+
+### 8.2 Three cna-demos fixes awaiting a native Windows run
+
+The CNA/cna-demos repair campaign closed every finding except these three, which are fixed and
+validated on Linux but still owe a run on native Windows -- a host this machine does not have.
+None of them is a known defect: each is a fix whose Windows execution is unproven. Wine does not
+count for any of them. Each one is done when its run passes on native Windows; then delete its
+paragraph, and this section with the last one. The evidence files are in `../cna-demos`.
+
+**`CNA-DEMOS-ISSUE-003` -- `SpriteBatch` leaves its texture in `GraphicsDevice::Textures[0]`.**
+SpriteBatch kept renderer handles but never published the public texture wrapper. `3b6a2eaf3`
+(2026-10-22) publishes `Textures[0]` after each custom pass through lifetime-safe movable
+identities, tells a live disposed wrapper from a destroyed C++ one, discards renderer staging of a
+failed submission without replaying it, and makes WEBGPU and DIRECTX9 honour `Immediate`. Its 22
+regressions pass on SOFTWARE, OPENGLES3 and OPENGL33, with compiled-effect coverage on SDL_GPU,
+FNA3D and WEBGPU; for DIRECTX9 the five affected translation units only compile in the MinGW
+configuration. *To run on native Windows with `DIRECTX9` and
+`-DCNA_DIRECTX9_COMPILED_EFFECTS=ON`:* the 22 tests in
+`modules/graphics/tests/Microsoft/Xna/Framework/Graphics/` -- `SpriteTextureBindingTests.cpp`
+(6), `SpriteTextureBindingLifetimeTests.cpp` (7), `SpriteCompiledTextureBindingTests.cpp` (3),
+`SpriteCompiledBindingLifetimeTests.cpp` (5) and `SpriteCompiledRetryPixelTests.cpp` (1) -- and
+the cna-demos demos `graphics.texture2d.set_data` and `graphics.texture2d.set_data_rectangle`.
+Evidence: `docs/repair-evidence/graphics/SPRITE_BINDING_FINAL_FOCUS.md`.
+
+**`CNA-DEMOS-ISSUE-101` -- video URI resolution and deferred file failures.** URI spellings
+bypassed Sharp Runtime's decoding and `TitleLocation` resolution, and a deferred `Play` of a
+missing file stopped silently where XNA throws `ArgumentException`. `abbd8a4ea` (2026-10-21, on
+Sharp Runtime `c26614e85`) fixed both; the tests are `VideoFilePathBoundaryTests.cpp` and
+`VideoMissingFileXnaTests.cpp` in `modules/media/tests/Microsoft/Xna/Framework/Media/Video/`.
+*Still unmeasured:* when and how genuine XNA reports an existing file it cannot decode. That needs
+a working XNA media reference on native Windows: first a valid WMV as the positive control, then
+the undecodable files and the error timing of the public `Play`. Under Wine the valid control
+aborted in the unimplemented `mfplat.dll` `MFCreateVideoMediaType`, so no Wine result settles it.
+Match CNA to the measurement; nothing was changed on FNA's word. Evidence:
+`docs/repair-evidence/media/VIDEO_CODEC_REFERENCE_LIMITATION.md`.
+
+**`CNA-DEMOS-ISSUE-152` -- `StorageContainer` honours the requested `FileShare`.**
+`StorageContainer` discarded an explicit `FileShare`, Sharp Runtime had no constructor taking
+one, and the shorter overloads used the wrong defaults (XNA opens them exclusively, and `Append`
+write-only). `21b4cd64c` (2026-10-23; C contract `169470ee7`; Sharp Runtime `c6984ecef` and
+`f51bf9acf`) fixed it with platform-native sharing. The genuine-XNA reference oracle and the Linux
+kernel coverage are complete, and Sharp's sharing tests pass 16/16 under Win64 Wine.
+*To run on native Windows against these CNA and Sharp Runtime commits or later:* the four sharing
+tests of `modules/storage/tests/Microsoft/Xna/Framework/Storage/StorageDeviceTests.cpp`
+(`FileSharingIsForwardedToTheNativeStream`, `ShortFileOverloadsAndCreateFileAreExclusive`,
+`DeniedSharingDoesNotTruncateStoredData`, `TwoArgumentAppendUsesWriteOnlyAndPreservesThePrefix`)
+and the cna-demos demo `storage.storage_container.file_modes`. Evidence:
+`docs/repair-evidence/storage/FILE_SHARE.md`.
