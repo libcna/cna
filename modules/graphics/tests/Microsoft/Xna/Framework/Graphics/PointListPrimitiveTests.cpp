@@ -74,7 +74,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
-// plans/plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
+// RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
 // BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
 // condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
 // multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
@@ -1202,7 +1202,7 @@ TEST_F(PointListPrimitiveTest, PointListRespectsViewportScissorAndBlendState)
 // The topology contract.
 TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software);
     RequirePointRendering();
@@ -1257,7 +1257,7 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount
 // vertexStart, which this renderer honours.
 TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(SdlGpu);
     RequirePointRendering();

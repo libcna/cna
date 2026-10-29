@@ -87,7 +87,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "System/InvalidOperationException.hpp"
 
-// plans/plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
+// RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
 // BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
 // condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
 // multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
@@ -121,7 +121,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 // The renderers that rasterize a stock 3D draw and read the result back through
 // RenderTarget2D::GetData -- InstancedDiffuseColorTests.cpp's own suite set.
-/// plans/plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
+/// RTR-P9-5: the same renderer set, evaluated at runtime so this
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool DeclarationLayout()
 {
@@ -130,7 +130,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 // The renderers measured on a real display here. D3D9 stays outside it because no D3D
 // display is reachable in this environment; every leg still PRINTS its reading there.
-/// plans/plan_runtimerenderer.md RTR-P9-6: the same set, evaluated at runtime.
+/// RTR-P9-6: the same set, evaluated at runtime.
 [[nodiscard]] inline bool DeclarationLayoutMeasured()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software, SdlGpu);
@@ -172,7 +172,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 namespace
 {
-    // plans/plan_runtimerenderer.md RTR-P9-6: was a hand-maintained #if/#elif chain of display names that
+    // RTR-P9-6: was a hand-maintained #if/#elif chain of display names that
     // had to be extended for every renderer and answered with a placeholder when it was not. The
     // runtime accessor knows the ACTIVE renderer, and knows all 46 names.
     inline std::string RendererName()
@@ -691,7 +691,7 @@ protected:
         Print(c, route, r);
         if (DeclarationLayoutMeasured())
         {
-            // plans/plan_runtimerenderer.md RTR-P9-6: bgfx infers no byte-stride table, so this expectation
+            // RTR-P9-6: bgfx infers no byte-stride table, so this expectation
             // is not its contract. Asked at runtime, it steps aside for whichever renderer is active.
             if (!TranslatesDeclarations())
             {
@@ -756,7 +756,7 @@ protected:
 
 TEST_F(VertexDeclarationLayoutTest, EveryDeclarationRendersItsOwnLayout)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
@@ -772,7 +772,7 @@ TEST_F(VertexDeclarationLayoutTest, EveryDeclarationRendersItsOwnLayout)
 
 TEST_F(VertexDeclarationLayoutTest, SameStrideDifferentElementsDoNotCollide)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
@@ -796,7 +796,7 @@ TEST_F(VertexDeclarationLayoutTest, SameStrideDifferentElementsDoNotCollide)
 
 TEST_F(VertexDeclarationLayoutTest, PaddedEquivalentDeclarationKeepsItsSemantics)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
@@ -815,7 +815,7 @@ TEST_F(VertexDeclarationLayoutTest, PaddedEquivalentDeclarationKeepsItsSemantics
 
 TEST_F(VertexDeclarationLayoutTest, EveryRouteBindsTheDeclaredLayout)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
@@ -835,7 +835,7 @@ TEST_F(VertexDeclarationLayoutTest, EveryRouteBindsTheDeclaredLayout)
 
 TEST_F(VertexDeclarationLayoutTest, GeometryVertexOffsetAddressesDeclaredRecords)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
@@ -853,7 +853,7 @@ TEST_F(VertexDeclarationLayoutTest, GeometryVertexOffsetAddressesDeclaredRecords
 
 TEST_F(VertexDeclarationLayoutTest, DeclarationTransitionsDoNotReuseAStaleLayout)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
@@ -1007,7 +1007,7 @@ protected:
 // Present flushes. The target still holds exactly the clear colour it was given.
 TEST_F(DeclarationGuardTest, ARefusedDeclarationRasterizesNothing)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
@@ -1034,7 +1034,7 @@ TEST_F(DeclarationGuardTest, ARefusedDeclarationRasterizesNothing)
 // render its own declaration exactly.
 TEST_F(DeclarationGuardTest, AValidDrawAfterARefusedOneStillRenders)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
@@ -1068,7 +1068,7 @@ TEST_F(DeclarationGuardTest, AValidDrawAfterARefusedOneStillRenders)
 // covers the one upload path the collision matrix happens to use is not a boundary.
 TEST_F(DeclarationGuardTest, EveryUploadAndIndexWidthReachesTheSameBoundary)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
@@ -1099,7 +1099,7 @@ TEST_F(DeclarationGuardTest, EveryUploadAndIndexWidthReachesTheSameBoundary)
 // works.
 TEST_F(DeclarationGuardTest, DrawUserPrimitivesReachesTheSameBoundary)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
@@ -1150,11 +1150,11 @@ TEST_F(DeclarationGuardTest, DrawUserPrimitivesReachesTheSameBoundary)
 // than a claim that the declarations are invalid.
 TEST_F(DeclarationGuardTest, TheTranslatingRendererStillRendersEveryCollidingDeclaration)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-6: the contract of whichever renderer
+    // RTR-P9-6: the contract of whichever renderer
     // translates, asked at runtime rather than named.
     if (!TranslatesDeclarations())
         GTEST_SKIP() << RendererName() << " refuses colliding declarations rather than translating";
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
@@ -1183,9 +1183,9 @@ TEST_F(DeclarationGuardTest, TheTranslatingRendererStillRendersEveryCollidingDec
 // there is no stock input list to compare against and nothing is being reinterpreted.
 TEST_F(DeclarationGuardTest, CustomShaderEffectKeepsItsElementIndexConvention)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-6: EasyGL's own convention, asked of the active renderer.
+    // RTR-P9-6: EasyGL's own convention, asked of the active renderer.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2);
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();

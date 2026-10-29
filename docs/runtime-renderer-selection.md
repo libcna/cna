@@ -2,9 +2,9 @@
 
 **Status: usable.** Runtime renderer selection works and is verified across several build sets (see
 the table at the end). The renderer-gated test/example corpus has been audited and its applicable
-sites converted or deliberately retained as compile-time family/default gates. The remaining work
-is limited to the platform-specific validation sets and measurements listed at the end of
-`plans/plan_runtimerenderer.md`.
+sites converted or deliberately retained as compile-time family/default gates. Nothing is left
+open: the platform-specific validation sets once planned were all for renderers retired since, and
+the cost measurement, with why build time is not measured, is *What a multi-renderer build costs*.
 
 ---
 
@@ -194,7 +194,7 @@ macro is private to that family's target. This keeps the compile-time accessors
 they all describe the **default**. A renderer family's example suite is therefore registered only
 in a build whose default is that family; the other compiled-in families are covered there by their
 device-free suites (below) and by runtime selection. Making the test corpus itself
-renderer-agnostic is a separate piece of work (`plans/plan_runtimerenderer.md` phase P9).
+renderer-agnostic is a separate piece of work (RTR-P9).
 
 `CNA_MULTI_RENDERER` is defined when more than one renderer is compiled in, and
 `CNA_RENDERER_PRESENT_<IDENTITY>` is defined on the test executable for **every** compiled-in
@@ -482,8 +482,57 @@ about LLGL, and still applies to `SDL_GPU`, `WEBGPU` and `FNA3D`.
 - The `OPENGLES3` tree uses the Makefiles generator where the others use Ninja. That affects build
   time, not binary size, so it is left in the size table and out of any timing claim.
 
+## Design decisions
+
+The numbered decisions this mode is built on. Source comments and gate messages cite them as
+"design decision N"; the tasks that implemented them (`RTR-P0`..`RTR-P14`, 2026-08) are in Git history.
+
+1. **Compile-time selection stays the default.** `-DCNA_GRAPHICS_RENDERER=<X>` keeps producing the
+   behaviour and macro environment it always did. Several renderers in one binary is an opt-in
+   second mode (`-DCNA_GRAPHICS_RENDERERS=<A>;<B>;…`) that no build acquires silently.
+2. **One descriptor per family, consulted before construction.** What `GraphicsDevice` must know
+   before an `IGraphicsRenderer` exists -- the window kind and its flags, whether a window or SDL's
+   video subsystem is needed at all, pre-window GL attributes, an availability probe -- is the
+   family's `GraphicsRendererDescriptor`, not an `#ifdef` chain in `GraphicsDevice.cpp`.
+3. **A generated registry, not self-registration.** A self-registering translation unit inside a
+   static archive is dropped by the linker when nothing references it, so
+   `cmake/RendererRegistry.cmake` generates the table; this also stays out of the
+   `cna_graphics_core` ↔ renderer archive cycle.
+4. **Each family's factory lives in the family namespace.**
+   `CNA::Internal::Renderers::<Family>::CreateGraphicsRenderer` replaced one colliding
+   `CNA::Internal::Renderers::CreateGraphicsRenderer`; that is what lets two renderer archives link
+   into one binary.
+5. **The selection latches when `GraphicsDevice` construction starts**, not at the first factory
+   call, because creating the window consumes it first. The latch forbids changing the selection,
+   not calling the factory again: recreating the same renderer for another multisample count is
+   legitimate.
+6. **Failure is hard by default.** A selection or latch violation is
+   `System::InvalidOperationException`, and an initialization failure propagates the family's own
+   exception. CNA never substitutes another renderer on its own.
+7. **Fallback is opt-in, ordered and reported.** `SetFallbackChain()` and `EnableAutomaticFallback()`
+   latch like `SetPreferred()`, cover both a probe that reports the renderer unavailable and a
+   `create()` that throws, log every step at warning level and record it in `GetFallbackHistory()`;
+   `GetActive()` reports what was really created.
+8. **A fallback across window kinds recreates the window, and only CNA's own.** With a
+   game-supplied window the candidate is skipped and recorded as `WindowKindConflict` (*The
+   window-kind limitation*).
+9. **Renderer-specific behaviour leaves the XNA layer.** What were per-renderer `#ifdef` blocks in
+   XNA types are `IGraphicsRenderer` virtuals the XNA layer asks the active renderer: the applied
+   back-buffer, multisample and depth-stencil formats (`GetApplied*EXT`), the `GraphicsProfile`
+   ceilings (`GetMaxTextureSizeForProfileEXT`, `GetMaxCubeSizeForProfileEXT`) and the surface-format
+   verdicts (`ClassifySurfaceFormatEXT`), each of which may defer to the framework's own rule.
+10. **Runtime selection adds no public renderer identity.** The identities are
+    `cmake/RendererIdentities.cmake`'s, pinned by `scripts/check_renderer_identities.py`, in either
+    mode.
+11. **Unbuildable combinations are refused at configure time, with a reason** (*Renderer
+    combinations*, `cmake/RendererCombinations.cmake`), never left as a link error. The former rule
+    against two EasyGL profiles in one binary was lifted when the GL profile became a runtime value
+    (`RTR-P11`).
+12. **The test corpus converts incrementally.** Tests and examples ask which renderer is active
+    rather than which one the build defaults to, a phase at a time; single-renderer builds keep
+    compiling the corpus as before.
+
 ## See also
 
-- `plans/plan_runtimerenderer.md` — the design decisions and the full task breakdown.
 - `modules/core/include/CNA/GraphicsRendererType.hpp` — the public renderer identities.
 - `cmake/RendererSelection.cmake` — compile-time selection.

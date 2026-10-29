@@ -348,7 +348,7 @@ namespace
             Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
             Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(800, 480)};
 
-        // plans/plan_runtimerenderer.md RTR-P9-5: this whole file used to sit behind
+        // RTR-P9-5: this whole file used to sit behind
         // `#ifdef CNA_RENDERER_SDL_GPU`, so on every other renderer its 27 tests did not exist and
         // reported nothing at all. The gate belongs in SetUp() rather than in a helper: GTEST_SKIP()
         // returns from the function it is written in, and SetUp() is where GoogleTest itself checks

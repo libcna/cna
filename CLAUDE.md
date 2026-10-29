@@ -414,8 +414,8 @@ is private to its target, which is what keeps the existing renderer-gated tests 
 meaningful — they describe the default.
 
 Unbuildable combinations are rejected at configure time with a reason
-(`cmake/RendererCombinations.cmake`). See `docs/runtime-renderer-selection.md` and
-`plans/plan_runtimerenderer.md`.
+(`cmake/RendererCombinations.cmake`). See `docs/runtime-renderer-selection.md`, whose numbered
+design decisions the renderer gates cite.
 
 `cmake-build-multi/` is the one addition to the build-directory list above; it is not a per-ticket
 directory and is shared by all multi-renderer work.

@@ -16,7 +16,7 @@
 add_library(cna_renderer_common INTERFACE)
 target_link_libraries(cna_renderer_common INTERFACE cna_build_config)
 
-# plans/plan_runtimerenderer.md RTR-P6-6: this family's target name, derived from its own directory.
+# RTR-P6-6: this family's target name, derived from its own directory.
 #
 # modules/renderers/<family> builds cna_renderer_<family>, '-' becoming '_'
 # (sdl-gpu -> cna_renderer_sdl_gpu). Checked against every RendererSelection.cmake
@@ -34,7 +34,7 @@ endfunction()
 # sharp-runtime closure, the module's own public include root, and the reverse edges into the
 # framework modules.
 #
-# plans/plan_runtimerenderer.md RTR-P6-6: takes the target as an ARGUMENT. It used to read the global
+# RTR-P6-6: takes the target as an ARGUMENT. It used to read the global
 # ${RENDERER_TARGET} scalar, which names the DEFAULT renderer -- correct only because
 # add_subdirectory() below is wrapped in a loop that overwrites that scalar before entering each
 # family and restores it afterwards. That made every family's correctness depend on an unwritten
@@ -45,7 +45,7 @@ endfunction()
 function(cna_renderer_common_setup target)
     set(RENDERER_TARGET "${target}")
     target_link_libraries(${RENDERER_TARGET} PUBLIC cna_renderer_common)
-    # plans/plan_runtimerenderer.md RTR-P6-4: this family's own identity macro, on this family's target.
+    # RTR-P6-4: this family's own identity macro, on this family's target.
     # Its sources guard on it (#ifdef CNA_RENDERER_SOFTWARE inside SoftwareRenderer.cpp, and so on),
     # and in a multi-renderer build it must NOT be visible project-wide -- only the default's is.
     if(CNA_RENDERER_TARGET_DEFINE)
@@ -85,7 +85,7 @@ endfunction()
 # and are included includer-relative). Extra arguments append additional sources
 # (Objective-C++ units, shared cross-family units).
 #
-# plans/plan_runtimerenderer.md RTR-P6-6: the target name is DERIVED from the directory this is called
+# RTR-P6-6: the target name is DERIVED from the directory this is called
 # from -- modules/renderers/<family> builds cna_renderer_<family>, with '-' replaced by '_'.
 # Verified to hold for every family against RendererSelection.cmake's own dir/target pairs.
 # Deriving it locally removes the last reason for a family to read a global scalar that was set
@@ -124,7 +124,7 @@ endfunction()
 
 get_filename_component(CNA_SELECTED_RENDERER "${RENDERER_DIR}" NAME)
 
-# plans/plan_runtimerenderer.md phase P6: every selected family, not only the default one. In
+# RTR-P6: every selected family, not only the default one. In
 # single-renderer mode this list has exactly one entry and equals CNA_SELECTED_RENDERER.
 set(CNA_SELECTED_RENDERER_FAMILIES)
 foreach(_cna_renderer_dir IN LISTS CNA_RENDERER_DIRS)
@@ -140,7 +140,7 @@ if(TARGET cna_mojoshader)
     add_subdirectory(common/mojoshader)
 endif()
 
-# plans/plan_runtimerenderer.md phase P6: enter every selected family, not only the default one.
+# RTR-P6: enter every selected family, not only the default one.
 # A family derives its own target from its own directory (RTR-P6-6) and receives its own identity
 # macros through CNA_RENDERER_TARGET_DEFINE, re-pointed per family below; in single-renderer mode
 # this loop runs once with the values it already had.
@@ -148,7 +148,7 @@ endif()
 # CNA_GRAPHICS_RENDERER is deliberately NOT re-pointed: inside every family directory it keeps
 # naming the build DEFAULT. Each family's examples/CMakeLists.txt gates its suite on equality with
 # it, because those executables are compiled against the default's project-wide CNA_RENDERER_<X>
-# macro and run the default renderer (plans/plan_runtimerenderer.md RTR-P9-13). Re-pointing it
+# macro and run the default renderer (RTR-P9-13). Re-pointing it
 # turned every one of those gates into list membership, so a multi-renderer build registered each
 # compiled-in family's suite against the default: two family sources stopped on their own #error
 # and the rest ran the default renderer under another family's name. A family that needs to know
@@ -164,7 +164,7 @@ foreach(_cna_family_index RANGE ${_cna_family_last})
 
     set(CNA_RENDERER_TARGET_DEFINE "${_cna_renderer_target_define}")
 
-    # plans/plan_runtimerenderer.md RTR-P6-3: RENDERER_TARGET is deliberately NOT re-pointed here any
+    # RTR-P6-3: RENDERER_TARGET is deliberately NOT re-pointed here any
     # more. It used to be, and that overwrite was the whole reason a family could read a global
     # scalar and get the right answer -- correctness resting on an unwritten rule that no read may
     # happen outside this loop, invisible in single-renderer mode where the default is the only
@@ -173,7 +173,7 @@ foreach(_cna_family_index RANGE ${_cna_family_last})
     # overwrite has no remaining reader: verified across every family that none reads
     # ${RENDERER_TARGET} before establishing its own target.
 
-    # plans/plan_runtimerenderer.md phase P11: several IDENTITIES may share one implementation family --
+    # RTR-P11: several IDENTITIES may share one implementation family --
     # EasyGL serves up to five. The family directory defines one target and must be entered once;
     # entering it again is a CMake error. The extra identities need no directory of their own,
     # only their own registry entry, which cmake/RendererRegistry.cmake already emits.

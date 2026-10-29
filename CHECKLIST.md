@@ -99,7 +99,7 @@ If the class depends on `Game` / SDL / graphics renderer, document it and skip t
 
 Beyond the identity registries (`GraphicsRendererType.hpp`, `cmake/RendererIdentities.cmake`,
 `scripts/check_renderer_identities.py`), a new renderer family must provide the runtime-dispatch
-surface (`plans/plan_runtimerenderer.md`):
+surface (`docs/runtime-renderer-selection.md`, design decisions 2-4):
 
 - [ ] `modules/renderers/<family>/src/<X>RendererDescriptor.cpp` defining
       `CNA::Internal::Renderers::<Family>::GetDescriptor()`. Enforced by

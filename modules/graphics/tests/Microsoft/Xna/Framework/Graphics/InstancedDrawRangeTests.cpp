@@ -91,7 +91,7 @@ using namespace CNA::Testing::Renderers;
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
-// plans/plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
+// RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
 // BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
 // condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
 // multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
@@ -131,7 +131,7 @@ using Microsoft::Xna::Framework::Graphics::Viewport;
 // The index-range contract above and nothing here; whether it honours the binding offsets is a
 // separate question that belongs to its own measurement, not to this file's compiled expectations,
 // and no D3D display has been reachable to take it.
-/// plans/plan_runtimerenderer.md RTR-P9-5: the binding-offset oracle set, asked of the ACTIVE renderer.
+/// RTR-P9-5: the binding-offset oracle set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedBindingOffsetOracle()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software);
@@ -748,7 +748,7 @@ namespace
             return PerInstanceTransformIsApplied() ? requested : 1;
         }
 
-        // plans/plan_runtimerenderer.md RTR-P9-5: this member is now always defined -- it used to sit
+        // RTR-P9-5: this member is now always defined -- it used to sit
         // behind CNA_INSTANCED_BINDING_OFFSET_ORACLE, but a declaration cannot be guarded by a
         // runtime predicate. The two tests that call it carry the renderer gate instead.
         /// The binding oracle (the D3D instanced offset fix reused it verbatim for the since-retired
@@ -2045,7 +2045,7 @@ TEST_F(InstancedDrawRangeTest, InstancedDrawAcceptsCompensatedNegativeBaseVertex
 // now the fixture's shared oracle so the D3D route asserts exactly the same contract.
 TEST_F(InstancedDrawRangeTest, EasyGLHonorsBindingOffsetsAndInstanceFrequency)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: this pin belongs to the EasyGL family specifically.
+    // RTR-P9-5: this pin belongs to the EasyGL family specifically.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2);
     RunBindingOffsetAndFrequencyOracle();
 }

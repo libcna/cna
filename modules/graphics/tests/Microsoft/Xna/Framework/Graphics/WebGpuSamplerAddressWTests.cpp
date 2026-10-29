@@ -137,7 +137,7 @@ namespace
 // ---------------------------------------------------------------------------
 TEST(WebGpuSamplerAddressW, EachAddressWModeProducesItsOwnNativeSampler)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
+    // RTR-P9-9: this is WebGPU's own contract.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     GraphicsDevice device;
     WebGPURenderer& renderer = RendererOf(device);
@@ -187,7 +187,7 @@ TEST(WebGpuSamplerAddressW, EachAddressWModeProducesItsOwnNativeSampler)
 // ---------------------------------------------------------------------------
 TEST(WebGpuSamplerAddressW, ApplySamplerStateDoesNotResetTheWAxis)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-9: this is WebGPU's own contract.
+    // RTR-P9-9: this is WebGPU's own contract.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     GraphicsDevice device;
     WebGPURenderer& renderer = RendererOf(device);

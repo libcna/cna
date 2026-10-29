@@ -19,7 +19,7 @@ cannot catch that; check_runtime_registry() below closes it by following each
 identity through to the C++ accessor that is supposed to return its descriptor.
 
 It also checks the DOCUMENTED count, in the handful of documents that state one
-(plans/plan_runtimerenderer.md RTR-P13-8). A count written into prose is a fact with no
+(RTR-P13-8). A count written into prose is a fact with no
 owner: TINYGL, IGL and PIXIJS were each added without it, so documents went on
 saying 46 and 47 while the registry said 49, and a reader has no way to tell which
 number is the live one. Correcting them by hand does not hold either -- the pass
@@ -242,8 +242,8 @@ def check_runtime_registry(identities):
          is a FATAL_ERROR at configure time for anyone selecting that identity.
       2. Some renderer translation unit DEFINES that namespace's descriptor accessor. Without it
          the generated registry names a symbol nothing provides and the link fails.
-      3. The same namespace declares its own CreateGraphicsRenderer. plans/plan_runtimerenderer.md
-         design decision 4 moved the factory out of the shared CNA::Internal::Renderers namespace
+      3. The same namespace declares its own CreateGraphicsRenderer. docs/runtime-renderer-selection.md design decision 4
+          moved the factory out of the shared CNA::Internal::Renderers namespace
          precisely so several renderer archives can link into one binary; a family left behind in
          the shared namespace both fails to satisfy its own descriptor and collides with every
          other such family in a multi-renderer build.
@@ -284,7 +284,7 @@ def check_runtime_registry(identities):
         if not any(factory.search(text) for text in in_namespace):
             problems.append(
                 f"{cmake_name}: CNA::Internal::Renderers::{namespace} has no family-scoped "
-                f"CreateGraphicsRenderer. plans/plan_runtimerenderer.md design decision 4 requires the "
+                f"CreateGraphicsRenderer. docs/runtime-renderer-selection.md design decision 4 requires the "
                 f"factory to live in the family's own namespace, not the shared one.")
 
     for cmake_name in sorted(set(mapping) - {c for c, _e, _v in identities}):

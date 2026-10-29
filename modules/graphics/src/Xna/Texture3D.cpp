@@ -21,7 +21,7 @@
 #include <vector>
 
 // DX9 Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef volume-texture ceilings.
-// plans/plan_runtimerenderer.md design decision 9: asked of the active renderer rather than the
+// docs/runtime-renderer-selection.md design decision 9: asked of the active renderer rather than the
 // preprocessor -- only D3D9 has a real capability structure to answer from.
 
 namespace Microsoft::Xna::Framework::Graphics

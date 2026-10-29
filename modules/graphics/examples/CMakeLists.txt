@@ -1,4 +1,4 @@
-# plans/plan_runtimerenderer.md RTR-P9-13/P9-15 -- the rule these gates follow, corrected after getting it
+# RTR-P9-13/P9-15 -- the rule these gates follow, corrected after getting it
 # wrong once:
 #
 #   * A gate deciding whether a TARGET EXISTS, where that target runs against whatever renderer the
@@ -20,7 +20,7 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 if(CNA_BUILD_EXAMPLES)
-    # ---- Runtime renderer selection reference (plans/plan_runtimerenderer.md RTR-P4-14) ----
+    # ---- Runtime renderer selection reference (RTR-P4-14) ----
     # Renderer-agnostic: it reports whatever this build contains rather than assuming one.
     add_executable(cna_demo_renderer_selection
         renderer_selection/renderer_selection_demo.cpp

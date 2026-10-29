@@ -17436,7 +17436,7 @@ namespace
 
 namespace CNA::Internal::Renderers
 {
-    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
+    // docs/runtime-renderer-selection.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace WebGPU { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

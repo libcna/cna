@@ -221,7 +221,7 @@
     {
       "name": "multi-renderer",
       "displayName": "Multi-renderer (HEADLESS + SOFTWARE + STUB)",
-      "description": "plans/plan_runtimerenderer.md reference multi-renderer set: no window, no GPU dependency, no third-party closure, so it runs anywhere including CI with no display server. The renderer is chosen at runtime via CNA::GraphicsRendererSelection.",
+      "description": "Reference multi-renderer set (docs/runtime-renderer-selection.md): no window, no GPU dependency, no third-party closure, so it runs anywhere including CI with no display server. The renderer is chosen at runtime via CNA::GraphicsRendererSelection.",
       "inherits": "base-ninja",
       "binaryDir": "${sourceDir}/cmake-build-multi",
       "cacheVariables": {

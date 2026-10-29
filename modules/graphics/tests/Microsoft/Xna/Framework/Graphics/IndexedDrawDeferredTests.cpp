@@ -55,7 +55,7 @@ using namespace CNA::Testing::Renderers;
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
-// plans/plan_runtimerenderer.md RTR-P9-9: these three blocks need their renderer's own headers and
+// RTR-P9-9: these three blocks need their renderer's own headers and
 // types, so they stay COMPILE-time -- no runtime predicate makes a type exist. The condition
 // widens from the DEFAULT renderer's macro to "compiled into this build", so a multi-renderer
 // build that holds one of these without selecting it still compiles its checks. Every test that
@@ -445,7 +445,7 @@ namespace
 // once, primitiveCount limiting the consumed range, and hints that never change addressing.
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
     RequireIndexedRendering();
@@ -490,7 +490,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
 
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsPositiveBaseVertexWithSixteenBitIndices)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
     RequireIndexedRendering();
@@ -631,7 +631,7 @@ TEST_F(CpuRebasedBaseVertexTest, ConsecutiveDrawsWithDifferentBasesEachReachThei
 
 TEST_F(IndexedDrawDeferredTest, PersistentDynamicDrawCombinesStartBaseCountAndHints)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
     RequireIndexedRendering();
@@ -688,7 +688,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDynamicDrawCombinesStartBaseCountAndHi
 
 TEST_F(IndexedDrawDeferredTest, PersistentDrawTreatsVertexRangesAsHints)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
     RequireIndexedRendering();
@@ -742,7 +742,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawTreatsVertexRangesAsHints)
 
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
     RequireIndexedRendering();
@@ -782,7 +782,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
 
 TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderExactGeometry)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, SdlGpu, Software);
     RequireIndexedRendering();
@@ -838,7 +838,7 @@ TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderE
         0,
         1);
 
-    // plans/plan_runtimerenderer.md RTR-P9-5: SDL_GPU has no backbuffer readback, so it is the one
+    // RTR-P9-5: SDL_GPU has no backbuffer readback, so it is the one
     // renderer with nothing to compare here.
     if (!CNA_RENDERER_IS(SdlGpu))
     {
@@ -884,7 +884,7 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
     EXPECT_NO_THROW(device.DrawIndexedPrimitives(
         PrimitiveType::TriangleStrip, 0, 4, 4, 1, 2));
 
-    // plans/plan_runtimerenderer.md RTR-P9-5: the renderers with an exact-pixel backbuffer oracle.
+    // RTR-P9-5: the renderers with an exact-pixel backbuffer oracle.
     if (CNA_RENDERER_IS(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software))
     {
         const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
@@ -895,7 +895,7 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
 
 TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
     RequireIndexedRendering();
@@ -965,7 +965,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
 
 TEST_F(IndexedDrawDeferredTest, DeferredStaticVertexAtoBtoAPreservesEveryQueuedVersion)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
     RequireIndexedRendering();
@@ -1028,7 +1028,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredStaticVertexAtoBtoAPreservesEveryQueuedV
 
 TEST_F(IndexedDrawDeferredTest, DeferredDynamicVertexAtoBtoAPreservesEveryQueuedVersion)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     // D3D9 is excluded here: this deferred-queue contract was never measured on it, and an
     // unmeasured renderer must not be asserted either way.
@@ -1075,7 +1075,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDynamicVertexAtoBtoAPreservesEveryQueued
 
 TEST_F(IndexedDrawDeferredTest, DeferredDistinctIdenticalVertexBuffersRemainIndependent)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
     RequireIndexedRendering();
@@ -1118,7 +1118,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDistinctIdenticalVertexBuffersRemainInde
 
 TEST_F(IndexedDrawDeferredTest, DeferredDynamicIndexAtoBtoAPreservesEveryQueuedVersion)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     // D3D9 is excluded here: this deferred-queue contract was never measured on it, and an
     // unmeasured renderer must not be asserted either way.
@@ -1181,7 +1181,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDynamicIndexAtoBtoAPreservesEveryQueuedV
 
 TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclaration)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
     RequireIndexedRendering();
@@ -1252,7 +1252,7 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclar
 
 TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffsetsAndSources)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
     RequireIndexedRendering();
@@ -1313,7 +1313,7 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffse
 
 TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRangesAndPixels)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
     RequireIndexedRendering();
@@ -1411,7 +1411,7 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
 
 TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
     RequireIndexedRendering();
@@ -1478,7 +1478,7 @@ TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
 
 TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctGeometry)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
     RequireIndexedRendering();
@@ -1549,7 +1549,7 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
 
 TEST_F(IndexedDrawDeferredTest, SoftwareRejectsAnInvalidIndexedTopologyWithoutRendering)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
     RequireIndexedRendering();
@@ -1586,7 +1586,7 @@ TEST_F(IndexedDrawDeferredTest, SoftwareRejectsAnInvalidIndexedTopologyWithoutRe
 // usable for a fully valid draw. Undefined pixels from the invalid calls are deliberately ignored.
 TEST_F(IndexedDrawDeferredTest, SoftwareSafelyForwardsDecodedAddressesOutsideTheBoundBuffer)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
     RequireIndexedRendering();
@@ -1893,7 +1893,7 @@ TEST(EasyGlIndexedDeviceLifecycleTest, ThirtyTwoBitDrawDoesNotPoisonNextDesktopC
 }
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
-// plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever WebGPU is in the build, run only when it is
+// RTR-P9-9: compiled whenever WebGPU is in the build, run only when it is
 // the active renderer.
 TEST_F(IndexedDrawDeferredTest, WebGpuIndexedTriangleStripMatchesBoundIndexFormat)
 {

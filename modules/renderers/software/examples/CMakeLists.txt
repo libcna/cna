@@ -35,7 +35,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         # CnaLibrary.cmake declares the real CNA <-> Software static-library cycle, so every
         # consumer gets a portable link line and these tests need no GNU-only archive group.
         target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
-        # plans/plan_runtimerenderer.md P6: the CNA umbrella links the DEFAULT renderer only
+        # RTR-P6: the CNA umbrella links the DEFAULT renderer only
         # (modules/CMakeLists.txt), so in a multi-renderer build where SOFTWARE is present but not
         # the default, these examples would not reach their own family's public-internal headers
         # (CNA/Internal/Renderers/Software/...). Naming the family's target is the same remedy

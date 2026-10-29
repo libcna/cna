@@ -265,7 +265,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // the platform contract, and it cannot be expressed without reaching past that contract to
         // the windowing library. next does not have it. Dropped rather than smuggled through.
 
-        /// plans/plan_runtimerenderer.md RTR-P8-5: a documented debug facility for verifying that a
+        /// RTR-P8-5: a documented debug facility for verifying that a
         /// configured fallback chain actually works, without having to break a driver to find out.
         ///
         /// CNA_DEBUG_UNAVAILABLE_RENDERERS is a comma-separated list of renderer names to treat as
@@ -306,7 +306,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return false;
         }
 
-        // MERGE (plans/plan_runtimerenderer.md P1/P3 x PLAT-*): `next` added
+        // MERGE (RTR-P1/P3 x PLAT-*): `next` added
         // RendererWindowRequirements and filled it with one `#ifdef CNA_RENDERER_<X>` per family --
         // the pattern P1/P3 removed from this file and that
         // scripts/check_runtime_renderer_discipline.py pins as absent. Neither design is discarded:
@@ -350,14 +350,14 @@ namespace Microsoft::Xna::Framework::Graphics
         /// CNA_DEBUG_FAIL_RENDERER_INIT: treat these renderers as failing during INITIALIZATION,
         /// which is a materially different path from failing the probe -- by then the window
         /// already exists, so a candidate needing a different window kind forces CNA to destroy and
-        /// recreate it (plans/plan_runtimerenderer.md design decision 8). That transition is otherwise
+        /// recreate it (docs/runtime-renderer-selection.md design decision 8). That transition is otherwise
         /// unreachable without a genuinely broken driver.
         [[nodiscard]] bool isDebugForcedInitFailure(std::string_view rendererName)
         {
             return isRendererListedIn("CNA_DEBUG_FAIL_RENDERER_INIT", rendererName);
         }
 
-        /// plans/plan_runtimerenderer.md RTR-P4: the single point where the runtime selection meets the
+        /// RTR-P4: the single point where the runtime selection meets the
         /// compiled-in set. The generated registry translation unit publishes that set into the
         /// selection layer before main() runs, so by the time anything here asks, the answer is real.
         /// The renderer GraphicsAdapter's UseNullDevice/UseReferenceDevice requires of a device being
@@ -3397,7 +3397,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     CNA::GraphicsRendererType GraphicsDevice::GetGraphicsRendererType() const
     {
-        // plans/plan_runtimerenderer.md RTR-P7-3: this device's own renderer. activeDescriptor_ is null
+        // RTR-P7-3: this device's own renderer. activeDescriptor_ is null
         // only if the accessor is somehow reached before resolution, in which case the build
         // default is the honest answer.
         return activeDescriptor_ != nullptr ? activeDescriptor_->type
@@ -3784,7 +3784,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!Texture::IsRenderTargetFormatAllowedByProfileEXT(graphicsProfile_, format))
             return false;
         // plans/plan_modern.md MOD-103/MOD-104: asks the same question RenderTarget2D's constructor asks
-        // (plans/plan_runtimerenderer.md design decision 9's tri-state verdict), so the two can never
+        // (docs/runtime-renderer-selection.md design decision 9's tri-state verdict), so the two can never
         // disagree -- a format this returns true for is a format RenderTarget2D will accept, and one
         // it returns false for is one the constructor refuses.
         switch (GetRenderer().ClassifyRenderTargetFormatEXT(static_cast<int>(format)))
@@ -3986,7 +3986,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // GraphicsDeviceManager preferences are applied.
         description.resizable = false;
 
-        // MERGE (PLAT-8 x plans/plan_runtimerenderer.md P1/P2): next derived the render
+        // MERGE (PLAT-8 x RTR-P1/P2): next derived the render
         // intent and the framebuffer bits from #if defined(CNA_RENDERER_*) chains. That is exactly
         // the construct P1/P3 removed, and it cannot be right in a multi-renderer binary: several
         // families are compiled in at once, so the chains describe whichever macros happen to be
@@ -4064,7 +4064,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::setVideoSubsystemAcquired(const bool acquired)
     {
-        // MERGE DEFECT (PLAT-8 x plans/plan_runtimerenderer.md RTR-P5-15), fixed here:
+        // MERGE DEFECT (PLAT-8 x RTR-P5-15), fixed here:
         // both campaigns independently added an AcquireSubsystem(Video) -- `next` in
         // createOrAttachWindow(), where a window is about to be created, and this plan in
         // resolveRenderer(), per fallback candidate -- and the merge kept both while keeping the
@@ -4310,7 +4310,7 @@ namespace Microsoft::Xna::Framework::Graphics
                         candidateType, GraphicsRendererFallbackReason::InitializationFailed,
                         e.what()});
 
-                // plans/plan_runtimerenderer.md RTR-P5-13: only a window this device OWNS may be dropped
+                // RTR-P5-13: only a window this device OWNS may be dropped
                 // here. discardOwnedWindow() correctly refuses to destroy a caller-supplied window,
                 // but it also dropped the window and zeroed DeviceWindowHandle unconditionally -- so
                 // after any initialization failure CNA forgot the caller's window entirely and the
@@ -4329,7 +4329,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 continue;
             }
 
-            // plans/plan_runtimerenderer.md design decision 5, refined by RTR-P5-18: the selection
+            // docs/runtime-renderer-selection.md design decision 5, refined by RTR-P5-18: the selection
             // latches on SUCCESSFUL resolution, not at the start of construction.
             //
             // Latching up front was the first cut, and it was wrong in a way the fallback tests
@@ -4372,7 +4372,7 @@ namespace Microsoft::Xna::Framework::Graphics
             args.surface.drawableSize = platformWindow_->GetPixelSize();
             args.surface.displayScale = platformWindow_->GetDisplayScale();
         }
-        // MERGE (PLAT-8 x plans/plan_runtimerenderer.md design decision 2): next picked
+        // MERGE (PLAT-8 x docs/runtime-renderer-selection.md design decision 2): next picked
         // these services with `#if defined(CNA_RENDERER_<X>)` chains. The descriptor of the family
         // actually being constructed answers the same question correctly in a multi-renderer build,
         // where several of those macros can be defined at once.
@@ -4440,7 +4440,7 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         };
 
-        // plans/plan_runtimerenderer.md design decision 4: reached through the descriptor rather than a
+        // docs/runtime-renderer-selection.md design decision 4: reached through the descriptor rather than a
         // single shared factory symbol, which is what lets several renderer archives coexist.
         renderer_ = descriptor.create(args);
 
@@ -4457,7 +4457,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     presentationParameters_.getMultiSampleCountProperty()));
             if (!rendererStartupNameLogged_)
             {
-                // plans/plan_runtimerenderer.md RTR-P7-10: the ACTIVE renderer, not the compile-time
+                // RTR-P7-10: the ACTIVE renderer, not the compile-time
                 // one. In a multi-renderer build those differ, and printing the compile-time name
                 // would misreport every runtime selection -- which is exactly the situation this
                 // line exists to make visible.

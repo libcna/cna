@@ -10,7 +10,7 @@
 // pixel test. The rendered consequences are covered by the Fna3d_3D CTest binary.
 #include <gtest/gtest.h>
 
-// plans/plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// RTR-P9-9: PRESENT_, not the identity macro. This suite is
 // device-free policy coverage for its own renderer, so it is worth compiling and running
 // whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
 // selected one. Only the default renderer's CNA_RENDERER_FNA3D is defined project-wide.

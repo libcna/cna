@@ -15,7 +15,7 @@
 # fails makes the overall run fail (non-zero exit), so this composes cleanly
 # as a CI step if/when this project's CI is extended to call it.
 #
-# plans/plan_runtimerenderer.md RTR-P9-22: a MULTI-RENDERER mode. Passing a semicolon-separated renderer
+# RTR-P9-22: a MULTI-RENDERER mode. Passing a semicolon-separated renderer
 # list runs every one of them from ONE build directory, selecting each at runtime through
 # CNA_GRAPHICS_RENDERER rather than reconfiguring and rebuilding per renderer:
 #
@@ -39,7 +39,7 @@ if [ "${1:-}" = "--multi" ]; then
     fi
 fi
 
-# plans/plan_runtimerenderer.md RTR-P2-8: two tiers, because checking every renderer on every change is
+# RTR-P2-8: two tiers, because checking every renderer on every change is
 # not affordable -- each one is a separate configure and build, and this project treats repeated
 # clean rebuilds as real SSD wear.
 #

@@ -1248,7 +1248,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         bool contextRecoveryEnabled_ = true;
         int swapInterval_ = 1;
-        /// plans/plan_runtimerenderer.md P11: which of EasyGL's three GL identities this instance serves.
+        /// RTR-P11: which of EasyGL's three GL identities this instance serves.
         GlProfile profile_ = kCompileTimeGlProfile;
         /// Clip-space multiplier for XNA's slightly-less-than-half-pixel center correction.
         float xnaPixelCenterScale_ = 63.0f / 64.0f;
@@ -1631,7 +1631,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief Constructs the renderer for one of EasyGL's three GL profiles.
          *
-         * plans/plan_runtimerenderer.md phase P11: the profile is a constructor argument rather than a
+         * RTR-P11: the profile is a constructor argument rather than a
          * compile definition, which is what lets two GL identities coexist in one binary. It
          * defaults to the profile this build was configured for, so a single-renderer build is
          * unaffected.
@@ -2216,7 +2216,7 @@ namespace CNA::Internal::Renderers::EasyGL
     /**
      * @brief Creates an EasyGL renderer for the build's default GL profile.
      *
-     * plans/plan_runtimerenderer.md design decision 4: declared in the FAMILY's namespace so several
+     * docs/runtime-renderer-selection.md design decision 4: declared in the FAMILY's namespace so several
      * renderer archives can link into one binary. Declared here, alongside the class, because this
      * family's device-free suites and contract programs construct a renderer directly, without
      * going through GraphicsDevice,
@@ -2231,7 +2231,7 @@ namespace CNA::Internal::Renderers::EasyGL
     /**
      * @brief Creates an EasyGL renderer for an explicit GL profile.
      *
-     * plans/plan_runtimerenderer.md P11: each of the three public GL identities this family serves
+     * RTR-P11: each of the three public GL identities this family serves
      * reaches this with its own profile, which is what lets all three be compiled into one binary.
      *
      * @param args Construction arguments.

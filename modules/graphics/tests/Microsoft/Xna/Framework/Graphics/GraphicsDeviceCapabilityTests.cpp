@@ -61,7 +61,7 @@ using namespace CNA::Testing::Renderers;   // NOLINT(google-build-using-namespac
 // This test target is built for multiple renderer families. Per-renderer arms below preserve each
 // accepted capability boundary rather than assuming one principal renderer's answers are universal.
 
-/// plans/plan_runtimerenderer.md RTR-P9-4: the per-renderer capability expectations. This was an
+/// RTR-P9-4: the per-renderer capability expectations. This was an
 /// `#if`/`#elif` chain of `constexpr bool`s, which in a multi-renderer build can only ever describe
 /// the DEFAULT renderer -- every other renderer in the same binary was asserted against the
 /// default's profile. It is a lookup keyed on the ACTIVE renderer now. Each arm keeps its own
@@ -514,7 +514,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
 
 TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorUnfilled)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    // RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
     if (!HasPixelOracle())
         GTEST_SKIP() << RendererName()
                      << " does not rasterize and read pixels back, so there is nothing to measure";
@@ -575,7 +575,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorU
 
 TEST(GraphicsDeviceCapabilityTest, WireFrameAndSolidAlternateWithoutStaleRasterizerState)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    // RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
     if (!HasPixelOracle())
         GTEST_SKIP() << RendererName()
                      << " does not rasterize and read pixels back, so there is nothing to measure";
@@ -613,7 +613,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameAndSolidAlternateWithoutStaleRasteri
 // ---------------------------------------------------------------------------
 TEST(GraphicsDeviceCapabilityTest, SolidRendersExactlyAfterAWireFrameDraw)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    // RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
     if (!HasPixelOracle())
         GTEST_SKIP() << RendererName()
                      << " does not rasterize and read pixels back, so there is nothing to measure";
@@ -647,7 +647,7 @@ TEST(GraphicsDeviceCapabilityTest, SolidRendersExactlyAfterAWireFrameDraw)
 // ---------------------------------------------------------------------------
 TEST(GraphicsDeviceCapabilityTest, WireFrameIsRefusedDeterministicallyOnThisRenderer)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    // RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
     if (!HasPixelOracle())
         GTEST_SKIP() << RendererName()
                      << " does not rasterize and read pixels back, so there is nothing to measure";

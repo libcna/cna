@@ -1,4 +1,4 @@
-// plans/plan_runtimerenderer.md RTR-P1-D08: the Software family's pre-construction contract.
+// RTR-P1-D08: the Software family's pre-construction contract.
 //
 // A real CPU rasterizer that owns its own framebuffer (plans/plan_software.md design decision 4): no
 // window, no GPU library, no platform video subsystem.
@@ -15,7 +15,7 @@ namespace CNA::Internal::Renderers::Software
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because docs/runtime-renderer-selection.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

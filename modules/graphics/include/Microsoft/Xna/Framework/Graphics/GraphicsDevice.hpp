@@ -1622,7 +1622,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns which graphics renderer THIS DEVICE is using.
          *
-         * plans/plan_runtimerenderer.md RTR-P7-3. This used to be `constexpr`, returning
+         * RTR-P7-3. This used to be `constexpr`, returning
          * CNA::getCurrentGraphicsRendererType() and ignoring `this` entirely -- correct while a
          * build could contain only one renderer, and wrong the moment it can contain several: it
          * would report the build's default even on a device that resolved to something else.
@@ -1907,7 +1907,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // GraphicsDevice). The platform outlives both the window and this device.
         CNA::Platform::IPlatform* platform_;
         std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow_;
-        /// MERGE (plans/plan_runtimerenderer.md RTR-P5-12 x PLAT-8): the platform wrapper
+        /// MERGE (RTR-P5-12 x PLAT-8): the platform wrapper
         /// already records whether destroying it destroys the underlying window, so this is no longer
         /// a lifetime flag. It survives as a policy flag: a caller-supplied window must not be torn
         /// down and rebuilt for a fallback candidate needing a different window kind, so the device
@@ -1927,7 +1927,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /// Detailed device-specific capabilities, populated lazily and invalidated with renderer
         /// reconstruction or an applied capability-affecting setting.
         mutable std::optional<CNA::RendererCapabilityProfile> rendererCapabilityProfile_;
-        /// plans/plan_runtimerenderer.md RTR-P5: the descriptor this device actually resolved to, which
+        /// RTR-P5: the descriptor this device actually resolved to, which
         /// may differ from the selected one when a fallback chain substituted another renderer.
         /// Pinned at construction so a later reconstruction (Reset, multisample change) rebuilds
         /// the SAME renderer rather than re-running resolution against a changed environment.
@@ -2262,7 +2262,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Resolves which renderer this device uses, honouring any configured fallback chain.
          *
-         * plans/plan_runtimerenderer.md design decisions 6 and 7. Creates the window and the renderer
+         * docs/runtime-renderer-selection.md design decisions 6 and 7. Creates the window and the renderer
          * together, because the window's flags depend on which renderer is being attempted: a
          * candidate that needs a different window kind cannot reuse the previous candidate's
          * window. Runs once, from the constructor. Reconstruction paths use createRenderer()

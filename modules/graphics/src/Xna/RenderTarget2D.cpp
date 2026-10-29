@@ -89,7 +89,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         // FNA's RenderTarget2D constructor passes NPOT mipmapped targets through to the
         // renderer even under Reach; Texture2D's profile restriction does not apply here.
-        // plans/plan_runtimerenderer.md design decision 9: renderability is the renderer's own question.
+        // docs/runtime-renderer-selection.md design decision 9: renderability is the renderer's own question.
         // A renderer that answers Defer accepts the framework's rule, which is what every renderer
         // except SKIA did when this was an #ifdef block.
         switch (device.GetRenderer().ClassifyRenderTargetFormatEXT(static_cast<int>(format)))

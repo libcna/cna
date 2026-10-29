@@ -1,4 +1,4 @@
-# plans/plan_runtimerenderer.md RTR-P9-19: renderer gates that decide whether a renderer's OWN tests are
+# RTR-P9-19: renderer gates that decide whether a renderer's OWN tests are
 # compiled, or its libraries exposed to the test executable, test LIST MEMBERSHIP
 # (CNA_RENDERER_IDENTITIES) rather than equality with the build default. In single-renderer mode the
 # list holds one entry and the two are identical; in a multi-renderer build a renderer's tests must
@@ -803,7 +803,7 @@ if(CNA_BUILD_TESTS)
     # not propagate to CnaTests via target_link_libraries and must be added here too.
     target_include_directories(cna_test_build_config INTERFACE
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cgltf
-            # plans/plan_runtimerenderer.md RTR-P9-2: shared test-support headers reached by their
+            # RTR-P9-2: shared test-support headers reached by their
             # namespace path (CNA/RendererTestGate.hpp), matching how every module's public headers
             # are spelled.
             ${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics/tests
@@ -833,7 +833,7 @@ if(CNA_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/support
     )
 
-    # plans/plan_runtimerenderer.md RTR-P9-9: one CNA_RENDERER_PRESENT_<IDENTITY> define per renderer
+    # RTR-P9-9: one CNA_RENDERER_PRESENT_<IDENTITY> define per renderer
     # COMPILED INTO THIS BUILD, on the test executable only.
     #
     # A renderer's own test suite guards its body on `#if defined(CNA_RENDERER_<X>)`, and only the
@@ -861,7 +861,7 @@ if(CNA_BUILD_TESTS)
         endif()
     endforeach()
 
-    # plans/plan_runtimerenderer.md RTR-P9-9, second half: a module's own include root is not enough when
+    # RTR-P9-9, second half: a module's own include root is not enough when
     # its PUBLIC headers include a third-party library's headers in turn: that library's include
     # directory reaches the renderer module through the third-party target it links, not through
     # any directory of CNA's own, so adding only CNA's root moved the failure from "no tests" to
@@ -892,7 +892,7 @@ if(CNA_BUILD_TESTS)
     # The WebGPU-only IndexBuffer regression opens native error scopes around the
     # public operation. CNA's renderer intentionally keeps wgpu-native PRIVATE, so expose it only
     # to this test executable in the WebGPU configuration.
-    # plans/plan_runtimerenderer.md RTR-P10-12: FNA3D's suites include mojoshader.h, and that header
+    # RTR-P10-12: FNA3D's suites include mojoshader.h, and that header
     # includes the GENERATED mojoshader_version.h unless MOJOSHADER_NO_VERSION_INCLUDE is defined.
     # cna_fna3d carries that switch for the renderer target, but RTR-P9-9 gave this executable the
     # present renderers' include PATHS only -- so CnaTests found the header and then failed on the

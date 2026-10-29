@@ -1,4 +1,4 @@
-// plans/plan_runtimerenderer.md RTR-P0-7: contract tests for the runtime-dispatch value types.
+// RTR-P0-7: contract tests for the runtime-dispatch value types.
 //
 // These types carry no behaviour of their own beyond the window-kind compatibility rule, so what
 // is worth pinning is exactly that rule, the trivial-copyability the generated registry table
@@ -44,7 +44,7 @@ namespace
                   "the number of public renderer identities changed -- update "
                   "scripts/check_renderer_identities.py, cmake/RendererIdentities.cmake, "
                   "cmake/RendererRegistry.cmake and the documented count in the same change "
-                  "(plans/plan_runtimerenderer.md design decision 10)");
+                  "(docs/runtime-renderer-selection.md design decision 10)");
 
     constexpr std::array<GraphicsRendererType, RendererIdentityCount> MakeAllRendererTypes()
     {
@@ -110,7 +110,7 @@ TEST(GraphicsRendererDescriptorTest, PreWindowRequestDefaultsMatchPresentationDe
 }
 
 // ---------------------------------------------------------------------------
-// Window-kind compatibility (plans/plan_runtimerenderer.md design decision 8)
+// Window-kind compatibility (docs/runtime-renderer-selection.md design decision 8)
 // ---------------------------------------------------------------------------
 
 TEST(RendererWindowKindTest, IdenticalKindsAreAlwaysCompatible)

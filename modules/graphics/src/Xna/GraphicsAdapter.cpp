@@ -378,7 +378,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool GraphicsAdapter::IsProfileSupported(GraphicsProfile graphicsProfile) const
     {
-        // plans/plan_runtimerenderer.md design decision 9: an ADAPTER-level query, asked before any
+        // docs/runtime-renderer-selection.md design decision 9: an ADAPTER-level query, asked before any
         // GraphicsDevice exists, so it goes through the renderer's static descriptor hook rather
         // than an IGraphicsRenderer virtual.
         const auto& queries =
@@ -403,7 +403,7 @@ namespace Microsoft::Xna::Framework::Graphics
         SharpRuntime::intcs& selectedMultiSampleCount
     ) const
     {
-        // plans/plan_runtimerenderer.md design decision 9: an ADAPTER-level query, so it goes through the
+        // docs/runtime-renderer-selection.md design decision 9: an ADAPTER-level query, so it goes through the
         // renderer's static descriptor hooks rather than an IGraphicsRenderer virtual -- there is no
         // device yet. A renderer that supplies no hook keeps exactly the behaviour it had when this
         // was the #else branch of an #ifdef.

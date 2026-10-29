@@ -1,4 +1,4 @@
-# --- Generated renderer registry (plans/plan_runtimerenderer.md design decision 3) ---
+# --- Generated renderer registry (docs/runtime-renderer-selection.md design decision 3) ---
 #
 # Emits one translation unit listing the renderer families linked into this build, so that
 # GraphicsRendererRegistry can hand GraphicsDevice a table of GraphicsRendererDescriptor instead of
@@ -23,7 +23,7 @@
 # accessor defaults to GetDescriptor.
 #
 # EasyGL is the one family serving several identities (docs/renderer-registry.md), and since
-# plans/plan_runtimerenderer.md phase P11 made its GL profile a runtime value, all three can be compiled in
+# RTR-P11 made its GL profile a runtime value, all three can be compiled in
 # at once -- each reached through its own accessor on the single EasyGL target.
 function(_cna_renderer_identity_map out_var)
     set(_map

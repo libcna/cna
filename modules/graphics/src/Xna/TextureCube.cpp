@@ -27,7 +27,7 @@
 #include <vector>
 
 // DX9 Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef cube-texture-size
-// ceilings. plans/plan_runtimerenderer.md design decision 9: asked of the active renderer rather than
+// ceilings. docs/runtime-renderer-selection.md design decision 9: asked of the active renderer rather than
 // convention exactly.
 
 namespace Microsoft::Xna::Framework::Graphics

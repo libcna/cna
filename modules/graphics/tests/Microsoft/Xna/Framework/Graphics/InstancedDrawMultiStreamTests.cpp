@@ -152,7 +152,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // instanced draw implementation at all (`IGraphicsRenderer::DrawInstancedPrimitivesEx`'s default
 // throws), which remains a capability boundary for any renderer outside this set. SOFTWARE-129
 // adds Software only after its independent CPU route passes the complete shared oracle.
-/// plans/plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
+/// RTR-P9-5: the same set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool MultiStreamOracle()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9,
@@ -172,7 +172,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // legs themselves stay -- they still print what every renderer consumed -- and their remaining
 // `#else` arm covers D3D9, which is outside this set only because no D3D display was reachable to
 // measure it, and an unmeasured renderer must not be asserted either way.
-/// plans/plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
+/// RTR-P9-5: the same set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool BindingOffsetOracle()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu,
@@ -905,7 +905,7 @@ namespace
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, TwoPerVertexAndTwoPerInstanceStreamsEachSupplyTheirOwnAxis)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!MultiStreamOracle())
         GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
@@ -966,7 +966,7 @@ TEST_F(InstancedDrawMultiStreamTest, TwoPerVertexAndTwoPerInstanceStreamsEachSup
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, BaseVertexAdvancesOnlyPerVertexStreams)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!MultiStreamOracle())
         GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
@@ -1033,7 +1033,7 @@ TEST_F(InstancedDrawMultiStreamTest, BaseVertexAdvancesOnlyPerVertexStreams)
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ReplacingOneStreamAtATimeAndReturningKeepsEachLegsBindings)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!MultiStreamOracle())
         GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
@@ -1135,7 +1135,7 @@ TEST_F(InstancedDrawMultiStreamTest, ReplacingOneStreamAtATimeAndReturningKeepsE
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, QueuedDrawsUnderDifferentBindingSetsKeepTheirOwn)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!MultiStreamOracle())
         GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
@@ -1231,7 +1231,7 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedDrawsUnderDifferentBindingSetsKeepThe
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, DuplicateSemanticStreamsRemapToUnusedIndices)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!MultiStreamOracle())
         GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
@@ -1304,7 +1304,7 @@ TEST_F(InstancedDrawMultiStreamTest, DuplicateSemanticStreamsRemapToUnusedIndice
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, RepeatedFramesReproduceTheSameMixedStreamFrame)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!MultiStreamOracle())
         GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
@@ -1384,7 +1384,7 @@ TEST_F(InstancedDrawMultiStreamTest, RepeatedFramesReproduceTheSameMixedStreamFr
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicSingleVertexAndSingleInstanceStreamIsUnchanged)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!MultiStreamOracle())
         GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
@@ -1467,7 +1467,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicSingleVertexAndSingleInstanceStreamI
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, QueuedMixedStreamDrawsSurviveContainerGrowthAndWrapperDeath)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!MultiStreamOracle())
         GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
@@ -1569,11 +1569,11 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedMixedStreamDrawsSurviveContainerGrowt
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamHonoursItsOwnVertexOffset)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!BindingOffsetOracle())
         GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!MultiStreamOracle())
         GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
@@ -1835,7 +1835,7 @@ namespace
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamOffsetIsReadOnEveryInstancingRenderer)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!MultiStreamOracle())
         GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
@@ -1912,7 +1912,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamOffsetIsReadOnEveryIns
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicPerVertexStreamOffsetIsReadOnEveryInstancingRenderer)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!MultiStreamOracle())
         GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
@@ -1990,7 +1990,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicPerVertexStreamOffsetIsReadOnEveryIn
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicBothStreamOffsetsAreReadOnEveryInstancingRenderer)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!MultiStreamOracle())
         GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
@@ -2085,7 +2085,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBothStreamOffsetsAreReadOnEveryInsta
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEveryInstancingRenderer)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!MultiStreamOracle())
         GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
@@ -2198,7 +2198,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEver
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColorEnabled)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!MultiStreamOracle())
         GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
@@ -2698,7 +2698,7 @@ namespace
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicBaseVertexAndPerVertexOffsetAddExactlyOnce)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!BindingOffsetOracle())
         GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
@@ -2756,7 +2756,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBaseVertexAndPerVertexOffsetAddExact
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicBothOffsetsHoldUnderStartIndexOnBothIndexWidths)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!BindingOffsetOracle())
         GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
@@ -2837,7 +2837,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBothOffsetsHoldUnderStartIndexOnBoth
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyIsArithmeticNotASpecialCase)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!BindingOffsetOracle())
         GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
@@ -2908,7 +2908,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyIsArithmeticNotASpe
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, QueuedClassicDrawsKeepTheirOwnOffsetsAndFrequencies)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!BindingOffsetOracle())
         GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
@@ -3002,7 +3002,7 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedClassicDrawsKeepTheirOwnOffsetsAndFre
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicOffsetsReturnToZeroAndBackAroundOrdinaryDraws)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!BindingOffsetOracle())
         GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
@@ -3117,7 +3117,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicOffsetsReturnToZeroAndBackAroundOrdi
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, QueuedClassicInstancedDrawSurvivesWrapperDeathAndAddressReuse)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!BindingOffsetOracle())
         GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
@@ -3207,7 +3207,7 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedClassicInstancedDrawSurvivesWrapperDe
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicOffsetsAndFrequencyHoldOnDynamicBuffers)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!BindingOffsetOracle())
         GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
@@ -3275,7 +3275,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicOffsetsAndFrequencyHoldOnDynamicBuff
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicBothOffsetsHoldAtFrequencyThree)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!BindingOffsetOracle())
         GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
@@ -3337,7 +3337,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBothOffsetsHoldAtFrequencyThree)
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicFrequencyAlternatesWithinOneFrame)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
     if (!BindingOffsetOracle())
         GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";

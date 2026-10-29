@@ -1,6 +1,6 @@
 #pragma once
 
-// plans/plan_runtimerenderer.md design decision 2: everything GraphicsDevice needs to know about a
+// docs/runtime-renderer-selection.md design decision 2: everything GraphicsDevice needs to know about a
 // renderer BEFORE an IGraphicsRenderer instance exists lives here, in one value type per renderer
 // family, instead of in #ifdef chains inside GraphicsDevice.cpp.
 //
@@ -32,7 +32,7 @@ namespace CNA::Internal::Renderers
      * prepareWindowFlags() returns: this is the granularity at which two renderers can be compared
      * for window compatibility. A windowing backend refuses to create one window carrying two
      * graphics-API intents, so a fallback crossing from one kind to another cannot reuse the
-     * existing window and must recreate it (plans/plan_runtimerenderer.md design decision 8).
+     * existing window and must recreate it (docs/runtime-renderer-selection.md design decision 8).
      */
     enum class RendererWindowKind
     {
@@ -129,7 +129,7 @@ namespace CNA::Internal::Renderers
     /**
      * @brief A renderer's answer about a GraphicsAdapter-level query, or a deferral.
      *
-     * plans/plan_runtimerenderer.md design decision 9, with a correction the implementation forced:
+     * docs/runtime-renderer-selection.md design decision 9, with a correction the implementation forced:
      * GraphicsAdapter's profile/format queries are ADAPTER-level and run before any GraphicsDevice
      * exists, so they cannot be routed through an IGraphicsRenderer virtual the way the texture and
      * render-target queries are. They go through these static descriptor hooks instead -- which is
@@ -216,7 +216,7 @@ namespace CNA::Internal::Renderers
          */
         bool needsVideoSubsystem = false;
 
-        // MERGE (PLAT-8 x plans/plan_runtimerenderer.md P2): a
+        // MERGE (PLAT-8 x RTR-P2): a
         // `std::uint32_t (*prepareWindowFlags)()` hook returning a raw windowing-library flag
         // bitmask used to live here; every descriptor's hook only mapped windowKind onto those
         // flags, which GraphicsDevice does once, behind the platform contract. Its one exception,
@@ -227,7 +227,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Framebuffer attributes that must be fixed before the window exists.
          *
-         * MERGE (PLAT-8 x plans/plan_runtimerenderer.md P2): this replaces
+         * MERGE (PLAT-8 x RTR-P2): this replaces
          * `void (*applyPreWindowAttributes)(const RendererPreWindowRequest&)`, whose every
          * implementation called into the windowing library directly. The platform contract already
          * carries these as data on WindowDescription::openGlFramebuffer, so a hook bought nothing
@@ -246,7 +246,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Whether this family is handed a platform surface presenter.
          *
-         * MERGE (PLAT-8 x plans/plan_runtimerenderer.md design decision 2): next chose
+         * MERGE (PLAT-8 x docs/runtime-renderer-selection.md design decision 2): next chose
          * the platform services a renderer receives with `#if defined(CNA_RENDERER_<X>)` chains in
          * GraphicsDevice::createRenderer(). In a multi-renderer binary those chains answer for
          * whichever macros are defined rather than for the family being constructed, so the
@@ -301,7 +301,7 @@ namespace CNA::Internal::Renderers
          * @brief Creates the renderer instance.
          *
          * The family's own CreateGraphicsRenderer, reached through a pointer so that several
-         * families can be linked into one binary (plans/plan_runtimerenderer.md design decision 4).
+         * families can be linked into one binary (docs/runtime-renderer-selection.md design decision 4).
          *
          * @param args Construction arguments, already populated by GraphicsDevice.
          * @return The new renderer; never nullptr on success. Throws on failure.

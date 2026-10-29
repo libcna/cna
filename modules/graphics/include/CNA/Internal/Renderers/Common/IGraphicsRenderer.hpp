@@ -1965,7 +1965,7 @@ namespace CNA::Internal::Renderers
     /**
      * @brief A renderer's answer about a surface format, or a deferral to the framework's own rule.
      *
-     * plans/plan_runtimerenderer.md design decision 9. Renderer-specific format behaviour used to live as
+     * docs/runtime-renderer-selection.md design decision 9. Renderer-specific format behaviour used to live as
      * #ifdef blocks inside the XNA layer, where the #else branch carried the renderer-agnostic
      * rule. Moving those behind a virtual has to preserve that structure exactly: a renderer either
      * has a real, renderer-specific answer, or it defers -- it must never be forced to restate the
@@ -2153,7 +2153,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Maps a requested MSAA sample count to the count this renderer actually applied.
          *
-         * plans/plan_runtimerenderer.md design decision 9. The identity default is deliberate:
+         * docs/runtime-renderer-selection.md design decision 9. The identity default is deliberate:
          * PresentationParameters keeps echoing back what the game asked for. Only a renderer that
          * clamps the request (SOFTWARE, which supports one real optional mode, or a GPU renderer
          * limited by its device) needs to correct that, and it must not be generalized to "always
@@ -2176,7 +2176,7 @@ namespace CNA::Internal::Renderers
         /// Returns the backbuffer's actual (device-clamped) MSAA sample count; 0 if none/unsupported.
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
 
-        // --- GraphicsProfile ceilings (plans/plan_runtimerenderer.md design decision 9) -------------
+        // --- GraphicsProfile ceilings (docs/runtime-renderer-selection.md design decision 9) -------------
         //
         // XNA's GraphicsProfile.Reach/HiDef carry renderer-independent, enforced-at-creation-time
         // ceilings. These are profile rules rather than hardware queries, so every renderer must
@@ -2237,7 +2237,7 @@ namespace CNA::Internal::Renderers
             return graphicsProfile == 1 /* GraphicsProfile::HiDef */ ? 4 : 1;
         }
 
-        // --- Surface-format boundaries (plans/plan_runtimerenderer.md design decision 9) -------------
+        // --- Surface-format boundaries (docs/runtime-renderer-selection.md design decision 9) -------------
 
         /**
          * @brief Whether a Texture2D may be created with the given surface format.
@@ -3505,7 +3505,7 @@ namespace CNA::Internal::Renderers
         std::function<void(RendererDeviceEvent)> deviceEventCallback;
     };
 
-    // plans/plan_runtimerenderer.md design decision 4: the renderer factory is NOT declared here.
+    // docs/runtime-renderer-selection.md design decision 4: the renderer factory is NOT declared here.
     //
     // It used to be -- declared once in this header and defined once per renderer family with an
     // identical signature, which is exactly why two renderer archives could never link into the

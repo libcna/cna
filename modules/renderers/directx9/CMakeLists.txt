@@ -30,7 +30,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/D3D9EffectRenderer.cpp")
     target_link_libraries(cna_renderer_d3d9_effect PRIVATE cna_graphics_core cna_core cna_math)
 endif()
 
-# plans/plan_runtimerenderer.md RTR-P6-6: derive this family's own target rather than reading the global
+# RTR-P6-6: derive this family's own target rather than reading the global
 # scalar, which names the build DEFAULT.
 cna_renderer_target_name(_cna_d3d9_target)
 add_library(${_cna_d3d9_target} STATIC ${_cna_d3d9_sources})

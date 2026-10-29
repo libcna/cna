@@ -67,7 +67,7 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     // plans/plan_nanovg.md: same registration discipline -- add the NANOVG entry here in the same task
     // that adds the identity everywhere else, not after the fact.
 
-    // plans/plan_runtimerenderer.md RTR-P7-8: exactly one, in BOTH modes.
+    // RTR-P7-8: exactly one, in BOTH modes.
     //
     // In a multi-renderer build this is not an accident -- it is the property that keeps this whole
     // file, and the ~892 other renderer-gated sites in the test and example corpus, meaningful.

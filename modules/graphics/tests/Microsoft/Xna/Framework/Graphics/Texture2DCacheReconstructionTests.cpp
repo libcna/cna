@@ -223,7 +223,7 @@ TEST_F(Texture2DCacheReconstructionTest, RepeatedReconstructionCyclesStayCorrect
 // A renderer whose CreateRenderTarget2D keeps the shared IGraphicsRenderer default (returns nullptr)
 // makes RenderTarget2D fall back to ordinary CPU-shadowed Texture2D behaviour, so the render-target
 // semantics below cannot be observed there.
-/// plans/plan_runtimerenderer.md RTR-P9-8: asked of the ACTIVE renderer, so a multi-renderer build gets
+/// RTR-P9-8: asked of the ACTIVE renderer, so a multi-renderer build gets
 /// the right answer per run instead of the build default's.
 [[nodiscard]] inline bool RenderTarget2DSupported()
 {

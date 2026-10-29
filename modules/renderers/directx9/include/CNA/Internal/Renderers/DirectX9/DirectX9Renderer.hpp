@@ -79,7 +79,7 @@ namespace CNA::Internal::Renderers::DirectX9
     class DirectX9Renderer final : public IGraphicsRenderer
     {
     public:
-        // plans/plan_runtimerenderer.md design decision 9 / DX9 D9-100/D9-103: D3D9 is the one
+        // docs/runtime-renderer-selection.md design decision 9 / DX9 D9-100/D9-103: D3D9 is the one
         // renderer with a real capability structure to consult, so it is the one renderer that can
         // enforce GraphicsProfile ceilings honestly. These used to live as
         // #ifdef CNA_RENDERER_DIRECTX9 blocks inside Texture2D/Texture3D/TextureCube/GraphicsDevice.

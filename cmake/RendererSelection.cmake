@@ -51,7 +51,7 @@ if(_cna_enabled_renderers)
     list(GET _cna_enabled_renderers 0 CNA_GRAPHICS_RENDERER)
 endif()
 
-# --- Multi-renderer selection (plans/plan_runtimerenderer.md design decision 1, phase P6) ---
+# --- Multi-renderer selection (docs/runtime-renderer-selection.md design decision 1, phase P6) ---
 #
 # CNA_GRAPHICS_RENDERER stays the primary, single-valued option: it names this build's DEFAULT
 # renderer, and a build that sets nothing else behaves exactly as it always has.
@@ -84,7 +84,7 @@ endif()
 # a scope, so every set()/add_compile_definitions()/add_subdirectory() inside behaves exactly as it
 # did when this was straight-line code. For a single-identity list the execution is identical.
 #
-# plans/plan_runtimerenderer.md RTR-P6-4: an identity's own CNA_RENDERER_<X> macro is announced by
+# RTR-P6-4: an identity's own CNA_RENDERER_<X> macro is announced by
 # appending it to _cna_identity_defines -- NEVER by calling add_compile_definitions() here. The
 # loop below applies the list to that family's own target and, for the DEFAULT identity only, to
 # the whole project. add_compile_definitions() is directory-scoped and this file is included from
@@ -150,7 +150,7 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL 
     # easy-gl is a SIBLING repository checkout, not a git submodule of this
     # repo (Task DEV-BUILD-001) -- see sharp-runtime's identical check above
     # for the full rationale.
-    # plans/plan_runtimerenderer.md P11: several GL identities can now be selected at once, and they all
+    # RTR-P11: several GL identities can now be selected at once, and they all
     # share this one easy-gl subdirectory -- add it only for the first of them.
     # CNA_EASYGL_ROOT points a build at an easy-gl checkout elsewhere (a worktree nested somewhere
     # else has no sibling of its own), the same way CNA_SHARP_RUNTIME_ROOT does for sharp-runtime.
@@ -345,7 +345,7 @@ foreach(_cna_identity IN LISTS _cna_renderer_identities)
     # Only the DEFAULT identity's macros are defined project-wide. That keeps a single-renderer
     # build exactly as it was, and keeps the compile-time accessors and the existing 892 test and
     # example #ifdef sites meaningful in a multi-renderer build: they describe the default. Making
-    # the corpus itself renderer-agnostic is plans/plan_runtimerenderer.md phase P9.
+    # the corpus itself renderer-agnostic is RTR-P9.
     if(_cna_identity STREQUAL _cna_default_renderer_identity)
         foreach(_cna_define IN LISTS _cna_identity_defines)
             add_compile_definitions(${_cna_define})

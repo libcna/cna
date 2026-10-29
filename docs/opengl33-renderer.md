@@ -4,7 +4,7 @@
 renderer plan, `GLB-1`..`GLB-43`, Git history) — it shares its entire implementation with
 `OPENGLES3`/`WEBGL2` (`modules/renderers/easygl/`, on top of the sibling `easy-gl` library),
 distinguished by its GL profile -- a runtime `GlProfile` (`GlProfile.hpp`) since
-`plans/plan_runtimerenderer.md` P11, with the `CNA_GL_PROFILE_OPENGL33` definition supplying only a
+RTR-P11, with the `CNA_GL_PROFILE_OPENGL33` definition supplying only a
 single-renderer build's default. Unlike the other profiles (all OpenGL ES / WebGL, GLSL ES syntax),
 `OPENGL33` requests a real desktop `SDL_GL_CONTEXT_PROFILE_CORE` context, GL 3.3.
 

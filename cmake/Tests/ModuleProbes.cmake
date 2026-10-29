@@ -198,7 +198,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     # renderer SDK: the whole probe closure must stay free of every native graphics library.
     # The same must hold for the content pipeline (no renderer/native SDK through the type
     # readers) and for both extension modules.
-    # plans/plan_runtimerenderer.md RTR-P9-21: deliberately ALSO requires single-renderer mode. This
+    # RTR-P9-21: deliberately ALSO requires single-renderer mode. This
     # asserts the probe closure links no native graphics SDK at all, which is a true statement about
     # a HEADLESS-only build and a FALSE one about a multi-renderer build that happens to default to
     # HEADLESS -- such a binary legitimately links SDL3, wgpu-native or whatever else it was built with.
@@ -508,20 +508,20 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                     --library $<TARGET_FILE:cna_c_api>)
         endif()
 
-        # plans/plan_runtimerenderer.md RTR-P1-6/P3-17/P12-15: renderer-specific production
+        # RTR-P1-6/P3-17/P12-15: renderer-specific production
         # decisions stay behind descriptors or virtuals, and every renderer family keeps exactly
         # one descriptor translation unit.
         add_test(NAME RuntimeRendererDiscipline
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_renderer_discipline.py")
 
-        # plans/plan_runtimerenderer.md RTR-P6-19/P12-15: keep the configure-time combination
+        # RTR-P6-19/P12-15: keep the configure-time combination
         # restrictions synchronized with their public documentation.
         add_test(NAME RendererCombinationRegistry
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_combinations.py")
 
-        # plans/plan_runtimerenderer.md RTR-P6-3: keeps RENDERER_TARGET from going back to being a
+        # RTR-P6-3: keeps RENDERER_TARGET from going back to being a
         # scalar that families read out of a global. The rule it enforces cannot be checked by
         # building: in a single-renderer build a wrong read gives the right answer, because the
         # default is the only renderer there is. Only a multi-renderer build would notice, and
@@ -531,7 +531,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_target_discipline.py")
     endif()
 
-    # plans/plan_runtimerenderer.md RTR-P6-1: CNA_GRAPHICS_RENDERER names the DEFAULT renderer chosen
+    # RTR-P6-1: CNA_GRAPHICS_RENDERER names the DEFAULT renderer chosen
     # from CNA_GRAPHICS_RENDERERS, so it must be a member of that list.
     #
     # Each case runs cmake/RendererDefaultSelection.cmake for real in `cmake -P` script mode, which

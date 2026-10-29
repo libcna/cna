@@ -10,7 +10,7 @@
 
 > **Renderer selection.** This document describes the renderer as a compile-time choice
 > (`-DCNA_GRAPHICS_RENDERER=...`), which remains the default and recommended mode. Since
-> `plan_runtimerenderer.md`, CNA can also be built with several renderers and choose between
+> runtime renderer selection (`RTR-*`), CNA can also be built with several renderers and choose between
 > them at runtime — see `docs/runtime-renderer-selection.md`. Nothing below changes in
 > single-renderer mode.
 

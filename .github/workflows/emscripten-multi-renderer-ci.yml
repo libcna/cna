@@ -1,4 +1,4 @@
-# plan_runtimerenderer.md RTR-P12-8: CI for the Emscripten multi-renderer bundle.
+# RTR-P12-8: CI for the Emscripten multi-renderer bundle.
 #
 # This is the set the feature exists for. On a native build a user can install the renderer they
 # want; in a browser they cannot, so one wasm bundle holding several renderers -- picked by the page

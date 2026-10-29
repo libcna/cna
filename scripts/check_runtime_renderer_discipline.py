@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Runtime-dispatch discipline gate (plans/plan_runtimerenderer.md RTR-P1-6).
+"""Runtime-dispatch discipline gate (RTR-P1-6).
 
 Renderer selection used to leak into the XNA layer as `#ifdef CNA_RENDERER_<X>` blocks. Phase P1
 removed every window-creation one by routing those decisions through GraphicsRendererDescriptor;
@@ -78,7 +78,7 @@ def check_xna_layer():
                     f"{rel}: window-creation renderer macro(s) reintroduced into the XNA layer: "
                     f"{', '.join('CNA_RENDERER_' + h for h in window_hits)}. "
                     f"Window/video-subsystem decisions belong in that family's "
-                    f"GraphicsRendererDescriptor (plans/plan_runtimerenderer.md design decision 2).")
+                    f"GraphicsRendererDescriptor (docs/runtime-renderer-selection.md design decision 2).")
 
             budget, task = ALLOWED.get(rel, (0, None))
             if len(hits) > budget:
@@ -90,7 +90,7 @@ def check_xna_layer():
                     failures.append(
                         f"{rel}: {len(hits)} CNA_RENDERER_* occurrences in the XNA layer, none "
                         f"allowed. Route renderer-specific behaviour through an IGraphicsRenderer "
-                        f"virtual (plans/plan_runtimerenderer.md design decision 9).")
+                        f"virtual (docs/runtime-renderer-selection.md design decision 9).")
     return failures
 
 
@@ -212,7 +212,7 @@ def check_factory_namespacing():
                 line = text.count("\n", 0, match.start()) + 1
                 failures.append(
                     f"{rel}:{line}: defines CNA::Internal::Renderers::CreateGraphicsRenderer -- the "
-                    f"single shared factory symbol plans/plan_runtimerenderer.md design decision 4 "
+                    f"single shared factory symbol docs/runtime-renderer-selection.md design decision 4 "
                     f"replaced. Two renderer archives defining it cannot link into one binary, "
                     f"which is the whole reason multi-renderer builds were impossible. Define "
                     f"CNA::Internal::Renderers::<Family>::CreateGraphicsRenderer instead and take "
@@ -324,7 +324,7 @@ def check_identity_define_scope():
                 f"invariant that a defined CNA_RENDERER_<X> names the DEFAULT renderer, which "
                 f"getCurrentGraphicsRendererType() and every renderer-gated test relies on. Use "
                 f"list(APPEND _cna_identity_defines {match.group(1)}) instead "
-                f"(plans/plan_runtimerenderer.md RTR-P6-4).")
+                f"(RTR-P6-4).")
     return failures
 
 

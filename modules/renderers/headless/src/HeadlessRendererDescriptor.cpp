@@ -1,4 +1,4 @@
-// plans/plan_runtimerenderer.md RTR-P1-D07: the Headless family's pre-construction contract.
+// RTR-P1-D07: the Headless family's pre-construction contract.
 //
 // The Headless renderer never creates a window and never touches the platform's video subsystem at all
 // (docs/headless-renderer.md), which is what lets it run in a CI container with no display
@@ -16,7 +16,7 @@ namespace CNA::Internal::Renderers::Headless
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because docs/runtime-renderer-selection.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

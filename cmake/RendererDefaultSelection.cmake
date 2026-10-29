@@ -1,5 +1,5 @@
 # =====================================================================================
-# CNA renderer set and default (plans/plan_runtimerenderer.md design decision 1, phase P6, RTR-P6-1)
+# CNA renderer set and default (docs/runtime-renderer-selection.md design decision 1, phase P6, RTR-P6-1)
 #
 # Resolves the two renderer options into the ordered identity list the rest of the build uses:
 #

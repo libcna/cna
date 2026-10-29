@@ -1,4 +1,4 @@
-// plans/plan_runtimerenderer.md phase P4/P5: renderer selection policy.
+// RTR-P4/P5: renderer selection policy.
 //
 // Holds no graphics state of any kind -- what was asked for, whether the choice is still open, and
 // what actually happened. The graphics module publishes the compiled-in set in and reads the
@@ -146,7 +146,7 @@ namespace CNA
             const char* raw = std::getenv("CNA_GRAPHICS_RENDERER");
 
 #ifdef __EMSCRIPTEN__
-            // plans/plan_runtimerenderer.md RTR-P10-23: a browser has no environment to set, so the page
+            // RTR-P10-23: a browser has no environment to set, so the page
             // supplies the same choice through `Module.cnaPreferredRenderer`. It is consulted HERE,
             // at the environment variable's precedence, rather than by calling SetPreferred() from
             // JS glue -- a page property must not outrank an explicit SetPreferred() call in the

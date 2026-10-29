@@ -1,6 +1,6 @@
 #pragma once
 
-// plans/plan_runtimerenderer.md phase P11: EasyGL's GL profile as a RUNTIME value.
+// RTR-P11: EasyGL's GL profile as a RUNTIME value.
 //
 // EasyGL is the one implementation family serving several public renderer identities -- OPENGLES3,
 // OPENGL33 and WEBGL2 (docs/renderer-registry.md). Until this header existed the choice

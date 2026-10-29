@@ -335,7 +335,7 @@ include(cmake/RendererSelection.cmake)
 # final application, not beside CNA's intermediate static renderer archive.
 include(cmake/RendererRuntime.cmake)
 
-# plans/plan_runtimerenderer.md design decision 3: emit the explicit table of renderer families
+# docs/runtime-renderer-selection.md design decision 3: emit the explicit table of renderer families
 # linked into this build. Must run after RendererSelection.cmake has resolved the identity.
 include(cmake/RendererRegistry.cmake)
 cna_generate_renderer_registry(CNA_RENDERER_REGISTRY_SOURCE ${_cna_renderer_identities})

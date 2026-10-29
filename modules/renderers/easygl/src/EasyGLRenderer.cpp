@@ -50,7 +50,7 @@ namespace CNA::Internal::Renderers::EasyGL
             bool wasEnabled_;
         };
 
-        // plans/plan_runtimerenderer.md phase P11: the runtime replacements for this file's former
+        // RTR-P11: the runtime replacements for this file's former
         // CNA_GL_PROFILE_* preprocessor guards. Argument-less on purpose -- they read the active
         // profile themselves, so a guard converts to a one-line condition with no plumbing through
         // the many free helpers this file is built from.
@@ -253,7 +253,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
     namespace
     {
-        // MERGE (PLAT-* x plans/plan_runtimerenderer.md P11): the version/profile the
+        // MERGE (PLAT-* x RTR-P11): the version/profile the
         // platform is asked for is DATA, so it is computed from the runtime profile rather than
         // from `#if defined(CNA_GL_PROFILE_*)`. The compile-time form could only ever describe one
         // profile, which is exactly what P11 removed: a single binary may hold up to three, and the
@@ -687,7 +687,7 @@ namespace CNA::Internal::Renderers::EasyGL
         return RewriteGlslEsVersionToDesktop(es300Source, "300", "#version 330 core");
     }
 
-    // plans/plan_runtimerenderer.md P11: always compiled now; the call site is runtime-gated on the
+    // RTR-P11: always compiled now; the call site is runtime-gated on the
     // active profile instead. Loading the entry point is harmless on a non-core profile because it
     // is only ever invoked when IsDesktopCoreProfile() holds.
     namespace
@@ -5047,7 +5047,7 @@ namespace CNA::Internal::Renderers::EasyGL
         , sampleCount_(multiSampleCount > 1 ? multiSampleCount : 1)
         , backBufferDepthFormat_(depthStencilFormat)
     {
-        // plans/plan_runtimerenderer.md P11: publish the profile before anything else runs -- the context
+        // RTR-P11: publish the profile before anything else runs -- the context
         // attributes, the shader adaptation and the API-generation checks all read it, and they run
         // from free helpers that have no other way to reach this instance.
         profile_ = profile;
@@ -11556,7 +11556,7 @@ namespace CNA::Internal::Renderers::EasyGL
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_EASYGL
-    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
+    // docs/runtime-renderer-selection.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace EasyGL
@@ -11584,7 +11584,7 @@ namespace CNA::Internal::Renderers
 
     std::unique_ptr<IGraphicsRenderer> EasyGL::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        // plans/plan_runtimerenderer.md P11: the build's default profile. Every registry entry uses
+        // RTR-P11: the build's default profile. Every registry entry uses
         // CreateGraphicsRendererForProfile with its own identity's profile instead.
         return EasyGL::CreateGraphicsRendererForProfile(args, EasyGL::kCompileTimeGlProfile);
     }

@@ -95,7 +95,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 
-// plans/plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
+// RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
 // BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
 // condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
 // multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
@@ -128,7 +128,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 // The renderers whose stock instanced path rasterizes and whose RenderTarget2D::GetData reads the
 // result back -- InstancedVertexColorTests.cpp's own suite set, for the same reason.
-/// plans/plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
+/// RTR-P9-5: the same renderer set, evaluated at runtime so this
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool InstancedDiffuse()
 {
@@ -143,7 +143,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // UNLIKE InstancedVertexColorTests.cpp, this file grants NO renderer an exemption: every measured
 // renderer is asserted against the CONTRACT above, never against its own measured behaviour. That is
 // what makes it red-first -- it failed on bgfx before the instanced DiffuseColor/VertexColorEnabled fix and passes after.
-/// plans/plan_runtimerenderer.md RTR-P9-5: the measured set, asked of the ACTIVE renderer.
+/// RTR-P9-5: the measured set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedDiffuseMeasured()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu,
@@ -153,7 +153,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 namespace
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a hand-maintained #if/#elif chain of renderer display
+    // RTR-P9-5: was a hand-maintained #if/#elif chain of renderer display
     // names, which had to be extended for every new renderer and answered "unknown" when it was
     // not. The runtime API already knows the active renderer's name, and knows it for all 46.
     inline std::string RendererName()
@@ -795,7 +795,7 @@ protected:
 
 TEST_F(InstancedDiffuseColorTest, NonNeutralDiffuseColorMultipliesVertexColorOnBothRoutes)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedDiffuse())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -827,7 +827,7 @@ TEST_F(InstancedDiffuseColorTest, NonNeutralDiffuseColorMultipliesVertexColorOnB
 
 TEST_F(InstancedDiffuseColorTest, VertexColorDisabledYieldsDiffuseColorOnBothRoutes)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedDiffuse())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -868,7 +868,7 @@ TEST_F(InstancedDiffuseColorTest, VertexColorDisabledYieldsDiffuseColorOnBothRou
 
 TEST_F(InstancedDiffuseColorTest, NeutralDiffuseColorCannotDistinguishRawColor0)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedDiffuse())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -919,7 +919,7 @@ TEST_F(InstancedDiffuseColorTest, NeutralDiffuseColorCannotDistinguishRawColor0)
 
 TEST_F(InstancedDiffuseColorTest, NonTrivialAlphaAppliesToBothTerms)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedDiffuse())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -960,7 +960,7 @@ TEST_F(InstancedDiffuseColorTest, NonTrivialAlphaAppliesToBothTerms)
 
 TEST_F(InstancedDiffuseColorTest, ColorStateTransitionsDoNotLeakBetweenFrames)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedDiffuse())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -1017,7 +1017,7 @@ TEST_F(InstancedDiffuseColorTest, ColorStateTransitionsDoNotLeakBetweenFrames)
 
 TEST_F(InstancedDiffuseColorTest, ReplacedGeometryColorBufferIsRereadNotCached)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedDiffuse())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -1060,7 +1060,7 @@ TEST_F(InstancedDiffuseColorTest, ReplacedGeometryColorBufferIsRereadNotCached)
 
 TEST_F(InstancedDiffuseColorTest, TwoDrawsInOneFrameKeepTheirOwnColorState)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedDiffuse())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -1144,7 +1144,7 @@ TEST_F(InstancedDiffuseColorTest, TwoDrawsInOneFrameKeepTheirOwnColorState)
 
 TEST_F(InstancedDiffuseColorTest, PackedColorTextureStrideKeepsTheFullContract)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedDiffuse())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -1179,7 +1179,7 @@ TEST_F(InstancedDiffuseColorTest, PackedColorTextureStrideKeepsTheFullContract)
 
 TEST_F(InstancedDiffuseColorTest, GeometryVertexOffsetKeepsTheFullContract)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedDiffuse())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -1218,7 +1218,7 @@ TEST_F(InstancedDiffuseColorTest, GeometryVertexOffsetKeepsTheFullContract)
 
 TEST_F(InstancedDiffuseColorTest, InstanceFrequencyKeepsTheFullContract)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedDiffuse())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -1291,7 +1291,7 @@ TEST_F(InstancedDiffuseColorTest, InstanceFrequencyKeepsTheFullContract)
 
 TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhenColorDisabled)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedDiffuse())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();

@@ -192,7 +192,7 @@ effect. The two capabilities describe different formats.
 needs -- it is also **where FNA3D selects that driver**, and `FNA3D_CreateDevice` refuses to run
 before it has, with `"Call FNA3D_PrepareWindowAttributes first!"`.
 
-This is worth stating because CNA already lost the call once. `plans/plan_runtimerenderer.md` RTR-P1-D41
+This is worth stating because CNA already lost the call once. RTR-P1-D41
 replaced the renderer descriptor's `prepareWindowFlags` hook with static data
 (`windowKind = OpenGL`, `glFramebuffer = 24/8/double`), which is the right shape for the window's
 visual -- CNA states those requirements through `WindowDescription` and the platform applies them.

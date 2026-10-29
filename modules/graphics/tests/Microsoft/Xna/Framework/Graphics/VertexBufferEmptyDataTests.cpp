@@ -49,7 +49,7 @@ using namespace CNA::Testing::Renderers;
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
-// plans/plan_runtimerenderer.md RTR-P9-9: this file's EasyGL block needs that renderer's own headers, so
+// RTR-P9-9: this file's EasyGL block needs that renderer's own headers, so
 // it stays a COMPILE-time guard -- no runtime predicate can make a type exist. What changes is the
 // condition: only the DEFAULT renderer's CNA_RENDERER_<X> is defined project-wide, so in a
 // multi-renderer build this block compiled to nothing even when EasyGL was in the binary. The
@@ -732,7 +732,7 @@ TEST_F(VertexBufferEmptyDataTest, UploadedVerticesSupportNormalAndIndexedDrawing
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
 TEST_F(VertexBufferEmptyDataTest, WebGpuNativeScopesCoverEmptyPaddedAndFullUploads)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever WebGPU is in the build, run only when it
+    // RTR-P9-9: compiled whenever WebGPU is in the build, run only when it
     // is the active renderer.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     RequireVertexBuffers();

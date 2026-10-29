@@ -36,7 +36,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   [`../docs/filesystem-path-model.md`](../docs/filesystem-path-model.md); comments cite rows as
   "Windows portability WINPORT-NNNN", "Windows closeout WINCLOSE-NNNN" and "Win32 native
   validation WINNATIVE-NNNN".
-- [`plan_runtimerenderer.md`](plan_runtimerenderer.md) — runtime graphics-renderer selection.
+- `plan_runtimerenderer.md` — runtime graphics-renderer selection (`RTR-P0`..`RTR-P14`, 2026-08):
+  every row done or void with a retired renderer; deleted on 2026-10-29 (Git history only). The
+  mode, its numbered design decisions (which the renderer gates cite) and its measured cost are
+  [`../docs/runtime-renderer-selection.md`](../docs/runtime-renderer-selection.md); comments cite
+  tasks as "RTR-…".
 - `plan_sdl3free.md` — historical SDL3-independent migration plan; its SDL2 route was superseded
   by native backends and retired on 2026-10-04, and those native backends were retired in turn on
   2026-10-06. Deleted on 2026-10-26 (Git history only); the SDL-free configurations that remain

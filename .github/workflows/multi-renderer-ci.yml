@@ -1,4 +1,4 @@
-# plan_runtimerenderer.md RTR-P12-7: CI for the opt-in multi-renderer build mode.
+# RTR-P12-7: CI for the opt-in multi-renderer build mode.
 #
 # The reference set is HEADLESS;SOFTWARE;STUB, chosen deliberately: none of the three creates a
 # window, touches SDL's video subsystem, or pulls a third-party graphics dependency, so this job
@@ -115,7 +115,7 @@ jobs:
                    | sed -n 's/^Active renderer: //p')
           [ "${actual}" = "SOFTWARE" ] || { echo "FAIL: env var ignored, got '${actual}'" >&2; exit 1; }
 
-      # plan_runtimerenderer.md RTR-P6-1. The interesting case is the REJECT one: an invalid default
+      # RTR-P6-1. The interesting case is the REJECT one: an invalid default
       # used to be replaced by the list's first entry with only a STATUS line, so a build asking for
       # one default and getting another succeeded and then answered every later renderer question
       # about a renderer nobody asked for. A CI job that only ever configures VALID sets cannot

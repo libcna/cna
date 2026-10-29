@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_runtimerenderer.md RTR-P6-1: one case of the CNA_GRAPHICS_RENDERER / CNA_GRAPHICS_RENDERERS
+# RTR-P6-1: one case of the CNA_GRAPHICS_RENDERER / CNA_GRAPHICS_RENDERERS
 # contract, run for real.
 #
 # Runs cmake/RendererDefaultSelection.cmake in `cmake -P` script mode with one pair of option

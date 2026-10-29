@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_runtimerenderer.md RTR-P3-17: the defaults of the virtuals that replaced the XNA layer's
+// RTR-P3-17: the defaults of the virtuals that replaced the XNA layer's
 // #ifdef CNA_RENDERER_* blocks.
 // Capability defaults must stay explicitly unknown/zero, and a malformed supported bit must
 // never pass the public known-and-supported predicate.

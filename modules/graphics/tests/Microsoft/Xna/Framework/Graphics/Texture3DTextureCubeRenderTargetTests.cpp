@@ -193,7 +193,7 @@ namespace
     using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
-    /// plans/plan_runtimerenderer.md RTR-P9-5: which renderers accept a RenderTargetCube SetData upload,
+    /// RTR-P9-5: which renderers accept a RenderTargetCube SetData upload,
     /// asked of the ACTIVE renderer. Each arm's reasoning is preserved with its renderer:
     ///
     ///   EasyGL / Magnum -- SetData is a real glTexSubImage2D upload into the shared cube texture

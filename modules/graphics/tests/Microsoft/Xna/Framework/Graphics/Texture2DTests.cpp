@@ -1218,7 +1218,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
 
     for (SurfaceFormat format : kAllFormats)
     {
-        // plans/plan_runtimerenderer.md RTR-P9-4: every flag below is evaluated at runtime, so this
+        // RTR-P9-4: every flag below is evaluated at runtime, so this
         // assertion describes the ACTIVE renderer rather than the build default.
         // WEBGPU-184/SDLGPU-69: these renderers provide the signed-normalized formats end to end.
         // The name keeps its EasyGL prefix only because the list began there.
