@@ -181,14 +181,18 @@ permanent issue history and handoff after every accepted batch.
 **§5 plus `CNA_DEMOS_REPAIR_MATRIX.json` are the authoritative current defect inventories during
 this campaign.** §5 records the ordinary CNA maintenance list; the matrix additionally records
 every historical cna-demos finding, including pending items that are not yet confirmed defects.
-Capability documents describe supported behavior, tests are executable evidence, and plans/Git
-history preserve measurement history. Do not let an issue disappear from either applicable list.
+Capability documents describe supported behavior, tests are executable evidence, and Git history
+preserves measurement history. Every implementation plan under `plans/` has been retired
+(2026-10-29); `plans/README.md` says where each one's content went. Do not let an issue disappear
+from either applicable list.
 
 Ready to pick up next, when the owner asks: the near-future tasks of §8, starting with `XNB-61b`
 (§8.1).
 
-Repository state last reconciled: **2026-10-24** (`next`, `96577db26`). The last full test run is
-the checkpoint identified above; do not upgrade later focused evidence into a full claim.
+Repository state last reconciled: **2026-10-29** (`next`, `225e88b09`), when the last plans were
+retired and §5 and §8 brought up to date. The campaign accounting above dates from 2026-10-24
+(`96577db26`), and the test runs in §0 and §2 carry their own dates. The last full test run is the
+checkpoint identified above; do not upgrade later focused evidence into a full claim.
 
 ## 1. Project summary
 
@@ -324,7 +328,7 @@ runtime. CI: `general-tests-ci.yml` runs the unfiltered suite for
 | GamerServices / Net / Avatar boundary | `docs/gamer-services-known-limitations.md` |
 | Why is a subsystem in (or out of) an executable? Link boundaries, size options, footprint gates | `docs/link-size-architecture.md` |
 | Build rules (ccache, build directories, display isolation) | `CLAUDE.md` / `AGENTS.md` |
-| Index of the other documents | `docs/README.md`, `plans/README.md` |
+| Index of the other documents | `docs/README.md`; where each retired plan's content went: `plans/README.md` |
 
 ## 4. Working rules for this phase
 
