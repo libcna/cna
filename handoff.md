@@ -184,6 +184,9 @@ every historical cna-demos finding, including pending items that are not yet con
 Capability documents describe supported behavior, tests are executable evidence, and plans/Git
 history preserve measurement history. Do not let an issue disappear from either applicable list.
 
+Ready to pick up next, when the owner asks: the near-future tasks of §8, starting with `XNB-61b`
+(§8.1).
+
 Repository state last reconciled: **2026-10-24** (`next`, `96577db26`). The last full test run is
 the checkpoint identified above; do not upgrade later focused evidence into a full claim.
 
@@ -540,7 +543,7 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 - The CNAEXT content manifest lists no reader names for a compressed `.xnb`:
   `ContentManager::ScanXnbReaderNames` reads only an uncompressed type-reader table, so an LZX or
   LZ4 file's `ContentManifestEntry::xnbReaderNames` is empty and `GetXnbReaderUsageSummary()` skips
-  it, although `Load` decompresses both (`XNB-61b`, `docs/xnb-content-pipeline-support.md`).
+  it, although `Load` decompresses both (`XNB-61b`; the fix is planned in §8.1).
 
 ### 5.3 External and driver limitations
 
@@ -623,3 +626,64 @@ python3 tools/platform/sdl_inventory.py --check && python3 tools/platform/sdl_cl
   contention produces false failures.
 - `CMakePresets.json` has the focused unit, sanitizer, web, Apple and multi-renderer presets.
 - System packages for a fresh Debian machine: [`docs/development-environment.md`](docs/development-environment.md).
+
+## 8. Near-future tasks
+
+Small, fully specified pieces of work that are ready to pick up. Each one names its evidence, its
+plan and the point at which it is done; take one only when the owner asks for it or the current
+campaign leaves room.
+
+### 8.1 `XNB-61b` — reader names of a compressed `.xnb` in the content manifest
+
+**The gap.** `ContentManager`'s CNAEXT content manifest (`RefreshContentManifest()`,
+`GetContentManifest()`, `GetXnbReaderUsageSummary()`; described in
+[`docs/xnb-content-pipeline-support.md`](docs/xnb-content-pipeline-support.md), *Content manifest*)
+lists the type-reader names each `.xnb` needs. For a **compressed** file it lists none:
+`ContentManager::ScanXnbReaderNames` (`modules/content/src/Xna/ContentManager.cpp`) parses the
+header and returns an empty list whenever `header.compression != XnbCompression::None`, with a
+comment saying the work was "not yet picked up". So `ContentManifestEntry::xnbReaderNames` is
+empty for every LZX or LZ4 file and `GetXnbReaderUsageSummary()` counts none of them, although
+`Load` decompresses both. It matters because real content is largely compressed: Microsoft's
+pipeline writes LZX, and 729 of the sample sweep's references differ from CNA's only inside the
+LZX stream (`tools/xna-sample-sweep/README.md`). A tool asking "which readers does this content
+need that the game has not registered" therefore misses most of a real XNA game.
+
+**The fix.**
+
+1. Pull the decompression out of `DecodeXnbCanonicalAsset` (`modules/content/src/Xnb/XnbCanonicalAsset.cpp`)
+   into a helper that takes the file bytes, its origin and `XnbReadLimits` and returns the parsed
+   header and the (possibly decompressed) body. Today that switch -- `None`, `Lzx` through
+   `DecompressXnbPayload`, `Lz4` through `DecompressXnbLz4Payload`, each with its truncation and
+   size checks -- exists only inline there. `DecodeXnbCanonicalAsset` then calls the helper.
+2. In `ScanXnbReaderNames`, replace the early `return names;` with the helper and read the
+   type-reader table from the body it returns. Keep the existing rule that a malformed file is not
+   a scan failure: a `ContentLoadException` from the helper still means an empty list for that one
+   entry.
+3. Tests in `modules/content/tests/Microsoft/Xna/Framework/Content/ContentManagerManifestTests.cpp`,
+   over fixtures already committed: the MonoGame LZX files in `tests/assets/xnb/monogame/windows/lzx/`
+   (`Explosion.xnb`, `FontCalibri14.xnb`), the LZ4 oracle `tests/assets/xnb/monogame/windows/lz4/white-1.xnb`
+   and CNA's own LZX corpus in `tests/assets/xnb/cna/windows/lzx/`. Assert the reader names of a
+   compressed entry equal those of its uncompressed twin where one exists, that
+   `GetXnbReaderUsageSummary()` counts compressed files, and that a truncated compressed file
+   yields an empty list without throwing.
+4. Remove the *Known gaps* row in `docs/xnb-content-pipeline-support.md` and the §5.2 entry here,
+   and correct the `xnbReaderNames` doxygen in `ContentManifestEntry.hpp`.
+5. Build and test in `cmake-build-multi`: `cmake --build cmake-build-multi --parallel 8 --target
+   CnaTests CnaContentTests`, then `CnaContentTests` and the XNB filter of `CnaTests` through
+   `tools/platform/run_gpu_tests_private.sh --exec`. Where ALSA cannot open a device (it could
+   not on 2026-10-29: "Host is down"), the `SoundEffect` tests need `SDL_AUDIO_DRIVER=dummy`.
+
+**Estimate.** About 1.5-2.5 hours, roughly one of them active work and the rest build and test
+time (helper 30 min, scan 15 min, tests 30-45 min, documents 10 min, build and runs 30-60 min).
+
+**Worth doing in the same change.** The helper also fixes the §5.1 defect in
+`ContentManager::LoadXnbAssetUntyped` (`ContentManagerUntyped.cpp`), the type-erased
+external-reference path, which still refuses LZ4 and skips the typed path's truncation check and
+limits on LZX. That adds about 1-1.5 hours, most of it a test fixture: an LZ4-compressed asset
+reached through a type-erased external reference, which CNA's own writer can produce with
+`--xnb-compress lz4`.
+
+**Deliberately not part of it.** A full decompression per compressed file makes the first
+`GetContentManifest()` over a large content root slower. The type-reader table sits at the start
+of the body, so decoding only the first LZX frame would be enough, but that is 1-2 more hours and
+should wait for a measurement that shows the scan is too slow.
