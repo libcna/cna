@@ -139,7 +139,7 @@ namespace CNA::Content::Pipeline
          *        XNA's `EffectProcessor.DebugMode` defaults to `Auto`, which follows the build
          *        configuration, so this is "the build configuration is Debug". It is part of the
          *        processor's identity, because the same source compiles to different bytes under
-         *        it (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-108`).
+         *        it (`XNASWEEP-108`).
          */
         explicit EffectSourceProcessor(std::shared_ptr<const EffectCompilerService> compiler,
                                        bool debugByDefault = false);

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-010: read an XNA `.contentproj` the way MSBuild does.
+"""XNASWEEP-010: read an XNA `.contentproj` the way MSBuild does.
 
 A second reader of the same file `modules/content-pipeline/src/Xna/Tasks/ContentProject.cpp` reads,
 written from the MSBuild schema rather than from that C++ -- so a mapping it produces is evidence

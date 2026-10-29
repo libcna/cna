@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-162: what the genuine ModelProcessor leaves on a
+// XNASWEEP-162: what the genuine ModelProcessor leaves on a
 // model's root bone. The importer's answer is measured elsewhere; this runs the processor over the
 // same files and prints every bone's transform at full precision, which the model oracle's
 // `0.######` formatting cannot show.
@@ -50,7 +50,7 @@ internal static class ModelRootOracle
         public override OpaqueDataDictionary Parameters { get { return new OpaqueDataDictionary(); } }
         // `CNA_MODELROOT_PLATFORM=WindowsPhone` and `CNA_MODELROOT_PROFILE=Reach` ask the
         // processors what they do for a target that refuses custom shaders, which is the question
-        // SAMPLE-028's phone build asks (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+        // SAMPLE-028's phone build asks (`XNASWEEP-174`).
         public override TargetPlatform TargetPlatform
         {
             get
@@ -79,7 +79,7 @@ internal static class ModelRootOracle
         // straight back where the types allow and a default otherwise -- unless
         // `CNA_MODELROOT_MATERIALS=1` asks for the real `MaterialProcessor`, which is the only way
         // to see what `DefaultEffect` turns a material into
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-175`).
+        // (`XNASWEEP-175`).
         public override TOutput Convert<TInput, TOutput>(TInput input, string processorName,
                                                          OpaqueDataDictionary processorParameters)
         {
@@ -112,7 +112,7 @@ internal static class ModelRootOracle
         { return default(TOutput); }
         // Every asset the processor asks to have built, recorded rather than built: which textures
         // a material actually builds is what says whether a channel the importer answered ever
-        // reaches the build (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-175`).
+        // reaches the build (`XNASWEEP-175`).
         public static readonly List<string> Built = new List<string>();
         public override ExternalReference<TOutput> BuildAsset<TInput, TOutput>(
             ExternalReference<TInput> source, string processorName,
@@ -210,7 +210,7 @@ internal static class ModelRootOracle
                     // over the imported graph with that scale and prints every normal channel
                     // afterwards, at round-trip precision. That is the one question a built `.xnb`
                     // cannot answer on its own: whether the method normalizes what it transforms
-                    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-167`).
+                    // (`XNASWEEP-167`).
                     string scene = Environment.GetEnvironmentVariable("CNA_MODELROOT_TRANSFORM_SCENE");
                     if (!string.IsNullOrEmpty(scene))
                     {
@@ -228,7 +228,7 @@ internal static class ModelRootOracle
                     // `CNA_MODELROOT_PROCESSOR=RotationX=-90;Scale=0.1;DefaultEffect=...` sets the
                     // processor's own properties before it runs, because several of the corpus's
                     // models are built with them and what they do to a bone's transform is exactly
-                    // what is being measured (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-172`).
+                    // what is being measured (`XNASWEEP-172`).
                     string settings = Environment.GetEnvironmentVariable("CNA_MODELROOT_PROCESSOR");
                     if (!string.IsNullOrEmpty(settings))
                     {
@@ -258,14 +258,14 @@ internal static class ModelRootOracle
                     // `CNA_MODELROOT_POSITIONS=1` prints every mesh's positions *after* the
                     // processor has run, because XNA's `ModelProcessor` mutates the graph it is
                     // given and the bounding sphere is computed over whatever the positions are by
-                    // then (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-168`).
+                    // then (`XNASWEEP-168`).
                     if (Environment.GetEnvironmentVariable("CNA_MODELROOT_POSITIONS") == "1")
                     {
                         DescribePositions(text, name, root, "");
                     }
                     // Every mesh's bounding sphere, at round-trip precision. What XNA computes it
                     // *over* is the open question, so the answer has to be read rather than
-                    // assumed (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-168`).
+                    // assumed (`XNASWEEP-168`).
                     for (int mi = 0; mi < model.Meshes.Count; mi++)
                     {
                         ModelMeshContent mesh = model.Meshes[mi];

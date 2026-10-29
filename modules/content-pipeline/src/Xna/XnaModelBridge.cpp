@@ -35,7 +35,7 @@ namespace CNA::Content::Pipeline
          * and any other count a `Single[]`. Measured over a fixture carrying counts 1, 2, 3, 4,
          * 16 and 5, 6, 9, 12 -- the genuine importer answers `System.Single[]` for the last four,
          * and the genuine build writes them through `ArrayReader`1[[System.Single]]`
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+         * (`XNASWEEP-174`).
          *
          * @param key The parameter name, for the diagnostic.
          * @param stored The boxed value.
@@ -83,8 +83,8 @@ namespace CNA::Content::Pipeline
          * which are the reference itself rather than a parameter. The table is written in sorted
          * key order, with textures and values interleaved: measured on a fixture whose parameters
          * are declared out of order and whose two textures sort first and third, and the genuine
-         * build answers all eight in ASCII order (plans/plan_xna_sample_xnb_sweep.md
-         * `XNASWEEP-174`).
+         * build answers all eight in ASCII order
+         * (`XNASWEEP-174`).
          *
          * @param material The material.
          * @return The canonical effect-material resource.
@@ -177,8 +177,8 @@ namespace CNA::Content::Pipeline
                 data.environmentMapAmount = environment->getEnvironmentMapAmountProperty().value_or(1.0f);
                 // Zero, not white: an `EnvironmentMapMaterialContent` that carries no specular is
                 // written with (0,0,0), which is `EnvironmentMapEffect`'s own default. Measured on
-                // SAMPLE-037's genuine `head.xnb` (plans/plan_xna_sample_xnb_sweep.md
-                // `XNASWEEP-175`).
+                // SAMPLE-037's genuine `head.xnb`
+                // (`XNASWEEP-175`).
                 data.environmentMapSpecular =
                     environment->getEnvironmentMapSpecularProperty().value_or(Vector3(0, 0, 0));
                 data.fresnelFactor = environment->getFresnelFactorProperty().value_or(1.0f);

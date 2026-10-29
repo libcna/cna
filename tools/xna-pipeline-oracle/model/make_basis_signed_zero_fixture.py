@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-189: the sign of a zero in a converted transform.
+"""XNASWEEP-189: the sign of a zero in a converted transform.
 
 The `.x` importer changes a `FrameTransformMatrix` into the right-handed basis the pipeline holds,
 and the change is a *multiplication* by `diag(1, 1, -1, 1)` on both sides rather than the five

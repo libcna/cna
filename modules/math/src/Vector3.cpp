@@ -483,7 +483,7 @@ namespace Microsoft::Xna::Framework
     {
         // Accumulated wider than `float` and narrowed once per component, which is what XNA's
         // 32-bit x87 arithmetic does. Measured over 60 cases: a `float` accumulation reproduces 8
-        // of them (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-172`).
+        // of them (`XNASWEEP-172`).
         const double px = position.X;
         const double py = position.Y;
         const double pz = position.Z;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-137: how wide a sprite-font atlas is, and how tall.
+// XNASWEEP-137: how wide a sprite-font atlas is, and how tall.
 //
 // The width is not a search over the widths that fit -- CNA's was, and it put SAMPLE-070's
 // `DamageFont` into a 256x64 sheet where XNA puts it into a 128x132. It is a formula: the *integer*

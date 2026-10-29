@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-237: which sign of zero a node's transform carries.
+"""XNASWEEP-237: which sign of zero a node's transform carries.
 
 SAMPLE-046's `spaceship.fbx` is the corpus's only file whose reference differs from CNA's output
 in nothing but the sign of two zeros: `Fbx_Root`'s `M12` and `M31` are `+0.0` in XNA's answer and

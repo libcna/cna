@@ -387,7 +387,7 @@ TEST(MatrixTest, ToStringContainsM11)
     EXPECT_NE(s.find("M44"), std::string::npos);
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-183: the whole form, not two substrings of it. A
+// XNASWEEP-183: the whole form, not two substrings of it. A
 // `Matrix` boxed in a material's opaque data comes back from the genuine XNA pipeline as this
 // exact string -- four brace-wrapped rows inside one more pair, with a space after the opening
 // brace and before the closing one -- which is what `x_effect_instance.x`'s sixteen-float

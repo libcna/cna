@@ -460,7 +460,7 @@ TEST(XnaContentProjectCommandLine, AProjectBuildTakesXnasLeniencyWhereTheToolWou
         << "the parameter is dropped with a warning, not in silence\n" << invocation.output;
 }
 
-// -- what a command line selects reaches a project build (plan_xna_sample_xnb_sweep.md) ---------
+// -- what a command line selects reaches a project build (XNASWEEP-101/102) ---------------------
 
 namespace
 {
@@ -489,7 +489,7 @@ namespace
     }
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-102. A project carries its own target, and a command
+// XNASWEEP-102. A project carries its own target, and a command
 // line that names one overrides it -- the way `msbuild /p:XnaPlatform=...` overrides the property
 // in the file. Before this the options were parsed, accepted and then dropped: `BuildContent`
 // writes its own command line for the coordinator and nothing the outer one selected was in it, so
@@ -520,7 +520,7 @@ TEST(XnaContentProjectCommandLine, TheTargetOnTheCommandLineOverridesTheProjects
     EXPECT_EQ(after.flags & 0x01u, 0x00u);
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-102, the compression half of the same defect.
+// XNASWEEP-102, the compression half of the same defect.
 TEST(XnaContentProjectCommandLine, CompressionOnTheCommandLineOverridesTheProjectsOwn)
 {
     const Project project("compress_override");
@@ -538,7 +538,7 @@ TEST(XnaContentProjectCommandLine, CompressionOnTheCommandLineOverridesTheProjec
     EXPECT_EQ(ReadXnbHeader(project.Output() / "probe.xnb").flags & 0x80u, 0x00u);
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-101. `BuildContent` writes its own command line, so
+// XNASWEEP-101. `BuildContent` writes its own command line, so
 // the build-tool *services* the outer one selected -- the effect compiler, the XMA encoder, the
 // font search -- reached nothing. A project with a `.spritefont` naming a family that is not
 // installed on the build machine could not be built at all, however the machine was told where the
@@ -596,7 +596,7 @@ TEST(XnaContentProjectCommandLine, AFontDirectoryOnTheCommandLineReachesAProject
     EXPECT_NE(with.output.find("told to search"), std::string::npos) << with.output;
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-103. A project is its item list, and XNA builds every
+// XNASWEEP-103. A project is its item list, and XNA builds every
 // item it can: `BuildContent` fails the ones whose processor it cannot find, keeps the ones it
 // can, and returns false. CNA refused the whole project instead -- once for the aggregate
 // diagnostic, once for the `PipelineAssemblies` item, and once more inside the task at the first
@@ -628,7 +628,7 @@ TEST(XnaContentProjectCommandLine, AnAssetWithNoComponentFailsWithoutTakingThePr
         << invocation.output;
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-103, the `PipelineAssemblies` half. Refusing beats
+// XNASWEEP-103, the `PipelineAssemblies` half. Refusing beats
 // ignoring -- a project naming its own pipeline assembly expects its own components to run and
 // this build has no assembly to load -- but the refusal belongs after building what it can, not
 // instead of it. 162 of the corpus's 328 build units reference a pipeline assembly, and most of
@@ -650,7 +650,7 @@ TEST(XnaContentProjectCommandLine, APipelineAssemblyFailsTheBuildAfterItProduces
     EXPECT_TRUE(std::filesystem::is_regular_file(project.Output() / "probe.xnb")) << invocation.output;
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-110. A content build must not need write access to
+// XNASWEEP-110. A content build must not need write access to
 // the content it is reading. `BuildContent` wrote its own configuration into the source root and
 // deleted it again, because the coordinator required a configuration to live inside the root it
 // was reading -- so a read-only source tree could not be built at all, and every build that did

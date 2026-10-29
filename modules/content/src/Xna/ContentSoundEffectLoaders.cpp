@@ -143,7 +143,7 @@ namespace Microsoft::Xna::Framework::Content
                                                       : Audio::AudioChannels::Mono;
             // A schema-2 file may store its samples 8-bit, which is what the source declared and
             // what the build now preserves; `SoundEffect` takes 16-bit PCM, so the width is given
-            // up here and nowhere earlier (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+            // up here and nowhere earlier (`XNASWEEP-197`).
             const std::vector<std::uint8_t> samples =
                 CNA::Content::Cnb::CnbSoundEffectSamplesAsPcm16(data);
             std::shared_ptr<Audio::SoundEffect> result;

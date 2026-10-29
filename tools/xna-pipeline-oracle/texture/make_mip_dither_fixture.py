@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-223: the source that shows XNA's mip filter taking
+"""XNASWEEP-223: the source that shows XNA's mip filter taking
 the same dither shift the block decoder takes.
 
 Twelve by twelve, uncompressed, so nothing but the filter is in the answer: the first generated

@@ -72,7 +72,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * `.xnb`: a `.x` file's synthesized root frame has no name and XNA writes a null object for
          * it, while a `Frame {` that declares an empty one is written as a zero-length string.
          * C++ has no null `std::string`, so the distinction is carried here
-         * (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122).
+         * (XNASWEEP-122).
          *
          * @return True when no name has been set.
          */

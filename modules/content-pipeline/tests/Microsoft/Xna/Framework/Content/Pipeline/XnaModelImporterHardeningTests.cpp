@@ -175,7 +175,7 @@ TEST(XnaModelReaderHardening, NoMutatedFbxDocumentCrashesOrEscapesItsOwnExceptio
 }
 
 // A declared size no host could serve is refused on the declaration, not by trying to allocate it.
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-195: a binary `.x` that declares its templates
+// XNASWEEP-195: a binary `.x` that declares its templates
 // inline. The binary form spells `template` as a token rather than as the word, and the reader
 // mapped that token to a generic keyword name -- so the parser's own `SkipTemplate` never fired,
 // the declaration was read as an *object*, and the first `array` inside it (token 52, which was

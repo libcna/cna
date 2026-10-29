@@ -289,7 +289,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
          * `MaterialProcessor` replaces a material's texture references with the built ones *in
          * place*, so converting the same material twice would hand the second conversion an
          * already-built `.xnb` path to build. XNA converts each distinct material once and every
-         * batch that names it shares the result (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-127).
+         * batch that names it shares the result (XNASWEEP-127).
          */
         std::map<const Graphics::MaterialContent*, std::shared_ptr<Graphics::MaterialContent>>
             convertedMaterials_;

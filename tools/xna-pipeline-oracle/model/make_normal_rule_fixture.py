@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-170: what a `.x` `MeshNormals` entry becomes.
+"""XNASWEEP-170: what a `.x` `MeshNormals` entry becomes.
 
 One mesh, one normal per vertex, chosen so that every part of the rule is separately observable:
 the six axis directions expose the sign of a zero the basis change leaves behind, the non-unit

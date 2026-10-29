@@ -89,7 +89,7 @@ namespace CNA::Content::Pipeline
          * a nested build's output, absolute under the output root. What an `.xnb` stores is the
          * name a `ContentManager` loads, and the CNB conversions ask for it through the same
          * resolver; the XNB route takes the model directly and therefore has to ask too
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+         * (`XNASWEEP-174`).
          *
          * @param model The model as the bridge answered it.
          * @param resolve The authored-path-to-logical-name resolver.
@@ -376,7 +376,7 @@ namespace CNA::Content::Pipeline
                 };
                 ProcessedModelBundle bundle;
                 // The XNB route writes this graph itself; the CNB conversions below are for the
-                // CNB route alone (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+                // CNB route alone (`XNASWEEP-174`).
                 bundle.xnaModel = WithResolvedReferences(xnb, resolve);
                 try
                 {

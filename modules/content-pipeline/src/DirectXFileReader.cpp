@@ -297,7 +297,7 @@ namespace CNA::Content::Pipeline
                     // Without it the declaration is read as an *object* whose type is a keyword,
                     // and the first `array` inside it ends the parse. SAMPLE-141's `target.x` and
                     // `xwing.x` are binary and declare all eleven of their templates inline, which
-                    // is what found this (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-195`).
+                    // is what found this (`XNASWEEP-195`).
                     case 31: return Token{Kind::Name, "template", 0.0};
                     // The rest are keywords a skipped template body may hold: `array` and the
                     // primitive type names. `array` is 52 and was missing from this list, which is

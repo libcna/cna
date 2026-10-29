@@ -212,7 +212,7 @@ TEST(XnbOutputContentPipelineTest, OneEightBitWavGivesOneProcessedValueAndTwoFai
     // asked for `.xnb` or for `.cnb`. It used to, because its output type *was* the CNB schema's
     // description, and that schema stored 16-bit only -- so an 8-bit source came out of both
     // containers widened, and the `.xnb` did not match what the genuine XNA pipeline writes
-    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+    // (`XNASWEEP-197`).
     //
     // One source, one importer, one processed value; each writer adapts it and neither decides
     // what it says.

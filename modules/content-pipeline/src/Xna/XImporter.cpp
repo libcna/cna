@@ -105,7 +105,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * `Car.x`'s `(-0.000000, -0.697342, 0.716738)` and eighty-six others like it. The
          * zero-length branch is not the raw accumulation either -- `(-0, -0, -0)` accumulates to
          * `(+0, -0, +0)` and the genuine importer answers `(+0, +0, +0)`
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-181`).
+         * (`XNASWEEP-181`).
          *
          * **The normalization is wide.** The sum of squares and the square root are computed in
          * `double` and rounded to a `float` once, and the three components are *divided* by it.
@@ -115,7 +115,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * reproduces all 396 and the float form 230.
          *
          * A position is neither transformed this way nor normalized: `0.855686` stays
-         * `0x3F5B0E3D` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-170`).
+         * `0x3F5B0E3D` (`XNASWEEP-170`).
          */
         [[nodiscard]] Vector3 ConvertNormal(const Vector3 value)
         {
@@ -142,7 +142,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // negative zero into a positive one: a `.x` vertex at `z = 0` comes back `0`, where
             // negating it on its own answers `-0`. Same bits everywhere else, and the difference
             // used to be invisible because `MeshHelper.TransformScene` ran over every model and
-            // washed the sign out (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-167`).
+            // washed the sign out (`XNASWEEP-167`).
             return Vector3(value.X + 0.0f, value.Y + 0.0f, -value.Z + 0.0f);
         }
 
@@ -155,7 +155,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * answer. Those two are what 144 measured matrices pin down; `M12`, `M13`, `M14` and the
          * fourth row are not constrained by any of them, and are written positive here except
          * `M43`, which cannot be, because no assignment with all three of the fourth row's zeros
-         * positive fits (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-189`).
+         * positive fits (`XNASWEEP-189`).
          */
         [[nodiscard]] Matrix BasisChangeLeft()
         {
@@ -175,7 +175,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * shared basis, two of 144 matrices come out with the wrong sign of zero and no assignment
          * of its twelve signs fixes them. Here `M32` is the negative zero and everything else is
          * positive -- the first and third columns because the measurements say so, the fourth
-         * because nothing constrains it (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-189`).
+         * because nothing constrains it (`XNASWEEP-189`).
          */
         [[nodiscard]] Matrix BasisChangeRight()
         {
@@ -195,7 +195,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * turns a zero into a negative zero where a dot product's sum of four terms does not.
          * Measured over 144 random sign patterns in three independent batches: the negations
          * reproduce 3 of 144, one shared basis 142, and this all 144 to the bit
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-189`).
+         * (`XNASWEEP-189`).
          */
         [[nodiscard]] Matrix Convert(const Matrix& m)
         {
@@ -259,7 +259,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * *texture* under that parameter's name. Measured on the genuine importer with a fixture
          * carrying one of each parameter template -- `EffectParamString`, `EffectParamFloats` and
          * `EffectParamDWord` -- which answers `Effect`, `Tint=(0.25,0.5,0.75)`, `Passes=2` and
-         * `materialTexture DiffuseTexture` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+         * `materialTexture DiffuseTexture` (`XNASWEEP-174`).
          */
         [[nodiscard]] std::shared_ptr<Graphics::MaterialContent> ReadMaterialContent(
             const Canon::DirectXFileObject& object, const Importing& importing);
@@ -279,7 +279,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // `.xnb` (measured, `x/zero_power.x`; and 3 of the sample corpus's `.x` materials are
             // exactly that -- ReachGraphicsDemo's `grid.x` and ColorReplacement's `Car.x` both
             // answer 16 in XNA's own build where CNA wrote 0,
-            // plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-106`).
+            // `XNASWEEP-106`).
             if (At(object, 4) != 0.0f)
             {
                 material.setSpecularPowerProperty(At(object, 4));
@@ -291,7 +291,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 // spelled the way the tool that wrote the file spells a path. Every `.x` in the
                 // public sample corpus was written on Windows, so `..\textures\p1_dual.tga` is
                 // an ordinary relative path and not a filename with backslashes in it
-                // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-114`).
+                // (`XNASWEEP-114`).
                 std::string named = texture->strings.front();
                 std::replace(named.begin(), named.end(), '\\', '/');
                 material.setTextureProperty(std::make_shared<ExternalReference<Graphics::TextureContent>>(
@@ -352,7 +352,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     // `Single`, two a `Vector2`, three a `Vector3`, four a `Vector4`, sixteen a
                     // `Matrix`, and every other count a `Single[]`. Measured on the genuine
                     // importer over counts 1, 2, 3, 4, 16, 5, 6, 9 and 12
-                    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+                    // (`XNASWEEP-174`).
                     if (parameter.numbers.empty()) { continue; }
                     const auto count = static_cast<std::size_t>(parameter.numbers.front());
                     if (parameter.numbers.size() < count + 1u) { continue; }
@@ -428,7 +428,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // `p2_dual.x`'s 23,305 -- in an order that is a *permutation* of the file's, and this
             // is the permutation. Nothing about the vertex buffer depends on it; the mesh's
             // bounding sphere does, because it is computed over this list and the growth pass is
-            // order-dependent (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-173`).
+            // order-dependent (`XNASWEEP-173`).
             constexpr std::size_t kUnplaced = static_cast<std::size_t>(-1);
             std::vector<std::size_t> positionOf(vertexCount, kUnplaced);
             std::map<std::array<std::uint32_t, 3>, std::size_t> mergedPositions;
@@ -493,7 +493,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
              * construction -- an origin and two small integer vectors, so the only rounding left
              * is here -- this form answers all 120 and a `float` sum answers 101, a `double`
              * square root 53 and a reciprocal multiply 48
-             * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-231`).
+             * (`XNASWEEP-231`).
              */
             const auto normalizeStep = [](const Vector3 value)
             {
@@ -541,7 +541,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
              *
              * Measured against the genuine importer over 432 purpose-built triangles, the 39
              * committed `.x` fixtures and SAMPLE-141's `xwing.x`, whose 1,293 positions it answers
-             * bit for bit (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-231`).
+             * bit for bit (`XNASWEEP-231`).
              *
              * **What is left.** Thirteen of those 1,291 probe normals and one of the 76 fixture
              * ones differ in the *sign of a zero* and in nothing else -- the genuine importer
@@ -622,7 +622,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // **6** normals -- one per cube face -- with twelve `3;n,n,n;` rows saying which. Read
             // as though a normal belonged to a position it answers 8 vertices where XNA answers
             // **24**, because a vertex is a position *and* its channel values and every corner of
-            // that cube has a different normal (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-144`;
+            // that cube has a different normal (`XNASWEEP-144`;
             // `XNASWEEP-112` is the same rule on the FBX route).
             std::vector<std::vector<std::size_t>> normalFaces;
             if (const Canon::DirectXFileObject* object2 = Find(object, "MeshNormals"); object2 != nullptr)
@@ -635,7 +635,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     // not. Measured on both genuine importers: a `MeshNormals` entry of
                     // `(0, 0, 2)` comes back `(0, 0, -1)` and `0.801785` comes back `0.801784`,
                     // while an `.fbx` mesh's normals are answered as the file's own floats bit for
-                    // bit (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-167`).
+                    // bit (`XNASWEEP-167`).
                     normals.push_back(ConvertNormal(
                         Vector3(At(*object2, normalAt), At(*object2, normalAt + 1), At(*object2, normalAt + 2))));
                     normalAt += 3u;
@@ -659,7 +659,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // index into the list, but what separates two vertices is the *value*: SAMPLE-057's
             // `cylinder.x` writes 418 normal entries over 21 distinct values, and XNA answers 135
             // vertices -- the distinct (position, normal value) pairs -- where keying on the index
-            // gives 418, one per entry (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-148`).
+            // gives 418, one per entry (`XNASWEEP-148`).
             std::vector<std::size_t> canonicalNormal(normals.size());
             {
                 std::map<std::tuple<float, float, float>, std::size_t> first;
@@ -757,7 +757,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // the same position, the same normal and the same channel values are one vertex, which
             // is why `x_position_merge.x` declares eight and the genuine importer answers six.
             // The other channels are grouped here into a class per file vertex so that the vertex
-            // key stays three integers wide (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-173`).
+            // key stays three integers wide (`XNASWEEP-173`).
             std::vector<std::size_t> channelClassOf(vertexCount, 0u);
             {
                 std::map<std::string, std::size_t> classes;
@@ -824,7 +824,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 // exporter writes from Maya does. Reading only the nested ones left such a mesh
                 // with no material at all and so with one part where XNA has one per material:
                 // 18 of the 52 differing `.x` models in the public sample corpus are exactly that
-                // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-114`).
+                // (`XNASWEEP-114`).
                 for (const std::string& named : list->references)
                 {
                     const auto found = importing.materialsByName.find(named);
@@ -841,7 +841,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // A triangle two of whose corners are the same corner is discarded, and the rest of
             // its polygon is not: SAMPLE-141's `racer.x` declares 2,447 faces in its chassis and
             // the genuine importer answers 2,445, the two it drops being `(1067,1068,1067)` and
-            // `(1077,1078,1077)` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-198`). What makes
+            // `(1077,1078,1077)` (`XNASWEEP-198`). What makes
             // two corners the same is the *vertex* and not the index: `x_face_degenerate.x` names
             // one vertex twice in a face and loses it, and `x_face_degenerate_normals.x` names the
             // same vertex twice with two different normals and keeps it, because those are two
@@ -860,7 +860,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // (`target.x`'s own data with that block removed answers all 180) and when it declares
             // `MeshTextureCoords` (the genuine importer splits a vertex instead of dropping the
             // face). What is behind that gate is not understood, so the rule is kept inside the
-            // window it was measured in rather than generalized past it; §11.3.1 of the plan
+            // window it was measured in rather than generalized past it; XNASWEEP-231
             // records the probe families the window does not explain.
             std::vector<std::size_t> originalOf;
             if (const Canon::DirectXFileObject* duplication = Find(object, "VertexDuplicationIndices");
@@ -986,7 +986,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         // and different declared normals are two. `x_generated_normals_exact.x` is
                         // twenty-four triangles sharing an origin: the genuine importer answers 49
                         // vertices for its 49 positions, and keying on the corner answers 72
-                        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-233`).
+                        // (`XNASWEEP-233`).
                         const std::size_t normalKey =
                             normals.empty()
                                 ? positionOf[vertex]

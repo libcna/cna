@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-134: black-box behaviour oracle for XNA 4.0's
+// XNASWEEP-134: black-box behaviour oracle for XNA 4.0's
 // BoundingSphere.CreateFromPoints, at the bit.
 //
 // The corpus's model references disagreed with CNA's on a mesh's bounding-sphere centre by a few

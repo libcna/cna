@@ -13,7 +13,7 @@
 // list. The cache optimization is `D3DXOptimizeFaces`, and a mesh with no shared vertices -- which
 // these fixtures are -- is the case where it answers the exact reverse, because every one of its
 // faces has the fewest possible neighbours; XnaOptimizeForCacheProbesTests.cpp is where the
-// general rule is measured (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149).
+// general rule is measured (XNASWEEP-149).
 #include <gtest/gtest.h>
 
 #include <array>
@@ -698,7 +698,7 @@ TEST(XnaMeshHelper, SwapWindingOrderReversesEachTriangle)
     EXPECT_EQ(DescribeMeshFull(mesh), Expected("meshhelper/swap_winding_order"));
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-234: the normalization `TransformScene` applies is
+// XNASWEEP-234: the normalization `TransformScene` applies is
 // not `Vector3::Normalize`'s.
 //
 // It is the wide divide -- the sum of squares accumulated wider than `float`, the square root

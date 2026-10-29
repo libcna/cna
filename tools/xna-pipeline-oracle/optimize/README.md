@@ -1,6 +1,6 @@
 # `MeshHelper.OptimizeForCache`, measured
 
-`plans/plan_xna_sample_xnb_sweep.md` `XNASWEEP-149`. Every unexplained reference left in the sweep
+`XNASWEEP-149`. Every unexplained reference left in the sweep
 turns on the order genuine XNA 4.0's `MeshHelper.OptimizeForCache` puts a mesh's triangles in, or
 on a number that follows from it. This directory is the black-box laboratory for that one method:
 it generates small meshes whose whole answer can be reasoned about, runs the **genuine** method

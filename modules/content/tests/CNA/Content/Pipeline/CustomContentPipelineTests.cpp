@@ -320,7 +320,7 @@ TEST(CustomContentPipelineTest, BuiltInWritersDeclareStableSchemaAndCodecIdentit
         EXPECT_EQ(schemas[0].assetTypeId, item.assetTypeId) << item.inputType;
         // Every asset schema is at version 1 except `SoundEffect`, which reached version 2 when
         // it learned to store an 8-bit sound at its own width
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+        // (`XNASWEEP-197`).
         EXPECT_EQ(schemas[0].assetSchemaVersion,
                   item.assetTypeId == Cnb::CnbAssetTypeId::SoundEffect
                       ? Cnb::CnbSoundEffectSchemaVersion

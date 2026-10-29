@@ -1,6 +1,6 @@
 """Score Microsoft DirectXMesh's `OptimizeFaces` against genuine XNA and genuine D3DX9.
 
-plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-149`.  Three implementations answer the same probes:
+`XNASWEEP-149`.  Three implementations answer the same probes:
 
   A. genuine Microsoft XNA 4.0 `MeshHelper.OptimizeForCache`   (OptimizeForCacheOracle.cs)
   B. genuine Microsoft D3DX9 `D3DXOptimizeFaces`               (D3dxOptimizeOracle.c)

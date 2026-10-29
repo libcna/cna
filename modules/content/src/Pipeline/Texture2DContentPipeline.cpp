@@ -35,7 +35,7 @@ namespace CNA::Content::Pipeline
 
         // A `.dds` this route decompresses is being *built*, and XNA builds one through D3DX,
         // whose endpoint expansion rounds up where a GPU's replicates bits. Measured over every
-        // endpoint value (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-136`); the renderers keep
+        // endpoint value (`XNASWEEP-136`); the renderers keep
         // the hardware rule, which is what the hardware beside them answers.
         constexpr CNA::Internal::Graphics::DxtEndpointExpansion PipelineExpansion =
             CNA::Internal::Graphics::DxtEndpointExpansion::D3dx;
@@ -506,7 +506,7 @@ namespace CNA::Content::Pipeline
          *        its own -- only a `.dds` does. XNA keeps such a chain and converts every level of
          *        it, so dropping it here would build a one-level texture against a reference with
          *        ten (measured, tests/reference/xna40/differential/texture_dds_mipchain_default.xnb;
-         *        plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`).
+         *        `XNASWEEP-135`).
          */
         [[nodiscard]] CNA::Internal::Graphics::ImageData DecodeToRgba8(
             const std::vector<std::uint8_t>& bytes, const std::filesystem::path& source,
@@ -640,8 +640,8 @@ namespace CNA::Content::Pipeline
      * sources in the public XNA sample corpus declare exactly that. Measured against XNA's own
      * build of NetRumble's `barrierPurple.png`: `round(255 * (c/255) ^ (1/(gamma*2.2)))`
      * followed by the truncating premultiply reproduces all 49,152 channel values, and every
-     * other candidate rule misses thousands (plans/plan_xna_sample_xnb_sweep.md
-     * `XNASWEEP-109`).
+     * other candidate rule misses thousands
+     * (`XNASWEEP-109`).
      *
      * An `sRGB` chunk *defines* the gamma as the standard one, so it corrects nothing; an
      * `iCCP` profile is ignored, which is measured rather than assumed -- 770 of the corpus's
@@ -656,7 +656,7 @@ namespace CNA::Content::Pipeline
      * and are byte-identical without it. There is no counterexample either way. A palette or
      * greyscale source with a non-standard gamma is not in the corpus, so it takes the same
      * answer as the truecolour one it resembles rather than a guess of its own
-     * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-218`).
+     * (`XNASWEEP-218`).
      *
      * @param file The source file's bytes.
      * @param pixels The decoded RGBA8 texels, corrected in place.
@@ -862,7 +862,7 @@ namespace CNA::Content::Pipeline
      * shift belongs to the dither and not to either consumer. Measured on eight uncompressed
      * sources built with `GenerateMipmaps` through the genuine pipeline: every generated level
      * whose parent is even is byte-identical with it and 6 to 102 bytes out without it
-     * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-223`, and `XNASWEEP-222` for the decoder).
+     * (`XNASWEEP-223`, and `XNASWEEP-222` for the decoder).
      *
      * @param x Destination column.
      * @param y Destination row.
@@ -936,7 +936,7 @@ namespace CNA::Content::Pipeline
      * quotient too, and taking two rounded one-dimensional passes instead answers one higher or
      * lower wherever the fraction lands past a threshold. Over the same eight sources, dithering
      * a single two-dimensional sum leaves 34 differing bytes of 8,084 where rounding two passes
-     * leaves 72 (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-223`).
+     * leaves 72 (`XNASWEEP-223`).
      *
      * @param pixels The source level.
      * @param width Its width.
@@ -1200,7 +1200,7 @@ namespace CNA::Content::Pipeline
                     // 255, and XNA's own build keeps every one of them -- they arrive in the
                     // reference as (254,0,254,254), which is (255,0,255,254) premultiplied.
                     // Comparing three channels cleared them to transparent black
-                    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-142`).
+                    // (`XNASWEEP-142`).
                     if (pixels[index] == (*colorKey)[0] &&
                         pixels[index + 1u] == (*colorKey)[1] &&
                         pixels[index + 2u] == (*colorKey)[2] &&
@@ -1236,7 +1236,7 @@ namespace CNA::Content::Pipeline
                 // refuse what comes out: a 6x6 with levels 3x3 and 1x1 becomes 8x8, 4x4 and 1x1,
                 // and the build stops with *Invalid texture. Face 0 mip 2 is sized 1x1, but
                 // should be 2x2.* (measured, texture/dds_mipchain_npot_resize in the differential
-                // corpus; plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`).
+                // corpus; `XNASWEEP-135`).
                 std::uint32_t levelWidth = image.width;
                 std::uint32_t levelHeight = image.height;
                 for (std::vector<std::uint8_t>& pixels : image.additionalRgbaMipLevels)
@@ -1339,7 +1339,7 @@ namespace CNA::Content::Pipeline
         // ImportedImage::authoredPremultiplyAlpha; an explicit parameter beats both.
         // A pass-through does none of the processor's own steps, which is what "unchanged" means:
         // no colour key, no resize and no premultiply (measured, texture_dds_mipchain_passthrough
-        // against texture_dds_mipchain_default; plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`).
+        // against texture_dds_mipchain_default; `XNASWEEP-135`).
         const bool premultiply = !passThrough &&
             ReadBooleanParameter(parameters, TexturePremultiplyAlphaParameter,
                                  image.authoredPremultiplyAlpha.value_or(true));
@@ -1365,7 +1365,7 @@ namespace CNA::Content::Pipeline
         // Dxt3 that has been through the colour key and the premultiply and been re-encoded -- the
         // two answers are both Dxt3 and are different bytes (measured,
         // tests/reference/xna40/differential/texture_dds_dxt3_passthrough.xnb against
-        // texture_dds_dxt3_nochange.xnb; plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`).
+        // texture_dds_dxt3_nochange.xnb; `XNASWEEP-135`).
         if (passThrough && image.sourceCompressedFormat.has_value() &&
             !image.sourceCompressedLevels.empty())
         {

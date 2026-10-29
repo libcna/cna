@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-224: block-compressed `.dds` files whose dimensions
+"""XNASWEEP-224: block-compressed `.dds` files whose dimensions
 are not a whole number of blocks.
 
 A DXT level of w by h pixels holds `ceil(w/4) * ceil(h/4)` blocks, which is what an encoder writes

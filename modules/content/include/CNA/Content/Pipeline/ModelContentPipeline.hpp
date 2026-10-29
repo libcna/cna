@@ -97,7 +97,7 @@ namespace CNA::Content::Pipeline
          * game's own and carries a parameter table for it. Neither schema has an effect kind for
          * that, and inventing one would change a frozen schema to describe a thing only the XNB
          * route can carry, so the CNB writer refuses that model by name instead
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+         * (`XNASWEEP-174`).
          */
         std::optional<CanonicalModelValue> primary;
 

@@ -4207,7 +4207,7 @@ typedef struct CNA_CnbSoundEffectInfo {
      *
      * `CNA_CNB_AUDIO_FORMAT_PCM16` from schema 1, `CNA_CNB_AUDIO_FORMAT_PCM8` from schema 2. Both
      * are read; the encoder writes whichever the description declares and stamps the file with the
-     * schema version this build emits (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+     * schema version this build emits (`XNASWEEP-197`).
      */
     CNA_CnbAudioFormat format;
     /** @brief Sample rate in Hz; 1..`CNA_CNB_MAX_AUDIO_SAMPLE_RATE`. */

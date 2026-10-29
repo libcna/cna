@@ -177,7 +177,7 @@ namespace CNA::Content::Pipeline
      *        drawn with the font's own `.notdef` and warned about, which is what XNA does
      *        (XNAPP-267).
      * @param profile The graphics profile the atlas must suit: Reach rounds its height up to a
-     *        power of two, HiDef up to four (measured, plans/plan_xna_sample_xnb_sweep.md
+     *        power of two, HiDef up to four (measured,
      *        XNASWEEP-104).
      * @return The atlas and its glyph table.
      */

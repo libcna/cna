@@ -881,7 +881,7 @@ TEST(ContentPipelineCliTest, ConfigurationRejectsUnknownAssetsComponentsAndOptio
     }
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-110. The containment rule is about what a *source
+// XNASWEEP-110. The containment rule is about what a *source
 // tree* may carry, so the configuration this build discovers under its root has to be inside it,
 // like every other file it reads. A configuration the command line names is not a discovered
 // source -- it is the instruction -- and requiring it inside the root made a read-only source tree

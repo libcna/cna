@@ -880,7 +880,7 @@ TEST(EffectSourceCommandLineTest, NoConfigureTimeCompilerDefaultIsBakedIntoThisB
         << run.output;
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-108. XNA's `EffectProcessor.DebugMode` defaults to
+// XNASWEEP-108. XNA's `EffectProcessor.DebugMode` defaults to
 // `Auto`, which follows the build configuration, and a content project's own default
 // `Configuration` is `Debug`. CNA defaulted to "no debug information" whatever the configuration
 // said, and had no way to say which configuration a build was: every effect in the sample corpus

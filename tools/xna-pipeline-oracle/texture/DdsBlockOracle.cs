@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-224: what the genuine `TextureImporter` answers for a
+// XNASWEEP-224: what the genuine `TextureImporter` answers for a
 // block-compressed `.dds` whose dimensions are not a whole number of blocks.
 //
 // The DDS files are written here, correctly: a level of w by h pixels holds ceil(w/4) * ceil(h/4)

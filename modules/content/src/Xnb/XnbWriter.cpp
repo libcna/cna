@@ -281,8 +281,8 @@ namespace CNA::Internal::Xnb
         const std::filesystem::path relative = referenced.lexically_relative(directory);
         // XNA writes a reference the way Windows spells a path. Of the 218 model texture
         // references in the public XNA sample corpus, 178 have no separator at all and 40 use a
-        // backslash; not one uses a forward slash (plans/plan_xna_sample_xnb_sweep.md
-        // `XNASWEEP-116`). CNA's own reader normalizes either, so this changes only the bytes.
+        // backslash; not one uses a forward slash
+        // (`XNASWEEP-116`). CNA's own reader normalizes either, so this changes only the bytes.
         std::string spelled =
             (relative.empty() ? CNA::Internal::PathToGenericUtf8(referenced) : CNA::Internal::PathToGenericUtf8(relative));
         std::replace(spelled.begin(), spelled.end(), '/', '\\');

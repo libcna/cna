@@ -1,6 +1,6 @@
 """Held-out probes: fresh topologies, generated to test an equivalence rather than to fit a rule.
 
-plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149.  The 376 frozen probes were designed, one family
+XNASWEEP-149.  The 376 frozen probes were designed, one family
 at a time, to separate hypotheses about `MeshHelper.OptimizeForCache`; a rule fitted to them proves
 little on them.  These are different: pseudo-random triangulations, random face orders and random
 corner rotations, generated from a fixed seed and never used to choose a rule.  They exist to be

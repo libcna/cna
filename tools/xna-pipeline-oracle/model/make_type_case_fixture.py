@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-180: a `.x` object's type name and its case.
+"""XNASWEEP-180: a `.x` object's type name and its case.
 
 An object's type in a `.x` file is a *template* name, and the genuine reader resolves it against
 the template set without regard to case. SAMPLE-028's `Car.x` is the corpus file that needs it --

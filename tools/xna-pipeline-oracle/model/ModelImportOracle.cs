@@ -35,7 +35,7 @@ namespace Cna.Xna40.ModelOracle
          * answers a material with no texture when it is imported after the fixtures that were there
          * before 2026-09-08, and a material *with* its texture when one unrelated file is added to
          * the same directory. Measured both ways, twice each, deterministic in each direction
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-147`). A measurement that moves when a
+         * (`XNASWEEP-147`). A measurement that moves when a
          * file it never names is added is not a measurement, so each one now gets its own process.
          */
         private static string Mode = null;
@@ -90,8 +90,8 @@ namespace Cna.Xna40.ModelOracle
         // Rounded to six decimals by default, which is what every committed reference carries.
         // `CNA_MODEL_ORACLE_EXACT=1` prints the round-trip form instead, for an investigation that
         // turns on a single ulp -- a rounded transform cannot tell -4.4e-08 from 6.1e-17, and
-        // cannot tell one float from the one below it (plans/plan_xna_sample_xnb_sweep.md
-        // `XNASWEEP-121`, `XNASWEEP-153`). It is deliberately not the default: turning it on would
+        // cannot tell one float from the one below it
+        // (`XNASWEEP-121`, `XNASWEEP-153`). It is deliberately not the default: turning it on would
         // rewrite every reference in the corpus for no measurement anybody asked for.
         private static readonly bool Exact =
             Environment.GetEnvironmentVariable("CNA_MODEL_ORACLE_EXACT") == "1";
@@ -99,7 +99,7 @@ namespace Cna.Xna40.ModelOracle
         // `CNA_MODEL_ORACLE_BITS=1` prints every float as its raw IEEE-754 bits. "R" cannot answer
         // two questions this campaign keeps asking: .NET 4.0's `ToString` prints `-0` as `0`, so a
         // sign of zero is invisible, and a decimal round trip has to be trusted rather than read.
-        // The bits are neither (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-170`).
+        // The bits are neither (`XNASWEEP-170`).
         private static readonly bool Bits =
             Environment.GetEnvironmentVariable("CNA_MODEL_ORACLE_BITS") == "1";
 
@@ -214,7 +214,7 @@ namespace Cna.Xna40.ModelOracle
                             // `Texture` names its file twice and the two can name different
                             // *directories*, which is the whole question for
                             // fbx_texture_path_filename.fbx and fbx_texture_path_relative.fbx
-                            // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-140). Every other
+                            // (XNASWEEP-140). Every other
                             // fixture names a bare file beside itself, so their records do not
                             // change.
                             builder.Append("    materialTexture " + texture.Key + "=" +

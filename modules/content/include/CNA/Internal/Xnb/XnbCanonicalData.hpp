@@ -305,7 +305,7 @@ namespace CNA::Internal::Xnb
         std::string name;
         /**
          * @brief Whether the bone has no name at all, written as a null object rather than as a
-         *        zero-length string (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122).
+         *        zero-length string (XNASWEEP-122).
          */
         bool nameIsNull = false;
         /** @brief Bone-local transform. */

@@ -170,7 +170,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // each level rounded on its own -- a 6x10 chain answers 8x12, 4x6, 2x3, 1x1, where
             // rounding each level would give 4x8 at level 1. Measured over eleven committed
             // fixtures, `tests/reference/xna40/texture/dds-block-oracle.json`
-            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-224`).
+            // (`XNASWEEP-224`).
             const bool compressed =
                 surfaces.format != CNA::Internal::Graphics::DdsSurfaceFormat::Color;
             const auto blockRound = [](const std::uint32_t pixels)
@@ -264,7 +264,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             throw InvalidContentException(UnreadableTextureMessage(bytes.empty()));
         }
         // The same rule the canonical route applies: GDI+ honours a PNG's own `gAMA`, and the
-        // genuine importer is GDI+ (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-109`).
+        // genuine importer is GDI+ (`XNASWEEP-109`).
         CNA::Content::Pipeline::ApplyPngFileGammaEXT(bytes, decoded.representations[0].levels[0]);
         auto bitmap = std::make_shared<Graphics::PixelBitmapContent<Color>>(
             static_cast<SharpRuntime::intcs>(decoded.width), static_cast<SharpRuntime::intcs>(decoded.height));

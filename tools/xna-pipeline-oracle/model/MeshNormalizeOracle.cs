@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-234: how `MeshHelper.TransformScene` normalizes.
+// XNASWEEP-234: how `MeshHelper.TransformScene` normalizes.
 //
 // The `.x` importer's own normalization is measured and wide -- the sum of squares and the square
 // root in `double`, narrowed once, and the components *divided* by it (`XNASWEEP-170`). The

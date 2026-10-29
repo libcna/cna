@@ -1629,7 +1629,7 @@ namespace CNA::Content::Pipeline
                     // every mesh reference it. That is a repeat, not a collision -- as long as the
                     // two really are the same output. Two different assets under one name still
                     // refuse, which is the case this check exists for
-                    // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-117).
+                    // (XNASWEEP-117).
                     const auto existing = std::find_if(
                         output.additionalOutputs.begin(), output.additionalOutputs.end(),
                         [&nested](const ContentAdditionalWriteOutput& one)

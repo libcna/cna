@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-186: a content project for a sample that ships none.
+"""XNASWEEP-186: a content project for a sample that ships none.
 
 `XNASWEEP-163` counted the references the sweep has no route to, and the largest class of them is
 samples whose references were produced by a hand-written `BuildContent` runner rather than by a
@@ -14,7 +14,7 @@ Each description names the source root, the output root, the target, and the rul
 `Directory.GetFiles` loop follows; this tool turns one into a `.contentproj` beside a copy of the
 sources, which is what `map_sources.py` and `sweep.py` already know how to build.
 
-The sources are copied because the sample tree is read-only (§9) and a content build resolves an
+The sources are copied because the sample tree is read-only (README.md) and a content build resolves an
 item's `Include` against the project's own directory.
 
 Usage:
@@ -38,7 +38,7 @@ MSBUILD_NS = "http://schemas.microsoft.com/developer/msbuild/2003"
 PROJECT_HEAD = """<?xml version="1.0" encoding="utf-8"?>
 <!-- Written by tools/xna-sample-sweep/synthesize_projects.py from
      %s, which records what %s does.
-     plans/plan_xna_sample_xnb_sweep.md XNASWEEP-186. -->
+     XNASWEEP-186. -->
 <Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="%s">
   <PropertyGroup>
     <ProjectGuid>{%s}</ProjectGuid>
@@ -62,7 +62,7 @@ def matches(rules, relative):
     `Path.GetExtension(...).ToLowerInvariant()` and the filesystem it ran on folded case anyway:
     SAMPLE-141's flight-sim series holds `skybox_back.JPG`, which XNA built as a texture and a
     case-sensitive `fnmatch` against `*.jpg` does not match at all
-    (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-194`).
+    (`XNASWEEP-194`).
     """
     found = None
     lowered = relative.lower()
@@ -117,7 +117,7 @@ def write(description, root, out, samples=None):
         # A runner may build another sample's project: the Windows 7 `SongProcessor` export ran
         # five samples' own `.contentproj` files and copied one asset out of each, which is why
         # the reference sits in one sample's tree and its source in another's. `sourceSample`
-        # says so (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-163`).
+        # says so (`XNASWEEP-163`).
         base = os.path.join(
             os.path.join(samples, unit["sourceSample"]) if unit.get("sourceSample") and samples
             else root,
@@ -131,7 +131,7 @@ def write(description, root, out, samples=None):
         # runner gave `BuildContent` that whole directory as its `RootDirectory`; staging only the
         # items leaves a `.x` pointing at a texture that is not there, which is how SAMPLE-141's
         # `skybox.x` failed with "primary source is not a regular file"
-        # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-194`).
+        # (`XNASWEEP-194`).
         for relative in everything(base, unit):
             target = os.path.join(staged, relative.replace("/", os.sep))
             os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -150,7 +150,7 @@ def write(description, root, out, samples=None):
             # A runner is free to give an asset a name that is not its file's stem. `assetName` is
             # that rule, with `{stem}` and `{relative}` for the two things a runner has to work
             # with; without it the name is the stem, which is what every runner here does
-            # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-194`).
+            # (`XNASWEEP-194`).
             name = rule.get("assetName", "{stem}").format(
                 stem=stem, relative=posixpath.splitext(relative)[0])
             text = '    <Compile Include="%s">\n' % saxutils.escape(relative.replace("/", "\\"))
@@ -168,7 +168,7 @@ def write(description, root, out, samples=None):
         # writes a nested texture at `OutputDirectory` + the texture source's own directory, and
         # the item's `Name` plays no part in it -- measured over thirteen cases of the genuine
         # `BuildContent` with `Name` and `Include` disagreeing about their directory
-        # (`nested-names.json`, plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-196`). Folding the
+        # (`nested-names.json`, `XNASWEEP-196`). Folding the
         # per-asset output directory into the asset *name* puts the model in the right place and
         # its textures in the wrong one, which is what SAMPLE-141's six `SkyBox_*_0.xnb` were.
         # `outputDirectory` says the runner did it the other way, and the unit becomes one project

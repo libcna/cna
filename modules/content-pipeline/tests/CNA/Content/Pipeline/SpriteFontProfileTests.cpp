@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-104/105: the two rules the sample corpus settled
+// XNASWEEP-104/105: the two rules the sample corpus settled
 // about a `.spritefont`, both of which change the bytes of every font built.
 
 #include <algorithm>
@@ -98,7 +98,7 @@ TEST(SpriteFontProfileTest, TheAtlasHeightIsTheProfilesRule)
     EXPECT_GE(reach.atlas.height, hiDef.atlas.height);
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-105. `<FontName>` is matched against the `name`
+// XNASWEEP-105. `<FontName>` is matched against the `name`
 // table's entry 1 -- the family Windows matches a LOGFONT against -- and not against FreeType's
 // own `family_name`, which prefers the *typographic* family (entry 16) where a font declares one.
 // `Moire-ExtraBold.ttf` declares family 'Moire ExtraBold' and typographic family 'Moire', so the

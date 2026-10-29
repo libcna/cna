@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-227: is the float tolerance narrow enough to see a
+"""XNASWEEP-227: is the float tolerance narrow enough to see a
 difference that is not a float's last bits?
 
 `classify.py` calls a pair `float-tolerance` when every number it reads differs by less than 1e-6

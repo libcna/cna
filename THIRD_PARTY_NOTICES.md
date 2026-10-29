@@ -17,7 +17,7 @@ restart threshold of 7).
 CNA uses it because genuine XNA 4.0's `MeshHelper.OptimizeForCache` **is** `D3DXOptimizeFaces`:
 1,210 measured probes, run through genuine XNA under Wine and through the genuine D3DX9
 redistributable, with no disagreement
-(`plans/plan_xna_sample_xnb_sweep.md` `XNASWEEP-149`). The adjacency the legacy entry point worked
+(`XNASWEEP-149`). The adjacency the legacy entry point worked
 from is CNA's own black-box measurement and is a separate, MS-PL file,
 `modules/content-pipeline/src/Internal/LegacyMeshAdjacency.cpp`.
 

@@ -572,6 +572,12 @@ The **FNA reference tree** (`/rv/data/library/github.com/FNA-XNA/FNA`) is the ru
 and has no content-*building* code, so it is neither needed nor consulted here. Where XNA and FNA
 disagree, XNA wins (`CLAUDE.md`, decided 2026-09-04).
 
+The sample `.xnb` sweep (`XNASWEEP-*`, [`tools/xna-sample-sweep/README.md`](../tools/xna-sample-sweep/README.md))
+kept these rules unchanged, with one addition this campaign needs: **the public
+C# source of a sample's own importer, processor or writer may be read**, because it is the sample's
+published source and is exactly what a game shipping that component would have. Microsoft's own
+pipeline implementation is still black-box only.
+
 ---
 
 ## 10. Reproducing every claim in this document
@@ -621,13 +627,14 @@ families, among them an unqualified `VideoReader` name (`XNAPP-281`). All three 
   that the header is prepended to, and a UTF-8 `charcs` overload `BinaryWriter` does not have;
   `CnbByteWriter` set the precedent of a CNA-owned deterministic writer beside sharp-runtime's
   reader.
-* **`<FontName>` names a file, not a Windows font family.** XNA asks Windows to resolve a family
-  name through GDI+, so the same `.spritefont` builds differently on different machines, and not
-  at all without the font. CNA looks beside the description first (`Console`, `Console.ttf`,
-  `Console.otf`, `Console.ttc`), so a build is reproducible and the font travels with the project;
-  an installed system font is only a fallback, and using one warns that the build is no longer
-  reproducible. A deliberate divergence from XNA; the XNA spelling still works wherever the font
-  file is present.
+* **`<FontName>` is a font family, and the reproducible routes come first.** XNA asks Windows to
+  resolve the family through GDI+, so the same `.spritefont` builds differently on different
+  machines, and not at all without the font. CNA looks, in order, for a font file of that name
+  beside the description (`Console`, `Console.ttf`, `Console.otf`, `Console.ttc`); a font file
+  beside it whose own family table answers the name the way Windows matches it (`Peric.ttf` is
+  the Pericles family; `XNASWEEP-100`/`105`); the directories a build passes with
+  `--font-directory`, then `CNA_FONT_PATH`; and only then the installed fonts, which warns that
+  the build now depends on what this machine has installed.
 * **Build-time components live in `modules/content-pipeline/`.** FreeType, the block-compression
   encoder and any future importer stay out of the link closure of a game that only loads content:
   `cna_content_pipeline` is linked by `cna_content_compiler` and nothing else, so the dependency

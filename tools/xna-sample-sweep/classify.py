@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-042: explain every pair the sweep found differing.
+"""XNASWEEP-042: explain every pair the sweep found differing.
 
 The sweep answers "are the bytes the same". This answers "why not", and it does it in the order
 that makes the cheapest true statement first:
@@ -100,7 +100,7 @@ def buffer_differences(reference, mine, found):
     'b'` and nothing else. Nine references sat in `UNEXPLAINED` for that reason alone, and reading
     them showed every one to be a normal off in the mantissa -- worst 0.00073 of a degree -- which
     is what a sum of face normals taken in a different order does
-    (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-210`).
+    (`XNASWEEP-210`).
 
     Only when *every* difference is a buffer digest, because a report that also disagrees about a
     bone or a bounding sphere is answered by those and not by this.
@@ -125,7 +125,7 @@ def buffer_differences(reference, mine, found):
     # will read a normal as a number with a huge exponent and report the position and texture
     # coordinate beside it as differing too. Two references read that way and looked like a
     # mechanism of their own; read the right way round they are the same one-to-two-ulp normal
-    # rounding as their Windows twins (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-219`).
+    # rounding as their Windows twins (`XNASWEEP-219`).
     order = ">" if left.get("platform") == "x" else "<"
     expanded = []
     for index in indices:
@@ -191,7 +191,7 @@ def unit_directory(units, unit):
     the output root alone dropped that suffix, so SAMPLE-031's two diagnostic fonts were looked
     for in the *other* unit's directory, came back `payload-unreadable` -- CNA's file not found --
     and were then handed the sprite-font accepted reason by `taxonomy.py` without any comparison
-    having happened (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-236`).
+    having happened (`XNASWEEP-236`).
 
     `sweep.py` records the directory it used, so no rule is re-derived. The search below is only
     for results written before it did; it tries the two names that rule can produce and nothing
@@ -289,7 +289,7 @@ def difference_fields(found):
     anything: a gate asking "does everything that differs belong to the reason this was accepted
     under" cannot answer from a truncated list. This is the whole set, and it stays small because
     an index is not a field -- 501 differing glyph rectangles are one path
-    (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-204`).
+    (`XNASWEEP-204`).
     """
     fields = set()
     for one in found:
@@ -330,7 +330,7 @@ def main(argv=None):
             # authored and a `textures/` a model's nested output authored, and deriving the path
             # from the reference again here looked in the wrong one of the two: 60 of Spacewar's
             # references came back `payload-unreadable` and were counted `UNEXPLAINED`
-            # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-184`, `XNASWEEP-191`).
+            # (`XNASWEEP-184`, `XNASWEEP-191`).
             relative = row.get("asset")
             relative = (relative + ".xnb") if relative else \
                 row["reference"][len(unit["outputRoot"]) + 1:]

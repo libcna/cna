@@ -474,7 +474,7 @@ namespace CNA::Content::Pipeline
             // XNA's own output -- this reproduces **every** placement of SAMPLE-062's
             // `NetRumbleFont` (95 of 95) and of the four sheets in the differential corpus (3, 10,
             // 3 and 2 of them), where the shelf packer matched only the small ones
-            // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-131).
+            // (XNASWEEP-131).
             //
             // A candidate row is `kMargin` or the bottom of something already placed, and a
             // candidate column is `kMargin` or the right edge of something already placed: a
@@ -549,7 +549,7 @@ namespace CNA::Content::Pipeline
          * 128 and so 128. Measured over every one of the 195 distinct sprite fonts in the sample
          * corpus, `.spritefont` and font sheet alike: the rule answers the reference's own width
          * on all 195, and with it the placement rule below reproduces every one of their glyph
-         * boxes exactly (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-137`).
+         * boxes exactly (`XNASWEEP-137`).
          *
          * CNA used to try every width and keep the one that wasted least, which is a better packer
          * and a different one: it put 95 glyphs of SAMPLE-070's `DamageFont` into a 256x64 sheet
@@ -770,7 +770,7 @@ namespace CNA::Content::Pipeline
         // the profile is what CNA did, and it costs a Reach-shaped sheet on a HiDef target: the
         // CardsStarterKit sample's three fonts are 256x144, 256x196 and 256x120 there against a
         // 256x256 here, which is 70,830 bytes of `.xnb` where XNA writes 42,158
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-104`).
+        // (`XNASWEEP-104`).
         const std::uint32_t atlasHeight =
             profile == Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef
                 ? ((usedHeight + 3u) & ~3u)
@@ -1084,7 +1084,7 @@ namespace CNA::Content::Pipeline
          * font has one: `Moire-ExtraBold.ttf` declares family 'Moire ExtraBold' and typographic
          * family 'Moire', so a lookup through `family_name` answers 'Moire' with the extra-bold
          * face and the CardsStarterKit sample's regular font comes out extra bold
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-105`).
+         * (`XNASWEEP-105`).
          *
          * Empty where this build has no rasterizer, which is what makes the family lookup an
          * addition to the file-name one rather than a replacement for it.
@@ -1261,7 +1261,7 @@ namespace CNA::Content::Pipeline
         // is told to look somewhere else. Without this, changing --font-directory left the
         // previous build's output in place as unchanged. An unconfigured build keeps the bare
         // version, so nothing that never used the option changes fingerprint
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-100`).
+        // (`XNASWEEP-100`).
         const std::vector<std::filesystem::path>& directories = ConfiguredFontDirectories();
         if (directories.empty()) { return {kImporterName, "1"}; }
         std::string version = "1+fonts";
@@ -1652,7 +1652,7 @@ namespace CNA::Content::Pipeline
         // `NetRumbleFont.png` is the case that shows it -- an 8x27 cell whose only ink is one texel
         // answers bounds `[124, 1, 1, 1]` and a cropping of `[7, 26, 8, 27]`, and the sheet that
         // holds all 95 glyphs is 128x156 where the untrimmed cells needed 256x256
-        // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-131).
+        // (XNASWEEP-131).
         //
         // A cell with no ink at all -- the space -- is the degenerate case, and XNA answers a 1x1
         // box at the bottom-right corner of the cell: the scan's initial minimum is the last texel
@@ -1861,7 +1861,7 @@ namespace CNA::Content::Pipeline
         // `PremultiplyAlpha` is this processor's own property and its default is True, which the
         // atlas shows: SAMPLE-062's `NetRumbleFont.png` pads its cells with *transparent white*
         // and XNA's atlas holds (0,0,0,0) there, not (255,255,255,0). CNA validated the parameter
-        // and never applied it (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-131).
+        // and never applied it (XNASWEEP-131).
         bool premultiply = true;
         if (const ContentProcessorParameterValue* named =
                 context.Parameters().Find(TexturePremultiplyAlphaParameter);

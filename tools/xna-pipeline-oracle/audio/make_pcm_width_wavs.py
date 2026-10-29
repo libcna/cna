@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-197: the WAV sources the width matrix is measured on.
+"""XNASWEEP-197: the WAV sources the width matrix is measured on.
 
 XNA's own `WavImporter` accepts 8-bit unsigned and 16-bit signed PCM and refuses everything wider
 (`audio-content-oracle.json`, `processors/SoundEffectProcessor_pcm_matrix`), so the sources that

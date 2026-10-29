@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-218: two PNGs that differ only in their alpha channel.
+"""XNASWEEP-218: two PNGs that differ only in their alpha channel.
 
 Both declare the same non-standard `gAMA` of 0.45. GDI+ -- which is what XNA's `TextureImporter`
 loads an image through -- applies a file gamma to the one with an alpha channel and not to the one

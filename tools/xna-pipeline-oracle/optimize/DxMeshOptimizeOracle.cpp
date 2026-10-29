@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149: the third Microsoft implementation.
+// XNASWEEP-149: the third Microsoft implementation.
 //
 // `MeshHelper.OptimizeForCache` is measured by OptimizeForCacheOracle.cs against genuine XNA and
 // by D3dxOptimizeOracle.c against the genuine D3DX9 redistributable.  This driver hands the *same*

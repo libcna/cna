@@ -354,7 +354,7 @@ namespace CNA::Content::Pipeline
          * written `sampler_state { Texture = <T>; }`. Measured on thirty-one effects built by the
          * genuine pipeline -- the seventeen of XNAPP-191 and
          * fourteen written to vary one property at a time
-         * (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-201).
+         * (XNASWEEP-201).
          *
          * Every read is bounds-checked and every unexpected shape answers empty, because a
          * summary this build is not sure of must not be written: the caller then emits the single
@@ -760,7 +760,7 @@ namespace CNA::Content::Pipeline
                 // five sample effects whose reference is uncompressed come out at exactly the
                 // length XNA wrote under `/Zi /Od`, and at a quite different one under `/Zi`
                 // alone -- 1744 against 1608, 1652 against 1340, 3668 against 3724, 4796 against
-                // 4428 (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-108`).
+                // 4428 (`XNASWEEP-108`).
                 if (request.debugInformation)
                 {
                     arguments.push_back("/Zi");

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-021: what actually produced each sample's reference.
+"""XNASWEEP-021: what actually produced each sample's reference.
 
 A sample's `.contentproj` says what the game's own build did. What produced the `.xnb` files in the
 artefact root is the sample's `scripts/XnaPipelineRunner.cs`, a C# program that drives the genuine
@@ -35,7 +35,7 @@ import re
 # rather than by its file name, because the name is not a convention: three samples call theirs
 # `Xna4ContentDiagnostic.cs`, `Xna4AssetProbe.cs` and `RobotGameXna4StockProbe.cs`, and one
 # (`SAMPLE-003`, pruned) has no `scripts/` directory left at all and keeps its runner beside the
-# output it wrote (`plans/plan_xna_sample_xnb_sweep.md` `XNASWEEP-133`). The names below are only
+# output it wrote (`XNASWEEP-133`). The names below are only
 # the preference order when a sample has more than one.
 SCRIPT_NAMES = ("XnaPipelineRunner.cs", "XnaPipelineRunnerWin7.cs", "XnaPipelineRunnerWin7Local.cs",
                 "DiagPipelineRunner.cs", "Xna4DiagnosticPipeline.cs")
@@ -51,7 +51,7 @@ _WALKS_COMPILE = re.compile(r"[\"':]Compile[\"']|Descendants\(\s*\w+\s*\+\s*\"Co
 # `SetMetadata(x.LocalName, ...)` and `SetMetadata(x.Name.LocalName, ...)` are the same runner;
 # requiring a single dotted step read SAMPLE-014's as hand-listed, which threw away the
 # `PremultiplyAlpha False` its project sets on 60 of its textures and marked every one of them a
-# difference (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-205`).
+# difference (`XNASWEEP-205`).
 _COPIES_METADATA = re.compile(
     r"SetMetadata\(\s*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\.(?:LocalName|Name)\s*,")
 _STRIPS_PARAMETER_PREFIX = re.compile(
@@ -327,8 +327,8 @@ def buildConfiguration(text):
     never reads it -- 109 of these runners pass `Debug` and 12 pass `Release`, and for those 12 the
     reference's effect blobs are optimized while a build following the project would compile them
     unoptimized. SAMPLE-006's `desaturate.fx` is 516 bytes compiled with `/Qstrip_debug` and 1,188
-    with `/Zi /Od`, and its reference is the first (plans/plan_xna_sample_xnb_sweep.md
-    `XNASWEEP-200`).
+    with `/Zi /Od`, and its reference is the first
+    (`XNASWEEP-200`).
 
     A runner that computes the configuration rather than writing it -- six do -- answers nothing,
     because what it computed is not in the source.
@@ -347,7 +347,7 @@ def sourceRoot(text, sample):
     compiles its pixel shader `ps_2_0` where the shipped one says `ps_1_1`, which XNA 4.0 and the
     June 2010 `fxc` both refuse. Reading the project against the shipped tree makes that one asset
     a build failure and the reference unexplainable; reading it against the tree the runner named
-    builds it (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-212`).
+    builds it (`XNASWEEP-212`).
 
     The **whole** expression is resolved, not its first identifier. SAMPLE-003 writes
     `RootDirectory = root + @"\\TexturesAndColors\\Content"`, and reading that as `root` moved

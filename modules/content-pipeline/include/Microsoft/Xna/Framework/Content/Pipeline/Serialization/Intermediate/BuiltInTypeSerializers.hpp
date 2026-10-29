@@ -292,7 +292,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
      * The order is the contract, not a detail. A .NET `Dictionary<K,V>` that has only ever been
      * added to enumerates in insertion order, and XNA writes what enumeration gives it, so a
      * genuine `.xnb` carries the document's own order (measured against Movipa's `App.config.xnb`,
-     * plans/plan_xna_sample_xnb_sweep.md XNASWEEP-119). That is why the container is
+     * XNASWEEP-119). That is why the container is
      * `OrderedDictionary` rather than `std::map`, whose key order is a different file.
      *
      * @tparam K The key type.

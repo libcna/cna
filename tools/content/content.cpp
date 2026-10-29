@@ -88,7 +88,7 @@ namespace
          * XNA's `EffectProcessor.DebugMode` defaults to `Auto`, which follows this, and a content
          * project's own default is `Debug` -- so a project built without saying which
          * configuration it is gets optimized effects where XNA's own build gets debuggable ones
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-108`).
+         * (`XNASWEEP-108`).
          */
         std::string buildConfiguration = "Release";
 
@@ -107,7 +107,7 @@ namespace
          * A `.contentproj` carries its own, and a command line that names one overrides it -- the
          * way an MSBuild property given on a command line overrides the one in the file. Knowing
          * whether one was *named* is what tells that apart from the default
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-102`).
+         * (`XNASWEEP-102`).
          */
         bool selectedXnbPlatform = false;
         bool selectedXnbProfile = false;
@@ -958,7 +958,7 @@ namespace
         // instruction, and requiring it inside the root made a read-only source tree unbuildable,
         // because `BuildContent` had to write its own configuration into the sources it was
         // reading. The assets a configuration names are still root-relative and still contained
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-110`).
+        // (`XNASWEEP-110`).
         if (!explicitPath && !IsWithin(WeaklyCanonical(sourceRoot), path))
         {
             throw std::runtime_error("content configuration '" +
@@ -1809,7 +1809,7 @@ namespace
      * `p1_dual` are exactly that -- both name `textures/p1_back.tga` -- and refusing them cost 85
      * of that sample's 154 assets. What is still refused is two nodes whose outputs *differ*
      * under one name, which is the case this check exists for
-     * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-117`).
+     * (`XNASWEEP-117`).
      *
      * @param entry The node's manifest entry.
      * @param owner The node's logical name.
@@ -2548,7 +2548,7 @@ namespace
         // find, keeps the ones it can and returns false. Refusing the project outright meant one
         // game-defined processor cost every other asset in the project: across the public sample
         // corpus that is 93 of 328 content projects producing nothing at all, most of them over
-        // three or four assets out of dozens (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-103`).
+        // three or four assets out of dozens (`XNASWEEP-103`).
         const std::vector<std::string> unroutable = project.UnroutableEXT();
         for (const std::string& reason : unroutable)
         {
@@ -2572,7 +2572,7 @@ namespace
         // way `msbuild /p:XnaPlatform=...` overrides the property in the file. Without this the
         // options were accepted and ignored: every `.contentproj` built Windows/HiDef whatever
         // `--xnb-platform` said, so a Windows Phone or Xbox project could not be built at all
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-102`).
+        // (`XNASWEEP-102`).
         if (command.selectedXnbPlatform)
         {
             // `TargetPlatform` is XNA's property and carries XNA's own spelling; the command
@@ -2611,7 +2611,7 @@ namespace
         // `--fx-compiler`, `--xma-encoder` and `--font-directory` were accepted on a
         // `.contentproj` build and then silently ignored, which is worse than refusing them: a
         // project with a `.fx` asset cannot be built at all with a compiler that was named
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-101`).
+        // (`XNASWEEP-101`).
         const Pipeline::ContentCompilerOptions& selected = command.services;
         const bool namedConfiguration = command.selectedBuildConfiguration;
         task.setRegistryFactoryEXT(
@@ -2633,7 +2633,7 @@ namespace
                 // `--build-configuration Release` was discarded in favour of a project's own
                 // `Debug` default -- and every effect of the twelve samples whose runner passes
                 // `Release` came out compiled `/Zi /Od` against a reference compiled optimized
-                // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-200`).
+                // (`XNASWEEP-200`).
                 if (namedConfiguration)
                 {
                     merged.buildConfiguration = selected.buildConfiguration;
@@ -3399,7 +3399,7 @@ namespace CNA::Content::Pipeline
         // The font search this process's `.spritefont` builds use, set before any source is
         // discovered. `<FontName>` is a family name and the families the XNA samples name are not
         // installed on a build machine, so a build has to be able to say where they are
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-100`).
+        // (`XNASWEEP-100`).
         SetFontSearchDirectoriesEXT(options.fontDirectories);
         RegisterSpriteFontSourceContentPipeline(registry);
         RegisterXnaModelSourceContentPipeline(registry);

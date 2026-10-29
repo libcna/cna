@@ -281,7 +281,7 @@ namespace CNA::Internal::Graphics
         // pixels -- a colour table for 256-colour displays is the usual one -- and the decoder
         // under this reads such a file from the wrong place. Measured outside CNA by
         // `spikes/bmp-offset-spike`, and the byte counts it produces are CNA's own
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-221`). Closing the gap costs one copy of
+        // (`XNASWEEP-221`). Closing the gap costs one copy of
         // a file that has one and nothing at all for a file that has not.
         const std::vector<std::uint8_t> closed =
             WithoutBitmapPixelGap(std::span<const std::uint8_t>(data, size));

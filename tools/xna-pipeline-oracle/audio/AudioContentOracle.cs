@@ -147,7 +147,7 @@ namespace Cna.Xna40.AudioOracle
             return path;
         }
 
-        // plans/plan_xna_sample_xnb_sweep.md XNASWEEP-192: one PCM16 WAV whose two size fields can
+        // XNASWEEP-192: one PCM16 WAV whose two size fields can
         // be wrong on purpose. `riffDelta` is added to the RIFF form's size (int.MinValue writes a
         // zero), `dataDelta` to the data chunk's declared size, and `trailing` bytes are appended
         // after it without either size counting them.
@@ -522,7 +522,7 @@ namespace Cna.Xna40.AudioOracle
                 return builder.ToString();
             });
 
-            // plans/plan_xna_sample_xnb_sweep.md XNASWEEP-192: what bounds a chunk -- the RIFF
+            // XNASWEEP-192: what bounds a chunk -- the RIFF
             // form's declared size, or the file. SAMPLE-145's `Whoosh` WAVs each declare a RIFF
             // size 68 bytes short of the file, which is exactly the `smpl` chunk somebody inserted
             // after that size was computed, so the `data` chunk ends at the end of the file and
@@ -576,7 +576,7 @@ namespace Cna.Xna40.AudioOracle
                         // fills a `data` chunk that claims more than the file holds is whatever
                         // was in that memory. A reference has to be reproducible from the tree
                         // that produces it, and that number is not
-                        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-201`).
+                        // (`XNASWEEP-201`).
                         builder.Append(label + "=[dataLength=" + bytes.Length + "]");
                     }
                     catch (Exception error) { builder.Append(label + "=" + error.GetType().Name); }
@@ -609,7 +609,7 @@ namespace Cna.Xna40.AudioOracle
                 var processor = new SoundEffectProcessor();
                 return "Quality=" + processor.Quality;
             });
-            // plans/plan_xna_sample_xnb_sweep.md XNASWEEP-197: what the processor does to a sample
+            // XNASWEEP-197: what the processor does to a sample
             // width it is given. SAMPLE-141's `explosion.wav` is 8-bit mono at 22,050 Hz and its
             // genuine `.xnb` carries an average byte rate of 22,050 -- the file's own -- where CNA
             // answers 44,100, which is that file widened to 16 bits. This measures the widths the

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-222: read D3DX's ordered-dither threshold straight
+"""XNASWEEP-222: read D3DX's ordered-dither threshold straight
 off the genuine pipeline, at every position of every level size.
 
 A *flat* block -- both endpoints the same 565 value -- has one exact rational per channel and no

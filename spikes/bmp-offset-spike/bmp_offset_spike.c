@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MS-PL
  *
- * plans/plan_xna_sample_xnb_sweep.md XNASWEEP-221: does the vendored stb_image decode a 24-bpp
+ * XNASWEEP-221: does the vendored stb_image decode a 24-bpp
  * BMP whose pixel data does not begin immediately after the DIB header?
  *
  * A BMP's file header carries `bfOffBits`, and a 24-bpp file is allowed to put bytes between the

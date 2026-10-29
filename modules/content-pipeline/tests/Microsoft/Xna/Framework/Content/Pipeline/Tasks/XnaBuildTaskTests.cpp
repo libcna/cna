@@ -271,7 +271,7 @@ TEST(XnaBuildContent, AnIncludeIsResolvedTheWayTheFilesystemItWasAuthoredOnResol
     // SAMPLE-070's names `CombatBkgdDungeon.JPG` and ships `.jpg`, SAMPLE-146's names
     // `Shaders/simplescreen.fx` and ships `SimpleScreen.fx`: 43 references of the public sample
     // corpus were unbuildable here for that and nothing else
-    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-163`).
+    // (`XNASWEEP-163`).
     Project project("case");
     Tasks::BuildContent task = MakeBuild(project);
     (void)project.Add(Locate("tests/assets/xna40/texture/probe.png"), "Textures/Tree.PNG");

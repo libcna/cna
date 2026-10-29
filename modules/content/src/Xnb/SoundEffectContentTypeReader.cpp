@@ -48,7 +48,7 @@ namespace CNA::Internal::Xnb
             CNA::Content::Cnb::ProcessImportedSoundEffect(imported);
         // `SoundEffect` takes a 16-bit PCM buffer, so an 8-bit payload -- which the processing
         // above now keeps at its own width -- is widened here and nowhere earlier
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+        // (`XNASWEEP-197`).
         const std::vector<std::uint8_t> samples =
             CNA::Content::Cnb::CnbSoundEffectSamplesAsPcm16(sound);
         try

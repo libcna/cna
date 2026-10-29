@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-118: a member XNA lets a game override, CNA must too.
+"""XNASWEEP-118: a member XNA lets a game override, CNA must too.
 
 XNA's content pipeline is extended by derivation. A game writes `class MyProcessor : ModelProcessor`
 and overrides the pieces it wants to change -- `Process`, `ConvertMaterial`, `ProcessVertexChannel`,

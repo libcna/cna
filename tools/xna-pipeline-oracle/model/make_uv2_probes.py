@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-166: why `Yager.FBX`'s `Box01` gets two texture
+"""XNASWEEP-166: why `Yager.FBX`'s `Box01` gets two texture
 coordinates.
 
 `Box01` is the one mesh in that file whose vertex declaration XNA writes at stride 40, with

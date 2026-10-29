@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-228: what FBX's `InheritType` does to a child.
+"""XNASWEEP-228: what FBX's `InheritType` does to a child.
 
 Three scenes that differ in one property. A root scaled (2, 3, 5) carries a child that turns 37
 degrees about Z and scales (1.5, 0.5, 2.5), and that child carries a grandchild that turns

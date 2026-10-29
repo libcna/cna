@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149: hand genuine XNA 4.0's
+// XNASWEEP-149: hand genuine XNA 4.0's
 // MeshHelper.OptimizeForCache a generated family of small meshes and record exactly what order it
 // puts their triangles in.
 //

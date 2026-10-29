@@ -165,7 +165,7 @@ namespace Microsoft::Xna::Framework
          * on the sphere either grows it or does not. Measured against the genuine assemblies over
          * 200 random point pairs -- `Vector3.Distance` and `Vector3.DistanceSquared` agree with a
          * double accumulation on every one and with a float accumulation on none
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-134`).
+         * (`XNASWEEP-134`).
          */
         [[nodiscard]] inline double SquaredLength(const Vector3& value) noexcept
         {

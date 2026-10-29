@@ -337,7 +337,7 @@ namespace CNA::Internal::Xnb
          * XNA's `DictionaryWriter` writes what enumerating the dictionary gives it, and a .NET
          * `Dictionary<K,V>` that has only ever been added to enumerates in insertion order -- so a
          * genuine `.xnb` carries the order its source listed, not the keys sorted (measured against
-         * Movipa's `App.config.xnb`, plans/plan_xna_sample_xnb_sweep.md XNASWEEP-119). A container
+         * Movipa's `App.config.xnb`, XNASWEEP-119). A container
          * that carries an order is therefore written in it. `std::unordered_map` has none to carry,
          * and is sorted instead so that the same input still produces the same file.
          *

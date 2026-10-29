@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xna_sample_xnb_sweep.md XNASWEEP-224: run the genuine TextureImporter over
+# XNASWEEP-224: run the genuine TextureImporter over
 # block-compressed `.dds` files whose dimensions are not a whole number of blocks.
 #
 #   CNA_XNA40_REFERENCES  directory holding Microsoft.Xna.Framework*.dll

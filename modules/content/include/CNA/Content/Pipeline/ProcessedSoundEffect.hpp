@@ -15,7 +15,7 @@ namespace CNA::Content::Pipeline
      * with their width, block alignment, byte rate, frame count and loop points unchanged, and
      * every wider one is refused at import with *"Only 8-bit and 16-bit audio data is
      * supported."* (`tests/reference/xna40/audio/audio-content-oracle.json`,
-     * `processors/SoundEffectProcessor_pcm_matrix`; plans/plan_xna_sample_xnb_sweep.md
+     * `processors/SoundEffectProcessor_pcm_matrix`;
      * `XNASWEEP-197`).
      */
     enum class ProcessedPcmEncoding
@@ -80,7 +80,7 @@ namespace CNA::Content::Pipeline
      * WAVEFORMATEX and its payload, the `.cnb` writer to the `SoundEffect` schema. Neither
      * container owns the representation, which is the point -- the processor used to answer
      * `CNA.Content.Cnb.SoundEffectData` and the CNB schema's 16-bit-only rule then decided what
-     * XNA-compatible `.xnb` output could say (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+     * XNA-compatible `.xnb` output could say (`XNASWEEP-197`).
      *
      * Everything a writer needs is here and nothing either container invented is: no
      * WAVEFORMATEX field that is not an audio fact, no chunk identifier, no schema version.

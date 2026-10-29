@@ -32,7 +32,7 @@ spec-following decode of the file byte for byte.
 corrects `bfOffBits` before the bytes reach the decoder, for bitmaps of more than eight bits per
 pixel only -- at eight or fewer the table *is* the palette, the decoder reads it correctly, and
 removing it would destroy the image. `ImageLoaderTests.ABitmapWhosePixelsDoNotFollowItsHeaderDecodesToTheSameImage`
-is the regression test; `plans/plan_xna_sample_xnb_sweep.md` `XNASWEEP-221` is the row.
+is the regression test; `XNASWEEP-221` is the row.
 
 **Running it.**
 

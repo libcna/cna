@@ -484,7 +484,7 @@ namespace CNA::Internal::Xnb
         // `OrderedDictionary` -- the container `ContentTypeName` is specialized for, because a
         // dictionary asset is written in its document's order -- and a registry keyed by C++ type
         // cannot reach the writer above from it (XNAPP-260,
-        // plans/plan_xna_sample_xnb_sweep.md XNASWEEP-119).
+        // XNASWEEP-119).
         registry.Register(
             std::make_shared<const XnbDictionaryTypeWriter<
                 std::string, std::int32_t,

@@ -119,7 +119,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
      * dictionary asset stand in the order its `.xml` document lists them. Neither `std::map` (key
      * order) nor `std::unordered_map` (no order) can express that, which is why the pipeline's
      * dictionary is `System::Collections::Generic::OrderedDictionary`
-     * (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-119). The serialized identity is unchanged: this
+     * (XNASWEEP-119). The serialized identity is unchanged: this
      * is still a `Dictionary`2` on both sides of the file.
      */
     template<typename K, typename V>

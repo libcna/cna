@@ -298,7 +298,7 @@ namespace Microsoft::Xna::Framework
         // from the genuine pipeline as `{ {M11:1 ...} {M21:...} {M31:...} {M41:...} }`, with the
         // space after the first brace and before the last. Measured on the genuine importer over
         // `x_effect_instance.x`, whose `EffectParamFloats` of sixteen floats is a `Matrix`
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-183`).
+        // (`XNASWEEP-183`).
         std::ostringstream stream;
         stream << "{ {M11:" << DisplayFloat(M11) << " M12:" << DisplayFloat(M12) << " M13:" << DisplayFloat(M13) << " M14:" << DisplayFloat(M14)
             << "} {M21:" << DisplayFloat(M21) << " M22:" << DisplayFloat(M22) << " M23:" << DisplayFloat(M23) << " M24:" << DisplayFloat(M24)
@@ -1031,7 +1031,7 @@ namespace Microsoft::Xna::Framework
         // determinant and its reciprocal are not, and every entry is one wide expression narrowed
         // once. Over the 52 inversions of tests/reference/xna40/framework/matrix-oracle.txt this
         // reproduces all 52; narrowing the reciprocal too reproduces 8, and plain `float`
-        // throughout reproduces 3 (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-172`).
+        // throughout reproduces 3 (`XNASWEEP-172`).
         const double num1 = matrix.M11;
         const double num2 = matrix.M12;
         const double num3 = matrix.M13;
@@ -1138,7 +1138,7 @@ namespace Microsoft::Xna::Framework
         // products, and the difference is what a rotation composed with its own inverse is made
         // of. Measured against the genuine assembly over 168 products
         // (tests/reference/xna40/framework/matrix-oracle.txt): a `float` accumulation reproduces
-        // 48 of them and a wide one all 168 (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-172`).
+        // 48 of them and a wide one all 168 (`XNASWEEP-172`).
         const double a[16] = {matrix1.M11, matrix1.M12, matrix1.M13, matrix1.M14,
                               matrix1.M21, matrix1.M22, matrix1.M23, matrix1.M24,
                               matrix1.M31, matrix1.M32, matrix1.M33, matrix1.M34,

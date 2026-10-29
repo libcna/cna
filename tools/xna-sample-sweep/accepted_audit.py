@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-204: does an accepted difference's evidence prove its reason?
+"""XNASWEEP-204: does an accepted difference's evidence prove its reason?
 
 `ACCEPTED_DIFFERENCE` is the one class with no gate under it: a reference lands there because its
 *source extension* or its *processor* matched, and nothing then checks that what actually differs
@@ -49,7 +49,7 @@ RULES = [
      "only the decoded pixels may differ; a size, a format or a mip count is not a decoder's "
      "tolerance"),
     (r"compiler's version string", [r"^root/(?:bytecode|digest|bytecodeByteCount)"],
-     "only the compiled blob may differ (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-201` "
+     "only the compiled blob may differ (`XNASWEEP-201` "
      "records what is inside it)"),
     (r"XMA has no publicly implementable encoder",
      [r"^root/(?:digest|samples|sampleDigest|sampleByteCount|dataLength|formatTag|bitsPerSample|"
@@ -67,7 +67,7 @@ RULES = [
 # compressor framed it. They are not a mechanism of their own -- a payload the reason allows to
 # differ takes them with it whenever it differs in length -- so they are permitted, and only when
 # every other field is. A reference whose sole complaint is one of these has nothing to prove
-# beyond what its reason has already proved (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-215`).
+# beyond what its reason has already proved (`XNASWEEP-215`).
 DERIVED = [re.compile(one) for one in (
     r"^decompressedLength$", r"^compressedLength$", r"^lzxFrames\[\]/", r"^lz4Frames\[\]/")]
 
@@ -120,7 +120,7 @@ def main(argv=None):
         # field set means the comparison did not happen -- SAMPLE-031's two diagnostic fonts were
         # accepted under the rasterizer reason while `classify.py` was answering `FileNotFoundError`
         # for them, and this audit called them proved because there was nothing to disprove
-        # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-236`).
+        # (`XNASWEEP-236`).
         if not fields:
             violations.append({"reference": reference, "reason": reason,
                                "field": "(nothing recorded as differing)",

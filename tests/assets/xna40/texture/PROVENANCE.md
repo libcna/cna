@@ -90,4 +90,4 @@ GDI+ honours a PNG's `gAMA`: a declared file gamma of 0.45 rather than the stand
 every mid-range channel by one, while an `sRGB` chunk declares the standard gamma and corrects
 nothing. 103 of the 2,267 distinct PNG sources in the public XNA sample corpus declare exactly
 0.45000, and the rule was measured against XNA's own build of NetRumble's `barrierPurple.png`
-(plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-109`).
+(`XNASWEEP-109`).

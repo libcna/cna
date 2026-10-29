@@ -526,6 +526,12 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   reproduced against the game they came from, which is not available. The audit narrowed the
   pitch report to a wrong sample rate reaching CNA before the mixer -- the class CBIND-146 fixed
   (`51d9c84cc`, 2026-10-02, an XNA-built sound's content sample rate).
+- Three content-pipeline residues against genuine XNA output, none visible in the 7,726-reference
+  sample sweep (`tools/xna-sample-sweep/README.md`, *What is left*): a generated `.x` normal can
+  carry the opposite sign of a zero (13 of 1,291 probe normals, `XNASWEEP-231`); FBX bone
+  transforms keep an ulp-level residue that grows with depth, inside the float tolerance
+  (`XNASWEEP-228`..`232`); and `MeshHelper.OptimizeForCache`'s strip termination is empirical
+  (9 of 20 probes exact, `XNASWEEP-149`).
 
 ### 5.3 External and driver limitations
 

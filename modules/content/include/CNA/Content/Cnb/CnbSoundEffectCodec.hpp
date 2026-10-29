@@ -62,7 +62,7 @@ namespace CNA::Content::Cnb
      *
      * The width has to survive the pipeline because the genuine XNA one preserves it: an 8-bit
      * source comes out of `SoundEffectProcessor` 8-bit, and CNB was the reason CNA's did not
-     * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+     * (`XNASWEEP-197`).
      */
     inline constexpr std::uint32_t CnbSoundEffectSchemaVersion = 2u;
 

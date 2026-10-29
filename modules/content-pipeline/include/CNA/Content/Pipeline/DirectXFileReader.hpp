@@ -52,7 +52,7 @@ namespace CNA::Content::Pipeline
          * spellings of `Frame`, `FrameTransformMatrix`, `Mesh`, `MeshNormals`,
          * `MeshTextureCoords`, `MeshMaterialList` and `Material` -- each measured against the
          * genuine importer, which answers a byte-identical graph for every one of them
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-180`). SAMPLE-028's `Car.x` is the corpus
+         * (`XNASWEEP-180`). SAMPLE-028's `Car.x` is the corpus
          * file that needs it: it writes `TextureFileName`, and comparing the type exactly loses
          * every texture the model has.
          *

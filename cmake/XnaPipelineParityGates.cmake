@@ -119,7 +119,7 @@ add_test(NAME XnaPipelineProcessorDefaultsMatchTheMeasurement
 set_tests_properties(XnaPipelineProcessorDefaultsMatchTheMeasurement
                      PROPERTIES LABELS "parity;xnapipeline")
 
-# plans/plan_xna_sample_xnb_sweep.md XNASWEEP-118: every member the CLR marks virtual on a type a
+# XNASWEEP-118: every member the CLR marks virtual on a type a
 # game can derive from is virtual in CNA too. A non-virtual accessor fails silently -- the derived
 # class compiles and its override is never called -- and 26 build units in the sample corpus derive
 # from a built-in processor, one of them overriding `GenerateTangentFrames`.
@@ -172,7 +172,7 @@ endif()
 # each does is clear it. Run in parallel they delete each other's fixtures and report a
 # `FileNotFoundException` for every one -- eight failures that pass the moment they are run
 # serially, which reads exactly like a regression and is not one. A shared `RESOURCE_LOCK` keeps
-# ctest from starting two of them at once (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-214`).
+# ctest from starting two of them at once (`XNASWEEP-214`).
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh")
     add_test(NAME XnaPipelineGenuineRuntimeInterop
              COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh")

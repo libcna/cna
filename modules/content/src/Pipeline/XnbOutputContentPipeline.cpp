@@ -290,7 +290,7 @@ namespace CNA::Content::Pipeline
                 // genuine builds covering both widths, mono and stereo, three rates, a loop and
                 // no loop, Windows, Windows Phone and HiDef
                 // (`tests/reference/xna40/differential-sound-widths/`,
-                // plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+                // `XNASWEEP-197`).
                 const std::uint16_t sampleBytes =
                     static_cast<std::uint16_t>(ProcessedPcmSampleBytes(sound.encoding));
                 Xnb::XnbSoundEffectData converted;
@@ -481,8 +481,8 @@ namespace CNA::Content::Pipeline
                 }
                 std::vector<std::string> warnings;
                 // An XNA-shaped model is already the graph this writer writes; converting it to
-                // CNB and back would only be undone here (plans/plan_xna_sample_xnb_sweep.md
-                // `XNASWEEP-174`).
+                // CNB and back would only be undone here
+                // (`XNASWEEP-174`).
                 if (bundle.xnaModel.has_value())
                 {
                     return MakeResult(
@@ -1076,7 +1076,7 @@ namespace CNA::Content::Pipeline
             // answers `vertex buffer, index buffer, every effect of the first group, the second
             // vertex buffer, its effects` -- SAMPLE-142's `France.FBX` reaches XNA's own build
             // exactly that way, its second vertex buffer at identifier 26 behind twenty-three
-            // effects (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-157`).
+            // effects (`XNASWEEP-157`).
             const auto vertexResource = [&](std::size_t index)
             {
                 if (index >= model.vertexBuffers.size()) { return std::size_t{0}; }

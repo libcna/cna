@@ -127,7 +127,7 @@ namespace CNA::Content::Cnb
             // compiles one document both ways and compares the bytes, so a key that clears a
             // different set of pixels here than there is a defect whichever set is right
             // (`CNBF-118`; the four-channel rule is measured in
-            // plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-142`).
+            // `XNASWEEP-142`).
             const std::uint8_t keyR = (*options.colorKey)[0];
             const std::uint8_t keyG = (*options.colorKey)[1];
             const std::uint8_t keyB = (*options.colorKey)[2];
@@ -214,7 +214,7 @@ namespace CNA::Content::Cnb
         // chunk. SAMPLE-145's six `Whoosh` WAVs are the corpus's own case: each declares a length
         // 68 bytes short of the file, which is exactly the `smpl` chunk somebody inserted after
         // that length was computed, and XNA built all six
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-192`). This replaces the stricter reading
+        // (`XNASWEEP-192`). This replaces the stricter reading
         // CNBF-117 chose before the importer had been measured.
         const std::uint32_t riffSize = ReadU32(wavBytes, 4u);
         if (riffSize < 4u)
@@ -246,7 +246,7 @@ namespace CNA::Content::Cnb
         // after the 'data' chunk is accepted and the same chunk placed before it is refused, so
         // what fails is having no 'data' rather than the unreadable chunk itself
         // (tests/reference/xna40/audio/audio-content-oracle.json `wav/riff-size-threshold`,
-        // `junk_after_data` and `junk_before_data`; plans/plan_xna_sample_xnb_sweep.md
+        // `junk_after_data` and `junk_before_data`;
         // `XNASWEEP-192`). The same measurement is why trailing bytes too few to be another chunk
         // header are ignored: one through nine of them are all accepted.
         //
@@ -394,7 +394,7 @@ namespace CNA::Content::Cnb
                             // inclusive and one frame longer than the difference. Measured on
                             // Spacewar's `Menu_Loop.wav`, whose `smpl` names 67693-859611 and
                             // whose genuine `.xnb` carries a loop length of 791919
-                            // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-124).
+                            // (XNASWEEP-124).
                             loopStart = first;
                             loopLength = last - first + 1u;
                         }
@@ -595,7 +595,7 @@ namespace CNA::Content::Cnb
         // 8-bit stays 8-bit: the `SoundEffect` schema carries the width from version 2 on, so the
         // source route answers what the source declared for the same reason the XNA-compatible
         // pipeline does. Wider encodings still narrow to 16 bits, because no schema version
-        // stores them (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+        // stores them (`XNASWEEP-197`).
         sound.format = imported.encoding == CNA::Content::Import::ImportedPcmEncoding::Unsigned8
                            ? CnbAudioFormat::Pcm8
                            : CnbAudioFormat::Pcm16;

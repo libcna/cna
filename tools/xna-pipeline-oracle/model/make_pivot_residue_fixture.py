@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-176: the pivot-conversion residue a child inherits.
+"""XNASWEEP-176: the pivot-conversion residue a child inherits.
 
 FBX's pivot set is not something an XNA `Matrix` can carry, so the conversion replaces a node's
 `Rpost^-1 . R . Rpre` with a single Euler triple obtained by decomposing it -- from the *float*

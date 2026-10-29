@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-041: what the sweep found, grouped so it can be acted on.
+"""XNASWEEP-041: what the sweep found, grouped so it can be acted on.
 
 Joins the sweep's per-file results with the source mapping, so every row carries the source
 extension, the importer and processor the project named, and the root reader the reference

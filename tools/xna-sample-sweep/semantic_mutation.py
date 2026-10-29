@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-236: can a real difference hide inside
+"""XNASWEEP-236: can a real difference hide inside
 `SEMANTICALLY_IDENTICAL`?
 
 `taxonomy.py` puts a reference there for one of three reasons, and each is a different claim:

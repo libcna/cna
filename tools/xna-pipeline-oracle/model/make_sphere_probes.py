@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-168: what a mesh's bounding sphere is computed over.
+"""XNASWEEP-168: what a mesh's bounding sphere is computed over.
 
 CNA's `BoundingSphere::CreateFromPoints` reproduces the genuine method exactly over 560 measured
 point sets (`XNASWEEP-134`), and a model's sphere still comes out different, so what differs is the

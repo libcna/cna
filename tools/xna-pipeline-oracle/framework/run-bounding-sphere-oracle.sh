@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xna_sample_xnb_sweep.md XNASWEEP-134: run the genuine XNA 4.0 framework's
+# XNASWEEP-134: run the genuine XNA 4.0 framework's
 # BoundingSphere.CreateFromPoints over the committed point sets and record the exact bits.
 #
 #   CNA_XNA40_REFERENCES  directory holding Microsoft.Xna.Framework.dll

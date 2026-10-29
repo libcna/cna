@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xna_sample_xnb_sweep.md XNASWEEP-234: what `MeshHelper.TransformScene` does to a
+# XNASWEEP-234: what `MeshHelper.TransformScene` does to a
 # normal, in raw IEEE-754 bits.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

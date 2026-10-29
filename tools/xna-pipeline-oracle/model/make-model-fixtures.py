@@ -311,7 +311,7 @@ Frame Root {
 # specular at all and is what 3 of the sample corpus's 14 `.x` materials carry. XNA's own build
 # answers a `SpecularPower` of 16 -- the `BasicEffect` default -- for exactly those, and the value
 # the file gives for every other one, so what this fixture settles is whether the *importer* is
-# where a zero stops being a value (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-106`).
+# where a zero stops being a value (`XNASWEEP-106`).
 ZERO_POWER = HEADER + """
 Frame Root {
   Mesh Flat {
@@ -343,7 +343,7 @@ Frame Root {
 # product is taken in. `bare_mesh.x`, the only fixture that covered this before, is a single
 # triangle in the XY plane and answers `(0,0,-1)` under every one of those rules -- which is why
 # CNA generated that constant, and why the ReachGraphicsDemo sample's ground plane came out facing
-# the camera (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-107`).
+# the camera (`XNASWEEP-107`).
 GENERATED_NORMALS = HEADER + """
 Frame Root {
   Mesh Fold {

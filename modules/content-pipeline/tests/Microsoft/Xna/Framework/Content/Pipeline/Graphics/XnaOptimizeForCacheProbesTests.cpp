@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149: CNA's `MeshHelper.OptimizeForCache` against
+// XNASWEEP-149: CNA's `MeshHelper.OptimizeForCache` against
 // genuine XNA 4.0's, on every probe the campaign measured.
 //
 // The probe files under tests/reference/xna40/optimize/ are the generator's own output and the

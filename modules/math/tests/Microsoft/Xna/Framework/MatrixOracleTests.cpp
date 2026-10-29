@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-172: Matrix::Multiply, Matrix::Invert and
+// XNASWEEP-172: Matrix::Multiply, Matrix::Invert and
 // Vector3::Transform against the genuine XNA 4.0 framework, bit for bit
 // (tests/reference/xna40/framework/matrix-oracle.txt, produced by
 // tools/xna-pipeline-oracle/framework/run-matrix-oracle.sh).

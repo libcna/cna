@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-174: what a `.x` `EffectInstance` becomes.
+"""XNASWEEP-174: what a `.x` `EffectInstance` becomes.
 
 SAMPLE-028's `Car.x` gives one of its materials an `EffectInstance` naming `ReplaceColor.fx`, and
 XNA's build answers an `EffectMaterialReader` where CNA answered a `BasicEffectReader`. The fixture

@@ -1,6 +1,6 @@
 """Probes for the one thing DirectXMesh's `OptimizeFaces` cannot be given: a non-manifold edge.
 
-plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-149`.  With Microsoft's DirectXMesh algorithm and an
+`XNASWEEP-149`.  With Microsoft's DirectXMesh algorithm and an
 adjacency of *the first other face in input order on each edge, kept only when it is wound the
 other way*, all 449 probes of the 616 whose every edge carries at most two faces come back exactly
 as genuine XNA and genuine D3DX answer them, and 131 of the 167 that carry an edge with three or

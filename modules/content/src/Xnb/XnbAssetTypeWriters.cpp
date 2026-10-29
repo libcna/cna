@@ -711,7 +711,7 @@ namespace CNA::Internal::Xnb
                 // while a `Frame {` that declares an empty one gets the empty string (measured on
                 // the genuine importer over SAMPLE-028's `Car.x`, whose unnamed frames answer `""`
                 // and whose synthesized root answers null;
-                // XNAPP-266, plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122).
+                // XNAPP-266, XNASWEEP-122).
                 if (bone.nameIsNull) { output.WriteNullObject(); }
                 else { output.WriteObject(bone.name); }
                 output.WriteMatrix(bone.transform);
@@ -1266,7 +1266,7 @@ namespace CNA::Internal::Xnb
         // `TextureReader` in the table beside `ExternalReferenceReader` -- with nothing ever read
         // through it. SAMPLE-028's `Car.xnb` is the corpus file that shows it: XNA's table has ten
         // entries where CNA's had nine, and every byte after the table was shifted by the one that
-        // was missing (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-188`).
+        // was missing (`XNASWEEP-188`).
         AddWriter<XnbExternalAssetReference>(registry,
             CoreIdentity("Microsoft.Xna.Framework.Content.ExternalReferenceReader",
                          "System.Object", XnbAssembly::Mscorlib, XnbNameEvidence::DerivedRule),

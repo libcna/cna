@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-213: deep bone chains under controlled roots.
+"""XNASWEEP-213: deep bone chains under controlled roots.
 
 `XNASWEEP-193` measured that a node answers the quotient of two `float` world transforms. Six of
 RobotGame's mech skeletons still differ from the genuine pipeline by one float ulp at depth one,

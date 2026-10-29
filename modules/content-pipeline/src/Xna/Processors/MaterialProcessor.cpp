@@ -93,7 +93,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
          * of it later -- the genuine processor's `EnvironmentMapMaterialContent` still carries the
          * `SpecularColor` and `SpecularPower` its `BasicMaterialContent` had, and the writer
          * ignores them (measured, `tools/xna-pipeline-oracle/modelroot/` with
-         * `CNA_MODELROOT_MATERIALS=1`; plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-175`).
+         * `CNA_MODELROOT_MATERIALS=1`; `XNASWEEP-175`).
          */
         /**
          * @brief Whether a material's own effect reads the texture stored under a key.
@@ -166,7 +166,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         // including the ones the new type has no property for, which are simply never read back
         // out of it. Measured on the genuine processor over all five values
         // (tests/reference/xna40/graphics/graphics-content-oracle.json, `materialprocessor/default_effect_*`;
-        // plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-175`).
+        // `XNASWEEP-175`).
         std::shared_ptr<Graphics::MaterialContent> converted = input;
         if (std::dynamic_pointer_cast<Graphics::BasicMaterialContent>(input) != nullptr)
         {
@@ -196,7 +196,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         // and the genuine `MaterialProcessor` builds `Head_Diff.tga` and nothing else. Measured
         // through `tools/xna-pipeline-oracle/modelroot/` with `CNA_MODELROOT_MATERIALS=1`, which
         // records every `BuildAsset` the processor asks for
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-175`).
+        // (`XNASWEEP-175`).
         Graphics::TextureReferenceDictionary& textures = converted->getTexturesProperty();
         for (const std::string& key : textures.getKeysProperty())
         {

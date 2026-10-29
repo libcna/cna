@@ -257,7 +257,7 @@ TEST(CnbProducerTest, AStereoPcm16WavKeepsBothChannels)
 TEST(CnbProducerTest, AnEightBitWavKeepsItsWidthAndWidensExactlyWhenItHasTo)
 {
     // The width is kept, because the `SoundEffect` schema carries it from version 2 on and the
-    // genuine XNA processor keeps it (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+    // genuine XNA processor keeps it (`XNASWEEP-197`).
     const std::vector<std::uint8_t> pcm8{0u, 128u, 255u, 64u};
     const auto sound = CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(
         MakeWav(1u, 8000u, 8u, pcm8), "eight.wav");
@@ -852,7 +852,7 @@ TEST(CnbProducerTest, OddSizedChunksAreWalkedThroughTheirRiffPadByte)
     EXPECT_NO_THROW((void)CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(trailing, "trailing.wav"));
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-192: the RIFF header's declared length bounds
+// XNASWEEP-192: the RIFF header's declared length bounds
 // nothing, and the four values it refuses are the only four. Measured on the genuine `WavImporter`
 // (tests/reference/xna40/audio/audio-content-oracle.json, `wav/riff-size` and
 // `wav/riff-size-threshold`), which is what replaced the stricter reading

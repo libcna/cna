@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-176: parent/child pairs for the pivot rule.
+"""XNASWEEP-176: parent/child pairs for the pivot rule.
 
 Writes one ASCII FBX 6.1 file holding a flat list of parent/child (and optionally grandchild)
 chains, each with its own pivot configuration, so a single import answers for all of them.

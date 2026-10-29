@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-189: which matrices the `.x` conversion multiplies by.
+"""XNASWEEP-189: which matrices the `.x` conversion multiplies by.
 
 A converted `FrameTransformMatrix` differs from XNA's only in the sign of its zeros, and a sign of
 zero is not something a value can show: `-0 == +0`, and .NET's `ToString` prints both as `0`. What

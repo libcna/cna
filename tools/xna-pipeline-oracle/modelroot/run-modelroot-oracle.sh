@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xna_sample_xnb_sweep.md XNASWEEP-162: run the genuine FbxImporter *and* ModelProcessor
+# XNASWEEP-162: run the genuine FbxImporter *and* ModelProcessor
 # over a directory of FBX files and print every bone's transform at round-trip precision.
 #
 #   $1  fixture directory
@@ -34,7 +34,7 @@ cp "$fixtures"/*.fbx "$build/fixtures/" 2>/dev/null || true
 cp "$fixtures"/*.x "$build/fixtures/" 2>/dev/null || true
 # What a model *names* has to be beside it: a `.x` `EffectInstance` resolves its effect and its
 # parameter textures at import time and refuses the file when they are not there
-# (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+# (`XNASWEEP-174`).
 cp "$fixtures"/*.fx "$build/fixtures/" 2>/dev/null || true
 cp "$fixtures"/*.tga "$build/fixtures/" 2>/dev/null || true
 cp "$fixtures"/*.png "$build/fixtures/" 2>/dev/null || true

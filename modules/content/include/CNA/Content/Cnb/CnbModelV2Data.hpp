@@ -214,7 +214,7 @@ namespace CNA::Content::Cnb
          * In memory only: schema 2's file format is frozen and stores a name string, so this is
          * carried between the XNA-shaped model and the `.xnb` writer -- the route every built
          * model takes -- and is not serialized. A model that has been through a `.cnb` file comes
-         * back with an empty name rather than none (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122).
+         * back with an empty name rather than none (XNASWEEP-122).
          */
         bool nameIsNull = false;
         /** @brief Parent index, or -1. */

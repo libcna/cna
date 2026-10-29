@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149.
+# XNASWEEP-149.
 #
 # Build DxMeshOptimizeOracle against Microsoft's open-source DirectXMesh (MIT) and run it over a
 # probe file.  DirectXMesh is a Windows library, so it is cross-compiled with MinGW and run under

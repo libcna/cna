@@ -118,7 +118,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
          * applies to a declared normal (`XNASWEEP-170`). `Vector3::Normalize` multiplies by a
          * `float` reciprocal instead, and the two differ by a ulp on most vectors: over nine
          * normals through the genuine `MeshHelper.TransformScene`, this answers all nine and the
-         * reciprocal multiply four (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-234`,
+         * reciprocal multiply four (`XNASWEEP-234`,
          * `tests/reference/xna40/model/mesh-normalize-oracle.json`).
          *
          * @param value The vector to normalize.
@@ -558,7 +558,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
             // XNA's method is the documented public D3DXOptimizeFaces, with the vertices
             // renumbered in the order the reordered face list first reaches them: measured on
             // 1,210 probes against genuine XNA 4.0 and the genuine D3DX9 redistributable with no
-            // disagreement (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149). The face order comes
+            // disagreement (XNASWEEP-149). The face order comes
             // from CNA::Internal::OptimizeFaces; the corner order inside a triangle never changes.
             const std::size_t triangleCount = indices.size() / 3;
             std::vector<std::uint32_t> faceIndices;

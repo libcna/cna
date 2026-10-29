@@ -994,7 +994,7 @@ class Reader:
             # Opt-in, because a payload is not a measurement and every comparison of two parses
             # would otherwise be comparing megabytes. A caller that has already found two digests
             # differing asks for them to read what actually differs
-            # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-210`).
+            # (`XNASWEEP-210`).
             if self.keep_payloads:
                 record["payload"] = payload
             return record

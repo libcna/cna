@@ -46,7 +46,7 @@ namespace CNA::Internal::Graphics
      * none, and with 864 it is 55,886, which is byte for byte what CNA produced for
      * `riemerstexture.bmp` against a reference the genuine XNA pipeline built. A bitmap of eight
      * bits or fewer is left alone: its table is its palette, the decoder reads it correctly, and
-     * removing it would destroy the image (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-221`).
+     * removing it would destroy the image (`XNASWEEP-221`).
      *
      * Anything that is not such a bitmap -- another format, a bitmap whose pixels already follow
      * its header, one whose fields do not agree -- is answered empty, and the caller then hands

@@ -62,7 +62,7 @@ namespace CNA::Content::Pipeline
      *
      * A pass-through writes what the importer produced, with none of the processor's own steps:
      * no colour key, no premultiply, and a block-compressed `.dds` keeps the file's own blocks
-     * rather than being decoded and re-encoded (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`).
+     * rather than being decoded and re-encoded (`XNASWEEP-135`).
      * Set by the `.contentproj` route when a project names `PassThroughProcessor` on an image.
      */
     inline constexpr const char* TexturePassThroughParameter = "passThrough";
@@ -197,7 +197,7 @@ namespace CNA::Content::Pipeline
          * `.dds` writes Dxt3 -- re-encoded, because the colour key and the premultiply ran first --
          * and a `PassThroughProcessor` writes the file's own blocks *verbatim*, neither keyed nor
          * premultiplied (measured, tests/reference/xna40/differential/texture_dds_dxt3_nochange.xnb
-         * and texture_dds_dxt3_passthrough.xnb; plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`).
+         * and texture_dds_dxt3_passthrough.xnb; `XNASWEEP-135`).
          * Empty for every source that is not a compressed `.dds`.
          */
         std::vector<std::vector<std::uint8_t>> sourceCompressedLevels;
@@ -235,7 +235,7 @@ namespace CNA::Content::Pipeline
      *
      * XNA's `TextureImporter` loads through `System.Drawing`, and GDI+ honours a PNG's gamma
      * chunk. Exported because the XNA façade's own `TextureImporter` decodes through a different
-     * route and has to apply the same rule (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-109`).
+     * route and has to apply the same rule (`XNASWEEP-109`).
      *
      * @param file The source file's bytes; anything that is not a PNG is left alone.
      * @param pixels The decoded RGBA8 texels, corrected in place.

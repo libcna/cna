@@ -78,7 +78,7 @@ namespace CNA::Internal::Xnb
          * ever read through them. `ExternalReferenceWriter<T>` is the case the corpus needs:
          * SAMPLE-028's `Car.xnb` carries a texture-valued effect parameter, and XNA's table holds
          * `ExternalReferenceReader` *and* `TextureReader` where CNA held only the first, which
-         * shifts every byte after the table (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-188`).
+         * shifts every byte after the table (`XNASWEEP-188`).
          *
          * @return The identities to intern after this writer's own, in order; empty by default.
          */

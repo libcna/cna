@@ -555,8 +555,8 @@ namespace CNA::Content::Pipeline
         if (!bundle.primary.has_value())
         {
             // Only one model shape reaches here without a canonical form, and saying which it is
-            // is more use than saying that a conversion failed (plans/plan_xna_sample_xnb_sweep.md
-            // `XNASWEEP-174`).
+            // is more use than saying that a conversion failed
+            // (`XNASWEEP-174`).
             throw ContentLoadException(
                 "'" + logicalName +
                 "': neither frozen Model schema carries this model. An XNA model whose material "

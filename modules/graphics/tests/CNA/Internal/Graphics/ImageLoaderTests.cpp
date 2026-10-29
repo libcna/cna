@@ -155,7 +155,7 @@ TEST(ImageLoaderTests, TheDibRecogniserClaimsNothingItShouldNot)
     EXPECT_THROW((void)WithBitmapFileHeader(png), std::invalid_argument);
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-221: a bitmap may put bytes between its header and
+// XNASWEEP-221: a bitmap may put bytes between its header and
 // its pixels, and the decoder under `ImageLoader` reads such a file from the wrong place. CNA
 // closes the gap before handing the bytes over, so the image is the one the file describes.
 //

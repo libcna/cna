@@ -196,6 +196,12 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   [`../docs/gltf-limitations.md`](../docs/gltf-limitations.md) §1; comments cite the `GLTF-*` IDs
   bare.
 - [`plan_xnb.md`](plan_xnb.md) — XNB content pipeline.
+- `plan_xna_sample_xnb_sweep.md` — the sample `.xnb` sweep (`XNASWEEP-*`, 2026-09-07/11): every
+  genuine `.xnb` Microsoft's pipeline built from a public XNA sample, rebuilt through CNA and
+  compared; all rows done, run 66 left 4,337 of 7,726 byte-identical and none unexplained. Deleted
+  on 2026-10-29 (Git history only). The method, the recipe, the last run and what is left are in
+  [`../tools/xna-sample-sweep/README.md`](../tools/xna-sample-sweep/README.md), its three measured
+  residues in [`../handoff.md`](../handoff.md) §5.2; comments cite the rows as `XNASWEEP-nnn`.
 - `plan_xnapipeline.md` — CNA's native XNB writer (`XNAP-*`, 2026-09-03/09); deleted on 2026-10-29
   (Git history only). Its last three non-done rows had closed elsewhere: genuine-runtime
   verification by `XNAPP-280`/`281`, the real effect compiler by `XNAPP-191`, the Emscripten link of

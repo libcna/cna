@@ -164,7 +164,7 @@ TEST(DxtUtil, DecompressDxt1_ExactlyEnoughData_DoesNotThrow)
     EXPECT_NO_THROW(DxtUtil::DecompressDxt1(kSolidRedDxt1, sizeof(kSolidRedDxt1), 4, 4));
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-220: D3DX narrows an interpolated *alpha* through
+// XNASWEEP-220: D3DX narrows an interpolated *alpha* through
 // the same ordered dither it narrows an interpolated colour through.
 //
 // `XNASWEEP-136` measured that dither for the colour channels and this channel was left out of it,
@@ -215,7 +215,7 @@ TEST(DxtUtilTests, AnInterpolatedAlphaTakesTheSameOrderedDitherAnInterpolatedCol
     EXPECT_EQ(plain[2 * 4 + 3], static_cast<uint8_t>((6 * 255 + 0 * 0) / 7));
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-222: what a level that is not a whole number of
+// XNASWEEP-222: what a level that is not a whole number of
 // blocks answers, and which threshold its dither takes.
 //
 // Three rules, each measured against the genuine pipeline and each pinned here by the bytes it

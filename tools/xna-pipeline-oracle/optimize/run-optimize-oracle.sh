@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149: run genuine XNA 4.0's MeshHelper.OptimizeForCache
+# XNASWEEP-149: run genuine XNA 4.0's MeshHelper.OptimizeForCache
 # over a generated probe file and record the order it answers with.
 #
 #   $1  probe file (default build/xna-sample-sweep/optimize/probes.txt)

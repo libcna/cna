@@ -21,7 +21,7 @@ namespace CNA::Internal::Graphics
      * pipeline, which converts a `.dds` through it -- rounds *up*: `ceil(v * 255 / 31)`, measured
      * over all 32 five-bit and all 64 six-bit values
      * (tests/reference/xna40/differential/texture_dds_dxt3_*_sweep.xnb,
-     * plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-136`).
+     * `XNASWEEP-136`).
      */
     enum class DxtEndpointExpansion
     {

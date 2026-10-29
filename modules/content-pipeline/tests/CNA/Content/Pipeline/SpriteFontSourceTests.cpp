@@ -606,7 +606,7 @@ TEST(SpriteFontSourceRouteTest, AnAtlasThatCannotFitIsRefusedWithTheSizeThatCaus
     }
 }
 
-// -- resolving `<FontName>` as a family (plan_xna_sample_xnb_sweep.md XNASWEEP-100) -------------
+// -- resolving `<FontName>` as a family (XNASWEEP-100) -------------
 //
 // `<FontName>` is a font *family* name -- XNA resolves it through Windows -- and the families the
 // public XNA samples name are in files called something else: 'Pericles' is `Peric.ttf`, 'Segoe UI

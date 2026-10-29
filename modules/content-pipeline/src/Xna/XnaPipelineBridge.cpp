@@ -510,7 +510,7 @@ namespace CNA::Content::Pipeline
          * A component actually registered under the XNA name wins: that is how
          * `MaterialProcessor` itself, the `TextureProcessor` front door that owns XNA's parameter
          * spellings, and a game's own `RegisterXnaProcessor` component are reached. Only a name
-         * nothing answers to is translated (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+         * nothing answers to is translated (`XNASWEEP-174`).
          *
          * @param pipeline The coordinator whose registry answers.
          * @param processorName The name the processor asked for, possibly empty.
@@ -800,7 +800,7 @@ namespace CNA::Content::Pipeline
         // a path is matched without regard to case. Spacewar's `asteroid1.x` names
         // `..\textures\asteroid1.tga` beside a directory called `Textures`, and XNA's own build
         // reads that file and writes the asset to `Content/textures/asteroid1_0.xnb` -- the
-        // authored case, not the disk's (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-115`).
+        // authored case, not the disk's (`XNASWEEP-115`).
         const std::filesystem::path authored = CNA::Internal::PathFromUtf8(sourceFilename);
         std::filesystem::path opened = authored;
         {
@@ -833,7 +833,7 @@ namespace CNA::Content::Pipeline
         // node builds it. Nothing is built here, which is what lets a model refer to an effect
         // whose own build refuses the target -- XNA's Windows Phone build of SAMPLE-028 writes a
         // `Car.xnb` naming `ReplaceColor` and no `ReplaceColor.xnb` beside it, because the model
-        // never compiled the effect (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+        // never compiled the effect (`XNASWEEP-174`).
         if (assetName.empty())
         {
             const ContentProcessorParameters nestedParameters =
@@ -849,7 +849,7 @@ namespace CNA::Content::Pipeline
                 // the measured behaviour rather than a convenience: XNA's own Windows Phone build
                 // of SAMPLE-028 wrote a `Car.xnb` naming `ReplaceColor` and no `ReplaceColor.xnb`
                 // beside it, because the effect's own node failed and the model's did not
-                // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+                // (`XNASWEEP-174`).
                 context_->AddRuntimeReference(sibling->logicalName);
                 return outputPath(sibling->logicalName);
             }
@@ -1005,7 +1005,7 @@ namespace CNA::Content::Pipeline
         processor->ValidateParameters(parameters);
         // The conversion is part of the same build and its own nested builds must see the same
         // items: `MaterialProcessor` is reached only through `Convert`, and it is what asks for a
-        // material's effect (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+        // material's effect (`XNASWEEP-174`).
         CanonicalProcessorContext nested(context_->SourceRoot(), context_->SourcePath(), context_->LogicalName(),
                                        processor->Identity().name, parameters, context_->ExternalSourceRoots(),
                                        context_->Dependencies(), context_->Logger(), context_->OutputFormat(),

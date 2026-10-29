@@ -32,7 +32,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
      * is matched without regard to case: Spacewar's `asteroid1.x` names
      * `..\textures\asteroid1.tga` and the directory beside it is called `Textures`. XNA's own
      * build resolves that; on a case-sensitive filesystem the exact spelling is simply not there,
-     * and the model failed to build at all (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-115`).
+     * and the model failed to build at all (`XNASWEEP-115`).
      *
      * The fallback is deliberately narrow and deterministic: it applies only when the authored
      * spelling does not exist, it matches one path component at a time, and a directory holding

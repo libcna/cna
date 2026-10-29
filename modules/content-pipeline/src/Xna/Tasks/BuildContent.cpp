@@ -217,7 +217,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
          * and ships `SimpleScreen.fx`. Building the same project on a case-sensitive filesystem
          * has to reach the same file or it is not building the same project -- 43 references of
          * this corpus are exactly that and nothing else
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-163`).
+         * (`XNASWEEP-163`).
          *
          * The exact path wins whenever it exists, so nothing changes on a filesystem that already
          * answers. A component that matches more than one entry is **not** resolved: two files
@@ -515,7 +515,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         // whose importer and processor are built-in is one this build produces correctly. Stopping
         // here cost the whole project for one game-defined processor, and in the public sample
         // corpus that is 107 of 328 content projects producing nothing
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-103`).
+        // (`XNASWEEP-103`).
         const bool assembliesRefused = !pipelineAssemblies_.empty();
         if (assembliesRefused)
         {
@@ -561,7 +561,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         // One asset's entry is composed on its own before it joins the document, so an asset this
         // build has no component for can be reported and left out instead of ending the build. A
         // project *is* its item list and XNA builds every item it can, failing the ones it cannot
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-103`).
+        // (`XNASWEEP-103`).
         bool refusedAnAsset = false;
         for (const TaskItem& asset : sourceAssets_)
         {
@@ -670,7 +670,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                 // `PassThroughProcessor` writes its input unchanged, and for an image that is not
                 // what the canonical texture route does by default -- it keys the colour out and
                 // premultiplies. XNA's own pass-through of a DXT3 `.dds` writes the file's blocks
-                // verbatim (measured, plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`), so the
+                // verbatim (measured, `XNASWEEP-135`), so the
                 // route is told so. Only for a source the image importer reads: an `.xml` passing
                 // through takes a route these parameters would mean nothing to.
                 if (TaskDetail::EqualsIgnoringCase(TaskDetail::Bare(processorName),
@@ -816,8 +816,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         // live inside the root it was reading -- and that made a read-only source tree
         // unbuildable and changed the modification time of every project directory a build
         // touched. Vendored content, a checkout mounted read-only and somebody else's sample
-        // corpus are all ordinary things to build (plans/plan_xna_sample_xnb_sweep.md
-        // `XNASWEEP-110`).
+        // corpus are all ordinary things to build
+        // (`XNASWEEP-110`).
         const std::filesystem::path configurationFile = intermediate / "cna-buildcontent.json";
         {
             std::ofstream file(configurationFile, std::ios::binary | std::ios::trunc);
@@ -890,7 +890,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             // `EffectProcessor.DebugMode` defaults to `Auto`, which follows the build
             // configuration; a content project's own default is `Debug`. Without this the
             // coordinator saw `Release` for every project and compiled every effect optimized
-            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-108`).
+            // (`XNASWEEP-108`).
             arguments.emplace_back("--build-configuration");
             arguments.emplace_back(buildConfiguration_);
         }
@@ -955,7 +955,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         // coordinator builds every asset it can and reports the ones it could not. The failure is
         // remembered and answered at the end, so `OutputContentFiles` still names what a partly
         // failed build produced -- which is what XNA's own task leaves behind
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-103`).
+        // (`XNASWEEP-103`).
         bool failed = assembliesRefused || refusedAnAsset;
         if (status != 0)
         {

@@ -23,7 +23,7 @@ build="$repo/build/xna-pipeline-oracle/model"
 # The corpus this runs over. Overridable so a *real* sample's model can be measured against the
 # genuine importer without joining the committed fixture set: an investigation reads what XNA
 # answers for a file it has, and only what that settles becomes a fixture
-# (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-111).
+# (XNASWEEP-111).
 fixtures="${CNA_MODEL_FIXTURES:-$repo/tests/assets/xna40/model}"
 
 for dll in Microsoft.Xna.Framework.dll Microsoft.Xna.Framework.Content.Pipeline.dll \
@@ -66,7 +66,7 @@ drive() {
 # One process per case. The FBX SDK inside XNA's importer carries state from one import to the
 # next, and it changes the answer: `fbx_texture_second_batch.fbx` comes back with a texture or
 # without one depending on whether an unrelated fixture is in the directory beside it, twice each
-# way (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-147`). Measuring each case alone is what makes
+# way (`XNASWEEP-147`). Measuring each case alone is what makes
 # the reference a measurement of the file rather than of the directory.
 status=0
 names="$(drive --list "$win_out" 2>/dev/null | tr -d '\r')" || status=$?

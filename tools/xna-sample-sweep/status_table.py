@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md §11: the counts, printed from the tools rather than typed.
+"""The sweep's counts (tools/xna-sample-sweep/README.md), printed from the tools rather than typed.
 
-§11 says nothing in it is hand-counted, and this is what makes that true: it reads the taxonomy
+The README says nothing in it is hand-counted, and this is what makes that true: it reads the taxonomy
 and the sweep results of one or more runs and prints the two tables in the file's own Markdown, so
 a run's numbers are copied rather than transcribed.
 

@@ -188,7 +188,7 @@ namespace
      * The oracle formats the vector types itself and falls back to `value.ToString()`, whose
      * default for a type that does not override it is the type's own full name -- which is how an
      * `ExternalReference<EffectContent>` is printed. A `Matrix` overrides it, and CNA's `ToString`
-     * answers the same form (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-183`).
+     * answers the same form (`XNASWEEP-183`).
      */
     std::string DescribeOpaqueValue(const Xna::ContentObject& value)
     {
@@ -217,7 +217,7 @@ namespace
         // type's own name in `Type.ToString()` form -- a generic argument in single brackets.
         // CNA's stable type name spells the same type in the `Type.FullName` form the XNB type
         // table needs, with the argument in doubled brackets, so the one difference is undone
-        // here rather than in the pipeline (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+        // here rather than in the pipeline (`XNASWEEP-174`).
         std::string name = value.StableType();
         for (const auto& [doubled, single] : {std::pair<const char*, const char*>{"[[", "["},
                                               std::pair<const char*, const char*>{"]]", "]"}})
@@ -365,7 +365,7 @@ namespace
                         // Relative to the fixture directory, as the oracle prints it: a `Texture`
                         // names its file twice and the two can name different *directories*, so
                         // the file name alone would not say which one was taken
-                        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-140`).
+                        // (`XNASWEEP-140`).
                         const std::filesystem::path referenced =
                             std::filesystem::path(reference->getFilenameProperty()).lexically_normal();
                         const std::filesystem::path relative =
@@ -521,11 +521,11 @@ TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
          {"bare_mesh.x", "binary_mesh.x", "generated_normals.x", "hierarchy.x", "missing_texture.x",
           // `MeshNormals` carries its own face list, so a corner's normal is not its position's:
           // this quad's two triangles name one normal each and the genuine importer answers six
-          // vertices for four positions (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-144`).
+          // vertices for four positions (`XNASWEEP-144`).
           "normal_per_face.x",
           // Two normal entries holding the same three numbers are one normal: this file writes the
           // same normal six times under six indices, and XNA answers four vertices, not six
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-148`).
+          // (`XNASWEEP-148`).
           "normal_duplicate_values.x",
           // What a `MeshNormals` entry becomes, in one file: the six axis directions, which is
           // where the sign of the zero the basis change leaves in Z is observable -- `(0, -1, 0)`
@@ -533,12 +533,12 @@ TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
           // normals, which show that the `.x` route normalizes and the FBX route does not; and
           // three near-unit ones taken from SAMPLE-014's own models, where a float sum of squares
           // and a double one give different floats
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-170`).
+          // (`XNASWEEP-170`).
           "x_normal_rules.x",
           // A mesh's position list holds each *different* position once, and the order is the order
           // the material batches ask for them: this one declares eight vertices over five
           // positions, two of which share a position and a normal, and XNA answers five positions
-          // and six vertices (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-173`).
+          // and six vertices (`XNASWEEP-173`).
           "x_position_merge.x",
           // And the order that list is built in: two materials, the second naming the *lower*
           // vertices. A list deduplicated in file order answers them the file's way; the genuine
@@ -550,7 +550,7 @@ TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
           // texture coordinates in upper case, the material list in lower, and the material and
           // its texture file name in two mixed spellings -- and carries an object of a type no
           // template defines, which is accepted and ignored
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-180`).
+          // (`XNASWEEP-180`).
           "x_type_name_case.x",
           // The two stage probes `XNASWEEP-231` measured the generated-normal rule on: the first
           // leaves only the normalization rounding, the second only the cross product's products.
@@ -560,7 +560,7 @@ TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
           // data is the effect reference and the instance's parameters in file order, an
           // `EffectParamFloats` is typed by its count, and an `EffectParamString` is a *texture*
           // under that parameter's name. None of the material's own colours survives
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+          // (`XNASWEEP-174`).
           "x_effect_instance.x",
           // The signs of the zeros the basis change leaves behind. The committed oracle rounds a
           // negative zero to `0`, so this file's *values* are checked here and its *bits* by
@@ -578,7 +578,7 @@ TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
     }
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-231: what a `.x` mesh with no `MeshNormals` answers,
+// XNASWEEP-231: what a `.x` mesh with no `MeshNormals` answers,
 // stage by stage. The committed probes leave exactly one stage rounding at a time --
 // `x_generated_normals_exact.x` is triangles of the origin and two small integer vectors, so the
 // subtraction and the cross product are exact and only the normalization rounds;
@@ -674,7 +674,7 @@ TEST(XnaXImporter, AGeneratedNormalIsTheUnitFaceNormalSummedByPosition)
     EXPECT_EQ(wideNormals.at(6)[2], 0xBF4898BEu);
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-181: the sign of a zero in a `.x` normal, which the
+// XNASWEEP-181: the sign of a zero in a `.x` normal, which the
 // committed oracle cannot carry -- .NET Framework's `ToString` writes a negative zero as `0`.
 // These are the bits the genuine importer answered for the same file, read with the oracle's
 // `CNA_MODEL_ORACLE_BITS=1` mode. They pin three things at once: `M31` is a negative zero, so a
@@ -739,7 +739,7 @@ TEST(XnaXImporter, ASignedZeroInANormalIsTheMatrixsOwn)
     }
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-189: the sign of a zero in a converted transform,
+// XNASWEEP-189: the sign of a zero in a converted transform,
 // which the committed oracle cannot carry either. The basis change is `B_L M B_R`, two matrix
 // multiplications by two matrices that are `diag(1, 1, -1, 1)` in value and *not* the same in the
 // signs of their zeros; negating the third row and the third column instead is equal in value and
@@ -853,7 +853,7 @@ TEST(XnaXImporter, SkinningAndAnimationAnswerWhatXnaAnswers)
 }
 
 // Every refusal, including the D3DX code the genuine reader appends and which one it picks.
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122: `Name` is a nullable string in XNA and the two
+// XNASWEEP-122: `Name` is a nullable string in XNA and the two
 // empty values reach a built `.xnb` differently -- a null object against a zero-length string. The
 // `.x` importer has both: a file with no enclosing frame gets a synthesized root that carries no
 // name, while `Frame {` declares one that happens to be empty. Measured on the genuine importer,
@@ -1008,19 +1008,19 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // an alpha and a specular colour and no `SpecularPower` at all -- so the model built
           // from it takes `BasicEffect`'s own default of 16, and materialising the absence as 0
           // is what put a 0 in two of the corpus's references
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-171`).
+          // (`XNASWEEP-171`).
           "fbx_material_lambert_textured.fbx",
           // The diffuse channel spelled the way an older Maya exporter spells it: a
           // `LayerElementReflectionUV` and a `LayerElementReflectionTextures`, and no
           // `LayerElementTexture` at all. The genuine importer answers the texture under
           // `Reflection`, *not* under `Texture`, so the material a model built from it carries has
           // no texture -- which is what SAMPLE-131's own `p1_piece.xnb` has
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-177`).
+          // (`XNASWEEP-177`).
           "fbx_reflection_texture.fbx",
           // A vertex is the `float` values it will be stored as, not the doubles the file holds.
           // Two corners of this quad share a control point and carry normals that differ only past
           // the 24th bit; the genuine importer answers four vertices, and comparing the doubles
-          // answers six (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-178`).
+          // answers six (`XNASWEEP-178`).
           "fbx_normal_narrow.fbx",
           // And the same question for a texture coordinate, which is stored *flipped*: two corners
           // of this quad share a control point and carry V values that differ as doubles and agree
@@ -1039,48 +1039,48 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // sharing a `Model`'s bare name is a different object: this one's three meshes come
           // back as `Alpha`, `Beta`, `Gamma`, where keying on the bare name lost `Beta` to the
           // material of the same name and reading the objects by identity reversed the three
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-145`).
+          // (`XNASWEEP-145`).
           "fbx_scene_order.fbx",
           // The geometry's own offset -- `GeometricScaling`, `GeometricRotation` and
           // `GeometricTranslation` -- is folded into the node's transform and undone again on its
           // child, and the `PreRotation` this file also carries is *not* applied because it does
-          // not set `RotationActive` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-146`).
+          // not set `RotationActive` (`XNASWEEP-146`).
           "fbx_geometric_offset.fbx",
           // FBX 7 splits a mesh in two, a `Geometry` object connected to the `Model` that places
           // it. The geometry is that model's data, not a node of its own: XNA answers one node,
           // `marble`, where reading the `Geometry` as a node answers two
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-151`).
+          // (`XNASWEEP-151`).
           "fbx7_geometry.fbx",
           // The six terms of FBX's transform formula a scaling, a rotation and a translation do
           // not reach. The first sets `RotationOffset`, `RotationPivot`, `ScalingOffset` and
           // `ScalingPivot`; the second sets `PostRotation` beside a `PreRotation` and an
           // `Lcl Rotation`, which is what settles that `R` comes before `Rpre`
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-152`).
+          // (`XNASWEEP-152`).
           "fbx_pivots.fbx", "fbx_postrotation.fbx",
           // A mesh's batches come out in the order its polygons first name each material, not the
           // order the materials are connected: this one connects `First` then `Second` and its two
           // polygons name them the other way round, and XNA answers `Second`'s batch first
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-155`).
+          // (`XNASWEEP-155`).
           "fbx_material_order.fbx",
           // A mesh that declares no normals gets them computed, per control point, as the
           // normalized sum of the *unit* normals of the polygons that name it. These two are the
           // same fold with one face four times the other's area and XNA answers the same normal on
           // the shared edge for both, which rules area weighting out
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-156`).
+          // (`XNASWEEP-156`).
           "fbx_generated_normals.fbx", "fbx_generated_normals_area.fbx",
           // The three `InheritType` modes, which are three different answers for the same scene.
           // Their bits are checked by `InheritTypeDecidesHowMuchOfTheParentsScalingReachesAChild`
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-228`, `XNASWEEP-229`).
+          // (`XNASWEEP-228`, `XNASWEEP-229`).
           "fbx_inherit_rrss.fbx", "fbx_inherit_rsrs.fbx", "fbx_inherit_rrs.fbx",
           // A number written with too few digits to name a float: XNA rounds it to the nearest,
-          // not toward zero (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-153`).
+          // not toward zero (`XNASWEEP-153`).
           "fbx_float_rounding.fbx",
           "fbx_split_vertices.fbx",
           // A `Texture` names its file twice and the two can name different directories; the
           // reference XNA writes is whichever one resolves. These two separate the branches:
           // the first's `FileName` names a directory that is there and its `RelativeFilename`
           // one that is not, the second's the other way round
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-140`).
+          // (`XNASWEEP-140`).
           "fbx_texture_path_filename.fbx", "fbx_texture_path_relative.fbx",
           // `fbx_texture_second_batch.fbx` is deliberately NOT compared here. Which texture a
           // batch gets is its polygons' own `TextureId` and this one's first polygon carries -1,
@@ -1090,12 +1090,12 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // regenerating the reference on 2026-09-10 answered *with* the texture, and so did a
           // copy of the same directory with eight unrelated files removed. Comparing CNA against
           // one of two answers would be asserting a coin toss, so the fixture and its recording
-          // stay and the comparison does not (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-202`).
+          // stay and the comparison does not (`XNASWEEP-202`).
           // A UV set's channel index is its `Layer` block's own number, and two sets in one block
           // take consecutive indices: the first of these declares its only UV in `Layer: 1` and
           // answers `TextureCoordinate1`, the second declares a `LayerElementUV` and a
           // `LayerElementReflectionUV` in `Layer: 0` and answers both indices
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-143`).
+          // (`XNASWEEP-143`).
           "fbx_uv_layer_one.fbx", "fbx_uv_two_sets.fbx",
           // The skeleton's root is promoted: the first bone a depth-first walk reaches leaves the
           // node it was connected under and becomes the *last* child of the scene's root, with its
@@ -1105,16 +1105,16 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // back carrying the transform it had in the world; and the fourth a scene whose single
           // top-level object is the skeleton, where making the bone's transform relative to itself
           // is the identity `Duskmas.FBX` comes back with
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-150`, `XNASWEEP-160`, `XNASWEEP-161`).
+          // (`XNASWEEP-150`, `XNASWEEP-160`, `XNASWEEP-161`).
           "fbx_bone_scene_order.fbx", "fbx_bone_first_only.fbx", "fbx_bone_promoted.fbx",
           "fbx_bone_is_root.fbx",
           // A `Light` and a `Marker` are not nodes, which no source in the corpus had ever carried
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-161`).
+          // (`XNASWEEP-161`).
           "fbx_light_marker.fbx",
           // A polygon with more than three corners is triangulated as a *strip*, not a fan, and
           // what it answers is a function of the corner count alone: a concave quad and a convex
           // one give the same triangles, and so does the same octagon walked from a different
-          // corner or backwards (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-164`).
+          // corner or backwards (`XNASWEEP-164`).
           "fbx_polygon4.fbx", "fbx_polygon5.fbx", "fbx_polygon6.fbx", "fbx_polygon7.fbx",
           "fbx_polygon8.fbx", "fbx_polygon12.fbx", "fbx_polygon8_rotated.fbx",
           "fbx_polygon8_reversed.fbx", "fbx_polygon_concave.fbx", "fbx_polygon_concave6.fbx",
@@ -1122,13 +1122,13 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // A `Materials` array that names an index no connected material answers. Those polygons
           // are not dropped: XNA answers all of them in one batch with no material at all, whatever
           // index each named, and a mesh whose polygons name only out-of-range indices comes back
-          // as a single null-material batch (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-165`).
+          // as a single null-material batch (`XNASWEEP-165`).
           "fbx_material_gap.fbx", "fbx_material_gap_negative.fbx", "fbx_material_gap_skip.fbx",
           // The scene's `UnitScaleFactor` multiplies the *composed* transform, basis and
           // translation both, and not the `Lcl Scaling` and `Lcl Translation` it is built from --
           // which is only the same thing when the node has no scaling pivot. It reaches the nodes
           // the scene connects and not their children
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-162`).
+          // (`XNASWEEP-162`).
           "fbx_unit_scale_pivot.fbx", "fbx_unit_scale_offset.fbx", "fbx_unit_scale_both.fbx",
           "fbx_unit_scale_plain.fbx", "fbx_unit_scale_two.fbx", "fbx_unit_scale_child.fbx",
           "fbx_unit_scale_siblings.fbx",
@@ -1140,7 +1140,7 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // `..._unnamed` declares the second set without naming it and answers one; `..._alone`
           // has only the transparency set and it takes index 0; `..._three_types` answers three;
           // and `..._same_type_twice` names one type at two `TypedIndex`es and answers one channel
-          // carrying the second (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-166`).
+          // carrying the second (`XNASWEEP-166`).
           "fbx_uv_transparent_pair.fbx", "fbx_uv_transparent_no_texture.fbx",
           "fbx_uv_transparent_unnamed.fbx", "fbx_uv_transparent_alone.fbx",
           "fbx_uv_three_types.fbx", "fbx_uv_same_type_twice.fbx",
@@ -1151,7 +1151,7 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // difference. Five pairs: three with a visible residue, including the `PreRotation` on X
           // against a rotation on Z that RobotGame's mechs have, and two negative controls whose
           // composition stays a single-axis turn and whose children are their own
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-176`).
+          // (`XNASWEEP-176`).
           "fbx_pivot_residue.fbx",
           "fbx_two_materials.fbx"})
     {
@@ -1166,7 +1166,7 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
 // way, but they are *not* the same six bytes: `ModelProcessor` writes the index buffer verbatim
 // and a rotated corner is a differing `.xnb`. This is the comparison that keeps the corner order,
 // and the polygon fixtures are where the two readings part company -- a quad's second triangle
-// alone (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-164`).
+// alone (`XNASWEEP-164`).
 TEST(XnaFbxImporter, APolygonIsTriangulatedIntoXnasOwnCornerOrder)
 {
     for (const std::string& fixture :
@@ -1182,7 +1182,7 @@ TEST(XnaFbxImporter, APolygonIsTriangulatedIntoXnasOwnCornerOrder)
     }
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-121: the oracle's own record prints a transform
+// XNASWEEP-121: the oracle's own record prints a transform
 // rounded, so `EveryFileAnswersTheGraphXnaAnswers` above cannot tell -4.4e-08 from 6.1e-17 -- both
 // print as `0`. This is the one that can. A quarter turn is where a float and a double `cos` part
 // company, and XNA's `Cube.xnb` (SAMPLE-003, `PreRotation -90` under `UnitScaleFactor 2.54`)
@@ -1209,7 +1209,7 @@ TEST(XnaFbxImporter, AQuarterTurnIsComposedTheWayXnasIsAndNotInFloat)
     EXPECT_NE(transform.M22, 2.54f * std::cos(1.5707964f));
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-228, XNASWEEP-229: FBX writes three inheritance
+// XNASWEEP-228, XNASWEEP-229: FBX writes three inheritance
 // modes and they are three different answers.
 //
 // The three fixtures differ in one property and nothing else: a root scaled (2, 3, 5) carries a
@@ -1237,7 +1237,7 @@ TEST(XnaFbxImporter, ARootsUnderflowedRotationEntryIsAPositiveZero)
     // The double the composition holds is *negative*, so narrowing it alone answers `0x80000000`
     // -- a negative zero -- and the genuine importer answers `0x00000000`. It divides by its
     // parent even at the root, and a product's entry is a sum, in which `0.0 + -0.0` is `+0.0`
-    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-237`).
+    // (`XNASWEEP-237`).
     const std::shared_ptr<Graphics::NodeContent> underflow =
         importer.Import(Fixture("fbx_underflow_rotation.fbx").string(), context);
     ASSERT_NE(underflow, nullptr);
@@ -1339,7 +1339,7 @@ TEST(XnaFbxImporter, InheritTypeDecidesHowMuchOfTheParentsScalingReachesAChild)
     EXPECT_NE(asBits(rsrsTip.M31), 0x3ED31BC9u);
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-176: the pivot residue stops at the node that
+// XNASWEEP-176: the pivot residue stops at the node that
 // inherits it. `fbx_pivot_residue_chain.fbx` is two degenerate nodes and a child: the first
 // node's decomposition loses the 0.0000839 of its quarter turn, its child carries the difference,
 // and the *grandchild* does not -- even though its own parent's decomposition is just as lossy.
@@ -1378,7 +1378,7 @@ TEST(XnaFbxImporter, ThePivotResidueStopsAtTheNodeThatInheritsIt)
     EXPECT_NE(grandchild->getTransformProperty().M11, -2.9294772e-06f);
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-213: a chain of plain `Lcl Rotation` takes no pivot
+// XNASWEEP-213: a chain of plain `Lcl Rotation` takes no pivot
 // residue, and used to take one.
 //
 // `fbx_rotation_chain.fbx` is three nodes under an identity root, each carrying the same three-axis

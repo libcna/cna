@@ -149,7 +149,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             // half-transparent texel beside it, and XNA's four output levels each answer
             // transparent black and a premultiplied texel
             // (tests/reference/xna40/differential/texture_dds_mipchain_default.xnb,
-            // plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`). CNA kept level 0 and dropped the
+            // `XNASWEEP-135`). CNA kept level 0 and dropped the
             // rest, so `Stripe2.dds` came out with one level against the reference's ten.
             for (SharpRuntime::intcs level = 0; level < chain->getCountProperty(); ++level)
             {

@@ -128,7 +128,7 @@ namespace Microsoft::Xna::Framework
         // not the exactly rounded 57.29578: over 31 measured angles that form answers every one
         // and `radians * 57.29577951308232f` answers 12 of them
         // (tests/reference/xna40/framework/matrix-oracle.txt, `todegrees/*`;
-        // plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-172`).
+        // `XNASWEEP-172`).
         return radians * (180.0f / Pi);
     }
 

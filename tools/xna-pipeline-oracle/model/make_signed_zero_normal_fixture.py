@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-181: the sign of a zero in a `.x` normal.
+"""XNASWEEP-181: the sign of a zero in a `.x` normal.
 
 `XNASWEEP-170` established that the `.x` basis change is a transform applied as
 `((x*M1j) + (y*M2j)) + (z*M3j)` and that `M13` is a negative zero, but `x_normal_rules.x` writes

@@ -406,7 +406,7 @@ def main():
     # Polygons with more than three corners, which the corpus had never carried and which the
     # FBX SDK inside XNA's importer triangulates its own way. A convex ring is enough: the answer
     # does not depend on where the vertices are (a concave quad and a convex one answer the same),
-    # only on how many corners the polygon has (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-164).
+    # only on how many corners the polygon has (XNASWEEP-164).
     def ring(n, radius=10.0, shift=0.0):
         return [(round(math.cos(2 * math.pi * i / n) * radius + shift, 6),
                  round(math.sin(2 * math.pi * i / n) * radius, 6), 0.0) for i in range(n)]
@@ -443,7 +443,7 @@ def main():
 
     # A `Materials` array that names an index no connected material answers. XNA does not drop
     # those polygons: it answers them in one batch with no material at all, whatever index each
-    # named (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-165).
+    # named (XNASWEEP-165).
     gap_vertices = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0),
                     (2, 0, 0), (2, 1, 0), (3, 0, 0), (3, 1, 0)]
     gap_polygons = [[0, 1, 2, 3], [1, 4, 5, 2], [4, 6, 7, 5]]
@@ -464,7 +464,7 @@ def main():
 
     # The scene's `UnitScaleFactor` against a node's own `Lcl Scaling` and its scaling pivot.
     # The unit multiplies the *composed* transform, basis and translation both, and it reaches only
-    # the nodes the scene connects (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-162).
+    # the nodes the scene connects (XNASWEEP-162).
     unit_triangle = [(0, 0, 0), (10, 0, 0), (0, 10, 0)]
 
     def scaled_mesh(name, scaling, pivot, offset, translation=(0, 0, 0)):

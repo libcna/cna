@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-172: black-box behaviour oracle for XNA 4.0's
+// XNASWEEP-172: black-box behaviour oracle for XNA 4.0's
 // Matrix.Multiply and Matrix.CreateRotation*, at the bit.
 //
 // A bone's transform in a built model is a product of matrices, and sixteen of the corpus's model

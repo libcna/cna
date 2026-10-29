@@ -77,7 +77,7 @@ namespace CNA::Content::Pipeline
          * `<FontName>` names a font *family*, which XNA resolves through Windows. A build machine
          * that is not the artist's has neither those families installed nor any way to say where
          * they are, so this is that way; `CNA_FONT_PATH` in the environment says the same thing
-         * and is read after these (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-100`).
+         * and is read after these (`XNASWEEP-100`).
          */
         std::vector<std::filesystem::path> fontDirectories;
 
@@ -86,7 +86,7 @@ namespace CNA::Content::Pipeline
          *
          * XNA's `EffectProcessor.DebugMode` defaults to `Auto`, which follows it, so it decides
          * whether an effect that names no debug mode is compiled with debug information and
-         * without optimization (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-108`).
+         * without optimization (`XNASWEEP-108`).
          */
         std::string buildConfiguration = "Release";
 

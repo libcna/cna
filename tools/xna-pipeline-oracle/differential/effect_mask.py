@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-225: which bytes of an effect blob are the
+"""XNASWEEP-225: which bytes of an effect blob are the
 compiler's own and which are not reproducible at all.
 
 Two things in a compiled `fx_2_0` container are not a function of the source:

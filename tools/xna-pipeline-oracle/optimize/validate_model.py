@@ -1,6 +1,6 @@
 """Check a built model `.xnb` against its genuine reference, one mesh part at a time.
 
-plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149.  The synthetic probes prove that genuine XNA's
+XNASWEEP-149.  The synthetic probes prove that genuine XNA's
 `MeshHelper.OptimizeForCache` is `D3DXOptimizeFaces`; this asks the same question of real corpus
 content, and it needs no rebuild of anything.  CNA's stand-in optimiser reverses the triangle list,
 so reversing CNA's own output recovers the order its optimiser was given.  Handing *that* to D3DX

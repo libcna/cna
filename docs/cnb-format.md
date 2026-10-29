@@ -1491,7 +1491,7 @@ preserves whichever of the two it was given, at every channel count and sample r
 (`tests/reference/xna40/audio/audio-content-oracle.json`,
 `processors/SoundEffectProcessor_pcm_matrix`). Storing 16-bit only meant CNA's XNA-compatible
 `.xnb` writer could not reproduce an 8-bit `SoundEffect`, which is a container deciding what an
-unrelated container is able to say (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+unrelated container is able to say (`XNASWEEP-197`).
 
 Everything this build writes is version 2, whatever its format: the writer declares one schema
 identity to the build graph and the incremental manifest, and a version that varied per asset would

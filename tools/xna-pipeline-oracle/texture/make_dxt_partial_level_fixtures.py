@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-222: the .dds fixtures that pin what the genuine
+"""XNASWEEP-222: the .dds fixtures that pin what the genuine
 pipeline does to a DXT level that is not a whole number of blocks.
 
 Three things happen at such a level and nowhere else, and each fixture is built so that getting it

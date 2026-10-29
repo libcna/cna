@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-001/002: freeze the genuine reference corpus.
+"""XNASWEEP-001/002: freeze the genuine reference corpus.
 
 Walks the read-only sample artefact root, decides which `.xnb` files were produced by the genuine
 Microsoft XNA 4.0 Content Pipeline rather than by CNA or FNA, and records for each one everything a
@@ -77,7 +77,7 @@ SYNTHESIZED = {
 # `.xnb` it writes, naming the `.xnb` in `<DestFile>`. That is the evidence a directory holding
 # MonoGame output is a MonoGame output directory whatever it is called: `SAMPLE-003`'s
 # `xna4-original/Content-built/` is one, and its name puts it under a genuine root
-# (`plans/plan_xna_sample_xnb_sweep.md` `XNASWEEP-132`).
+# (`XNASWEEP-132`).
 MGCONTENT_DEST = re.compile(rb"<DestFile>([^<]*)</DestFile>")
 
 

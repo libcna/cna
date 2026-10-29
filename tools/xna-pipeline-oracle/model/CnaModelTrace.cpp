@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-170: CNA's side of the model trace.
+// XNASWEEP-170: CNA's side of the model trace.
 //
 // `ModelImportOracle.cs` prints what the genuine XNA importer answers for a directory of models;
 // this prints what CNA's importer answers for the same directory, in the same words and the same

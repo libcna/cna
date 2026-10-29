@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-134/XNASWEEP-168: the point sets the BoundingSphere oracle runs.
+"""XNASWEEP-134/XNASWEEP-168: the point sets the BoundingSphere oracle runs.
 
 `BoundingSphere.CreateFromPoints` is an iterative sphere-growing pass, so the only way to pin what
 it does is to hand the genuine framework point sets whose shapes separate the candidate rules and

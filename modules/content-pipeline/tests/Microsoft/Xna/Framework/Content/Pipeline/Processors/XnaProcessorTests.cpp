@@ -902,7 +902,7 @@ TEST(XnaMaterialProcessor, BuildsEveryTextureItNames)
 // A stock material carries whatever texture channels the importer answered, and the processor
 // opens only the one its effect reads. That is what makes producing every channel safe: SAMPLE-037's
 // `head.fbx` names a `Head_Spec.TGA` the sample does not ship, and the genuine build does not open
-// it (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-175`).
+// it (`XNASWEEP-175`).
 TEST(XnaMaterialProcessor, BuildsOnlyTheTextureItsEffectReads)
 {
     Processors::MaterialProcessor processor;
@@ -1754,7 +1754,7 @@ TEST(XnaModelProcessor, TangentFramesAreGeneratedAndRefusedAsXnaDoes)
               Expected("modelprocessor/tangent_frames_no_texcoords"));
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-118: a processor property is `virtual` in XNA, and a
+// XNASWEEP-118: a processor property is `virtual` in XNA, and a
 // game overrides it rather than setting it. The Normal Mapping sample's processor is written
 // exactly this way -- `public override bool GenerateTangentFrames { get { return true; } }` -- so
 // that no project setting can turn off something the effect requires. Twenty-six build units in the
@@ -1836,7 +1836,7 @@ TEST(XnaProcessorOverriding, ATextureProcessorSubclassKeepsTheColourTheBaseWould
               Expected("textureprocessor/color_key_disabled"));
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122: a node with no name at all and a node whose name
+// XNASWEEP-122: a node with no name at all and a node whose name
 // is the empty string are different values, and the difference survives into the bone table.
 TEST(XnaModelProcessor, ABoneKeepsWhetherItsNodeHadNoNameOrAnEmptyOne)
 {
@@ -1865,7 +1865,7 @@ TEST(XnaModelProcessor, ABoneKeepsWhetherItsNodeHadNoNameOrAnEmptyOne)
     EXPECT_TRUE(model->getBonesProperty()[1]->getNameProperty().empty());
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-126: the mesh list and the bone list are not the same
+// XNASWEEP-126: the mesh list and the bone list are not the same
 // order, and the whole model shares one pair of buffers.
 //
 // SAMPLE-030's `tank.fbx` settles both. Its twelve meshes hang three deep under `tank_geo`, and
@@ -1930,7 +1930,7 @@ TEST(XnaModelProcessor, MeshesComeOutChildFirstAndShareOnePairOfBuffers)
     EXPECT_EQ(offsets, (std::vector<SharpRuntime::intcs>{0, 3, 6}));
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-235: a batch joins whichever buffer already carries
+// XNASWEEP-235: a batch joins whichever buffer already carries
 // its own declaration, not the one the batch before it used.
 //
 // SAMPLE-142's `Yager.FBX` is the shape: five 32-byte meshes, then a 40-byte one, then seven more
@@ -2848,7 +2848,7 @@ TEST(XnaEffectProcessor, TheRealCompilerAnswersWhatXnaAnswered)
     }
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-201: what the `0xBCF00BCF` header's per-pass pair of
+// XNASWEEP-201: what the `0xBCF00BCF` header's per-pass pair of
 // dwords actually holds.
 //
 // It was recorded as the pass's state groups or'd with the sampler registers its shaders bind,

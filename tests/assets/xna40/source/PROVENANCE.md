@@ -73,7 +73,7 @@ which is what makes a difference in the compiled container attributable to somet
   group each; the three `*_wide.fx` files assign every state of one group and nothing else, which
   is how the container's dense render-state numbering was read rather than assumed.
 
-`plans/plan_xna_sample_xnb_sweep.md` `XNASWEEP-201` added four more, and they are the ones that
+`XNASWEEP-201` added four more, and they are the ones that
 separate what a *shader* declares from what the *effect* assigns -- a distinction every earlier
 fixture happens to hide, because every sampler in them carries a texture and a filter at once:
 

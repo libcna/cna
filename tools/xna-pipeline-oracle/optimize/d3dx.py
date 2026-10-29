@@ -1,6 +1,6 @@
 """Load the D3DX9 oracle's answers and score them against genuine XNA's, probe for probe.
 
-plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149.  `D3dxOptimizeOracle.c` records the face remap
+XNASWEEP-149.  `D3dxOptimizeOracle.c` records the face remap
 `D3DXOptimizeFaces` returns, verbatim.  Which way round a remap reads is not documented sharply
 enough to assume, so both readings are decoded here and both are scored; the corpus decides.
 """

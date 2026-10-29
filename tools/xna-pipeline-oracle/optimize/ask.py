@@ -1,6 +1,6 @@
 """Ask the D3DX oracle about a batch of meshes, in one Wine start.
 
-plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149.  The measurement loop for the reconstruction:
+XNASWEEP-149.  The measurement loop for the reconstruction:
 build meshes in Python, get the face order genuine `D3DXOptimizeFaces` answers, in bulk.
 `XNASWEEP-149` proved that order is genuine XNA's `MeshHelper.OptimizeForCache` on 616 probes, so
 this is the fast stand-in for the .NET oracle during inference; a conclusion is confirmed against

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-190/203: the `REFERENCE_REMOVED` class, itemised.
+"""XNASWEEP-190/203: the `REFERENCE_REMOVED` class, itemised.
 
 A frozen reference that is no longer on disk is not a comparison that passed and not a comparison
 that failed, and the difference between "the bytes are still built and still compared somewhere

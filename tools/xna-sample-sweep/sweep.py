@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-040: rebuild every mapped build unit and compare.
+"""XNASWEEP-040: rebuild every mapped build unit and compare.
 
 One unit is one `.contentproj` built into one output root, with the target read off the reference
 headers rather than assumed. The build goes through `cna-content` -- the product front end, the same
@@ -90,7 +90,7 @@ MSBUILD_NS = "http://schemas.microsoft.com/developer/msbuild/2003"
 # reference that lost the race came out with ten mip levels against a reference that has one,
 # because the copy it read still carried the project's own `GenerateMipmaps True` that the
 # reconstruction removes. Serially both are byte-identical
-# (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-217`).
+# (`XNASWEEP-217`).
 _STAGING_LOCKS = {}
 _STAGING_LOCKS_GUARD = threading.Lock()
 
@@ -150,7 +150,7 @@ def build_one(job):
     # A root written by more than one `BuildContent` call gets one output directory per call, and
     # each compares only the references its own project names -- otherwise the second pass wipes
     # the first's output and reports the whole root missing
-    # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-163`).
+    # (`XNASWEEP-163`).
     output = os.path.join(outdir, slug(unit["outputRoot"]) +
                           ("__" + slug(os.path.basename(unit["project"])) if unit.get("secondPass")
                            else ""))
@@ -163,7 +163,7 @@ def build_one(job):
     # it at a tree that is not the project's: SAMPLE-146 builds `xna4-diagnostic/content-source`,
     # whose `SimpleScreen.fx` compiles `ps_2_0` where the shipped copy says `ps_1_1` -- which XNA
     # 4.0 and the June 2010 `fxc` both refuse, so reading the project against the shipped tree
-    # makes that asset a build failure (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-212`).
+    # makes that asset a build failure (`XNASWEEP-212`).
     source_root = None
     named = runner.get("sourceRoot")
     if named and os.path.abspath(project).startswith(os.path.abspath(root) + os.sep):
@@ -187,7 +187,7 @@ def build_one(job):
     # to `Debug` and is what a build reads when nobody says otherwise -- is not what the runner
     # used. Without this every effect of those twelve samples was compiled `/Zi /Od` against a
     # reference compiled optimized, and came out at twice the length
-    # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-200`).
+    # (`XNASWEEP-200`).
     configuration = runner.get("buildConfiguration")
     arguments = [
         tool, "build", project, "-o", output,
@@ -239,7 +239,7 @@ def compare_unit(unit, root, build, references):
     # case-insensitive: Spacewar's project items go to `Textures/` and its models' nested textures
     # to `textures/`, and the corpus has one `textures/` holding both. A folded name with two
     # different CNA outputs under it is left alone rather than guessed at
-    # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-184`).
+    # (`XNASWEEP-184`).
     folded = collections.defaultdict(list)
     for directory, _, files in os.walk(output):
         for name in files:
@@ -267,7 +267,7 @@ def compare_unit(unit, root, build, references):
         # another session's `prune-completed-sample.sh` removed 21 of the frozen references on
         # 2026-09-09. A reference that is no longer on disk is a *finding* rather than a crash,
         # and it is not CNA's: the sweep says so and carries on
-        # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-190`, §11.4).
+        # (`XNASWEEP-190`).
         if not os.path.isfile(os.path.join(root, reference["reference"])):
             row["result"] = "reference-removed"
             produced.discard(relative)
@@ -322,7 +322,7 @@ def main(argv=None):
     # so a reference its project declares must be compared there and *not* in the owner's, where
     # it is bound to be missing: SAMPLE-031's two diagnostic fonts were reported missing by the
     # owner and extra by the second pass, which is the same two files counted twice and explained
-    # neither time (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-212`).
+    # neither time (`XNASWEEP-212`).
     second_pass = {(u["outputRoot"], u["project"]) for u in units if u.get("secondPass")}
     by_root = {}
     for mapping in document["mappings"]:
@@ -343,7 +343,7 @@ def main(argv=None):
         # since it was written silently keeps the old answer. Run 47 built 78 of SAMPLE-014's
         # textures against a reference that used `PremultiplyAlpha False` because this manifest
         # predated the fix that reads its runner correctly
-        # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-208`).
+        # (`XNASWEEP-208`).
         generator = os.path.join(HERE, "runner_provenance.py")
         if (os.path.exists(generator)
                 and os.path.getmtime(generator) > os.path.getmtime(args.provenance)):
@@ -377,7 +377,7 @@ def main(argv=None):
                 # The directory this unit's output actually went into, so `classify.py` reads it
                 # rather than deriving the name again -- a second pass's is suffixed with its
                 # project and the derivation dropped that
-                # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-236`).
+                # (`XNASWEEP-236`).
                 "outputDir": os.path.basename(build["output"]),
                 "reconstructedProject": build.get("reconstructedProject"),
                 "seconds": build["seconds"],

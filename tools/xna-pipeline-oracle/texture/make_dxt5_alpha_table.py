@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-220: one DXT5 image that reads a decoder's whole
+"""XNASWEEP-220: one DXT5 image that reads a decoder's whole
 alpha interpolation table.
 
 A DXT5 block's alpha is two endpoints and a three-bit index per texel, and what the six or four

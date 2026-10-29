@@ -43,7 +43,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * SAMPLE-138's `photograph.fbx` is the corpus's case: a `ScalingOffset` of
          * 1.05205948463126 against a `ScalingPivot` of -1.06268632411957 under a scaling of 0.01
          * leaves 2.35e-08, and a `float` pivot leaves three times that
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-162`).
+         * (`XNASWEEP-162`).
          */
         using Triple = std::array<double, 3>;
 
@@ -54,7 +54,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * function of the corner count alone: a concave quad and a convex one give the same
          * triangles, and so does the same octagon walked from a different corner or backwards.
          * Measured for 3 to 20 corners on `tests/assets/xna40/model/fbx_polygon*.fbx`
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-164`). The winding is reversed, which is
+         * (`XNASWEEP-164`). The winding is reversed, which is
          * the one thing FBX and `.x` differ on that changes what a triangle faces.
          */
         std::vector<std::array<std::size_t, 3>> TrianglesOfPolygon(const std::size_t cornerCount)
@@ -195,7 +195,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
              * parent's world, where the child's rotation comes back untouched; `2`
              * (`eInheritRrs`) does not inherit it at all, and the quotient divides it out of the
              * columns. Measured on eight purpose-built probes, four nodes each, bit-exact
-             * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-228`).
+             * (`XNASWEEP-228`).
              */
             int inheritType = 0;
             /**
@@ -206,7 +206,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
              * `Geometry` object connected to it. SAMPLE-061's `marble.FBX` is the second shape, and
              * reading the `Geometry` as a node of its own answers two bones -- `marble` and a
              * nameless child -- where XNA answers one, `marble`, carrying the mesh
-             * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-151`).
+             * (`XNASWEEP-151`).
              */
             bool isGeometryData = false;
             /** @brief The geometry's own offset from the node, FBX's `Geometric*` properties. */
@@ -226,12 +226,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * over the 132 FBX sources of the public XNA sample corpus -- and none of them ever
          * appears in what the genuine importer answers: `Cone.fbx` has nine models, eight of them
          * cameras, and XNA answers a single `MeshContent` node. CNA answered ten bones for it
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-111`).
+         * (`XNASWEEP-111`).
          *
          * `Light` and `Marker` are not nodes either, which was measured rather than assumed:
          * `co_light_then_null` and `co_marker_then_null` hand the genuine importer a scene of two
          * top-level models, one of each class beside a `Null`, and it answers a single node
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-161`).
+         * (`XNASWEEP-161`).
          *
          * @param kind The object's FBX class.
          * @return Whether it is part of the node graph.
@@ -248,7 +248,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * `LimbNode` is the class every skeleton joint an exporter writes carries, and `Root` is
          * the one 3ds Max writes for a biped's root. Both answer `BoneContent` from the genuine
          * importer, measured on `co_limbnode_then_null` and `co_root_then_null`
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-161`).
+         * (`XNASWEEP-161`).
          *
          * @param kind The object's FBX class.
          * @return Whether it is a bone.
@@ -307,7 +307,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * Where the bone *is* the root -- a scene whose single top-level object is the skeleton --
          * the same expression makes its transform relative to itself, which is the identity: that
          * is why every RobotGame mech answers an identity root where its file gives it a quarter
-         * turn (`cs_bone_dusk`, and `plans/plan_xna_sample_xnb_sweep.md` `XNASWEEP-150`).
+         * turn (`cs_bone_dusk`, and `XNASWEEP-150`).
          *
          * @param root The scene's root node.
          * @return The same root.
@@ -342,7 +342,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // one, and `Yager.FBX` and `Kiev.FBX` are the two models in the corpus whose root
             // carries a translation small enough for it to show: 2.7888802e-13 against
             // 2.7890093e-13, which is the whole of what those two references still differed by
-            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-232`).
+            // (`XNASWEEP-232`).
             const auto composeWide = [](const Matrix& left, const Matrix& right)
             {
                 const double a[16] = {left.M11, left.M12, left.M13, left.M14,
@@ -501,7 +501,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * and `AircraftCarrier.FBX` all name (-90, 0, 0) on their top-level nodes, and the genuine
          * importer answers a basis of `[1 0 0][0 0 -1][0 1 0]` for exactly that. Leaving it out
          * gave every such model a near-identity transform and stood it on the wrong axis
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-113`).
+         * (`XNASWEEP-113`).
          */
         using Rows = std::array<std::array<double, 4>, 4>;
 
@@ -535,7 +535,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * pi/2 it is 6.123e-17, and `Cube.fbx`'s `PreRotation -90` reaches XNA's own `Cube.xnb` as
          * 2.54 * 6.123e-17 = 1.5553e-16 -- so a float rotation lands seven orders of magnitude away
          * from XNA's on the two entries a quarter turn zeroes
-         * (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-121).
+         * (XNASWEEP-121).
          */
         [[nodiscard]] Rows EulerRows(const Triple& degrees)
         {
@@ -599,7 +599,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * FBX calls this the geometric transform, and it belongs to the geometry rather than to the
          * node: a child does not inherit it. The genuine importer folds it into the node's own
          * `Transform` and undoes it again on every child, which is what `LocalTransform` does with
-         * the inverse (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-146`).
+         * the inverse (`XNASWEEP-146`).
          */
         [[nodiscard]] Rows GeometricRows(const Object& object)
         {
@@ -755,7 +755,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          *   out of the columns -- `R[r][c] / S[c]`.
          *
          * Every RobotGame mech names `1`, and three of SAMPLE-142's files name both `0` and `1`
-         * in the same scene (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-228`).
+         * in the same scene (`XNASWEEP-228`).
          *
          * @param rotation The node's own rotation.
          * @param scale The parent's accumulated world scaling.
@@ -798,7 +798,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * The test is relative to the rows' own lengths, and the two classes it separates are six
          * orders of magnitude apart: every threshold from 1e-16 to 1e-10 answers the same for the
          * 4,992 bone elements of SAMPLE-142's thirteen models, and 1e-8 upward stops seeing the
-         * shear that is there (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-229`).
+         * shear that is there (`XNASWEEP-229`).
          *
          * @param world The transform to test.
          * @return Whether its basis carries a shear.
@@ -870,7 +870,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * them out, decomposed to an Euler triple and composed again -- and what a shear cannot
          * survive is exactly that round trip. A child whose parent's world carries a shear does
          * not compose onto that world, it composes onto this (`HasShear`,
-         * plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-229`).
+         * `XNASWEEP-229`).
          *
          * @param world The transform to re-express.
          * @return The same translation, with the basis rebuilt from its rotation and its scaling.
@@ -924,7 +924,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * from the *float* matrix, which at a quarter turn cannot tell 90 from 90.0000839: `sin`
          * of both is `1.0f`. What carries the difference is the node's children, whose own
          * rotation is multiplied on the right by `E . G^-1` before their world is composed
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-176`, and `XNASWEEP-193` for the world
+         * (`XNASWEEP-176`, and `XNASWEEP-193` for the world
          * quotient this now feeds rather than being the whole answer).
          *
          * @param composed The rotation to decompose, in double.
@@ -955,7 +955,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // product narrowed or not -- against the committed fixtures, eight `InheritType`
             // probes and SAMPLE-142's thirteen models: this one is best on all three, and takes
             // the models from 691 differing bone elements to 559
-            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-230`).
+            // (`XNASWEEP-230`).
             residue.compensation =
                 NarrowAll(Multiply(narrowedRecomposed, AffineInverse(narrowedComposed)));
             return residue;
@@ -968,7 +968,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * `PreRotation` counts only where `RotationActive` is set, which is FBX's own rule and
          * measurable: `fbx_prerotation_units.fbx` sets it and the quarter turn is in XNA's answer,
          * `fbx_geometric_offset.fbx` does not and the same `PreRotation -90` is not
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-146`).
+         * (`XNASWEEP-146`).
          *
          * @param object The FBX object.
          * @param parentGeometricInverse The parent's geometric offset, to undo.
@@ -989,7 +989,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // `ScalingPivot` of about -(1.06, 6.89, 6.43) against a `ScalingOffset` that nearly
             // cancels it, and XNA's own build holds what is left over -- (2.35e-06, 1.53e-05,
             // -1.42e-05) -- where CNA held a clean zero. Measured on `fbx_pivots.fbx` and
-            // `fbx_postrotation.fbx` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-152`); the
+            // `fbx_postrotation.fbx` (`XNASWEEP-152`); the
             // second of those also settles that `R` comes *before* `Rpre` here, which no fixture
             // that sets only one of them could say.
             const Triple negate[4] = {
@@ -1030,7 +1030,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * it: a parent translated 1e7 and a child translated 0.1 answers 0, because `float` at 1e7
          * cannot hold the tenth. Measured over 178 purpose-built nodes and confirmed on 46
          * held-out ones, where it takes 138 to 170 and 25 to 37 bit-identical against the rule it
-         * replaces (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-193`).
+         * replaces (`XNASWEEP-193`).
          *
          * The scene's own children divide by nothing, so their answer is their world.
          *
@@ -1056,15 +1056,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // each candidate value: XNA answers `+0.0` for *every* underflow and reproduces every
             // float denormal that does not underflow, which is what says the narrowing is CNA's
             // own and the sum is what washes the sign
-            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-237`).
+            // (`XNASWEEP-237`).
             if (!hasParent) { return ToMatrix(Multiply(NarrowAll(world), IdentityRows())); }
             // XNA's own `Matrix.Invert` rather than the affine shortcut. The two agree to a float
             // ulp on a well-conditioned basis and disagree exactly where this campaign looks: the
             // affine form's translation row is three products and a negation, the cofactor form's
             // is a determinant away, and the entries a quarter turn nearly zeroes carry the
             // difference. Measured over SAMPLE-142's thirteen models: 2,654 differing bone
-            // elements become 1,558 with this alone (plans/plan_xna_sample_xnb_sweep.md
-            // `XNASWEEP-230`).
+            // elements become 1,558 with this alone
+            // (`XNASWEEP-230`).
             const Matrix inverse = Matrix::Invert(ToMatrix(parentWorld));
             Rows inverseRows{{{inverse.M11, inverse.M12, inverse.M13, inverse.M14},
                               {inverse.M21, inverse.M22, inverse.M23, inverse.M24},
@@ -1236,7 +1236,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         // not decoration: SAMPLE-047's `table.FBX` declares `Model::TableTop` and
         // `Material::TableTop`, and keying on the bare `TableTop` lets the material answer for the
         // model, which loses the model from the scene entirely
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-145`). The bare name stays as a fallback
+        // (`XNASWEEP-145`). The bare name stays as a fallback
         // for a file that connects without the prefix, first declaration winning so a later object
         // cannot shadow an earlier one.
         std::map<std::string, std::int64_t> byFullName;
@@ -1248,7 +1248,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         // The order the `Connect` lines put objects in the scene, which is the one XNA answers.
         // SAMPLE-142's `France.FBX` separates the two: it declares `Sky` before `Object04` and
         // connects `Object04` to the scene first, and XNA's own build answers `Object04` as the
-        // first bone under the root (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-154`).
+        // first bone under the root (`XNASWEEP-154`).
         std::vector<std::int64_t> sceneOrder;
         std::int64_t nextSynthetic = -1;
         if (const Canon::FbxNode* block = parsed.Find("Objects"); block != nullptr)
@@ -1349,7 +1349,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     // not the same thing: an exporter writes the producer cameras as objects and
                     // connects none of them, which is why `Cone.fbx` answers its mesh as the root
                     // where `fbx_cameras.fbx`, whose cameras *are* connected, answers a
-                    // `RootNode` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-111`).
+                    // `RootNode` (`XNASWEEP-111`).
                     if (!childObject->second.inScene) { sceneOrder.push_back(child); }
                     childObject->second.inScene = true;
                     continue;
@@ -1367,7 +1367,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     // `Texture::steamroller_tank61_file3 -> Model::r_engine_geo`; the genuine
                     // importer answers `materialTexture Texture=engine_diff_tex.tga` on that
                     // model's material). A repeat is dropped: an exporter names the same texture
-                    // once per layer element (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-127).
+                    // once per layer element (XNASWEEP-127).
                     std::vector<std::int64_t>& list = parentObject->second.textures;
                     if (std::find(list.begin(), list.end(), child) == list.end())
                     {
@@ -1399,7 +1399,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // `Diffuse`, `Specular` and `Emissive` compatibility properties are written beside
             // them. SAMPLE-030's `tank.fbx` is the case that shows it: `DiffuseColor` is (1,1,1)
             // with a `DiffuseFactor` of 0.8, the file's own `Diffuse` is (0.8,0.8,0.8), and the
-            // genuine importer answers 0.8 (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-127).
+            // genuine importer answers 0.8 (XNASWEEP-127).
             //
             // Two property tables exist and a material carries one or the other. The newer one
             // names `DiffuseColor` beside a `DiffuseFactor`, and its shininess is
@@ -1432,7 +1432,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // diffuse, an emissive, an alpha and a specular *colour* and no `SpecularPower`, and
             // the model XNA builds from it holds the `BasicEffect` default of 16 where CNA wrote
             // 20. Every material measured that does answer one is a Phong
-            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-138`).
+            // (`XNASWEEP-138`).
             const std::string shading = PropertyText(*object.node, "ShadingModel", "");
             bool lambert = shading.size() == 7u;
             for (std::size_t at = 0u; at < shading.size() && lambert; ++at)
@@ -1452,7 +1452,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         // `tank.fbx` shares `engine_phong` across nine models and every one of them names
         // `engine_diff_tex.tga`, so one instance per (material, texture) is both what XNA writes --
         // two effects for twelve meshes -- and what keeps two models that name different textures
-        // apart (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-127).
+        // apart (XNASWEEP-127).
         const std::filesystem::path sourceDirectory = source->parent_path();
         // A `Texture` names its file twice and the two do not have to agree. The SDK resolves the
         // absolute `FileName` first and falls back to `RelativeFilename` when that names nothing,
@@ -1465,7 +1465,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         // SAMPLE-005's `saucer.fbx` names `saucer_p1_diff_v1.tga` against `saucer_texture.tga`,
         // where only the *second* is beside it, and XNA writes `saucer_texture_0`. Preferring
         // either field outright is wrong for one of the three; preferring the one that exists is
-        // right for all three (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-140`). A path is
+        // right for all three (`XNASWEEP-140`). A path is
         // matched the way Windows matches one, which `XNASWEEP-115` already needed.
         const auto textureFile = [&objects, &sourceDirectory](const std::int64_t identity) -> std::string
         {
@@ -1544,7 +1544,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // the genuine importer answers a material without one, textured or not
             // (`fbx_material_lambert_textured.fbx`); materialising the absence as 0 here made a
             // textured Lambert carry 0 into the `.xnb` where XNA carries `BasicEffect`'s own
-            // default of 16 (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-171`).
+            // default of 16 (`XNASWEEP-171`).
             copy->setSpecularPowerProperty(base->getSpecularPowerProperty());
             for (const auto& [name, path] : resolved)
             {
@@ -1574,7 +1574,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // `head.fbx` sets the flag with both angles at zero and the genuine importer still
             // leaves the residue -- four entries of 1.2246e-16 where a node without the flag has
             // clean zeros -- so what the flag turns on is the *decomposition*, whatever the angles
-            // it composes are (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-213`).
+            // it composes are (`XNASWEEP-213`).
             const bool ownComposesRotation = object.rotationActive;
             std::shared_ptr<NodeContent> node;
             const Canon::FbxNode* geometry = object.node;
@@ -1626,7 +1626,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 // block the second takes the next free index. SAMPLE-035's `SphereHighPoly.fbx` is
                 // what says the first half: its single UV set is declared in `Layer: 1` rather
                 // than `Layer: 0`, and XNA's vertex declaration carries `TextureCoordinate`
-                // usage index **1** (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-143`).
+                // usage index **1** (`XNASWEEP-143`).
                 struct UvSet
                 {
                     Layer layer;
@@ -1698,7 +1698,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                             // the same `Layer` block also names a texture element, whichever one
                             // and whether or not a texture is connected to the mesh. Measured on
                             // the genuine importer over 29 probes
-                            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-166`): the same file
+                            // (`XNASWEEP-166`): the same file
                             // with the texture entry removed from the `Layer` answers one channel
                             // and with it answers two, and a `LayerElementTexture` naming a
                             // texture that is not connected is enough.
@@ -1752,7 +1752,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 // Which texture a polygon uses, where the mesh says so. `TextureId` is a per
                 // polygon index into the textures connected to the model, and -1 is *no texture*
                 // -- the layer's `IndexToDirect` names the same array `Materials` does, not a
-                // second one (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-141`).
+                // second one (`XNASWEEP-141`).
                 Layer textureLayer = ReadLayer(*geometry, "LayerElementTexture", "TextureId",
                                                "", 1u);
                 if (textureLayer.stride == 0u)
@@ -1768,7 +1768,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 // back in this one -- and three element types the FBX 6 format defines are simply
                 // not read: `Emissive`, `Diffuse` and `Displacement` produce nothing. A texture
                 // element the geometry declares but no `Layer` names produces nothing either
-                // (measured over eleven probes, plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-166`).
+                // (measured over eleven probes, `XNASWEEP-166`).
                 //
                 // All of them are produced, not only the diffuse one. What made that safe is a
                 // second measurement: `MaterialProcessor` builds only the texture the effect it is
@@ -1874,7 +1874,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 // `fbx_generated_normals_area.fbx` are the same fold with one face four times the
                 // other's area, and XNA answers `(0, -0.707107, 0.707107)` on the shared edge for
                 // both, which is the normalized sum of the two *unit* face normals
-                // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-156`). CNA used to write a constant
+                // (`XNASWEEP-156`). CNA used to write a constant
                 // `(0, 0, 1)`, which is right for a mesh in the XY plane and for nothing else.
                 std::vector<Vector3> generatedNormals(
                     static_cast<std::size_t>(mesh->getPositionsProperty().getCountProperty()),
@@ -1932,7 +1932,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 // own build answers its batches with 840, 28, 28, 252, 56, 81, 179, 863, ...
                 // triangles -- which is the first-use order exactly, where the connection order
                 // would answer 200, 8, 863, 81, 131, 179, 466, ...
-                // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-155`).
+                // (`XNASWEEP-155`).
                 //
                 // A polygon whose index names no connected material is *not* dropped: XNA answers
                 // every one of them in a single batch carrying no material at all, whatever index
@@ -1943,7 +1943,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 // answers a single null batch. SAMPLE-138's `photograph.fbx` is the corpus's own
                 // case: its `Materials` array names 0, 1 and 2 with two materials connected, and
                 // dropping the 86 polygons that named 2 lost a whole mesh part and 154 vertices
-                // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-165`).
+                // (`XNASWEEP-165`).
                 constexpr std::size_t NoMaterial = static_cast<std::size_t>(-1);
                 const auto batchOf = [&](const Polygon& polygon) -> std::size_t
                 {
@@ -1991,7 +1991,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     // 168 for `Cone.fbx`, 362 and 387 for `marble.FBX`. Keying on the control
                     // point alone gave one vertex per position and kept whichever corner happened
                     // to be seen first, which is a hard edge drawn with a neighbour's normal
-                    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-112`).
+                    // (`XNASWEEP-112`).
                     using VertexKey = std::tuple<std::size_t, std::vector<double>,
                                                  std::vector<double>, std::vector<double>>;
                     // The values are compared as the `float`s they will be *stored* as, not as the
@@ -2001,7 +2001,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     // fifty-eight in another, all of them in the V of a texture coordinate;
                     // comparing what the file holds answers 2,483 and 1,159 vertices where the
                     // genuine importer answers 2,480 and 1,101
-                    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-178`).
+                    // (`XNASWEEP-178`).
                     const auto narrowed = [](std::vector<double> values)
                     {
                         for (double& value : values)
@@ -2160,7 +2160,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     // normals is the exception -- the SDK generates them and appends them after
                     // the channels the file did declare, so they come last there (measured,
                     // fbx/fbx_material_factor_texture.fbx, whose only declared channel is UV;
-                    // plans/plan_xna_sample_xnb_sweep.md XNASWEEP-127).
+                    // XNASWEEP-127).
                     const bool declaresNormals = normals.stride != 0u && !normals.values.empty();
                     const auto addNormals = [&]
                     {
@@ -2187,7 +2187,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     // whatever order the `Layer` block names them in -- SAMPLE-142's
                     // `AircraftCarrier.FBX` names UV, TransparentUV, Color and answers the colour
                     // in the middle (measured, `fbx_uv_two_sets_colour.fbx`;
-                    // plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-179`).
+                    // `XNASWEEP-179`).
                     const auto addColors = [&]
                     {
                         if (colors.stride == 0u || colors.values.empty())
@@ -2222,7 +2222,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                             // `0.427853971719742` and XNA answers `0.57214599847793579` where
                             // narrowing first answers `0.57214605808258057`, one ulp away -- 483
                             // of that model's 8,591 vertices differ by exactly that
-                            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-169`; the flip itself
+                            // (`XNASWEEP-169`; the flip itself
                             // is `fbx_oblique`, 0.2 answers 0.8).
                             channel.push_back(value.size() >= 2u
                                                   ? Vector2(static_cast<float>(value[0]),
@@ -2261,13 +2261,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // it, so the child's own decomposition is exact and the grandchild gets none. Reading
             // it off each node's own rotation doubles it -- measured, `fbx_pivot_residue_chain.fbx`
             // answers -1.4647386e-06 at the grandchild and doubling gives -2.9294772e-06
-            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-176`).
+            // (`XNASWEEP-176`).
             // The residue exists only where an ancestor's rotation was *composed* -- where a
             // `PreRotation` or `PostRotation` counted, so the matrix is not the Euler triple the
             // file wrote and XNA has to express it as one again. A chain of plain `Lcl Rotation`
             // needs no decomposition and carries no residue, and taking one there is what put a
             // float ulp at the top of every skeleton in the corpus
-            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-213`).
+            // (`XNASWEEP-213`).
             // The residue is the *parent's* own, and only where the parent's rotation was
             // composed from more than the Euler triple its file wrote: a `PreRotation` or a
             // `PostRotation` that `RotationActive` turned on. A chain of plain `Lcl Rotation`
@@ -2280,7 +2280,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // node's own composition decides), 60 purpose-built chains of eight nodes each (8,833
             // of 9,600, against 8,171 for the rule this replaces) and SAMPLE-142's `PhantomBoss`
             // (351 differing elements, against 412 and 373)
-            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-213`).
+            // (`XNASWEEP-213`).
             const Rows rotated =
                 hasParent && parentComposesRotation
                     ? InheritedRotation(
@@ -2295,7 +2295,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // what is left of it once it is re-expressed -- but only its *basis* does. The
             // translation still goes through the parent's own world, which is what a child under a
             // sheared parent answers as its own `Lcl Translation` rather than a turned one
-            // (`RecomposeWorld`, plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-229`).
+            // (`RecomposeWorld`, `XNASWEEP-229`).
             Rows world = localRows;
             if (hasParent)
             {
@@ -2335,7 +2335,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         // The corpus settles the value and the place it lands: `Cone.fbx` declares 2.54, and the
         // genuine importer answers a basis of 2.54 with the node's own translation multiplied by
         // it too -- -0.000101717 becoming -0.000258362. Every other model in the corpus declares
-        // 1, where this changes nothing (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-113`).
+        // 1, where this changes nothing (`XNASWEEP-113`).
         double unitScale = 1.0;
         // FBX 6 nests `GlobalSettings` inside `Objects`; FBX 7 has it at the top level.
         const Canon::FbxNode* settings = parsed.Find("GlobalSettings");
@@ -2370,7 +2370,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         // decided by how many top-level objects there are, cameras included -- a mesh alone
         // answers itself, and the same mesh beside a producer camera and a camera switcher
         // answers `/RootNode/Tri` (measured, `fbx_cameras.fbx`). Only the scene nodes are then
-        // converted (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-111`).
+        // converted (`XNASWEEP-111`).
         // A file with no `Connections` at all has no scene; then every unattached object is one,
         // which is what this used to assume for every file.
         bool anyInScene = false;

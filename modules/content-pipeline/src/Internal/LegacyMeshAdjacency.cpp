@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149.
+// XNASWEEP-149.
 //
 // `D3DXOptimizeFaces` took an index buffer and no adjacency; DirectX::OptimizeFaces takes the
 // adjacency as an argument. The rule below is CNA's own measurement of what the legacy entry point

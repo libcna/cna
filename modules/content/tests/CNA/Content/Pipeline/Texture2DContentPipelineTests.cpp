@@ -871,7 +871,7 @@ TEST(Texture2DContentPipelineTest, ADdsCubeIsImportedAsACubeRatherThanRefused)
     EXPECT_EQ(result.processor.name, "CNA.TextureCubeProcessor");
 }
 
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-109. XNA's `TextureImporter` loads an image through
+// XNASWEEP-109. XNA's `TextureImporter` loads an image through
 // `System.Drawing`, and GDI+ honours a PNG's own `gAMA` chunk: a file that declares a gamma of
 // 0.45 rather than the standard 0.45455 is corrected on load. The correction is one unit over most
 // of the range and none at either end, but it reaches every texel, and 103 of the 2,267 distinct

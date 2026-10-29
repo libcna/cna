@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-134: BoundingSphere::CreateFromPoints against the
+// XNASWEEP-134: BoundingSphere::CreateFromPoints against the
 // genuine XNA 4.0 framework, bit for bit
 // (tests/reference/xna40/framework/bounding-sphere-oracle.txt, produced by
 // tools/xna-pipeline-oracle/framework/run-bounding-sphere-oracle.sh).

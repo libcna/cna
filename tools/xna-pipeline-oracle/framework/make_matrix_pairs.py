@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-172: the matrix cases the Matrix oracle runs.
+"""XNASWEEP-172: the matrix cases the Matrix oracle runs.
 
 A bone's transform in a built model is a product of matrices, and the corpus's remaining model
 differences are in entries a rotation leaves near zero. Whether those entries come out as zero or

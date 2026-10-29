@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-231: the stages of a generated `.x` normal.
+"""XNASWEEP-231: the stages of a generated `.x` normal.
 
 A mesh with no `MeshNormals` has its normals generated, and the arithmetic that generates them
 rounds in three places -- the edge subtraction, the cross product, and the normalization. These two

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xna_sample_xnb_sweep.md XNASWEEP-170: build CnaModelTrace against the libraries
+# XNASWEEP-170: build CnaModelTrace against the libraries
 # cmake-build-debug/ already holds, into the shared build-probe/ directory. It is a diagnostic
 # tool, not part of any CMake target, and nothing it builds is production.
 set -euo pipefail

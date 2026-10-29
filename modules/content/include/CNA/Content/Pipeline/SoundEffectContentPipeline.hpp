@@ -23,7 +23,7 @@ namespace CNA::Content::Pipeline
      * It used to name `CNA.Content.Cnb.SoundEffectData`, and that was the defect rather than the
      * spelling: the CNB schema's 16-bit-only rule then decided what the XNA-compatible `.xnb`
      * writer was able to say, and an 8-bit source came out of both containers widened
-     * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+     * (`XNASWEEP-197`).
      */
     inline constexpr const char* ProcessedSoundEffectType =
         "CNA.Content.Pipeline.ProcessedSoundEffect";

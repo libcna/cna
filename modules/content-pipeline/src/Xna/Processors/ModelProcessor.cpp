@@ -193,7 +193,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         // no-op it looks like: it would move a declared normal by an ulp or two. XNA's own build
         // does not: `SphereLowPoly.xnb`'s normals are the `.fbx`'s own floats, bit for bit, and
         // CNA's differed on 17 of 89 by exactly what normalizing them gives
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-167`).
+        // (`XNASWEEP-167`).
         if (adjustment != Matrix::getIdentityProperty())
         {
             Graphics::MeshHelper::TransformScene(input, adjustment);
@@ -218,13 +218,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         // with a vertex offset and a start index -- SAMPLE-030's twelve-mesh `tank.fbx` reaches
         // XNA's own `tank.xnb` as four shared resources, one vertex buffer, one index buffer and
         // the two distinct effects, where a buffer per mesh would be twenty-six
-        // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-126).
+        // (XNASWEEP-126).
         // ...and one *per declaration*: a batch joins whichever buffer already carries its own
         // layout rather than the one the batch before it used. SAMPLE-142's `Yager.FBX` has five
         // 32-byte meshes, then a 40-byte one, then seven more 32-byte ones, and XNA's own build
         // puts the last seven back into the first buffer at offset 1,118 -- two vertex buffers for
         // thirteen meshes where taking only the most recent answers three
-        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-235`).
+        // (`XNASWEEP-235`).
         std::vector<std::shared_ptr<VertexBufferContent>> vertexBuffers;
         std::shared_ptr<Graphics::IndexCollection> indexBuffer;
         // Every node becomes a bone, in the order a depth-first walk reaches them (measured,
@@ -348,7 +348,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                         // build answers two vertex buffers and **one** index buffer of 24,855
                         // indices, whose `startIndex` runs 0, 17,811, 18,591, 24,423 straight
                         // through the second vertex buffer's meshes
-                        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-157`).
+                        // (`XNASWEEP-157`).
                         vertexBuffer = batchBuffer;
                         vertexBuffers.push_back(vertexBuffer);
                     }
@@ -395,7 +395,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             // `tank_geo`, and its genuine `tank.xnb` lists them
             // `r_back_wheel, r_front_wheel, r_steer, r_engine, ... , turret, tank` -- every child
             // before its parent -- while its bone table is the plain depth-first order CNA already
-            // matched exactly (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-126).
+            // matched exactly (XNASWEEP-126).
             if (made != nullptr) { meshes.push_back(std::move(made)); }
             return bone;
         };

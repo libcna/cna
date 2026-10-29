@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MS-PL
  *
- * plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149: the second Microsoft black box.
+ * XNASWEEP-149: the second Microsoft black box.
  *
  * `MeshHelper.OptimizeForCache` is measured by OptimizeForCacheOracle.cs; this driver hands the
  * *same* probe file, built into the *same* index buffer, to the documented public D3DX9 mesh

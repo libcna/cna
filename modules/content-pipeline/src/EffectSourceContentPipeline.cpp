@@ -142,8 +142,8 @@ namespace CNA::Content::Pipeline
          * the build configuration, and a content project's own default `Configuration` is `Debug`.
          * Defaulting to false here meant every effect in the sample corpus was compiled optimized
          * against a reference that was not: the ParticleEffect of the Particles3D sample is 7,624
-         * bytes in XNA's own build and was 4,604 here (plans/plan_xna_sample_xnb_sweep.md
-         * `XNASWEEP-108`).
+         * bytes in XNA's own build and was 4,604 here
+         * (`XNASWEEP-108`).
          *
          * @param parameters The processor's parameters.
          * @param configurationIsDebug Whether the build configuration is `Debug`.

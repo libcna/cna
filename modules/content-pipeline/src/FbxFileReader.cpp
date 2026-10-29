@@ -293,7 +293,7 @@ namespace CNA::Content::Pipeline
                 // SAMPLE-046's `spaceship.fbx` carries one, an exporter having written two `float`
                 // `-0.0`s into a `double` slot, and the genuine importer reads that file; CNA
                 // refused the whole scene as corrupt. Only a genuine overflow, which comes back
-                // infinite, is a parse failure (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-237`).
+                // infinite, is a parse failure (`XNASWEEP-237`).
                 errno = 0;
                 char* stopped = nullptr;
                 const double value = std::strtod(text.c_str(), &stopped);

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-173: what a `.x` mesh's position list holds.
+"""XNASWEEP-173: what a `.x` mesh's position list holds.
 
 Spacewar's models declare more vertices than they have different positions -- `p1_bfg.x` declares
 5,299 and holds 3,815 -- and the genuine importer answers the smaller number, so the list is the

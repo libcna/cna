@@ -1,6 +1,6 @@
 """Run `validate_model.py`'s question over every model the sweep built, and sort the answers.
 
-plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149.  A differing model `.xnb` can differ for two
+XNASWEEP-149.  A differing model `.xnb` can differ for two
 reasons that the sweep's own diff cannot tell apart: CNA put the right triangles in a different
 order, which is `XNASWEEP-149`, or it did not have the right triangles at all, which is a defect of
 its own.  This asks each one and counts them, so a session can see at a glance whether any model

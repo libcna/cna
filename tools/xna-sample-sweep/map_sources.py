@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-011: map every genuine `.xnb` to the item that built it.
+"""XNASWEEP-011: map every genuine `.xnb` to the item that built it.
 
 The corpus is output; the sample tree is input; nothing in either says which produced which. What
 does say it is the pair of names: XNA writes an asset to `<output root>/<the item's directory>/<the
@@ -38,7 +38,7 @@ def project_reference(path, root):
     A synthesized project lives in the repository's own build directory rather than in the
     read-only sample tree, and a relative path out of one root and into another says nothing;
     `os.path.join` with an absolute second argument answers the absolute one, which is what
-    `sweep.py` does with this (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-186`).
+    `sweep.py` does with this (`XNASWEEP-186`).
     """
     absolute = os.path.abspath(path)
     inside = os.path.abspath(root) + os.sep
@@ -54,7 +54,7 @@ def ResolveIgnoringCase(path):
     `.JPG` and ships `.jpg`, SAMPLE-146's names `simplescreen.fx` and ships `SimpleScreen.fx`. The
     exact path wins whenever it exists; a component matching more than one entry is left alone,
     because two files differing only in case is a tree the reference build could not have had
-    (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-163`). `cna-content` resolves the same way, so
+    (`XNASWEEP-163`). `cna-content` resolves the same way, so
     the mapper and the build agree about which file an item names.
     """
     if os.path.exists(path):
@@ -85,7 +85,7 @@ def sample_projects(root, sample, synthesized=None):
 
     A sample whose references were produced by a hand-written `BuildContent` runner ships no
     project at all, and `synthesize_projects.py` writes the one the runner describes beside a copy
-    of its sources (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-186`).
+    of its sources (`XNASWEEP-186`).
 
     A reconstruction is **added** to whatever the sample ships rather than replacing it, because a
     sample can ship a project that is not the one its references came out of:
@@ -194,7 +194,7 @@ def main(argv=None):
             # the last component alone scores every one of them equally: the reference under
             # `3d-series-2-flightsim/explosion` was read against `2d-shooters/explosion.png` and
             # came out a 512x512 texture where the reference is a mono 8-bit sound
-            # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-209`).
+            # (`XNASWEEP-209`).
             components = output_root.rstrip("/").split("/")
             meaningful = [c for c in components if not c.lower().startswith("content")]
             variant_words = []
@@ -259,7 +259,7 @@ def main(argv=None):
             # the sample's own project writes the rest of it. The root's owner is the project that
             # explains the most of it, and a *reconstruction* that names assets the owner does not
             # is a second call rather than a rival, so it gets a unit of its own
-            # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-163`).
+            # (`XNASWEEP-163`).
             for other_path, items in sorted(roots[output_root].items()):
                 if other_path == owner or args.synthesized is None:
                     continue
@@ -286,7 +286,7 @@ def main(argv=None):
                 # reference build ran on those are one directory, and the corpus has exactly one:
                 # `bin/Content/textures/` holding both. Matching the item's authored case against
                 # the reference's lost 115 references to `no-item` that the project does name
-                # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-184`).
+                # (`XNASWEEP-184`).
                 item = owned.get(name.lower())
                 itemProject = owner
                 if item is None:
@@ -295,7 +295,7 @@ def main(argv=None):
                     # the winner's left SAMPLE-031's two diagnostic fonts `no-source`, because the
                     # root is won by the sample's own project and the fonts are named by the
                     # reconstruction of its diagnostic runner
-                    # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-163`).
+                    # (`XNASWEEP-163`).
                     for other_path, items in roots[output_root].items():
                         if name.lower() in items:
                             item = items[name.lower()]
@@ -325,7 +325,7 @@ def main(argv=None):
                 # own runner passed them on. Most of these runners hand-list their assets and set
                 # none, so the reference carries the processor's defaults whatever the project
                 # says, and comparing against the project's parameters marks a correct build wrong
-                # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-021`).
+                # (`XNASWEEP-021`).
                 runner = provenance.get(sample, {})
                 parameters = item.processor_parameters
                 parameterSource = "project"

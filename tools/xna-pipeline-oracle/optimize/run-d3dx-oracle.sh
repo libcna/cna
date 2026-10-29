@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149: run the documented public D3DX9 mesh
+# XNASWEEP-149: run the documented public D3DX9 mesh
 # optimisation entry points over the same probe file genuine XNA's MeshHelper.OptimizeForCache was
 # measured on, so the two Microsoft black boxes can be compared.
 #

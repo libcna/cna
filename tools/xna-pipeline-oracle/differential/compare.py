@@ -38,9 +38,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import effect_mask  # noqa: E402  (path is set above on purpose)
 
 
-# What §24 says to compare, in the order a reader would look at it. A key absent from a report is
-# compared as absent on both sides rather than skipped, so a field that stops being written is a
-# difference rather than a silence.
+# What the semantic comparison (XNAPP-266) compares, in the order a reader would look at it. A key
+# absent from a report is compared as absent on both sides rather than skipped, so a field that
+# stops being written is a difference rather than a silence.
 COMPARED = (
     "platform",
     "version",
@@ -165,8 +165,8 @@ def main(argv):
             # `fx_2_0` container that are not a function of the source -- the compiler's version
             # string and the padding `d3dx9` leaves after an aligned string -- and for nothing
             # else. Without this the acceptance is the whole blob, which is a hole a real change
-            # to the bytecode would fall through (plans/plan_xna_sample_xnb_sweep.md
-            # `XNASWEEP-225`). A decision that also accepts `root/bytecodeByteCount` is the Xbox
+            # to the bytecode would fall through
+            # (`XNASWEEP-225`). A decision that also accepts `root/bytecodeByteCount` is the Xbox
             # 360's Xenos bytecode, which is a different instruction set and a different length;
             # its own reason covers it and the mask has nothing to say.
             if (not uncovered and "root/digest" in matched_paths[case]

@@ -49,7 +49,7 @@ def png_with_colour_chunk(path, chunk_tag, chunk_payload):
 
     XNA's `TextureImporter` loads through `System.Drawing`, and GDI+ honours a PNG's `gAMA`:
     a file gamma of 0.45 rather than the standard 0.45455 shifts every mid-range channel by one
-    (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-109`). An `sRGB` chunk declares the standard
+    (`XNASWEEP-109`). An `sRGB` chunk declares the standard
     gamma and so corrects nothing, which is the other half of the rule and the reason the two
     fixtures differ only in the chunk.
     """

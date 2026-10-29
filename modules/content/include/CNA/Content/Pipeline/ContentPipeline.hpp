@@ -593,7 +593,7 @@ namespace CNA::Content::Pipeline
      * refers to the item's name (`shader`, and `shaders/mine` when the item is named that) and no
      * `shader_0.xnb` is written, and with the item carrying one processor parameter -- even
      * `DebugMode=Auto`, the default -- it is a different request again and `shader_0.xnb` comes
-     * back (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+     * back (`XNASWEEP-174`).
      *
      * A nested texture never matches an item this way, because `MaterialProcessor` asks for its
      * textures with six parameters and an item that names none carries none -- which is what the

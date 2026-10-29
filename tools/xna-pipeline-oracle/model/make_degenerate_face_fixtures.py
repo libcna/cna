@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-198: the faces the genuine XImporter discards.
+"""XNASWEEP-198: the faces the genuine XImporter discards.
 
 SAMPLE-141's `racer.x` declares 2,447 faces in its chassis and XNA answers 2,445; its `target.x`
 declares 180 and XNA answers 170. The two are different rules and these fixtures separate them.

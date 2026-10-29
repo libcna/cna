@@ -1,6 +1,6 @@
 """Microsoft DirectXMesh's `OptimizeFaces`, ported to Python for the XNASWEEP-149 experiment.
 
-plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-149`.  Genuine XNA 4.0's
+`XNASWEEP-149`.  Genuine XNA 4.0's
 `MeshHelper.OptimizeForCache` is `D3DXOptimizeFaces` on all 616 probes, and Microsoft documents
 its open-source DirectXMesh `OptimizeFaces` as the same Hoppe algorithm with the same defaults.
 DirectXMesh takes its adjacency as an argument where D3DX computed one internally, so the one

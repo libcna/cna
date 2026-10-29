@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-160: what orders a scene's children.
+"""XNASWEEP-160: what orders a scene's children.
 
 SAMPLE-142's `Hammer.FBX` connects `Model::Root` and `Model:: Footsteps` to `Model::Scene` in that
 order, declares them in that order and relates them in that order, and the genuine build answers

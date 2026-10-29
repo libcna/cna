@@ -1754,7 +1754,7 @@ namespace Cna.Xna40.GraphicsOracle
             // A stock material carrying a channel its effect does not read. The importer answers
             // every texture channel a mesh declares, and what the processor does with the ones the
             // effect has no parameter for is what decides whether a file the sample does not ship
-            // is ever opened (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-175`).
+            // is ever opened (`XNASWEEP-175`).
             Record("materialprocessor/unused_channel", () =>
             {
                 var processor = new MaterialProcessor();
@@ -4108,7 +4108,7 @@ namespace Cna.Xna40.GraphicsOracle
         /**
          * A mesh whose triangles are exactly the ones handed in, one vertex per corner, so the
          * order OptimizeForCache produces can be read back as a permutation of the input.
-         * plans/plan_xna_sample_xnb_sweep.md XNASWEEP-139.
+         * XNASWEEP-139.
          */
         private static MeshContent SoupMesh(string name, Vector3[] positions, int[][] triangles)
         {

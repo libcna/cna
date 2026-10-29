@@ -321,7 +321,7 @@ TEST(SoundEffectContentPipelineTest, EightBitPipelineBytesMatchTheExistingProduc
 
     // Both front ends now answer the source's own width rather than a widened copy of it, which
     // is what the genuine processor does with every width it accepts
-    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+    // (`XNASWEEP-197`).
     const Cnb::CnbSoundEffectData decoded = Cnb::DecodeSoundEffectFromCnb(
         Cnb::CnbDocument::Parse(result.output.bytes, "eight-bit pipeline output"));
     EXPECT_EQ(decoded.format, Cnb::CnbAudioFormat::Pcm8);
@@ -532,7 +532,7 @@ TEST(SoundEffectSourcePcmTest, ARouteBuildRefusesTheWidthsXnaRefuses)
     // (`tests/reference/xna40/audio/audio-content-oracle.json`,
     // `processors/SoundEffectProcessor_pcm_matrix`). The route that claims to be XNA's refuses
     // them rather than narrowing, which is what makes its answer lossless
-    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+    // (`XNASWEEP-197`).
     ScratchDirectory scratch("narrow");
     WriteBytes(scratch.Path() / "explosion.wav",
                MakeWav(1u, 44100u, 24u, MakePcm24(std::vector<std::int32_t>(64, 12345))));

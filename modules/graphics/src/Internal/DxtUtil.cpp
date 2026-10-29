@@ -42,7 +42,7 @@ namespace CNA::Internal::Graphics
          * flat block of endpoint 1 comes out 9 in four of its sixteen texels and 8 in the other
          * twelve, in the pattern this matrix describes, and endpoint 2 comes out 17 in seven of
          * them. Rounding to nearest answers 8 and 16 everywhere and is wrong on 128 of 2,048
-         * texels; this matrix is wrong on none (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-136`).
+         * texels; this matrix is wrong on none (`XNASWEEP-136`).
          * It is the same matrix XNA's own mip filter dithers through.
          */
         constexpr int kDitherThreshold[4][4] = {
@@ -56,7 +56,7 @@ namespace CNA::Internal::Graphics
          * of blocks wide: it is `(-width) mod 4`. Measured over level widths 1, 2, 3, 5, 6, 7, 9,
          * 11, 14, 15, 18, 22, 28, 30, 36, 44 and 88, every row of each, all three colour channels
          * and all thirty-two five-bit endpoint values, through the genuine pipeline
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-222`). The same shift governs XNA's mip
+         * (`XNASWEEP-222`). The same shift governs XNA's mip
          * filter, which dithers through this matrix too.
          *
          * @param px Destination column.
@@ -162,7 +162,7 @@ namespace CNA::Internal::Graphics
          * midpoint, index three black -- and it does so in **every** DXT kind, not only in DXT1:
          * measured on DXT1, DXT3 and DXT5 alike, where only DXT1's index three is also
          * transparent, because only DXT1 has no alpha of its own
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-222`).
+         * (`XNASWEEP-222`).
          *
          * @param c0 The block's first endpoint.
          * @param c1 The block's second endpoint.
@@ -220,7 +220,7 @@ namespace CNA::Internal::Graphics
          * an endpoint is already a 565 value and a third of two of them never is -- and that is
          * where the even neighbour is the one the genuine pipeline answers, on 149 blocks where
          * rounding away from zero answers the other one
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-222`).
+         * (`XNASWEEP-222`).
          */
         [[nodiscard]] inline uint16_t Quantize565(const long long* colour)
         {
@@ -255,7 +255,7 @@ namespace CNA::Internal::Graphics
          * is the whole of the difference at `Stripe2.dds`'s 1x1 level -- and a block whose texels
          * span its own endpoints comes back unchanged. Measured over 2,009 levels of the genuine
          * pipeline's own output; what it does not reproduce is in the row
-         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-222`).
+         * (`XNASWEEP-222`).
          *
          * @param texels The block's texels, rewritten in place.
          */
@@ -597,7 +597,7 @@ namespace CNA::Internal::Graphics
                 // channels and this one was left out of. Over a 1,024-block probe carrying every
                 // alpha index against 1,024 endpoint pairs, built by the genuine pipeline, it is
                 // exact on **16,384 of 16,384** texels where truncating is exact on 60% and
-                // rounding on 75% (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-220`). The
+                // rounding on 75% (`XNASWEEP-220`). The
                 // deviation from rounding is what named it: symmetric, +/-1, and a function of the
                 // texel's position rather than of the endpoints.
                 const bool dithered = expansion == DxtEndpointExpansion::D3dx;

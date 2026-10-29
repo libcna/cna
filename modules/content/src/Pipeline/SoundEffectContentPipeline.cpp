@@ -46,7 +46,7 @@ namespace CNA::Content::Pipeline
         // (`audio-content-oracle.json`, `processors/SoundEffectProcessor_pcm_matrix`). Refusing
         // here rather than narrowing later is what keeps the processor's answer lossless; the
         // `.cnb`-only route through `ImportWavAsCnbSoundEffect` still converts, because it is not
-        // claiming to be XNA (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+        // claiming to be XNA (`XNASWEEP-197`).
         using CNA::Content::Import::ImportedPcmEncoding;
         if (imported.encoding != ImportedPcmEncoding::Unsigned8 &&
             imported.encoding != ImportedPcmEncoding::Signed16LittleEndian)
@@ -69,7 +69,7 @@ namespace CNA::Content::Pipeline
     {
         // Build version 3: the processed value is container-neutral and keeps the source's own
         // sample width, so an 8-bit source built by version 2 -- which widened it to 16 -- is a
-        // different asset (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+        // different asset (`XNASWEEP-197`).
         return {kSoundEffectProcessorName, "3"};
     }
 
@@ -187,7 +187,7 @@ namespace CNA::Content::Pipeline
     ContentComponentIdentity SoundEffectContentWriter::Identity() const
     {
         // Build version 2: the schema this writer emits is 2 rather than 1, so its bytes differ
-        // for unchanged input (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+        // for unchanged input (`XNASWEEP-197`).
         return {kSoundEffectWriterName, "2"};
     }
 

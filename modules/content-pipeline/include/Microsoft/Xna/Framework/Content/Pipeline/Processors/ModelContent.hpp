@@ -77,7 +77,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
          *
          * A `.x` file's synthesized root frame has none, and XNA writes a null object for it where
          * a frame declaring an empty name is written as a zero-length string
-         * (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122).
+         * (XNASWEEP-122).
          *
          * @return True when the bone is unnamed.
          */

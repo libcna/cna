@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-050: one class, with a reason, for every reference.
+"""XNASWEEP-050: one class, with a reason, for every reference.
 
 The sweep says whether the bytes match; `classify.py` says why a differing pair differs. This puts
 every genuine reference in the frozen corpus -- built, differing, missing or never mapped -- into
@@ -84,7 +84,7 @@ _NOT_BUILT = {
 # The surface format is not in the corpus manifest and is needed to tell a compressor's choice from
 # a decoder's error, so it is read from the reference itself -- for the handful of references whose
 # every difference is a level digest, which is a few hundred parses and only where it decides
-# something (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-204`).
+# something (`XNASWEEP-204`).
 _formatCache = {}
 
 
@@ -116,7 +116,7 @@ def SourceCarriesItsOwnChain(source, root="/rv/tmp/samples"):
     that declares more than one surface produced them itself -- so a difference in one of those is
     not the mip filter's dither and must not be accepted as though it were. SAMPLE-073's
     `Stripe2.dds` declares ten, and the three bytes it still differs in are a block decoder's, at
-    the two smallest levels (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-222`).
+    the two smallest levels (`XNASWEEP-222`).
 
     @param source The item's source, relative to @p root.
     @param root The read-only sample tree.
@@ -148,8 +148,8 @@ def NestedOwnerIsCustom(rows, reference):
     beside them -- the model they belong to failed for a processor the sample defines.
     `customComponentsOnly` asks whether *every* asset the unit failed on is custom, which is too
     strong for a unit that also builds ordinary assets; this asks the narrower question about the
-    one asset that would have written this file (plans/plan_xna_sample_xnb_sweep.md
-    `XNASWEEP-206`).
+    one asset that would have written this file
+    (`XNASWEEP-206`).
 
     @param rows The mapping, keyed by reference.
     @param reference The reference's path.
@@ -203,7 +203,7 @@ def customComponentsOnly(unit):
     effect a material clones -- and only the item that names it can produce one. When every asset
     a unit failed on failed because a component the sample defines could not be loaded, the nested
     outputs those items would have produced are that same gap rather than a hole in the sweep's
-    mapping (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-185`).
+    mapping (`XNASWEEP-185`).
 
     Returns the sorted component names, or an empty list when the unit also failed for another
     reason -- in which case the reference keeps the mapper's own verdict rather than being
@@ -275,7 +275,7 @@ def main(argv=None):
                 # `/rv/tmp/samples` is not this campaign's tree, and another session's
                 # `prune-completed-sample.sh` removed 21 of the frozen references on 2026-09-09.
                 # It has its own class so it can never be read as a comparison that passed
-                # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-190`, §11.4).
+                # (`XNASWEEP-190`).
                 assign(reference, "REFERENCE_REMOVED",
                        "the frozen reference was deleted from the read-only tree by another "
                        "session after this corpus was frozen")
@@ -319,7 +319,7 @@ def main(argv=None):
             # asset's extension: SAMPLE-031's two diagnostic fonts were counted
             # `ACCEPTED_DIFFERENCE` under "two rasterizers disagree about a glyph's ink" while
             # `classify.py` was reporting `FileNotFoundError` for them
-            # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-236`).
+            # (`XNASWEEP-236`).
             if kind == "payload-unreadable":
                 assign(reference, "UNEXPLAINED",
                        "CNA's output for it could not be read, so nothing was compared: %s"
@@ -349,7 +349,7 @@ def main(argv=None):
             # asset built for `x` under it put twenty textures and two models under a reason that
             # has nothing to do with them -- SAMPLE-031's `engine_diff_tex_0.xnb` is a texture and
             # its level 0 differs, which no missing audio encoder explains. A reason has to be
-            # about the thing it is accepting (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-215`).
+            # about the thing it is accepting (`XNASWEEP-215`).
             if source.get("platform") == "x" and (
                     processor in ("SoundEffectProcessor", "WavImporter")
                     or "SoundEffectReader" in (source.get("rootReader") or "")):
@@ -362,7 +362,7 @@ def main(argv=None):
             # them". Asking the truncated list made this rule unreachable for any reference with
             # more than twelve differences -- a ten-level texture has sixteen, so every one of
             # them fell through to `UNEXPLAINED` or was caught by a broader rule above
-            # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-215`).
+            # (`XNASWEEP-215`).
             fields = answer.get("differenceFields")
             if fields is not None:
                 complete = True
@@ -381,8 +381,8 @@ def main(argv=None):
                 # textures whose level 0 differs -- two conformant DXT compressors choosing
                 # different endpoints for the same pixels, which is a different accepted reason --
                 # and 78 are *uncompressed* textures whose base image differs, which no filter and
-                # no compressor accounts for at all (plans/plan_xna_sample_xnb_sweep.md
-                # `XNASWEEP-204`).
+                # no compressor accounts for at all
+                # (`XNASWEEP-204`).
                 # From the complete field set when there is one -- a level digest keeps its
                 # index there for exactly this -- because reading *which* levels differ off a
                 # list capped at twelve can miss level 0 and call a base-image difference the
