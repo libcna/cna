@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# WEBGPU-193 / plans/plan_sdlgpu.md SDLGPU-81: run the WHOLE shared parity
+# WEBGPU-193 / SDLGPU-81: run the WHOLE shared parity
 # corpus under EasyGL and one comparison renderer, and record a per-fixture verdict.
 #
 # scripts/run-parity-fixture.sh does one fixture. This does all of them, and adds the thing a

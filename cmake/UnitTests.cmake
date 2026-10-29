@@ -1582,7 +1582,7 @@ if(CNA_BUILD_TESTS)
             -P ${CMAKE_SOURCE_DIR}/cmake/Tests/SdlOffFindPackage.cmake)
     set_tests_properties(CnaSdlOffFindsNoSdlPackage PROPERTIES LABELS "platform;configuration")
 
-    # plans/plan_sdlgpu_modern_graphics.md SMG-0039: the persistent vendored-SDL install is rebuilt
+    # SMG-0039: the persistent vendored-SDL install is rebuilt
     # when its source, its CNA patch series or its configure arguments change, never silently
     # reused. Pure CMake, on a fixture.
     add_test(NAME CnaSdlPrebuiltFingerprint

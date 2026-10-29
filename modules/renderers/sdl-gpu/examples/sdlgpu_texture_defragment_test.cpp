@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_sdlgpu_modern_graphics.md SMG-0038: SDL_gpu's Vulkan memory defragmenter, driven on
+// SMG-0038: SDL_gpu's Vulkan memory defragmenter, driven on
 // purpose rather than by allocator luck.
 //
 // SDL 3.5.0 at the vendored pin crashed the first time it defragmented a texture allocation: it

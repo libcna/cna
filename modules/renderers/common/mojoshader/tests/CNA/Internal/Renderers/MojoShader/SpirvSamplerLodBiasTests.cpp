@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// WEBGPU-208 / plans/plan_sdlgpu.md SDLGPU-122: the SPIR-V half of
+// WEBGPU-208 / SDLGPU-122: the SPIR-V half of
 // compiled-effect LOD bias, measured on the committed compiled-effect corpus rather than on one
 // hand-built module.
 //

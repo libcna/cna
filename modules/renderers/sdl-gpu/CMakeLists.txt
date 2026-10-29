@@ -1,10 +1,10 @@
-# plans/plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
+# SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
 # into the same SDL3 library every other renderer links against) -- no separate find_package
 # or FetchContent is needed, unlike WEBGPU.
 cna_add_renderer()
 set_property(TARGET ${RENDERER_TARGET} PROPERTY REQUIRES_PLATFORM SDL3)
 
-# plans/plan_sdlgpu.md SDLGPU-92: the built-in shader path links SDL_shadercross statically when
+# SDLGPU-92: the built-in shader path links SDL_shadercross statically when
 # configured. Windows and Apple default this on because their native SDL_gpu drivers consume
 # DXBC/MSL, not SPIR-V. Linux/Android retain the direct dependency-free Vulkan route by default.
 if(CNA_SDL_GPU_SHADERCROSS)
@@ -50,7 +50,7 @@ endif()
 # unresolved even though the correct import library was present on the link line.
 target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
 
-# plans/plan_sdlgpu.md SDLGPU-42/43/97: ShaderEffect needs a target-native runtime
+# SDLGPU-42/43/97: ShaderEffect needs a target-native runtime
 # GLSL->SPIR-V compiler, and the resulting SPIR-V needs a driver that accepts it. Never let a
 # cross-build discover the build host's versioned ELF library through the Linux-only fallback:
 # the old unconditional glob made MinGW try to link x86_64-linux-gnu/libshaderc.so.1. D3D12 and

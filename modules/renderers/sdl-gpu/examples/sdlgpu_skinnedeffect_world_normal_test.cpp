@@ -13,7 +13,7 @@
 // is the identity and the bug is invisible. This is the non-identity-World harness those tests
 // cannot cover -- a port of the retired Vulkan renderer's
 // vulkan_skinnedeffect_world_normal_test.cpp using RenderTarget2D::GetData readback (this
-// renderer's swapchain-download path segfaults; see plans/plan_sdlgpu.md SDLGPU-39) and the
+// renderer's swapchain-download path segfaults; see SDLGPU-39) and the
 // standard GPU-display skip guard the other SdlGpu pixel tests use.
 //
 // Design notes that make the bug *numerically* visible (identical to the Vulkan harness):

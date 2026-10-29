@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// WEBGPU-208 and plans/plan_sdlgpu.md SDLGPU-122: make
+// WEBGPU-208 and SDLGPU-122: make
 // `SamplerState.MipMapLevelOfDetailBias` reach a compiled XNA Effect's texture sampling.
 //
 // XNA applies the bias to the level of detail an implicit sample computes. Direct3D 9 carried it as

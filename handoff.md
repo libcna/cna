@@ -380,6 +380,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   Every such call copies the state twice, each copy allocating its own state on the heap. Found
   by the Inspector's first end-to-end run (`AUD-DIAG-INSP-0004`, 2026-09-18) and left open
   because the fix changes a public signature.
+- EasyGL (`OPENGLES3`, `OPENGL33`, `WEBGL2`) disables blending whenever colour and alpha both use
+  `Blend::One` / `Blend::Zero`, without looking at the blend functions
+  (`EasyGLRenderer::ApplyBlendState`). With `BlendFunction::ReverseSubtract` XNA evaluates
+  `0 - source`, but EasyGL copies the source; the same shortcut also skips `Max` and `Min`, which
+  ignore the factors (not measured). Found by SDL_GPU's blend-equation oracle (`SDLGPU-58`,
+  formerly `EASYGL-PARITY-1`, 2026-09-10); SDL_GPU evaluates the equation correctly, and EasyGL
+  has no regression leg for it yet.
 
 ### 5.2 Limitations
 

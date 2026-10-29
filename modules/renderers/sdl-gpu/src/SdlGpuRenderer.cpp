@@ -1816,7 +1816,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             // both stages without changing this established 56-float block: zero is XNA's default
             // per-vertex/Gouraud path, one requests the per-pixel path.
             out[16] = p.emissiveColor[0]; out[17] = p.emissiveColor[1]; out[18] = p.emissiveColor[2];
-            // plans/plan_sdlgpu_modern_graphics.md SMG-0032: a draw that receives a shadow takes the
+            // SMG-0032: a draw that receives a shadow takes the
             // per-pixel path whatever PreferPerPixelLighting says. Gouraud lighting would evaluate
             // the lookup at the corners and interpolate it, so a ground plane of two triangles
             // would carry a gradient rather than a shadow. WebGPU and EasyGL apply the same
@@ -2545,7 +2545,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
         resources.headless = window_ == nullptr || forceTestHeadless;
 
-        // plans/plan_sdlgpu.md SDLGPU-92: Vulkan consumes the committed SPIR-V directly. When
+        // SDLGPU-92: Vulkan consumes the committed SPIR-V directly. When
         // configured, SDL_shadercross adds the formats it can translate that SPIR-V into, allowing
         // SDL to choose its native D3D12 or Metal driver without maintaining divergent shaders.
         // debug_mode is an #ifndef NDEBUG CNA-side toggle (design decision 12: the validation/debug
@@ -4151,7 +4151,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     int SdlGpuRenderer::ConfigureSwapchain(SDL_GPUDevice* device, SDL_Window* window,
                                            int interval)
     {
-        // plans/plan_sdlgpu.md: SDL_gpu has no "half-rate" present mode -- XNA's PresentInterval.Two
+        // SDL_gpu has no "half-rate" present mode -- XNA's PresentInterval.Two
         // (swapInterval==2) falls back to plain VSYNC, same as swapInterval==1.
         SDL_GPUPresentMode presentMode = SDL_GPU_PRESENTMODE_VSYNC;
         int appliedInterval = 1;
@@ -7415,7 +7415,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
     }
 
-    // ---- plans/plan_sdlgpu_modern_graphics.md SMG-0032: shadow reception ---------------------
+    // ---- SMG-0032: shadow reception ---------------------
 
     void SdlGpuRenderer::EnsureDefaultShadowCubeEXT()
     {
@@ -13847,7 +13847,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuEffectRenderer* customEffectRenderer = customEffect_
             ? dynamic_cast<SdlGpuEffectRenderer*>(customEffect_->GetEffectRendererPtr())
             : nullptr;
-        // plans/plan_sdlgpu_modern_graphics.md SMG-0011: apply the effect BEFORE its uniform state
+        // SMG-0011: apply the effect BEFORE its uniform state
         // is snapshotted below. An `Effect` subclass publishes its parameters from `OnApply()` --
         // that is what the XNA lifecycle is for, and it is where every CNAEXT stock effect writes
         // its own (`CRTEffect::OnApply` sets `uCrtParams`). Every other renderer's SpriteBatch

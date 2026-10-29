@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_sdlgpu.md SDLGPU-92: exact stock-shader route selection.
+// SDLGPU-92: exact stock-shader route selection.
 
 #if defined(CNA_RENDERER_SDL_GPU)
 

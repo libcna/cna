@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_sdlgpu.md SDLGPU-85: ordinary PresentationParameters.MultiSampleCount must create a
+// SDLGPU-85: ordinary PresentationParameters.MultiSampleCount must create a
 // genuinely multisampled backbuffer, not merely echo the requested integer.
 //
 // This is intentionally a standalone GraphicsDevice fixture rather than a ParityFixture Game.

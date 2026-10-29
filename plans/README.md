@@ -279,7 +279,15 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   GoogleTest runner (`../tools/tests/run_gtest_bounded.sh`) and the measured hand-off to the SDL_GPU
   workstream; deleted on 2026-10-28 (Git history only). Comments cite rows as
   "pre-SDL_GPU PSG-NNNN".
-- [`plan_sdlgpu.md`](plan_sdlgpu.md) — SDL GPU.
+- `plan_sdlgpu.md` — the SDL_GPU renderer and its classic XNA/EasyGL parity campaign
+  (`SDLGPU-1`..`SDLGPU-135`, 2026-09), with its two audit manifests
+  `sdlgpu_renderer_contract_audit.csv` / `sdlgpu_easygl_example_classification.csv` and their
+  checkers; deleted on 2026-10-29 (Git history only). `SDLGPU-95` was settled by the Mac mini M4
+  qualification and `SDLGPU-96` (Android) stays unqualified. The renderer, its parity verdict,
+  platform evidence and design decisions are in
+  [`../docs/sdl-gpu-renderer.md`](../docs/sdl-gpu-renderer.md); the one EasyGL defect its oracle
+  found that is still open is in [`../handoff.md`](../handoff.md) §5.1; comments cite the rows as
+  `SDLGPU-nnn`.
 - [`plan_software.md`](plan_software.md) — CPU software rasterizer.
 - `plan_stub.md` — STUB-1..6, the no-op Stub renderer (done 2026-07-19); deleted on 2026-10-28
   (Git history only). Its design and limitations are in

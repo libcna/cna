@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_sdlgpu.md SDLGPU-78: discriminating LineList/LineStrip coverage for every ordinary
+// SDLGPU-78: discriminating LineList/LineStrip coverage for every ordinary
 // GraphicsDevice draw family. The older primitive-type test only proved these enum values did not
 // throw, so a backend that silently submitted both as the same topology could pass it.
 //

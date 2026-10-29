@@ -287,7 +287,7 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set(RENDERER_TARGET "cna_renderer_sdl_gpu")
     list(APPEND _cna_identity_defines CNA_RENDERER_SDL_GPU)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SDL_GPU")
-    # plans/plan_sdlgpu.md SDLGPU-92: SDL_gpu's Vulkan driver consumes CNA's committed SPIR-V stock shaders
+    # SDLGPU-92: SDL_gpu's Vulkan driver consumes CNA's committed SPIR-V stock shaders
     # directly. D3D12 and Metal require SDL_shadercross to translate those same blobs to DXBC or
     # MSL. Keep Linux/Android's already-native route dependency-free by default, while making the
     # dependency the default on the platforms that cannot construct the renderer without it.

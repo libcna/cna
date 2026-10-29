@@ -250,7 +250,7 @@ function(cna_configure_mojoshader)
     message(STATUS "CNA: MojoShader pinned with FNA3D ${CNA_FNA3D_GIT_TAG} (${fna3d_SOURCE_DIR})")
 endfunction()
 
-# plans/plan_sdlgpu.md SDLGPU-93: use CNA's statically linked, process-initialized
+# SDLGPU-93: use CNA's statically linked, process-initialized
 # SDL_shadercross rather than MojoShader's optional shared-library probe. This is a separate helper
 # because the same MojoShader target also serves renderers that do not use SDL_gpu or ShaderCross.
 function(cna_enable_mojoshader_sdl_gpu_shadercross)

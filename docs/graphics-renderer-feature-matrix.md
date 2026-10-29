@@ -1,14 +1,13 @@
 # Graphics renderer feature matrix — established GPU paths and CPU/raster companions
 
-Master, up-to-date cross-renderer feature matrix for CNA's established renderers, written for
-Task 451 (Phase 51) and extended 2026-07-15 with a `DIRECTX9` column (`../the DX9 plan`,
-`D9-130`). The WebGPU renderer is intentionally tracked separately in
-[`webgpu-renderer.md`](webgpu-renderer.md); SDL_GPU
-(`../plans/plan_sdlgpu.md`) and FNA3D ([`fna3d-renderer.md`](fna3d-renderer.md)) have no columns
-here. A cell is only marked ✅ if a real, GPU-facing pixel/behavior check actually exercised it;
-anything implemented but not independently pixel-tested is marked 🟨, and anything not
-attempted/not built at all is marked ⬜ (distinct from this doc's own ❌, which means "tested and
-found to genuinely not work").
+Master, up-to-date cross-renderer feature matrix for CNA's established renderers, written for Task
+451 (Phase 51) and extended 2026-07-15 with a `DIRECTX9` column (`../the DX9 plan`, `D9-130`). The
+WebGPU renderer is intentionally tracked separately in [`webgpu-renderer.md`](webgpu-renderer.md);
+SDL_GPU ([`sdl-gpu-renderer.md`](sdl-gpu-renderer.md)) and FNA3D
+([`fna3d-renderer.md`](fna3d-renderer.md)) have no columns here. A cell is only marked ✅ if a real,
+GPU-facing pixel/behavior check actually exercised it; anything implemented but not independently
+pixel-tested is marked 🟨, and anything not attempted/not built at all is marked ⬜ (distinct from
+this doc's own ❌, which means "tested and found to genuinely not work").
 
 **The `DIRECTX9` column measures something narrower and stricter than the EasyGL column: pixel-for-pixel
 indistinguishability from the real XNA 4.0 runtime**, not just "feature works." A `DIRECTX9` ✅ means the

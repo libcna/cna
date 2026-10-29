@@ -47,7 +47,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/SdlPrebuiltFingerprint.cmake")
 #  f286e420afd3ccb0dedc7ec77eb09d4bd2e5e102  GPU: Refactor Vulkan barriers to fix defrag segfault
 #      The defragmenter barriered the replacement texture before it had a container, a null
 #      dereference on the first defragmentation of a texture allocation
-#      (plans/plan_sdlgpu_modern_graphics.md SMG-0034; SdlGpu_TextureDefragment forces it).
+#      (SMG-0034; SdlGpu_TextureDefragment forces it).
 #  86296ac8f01597076979630667472a846b04ce46  GPU: Set missing fields on Vulkan swapchain texture
 #      Its follow-up: swapchain textures are not made by CreateTexture, so the fields the refactor
 #      added were uninitialised on them.

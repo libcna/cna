@@ -5,7 +5,7 @@ layout(location = 1) in vec4 fragColor;
 
 layout(location = 0) out vec4 outColor;
 
-// plans/plan_sdlgpu.md SDLGPU-13: fragment-stage sampled textures live in set 2 and fragment-stage
+// SDLGPU-13: fragment-stage sampled textures live in set 2 and fragment-stage
 // uniform buffers in set 3 per SDL_gpu's SPIR-V graphics-pipeline convention.
 layout(set = 2, binding = 0) uniform sampler2D texSampler;
 

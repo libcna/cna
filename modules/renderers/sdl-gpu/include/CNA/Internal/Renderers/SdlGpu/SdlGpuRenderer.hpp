@@ -208,7 +208,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     /**
      * @brief The four std140 uniform arrays a portable effect may set, captured by value. CNAEXT.
      *
-     * plans/plan_sdlgpu_modern_graphics.md `SMG-0010`. The engine layer's passes hand a `ShaderEffect`
+     * `SMG-0010`. The engine layer's passes hand a `ShaderEffect`
      * whole arrays (`SetUniformFloatArray("uAerialScalars", …)`), which do not fit the fixed
      * 128-byte per-draw block and live in uniform blocks of their own. CNA's portable shaders name
      * those blocks by a fixed binding -- 12 `FloatArray`, 13 `Vec2Array`, 14 `Vec3Array`, 15
@@ -259,7 +259,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     /**
      * @brief Where a portable shader puts a custom effect's own bound textures. CNAEXT.
      *
-     * plans/plan_sdlgpu_modern_graphics.md `SMG-0016`. This is **not** a choice this renderer gets
+     * `SMG-0016`. This is **not** a choice this renderer gets
      * to make: CNA's portable shader sources are written against the retired Vulkan renderer's
      * descriptor convention, so the binding number in a shared `*.vulkan.frag.glsl` already encodes
      * which kind of texture goes at which unit. Set 1 holds the effect's own textures, and within
@@ -781,7 +781,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @brief Real GPU readback of this target's pixels (`SDLGPU-39`) -- reads from the
          * always-single-sample, sampleable color texture (already resolved-into if this target
          * is MSAA), a texture this renderer fully owns, unlike the swapchain -- so it does not hit
-         * the swapchain-download segfault documented in `plans/plan_sdlgpu.md`'s `SDLGPU-39` row.
+         * the swapchain-download segfault documented in `SDLGPU-39`.
          * Flushes any pending frame first so the read reflects this frame's draws.
          *
          * Returns true only once the downloaded transfer buffer has been copied into
@@ -946,7 +946,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Real GPU readback of one face's pixels (pulled forward from `SDLGPU-39` -- this
          * targets a texture this renderer fully controls, unlike the swapchain-download path that
-         * segfaulted; see that row's notes in `plans/plan_sdlgpu.md`). Flushes any pending frame first so
+         * segfaulted). Flushes any pending frame first so
          * the read reflects this frame's draws, not stale/uninitialized GPU memory.
          */
         /// True only once the download fence has signalled and the whole requested
@@ -1367,7 +1367,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Creates both stages from SPIR-V payloads, translating their descriptors. CNAEXT.
          *
-         * plans/plan_sdlgpu_modern_graphics.md `SMG-0007`. Selected by `CompileProgram` when the
+         * `SMG-0007`. Selected by `CompileProgram` when the
          * payload begins with the SPIR-V magic word. Unlike the GLSL route this needs no runtime
          * shader compiler, so it is present in every build; what it does need is
          * `RemapSpirvForSdlGpuEXT`, because a portable package's SPIR-V is laid out for the retired
@@ -1725,7 +1725,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     /**
      * @brief `SDL_gpu`-backed graphics renderer (`CNA_GRAPHICS_RENDERER=SDL_GPU`).
      *
-     * See `plans/plan_sdlgpu.md` for the phased implementation and current parity evidence. Device,
+     * See `docs/sdl-gpu-renderer.md` for the build options, parity verdict and platforms. Device,
      * swapchain, multisampled backbuffer, all classic texture/target/buffer/draw families,
      * `SpriteBatch`, the five XNA stock effects, Models and ordinary compiled Effects are real and
      * discriminating-pixel verified. The renderer queues public draws and snapshots the complete
@@ -2008,7 +2008,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         using EffectUnitSamplersEXT = std::array<SamplerSlotState, kMaxCustomEffectSamplersEXT>;
 
-        // plans/plan_sdlgpu_modern_graphics.md SMG-0032: one stock draw's shadow reception
+        // SMG-0032: one stock draw's shadow reception
         // (`GpuDrawParams`' single-map, cascade and punctual groups), captured when the draw is
         // queued -- a shadow map attached after the draw but before Present() is not this draw's.
         // `uniforms` is the shared `CnaShadowParams` block of shadow_sampling.glsl, filled
@@ -2954,7 +2954,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /** @brief Describes current qualitative SDL_gpu API and renderer limitations. */
         [[nodiscard]] std::string_view GetAdditionalLimitationsTextEXT() const override;
 
-        // ---- modern (CNAEXT) shader intake. plans/plan_sdlgpu_modern_graphics.md SMG-0007 ----
+        // ---- modern (CNAEXT) shader intake. SMG-0007 ----
 
         /**
          * @brief Declares SPIR-V, because that is the payload form this renderer accepts publicly.
@@ -3395,7 +3395,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Records XNA's `SamplerState.MaxMipLevel`/`MipMapLevelOfDetailBias` for a slot.
          *
-         * FX-083 and plans/plan_sdlgpu.md SDLGPU-121. `MaxMipLevel` maps to
+         * FX-083 and SDLGPU-121. `MaxMipLevel` maps to
          * `SDL_GPUSamplerCreateInfo::min_lod`. Stock 3D and stock SpriteBatch carry the bias in a
          * fragment uniform and apply the SPIR-V Bias image operand because SDL's Metal driver
          * documents native `mip_lod_bias` as a no-op. SDLGPU-122 applies the same shader-side rule
@@ -3782,7 +3782,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Pushes one stage's declared uniform blocks to the slots its module named. CNAEXT.
          *
-         * plans/plan_sdlgpu_modern_graphics.md `SMG-0010`. Only blocks the module declares are
+         * `SMG-0010`. Only blocks the module declares are
          * pushed: SDL asserts on a slot the shader does not have, and a declared block left
          * unpushed reaches the driver as an unwritten descriptor.
          *
@@ -4158,7 +4158,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         void DestroyPbrResources();
         void EnsureDefaultPbrTextures();
 
-        // plans/plan_sdlgpu_modern_graphics.md SMG-0032. Capture resolves the three maps and fills
+        // SMG-0032. Capture resolves the three maps and fills
         // the parameter block at queue time; Bind pushes that block to fragment uniform slot 3 and
         // binds the maps at `firstSampler`, +1 and +2, with neutral white standing in for an
         // absent one (white reads as "nothing occludes", which the block already says).
@@ -4173,7 +4173,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief The 1x1 opaque white texture, creating it if this is its first use. CNAEXT.
          *
-         * plans/plan_sdlgpu_modern_graphics.md `SMG-0008`. A custom effect's module may declare a
+         * `SMG-0008`. A custom effect's module may declare a
          * sampler the caller never bound; SDL still writes a descriptor for it, so the slot needs
          * a real image. White is the neutral choice for every multiply the engine layer's passes
          * perform with an optional map.
@@ -4542,7 +4542,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // HeadlessEXT has no swapchain, so the same proxy is its permanent off-screen backbuffer;
         // ReadBackbuffer then downloads from the proxy through the same transfer-buffer+fence path the
         // render targets already use. Lazily created on the first read, so a game that never reads the
-        // backbuffer pays NOTHING (this resolves plans/plan_sdlgpu.md SDLGPU-39's per-frame-cost objection --
+        // backbuffer pays NOTHING (this resolves SDLGPU-39's per-frame-cost objection --
         // the deferred-frame model means the first read happens while the frame is still pending, so
         // the proxy genuinely can be allocated on demand rather than "before every frame's draws").
         SDL_GPUTexture* backbufferProxy_ = nullptr;

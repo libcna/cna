@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_sdlgpu.md SDLGPU-58: all eight stencil CompareFunctions, including an explicit
+// SDLGPU-58: all eight stencil CompareFunctions, including an explicit
 // Always -> Never -> Always cache-restoration sequence.
 //
 // Stencil comparison needs three relationships to distinguish every function. Each column is one

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plans/plan_sdlgpu.md SDLGPU-104: isolated cross-compiled SDL GPU/D3D12 CTest transport.
+# SDLGPU-104: isolated cross-compiled SDL GPU/D3D12 CTest transport.
 #
 # Usage: scripts/run-wine-vkd3d-headless.sh <path-to.exe> [args...]
 #

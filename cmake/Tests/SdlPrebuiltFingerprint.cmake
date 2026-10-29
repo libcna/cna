@@ -1,4 +1,4 @@
-# plans/plan_sdlgpu_modern_graphics.md SMG-0039: the persistent SDL install is reused only while
+# SMG-0039: the persistent SDL install is reused only while
 # its build manifest matches, so a changed vendored source, a changed CNA patch series, changed
 # configure arguments or a changed toolchain cannot leave an old library linked under a tree that
 # claims the new one.

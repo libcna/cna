@@ -3,7 +3,7 @@
 
 /**
  * @file SdlGpuSpirvBindings.hpp
- * @brief plans/plan_sdlgpu_modern_graphics.md SMG-0006: the one mapping layer between a portable
+ * @brief SMG-0006: the one mapping layer between a portable
  *        SPIR-V payload and `SDL_gpu`'s mandated descriptor-set layout.
  *
  * `SDL_gpu` does not let a shader choose its own descriptor sets. `SDL_CreateGPUShader` documents
@@ -25,7 +25,7 @@
  * about where a resource lives, so something had to translate, and the honest place for that was
  * here rather than in the shader sources -- the package was shared with Vulkan, which was
  * validated against it, and a second set of numbers baked into the sources would have made one
- * of the two renderers wrong (`plans/plan_sdlgpu_modern_graphics.md` Phase 10, "do not assume
+ * of the two renderers wrong (SDL_GPU modern-graphics Phase 10, "do not assume
  * Vulkan descriptor-set numbering"). The sources keep that convention now that the Vulkan
  * renderer is retired (WebGPU's WGSL payloads are derived from the same sources), so the
  * translation stays here.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// WEBGPU-208 / plans/plan_sdlgpu.md SDLGPU-122. See the header for what this
+// WEBGPU-208 / SDLGPU-122. See the header for what this
 // does and why it belongs in the shared MojoShader layer.
 
 #include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_sdlgpu_modern_graphics.md SMG-0006. See the header for what this translates and why
+// SMG-0006. See the header for what this translates and why
 // the translation belongs here rather than in the shared shader sources.
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuSpirvBindings.hpp"
