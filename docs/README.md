@@ -118,9 +118,6 @@ Kept for their investigation methodology and root-cause detail, not as current s
 - `graphics-compatibility-report.md` — Task 500's 2026-07-09 milestone declaration. Has a
   2026-07-11 status banner: its "5 confirmed bugs" gate is closed; treat the percentages here as a
   dated snapshot, not current.
-- `coverage.md` — superseded for Graphics by `graphics-renderer-feature-matrix.md` (see that file's
-  own header); its non-Graphics namespace estimates (Audio/Media/Content/Net/GamerServices) are
-  the reason it's kept.
 - `graphicsdevice-fna-audit.md`, `graphicsresource-fna-audit.md`, `graphics-resource-lifetime.md` —
   per-class FNA-fidelity audits, not re-verified in the 2026-07-11 pass.
 - `xna_culling_compatibility_audit.md`, `xna_depth_occlusion_compatibility_audit.md` — recent
@@ -164,9 +161,6 @@ scope for the 2026-07-11 Graphics documentation-accuracy pass; check each file's
   2026-10-25, for location support through `System.Device.Location`; nothing is implemented yet.
 
 ## Other
-
-- [`renderer-expansion-candidates.md`](renderer-expansion-candidates.md) — research only, never a
-  roadmap: the renderer set is curated (`renderer-registry.md`) and this catalog authorizes nothing.
 
 - `avatars.md` — the XNA avatar API on original CNA avatars: description encoding, rendering,
   animations and the asset catalog; `avatar-demos.md` lists the avatar demos.
