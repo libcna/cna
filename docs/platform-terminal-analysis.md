@@ -71,9 +71,9 @@ The single most important design conclusion:
 renderers that used `SDL_Renderer` only to get finished pixels onto the window. Its
 contract is "present this RGBA buffer to this window, with scaling and vsync". A terminal is
 simply another device that can accept that buffer — it just quantises instead of blitting.
-`SOFTWARE` is the renderer that presents CPU frames through it
-(`plans/plan_terminal_capi_repair.md` `TCR-2`); `BLEND2D`, retired 2026-09-17, was the one before
-it, and between those two points no renderer in the tree requested a presenter at all.
+`SOFTWARE` is the renderer that presents CPU frames through it (`TCR-2`); `BLEND2D`, retired
+2026-09-17, was the one before it, and between those two points no renderer in the tree requested
+a presenter at all.
 
 **What that gap cost while it lasted** (`plans/plan_renderer_cleanup.md` `RRC-010`). The terminal
 platform itself was never affected: it is compiled into every POSIX build, and its unit tests —

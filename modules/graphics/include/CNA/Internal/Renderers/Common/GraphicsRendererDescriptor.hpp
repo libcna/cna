@@ -253,7 +253,7 @@ namespace CNA::Internal::Renderers
          * question moves here, where it is answered per family.
          *
          * True for a CPU-raster family that presents through the platform rather than owning a
-         * swap chain. `SOFTWARE` sets it (`plans/plan_terminal_capi_repair.md` `TCR-2`); the two
+         * swap chain. `SOFTWARE` sets it (`TCR-2`); the two
          * that set it before, SKIA and BLEND2D, were retired in 2026-08 and on 2026-09-17, and
          * between those two dates nothing did -- which is what `RRC-010` audited and kept the field
          * for, rather than deleting a switch a working output path was waiting on.

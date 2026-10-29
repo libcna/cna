@@ -212,7 +212,7 @@ jobs:
         working-directory: build
         run: env -u DISPLAY -u WAYLAND_DISPLAY ./cna_demo_2d --smoke 6
 
-      # A real end-to-end leg again (plans/plan_terminal_capi_repair.md TCR-3): SOFTWARE requests a
+      # A real end-to-end leg again (TCR-3): SOFTWARE requests a
       # surface presenter and feeds it finished CPU frames, so the runner's alternate-screen,
       # SIGWINCH-grid and diagnostics assertions all describe behaviour that happens. It reported
       # "Not Run (Disabled)" between BLEND2D's retirement and that repair, when no renderer set

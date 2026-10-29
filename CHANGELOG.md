@@ -454,7 +454,7 @@ Every other dependency is still pinned by this repository through submodule gitl
   presentation and no native window handle, which is a terminal and nothing else today — so
   `SOFTWARE` on a windowing platform, under `HEADLESS`, or with its output piped behaves exactly as
   before. The end-to-end pseudo-TTY test disabled by the curation is enabled and passing
-  (`plans/plan_terminal_capi_repair.md`).
+  (`TCR-1`..`TCR-8`).
 - **`-DCNA_BUILD_C_API=ON` builds again**, at three independent root causes rather than by
   suppression: the effect collections' `operator[](int)` returns `T*` since XNA's null-index
   semantics were restored, and `CnaCApiEffects.cpp` still took its address; the C API links

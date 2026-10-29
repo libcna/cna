@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_terminal_capi_repair.md TCR-2/TCR-3: the producer half of the surface-presenter seam.
+// TCR-2/TCR-3: the producer half of the surface-presenter seam.
 //
 // IPlatformSurfacePresenter had a complete, tested consumer side and no producer at all once
 // BLEND2D was retired, so a CPU frame could not reach a screen. These tests pin the contract

@@ -121,7 +121,7 @@ endif()
 # A full terminal-platform smoke test.  The Python runner owns a pseudo-terminal so the real demo
 # receives a TTY (unlike ordinary CTest stdout), a resize signal and keyboard input.
 #
-# Enabled again (plans/plan_terminal_capi_repair.md TCR-3).  It was registered DISABLED by
+# Enabled again (TCR-3).  It was registered DISABLED by
 # RRC-010 because no renderer set `needsSurfacePresenter` once BLEND2D was retired, so every piece
 # of evidence the runner waits for -- the alternate screen, the SIGWINCH-observed grid, the
 # `dropped_frames=`/`kitty_keyboard=` diagnostics -- was emitted by a TerminalSurfacePresenter that

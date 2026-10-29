@@ -8,7 +8,7 @@ byte, reacts to SIGWINCH, and must restore the caller's terminal before it exits
 It requires a renderer whose `GraphicsRendererDescriptor` sets `needsSurfacePresenter`, because
 every byte sequence asserted below is emitted by `TerminalSurfacePresenter` and nothing else.
 SOFTWARE sets it and presents its finished CPU framebuffer through the platform contract
-(`plans/plan_terminal_capi_repair.md` TCR-2), so this runs for real; between BLEND2D's retirement
+(TCR-2), so this runs for real; between BLEND2D's retirement
 and that repair no renderer did, and the CTest registration was DISABLED rather than left failing.
 """
 

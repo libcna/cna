@@ -154,6 +154,12 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   their reasons in the code, the tooling in `tools/c-api/generate_coverage_inventory.py` and
   `test_coverage_scope.py`, and the live backlog is
   [`../docs/c-api/COVERAGE.md`](../docs/c-api/COVERAGE.md).
+- `plan_terminal_capi_repair.md` — `TCR-1`..`TCR-8` (2026-09-18): `SOFTWARE` presenting through
+  the terminal again, and `-DCNA_BUILD_C_API=ON` building again. Deleted on 2026-10-29 (Git history
+  only). The two things it left open are closed: the C API smoke repairs above, and the unmapped
+  CBIND symbols that kept `LIMITATIONS.md` from generating. The presenter design is in
+  [`../docs/platform-terminal-analysis.md`](../docs/platform-terminal-analysis.md); comments cite
+  the rows as `TCR-n`.
 - `plan_cabi.md` — the cross-binding C ABI correctness milestone (`CABI-1`..`CABI-49`, ABI
   0.8-0.9, 2026-08/09); deleted on 2026-10-28 (Git history only). Its contracts are in
   [`../docs/c-api/`](../docs/c-api/README.md) (wasm artifact, ContentLost, owned devices, video
