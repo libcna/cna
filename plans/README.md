@@ -81,7 +81,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - `plan_cna_devices.md` — `CNA::Devices` extensions (`DEVICES-CNA-000`..`012`, 2026-07-07), all
   closed; deleted on 2026-10-28 (Git history only). The module, its rules and every capability are
   in [`../docs/devices-ext.md`](../docs/devices-ext.md).
-- [`plan_input.md`](plan_input.md) — input compatibility and stabilization.
+- `plan_input.md` — the input audit and repair (`P0-001`..`P13-006`, 2026-07-07..18): 490 tasks done,
+  the 15 hardware checks `P11-001`..`P11-015` blocked on hardware; deleted on 2026-10-29 (Git history
+  only). The open hardware checks are in
+  [`../docs/input-manual-verification-results.md`](../docs/input-manual-verification-results.md), the
+  FNA parity and deviations in the other `../docs/input-*.md`.
 - `plan_keyboard_device_emulation.md` — INPUT-EMU-001/002, the off-by-default keyboard-driven
   accelerometer, window orientation and player-one GamePad (2026-09-28, 2026-10-03); deleted on
   2026-10-28 (Git history only). The API and its boundaries are in

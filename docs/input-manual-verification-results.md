@@ -1,6 +1,6 @@
 # Input — Manual / Platform Verification Results
 
-> **Related input docs (INP-0003):** [plan](../plans/plan_input.md) · [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+> **Related input docs (INP-0003):** [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
 
 Records hardware- and platform-gated input checks that the headless `CnaTests` suite cannot cover
 (Phase I10 tasks 850–853). **This log is deliberately honest:** items that could not be verified in
@@ -124,6 +124,12 @@ add the dated row to the log. All cells are currently ⬜ (no hardware available
 | Touchscreen | ⬜ | ⬜ | — | — |
 | IME (JP/CN/KR) | — | — | ⬜ | — |
 | Czech keyboard | — | — | — | ⬜ |
+
+| Other check (the input plan's Phase 11) | Status | What a run must show |
+|-----------------------------------------|:---:|----------------------|
+| Non-QWERTY layout, e.g. AZERTY or Dvorak (P11-003) | ⬜ | Keyboard input behaves correctly on that physical layout |
+| Mouse with side buttons (P11-005) | ⬜ | `XButton1`/`XButton2` report presses from the real buttons |
+| High-DPI display (P11-015) | ⬜ | Mouse and touch coordinates land correctly on a real high-DPI display |
 
 ## Recording a result (template — INP-0222)
 

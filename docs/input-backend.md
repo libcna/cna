@@ -1,20 +1,20 @@
 # Input Backend Architecture
 
-> **Related input docs (INP-0003):** [plan](../plans/plan_input.md) · [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+> **Related input docs (INP-0003):** [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
 
 Describes how CNA wires SDL3 input events to the `Microsoft::Xna::Framework::Input` (and
-`Input::Touch`) public API. Reference implementation: `feature/input` branch, `plans/plan_input.md`
+`Input::Touch`) public API. Reference implementation: the `feature/input` branch, merged on 2026-07-18
 (Phases I1–I6, legacy tasks 700–777). FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
 
 > **Task-number scheme (INPUT-AUDIT-004, updated 2026-07-16).** This doc-set accumulated three
-> generations of task numbering as `plans/plan_input.md` was revised: bare 3-digit numbers (e.g. "task 734",
+> generations of task numbering as the input plan was revised: bare 3-digit numbers (e.g. "task 734",
 > "tasks 700–777"), the `Phase I*`/`INPUT-*` scheme (e.g. "Phase I12", "Phase I13/I14"), and — since the
-> **2026-07-07 plan reset** — the current, sole authoritative scheme, `P0-001`–`P13-006` in
-> `plans/plan_input.md`. **None of the earlier two schemes are tracked in the current plan** and their task
+> **2026-07-07 plan reset** — `P0-001`–`P13-006`, the scheme of the final plan (closed 2026-07-18: 490
+> tasks done, the 15 hardware checks P11-001..015 blocked on hardware; the plan was deleted on
+> 2026-10-29 and is in Git history). **None of the earlier two schemes map onto it** and their task
 > IDs do **not** correspond to any `P#-###` task; a "Phase I12" or "task 734" citation elsewhere in this
 > doc-set is historical provenance for *when a specific behavior was fixed*, not evidence that any
-> current-plan task is complete. Do not infer current-plan status from a legacy citation — check
-> `plans/plan_input.md` itself. These legacy numbers are also **not** related to the identically-numbered
+> `P#-###` task is complete. These legacy numbers are also **not** related to the identically-numbered
 > items in the Graphics track (`GRAPHICS_TASKS.md`, e.g. tasks 710–717 or 868–872 there mean
 > SDL_Renderer / DepthStencil work, not input). When a doc needs to point at Graphics work it names
 > `GRAPHICS_TASKS.md` explicitly; a bare number here always means input.
@@ -177,7 +177,7 @@ Where the difference is actually visible:
 
 ## 4. Per-device fidelity notes
 
-Full per-task detail lives in `plans/plan_input.md` (Phases I1–I6); the per-member FNA comparison
+Per-task detail is in Git history (the input plan, Phases I1–I6); the per-member FNA comparison
 is `docs/input-fna-fidelity.md`. Summary of what's real vs. what deviates:
 
 ### Keyboard

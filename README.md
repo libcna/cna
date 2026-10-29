@@ -92,7 +92,7 @@ components, relocation, version semantics and tested platform coverage.
 - `Keyboard`, `Mouse` (incl. `MouseCursor`), `GamePad` (up to 4 players), `TouchPanel`/`TouchCollection`,
   and the `GestureDetector` gesture recognizer (Tap/DoubleTap/Hold/Drag/Flick/Pinch) — all under
   `Microsoft::Xna::Framework::Input`, matching FNA/XNA 4.0 behavior member-for-member.
-  See `plans/plan_input.md` for the full FNA-parity audit record.
+  See `docs/input-fna-fidelity.md` and `docs/input-member-parity-matrix.md` for the FNA-parity record.
 - CNAEXT extensions beyond stock XNA: `TextInputEXT` (IME composition), rumble/trigger-rumble/light-bar/
   gyro/accelerometer on `GamePad`, raw `CNA::Input::Joysticks` (distinct from `GamePad`'s mapped view),
   device-level `CNA::Input::Sensors`/`Power`, and `CNA::Input::Haptics` for standalone haptic devices.
