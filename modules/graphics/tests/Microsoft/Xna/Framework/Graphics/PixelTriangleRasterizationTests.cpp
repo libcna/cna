@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_samples_multirenderer.md MSR-034: the XNA Primitives sample represents each star
+// MSR-034: the XNA Primitives sample represents each star
 // with a one-pixel clockwise triangle in an orthographic, top-left-origin projection. Keep that
 // real application contract distinct from larger triangles that can hide a winding or pixel-centre
 // mismatch.

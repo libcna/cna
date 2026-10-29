@@ -64,6 +64,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   [`../docs/inspector-benchmark.md`](../docs/inspector-benchmark.md).
 - [`cna-samples/plan.md`](../../cna-samples/plan.md) — authoritative sample coverage,
   cross-repository gap fixes and native/web verification work.
+- `plan_samples_multirenderer.md` — the native sample multi-renderer qualification
+  (`MSR-001`..`MSR-040`, 2026-10-04/14), every item done; deleted on 2026-10-29 (Git history
+  only). The measured matrix, the full static-frame review and the remaining external gates are in
+  [`cna-samples/renderers.md`](../../cna-samples/renderers.md); comments cite the rows as
+  `MSR-nnn`.
 - `plan_cna_rts.md` — RTS-001/RTS-002, the 2026-10-27 `cna-rts` consumer validation and
   HiDef/direct-screenshot repair; deleted on 2026-10-28 (Git history only). Consumer-owned
   evidence and the remaining optional raw-upload cleanup are in

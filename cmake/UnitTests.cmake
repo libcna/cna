@@ -220,11 +220,11 @@ if(CNA_BUILD_TESTS)
             "tests/*.cpp"
     )
 
-    # FX-111 and plans/plan_samples_multirenderer.md MSR-038: this is test-harness
-    # policy, not an integration-test case.  Keep it out of the module grouping below and compile
-    # it into every test executable.  Otherwise only CnaTests/CnaIntegrationTests receive the
-    # non-interactive SDL assertion policy, while a focused executable such as CnaRendererTests
-    # can block indefinitely in SDL's zenity assertion dialog.
+    # FX-111 and MSR-038: this is test-harness policy, not an integration-test case.  Keep it out
+    # of the module grouping below and compile it into every test executable.  Otherwise only
+    # CnaTests/CnaIntegrationTests receive the non-interactive SDL assertion policy, while a
+    # focused executable such as CnaRendererTests can block indefinitely in SDL's zenity
+    # assertion dialog.
     set(CNA_TEST_HARNESS_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/HarnessAssertionPolicy.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/HarnessUserDataIsolation.cpp")
