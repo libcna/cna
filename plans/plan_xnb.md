@@ -767,7 +767,7 @@ Offer, in order of how directly related they are to this plan:
    this work and only ever *documented*, never fixed: `NetworkSession::Dispose()` is not idempotent
    (missing an `isDisposed_` guard other `Dispose()` methods in this codebase have) — a genuine
    heap-use-after-free when called twice. Full root cause, a concrete fix, and test guidance are
-   already written up in [`plan_net.md`](plan_net.md)'s **Phase 12** (`Task 12.1`,
+   already written up in the former `plan_net.md`'s **Phase 12** (`Task 12.1`,
    `src/Microsoft/Xna/Framework/Net/NetworkSession.cpp:278-294`). This is unrelated to `.xnb` and
    belongs to that plan file, not this one — mentioned here only so a fresh session doesn't have to
    rediscover that it exists.

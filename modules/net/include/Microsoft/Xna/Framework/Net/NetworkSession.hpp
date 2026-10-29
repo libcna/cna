@@ -172,7 +172,7 @@ namespace Microsoft::Xna::Framework::Net
          * CNA policy; XNA shows only that a migration happened), gamer IDs and the roster carry
          * over, and HostChanged is raised after the old host's GamerLeft.
          *
-         * SystemLink, Task 5.1-5.4 (plans/plan_net.md Phase 5): a LAN implementation - `false` (the
+         * SystemLink, Net Tasks 5.1-5.4: a LAN implementation - `false` (the
          * default) keeps FNA's own reference behavior exactly (`ENetBackend::HandleDisconnect`
          * unconditionally ends the session the instant its host peer disconnects). `true` enables
          * a real, full-reconnect migration instead: every surviving peer independently computes

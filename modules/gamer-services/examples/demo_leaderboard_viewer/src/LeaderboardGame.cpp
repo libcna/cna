@@ -50,7 +50,7 @@ void LeaderboardGame::Initialize()
 {
     Game::Initialize();
 
-    // Task 4.3/4.4 (plans/plan_net.md Phase 4): real persistence needs a real, distinct app-data
+    // Net Task 4.3/4.4: real persistence needs a real, distinct app-data
     // location - this demo uses its own dedicated app name so its 20 synthetic gamertags never
     // collide with any other CNA app's own local GamerServices store.
     Storage::StorageDevice::SetAppNameEXT("CnaDemoLeaderboardViewer");
@@ -108,7 +108,7 @@ void LeaderboardGame::LoadContent()
 
 void LeaderboardGame::Update(GameTime& /*gameTime*/)
 {
-    // Task 4.4 (plans/plan_net.md Phase 4): PageDown()/PageUp() mutate reader_ in place (reslicing
+    // Net Task 4.4: PageDown()/PageUp() mutate reader_ in place (reslicing
     // the already-cached full leaderboard, no new disk read), so there is no separate "rebuild the
     // reader" step.
     KeyboardState keys = Keyboard::GetState();

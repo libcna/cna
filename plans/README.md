@@ -98,9 +98,11 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   [`../docs/video-backend.md`](../docs/video-backend.md); its deviations and the library design
   decisions D1-D11 are the Media rows of [`../CHECKLIST.md`](../CHECKLIST.md). Comments cite rows
   as "MEDIA-nnn" and decisions as "media decision Dn".
-- [`plan_net.md`](plan_net.md) — networking, GamerServices, and Avatar APIs up to 2026-07 (history;
-  the current state is
-  [`../docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md)).
+- `plan_net.md` — networking, GamerServices and Avatar re-audit and hardening (2026-07-07..18, plus
+  SAMPLE-100's session-property replication on 2026-09-01): every task done, its avatar-mesh open item
+  moot since catalog v3 replaced that generator; deleted on 2026-10-29 (Git history only). The current
+  state is [`../docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md)
+  and the API doc comments; comments cite its tasks as "Net Task N.N".
 - `plan_gamer_services_server.md` (`GS-001`..`GS-011`, the CNA service, protocol, relay,
   matchmaking and standard Avatar API, 2026-09-28/29), `plan_gamer_services_avatar_polish.md`
   (`GSP-*`), `plan_gamer_services_xbox_fidelity.md` (`GSX-*`) and

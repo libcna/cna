@@ -39,8 +39,8 @@ Applies to any Net-using demo (`demo_net_avatar_sync`, `demo_net_client_server_a
   past its own `NetworkSession::Create` call before the client starts searching. Launch the host
   process first, give it a moment to finish creating its session, then launch the client — a tight
   race between the two process launches (both started in the same shell command with no delay) is
-  the most common cause of a spurious "not found," not a real bug. `plans/plan_net.md` Phase 5's own
-  cross-process integration test uses exactly this ordering (host, brief pause, then client) for
+  the most common cause of a spurious "not found," not a real bug. the host-migration
+  cross-process integration test (`TwoProcessLoopbackTest.cpp`, Net Task 5.5) uses exactly this ordering (host, brief pause, then client) for
   the same reason.
 - **"Failed to bind discovery UDP socket."** — the discovery service binds a well-known UDP port
   (61190) with `SO_REUSEADDR` specifically so multiple independent host/client *processes* on the
@@ -61,7 +61,7 @@ Applies to any Net-using demo (`demo_net_avatar_sync`, `demo_net_client_server_a
   behavior, not a CNA limitation) — both host and client must be on the same local broadcast
   domain (e.g. the same Wi-Fi/switch segment) for discovery to find each other automatically.
 - **Host migration (`AllowHostMigration`) doesn't seem to promote a new host** — host migration
-  targets the specific 3-real-process scenario `plans/plan_net.md` Phase 5's own integration test
-  exercises (the original host process actually exiting/disconnecting); it does not run
+  targets the specific 3-real-process scenario the host-migration integration test
+  (`TwoProcessLoopbackTest.cpp`, Net Task 5.5) exercises (the original host process actually exiting/disconnecting); it does not run
   speculatively or "just in case" — confirm the original host process actually terminated, not
   just became unresponsive within the same process.

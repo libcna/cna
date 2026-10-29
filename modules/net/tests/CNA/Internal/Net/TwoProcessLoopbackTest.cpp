@@ -330,7 +330,7 @@ TEST_P(NetworkUnavailableProcessTest, ReportsAvailabilityAndAllowsRecovery) {
 INSTANTIATE_TEST_SUITE_P(RequiredSocketFailures, NetworkUnavailableProcessTest,
     testing::Values("host", "client", "discovery", "find", "reply", "end-create", "end-find"));
 
-// Task 5.5 (plans/plan_net.md Phase 5): spawns 3 real, independent OS processes - one migration-host and
+// Net Task 5.5: spawns 3 real, independent OS processes - one migration-host and
 // two migration-survivor roles - and proves real host migration works across genuinely separate
 // address spaces: the host dies mid-session, exactly one survivor gets deterministically promoted
 // to a real new host (discoverable via a real ENetDiscoveryService::RegisterHost call, reachable

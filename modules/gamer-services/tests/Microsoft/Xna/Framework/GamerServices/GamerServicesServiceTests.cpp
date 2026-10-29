@@ -414,7 +414,7 @@ TEST(GuideTest, BeginShowKeyboardInputInvokesCallbackExactlyOnceOnEnterWithCorre
     delete result;
 }
 
-// --- Guide keyboard input remediation (post-plans/plan_net.md independent audit, 2026-07-18) ---
+// --- Guide keyboard input remediation (post-Net-plan independent audit, 2026-07-18) ---
 //
 // An independent post-completion audit found BeginShowKeyboardInput's title/description
 // parameters were silently discarded, UsePasswordMode was stored but never used, IsVisible never

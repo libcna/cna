@@ -4,7 +4,7 @@ The owner's decisions below govern every CNA avatar asset. The current catalog i
 `tools/avatar_builder/generate_avatar_catalog.py` (see `avatars.md`); the "Baseline evidence"
 section records the defects of the retired Blender pipeline that motivated these targets.
 
-## Acceptance criteria (verbatim, from `plans/plan_net.md`'s User Decisions table)
+## Acceptance criteria (verbatim, from the 2026-07 Net plan's User Decisions table, decision 4c)
 
 | # | Topic | Decision |
 |---|-------|----------|

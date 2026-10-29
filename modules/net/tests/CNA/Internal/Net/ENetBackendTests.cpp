@@ -101,7 +101,7 @@ namespace {
     void PollYield() { }
 #endif
 
-    // Task 6.4/6.5 (plans/plan_net.md Phase 6): shared handshake helper for the SimulatedLatency/
+    // Net Task 6.4/6.5: shared handshake helper for the SimulatedLatency/
     // SimulatedPacketLoss tests below - connects fakeClient to host's real bound port, completes a
     // real ClientHello/ServerWelcome round trip, and returns the wire id the host assigned to
     // fakeClient's own gamer (needed as AppDataMessage::SenderWireId for every AppData sent below).
@@ -1538,7 +1538,7 @@ TEST(ENetBackendTest, ClientRaisesSessionEndedOnHostDisconnect) {
     }
     ASSERT_NE(clientPeerFromHostSide, nullptr);
 
-    // Task 5.2/5.3 (plans/plan_net.md Phase 5): AllowHostMigration now has a real effect in general (see
+    // Net Task 5.2/5.3: AllowHostMigration now has a real effect in general (see
     // the tests below), but this specific scenario never completes a real ServerWelcome handshake
     // - client.session's own WireIdToGamer stays empty, so AttemptHostMigration has no roster to
     // find a survivor in and correctly falls back to the exact same immediate-end behavior as
@@ -1565,7 +1565,7 @@ TEST(ENetBackendTest, ClientRaisesSessionEndedOnHostDisconnect) {
     EXPECT_EQ(client.session->getSessionStateProperty(), NetworkSessionState::Ended);
 }
 
-// --- Task 5.2/5.3/5.4: real host migration (plans/plan_net.md Phase 5) ---
+// --- Task 5.2/5.3/5.4: real host migration (Net plan Phase 5) ---
 
 // Task 5.4: the regression case ClientRaisesSessionEndedOnHostDisconnect above can't actually
 // cover, since its own handshake never completes far enough to give AttemptHostMigration a real
@@ -1771,7 +1771,7 @@ TEST(ENetBackendTest, ClientPromotesItselfWhenItIsTheOnlyKnownSurvivor) {
 
 // Task 5.3: proves the tie-break math itself (excluding the dead host, picking the true minimum
 // remaining wire id) rather than a full cross-process reconnect, which needs a second real
-// NetworkSession to reconnect to - see plans/plan_net.md Task 5.1's own note on why that's covered by
+// NetworkSession to reconnect to - see Net Task 5.1's own note on why that's covered by
 // the multi-process harness instead (Task 5.5), not here.
 TEST(ENetBackendTest, ClientTargetsTheLowestSurvivingWireIdInsteadOfPromotingItself) {
     ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);

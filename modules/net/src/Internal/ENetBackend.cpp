@@ -107,7 +107,7 @@ namespace CNA::Internal::Net
             // (TeardownSession erasing it from Sessions()), which already happens at the same time
             // NetworkSession::Dispose() frees everything *it* owns.
             std::vector<std::unique_ptr<NetworkGamer>> OwnedRemoteGamers;
-            // Task 5.3 (plans/plan_net.md Phase 5): set by AttemptHostMigration right before issuing the
+            // Net Task 5.3: set by AttemptHostMigration right before issuing the
             // reconnect Connect() call, so the ServerWelcome that completes it (a genuine
             // migration, not a plain fresh join) knows to raise NetworkEventType::HostChange once
             // a real NetworkGamer* for the new host exists - see HandleServerWelcome.
@@ -945,7 +945,7 @@ namespace CNA::Internal::Net
             }
         }
 
-        // Task 5.1/5.2/5.3 (plans/plan_net.md Phase 5): called from HandleDisconnect's host-lost branch
+        // Net Task 5.1/5.2/5.3: called from HandleDisconnect's host-lost branch
         // when AllowHostMigration is true, instead of ending the session outright. Every survivor
         // independently computes the same deterministic new host (lowest remaining wire id) from
         // its own already-cached roster - no extra negotiation round-trip is needed, since every
@@ -1027,7 +1027,7 @@ namespace CNA::Internal::Net
             // Shared cleanup for both outcomes below: every remote gamer this peer knew about is
             // really gone from its point of view now (real GamerLeave events - a reconnecting/
             // promoted peer's roster genuinely gets rebuilt from scratch, not preserved across the
-            // migration - see plans/plan_net.md Task 5.1's own "simple, not seamless" scope note), and
+            // migration - see Net Task 5.1's own "simple, not seamless" scope note), and
             // every wire-id bookkeeping structure is reset so the handshake that follows (either
             // accepting fresh reconnects as the new host, or this peer's own reconnect to whoever
             // else was promoted) starts from a clean slate - stale entries from the dead host's own

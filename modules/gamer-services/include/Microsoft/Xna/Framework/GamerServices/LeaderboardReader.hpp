@@ -275,7 +275,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          * calling this: passing a full, un-sliced leaderboard here (rather than the specific page
          * `[start, start + size)`) will silently produce a wrong (too-short-or-shifted) page,
          * since this constructor trusts its input completely and never re-derives the intended
-         * slice itself. Task 4.4 (plans/plan_net.md Phase 4): every real `BeginRead` overload now calls
+         * slice itself. Net Task 4.4: every real `BeginRead` overload now calls
          * this with the *full* local leaderboard as `entries` (not pre-sliced to one page),
          * relying on the slicing loop above to derive the actual page - the real (non-stub)
          * implementation this precondition originally anticipated, now in place.

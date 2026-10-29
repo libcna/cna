@@ -78,7 +78,7 @@ namespace CNA::Internal::GamerServices
         fs::path LeaderboardsDir() { return StoreRoot() / "leaderboards"; }
 
         // Best-effort read - a missing or corrupt file starts empty rather than throwing
-        // (plans/plan_net.md Task 4.7's explicit requirement), since "no local record yet" and "record
+        // (Net Task 4.7's explicit requirement), since "no local record yet" and "record
         // is unreadable" both mean the same thing to a caller: nothing usable was persisted.
         std::optional<StoreJson> TryReadJsonFile(const fs::path& path)
         {
