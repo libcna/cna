@@ -152,8 +152,8 @@ def include_roots() -> list[str]:
     # Families that share code do it through modules/renderers/common/<name>/include -- one level
     # deeper than a family's own root, so the glob above cannot see it.
     # cmake/RendererDescriptorGate.cmake carries the same pair of roots; this one was left behind
-    # when D3DCommon became shared by the retired DirectX 11 and 12 descriptors (DX-214/DX-225 of
-    # the retired plans/plan_dx.md), which is how a descriptor that compiled under the CMake gate
+    # when D3DCommon became shared by the retired DirectX 11 and 12 descriptors (DX-214/DX-225),
+    # which is how a descriptor that compiled under the CMake gate
     # still failed here.
     roots += [str(p) for p in sorted((REPO / "modules" / "renderers").glob("common/*/include"))]
 

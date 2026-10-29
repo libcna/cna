@@ -4,7 +4,7 @@
 // C ABI CABI-37/CABI-39 -- the C ABI's own browser probe
 // (modules/c-api/wasm/browser_probe.html), registered as the ctest CApi_WasmBrowserProbe, runs
 // through this script. It was first written for the PixiJS renderer's pixel suite
-// (plans/plan_pixijs.md PIXIJS-85, a renderer retired on 2026-09-17 -- see
+// (PIXIJS-85, a renderer retired on 2026-09-17 -- see
 // docs/removed-renderers.md) and kept, renamed, because it is not renderer-specific: it decides how
 // a page is served, what counts as a pass, and what "Playwright is available" means.
 //

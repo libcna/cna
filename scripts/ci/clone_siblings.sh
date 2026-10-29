@@ -8,7 +8,7 @@
 # candidate branches it actually has; failing that `next`, CNA's integration branch that topic
 # branches (`x11`, ...) are cut from; and `develop` when it has neither. Pinning `develop` for every sibling made every CI build of
 # CNA `next` fail at configure: `next` asks for sharp-runtime components that exist only on
-# sharp-runtime's own `next` (plans/plan_native_platform_validation.md, "Next steps", step 1).
+# sharp-runtime's own `next` (NPV-*, the native platform validation's "Next steps").
 #
 # Usage: scripts/ci/clone_siblings.sh "<candidate branches, space separated>" <repo> [<repo> ...]
 #

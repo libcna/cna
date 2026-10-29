@@ -110,7 +110,7 @@ class WebGpuRealWindowResizeTest : public Game
         const int newViewportHeight = device.getViewportProperty().getHeightProperty();
         const auto& parameters = device.getPresentationParametersProperty();
 
-        // plans/plan_webgpu_failing_eight.md WGF-0007: the physical rectangle as well as the
+        // WGF-0007: the physical rectangle as well as the
         // logical size. Under FixedHeightDynamicWidth (which the constructor now asks for, the way
         // the reference test does) both follow the window; the physical one is what a renderer
         // actually programs, and checking it here is what distinguishes "the device recomputed its
@@ -220,7 +220,7 @@ protected:
         }
         if (frame_ >= kMaxWaitFrames)
         {
-            // plans/plan_webgpu_failing_eight.md WGF-0006: say which half timed out. This arm used
+            // WGF-0006: say which half timed out. This arm used
             // to report "the platform resize never arrived" whichever half was missing, which is
             // the wrong half here and sent the diagnosis at the compositor instead of at the
             // drawable-size path.
@@ -255,7 +255,7 @@ public:
         // first check -- the defect VKPAR-0006 fixed in 104 Vulkan
         // tests.
         gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
-        // plans/plan_webgpu_failing_eight.md WGF-0007: state the prerequisite instead of assuming
+        // WGF-0007: state the prerequisite instead of assuming
         // it. This test's header called FixedHeightDynamicWidth "the default"; it stopped being
         // one, and `GraphicsRendererCreateArgs` now defaults to Letterbox -- under which the
         // LOGICAL viewport is pinned in both axes by design and a width-only oracle can never

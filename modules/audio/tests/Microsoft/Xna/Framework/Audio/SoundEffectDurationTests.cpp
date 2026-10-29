@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_native_platform_validation.md NPV-0105: SoundEffect.Duration is a property of the
+// NPV-0105: SoundEffect.Duration is a property of the
 // sample data, not of an output device -- FNA computes it from the sample count when the effect
 // is created. So it must be reported whatever CNA_AUDIO_PLATFORM is, including NULL,
 // which have no mixer to ask. It used to be zero there for every effect, which a game timing

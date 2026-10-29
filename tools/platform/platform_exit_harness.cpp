@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_native_platform_validation.md NPV-0102: a process that exits while CNA's current
+// NPV-0102: a process that exits while CNA's current
 // platform -- and so its window-system connection -- is still open.
 //
 // That is the ordinary end of every application written against the XNA API: CurrentPlatform

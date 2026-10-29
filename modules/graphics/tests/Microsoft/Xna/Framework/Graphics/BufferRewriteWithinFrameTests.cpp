@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_street_perf.md STREETPERF-0002: a draw renders the vertex and index data its buffers
+// STREETPERF-0002: a draw renders the vertex and index data its buffers
 // held when the draw was issued, even when the game rewrites those buffers before the frame is
 // presented. Immediate renderers get this for free; a renderer that records draws and replays
 // them at Present() has to keep what each draw was issued with. SDL_GPU used to copy every

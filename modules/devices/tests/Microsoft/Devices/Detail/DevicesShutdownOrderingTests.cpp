@@ -21,7 +21,7 @@
 
 extern char** environ;
 
-// plans/plan_native_platforms_integration.md NPI-0007: cmake/Harnesses.cmake only builds
+// NPI-0007: cmake/Harnesses.cmake only builds
 // cna_devices_shutdown_ordering_harness (and defines this macro) when SDL3 is actually configured
 // -- the harness's whole point is proving the ordering around SDL3's own real native shutdown
 // call, which does not exist to make under CNA_ENABLE_SDL=OFF or a non-SDL3 selection. Without

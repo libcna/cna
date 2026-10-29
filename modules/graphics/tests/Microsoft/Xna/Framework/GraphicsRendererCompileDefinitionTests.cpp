@@ -32,23 +32,23 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_DIRECTX9
     ++enabled;
 #endif
-    // plans/plan_dx2.md DX2-84: the same class of gap the D3D9 comment above documents -- no commit in
+    // DX2-84: the same class of gap the D3D9 comment above documents -- no commit in
     // this file's history ever added a DIRECTX2 entry either, so the full CnaTests suite's first-ever
     // run under CNA_GRAPHICS_RENDERER=DIRECTX2 (this regression pass) would have silently failed
     // EXPECT_EQ(enabled, 1) the same way D3D9's did.
-    // plans/plan_dx3.md: same class of gap DX2-84's own comment above documents -- DIRECTX3 needs its own
+    // DX30-*: same class of gap DX2-84's own comment above documents -- DIRECTX3 needs its own
     // entry here too, added proactively this time rather than discovered by a from-scratch regression.
 #ifdef CNA_RENDERER_SDL_GPU
     ++enabled;
 #endif
-    // plans/plan_opengles1.md (retired 2026-09-17): same class of gap DX2-84's comment above
+    // OPENGLES1-* (retired 2026-09-17): same class of gap DX2-84's comment above
     // documents -- a new renderer that never gets an entry here makes this test report 0 enabled
     // renderers rather than 1.
-    // plans/plan_opengl1.md phase 12 finding: same gap class as the D3D9 comment above -- no commit in
+    // The OPENGL1 plan's phase 12 finding: same gap class as the D3D9 comment above -- no commit in
     // this file's own history ever added an OPENGL1 entry either, and the full unfiltered
     // CnaTests suite had never actually been run under CNA_GRAPHICS_RENDERER=OPENGL1 until this
     // audit did so.
-    // plans/plan_wicked.md: same gap class the D3D9 comment above documents -- the registration union
+    // WICKED-*: same gap class the D3D9 comment above documents -- the registration union
     // that added the WICKED identity (retired 2026-09-17) everywhere else never conflicted on this
     // file, so its silent omission surfaced only when the full CnaTests suite first ran under
     // CNA_GRAPHICS_RENDERER=WICKED and this test reported 0 enabled renderers. The trap is not
@@ -58,13 +58,13 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     ++enabled;
 #endif
 
-    // The IGL identity (plans/plan_igl.md), registered here at the same time it was registered
+    // The IGL identity (IGL-*), registered here at the same time it was registered
     // everywhere else.
 
-    // plans/plan_pixijs.md: same registration discipline as every renderer above -- add the PIXIJS
+    // PIXIJS-*: same registration discipline as every renderer above -- add the PIXIJS
     // entry here in the same task that adds the identity everywhere else, not after the fact.
 
-    // plans/plan_nanovg.md: same registration discipline -- add the NANOVG entry here in the same task
+    // NVG-*: same registration discipline -- add the NANOVG entry here in the same task
     // that adds the identity everywhere else, not after the fact.
 
     // RTR-P7-8: exactly one, in BOTH modes.

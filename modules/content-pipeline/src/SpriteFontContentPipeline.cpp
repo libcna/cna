@@ -395,7 +395,7 @@ namespace CNA::Content::Pipeline
 #endif
 
     // The packer needs no FreeType: a font sheet (a texture of glyph cells) is packed with it too,
-    // and that route is compiled in every build (plans/plan_native_platform_validation.md NPV-0130).
+    // and that route is compiled in every build (NPV-0130).
     namespace
     {
         /** @brief One rasterized glyph, before packing. */

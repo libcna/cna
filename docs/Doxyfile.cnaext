@@ -1,6 +1,6 @@
 # Doxygen configuration for the CNA::Graphics engine layer alone.
 #
-# plans/plan_modern.md MOD-7. Separate from the repository's root Doxyfile on purpose: that file is stock
+# MOD-7. Separate from the repository's root Doxyfile on purpose: that file is stock
 # `doxygen -g` output with an empty INPUT, and repairing it is a repository-wide job with its
 # own consequences for every other module. This one scans a single directory, so it can be run and
 # checked here and now:

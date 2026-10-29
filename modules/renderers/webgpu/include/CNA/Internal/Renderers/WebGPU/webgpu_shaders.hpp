@@ -195,7 +195,7 @@ struct VertexOutput {
     // u.light0DiffuseVertexColor.w / u.light0DirTexture.w are 0, so vc is white and the sample is
     // white: every existing lit draw is byte-identical.
     /**
-     * @brief plans/plan_webgpu_modern_graphics.md WMG-0014: directional, cascaded, point and spot
+     * @brief WMG-0014: directional, cascaded, point and spot
      *        shadow reception, appended to every lit fragment program that receives shadows.
      *
      * The WGSL twin of SDL_GPU's `shadow_sampling.glsl` (first written for the retired VULKAN
@@ -1047,7 +1047,7 @@ struct VSOut {
 )WGSL";
 
     /**
-     * @brief plans/plan_webgpu_modern_graphics.md WMG-0022: image-based lighting for the two PBR
+     * @brief WMG-0022: image-based lighting for the two PBR
      * families, appended to their source exactly as @ref kShadowSampling is.
      *
      * The split-sum equation is transliterated function for function from EasyGL's `cnaIblAmbient`

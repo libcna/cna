@@ -272,7 +272,7 @@ namespace CNA::Examples
         [[nodiscard]] int getResultProperty() const { return result_; }
 
         // Marks the overall result as failed for a check that is not a pixel comparison --
-        // e.g. "this unimplemented path must throw" (plans/plan_sokol.md SOKOL-20, retired
+        // e.g. "this unimplemented path must throw" (SOKOL-20, retired
         // 2026-09-17). Without this a derived test could only fail the run through ExpectPixel(),
         // which would mean either
         // hand-rolling its own Game subclass for one non-pixel assertion or, worse, printing

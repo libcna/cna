@@ -908,7 +908,7 @@ CNA_WEBGPU_WGSL_ROUTE_TEST(VertexTextureAndEffectOutliveTheirDeferredDraw,
 #undef CNA_WEBGPU_WGSL_ROUTE_TEST
 
 // -----------------------------------------------------------------------------------------------
-// plans/plan_webgpu_perf.md WEBGPUPERF-0008 -- what a compiled-effect draw costs wgpu.
+// WEBGPUPERF-0008 -- what a compiled-effect draw costs wgpu.
 //
 // A compiled draw used to copy every vertex stream it bound, whole, into the queued command and
 // upload that copy at replay, and to write its two register files and build four bind groups per

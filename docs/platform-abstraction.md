@@ -73,7 +73,7 @@ a server, a test runner, a terminal game. A build that opens a window needs SDL3
 **Platform independence, the audio backend and content WAV decoding are three separate axes, and
 "SDL-free" only means something once all three agree.** `CNA_PLATFORM=HEADLESS`/`TERMINAL`
 removes SDL from windowing/events/input; `CNA_AUDIO_PLATFORM=NULL` or `ALSA` removes it from
-playback/capture; but until `plans/plan_native_platforms_integration.md` NPI-0007..0011,
+playback/capture; but until NPI-0007..0011,
 `cna_content` still could not finish linking in that combination, because `DecodeWavToPcm16` --
 used to decode a WAV-wrapped `SoundEffect`/XACT `WaveBank` entry to PCM16, independent of whether
 anything is ever played back -- was implemented only via `SDL_LoadWAV_IO`/`SDL_ConvertAudioSamples`

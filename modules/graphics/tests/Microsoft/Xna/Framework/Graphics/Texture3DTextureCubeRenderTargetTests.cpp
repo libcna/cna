@@ -205,13 +205,13 @@ namespace
     ///     plain cube in
     ///     modules/graphics/examples/texturecube_texture3d_setdata_contract_test.cpp.
     ///   Wicked -- a real staged upload into the rendered cube's colour array (UploadTextureRegion,
-    ///     plans/plan_wicked.md WICKED-55/79), with the per-face readback implemented, so the byte-exact
+    ///     WICKED-55/79), with the per-face readback implemented, so the byte-exact
     ///     round trip is asserted by the shared TextureCube/RenderTargetCube suites. A
     ///     multisampled cube still refuses: resolving into one face needs a per-face resolve
     ///     subresource this renderer does not create.
     [[nodiscard]] inline bool RenderTargetCubeAcceptsSetData()
     {
-        // plans/plan_igl.md IGL-21: IGL belongs here too. Its RenderTargetCube's colour attachment is an
+        // IGL-21: IGL belongs here too. Its RenderTargetCube's colour attachment is an
         // ordinary sampleable `igl::TextureType::Cube` image, so `IglRenderTargetCubeRenderer::
         // SetData` seeds a face with a real upload rather than accepting and discarding one --
         // which is what this test forbids. Without the entry an IGL build asserted a refusal the

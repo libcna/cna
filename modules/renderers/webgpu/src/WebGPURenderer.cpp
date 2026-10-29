@@ -1119,7 +1119,7 @@ namespace CNA::Internal::Renderers::WebGPU
             // it is a LOWER clamp on the level-of-detail -- the same mapping the reference renderer
             // makes to GL_TEXTURE_MIN_LOD and FNA3D's SDL_GPU driver to min_lod. 0 is XNA's default
             // and means no restriction, which is also lodMinClamp's own default.
-            // plans/plan_webgpu_failing_eight.md WGF-0005: bounded by the upper clamp. WebGPU
+            // WGF-0005: bounded by the upper clamp. WebGPU
             // refuses a sampler whose lodMinClamp exceeds its lodMaxClamp -- "Invalid lodMaxClamp:
             // 32. Must be greater or equal to lodMinClamp (which is 99)" -- and an invalid sampler
             // then invalidates the bind group that names it, which invalidates the draw, which
@@ -2186,7 +2186,7 @@ namespace CNA::Internal::Renderers::WebGPU
                                                          int w, int h, void* data,
                                                          int dataLength) const
     {
-        // plans/plan_webgpu_failing_eight.md WGF-0003. The rules are one shared contract, first
+        // WGF-0003. The rules are one shared contract, first
         // written for the retired VULKAN renderer: a block-aligned origin, a
         // block-aligned extent unless it reaches the mip edge, and tightly packed block rows out.
         if (data == nullptr || !compressed_ || blockBytes_ <= 0) return false;
@@ -3953,7 +3953,7 @@ namespace CNA::Internal::Renderers::WebGPU
             CreateSurface();
             RequestAdapterAndDevice();
             ConfigureSurface(true);
-            // plans/plan_webgpu_failing_eight.md WGF-0004: the requested backbuffer sample count,
+            // WGF-0004: the requested backbuffer sample count,
             // applied rather than merely reported. This constructor used to ignore
             // `args.multiSampleCount` entirely, so a GraphicsDevice built directly from
             // PresentationParameters (rather than through GraphicsDeviceManager, whose Reset()
@@ -4130,7 +4130,7 @@ namespace CNA::Internal::Renderers::WebGPU
         transientBufferPool_.clear();
     }
 
-    // ---- plans/plan_webgpu_perf.md WEBGPUPERF-0002: the per-flush stream arenas -------------------
+    // ---- WEBGPUPERF-0002: the per-flush stream arenas -------------------
 
     std::uint64_t WebGPURenderer::ArenaAlignmentEXT(const StreamArenaEXT& arena) const
     {
@@ -4548,7 +4548,7 @@ namespace CNA::Internal::Renderers::WebGPU
         DestroyPbrResources();
         DestroySkinnedResources();
         DestroySkinnedPbrResources();
-        // plans/plan_webgpu_failing_eight.md WGF-0002: the two SHARED bind-group layouts, which
+        // WGF-0002: the two SHARED bind-group layouts, which
         // belong to the device exactly as every family's own do. `EnsureShadowResourcesEXT` and
         // `EnsureIblResourcesEXT` build theirs once and return early while the handle is non-null,
         // so a handle left over from a destroyed device is never rebuilt -- and every pipeline
@@ -5212,7 +5212,7 @@ namespace CNA::Internal::Renderers::WebGPU
         layoutEntries[2].visibility = WGPUShaderStage_Fragment;
         layoutEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
         layoutEntries[2].buffer.minBindingSize = 16;
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the block lives in the uniform arena, so every
+        // WEBGPUPERF-0007: the block lives in the uniform arena, so every
         // sprite of one texture and sampler binds the same cached group.
         layoutEntries[2].buffer.hasDynamicOffset = true;
         WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
@@ -5460,7 +5460,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // colored/textured/colored_textured/alpha_test/dual/instanced -- ALL of which bind a 160-byte
         // buffer (every *DrawCommand::uniforms is std::array<float,40>), so declare the exact size.
         uniformEntry.buffer.minBindingSize = kPrimaryUniformByteSize;
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the block lives in the uniform arena, so every
+        // WEBGPUPERF-0007: the block lives in the uniform arena, so every
         // family sharing this layout binds the chunk's one group at its own offset.
         uniformEntry.buffer.hasDynamicOffset = true;
         WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
@@ -6004,7 +6004,7 @@ namespace CNA::Internal::Renderers::WebGPU
                                                      const std::uint32_t slot)
     {
         if (!state.enabled || state.records.empty()) return nullptr;
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0002: into this flush's vertex arena, written with
+        // WEBGPUPERF-0002: into this flush's vertex arena, written with
         // everything else the flush appended. Only a stream larger than a whole chunk still takes
         // a buffer and a queue write of its own.
         if (ReserveArenaEXT(vertexArenaEXT_, state.records.size()))
@@ -6449,7 +6449,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
 namespace
 {
-    /// plans/plan_street_webgpu.md STREETW-0004: which object-space position a stock family's
+    /// STREETW-0004: which object-space position a stock family's
     /// vertex stage hands to its transforms, and therefore where the per-instance matrix goes.
     enum class InstancedWgslShapeEXT
     {
@@ -6696,7 +6696,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         coloredTexturedShaderDescriptor.nextInChain = &coloredTexturedWgsl.chain;
         coloredTexturedShader_ = wgpuDeviceCreateShaderModule(device_, &coloredTexturedShaderDescriptor);
 
-        // plans/plan_street_webgpu.md STREETW-0004: the instanced twins of both.
+        // STREETW-0004: the instanced twins of both.
         texturedInstancedShader_ = CreateInstancedStockModuleEXT(
             device_, "CNA WebGPU Textured3D Instanced WGSL", webgpu_shaders::kTextured,
             InstancedWgslShapeEXT::Rigid, "Textured3D");
@@ -6838,7 +6838,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         litPipelineLayout_ = nullptr;
         litBindGroupLayout_ = nullptr;
         litTexturedShader_ = nullptr;
-        // plans/plan_street_webgpu.md STREETW-0004: the instanced twins, on the same
+        // STREETW-0004: the instanced twins, on the same
         // principle -- a pipeline cache nobody frees is the leak this prevents.
         for (auto* cache : {&litTexturedInstancedPipelines_, &litTexturedVertexLitInstancedPipelines_})
         {
@@ -6880,7 +6880,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         shaderDescriptor.label = StringView("CNA WebGPU LitTextured3D WGSL");
         shaderDescriptor.nextInChain = &wgsl.chain;
         litTexturedShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
-        // plans/plan_street_webgpu.md STREETW-0004: its instanced twin.
+        // STREETW-0004: its instanced twin.
         litTexturedInstancedShader_ = CreateInstancedStockModuleEXT(
             device_, "CNA WebGPU LitTextured3D Instanced WGSL", webgpu_shaders::kLitTextured,
             InstancedWgslShapeEXT::Rigid, "LitTextured3D", webgpu_shaders::kShadowSampling);
@@ -6906,7 +6906,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         vertexLitShaderDescriptor.label = StringView("CNA WebGPU LitTextured3D VertexLit WGSL");
         vertexLitShaderDescriptor.nextInChain = &vertexLitWgsl.chain;
         litTexturedVertexLitShader_ = wgpuDeviceCreateShaderModule(device_, &vertexLitShaderDescriptor);
-        // plans/plan_street_webgpu.md STREETW-0004: its instanced twin.
+        // STREETW-0004: its instanced twin.
         litTexturedVertexLitInstancedShader_ = CreateInstancedStockModuleEXT(
             device_, "CNA WebGPU LitTextured3D VertexLit Instanced WGSL",
             webgpu_shaders::kLitTexturedVertexLit, InstancedWgslShapeEXT::Rigid,
@@ -7068,7 +7068,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (alphaTestColoredShader_ != nullptr) wgpuShaderModuleRelease(alphaTestColoredShader_);
         alphaTestShader_ = nullptr;
         alphaTestColoredShader_ = nullptr;
-        // plans/plan_street_webgpu.md STREETW-0004: the instanced twins, on the same
+        // STREETW-0004: the instanced twins, on the same
         // principle -- a pipeline cache nobody frees is the leak this prevents.
         for (auto* cache : {&alphaTestInstancedPipelines_, &alphaTestColoredInstancedPipelines_})
         {
@@ -7105,7 +7105,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         shaderDescriptor.label = StringView("CNA WebGPU AlphaTest3D WGSL");
         shaderDescriptor.nextInChain = &wgsl.chain;
         alphaTestShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
-        // plans/plan_street_webgpu.md STREETW-0004: its instanced twin.
+        // STREETW-0004: its instanced twin.
         alphaTestInstancedShader_ = CreateInstancedStockModuleEXT(
             device_, "CNA WebGPU AlphaTest3D Instanced WGSL", webgpu_shaders::kAlphaTest,
             InstancedWgslShapeEXT::Rigid, "AlphaTest3D");
@@ -7124,7 +7124,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         coloredShaderDescriptor.label = StringView("CNA WebGPU AlphaTestColored3D WGSL");
         coloredShaderDescriptor.nextInChain = &coloredWgsl.chain;
         alphaTestColoredShader_ = wgpuDeviceCreateShaderModule(device_, &coloredShaderDescriptor);
-        // plans/plan_street_webgpu.md STREETW-0004: its instanced twin.
+        // STREETW-0004: its instanced twin.
         alphaTestColoredInstancedShader_ = CreateInstancedStockModuleEXT(
             device_, "CNA WebGPU AlphaTest3D Colored Instanced WGSL", webgpu_shaders::kAlphaTestColored,
             InstancedWgslShapeEXT::Rigid, "AlphaTest3D Colored");
@@ -7215,7 +7215,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         dualTextureBindGroupLayout_ = nullptr;
         dualTextureShader_ = nullptr;
         dualTextureColoredShader_ = nullptr;
-        // plans/plan_street_webgpu.md STREETW-0004: the instanced twins, on the same
+        // STREETW-0004: the instanced twins, on the same
         // principle -- a pipeline cache nobody frees is the leak this prevents.
         for (auto* cache : {&dualTextureInstancedPipelines_, &dualTextureColoredInstancedPipelines_})
         {
@@ -7254,7 +7254,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         shaderDescriptor.label = StringView("CNA WebGPU DualTexture3D WGSL");
         shaderDescriptor.nextInChain = &wgsl.chain;
         dualTextureShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
-        // plans/plan_street_webgpu.md STREETW-0004: its instanced twin.
+        // STREETW-0004: its instanced twin.
         dualTextureInstancedShader_ = CreateInstancedStockModuleEXT(
             device_, "CNA WebGPU DualTexture3D Instanced WGSL", webgpu_shaders::kDualTexture,
             InstancedWgslShapeEXT::Rigid, "DualTexture3D");
@@ -7272,7 +7272,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         coloredShaderDescriptor.label = StringView("CNA WebGPU DualTextureColored3D WGSL");
         coloredShaderDescriptor.nextInChain = &coloredWgsl.chain;
         dualTextureColoredShader_ = wgpuDeviceCreateShaderModule(device_, &coloredShaderDescriptor);
-        // plans/plan_street_webgpu.md STREETW-0004: its instanced twin.
+        // STREETW-0004: its instanced twin.
         dualTextureColoredInstancedShader_ = CreateInstancedStockModuleEXT(
             device_, "CNA WebGPU DualTexture3D Colored Instanced WGSL", webgpu_shaders::kDualTextureColored,
             InstancedWgslShapeEXT::Rigid, "DualTexture3D Colored");
@@ -7393,7 +7393,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         envMapBindGroupLayout_ = nullptr;
         envMapTextureBindGroupLayout_ = nullptr;
         envMapShader_ = nullptr;
-        // plans/plan_street_webgpu.md STREETW-0004: the instanced twins, on the same
+        // STREETW-0004: the instanced twins, on the same
         // principle -- a pipeline cache nobody frees is the leak this prevents.
         for (auto* cache : {&envMapInstancedPipelines_})
         {
@@ -7429,7 +7429,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         shaderDescriptor.label = StringView("CNA WebGPU EnvMap3D WGSL");
         shaderDescriptor.nextInChain = &wgsl.chain;
         envMapShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
-        // plans/plan_street_webgpu.md STREETW-0004: its instanced twin.
+        // STREETW-0004: its instanced twin.
         envMapInstancedShader_ = CreateInstancedStockModuleEXT(
             device_, "CNA WebGPU EnvMap3D Instanced WGSL", webgpu_shaders::kEnvMap,
             InstancedWgslShapeEXT::Rigid, "EnvMap3D");
@@ -7560,7 +7560,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // whatever offsets and stride it puts them.
 
         EnvMapDrawCommand command;
-        // plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world matrices.
+        // STREETW-0004: this draw's per-instance world matrices.
         CaptureInstanceStreamEXT(instanceStream, instanceCount, "EnvMapEffect",
                                  command.instance);
         // WEBGPU-172: every bound per-vertex stream, not only the buffer the draw call named.
@@ -7665,7 +7665,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the two blocks into this flush's arena, bound
+        // WEBGPUPERF-0007: the two blocks into this flush's arena, bound
         // through the chunk's one group at their own offsets, as WEBGPUPERF-0002 did for PBR.
         const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
             envMapBindGroupLayout_,
@@ -7749,7 +7749,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // for a single-stream draw, whose binding sequence is therefore unchanged.
         BindExtraVertexStreamsEXT(pass, "CNA WebGPU Stock VertexStream", command.extraStreams);
         BindNeutralVertexBufferEXT(pass, command.vertexLayout);
-        // plans/plan_street_webgpu.md STREETW-0004: the per-instance world matrices, at the slot
+        // STREETW-0004: the per-instance world matrices, at the slot
         // past this draw's own streams and its neutral record. An ordinary draw binds nothing and
         // counts one, so its draw call below is exactly what it was.
         WGPUBuffer instanceBuffer =
@@ -7912,7 +7912,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the uniform block into this flush's arena, bound
+        // WEBGPUPERF-0007: the uniform block into this flush's arena, bound
         // through the chunk's one group at its own offset, as WEBGPUPERF-0002 did for PBR.
         const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
             coloredBindGroupLayout_,
@@ -8512,7 +8512,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             vertices.insert(vertices.end(), command.vertices.begin(), command.vertices.end());
         spriteVertexBytes_ = vertices.size() * sizeof(SpriteVertex);
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0006: the frame encoder holds several bind cycles,
+        // WEBGPUPERF-0006: the frame encoder holds several bind cycles,
         // so one cycle's vertices must not overwrite a buffer an earlier, still unsubmitted cycle
         // draws from. The vertex arena gives each its own range and is written at the submission.
         if (ReserveArenaEXT(vertexArenaEXT_, spriteVertexBytes_))
@@ -8569,7 +8569,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
         // Uniform buffer: the effect's block captured at queue time; min 16 bytes so an effect with
         // no declared block still binds.
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0005: in the flush's uniform arena. Every sprite of
+        // WEBGPUPERF-0005: in the flush's uniform arena. Every sprite of
         // a batch usually carries the same block, so it is appended once and shared.
         const std::uint64_t uboSize =
             std::max<std::uint64_t>(16u, (command.customUniforms.size() + 15u) & ~std::uint64_t{15u});
@@ -8796,7 +8796,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         ApplyDrawViewport(pass, command.viewport);
         // And this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the 16-byte sampler block, in the uniform arena
+        // WEBGPUPERF-0007: the 16-byte sampler block, in the uniform arena
         // once per distinct bias/format pair per flush -- every sprite used to write its own, and
         // build and release a group of its own, which a frame of a few thousand sprites paid
         // thousands of times over. The format selects XNA's sampled-channel expansion too.
@@ -9055,7 +9055,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     void WebGPURenderer::SetStringMarkerEXT(const char* marker)
     {
-        // plans/plan_webgpu_modern_graphics.md WMG-0020. An empty label is nothing to name, and
+        // WMG-0020. An empty label is nothing to name, and
         // WebGPU would reject it.
         if (marker == nullptr || marker[0] == '\0') return;
         if (TraceDrawOrder())
@@ -9273,7 +9273,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             occlusionReadbackPending_ = true;
         }
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0002: the uniform blocks and instance streams the
+        // WEBGPUPERF-0002: the uniform blocks and instance streams the
         // passes above bound are written by SubmitFrameEncoderEXT(), one queue write per chunk for
         // every flush the encoder holds (WEBGPUPERF-0006), just before it submits them.
 
@@ -9737,7 +9737,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             return false;
         }
 
-        // plans/plan_webgpu_modern_graphics.md WMG-0006: which binding contract this pair follows is
+        // WMG-0006: which binding contract this pair follows is
         // decided from the WGSL itself, before anything is compiled. The WEBGPU-76 contract puts its
         // one declared block at @group(0) @binding(0) and nothing anywhere else; the descriptor
         // contract -- the one CNA's generated WGSL follows -- uses @group(1)
@@ -9769,7 +9769,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         entries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
         entries[0].buffer.type = WGPUBufferBindingType_Uniform;
         entries[0].buffer.minBindingSize = 0;  // the concrete block size is validated per draw
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0005: the block lives in the uniform arena and a draw
+        // WEBGPUPERF-0005: the block lives in the uniform arena and a draw
         // binds the cached group at its own offset.
         entries[0].buffer.hasDynamicOffset = true;
         std::size_t entryCount = 1;
@@ -10010,7 +10010,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         return renderer;
     }
 
-    // plans/plan_webgpu_modern_graphics.md WMG-0021: the vertex buffer layouts of one custom-effect
+    // WMG-0021: the vertex buffer layouts of one custom-effect
     // draw -- the per-vertex stream at slot 0 and every per-instance stream after it, each with
     // WGPUVertexStepMode_Instance.
     //
@@ -10158,7 +10158,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         command.effect = effect;
         if (effect->ContractKindEXT() == WebGPUEffectRenderer::ContractEXT::Descriptor)
         {
-            // plans/plan_webgpu_modern_graphics.md WMG-0006: the descriptor contract has no named
+            // WMG-0006: the descriptor contract has no named
             // matrices -- the draw's own world*view*projection goes into the single matrix slot the
             // scalar block carries, and only where the game did not set it itself (VULKAN-255).
             auto snapshot = effect->CaptureDescriptorStateEXT(*this);
@@ -10419,7 +10419,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
         // Uniform block (the one captured at queue time); min 16 bytes so an effect with no
-        // declared block still has a bindable one. plans/plan_webgpu_perf.md WEBGPUPERF-0005: in
+        // declared block still has a bindable one. WEBGPUPERF-0005: in
         // the flush's uniform arena, where it used to be a transient buffer and a queue write.
         const std::uint64_t uboSize =
             std::max<std::uint64_t>(16u, (command.uniforms.size() + 15u) & ~std::uint64_t{15u});
@@ -10612,7 +10612,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     }
 
 
-    // plans/plan_webgpu_modern_graphics.md WMG-0006: the volume view is not compiled-effect-only
+    // WMG-0006: the volume view is not compiled-effect-only
     // any more -- a descriptor-contract ShaderEffect samples volumes through the same view.
     WGPUTextureView WebGPUTexture3DRenderer::SampledView() const
     {
@@ -10643,7 +10643,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         return WebGPUSampledTextureEXT{view, sampledKeepAlive_};
     }
 
-    // plans/plan_webgpu_modern_graphics.md WMG-0024: OUTSIDE the compiled-effect block below.
+    // WMG-0024: OUTSIDE the compiled-effect block below.
     // A descriptor-contract sprite is a ShaderEffect concern (WMG-0011), not a compiled-effect
     // one, and this definition had drifted inside that block while its only call site -- in
     // IssueSprite -- stayed unguarded. With CNA_WEBGPU_COMPILED_EFFECTS=OFF the call survived
@@ -10663,7 +10663,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // The sprite's own six vertices in the layout the generated fullscreen vertex program
         // declares: position in PIXELS (it divides by the viewport size the scalar block carries),
         // texture coordinates and colour.
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0005: into the flush's vertex arena, written with
+        // WEBGPUPERF-0005: into the flush's vertex arena, written with
         // everything else it appended; a transient buffer and a queue write per sprite before.
         constexpr std::uint64_t kSpriteVertexBytes = 6 * 8 * sizeof(float);
         static_assert(sizeof(command.descriptor->spriteVertices) == kSpriteVertexBytes);
@@ -10948,7 +10948,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         ++nativeDrawIssueCount_;
     }
 
-    // plans/plan_webgpu_modern_graphics.md WMG-0024: the compiled-effect block starts HERE, not
+    // WMG-0024: the compiled-effect block starts HERE, not
     // above IssueDescriptorEffectDrawEXT. That function and IssueDescriptorSpriteEXT are
     // descriptor-contract ShaderEffect draws (WMG-0006); they had drifted inside this
     // block while their call sites stayed unguarded, so CNA_WEBGPU_COMPILED_EFFECTS=OFF built a
@@ -11079,7 +11079,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     void WebGPURenderer::ReleaseCompiledEffectCachesEXT()
     {
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0008: cached groups may name these layouts.
+        // WEBGPUPERF-0008: cached groups may name these layouts.
         ReleaseBindingCacheEXT();
         for (auto& [key, pipeline] : compiledEffectPipelines_)
             if (pipeline != nullptr) wgpuRenderPipelineRelease(pipeline);
@@ -11135,7 +11135,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             entry.binding = 0;
             entry.visibility = stage;
             entry.buffer.type = WGPUBufferBindingType_Uniform;
-            // plans/plan_webgpu_perf.md WEBGPUPERF-0008: the register file lives in the uniform
+            // WEBGPUPERF-0008: the register file lives in the uniform
             // arena and a draw binds the cached group at its own offset.
             entry.buffer.hasDynamicOffset = true;
             WGPUBindGroupLayoutDescriptor descriptor{};
@@ -11307,7 +11307,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.streams[i].arrayStride = sources[i].stride;
             command.streams[i].perInstance = sources[i].perInstance;
             const auto& shadow = sources[i].buffer->ShadowData();
-            // plans/plan_webgpu_perf.md WEBGPUPERF-0008: an ordinary draw binds its buffers' own
+            // WEBGPUPERF-0008: an ordinary draw binds its buffers' own
             // storage, as the stock families have since STREETPERF-0004; every draw used to copy
             // each whole buffer here. The SpriteBatch route (a texture override) keeps its copy:
             // it refills one internal buffer per run, and holding that storage would make every
@@ -11648,7 +11648,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             compiledEffectPipelines_[key] = pipe;
         }
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0008: the two register files and the LOD-bias block
+        // WEBGPUPERF-0008: the two register files and the LOD-bias block
         // go into this flush's uniform arena, bound at dynamic offsets, and all four groups come
         // from the binding cache -- where each draw used to write up to three transient buffers
         // and build four groups, one of them empty. A stage with no declared block binds a group
@@ -12877,7 +12877,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                  | ((static_cast<std::uint64_t>(addressW) & 0xFFull) << 32)
                                  // WEBGPU-161: a changed MaxMipLevel must produce a NEW sampler
                                  // rather than mutate a live one, so it belongs in the key.
-                                 // plans/plan_webgpu_failing_eight.md WGF-0005: keyed the way the
+                                 // WGF-0005: keyed the way the
                                  // descriptor READS it. `std::max(0, ...)` folded every negative
                                  // onto level 0, so a sampler asking for the last level (XNA's
                                  // unsigned-negative spelling) collided with one asking for the
@@ -13091,7 +13091,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
         CaptureReadback(encoder, acquiredTexture_);
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0006: recorded, not submitted -- Present() and
+        // WEBGPUPERF-0006: recorded, not submitted -- Present() and
         // ReadBackbuffer() submit, and a mid-frame switch away from the back buffer need not. The
         // view goes when the passes that write it have been submitted, with the per-draw resources.
         pendingTextureViewReleasesEXT_.push_back(backBuffer);
@@ -13105,7 +13105,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     void WebGPURenderer::RenderPendingDrawsToRenderTarget(WebGPURenderTargetRenderer* target)
     {
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0006: into the frame's encoder, submitted with the
+        // WEBGPUPERF-0006: into the frame's encoder, submitted with the
         // back buffer rather than per bind cycle.
         WGPUCommandEncoder encoder = BeginReplayEXT();
 
@@ -14417,7 +14417,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             return;
         }
 #endif
-        // plans/plan_webgpu_modern_graphics.md WMG-0021: a bound custom WGSL ShaderEffect owns the
+        // WMG-0021: a bound custom WGSL ShaderEffect owns the
         // whole draw, exactly as it does in DrawPrimitivesEx and DrawIndexedPrimitivesEx. Without
         // this branch an instanced draw through a ShaderEffect fell into the stock instanced3d
         // family below and was rendered with CNA's own shader instead of the game's -- a silent
@@ -14446,7 +14446,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             return;
         }
 
-        // plans/plan_street_webgpu.md STREETW-0001/0004: a stock effect keeps its OWN family when
+        // STREETW-0001/0004: a stock effect keeps its OWN family when
         // the draw is instanced -- it takes the ordinary family's programs and adds a per-instance
         // binding, which is how VULKAN-222..232 put the same thing on the retired VULKAN renderer.
         // Without this every instanced draw fell through to the instanced3d family below, which is
@@ -14642,7 +14642,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the uniform block into this flush's arena, bound
+        // WEBGPUPERF-0007: the uniform block into this flush's arena, bound
         // through the chunk's one group at its own offset, as WEBGPUPERF-0002 did for PBR.
         const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
             coloredBindGroupLayout_,
@@ -14709,7 +14709,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the uniform block into this flush's arena, bound
+        // WEBGPUPERF-0007: the uniform block into this flush's arena, bound
         // through the chunk's one group at its own offset, as WEBGPUPERF-0002 did for PBR.
         const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
             coloredBindGroupLayout_,
@@ -14771,7 +14771,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // for a single-stream draw, whose binding sequence is therefore unchanged.
         BindExtraVertexStreamsEXT(pass, "CNA WebGPU Stock VertexStream", command.extraStreams);
         BindNeutralVertexBufferEXT(pass, command.vertexLayout);
-        // plans/plan_street_webgpu.md STREETW-0004: the per-instance world matrices, at the slot
+        // STREETW-0004: the per-instance world matrices, at the slot
         // past this draw's own streams and its neutral record. An ordinary draw binds nothing and
         // counts one, so its draw call below is exactly what it was.
         WGPUBuffer instanceBuffer =
@@ -14811,7 +14811,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the uniform blocks into this flush's arena, bound
+        // WEBGPUPERF-0007: the uniform blocks into this flush's arena, bound
         // through the chunk's one group at their own offsets, as WEBGPUPERF-0002 did for PBR.
         const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
             litBindGroupLayout_,
@@ -14880,7 +14880,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // for a single-stream draw, whose binding sequence is therefore unchanged.
         BindExtraVertexStreamsEXT(pass, "CNA WebGPU Stock VertexStream", command.extraStreams);
         BindNeutralVertexBufferEXT(pass, command.vertexLayout);
-        // plans/plan_street_webgpu.md STREETW-0004: the per-instance world matrices, at the slot
+        // STREETW-0004: the per-instance world matrices, at the slot
         // past this draw's own streams and its neutral record. An ordinary draw binds nothing and
         // counts one, so its draw call below is exactly what it was.
         WGPUBuffer instanceBuffer =
@@ -14921,7 +14921,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         LitTexturedDrawCommand command;
-        // plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world matrices.
+        // STREETW-0004: this draw's per-instance world matrices.
         CaptureInstanceStreamEXT(instanceStream, instanceCount, "LitTexturedEffect",
                                  command.instance);
         // WEBGPU-172: every bound per-vertex stream, not only the buffer the draw call named.
@@ -15035,7 +15035,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the uniform block into this flush's arena, bound
+        // WEBGPUPERF-0007: the uniform block into this flush's arena, bound
         // through the chunk's one group at its own offset, as WEBGPUPERF-0002 did for PBR.
         const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
             coloredBindGroupLayout_,
@@ -15087,7 +15087,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // for a single-stream draw, whose binding sequence is therefore unchanged.
         BindExtraVertexStreamsEXT(pass, "CNA WebGPU Stock VertexStream", command.extraStreams);
         BindNeutralVertexBufferEXT(pass, command.vertexLayout);
-        // plans/plan_street_webgpu.md STREETW-0004: the per-instance world matrices, at the slot
+        // STREETW-0004: the per-instance world matrices, at the slot
         // past this draw's own streams and its neutral record. An ordinary draw binds nothing and
         // counts one, so its draw call below is exactly what it was.
         WGPUBuffer instanceBuffer =
@@ -15127,7 +15127,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         AlphaTestDrawCommand command;
-        // plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world matrices.
+        // STREETW-0004: this draw's per-instance world matrices.
         CaptureInstanceStreamEXT(instanceStream, instanceCount, "AlphaTestEffect",
                                  command.instance);
         command.stride = stride;
@@ -15235,7 +15235,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the uniform block into this flush's arena, bound
+        // WEBGPUPERF-0007: the uniform block into this flush's arena, bound
         // through the chunk's one group at its own offset, as WEBGPUPERF-0002 did for PBR.
         const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
             coloredBindGroupLayout_,
@@ -15309,7 +15309,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // for a single-stream draw, whose binding sequence is therefore unchanged.
         BindExtraVertexStreamsEXT(pass, "CNA WebGPU Stock VertexStream", command.extraStreams);
         BindNeutralVertexBufferEXT(pass, command.vertexLayout);
-        // plans/plan_street_webgpu.md STREETW-0004: the per-instance world matrices, at the slot
+        // STREETW-0004: the per-instance world matrices, at the slot
         // past this draw's own streams and its neutral record. An ordinary draw binds nothing and
         // counts one, so its draw call below is exactly what it was.
         WGPUBuffer instanceBuffer =
@@ -15349,7 +15349,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // samples instead.
 
         DualTextureDrawCommand command;
-        // plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world matrices.
+        // STREETW-0004: this draw's per-instance world matrices.
         CaptureInstanceStreamEXT(instanceStream, instanceCount, "DualTextureEffect",
                                  command.instance);
         command.hasVertexColor = (shape == StockVertexShapeEXT::DualTexturedColored);
@@ -15461,7 +15461,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         TexturedDrawCommand command;
-        // plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world matrices.
+        // STREETW-0004: this draw's per-instance world matrices.
         CaptureInstanceStreamEXT(instanceStream, instanceCount, "TexturedEffect",
                                  command.instance);
         command.hasVertexColor = (shape == StockVertexShapeEXT::ColoredTextured);
@@ -15567,7 +15567,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         pbrColorPipelines_.clear();
         if (pbrColorShader_ != nullptr) wgpuShaderModuleRelease(pbrColorShader_);
         pbrColorShader_ = nullptr;
-        // plans/plan_street_webgpu.md STREETW-0001: the instanced twins, on the same principle.
+        // STREETW-0001: the instanced twins, on the same principle.
         for (auto* cache : {&pbrInstancedPipelines_, &pbrInstancedColorPipelines_})
         {
             for (auto& [key, pipe] : *cache)
@@ -15666,7 +15666,7 @@ namespace
             }
         };
 
-        // plans/plan_webgpu_modern_graphics.md WMG-0014: a family that receives shadows is compiled
+        // WMG-0014: a family that receives shadows is compiled
         // with kShadowSampling appended, so it is VALIDATED that way too -- validating the bare
         // source would compile a program this renderer never builds, and would fail on the very
         // functions the appended block defines.
@@ -15694,7 +15694,7 @@ namespace
         };
         validate("Pbr3D", expandedPbr(webgpu_shaders::kPbr, false, 4).c_str());
         validate("Pbr3D VertexColor", expandedPbr(webgpu_shaders::kPbr, true, 4).c_str());
-        // plans/plan_street_webgpu.md STREETW-0001: and both instanced twins, here rather than
+        // STREETW-0001: and both instanced twins, here rather than
         // only at the first instanced prop's pipeline -- which is what this whole function is for.
         const auto expandedInstancedPbr = [](const char* source, const bool colored) {
             return MakeInstancedStockWgslEXT(ExpandPbrVertexColourWgslEXT(source, colored, 4),
@@ -15758,7 +15758,7 @@ namespace
         if (pbrColorShader_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create Pbr3D vertex-colour shader");
 
-        // plans/plan_street_webgpu.md STREETW-0001: the instanced twins. A fourth module rather
+        // STREETW-0001: the instanced twins. A fourth module rather
         // than a pipeline flag, for the reason GLTF-465 gives above -- WGSL rejects a vertex input
         // with no matching attribute, so a shader that declares the four instance columns cannot
         // also serve a draw that binds none.
@@ -15808,7 +15808,7 @@ namespace
         uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
         // Four material vec4s followed by ten affine texture-transform rows.
         uboEntries[2].buffer.minBindingSize = 80 * sizeof(float);
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0002: the three blocks live in the uniform arena and
+        // WEBGPUPERF-0002: the three blocks live in the uniform arena and
         // a draw binds the chunk's one group at its own offsets.
         for (WGPUBindGroupLayoutEntry& entry : uboEntries)
             entry.buffer.hasDynamicOffset = true;
@@ -15871,7 +15871,7 @@ namespace
                                                      replayColorFormat_, replaySampleCount_,
                                                      replayMrtColorFormats_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
-        // plans/plan_street_webgpu.md STREETW-0001: caches of their own rather than one more bit
+        // STREETW-0001: caches of their own rather than one more bit
         // in the key -- the instanced variants differ in shader MODULE and vertex-buffer COUNT,
         // neither of which the key expresses, so a shared cache would hand an instanced draw the
         // ordinary pipeline whenever the two agree on everything the key does describe.
@@ -15913,7 +15913,7 @@ namespace
         vertexBufferLayout.attributeCount = colored ? 5u : 4u;
         vertexBufferLayout.attributes = attributes.data();
 
-        // plans/plan_street_webgpu.md STREETW-0001: the world matrix as four Float32x4 columns at
+        // STREETW-0001: the world matrix as four Float32x4 columns at
         // locations 12-15, one record per instance. Materialized at queue time, so the stride is
         // this renderer's own 64 rather than the caller's -- InstanceFrequency never reaches a
         // native layout here, exactly as WEBGPU-172 established for the instanced3d family.
@@ -16064,7 +16064,7 @@ namespace
 
         PbrDrawCommand command;
         command.colored = (pbrStride == 60);
-        // plans/plan_street_webgpu.md STREETW-0001/0004: this draw's per-instance world matrices.
+        // STREETW-0001/0004: this draw's per-instance world matrices.
         CaptureInstanceStreamEXT(instanceStream, instanceCount, "PbrEffect", command.instance);
         const auto& shadow = normalized.empty() ? webgpuVb.ShadowData() : normalized;
         const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * pbrStride;
@@ -16200,7 +16200,7 @@ namespace
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0002: the three blocks into this flush's uniform
+        // WEBGPUPERF-0002: the three blocks into this flush's uniform
         // arena, bound through the chunk's one group at their own offsets. They used to be three
         // transient buffers, three queue writes and a bind group of their own, every draw.
         const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
@@ -16248,7 +16248,7 @@ namespace
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexSource.buffer, vertexSource.offset,
                                              vertexSource.size);
 
-        // plans/plan_street_webgpu.md STREETW-0001/0004: the per-instance world matrices at the
+        // STREETW-0001/0004: the per-instance world matrices at the
         // slot past this family's own single stream. An ordinary draw binds nothing and counts
         // one, so its two calls below are exactly what they were.
         WGPUBuffer instanceBuffer = BindInstanceStreamEXT(pass, command.instance, 1u);
@@ -16303,7 +16303,7 @@ namespace
         skinnedColorShader_ = nullptr;
         skinnedVertexLitShader_ = nullptr;
         skinnedVertexLitColorShader_ = nullptr;
-        // plans/plan_street_webgpu.md STREETW-0005: the instanced twins, on the same
+        // STREETW-0005: the instanced twins, on the same
         // principle -- a pipeline cache nobody frees is the leak this prevents.
         for (auto* cache : {&skinnedInstancedPipelines_, &skinnedColorInstancedPipelines_, &skinnedVertexLitInstancedPipelines_, &skinnedVertexLitColorInstancedPipelines_})
         {
@@ -16353,7 +16353,7 @@ namespace
         shaderDescriptor.label = StringView("CNA WebGPU Skinned3D WGSL");
         shaderDescriptor.nextInChain = &wgsl.chain;
         skinnedShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
-        // plans/plan_street_webgpu.md STREETW-0005: its instanced twin. The shadow block
+        // STREETW-0005: its instanced twin. The shadow block
         // is appended after the rewrite, exactly as the ordinary module composes it.
         skinnedInstancedShader_ = CreateInstancedStockModuleEXT(
             device_, "CNA WebGPU Skinned3D Instanced WGSL", webgpu_shaders::kSkinned,
@@ -16381,7 +16381,7 @@ namespace
         colorShaderDescriptor.label = StringView("CNA WebGPU Skinned3D VertexColor WGSL");
         colorShaderDescriptor.nextInChain = &colorWgsl.chain;
         skinnedColorShader_ = wgpuDeviceCreateShaderModule(device_, &colorShaderDescriptor);
-        // plans/plan_street_webgpu.md STREETW-0005: its instanced twin. The shadow block
+        // STREETW-0005: its instanced twin. The shadow block
         // is appended after the rewrite, exactly as the ordinary module composes it.
         skinnedColorInstancedShader_ = CreateInstancedStockModuleEXT(
             device_, "CNA WebGPU Skinned3D Colored Instanced WGSL", webgpu_shaders::kSkinnedColor,
@@ -16404,7 +16404,7 @@ namespace
         vertexLitShaderDescriptor.label = StringView("CNA WebGPU Skinned3D VertexLit WGSL");
         vertexLitShaderDescriptor.nextInChain = &vertexLitWgsl.chain;
         skinnedVertexLitShader_ = wgpuDeviceCreateShaderModule(device_, &vertexLitShaderDescriptor);
-        // plans/plan_street_webgpu.md STREETW-0005: its instanced twin. The shadow block
+        // STREETW-0005: its instanced twin. The shadow block
         // is appended after the rewrite, exactly as the ordinary module composes it.
         skinnedVertexLitInstancedShader_ = CreateInstancedStockModuleEXT(
             device_, "CNA WebGPU Skinned3D VertexLit Instanced WGSL", webgpu_shaders::kSkinnedVertexLit,
@@ -16423,7 +16423,7 @@ namespace
         vertexLitColorShaderDescriptor.label = StringView("CNA WebGPU Skinned3D VertexLit VertexColor WGSL");
         vertexLitColorShaderDescriptor.nextInChain = &vertexLitColorWgsl.chain;
         skinnedVertexLitColorShader_ = wgpuDeviceCreateShaderModule(device_, &vertexLitColorShaderDescriptor);
-        // plans/plan_street_webgpu.md STREETW-0005: its instanced twin. The shadow block
+        // STREETW-0005: its instanced twin. The shadow block
         // is appended after the rewrite, exactly as the ordinary module composes it.
         skinnedVertexLitColorInstancedShader_ = CreateInstancedStockModuleEXT(
             device_, "CNA WebGPU Skinned3D VertexLit Colored Instanced WGSL", webgpu_shaders::kSkinnedVertexLitColor,
@@ -16728,7 +16728,7 @@ namespace
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         SkinnedDrawCommand command;
-        // plans/plan_street_webgpu.md STREETW-0005: this draw's per-instance world matrices.
+        // STREETW-0005: this draw's per-instance world matrices.
         CaptureInstanceStreamEXT(instanceStream, instanceCount, "SkinnedEffect", command.instance);
         // WEBGPU-177/MSR-017: a canonical declared stride-52/56 record keeps its resident-buffer
         // path. Any OTHER declaration that can supply the same five semantics is rewritten into
@@ -16877,7 +16877,7 @@ namespace
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the uniform blocks into this flush's arena, bound
+        // WEBGPUPERF-0007: the uniform blocks into this flush's arena, bound
         // through the chunk's one group at their own offsets, as WEBGPUPERF-0002 did for PBR.
         const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
             skinnedBindGroupLayout_,
@@ -16928,7 +16928,7 @@ namespace
         wgpuRenderPassEncoderSetBindGroup(pass, 2, shadowBindGroup, 1, &shadowOffset);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexSource.buffer, vertexSource.offset,
                                              vertexSource.size);
-        // plans/plan_street_webgpu.md STREETW-0005: the per-instance world matrices at the
+        // STREETW-0005: the per-instance world matrices at the
         // slot past this family's own single stream. An ordinary draw binds nothing and
         // counts one, so its draw call below is exactly what it was.
         WGPUBuffer instanceBuffer = BindInstanceStreamEXT(pass, command.instance, 1u);
@@ -16981,7 +16981,7 @@ namespace
         skinnedPbrPipelineLayout_ = nullptr;
         skinnedPbrBindGroupLayout0_ = nullptr;
         skinnedPbrShader_ = nullptr;
-        // plans/plan_street_webgpu.md STREETW-0005: the instanced twins, on the same
+        // STREETW-0005: the instanced twins, on the same
         // principle -- a pipeline cache nobody frees is the leak this prevents.
         for (auto* cache : {&skinnedPbrInstancedPipelines_, &skinnedPbrColorInstancedPipelines_})
         {
@@ -17023,7 +17023,7 @@ namespace
         const std::string colorWgsl =
             ExpandPbrVertexColourWgslEXT(shaderSource, true, 6) + webgpu_shaders::kShadowSampling
             + webgpu_shaders::kIblSampling;
-        // plans/plan_street_webgpu.md STREETW-0005: the instanced twins of both.
+        // STREETW-0005: the instanced twins of both.
         const std::string shadowAndIbl =
             std::string(webgpu_shaders::kShadowSampling) + webgpu_shaders::kIblSampling;
         const std::string instancedWgsl = MakeInstancedStockWgslEXT(
@@ -17224,7 +17224,7 @@ namespace
         EnsurePbrDefaultTextures();
 
         SkinnedPbrDrawCommand command;
-        // plans/plan_street_webgpu.md STREETW-0005: this draw's per-instance world matrices.
+        // STREETW-0005: this draw's per-instance world matrices.
         CaptureInstanceStreamEXT(instanceStream, instanceCount, "SkinnedPbrEffect", command.instance);
         command.colored = (skinnedPbrStride == 80);
         const auto& shadow = webgpuVb.ShadowData();
@@ -17362,7 +17362,7 @@ namespace
             command.vertexData, command.resident, vbDescriptor.usage, vbDescriptor.size);
         WGPUBuffer vertexBuffer = vertexSource.transient;
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0002: the four blocks -- the bone palette among
+        // WEBGPUPERF-0002: the four blocks -- the bone palette among
         // them -- into this flush's uniform arena, as the rigid PBR family's three are.
         const ArenaUniformBindingEXT ubo = AppendUniformBlocksEXT(
             skinnedPbrBindGroupLayout0_,
@@ -17409,7 +17409,7 @@ namespace
         wgpuRenderPassEncoderSetBindGroup(pass, 3, iblBindGroup, 1, &iblOffset);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexSource.buffer, vertexSource.offset,
                                              vertexSource.size);
-        // plans/plan_street_webgpu.md STREETW-0005: the per-instance world matrices at the
+        // STREETW-0005: the per-instance world matrices at the
         // slot past this family's own single stream. An ordinary draw binds nothing and
         // counts one, so its draw call below is exactly what it was.
         WGPUBuffer instanceBuffer = BindInstanceStreamEXT(pass, command.instance, 1u);

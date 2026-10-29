@@ -247,7 +247,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
     cna_register_renderer_test(NAME Headless_PresentLifecycle COMMAND cna_test_headless_present_lifecycle
         TIMEOUT 900 LABELS "Headless")
 
-    # plans/plan_native_platform_validation.md NPV-0123: these four share
+    # NPV-0123: these four share
     # common/SdlTestGraphicsServices.hpp, an SDL-backed test harness, so they cannot link in a
     # build with no SDL configured -- a plain `cmake --build` of an SDL-free HEADLESS build
     # failed on them. They are cross-renderer controls for SDL-era defects; without SDL they are

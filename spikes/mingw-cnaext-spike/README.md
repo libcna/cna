@@ -1,6 +1,6 @@
 # `mingw-cnaext-spike` — the engine layer as a Windows compiler sees it
 
-`plans/plan_modern.md` **MOD-1719** (that plan was deleted on 2026-10-11 and survives in Git
+**MOD-1719** (that plan was deleted on 2026-10-11 and survives in Git
 history; the engine layer it described was reduced to `docs/cnaext-engine-layer.md`). Everything here has been run on this machine (2026-08-18) with
 `g++-mingw-w64-x86-64` 13.2.0; none of it is a sketch.
 

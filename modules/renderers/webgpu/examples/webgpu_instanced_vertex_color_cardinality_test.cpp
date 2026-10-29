@@ -233,7 +233,7 @@ namespace
                 renderer.OrderExternalQueueWorkEXT();
             };
 
-            // plans/plan_webgpu_perf.md WEBGPUPERF-0006: a flush records into the frame's encoder
+            // WEBGPUPERF-0006: a flush records into the frame's encoder
             // and the frame submits it, so a window starts with nothing recorded and every cycle
             // below ends by submitting itself -- a cycle's submit count is its own submission.
             const auto measure = [&](const char* label, auto&& body) {
@@ -300,7 +300,7 @@ namespace
             Check("four draws in one cycle still cost exactly 1 pass", alternating.passes == 1);
             Check("four draws in one cycle still cost exactly 1 submit", alternating.submits == 1);
 
-            // plans/plan_street_webgpu.md STREETW-0004: this leg's subject is that a DIFFERENT
+            // STREETW-0004: this leg's subject is that a DIFFERENT
             // declaration gets a pipeline of its own rather than sharing one, and it still does --
             // but it is no longer an Instanced3D pipeline. The stride-24 record names a texture
             // coordinate, so the instanced route now hands it to the ColoredTextured3D family, the

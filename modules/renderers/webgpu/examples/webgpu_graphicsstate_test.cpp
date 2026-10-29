@@ -313,7 +313,7 @@ protected:
             dev.setRasterizerStateProperty(solid);
             dev.Clear(Color::Black);
             DrawWindingQuad(dev, Color::White);
-            // plans/plan_street_webgpu.md STREETW-0003: a quarter of the way in, NOT the quad's
+            // STREETW-0003: a quarter of the way in, NOT the quad's
             // centre. The quad is two triangles sharing the tr-bl diagonal, and its centre pixel
             // lies within one pixel of that diagonal -- so a centre probe measures whether the
             // shared EDGE covers a pixel, not whether the interior is filled, and a sub-pixel

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu_modern_graphics.md WMG-0021: a per-instance vertex stream on the custom
+// WMG-0021: a per-instance vertex stream on the custom
 // ShaderEffect route.
 //
 // The contract is XNA's own and there is only one of it: SetVertexBuffers with a binding whose

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MS-PL
 """Guard the renderer-curation API decisions: what was removed stays removed, what was kept stays used.
 
-`RRC-009` (the since-removed `plans/plan_renderer_cleanup.md`) removed `DrawMeshEXT` -- the
+`RRC-009` removed `DrawMeshEXT` -- the
 SpriteBatch 2D triangle-mesh entry point -- from the C++ API and the C ABI, because the 25-renderer
 curation left it with no implementer at all. `RRC-010` examined `needsSurfacePresenter` the same way and reached the opposite
 verdict: no retained renderer *sets* it, but a retained, tested consumer (`TerminalSurfacePresenter`,

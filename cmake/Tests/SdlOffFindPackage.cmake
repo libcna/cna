@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_native_platform_validation.md NPV-0114: CNA_ENABLE_SDL=OFF promises that no SDL is
+# NPV-0114: CNA_ENABLE_SDL=OFF promises that no SDL is
 # found, and that has to hold for every project a CNA build adds -- the sibling easy-gl once ran
 # find_package(SDL3 QUIET) from its example directory, found an SDL3 installed in /usr/local and
 # linked it into the default target of an "SDL-free" build.

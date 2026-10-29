@@ -224,7 +224,7 @@ namespace CNA::Internal::Renderers::EasyGL
          *                         from nothing instead of touching freed storage.
          * @param mipMap           Whether a full mip chain is allocated and regenerated on unbind.
          * @param multiSampleCount Requested sample count, clamped to `GL_MAX_SAMPLES`.
-         * @param surfaceFormat    plans/plan_modern.md MOD-115: raw
+         * @param surfaceFormat    MOD-115: raw
          *                         `Microsoft::Xna::Framework::Graphics::SurfaceFormat` ordinal for
          *                         the colour attachment. `Color` (the default) keeps the historical
          *                         8-bit RGBA storage exactly as it was; the float formats allocate
@@ -276,7 +276,7 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
         /** @brief Returns the raw XNA `DepthFormat` ordinal backing this target. */
         [[nodiscard]] int GetDepthFormatEXT() const noexcept { return depthFormat_; }
-        /// plans/plan_modern.md MOD-115: the raw SurfaceFormat ordinal this target's colour storage was
+        /// MOD-115: the raw SurfaceFormat ordinal this target's colour storage was
         /// actually created with. Equal to what was requested -- an unsupported format is refused at
         /// creation rather than substituted, so this can never disagree with the caller's request.
         [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
@@ -1312,7 +1312,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_specularpower = -1;  ///< BasicEffect.SpecularPower (Blinn-Phong exponent)
             int loc_texture       = -1;
             int loc_texture2      = -1;  ///< second sampler (DualTextureEffect only)
-            /// plans/plan_modern.md MOD-835: shadow reception. Present only on the lit variants; every
+            /// MOD-835: shadow reception. Present only on the lit variants; every
             /// other program leaves them at -1 and BindDrawParams skips them, exactly like the
             /// other optional locations here.
             int loc_shadowmap      = -1;  ///< sampler2D holding light-space distance
@@ -1321,7 +1321,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_shadow_bias    = -1;  ///< float
             int loc_shadow_texel   = -1;  ///< vec2 1/size (textureSize() is ES 3.00 only)
             int loc_shadow_pcf     = -1;  ///< float PCF radius in texels, 0..2
-            /// plans/plan_modern.md MOD-908: cascades. uCascadeCount 0 means a single map and the rest
+            /// MOD-908: cascades. uCascadeCount 0 means a single map and the rest
             /// are left alone, which is why an existing draw is byte-for-byte unchanged.
             int loc_cascade_count  = -1;  ///< float, 0 = single map
             int loc_cascade_mats   = -1;  ///< mat4[4], world -> atlas, sub-rectangle baked in
@@ -1329,7 +1329,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_cascade_viewz  = -1;  ///< vec4, the view matrix's third column
             int loc_cascade_blend  = -1;  ///< float cross-fade width in view-depth units
             int loc_cascade_debug  = -1;  ///< float 0/1
-            /// plans/plan_modern.md MOD-1005: one punctual light. uPunctualKind 0 means none and the
+            /// MOD-1005: one punctual light. uPunctualKind 0 means none and the
             /// rest are left alone, which is why an existing draw is unchanged.
             int loc_punctual_kind   = -1;  ///< float 0 none, 1 point, 2 spot
             int loc_punctual_pos    = -1;
@@ -1344,7 +1344,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_punctual_map    = -1;  ///< sampler2D, unit 9
             int loc_punctual_vp     = -1;
             int loc_punctual_texel  = -1;  ///< vec2 1/size of the spot map
-            /// plans/plan_modern.md MOD-1225: image-based lighting. uIblEnabled 0 means the flat
+            /// MOD-1225: image-based lighting. uIblEnabled 0 means the flat
             /// uAmbientColor term is in charge and every other field here is untouched -- which
             /// is why a draw that has never heard of IBL renders exactly as it did.
             int loc_ibl_enabled    = -1;  ///< float 0/1
@@ -1485,7 +1485,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /// which is precisely what the trace exists to record.
         [[nodiscard]] std::string TraceBindingDetailEXT() const;
 
-        /// plans/plan_modern.md MOD-117: asks GL, once per kind, whether a colour attachment of the
+        /// MOD-117: asks GL, once per kind, whether a colour attachment of the
         /// 32-bit (@p fullFloat) or 16-bit float format is framebuffer-complete on this context.
         /// Restores the previously bound framebuffer and drains the error queue before returning.
         [[nodiscard]] bool ProbeFloatRenderTargetSupportEXT(bool fullFloat) const;
@@ -1619,11 +1619,11 @@ namespace CNA::Internal::Renderers::EasyGL
                             const Matrix& projection, const GpuDrawParams& params);
         /// Resolves uRtFlipV/uRtFlipVHi for a freshly linked stock 3D program.
         static void ResolveRenderTargetOrientationUniforms(Prog3D& p);
-        /// plans/plan_modern.md MOD-836..MOD-839: resolves CNA_GL_SHADOW_DECL's uniforms for a freshly
+        /// MOD-836..MOD-839: resolves CNA_GL_SHADOW_DECL's uniforms for a freshly
         /// linked lit program. Every other program leaves them at -1, and BindDrawParams skips
         /// them exactly as it skips the other optional locations.
         static void ResolveShadowUniforms(Prog3D& p);
-        /// plans/plan_modern.md MOD-1225: resolves the image-based-lighting uniforms, which exist only
+        /// MOD-1225: resolves the image-based-lighting uniforms, which exist only
         /// on the two PBR programs; every other program leaves them at -1.
         static void ResolveIblUniforms(Prog3D& p);
 
@@ -1974,7 +1974,7 @@ namespace CNA::Internal::Renderers::EasyGL
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
         std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
-        /// plans/plan_modern.md MOD-115: creates the colour attachment in the requested SurfaceFormat --
+        /// MOD-115: creates the colour attachment in the requested SurfaceFormat --
         /// real R/RG/RGBA 16F/32F storage for the float formats, unchanged 8-bit RGBA for Color.
         /// Throws for a format this GL context cannot render to, rather than substituting Color the
         /// way the shared default does; ask SupportsRenderTargetFormat() first.
@@ -2011,13 +2011,13 @@ namespace CNA::Internal::Renderers::EasyGL
          * @return `Unsupported` for signed `NormalizedByte4`, or `Defer` otherwise.
          */
         [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(int surfaceFormat) const override;
-        /// plans/plan_modern.md MOD-104/MOD-117: this renderer's own verdict on a render-target
+        /// MOD-104/MOD-117: this renderer's own verdict on a render-target
         /// SurfaceFormat. Color is Supported unconditionally; the float formats are answered by a
         /// cached runtime framebuffer-completeness probe, because their availability is a property
         /// of the driver and its extensions rather than of the compile-time GL profile. Every other
         /// format defers to the framework rule, unchanged.
         [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
-        /// plans/plan_modern.md MOD-123: half-float texture filtering. Core from OpenGL ES 3.0 and
+        /// MOD-123: half-float texture filtering. Core from OpenGL ES 3.0 and
         /// desktop GL 3.0 onward, so every profile this renderer serves reports true.
         [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
 
@@ -2038,7 +2038,7 @@ namespace CNA::Internal::Renderers::EasyGL
          */
         [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
 
-        /// plans/plan_modern.md MOD-1699: this renderer's four lit programs really do sample the shadow
+        /// MOD-1699: this renderer's four lit programs really do sample the shadow
         /// state, and its two PBR programs really do shade from an image-based light -- Phases 8-12
         /// implemented both here first.
         /// This renderer compiles the GLSL it is given and runs it; that is the whole EasyGL
@@ -2083,7 +2083,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /// Colour attachments one draw can write: the smaller of GL_MAX_COLOR_ATTACHMENTS and GL_MAX_DRAW_BUFFERS.
         [[nodiscard]] int GetMaxColorAttachmentsEXT() const override;
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
-        /// plans/plan_modern.md MOD-107: the cube counterpart of CreateRenderTarget2DEXT -- real float
+        /// MOD-107: the cube counterpart of CreateRenderTarget2DEXT -- real float
         /// storage for the formats this context can render to, and a refusal for the rest.
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
             int size, int depthFormat, bool preserveContents, bool mipMap,

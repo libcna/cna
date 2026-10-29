@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu_perf.md WEBGPUPERF-0001..0004: what a frame of PbrEffect draws costs wgpu.
+// WEBGPUPERF-0001..0004: what a frame of PbrEffect draws costs wgpu.
 //
 // Every PbrEffect draw used to create four bind groups and write five uniform blocks with a queue
 // write each, and wgpu then spent as long releasing those objects at the next submit as it had

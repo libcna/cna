@@ -176,7 +176,7 @@ class WebGpuScissorCardinalityTest : public Game
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
             // Baseline INSIDE the cycle: binding a target flushes whatever the backbuffer had
-            // pending, which is not what this check is measuring. plans/plan_webgpu_perf.md
+            // pending, which is not what this check is measuring.
             // WEBGPUPERF-0006: that flush is recorded into the frame's encoder rather than
             // submitted, so it is submitted here, and the cycle's own submission forced at its end.
             renderer.OrderExternalQueueWorkEXT();
@@ -242,7 +242,7 @@ class WebGpuScissorCardinalityTest : public Game
             dev.Clear(kBlack);
             for (int i = 0; i < 32; ++i)
             {
-                // plans/plan_webgpu_failing_eight.md WGF-0001: derived so that x + w and y + h
+                // WGF-0001: derived so that x + w and y + h
                 // stay inside the target. The 32 rectangles are still distinct -- which is what
                 // this leg measures -- but they no longer run off the surface: SOFTWARE-226
                 // restored Microsoft's active-surface bounds check on Viewport and
@@ -278,7 +278,7 @@ class WebGpuScissorCardinalityTest : public Game
             Draw3D(dev, kRed);
             SetScissor(dev, 0, 0, 0, 0);                       // wholly degenerate
             Draw3D(dev, kRed);
-            // plans/plan_webgpu_failing_eight.md WGF-0001: this leg used to set two rectangles
+            // WGF-0001: this leg used to set two rectangles
             // that leave the target -- one hanging off it, one entirely outside -- and assert they
             // were "legal". SOFTWARE-226 restored Microsoft's active-surface bounds check, under
             // which they are not: a zero-SIZE rectangle stays legal (its own validation test says

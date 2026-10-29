@@ -129,7 +129,7 @@ namespace
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, true};
 #elif defined(CNA_RENDERER_WEBGPU)
-    // plans/plan_webgpu_modern_graphics.md WMG-0002: wantHiDefProfile is true -- WebGPU supports
+    // WMG-0002: wantHiDefProfile is true -- WebGPU supports
     // HiDef, and under Reach this test died on a profile refusal before its first check.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, true};
@@ -240,7 +240,7 @@ namespace
 }
 
 namespace {
-/// plans/plan_webgpu_modern_graphics.md WMG-0005: a row that declares `wantHiDefProfile` needs
+/// WMG-0005: a row that declares `wantHiDefProfile` needs
 /// HiDef to be the PROGRAM's profile, not a request made later. `Game`'s own GraphicsDevice is
 /// default-constructed at Reach before `GraphicsDeviceManager` exists (DX9 D9-103),
 /// so the manager-level request below arrives after the device it has to describe -- the test then

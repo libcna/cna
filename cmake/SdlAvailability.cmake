@@ -93,7 +93,7 @@ endif()
 if(_cna_enable_sdl_normalized STREQUAL "OFF")
     set(CNA_ENABLE_SDL OFF CACHE STRING "Configure the vendored SDL3 dependency (OFF, AUTO, or ON)" FORCE)
     # "Not found" has to hold for every project this build adds, not only for CNA's own CMake:
-    # plans/plan_native_platform_validation.md NPV-0114 found the sibling easy-gl's example
+    # NPV-0114 found the sibling easy-gl's example
     # directory running find_package(SDL3 QUIET), picking up an SDL3 installed in /usr/local and
     # adding an SDL-linked executable to the default target of a CNA_ENABLE_SDL=OFF build. With
     # these set, an optional lookup anywhere in the tree finds nothing and a REQUIRED one fails

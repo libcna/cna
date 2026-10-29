@@ -165,7 +165,7 @@ class WebGpuViewportCardinalityTest : public Game
             auto rt = MakeTarget(dev);
             dev.SetRenderTarget(rt.get());
             // Baseline INSIDE the cycle: binding a target flushes whatever the backbuffer had
-            // pending, which is not what this check is measuring. plans/plan_webgpu_perf.md
+            // pending, which is not what this check is measuring.
             // WEBGPUPERF-0006: that flush is recorded into the frame's encoder rather than
             // submitted, so it is submitted here, and the cycle's own submission forced at its end.
             renderer.OrderExternalQueueWorkEXT();
@@ -226,7 +226,7 @@ class WebGpuViewportCardinalityTest : public Game
             dev.Clear(kBlack);
             for (int i = 0; i < 32; ++i)
             {
-                // plans/plan_webgpu_failing_eight.md WGF-0001: derived so that x + w and y + h
+                // WGF-0001: derived so that x + w and y + h
                 // stay inside the target. The 32 rectangles are still distinct -- which is what
                 // this leg measures -- but they no longer run off the surface: SOFTWARE-226
                 // restored Microsoft's active-surface bounds check on Viewport and

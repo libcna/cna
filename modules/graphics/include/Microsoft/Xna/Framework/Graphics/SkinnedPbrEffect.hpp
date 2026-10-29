@@ -487,7 +487,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
 
     public:
-        // ---- CNAEXT: shadow reception (plans/plan_modern.md MOD-820) ----------------------------
+        // ---- CNAEXT: shadow reception (MOD-820) ----------------------------
 
         /** @brief Sets the shadow map this effect samples. @param shadowMap The map, or null. */
         CNAEXT void setShadowMapEXT(Texture2D* shadowMap) override;
@@ -526,7 +526,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Supplies an environment to light with, replacing the flat ambient term.
          *
-         * plans/plan_modern.md `MOD-1221`. The two ambient terms are exclusive rather than additive:
+         * `MOD-1221`. The two ambient terms are exclusive rather than additive:
          * `AmbientLightColor` is a constant standing in for light from the environment, and this
          * is that light actually measured, so applying both would count it twice. A bundle that
          * is not @ref ImageBasedLightEXT::IsValidEXT leaves the flat term in charge, which is what

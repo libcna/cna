@@ -137,7 +137,7 @@ struct FragOut {
 }
 
 namespace {
-/// plans/plan_webgpu_modern_graphics.md WMG-0005: HiDef as the PROGRAM's profile, not as a request
+/// WMG-0005: HiDef as the PROGRAM's profile, not as a request
 /// made later. Reach allows one render target, so `SetRenderTargets(2)` threw and this test died
 /// before its first check. It has to be set here rather than on the GraphicsDeviceManager, because
 /// `Game`'s own GraphicsDevice is default-constructed at Reach before that manager exists

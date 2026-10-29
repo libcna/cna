@@ -20,7 +20,7 @@ namespace CNA::Graphics
     /**
      * @brief Owned source text or binary code for one explicitly identified shader stage.
      *
-     * plans/plan_modern.md `MOD-2211`. The language and payload form are declared rather than
+     * `MOD-2211`. The language and payload form are declared rather than
      * inferred from contents. Construction copies or moves every string/byte into this value, so
      * no renderer or future shader package depends on caller-owned storage.
      */

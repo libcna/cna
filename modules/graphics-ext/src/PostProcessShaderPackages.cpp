@@ -77,7 +77,7 @@ namespace CNA::Graphics::detail
                                   vulkanFragment.label,
                                   ToBytes(vulkanFragment.words,
                                           vulkanFragment.byteSize)),
-                    // plans/plan_webgpu_modern_graphics.md WMG-0005: the WGSL the generator derives
+                    // WMG-0005: the WGSL the generator derives
                     // from the same Vulkan GLSL, so a WGSL renderer runs the pass rather than
                     // falling back to a copy of its input.
                     ShaderCodeEXT(CNA::ShaderLanguageEXT::Wgsl,

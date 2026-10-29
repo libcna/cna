@@ -1342,7 +1342,7 @@ differently. That is rounding, not divergence.
 
 ## CNA graphics extensions on WebGPU (2026-09-22, `WMG-0001`–`WMG-0015`)
 
-`plans/plan_webgpu_modern_graphics.md` is the evidence ledger; this is the capability boundary.
+The `WMG-*` rows (Git history) were the evidence ledger; this is the capability boundary.
 The general-purpose modern GPU layer that workstream also implemented here — compute shaders,
 storage buffers and textures, the `Texture2DArray` facade, GPU timers and indirect draws over
 those resources — was retired together with its common interfaces

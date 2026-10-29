@@ -15,7 +15,7 @@ namespace CNA::Platform {
     namespace {
 
         // Every holder below that owns a destructor is deliberately IMMORTAL -- allocated once and
-        // never destroyed -- for the reason plans/plan_native_platform_validation.md NPV-0102
+        // never destroyed -- for the reason NPV-0102
         // records and the C API handle registry proved again: whatever installed or pinned a
         // platform can be destroyed at ANY point of process teardown, including from a later
         // static's destructor, and must still find this state alive. ~Game reaches all of it

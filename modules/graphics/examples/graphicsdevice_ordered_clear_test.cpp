@@ -189,7 +189,7 @@ namespace
     // WGPURenderPassDescriptor has exactly one set of them. the ordered mid-cycle Clear fix put Clear() into the same
     // ordered stream the WebGPU draw-order fix built for the eleven draw families and cuts that stream into one
     // native pass per observable Clear, so `orderedClear` is true here too.
-    // plans/plan_webgpu_modern_graphics.md WMG-0002: wantHiDefProfile is true -- WebGPU supports
+    // WMG-0002: wantHiDefProfile is true -- WebGPU supports
     // HiDef, and under Reach this test died on a profile refusal before its first check.
     constexpr Contract kContract{"WEBGPU", true, true, true, true, true,
                                  true, true, false,
@@ -235,7 +235,7 @@ namespace
 }
 
 namespace {
-/// plans/plan_webgpu_modern_graphics.md WMG-0005: a row that declares `wantHiDefProfile` needs
+/// WMG-0005: a row that declares `wantHiDefProfile` needs
 /// HiDef to be the PROGRAM's profile, not a request made later. `Game`'s own GraphicsDevice is
 /// default-constructed at Reach before `GraphicsDeviceManager` exists (DX9 D9-103),
 /// so the manager-level request below arrives after the device it has to describe -- the test then

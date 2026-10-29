@@ -443,7 +443,7 @@ if(CNA_BUILD_TESTS AND NOT WIN32)
     )
 endif()
 
-# --- plans/plan_native_platform_validation.md NPV-0102: platform exit-order harness ---
+# --- NPV-0102: platform exit-order harness ---
 # A process that returns from main() while CurrentPlatform's lazily created platform still has a
 # window system open -- the ordinary end of every XNA-API application. The defect class it guards
 # against lives in static destruction order at process exit, which no test inside a long-running

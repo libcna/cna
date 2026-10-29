@@ -1,13 +1,13 @@
 #!/bin/sh
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_wayland.md WAYLAND-0112/0113: run a command against a PRIVATE Wayland compositor.
+# WAYLAND-0112/0113: run a command against a PRIVATE Wayland compositor.
 #
 # A test that talks to Wayland -- SDL3's wayland video driver, a GPU test through Xwayland
 # (tools/platform/run_gpu_tests_private.sh) -- needs a real compositor, and the one a developer is
 # sitting in front of is the one thing it must never touch: a test would open windows on the
 # user's screen, take their clipboard, and -- on a locked session -- act on a desktop nobody is
-# watching (plans/plan_wayland.md D-28). This starts a compositor of its own, in a runtime
+# watching (D-28). This starts a compositor of its own, in a runtime
 # directory of its own, runs the command against it, and takes everything down again.
 #
 #   tools/platform/wayland_test_server.sh [--compositor weston] [--renderer pixman|gl] [--scale N]

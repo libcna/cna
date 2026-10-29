@@ -314,7 +314,7 @@ jobs:
         run: ./build/CnaPlatformModuleTests.exe --gtest_filter='Sdl3WindowTest.*:EveryImplementation/PlatformWindowConformance.*/SDL3'
 
   # ---------------------------------------------------------------------------------------------
-  # plans/plan_native_platforms_integration.md NPI-0013: the permanent SDL-free Linux cell.
+  # NPI-0013: the permanent SDL-free Linux cell.
   #
   # Every other Linux cell above configures with CNA_ENABLE_SDL left at its AUTO default, so none
   # of them proves a genuinely SDL-free CNA build stays buildable. This one sets
@@ -323,7 +323,7 @@ jobs:
   # the runner has no sound card, so everything plays to ALSA's silent `null` device).
   # cna_content is built and tested here specifically because DecodeWavToPcm16
   # (modules/audio/src/Internal/WavDecoder.cpp) is the dependency this cell exists to keep SDL-free
-  # -- see plans/plan_native_platforms_integration.md's WAV decoder section for the history of why
+  # -- see NPI-* (the native platforms integration, in Git history) for the history of why
   # that mattered. A windowed build needs SDL3, on Linux as on every other desktop.
   sdl-free:
     name: Headless + Headless + ALSA audio (CNA_ENABLE_SDL=OFF)
@@ -439,7 +439,7 @@ jobs:
           python3 tools/platform/nonproduction_sdl_audit.py --check
 
   # ---------------------------------------------------------------------------------------------
-  # plans/plan_native_platforms_integration.md NPI-0014: CNA_ENABLE_SDL's own AUTO/ON/OFF contract.
+  # NPI-0014: CNA_ENABLE_SDL's own AUTO/ON/OFF contract.
   #
   # AUTO must be byte-for-byte the historical default (a plain configure with nothing set), ON
   # must configure SDL the same way AUTO does whenever anything actually needs it, and OFF must

@@ -50,7 +50,7 @@ namespace Microsoft::Xna::Framework::Audio
         // The length of the sample data and its rate, recorded in every build. Duration is a
         // property of the data rather than of an output device (FNA computes it from the sample
         // count at creation), so a NULL audio build -- which has no mixer to ask -- must
-        // still report it (plans/plan_native_platform_validation.md NPV-0105).
+        // still report it (NPV-0105).
         std::int64_t frames = 0;
         SharpRuntime::intcs frameRate = 0;
         // Set by the XNA stream overload: WavFile's Duration, rounded to whole milliseconds.

@@ -83,7 +83,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns the compiler/linker log from a failed compile, empty when it succeeded.
          *
-         * plans/plan_modern.md `MOD-219`. `IsEffectValid()` says *that* a shader did not compile; this
+         * `MOD-219`. `IsEffectValid()` says *that* a shader did not compile; this
          * says why. The two are separate on purpose: a failed compile is not an exception here,
          * because on some renderers `GraphicsCapability::CustomEffects` is true while GLSL source
          * is never compiled at all (SOFTWARE and HEADLESS accept and ignore it), and throwing would
@@ -339,7 +339,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Releases the compiled renderer program before the base class marks this resource
-         * disposed (plans/plan_sokol.md SOKOL-42).
+         * disposed (SOKOL-42).
          *
          * `Effect::Dispose(bool)` only reaches `GraphicsResource::Dispose(bool)`, which never
          * touches `effectRenderer_`. `GraphicsDevice::Dispose()` disposes tracked resources before

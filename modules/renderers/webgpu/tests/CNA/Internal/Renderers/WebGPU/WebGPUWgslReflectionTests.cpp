@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu_modern_graphics.md WMG-0004: the WGSL reflection the WebGPU renderer builds its
+// WMG-0004: the WGSL reflection the WebGPU renderer builds its
 // explicit bind-group and pipeline layouts from. CPU-only: no adapter, no device.
 //
 // The first fixtures are verbatim shapes of what naga 28 emits for the engine layer's Vulkan GLSL

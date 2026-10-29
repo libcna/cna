@@ -24,7 +24,7 @@
 #
 # docs/directx9-renderer.md design decision 17 / D9-5: this wrapper also automatically
 # ASSERTS that DXVK itself (not a silent WineD3D fallback) handled the run,
-# mirroring the retired plans/plan_dx.md's DX-85 gate -- a "DXVK: <version>" log line that only
+# mirroring DX-85's gate -- a "DXVK: <version>" log line that only
 # DXVK's own logger ever prints (vanilla WineD3D never does). Without this, a
 # broken/missing DXVK install could silently degrade every D3D9 pixel test in
 # this suite to validating WineD3D's own (different) Direct3D 9 implementation

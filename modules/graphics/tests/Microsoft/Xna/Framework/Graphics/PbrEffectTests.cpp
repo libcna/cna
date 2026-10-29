@@ -470,7 +470,7 @@ TEST_F(PbrEffectDefaultsTest, VertexColorEnabledDefaultsOffAndOverridesTheDrawPa
 }
 
 // -----------------------------------------------------------------------
-// Image-based lighting (plans/plan_modern.md MOD-1220/MOD-1221/MOD-1224/MOD-1226)
+// Image-based lighting (MOD-1220/MOD-1221/MOD-1224/MOD-1226)
 
 TEST_F(PbrEffectDefaultsTest, ImageBasedLightIsAbsentAndInertByDefault)
 {

@@ -69,7 +69,7 @@ namespace CNA::Internal::Xnb
         // (modules/audio/src/Internal, compiled for every CNA_AUDIO_PLATFORM). This used to be
         // SOUND_ENABLED-only because its predecessor was SDL3's, and the guard outlived the
         // reason -- an SDL-free build refused float and ADPCM SoundEffects it could decode
-        // (plans/plan_native_platform_validation.md NPV-0104).
+        // (NPV-0104).
         [[nodiscard]] std::vector<std::uint8_t> DecodeWaveToPcm16(
             const XnbSoundEffectData& source, const std::string& origin,
             std::uint32_t& frameCount)

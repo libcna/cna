@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MS-PL
 #
-# RRC-006 (the since-removed plans/plan_renderer_cleanup.md): one case of "a retired renderer
+# RRC-006: one case of "a retired renderer
 # selector is refused, by name, with no silent fallback" -- run for real.
 #
 # Runs cmake/RendererIdentities.cmake in `cmake -P` script mode with one selection and asserts the

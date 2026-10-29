@@ -247,7 +247,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // CreateTextureCube's own renderer call never actually forwards it -- a RenderTargetCube
         // could report a non-Color Format() while its real GPU resource was always Color.
         //
-        // plans/plan_modern.md MOD-107: the format is forwarded now (CreateRenderTargetCubeEXT), so the
+        // MOD-107: the format is forwarded now (CreateRenderTargetCubeEXT), so the
         // rule that keeps that finding fixed is no longer "Color only" but "whatever the renderer
         // says it really creates". The cube-specific tri-state verdict permits native APIs to
         // distinguish cube attachment support from otherwise-identical 2D attachment support.

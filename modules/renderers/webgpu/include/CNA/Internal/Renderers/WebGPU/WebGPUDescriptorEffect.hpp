@@ -44,7 +44,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /** @brief Buffer minimum binding size. */
         std::uint64_t minBindingSize = 0;
         /**
-         * @brief plans/plan_webgpu_perf.md WEBGPUPERF-0005: a uniform block the layout declares with
+         * @brief WEBGPUPERF-0005: a uniform block the layout declares with
          *        a dynamic offset, so a draw binds it inside the flush's uniform arena.
          */
         bool dynamicOffset = false;

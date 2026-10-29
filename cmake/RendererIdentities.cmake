@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MS-PL
 # =====================================================================================
 # CNA renderer identities: the public set, the retired set, and the early refusal of both
-# unknown and retired selections (RRC-002, from the since-removed plans/plan_renderer_cleanup.md;
+# unknown and retired selections (RRC-002;
 # docs/removed-renderers.md is the record of every retirement).
 #
 # CNA intentionally maintains a curated renderer set. This file is the CMake side of the identity

@@ -10,7 +10,7 @@
 # the golden-image working-directory conventions rely on it); keep them there.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
-# plans/plan_native_platform_validation.md NPV-0106: this suite links SDL3 directly -- its test
+# NPV-0106: this suite links SDL3 directly -- its test
 # macro names SDL3::SDL3, several examples include <SDL3/SDL.h>, and the shared
 # common/PixelTestGame.hpp probes for a display through SDL_InitSubSystem. A CNA_ENABLE_SDL=OFF
 # configuration has no SDL3 target at all, and without this guard selecting the EasyGL renderer

@@ -22,7 +22,7 @@ namespace CNA::Internal::Renderers::WebGPU
         }
     }
 
-    // ---- plans/plan_webgpu_modern_graphics.md WMG-0014: shadow reception -----------------------
+    // ---- WMG-0014: shadow reception -----------------------
 
     void WebGPURenderer::EnsureShadowResourcesEXT()
     {
@@ -32,7 +32,7 @@ namespace CNA::Internal::Renderers::WebGPU
         entries[0].visibility = WGPUShaderStage_Fragment;
         entries[0].buffer.type = WGPUBufferBindingType_Uniform;
         entries[0].buffer.minBindingSize = sizeof(WebGPUShadowStateEXT::uniforms);
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0004: the block lives in the uniform arena, so draws
+        // WEBGPUPERF-0004: the block lives in the uniform arena, so draws
         // receiving the same maps share one group and differ only in this offset.
         entries[0].buffer.hasDynamicOffset = true;
         const auto sampler = [&entries](const std::uint32_t binding) {
@@ -125,7 +125,7 @@ namespace CNA::Internal::Renderers::WebGPU
                                                           std::uint32_t& offset)
     {
         EnsureShadowResourcesEXT();
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0004: the block goes into the uniform arena and is
+        // WEBGPUPERF-0004: the block goes into the uniform arena and is
         // bound at its own offset; what is left in the group is the maps and their samplers, which
         // a whole frame of draws usually shares -- so the group comes from the binding cache
         // instead of being built, written and released for every draw.
@@ -185,7 +185,7 @@ namespace CNA::Internal::Renderers::WebGPU
         return AcquireCachedBindGroupEXT(key, {&map, &cube, &spot}, descriptor);
     }
 
-    // ---- plans/plan_webgpu_modern_graphics.md WMG-0022: image-based lighting -------------------
+    // ---- WMG-0022: image-based lighting -------------------
 
     void WebGPURenderer::EnsureIblResourcesEXT()
     {

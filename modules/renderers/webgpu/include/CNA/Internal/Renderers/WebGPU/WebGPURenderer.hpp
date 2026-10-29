@@ -426,7 +426,7 @@ namespace CNA::Internal::Renderers::WebGPU
                                                 const void* data, int dataLength) override;
 
         /**
-         * @brief plans/plan_webgpu_failing_eight.md WGF-0003: the exact compressed blocks of one
+         * @brief WGF-0003: the exact compressed blocks of one
          *        face region, read back from the block store this class already keeps.
          *
          * The store is authoritative for the same reason `SetCompressedDataEXT` documents: a
@@ -732,7 +732,7 @@ namespace CNA::Internal::Renderers::WebGPU
          *
          * Created lazily, because until a compiled effect could sample a `Texture3D` no route in
          * this renderer needed one -- which is exactly why `SamplerState.AddressW` had no
-         * observable pixel effect before `WEBGPU-169`. plans/plan_webgpu_modern_graphics.md
+         * observable pixel effect before `WEBGPU-169`.
          * WMG-0006 made it unconditional: a descriptor-contract `ShaderEffect` samples volumes too,
          * and that route exists whether or not compiled effects are built.
          */
@@ -1623,7 +1623,7 @@ namespace CNA::Internal::Renderers::WebGPU
             return transientBuffersReusedEXT_;
         }
         /**
-         * @brief plans/plan_webgpu_perf.md WEBGPUPERF-0001: bind groups this renderer has created.
+         * @brief WEBGPUPERF-0001: bind groups this renderer has created.
          *
          * Cumulative since device creation, so a test measures one frame as the difference of two
          * readings. A group served from the binding cache or an arena chunk is not counted again,
@@ -1831,7 +1831,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /// WEBGPU-58: the backbuffer's real, applied MSAA sample count (0 = none).
         [[nodiscard]] int GetMultiSampleCount() const override;
         /**
-         * @brief plans/plan_webgpu_failing_eight.md WGF-0004: the sample count this renderer has
+         * @brief WGF-0004: the sample count this renderer has
          *        actually applied, not the one that was asked for.
          *
          * The interface default echoes the request back, which lets a device report a
@@ -2043,7 +2043,7 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WGPUDevice Device() const { return device_; }
         [[nodiscard]] WGPUQueue Queue() const { return queue_; }
         /**
-         * @brief plans/plan_webgpu_perf.md WEBGPUPERF-0006: submits the frame's encoded passes
+         * @brief WEBGPUPERF-0006: submits the frame's encoded passes
          *        before queue work that must come after them.
          *
          * Every flush of a bind cycle records into one command encoder per frame, which is
@@ -2321,7 +2321,7 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return device_ != nullptr; }
 
         /**
-         * @brief plans/plan_webgpu_modern_graphics.md WMG-0022: this renderer's PBR programs
+         * @brief WMG-0022: this renderer's PBR programs
          * really do consume an `ImageBasedLightEXT`.
          *
          * `kIblSampling` is appended to both PBR families and evaluates the same split-sum
@@ -2352,7 +2352,7 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] bool ReadsBackRenderTargetsEXT() const override { return device_ != nullptr; }
 
         /**
-         * @brief plans/plan_webgpu_modern_graphics.md WMG-0020: inserts a GPU debug label.
+         * @brief WMG-0020: inserts a GPU debug label.
          *
          * Queued into the ordered stream rather than emitted here, for the reason every other
          * public graphics command in this renderer is: nothing is recorded until the bind cycle
@@ -2656,7 +2656,7 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             Draw,
             Clear,
-            /// plans/plan_webgpu_modern_graphics.md WMG-0020: a `SetStringMarkerEXT` label, which
+            /// WMG-0020: a `SetStringMarkerEXT` label, which
             /// addresses @ref markerCommands_ and whose @ref DrawOrderEntry::family is not read.
             /// A marker has a public position among the draws exactly as an ordered Clear does,
             /// but unlike a Clear it is not observable in the pixels, so it never opens a pass of
@@ -3046,7 +3046,7 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         [[nodiscard]] WebGPUViewportSnapshot CaptureViewport() const noexcept;
         /**
-         * @brief plans/plan_street_webgpu.md STREETW-0003: XNA's pixel-centre correction, as a
+         * @brief STREETW-0003: XNA's pixel-centre correction, as a
          *        clip-space translation to post-multiply onto a stock family's WVP.
          *
          * XNA rasterizes under Direct3D 9's convention, where a pixel's centre sits at the integer
@@ -3387,7 +3387,7 @@ namespace CNA::Internal::Renderers::WebGPU
                                        const std::vector<CapturedVertexStreamEXT>& extra);
 
         /**
-         * @brief plans/plan_street_webgpu.md STREETW-0004: one stock draw's per-instance world
+         * @brief STREETW-0004: one stock draw's per-instance world
          *        matrices, already materialized to one 64-byte record per instance.
          *
          * Every stock family that can be drawn instanced carries one of these, so the capture, the
@@ -4219,7 +4219,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // implementation already falls back to DrawColoredPrimitives, so this also unblocks simple
         // (unlit, untextured) Model/BasicEffect draws going through that fallback.
         /**
-         * @brief plans/plan_webgpu_modern_graphics.md WMG-0014: one draw's shadow reception.
+         * @brief WMG-0014: one draw's shadow reception.
          *
          * Captured at the public draw call like every other piece of per-draw state, so a shadow
          * map bound after the draw but before the flush cannot change what an already-queued draw
@@ -4238,7 +4238,7 @@ namespace CNA::Internal::Renderers::WebGPU
         };
 
         /**
-         * @brief plans/plan_webgpu_modern_graphics.md WMG-0022: a queued PBR draw's image-based
+         * @brief WMG-0022: a queued PBR draw's image-based
          * lighting, resolved to values at the public draw call.
          *
          * The same rule and the same shape as @ref WebGPUShadowStateEXT beside it: this renderer
@@ -4325,7 +4325,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // own WEBGPU-N task).
         struct TexturedDrawCommand
         {
-            /// plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world
+            /// STREETW-0004: this draw's per-instance world
             /// matrices, or a disabled state for an ordinary draw.
             WebGPUInstanceStreamEXT instance{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
@@ -4456,7 +4456,7 @@ namespace CNA::Internal::Renderers::WebGPU
         std::vector<WGPUTextureView> pendingTextureViewReleasesEXT_;
         std::vector<WGPUBindGroup> pendingBindGroupReleases_;
 
-        // ---- plans/plan_webgpu_perf.md WEBGPUPERF-0001..0004: the per-draw binding cost ----------
+        // ---- WEBGPUPERF-0001..0004: the per-draw binding cost ----------
         /// Every bind group the draw paths create goes through here, so the count is the frame's
         /// real cost to wgpu. Creation and the release at the next submit are what made a street
         /// frame of 1 212 draws spend most of its time inside wgpu.
@@ -4781,7 +4781,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // sampler + texture) unchanged. No fog (same deliberate deferral as the other 3D shaders).
         struct LitTexturedDrawCommand
         {
-            /// plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world
+            /// STREETW-0004: this draw's per-instance world
             /// matrices, or a disabled state for an ordinary draw.
             WebGPUInstanceStreamEXT instance{};
             /// WMG-0014: this draw's shadow reception, captured at its public call.
@@ -4920,7 +4920,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // for stride 24. No fog (same deliberate deferral as the other 3D shaders).
         struct AlphaTestDrawCommand
         {
-            /// plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world
+            /// STREETW-0004: this draw's per-instance world
             /// matrices, or a disabled state for an ordinary draw.
             WebGPUInstanceStreamEXT instance{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
@@ -5032,7 +5032,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // No fog (same deliberate deferral as the other 3D shaders).
         struct DualTextureDrawCommand
         {
-            /// plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world
+            /// STREETW-0004: this draw's per-instance world
             /// matrices, or a disabled state for an ordinary draw.
             WebGPUInstanceStreamEXT instance{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
@@ -5167,7 +5167,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // support already exists in the reference GLSL this was ported from, so it is wired in.
         struct EnvMapDrawCommand
         {
-            /// plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world
+            /// STREETW-0004: this draw's per-instance world
             /// matrices, or a disabled state for an ordinary draw.
             WebGPUInstanceStreamEXT instance{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
@@ -5407,7 +5407,7 @@ namespace CNA::Internal::Renderers::WebGPU
             /** @brief STREETPERF-0004: storage bound in place instead of `vertexData`/`indexData`. */
             ResidentGeometryEXT resident;
             std::vector<std::uint8_t> indexData;
-            /// plans/plan_street_webgpu.md STREETW-0001/0004: this draw's per-instance world
+            /// STREETW-0001/0004: this draw's per-instance world
             /// matrices, or a disabled state for an ordinary draw.
             WebGPUInstanceStreamEXT instance{};
             /// GLTF-465: true for stride 60, the record that carries COLOR_0.
@@ -5489,7 +5489,7 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUShaderModule pbrShader_ = nullptr;
         /// GLTF-465: the stride-60 twin, whose vertex input declares COLOR_0.
         WGPUShaderModule pbrColorShader_ = nullptr;
-        /// plans/plan_street_webgpu.md STREETW-0001: the instanced twins of both, whose vertex
+        /// STREETW-0001: the instanced twins of both, whose vertex
         /// input declares the four world-matrix columns at locations 12-15.
         WGPUShaderModule pbrInstancedShader_ = nullptr;
         WGPUShaderModule pbrInstancedColorShader_ = nullptr;
@@ -5500,7 +5500,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /// GLTF-465: the stride-60 pipelines; a separate cache because the vertex
         /// layout and the shader module both differ, so the key alone cannot separate them.
         std::unordered_map<std::uint64_t, WGPURenderPipeline> pbrColorPipelines_;
-        /// plans/plan_street_webgpu.md STREETW-0001: the instanced pipelines, separate for the
+        /// STREETW-0001: the instanced pipelines, separate for the
         /// same reason -- a second vertex buffer and a different module.
         std::unordered_map<std::uint64_t, WGPURenderPipeline> pbrInstancedPipelines_;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> pbrInstancedColorPipelines_;
@@ -5548,7 +5548,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // always-pass default).
         struct SkinnedDrawCommand
         {
-            /// plans/plan_street_webgpu.md STREETW-0005: this draw's per-instance world
+            /// STREETW-0005: this draw's per-instance world
             /// matrices, or a disabled state for an ordinary draw.
             WebGPUInstanceStreamEXT instance{};
             /// WMG-0014: this draw's shadow reception, captured at its public call.
@@ -5660,7 +5660,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // colour (SkinnedPbrEffect has no VertexColorEnabled, matching the EasyGL reference).
         struct SkinnedPbrDrawCommand
         {
-            /// plans/plan_street_webgpu.md STREETW-0005: this draw's per-instance world
+            /// STREETW-0005: this draw's per-instance world
             /// matrices, or a disabled state for an ordinary draw.
             WebGPUInstanceStreamEXT instance{};
             /// WMG-0014: this draw's shadow reception, captured at its public call.
@@ -5786,7 +5786,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint64_t arrayStride = 0;                     ///< the bound vertex's byte stride
             std::vector<CustomEffectVertexAttr> attributes;    ///< derived from the VertexDeclaration
 
-            /// plans/plan_webgpu_modern_graphics.md WMG-0021: one per-instance stream of an
+            /// WMG-0021: one per-instance stream of an
             /// instanced `ShaderEffect` draw -- its records, its stride and its attributes.
             struct InstanceStream
             {
@@ -5856,7 +5856,7 @@ namespace CNA::Internal::Renderers::WebGPU
                 std::vector<std::uint8_t> data;
                 std::uint64_t arrayStride = 0;
                 bool perInstance = false;
-                /// plans/plan_webgpu_perf.md WEBGPUPERF-0008: the vertex buffer's own storage, bound
+                /// WEBGPUPERF-0008: the vertex buffer's own storage, bound
                 /// in place where `data` used to carry a copy of the whole buffer -- the stock
                 /// families' STREETPERF-0004 rule. Holding it is what makes a later `SetData` move
                 /// the buffer to fresh storage rather than rewrite what this draw reads.

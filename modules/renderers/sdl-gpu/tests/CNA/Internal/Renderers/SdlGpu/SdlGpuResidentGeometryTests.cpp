@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_street_perf.md STREETPERF-0002: this renderer replays draws at Present(), and used to
+// STREETPERF-0002: this renderer replays draws at Present(), and used to
 // keep each draw's geometry by copying its buffers' whole contents into the draw and uploading
 // them again at the end of the frame -- ~430 MB a frame in cna-street, whose scene holds 71 MiB.
 // A draw now binds its vertex and index buffers' own GPU storage; only bytes the draw carries

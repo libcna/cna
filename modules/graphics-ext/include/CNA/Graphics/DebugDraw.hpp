@@ -144,7 +144,7 @@ namespace CNA::Graphics {
         /**
          * @brief Sets whether shapes submitted from now on are hidden behind geometry.
          *
-         * plans/plan_modern.md `MOD-2162`, and it is set **per submission** rather than per batch because
+         * `MOD-2162`, and it is set **per submission** rather than per batch because
          * the two modes answer different questions in the same frame. Depth-tested tells you where
          * a shape is *relative to the scene* — whether the light's volume really does contain the
          * pillar. Overlay tells you where a shape is *at all*, which is the only way to find one

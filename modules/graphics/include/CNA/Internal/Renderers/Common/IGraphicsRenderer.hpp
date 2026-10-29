@@ -929,13 +929,13 @@ namespace CNA::Internal::Renderers
         /// (`values` holds `count * 2` floats).
         virtual void SetUniformVec2Array(const char* name, const float* values, int count) {}
 
-        /// plans/plan_modern.md MOD-217 (reopened): uploads @p count vec3 values. A vec3 array cannot be
+        /// MOD-217 (reopened): uploads @p count vec3 values. A vec3 array cannot be
         /// filled through SetUniformFloatArray -- GL rejects the type mismatch and leaves the
         /// uniform at zero, silently, which is how an SSAO kernel of 64 vec3s turns into 64 samples
         /// at the origin and an image with no occlusion in it at all.
         virtual void SetUniformVec3Array(const char* name, const float* values, int count) {}
 
-        /// plans/plan_modern.md MOD-810: uploads @p count 4x4 matrices (as SetUniformMat4), for a shader that
+        /// MOD-810: uploads @p count 4x4 matrices (as SetUniformMat4), for a shader that
         /// declares `mat4 name[N]` -- a skinning palette, most of the time. Separate from
         /// SetUniformMat4 for the same reason the array forms above are separate from their scalar
         /// ones: the single-matrix call uploads exactly one matrix whatever the uniform's declared
@@ -1299,7 +1299,7 @@ namespace CNA::Internal::Renderers
         /// EnvironmentMapEffect: camera world-space position for reflection vector.
         /// BasicEffect (lit path only): camera world-space position for specular half-vector.
         float eyePositionWorld[3] = {0,0,0};
-        /// plans/plan_modern.md MOD-821: shadow reception. `shadowMap` holds light-space distance (not a
+        /// MOD-821: shadow reception. `shadowMap` holds light-space distance (not a
         /// depth buffer -- CNA cannot sample a depth attachment), and
         /// `lightViewProjColMajor` takes a world position into that map's space. Defaults mean "no
         /// shadows", and a renderer with no shadow-sampling variant accepts and ignores them, the
@@ -1309,11 +1309,11 @@ namespace CNA::Internal::Renderers
             1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
         bool  shadowsEnabled = false;
         float shadowDepthBias = 0.0015f;
-        /// plans/plan_modern.md MOD-840: PCF kernel radius in shadow-map texels. 0 is a single tap, 1 a
+        /// MOD-840: PCF kernel radius in shadow-map texels. 0 is a single tap, 1 a
         /// 3x3 neighbourhood, 2 a 5x5 one. Expressed as a radius rather than a kernel size because
         /// that is what a shader loop bound needs, and clamped by the renderer rather than trusted.
         int   shadowPcfRadius = 1;
-        /// plans/plan_modern.md MOD-908: cascaded shadows. Zero means "one map", and everything below is
+        /// MOD-908: cascaded shadows. Zero means "one map", and everything below is
         /// ignored -- which is what keeps every existing draw, and every renderer with no cascade
         /// shader, exactly as it was. When it is non-zero `shadowMap` is the cascade atlas rather
         /// than a single map, `cascadeMatricesColMajor` holds one world-to-atlas matrix per cascade
@@ -1331,7 +1331,7 @@ namespace CNA::Internal::Renderers
         float cascadeBlendBand = 0.0f;
         /// Tints each cascade a different colour. A debugging aid, off by default.
         bool  cascadeDebugTint = false;
-        /// plans/plan_modern.md MOD-1005: one punctual light and its shadow. 0 means none -- and every
+        /// MOD-1005: one punctual light and its shadow. 0 means none -- and every
         /// draw that has never heard of punctual lights leaves it there, which is what keeps this
         /// free. 1 is a point light (shadowed by `punctualShadowCube`), 2 a spot light (shadowed
         /// by `punctualShadowMap` through `punctualViewProjColMajor`). Both maps store *distance
@@ -1424,7 +1424,7 @@ namespace CNA::Internal::Renderers
         bool pbr                 = false;
         /// Number of instances to draw (1 = non-instanced).
         int instanceCount = 1;
-        /// plans/plan_modern.md MOD-2232: first logical instance for the capability-gated
+        /// MOD-2232: first logical instance for the capability-gated
         /// base-instance route. The XNA draw path and every older renderer see zero.
         int firstInstance = 0;
         /// Every active declared `VertexBufferBinding`, in public slot order,
@@ -1614,7 +1614,7 @@ namespace CNA::Internal::Renderers
         /// §3.9.2 declares them linear unconditionally; a flag would imply a choice that does not
         /// exist.
         bool pbrEncodeOutputToSrgb = true;
-        /// plans/plan_modern.md MOD-1224: image-based lighting, the three split-sum products at once.
+        /// MOD-1224: image-based lighting, the three split-sum products at once.
         /// `iblEnabled` false -- which is every draw that has never heard of IBL -- leaves the
         /// flat `ambientColor` term exactly as it was, and that is deliberate: the two are the
         /// same term computed two ways, so a renderer applies one or the other, never their sum
@@ -2267,7 +2267,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Whether this renderer's implemented path consumes one explicit shader payload.
          *
-         * plans/plan_modern.md `MOD-2210`. The renderer boundary deliberately carries raw
+         * `MOD-2210`. The renderer boundary deliberately carries raw
          * append-only ordinals rather than depending on a public extension enum. The shared
          * default refuses every language/stage pair, including unknown and future values, so a
          * renderer cannot acquire support merely because a new identity was appended.
@@ -2524,7 +2524,7 @@ namespace CNA::Internal::Renderers
             return CreateRenderTarget2D(w, h, depthFormat, preserveContents, mipMap, multiSampleCount);
         }
 
-        /// plans/plan_modern.md MOD-123: whether sampling a half-float colour texture with a linear
+        /// MOD-123: whether sampling a half-float colour texture with a linear
         /// (or mip) filter is supported by this context, as distinct from being able to render into
         /// one. Default false: a renderer that has not checked cannot promise it, and a pass that
         /// wrongly assumes hardware filtering gets undefined sampling rather than a slower path.
@@ -2552,7 +2552,7 @@ namespace CNA::Internal::Renderers
         /// PreserveContents cube face was wiped on every bind cycle.
         virtual std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) { return nullptr; }
 
-        /// plans/plan_modern.md MOD-107: CreateRenderTargetCube plus an explicit
+        /// MOD-107: CreateRenderTargetCube plus an explicit
         /// Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal, exactly as
         /// CreateRenderTarget2DEXT is to CreateRenderTarget2D. The default forwards and ignores the
         /// format, so every renderer keeps its Color-only cube behaviour until it implements more;
@@ -2585,7 +2585,7 @@ namespace CNA::Internal::Renderers
         /// CompiledEffects so an old catch-all cannot accidentally advertise a native runtime.
         [[nodiscard]] virtual bool SupportsCompiledEffects() const { return false; }
 
-        /// plans/plan_modern.md MOD-1699: whether the source text handed to `CreateEffectRenderer`
+        /// MOD-1699: whether the source text handed to `CreateEffectRenderer`
         /// actually determines the pixels. Two renderers answer this differently from
         /// `GraphicsCapability::CustomEffects`, legitimately: SOFTWARE and HEADLESS *accept* any
         /// shader source and render with their own fixed path instead (a documented decision, not
@@ -2594,7 +2594,7 @@ namespace CNA::Internal::Renderers
         /// capability promises here.
         [[nodiscard]] virtual bool ExecutesShaderEffectSourceEXT() const { return false; }
 
-        /// plans/plan_modern.md MOD-1699: whether this renderer's lit shaders actually SAMPLE the
+        /// MOD-1699: whether this renderer's lit shaders actually SAMPLE the
         /// shadow state an effect carries (`IShadowReceiverEXT`: single map, cascades, punctual).
         /// The state itself is accepted and ignored everywhere -- that convention is what keeps a
         /// draw working on a renderer with no shadow shader -- but "accepted and ignored" and
@@ -2603,7 +2603,7 @@ namespace CNA::Internal::Renderers
         /// sampling must not claim it.
         [[nodiscard]] virtual bool SupportsShadowSamplingEXT() const { return false; }
 
-        /// plans/plan_modern.md MOD-1699: whether this renderer's PBR shader honours the image-based
+        /// MOD-1699: whether this renderer's PBR shader honours the image-based
         /// lighting group of `GpuDrawParams` (`iblIrradiance`, `iblPrefilteredSpecular`,
         /// `iblBrdfLut`). Same reasoning as `SupportsShadowSamplingEXT`, and the same default.
         [[nodiscard]] virtual bool SupportsImageBasedLightingEXT() const { return false; }
@@ -2670,7 +2670,7 @@ namespace CNA::Internal::Renderers
         /// here, and one that has not been measured under-claims rather than over-claims.
         [[nodiscard]] virtual bool SupportsTexture3DSamplingEXT() const { return false; }
 
-        /// plans/plan_modern.md MOD-2092: the colour space the swap chain is currently presenting in.
+        /// MOD-2092: the colour space the swap chain is currently presenting in.
         /// `Srgb` by default and for every CNA renderer today -- an HDR swap chain is a property of
         /// the *presentation* path (DXGI, Vulkan surface formats, a platform's own HDR opt-in), not
         /// of a drawing API, and no CNA platform back end offers one yet. A renderer must not claim
@@ -2681,7 +2681,7 @@ namespace CNA::Internal::Renderers
             return CNA::DisplayColorSpace::Srgb;
         }
 
-        /// plans/plan_modern.md MOD-2092: asks the swap chain to present in @p space.
+        /// MOD-2092: asks the swap chain to present in @p space.
         /// @return True when the swap chain now presents in that space. The default accepts only
         ///         `Srgb`, which is the truth rather than a stub: a renderer that returned true
         ///         without reconfiguring anything would have every caller encode for a display that
@@ -3163,7 +3163,7 @@ namespace CNA::Internal::Renderers
             // can opt in. The corresponding creation default above returns nullptr.
             if (capability == CNA::GraphicsCapability::CompiledEffects)
                 return SupportsCompiledEffects();
-            // plans/plan_modern.md MOD-100/MOD-101: float colour render targets are opt-in for the same
+            // MOD-100/MOD-101: float colour render targets are opt-in for the same
             // reason. CreateRenderTarget2DEXT's own shared default drops the requested
             // SurfaceFormat and produces an 8-bit Color target, so a renderer that has not been
             // taught float formats would, under a true default, promise that values above 1.0

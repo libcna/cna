@@ -257,7 +257,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_identities.py")
 
-        # RRC-009/RRC-010 (the since-removed plans/plan_renderer_cleanup.md): the two API decisions
+        # RRC-009/RRC-010: the two API decisions
         # the 25-identity curation forced, held in opposite directions -- the removed 2D mesh entry
         # point stays removed, and the retained surface-presenter flag stays retained only while the
         # platform code it was kept for still exists. The script names both symbols; this comment
@@ -266,7 +266,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_removed_renderer_api.py")
 
-        # plans/plan_modern.md MOD-2216: checked-in packages must remain derivable from their
+        # MOD-2216: checked-in packages must remain derivable from their
         # declared source files. This is deliberately an offline authoring gate: the generator
         # exits 77 when shaderc is absent and no CNA runtime target links or loads the compiler.
         add_test(NAME ShaderPackageReproducibility
@@ -567,7 +567,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             PROPERTIES LABELS "renderer;configuration")
     endforeach()
 
-    # RRC-006 (the since-removed plans/plan_renderer_cleanup.md): every retired renderer selector
+    # RRC-006: every retired renderer selector
     # must be REFUSED, by name, on every route that can name one -- and the refusal must say it was
     # retired rather than merely unknown.
     #

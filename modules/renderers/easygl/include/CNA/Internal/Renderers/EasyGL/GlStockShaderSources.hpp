@@ -117,7 +117,7 @@ CNA_GL_CUBE_DIR_DECL
 "vec4 cnaInstancePosition(vec4 p){return (uCnaInstanced>0.5)?cnaInstanceMatrix()*p:p;}\n" \
 "vec3 cnaInstanceDirection(vec3 d){return (uCnaInstanced>0.5)?mat3(cnaInstanceMatrix())*d:d;}\n"
 
-// plans/plan_modern.md MOD-836..MOD-841: shadow reception, shared by every lit fragment shader so the
+// MOD-836..MOD-841: shadow reception, shared by every lit fragment shader so the
 // four of them cannot drift into four subtly different shadows.
 //
 // The map holds light-space distance rather than a depth buffer: CNA cannot sample a depth
@@ -231,7 +231,7 @@ CNA_GL_CUBE_DIR_DECL
 "    return vec3(1.0,1.0,0.6);\n" \
 "}\n"
 
-// plans/plan_modern.md MOD-1005/MOD-1006: one punctual light -- point or spot -- with its own shadow.
+// MOD-1005/MOD-1006: one punctual light -- point or spot -- with its own shadow.
 // Kept beside the directional lookup rather than folded into it because the two shadow different
 // lights: one answers "is the sun blocked here", the other "is that lamp blocked here", and
 // multiplying one light's contribution by the other's visibility produces a plausible image and no
@@ -313,7 +313,7 @@ namespace CNA::Internal::Renderers::GlStockShaders
         std::string fragment;
     };
 
-    // plans/plan_modern.md MOD-1225: the split-sum ambient term, replacing the flat uAmbientColor when an
+    // MOD-1225: the split-sum ambient term, replacing the flat uAmbientColor when an
     // environment is bound. Three inputs that were generated together (CNA::Graphics::
     // EnvironmentProcessor): the irradiance cube read by the normal, the prefiltered specular cube
     // whose mip IS the roughness, and the BRDF table that says how much of the reflection survives at
@@ -1537,7 +1537,7 @@ CNA_GL_PUNCTUAL_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
-// plans/plan_modern.md MOD-838/MOD-839: Lo is the direct-lighting term and the only one a shadow may
+// MOD-838/MOD-839: Lo is the direct-lighting term and the only one a shadow may
 // touch. The ambient/occlusion term below stands for light arriving from the rest of the
 // environment, which an occluder between the surface and this one light does not block.
 "    Lo*=cnaShadowFactor(vWorldPos);\n"
@@ -1801,7 +1801,7 @@ CNA_GL_PUNCTUAL_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
-// plans/plan_modern.md MOD-838/MOD-839: Lo is the direct-lighting term and the only one a shadow may
+// MOD-838/MOD-839: Lo is the direct-lighting term and the only one a shadow may
 // touch. The ambient/occlusion term below stands for light arriving from the rest of the
 // environment, which an occluder between the surface and this one light does not block.
 "    Lo*=cnaShadowFactor(vWorldPos);\n"

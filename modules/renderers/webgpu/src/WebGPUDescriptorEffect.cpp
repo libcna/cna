@@ -145,7 +145,7 @@ namespace CNA::Internal::Renderers::WebGPU
         }
         layout->groupCount_ = used;
 
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0005: all of a program's uniform blocks become
+        // WEBGPUPERF-0005: all of a program's uniform blocks become
         // dynamic-offset bindings, or none do -- a pipeline layout may hold only so many, and a
         // program past that keeps the per-draw buffers it always had.
         std::uint32_t uniformBlocks = 0;
@@ -297,7 +297,7 @@ namespace CNA::Internal::Renderers::WebGPU
         }
 
         std::string error;
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0005: the uniform blocks as dynamic-offset bindings,
+        // WEBGPUPERF-0005: the uniform blocks as dynamic-offset bindings,
         // so a draw binds them inside the flush's uniform arena and its groups can be cached.
         const std::uint32_t deviceDynamicLimit =
             owner_->DeviceLimitsEXT().maxDynamicUniformBuffersPerPipelineLayout;
@@ -461,7 +461,7 @@ namespace CNA::Internal::Renderers::WebGPU
     WebGPUSampledTextureEXT WebGPURenderer::NeutralTextureForDimensionEXT(
         WGPUTextureViewDimension dimension)
     {
-        // plans/plan_webgpu_perf.md WEBGPUPERF-0003: one reference object per shape, made with the
+        // WEBGPUPERF-0003: one reference object per shape, made with the
         // texture and handed out on every call. A fresh one per call cost two heap allocations per
         // draw, and an object only the binding cache held would read to its sweep as a texture
         // nothing can bind any more.
@@ -552,7 +552,7 @@ namespace CNA::Internal::Renderers::WebGPU
         DescriptorEffectBindingsEXT result;
 
         // A block the layout declares dynamic goes into the flush's uniform arena
-        // (plans/plan_webgpu_perf.md WEBGPUPERF-0005), keyed by its slot so an unchanged block is
+        // (WEBGPUPERF-0005), keyed by its slot so an unchanged block is
         // appended once per flush rather than once per draw. Any other block keeps its own transient
         // buffer, and the group that binds it is then built for this draw alone.
         const auto bindBlock = [&](const WebGPUBindingSlotEXT& slot, const void* data,

@@ -1763,7 +1763,7 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     // Note for whoever edits this comment: the scan counts the opening delimiter anywhere in a
     // .cpp, comments included, so spelling it here would raise the very number it explains.
     //
-    // 275 -> 280 is plans/plan_modern.md MOD-2076, and the decision this ratchet asks for is: these are
+    // 275 -> 280 is MOD-2076, and the decision this ratchet asks for is: these are
     // **loader-machinery probes**, not conformance statements about an asset. Each one asks which
     // values of KHR_materials_clearcoat / _sheen / _transmission / _volume / _iridescence reach
     // MaterialOut, including the two that are about the *absence* of a declaration and one about an

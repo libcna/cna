@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_native_platforms_integration.md NPI-0009: DecodeWavToPcm16 no longer depends on
+// NPI-0009: DecodeWavToPcm16 no longer depends on
 // SDL (see modules/audio/src/Internal/WavDecoder.cpp) -- these tests exercise that CNA-owned
 // implementation directly and are run with CNA_ENABLE_SDL=OFF so they cannot pass merely because
 // SDL happens to still be linked into the binary.

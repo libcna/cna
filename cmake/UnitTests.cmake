@@ -365,7 +365,7 @@ if(CNA_BUILD_TESTS)
     # reasons at once: an app-sandboxed process may not spawn another executable at all, and the
     # baked-in build-machine harness path does not exist inside the .app either. Not part of the Task 6.2/6.4 verification filters
     # (*Network*:*Gamer*:*ENet*:*Packet*) either, since its suite name is TwoProcessLoopbackTest.
-    # plans/plan_dx1.md DX1-88 regression pass: found and fixed a pre-existing, not-DX1-specific gap --
+    # DX1-88 regression pass: found and fixed a pre-existing, not-DX1-specific gap --
     # this glob picks up ENet-specific tests unconditionally, but those files include
     # <enet/enet.h> directly, which only resolves when CNA_ENABLE_NET actually configured
     # the vendored ENet target (cmake/ThirdPartyENet.cmake). CNA_ENABLE_NET=OFF is a real,
@@ -470,7 +470,7 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/EasyGL/.*\\.cpp$")
     endif()
 
-    # plans/plan_webgpu_modern_graphics.md WMG-0028, for exactly the reason the FNA3D entry above
+    # WMG-0028, for exactly the reason the FNA3D entry above
     # states: the WGSL reflection suite (WMG-0007) lives under modules/renderers/webgpu/tests/ and
     # includes WebGPUWgslReflection.hpp, whose include root arrives with the WebGPU renderer
     # target. Without this the unconditional glob broke every OTHER renderer's CnaTests configure
@@ -539,7 +539,7 @@ if(CNA_BUILD_TESTS)
     set(CNA_TEST_GROUP_DEPENDENCY_integration CNA)
     # SAMPLE-066: XmlSerializationEXT.hpp opts the math value types into System::Xml::Serialization,
     # so the group that tests it links that component too -- everywhere the component exists.
-    # DX-250/DX-269 (the retired plans/plan_dx.md): on a Windows target it does not (see
+    # DX-250/DX-269: on a Windows target it does not (see
     # cmake/SharpRuntimeConsumption.cmake for the exact upstream reason), so both the source and
     # dependency are absent rather than naming a target CMake would reject at generate time or
     # compiling a source whose include root is unavailable.
@@ -1377,7 +1377,7 @@ if(CNA_BUILD_TESTS)
     # Headless-safe audio everywhere; the video driver is left to the runner (Xvfb+x11 in CI, real
     # display or `xvfb-run` locally) because the MouseCursor tests need real cursors (the SDL dummy
     # driver has null cursors).
-    # VULKAN-153 (finding F-22 of the retired plans/plan_vulkan.md): this test carried NO timeout,
+    # VULKAN-153 (its finding F-22): this test carried NO timeout,
     # and it can deadlock -- observed twice on 2026-09-05, single-threaded in futex_wait with 2
     # seconds of CPU after 45 minutes of wall clock, both times while a second copy of this same
     # suite was running from another checkout. Without a TIMEOUT, ctest never reaps it and the whole
@@ -1405,7 +1405,7 @@ if(CNA_BUILD_TESTS)
     # parses this exact list out of this file and asserts that every registered Gltf* suite falls
     # into exactly one rung -- so a new suite that matches no rung fails the run instead of
     # silently sitting outside `ctest -L gltf-conformance`. Keep the entries here only.
-    # plans/plan_modern.md MOD-1309/MOD-1310 add two suites that exist only when the engine layer is
+    # MOD-1309/MOD-1310 add two suites that exist only when the engine layer is
     # compiled in. They are named here unconditionally -- the rung list is parsed as TEXT by
     # GltfConformanceLadderTests, so a CMake variable inside one of these strings would be read
     # literally -- and that test knows which of them are CNAEXT-gated.
@@ -1658,7 +1658,7 @@ if(CNA_BUILD_TESTS)
         set_tests_properties(CnaSdlAndroidAssetEnumeration PROPERTIES LABELS "platform;configuration")
     endif()
 
-    # plans/plan_native_platform_validation.md NPV-0131: which test binary the platform ctest
+    # NPV-0131: which test binary the platform ctest
     # entries below (CnaPlatform*) run. CnaTests by default. A build that compiles only the
     # platform module's tests -- CI's SDL-free cell builds the focused CnaPlatformModuleTests,
     # which is not part of `all` -- names it here instead; the entries then run every
@@ -1687,7 +1687,7 @@ if(CNA_BUILD_TESTS)
     cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*:Sdl3InputTest.TextInputLifecycleAndAreaReachALivePlatformWindow:DisplayInfoTests.*:GraphicsDevicePlatformWindowTests.*:GameWindowPlatformTest.*:*PlatformWindowConformance*
         LABELS "platform" ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 
-    # VULKAN-154/VULKAN-157 (the retired plans/plan_vulkan.md): the Xlib error-handler regression is
+    # VULKAN-154/VULKAN-157: the Xlib error-handler regression is
     # the one platform test that needs a REAL X11 connection rather than SDL's dummy driver -- its
     # whole subject is what Xlib does with a failing X request. Its own ctest, with the video driver
     # and the display forced, because the gtest-discovered copy inside the shared binary inherits
@@ -1731,7 +1731,7 @@ if(CNA_BUILD_TESTS)
         unset(_cna_sdl3_window_system_filter)
     endif()
 
-    # plans/plan_native_platform_validation.md NPV-0102: a process that returns from main() with
+    # NPV-0102: a process that returns from main() with
     # the lazily created platform still open must exit cleanly (cmake/Harnesses.cmake). Once on
     # SDL's dummy driver, which every host has, and once on a private X server.
     if(TARGET cna_platform_exit_harness)

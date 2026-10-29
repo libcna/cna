@@ -369,7 +369,7 @@ namespace CNA::Internal::GltfImport
         /** @brief `doubleSided` (glTF default false). */
         bool doubleSided = false;
 
-        // plans/plan_modern.md MOD-2076. The material extensions beyond what `PbrEffect` shades, kept
+        // MOD-2076. The material extensions beyond what `PbrEffect` shades, kept
         // here as plain values for the same reason the four above are: the importer's job is to
         // say what the file contained, and deciding what to do about it belongs to whoever reads
         // this. Each field carries the extension's own default, so a file that does not declare

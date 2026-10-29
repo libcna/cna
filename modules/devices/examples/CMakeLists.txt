@@ -22,7 +22,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 # comment below for why), so unlike every other example it has a genuine, unconditional source
 # dependency on SDL3 -- not merely a platform/renderer choice that happens to route through it.
 # It is therefore only ever built when SDL3 is actually configured
-# (plans/plan_native_platforms_integration.md NPI-0007): an SDL-free configuration
+# (NPI-0007): an SDL-free configuration
 # (CNA_ENABLE_SDL=OFF) skips it rather than failing to configure over an example that was never
 # claiming to be SDL-free.
 if(CNA_BUILD_EXAMPLES AND NOT ANDROID AND (TARGET SDL3::SDL3 OR TARGET SDL3::SDL3-static))

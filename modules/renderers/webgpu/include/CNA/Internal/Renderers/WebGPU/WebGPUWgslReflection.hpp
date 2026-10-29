@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu_modern_graphics.md WMG-0004: resource, layout and entry-point reflection over
+// WMG-0004: resource, layout and entry-point reflection over
 // the WGSL this renderer is handed.
 //
 // WHY THE RENDERER READS ITS OWN SHADER SOURCE

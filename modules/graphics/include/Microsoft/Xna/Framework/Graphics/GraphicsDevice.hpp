@@ -1609,7 +1609,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns whether the active renderer consumes an explicit shader payload pair.
          *
-         * plans/plan_modern.md `MOD-2210`. This is a live renderer query, not a mapping from the
+         * `MOD-2210`. This is a live renderer query, not a mapping from the
          * renderer's name. Unknown, sentinel and invalid enum values return false.
          *
          * @param language The payload's declared source language or binary format.
@@ -1731,7 +1731,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns whether a `ShaderEffect`'s source text really determines the pixels.
          *
-         * plans/plan_modern.md `MOD-1699`. `GraphicsCapability::CustomEffects` says a renderer accepts a
+         * `MOD-1699`. `GraphicsCapability::CustomEffects` says a renderer accepts a
          * custom effect; this says the shader you wrote is what runs. They differ on real
          * renderers: SOFTWARE and HEADLESS accept any source and render with their own fixed
          * path. A pass that assumes the first answer covers the second copies its input through
@@ -1744,7 +1744,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns whether this renderer's lit shaders really sample the shadow state.
          *
-         * plans/plan_modern.md `MOD-1699`. An effect accepts `IShadowReceiverEXT`'s state on every
+         * `MOD-1699`. An effect accepts `IShadowReceiverEXT`'s state on every
          * renderer -- that is what keeps a shadow-configured draw working where there is no shadow
          * shader -- but only some renderers *use* it. This is the difference, asked of the
          * renderer rather than inferred from a frame that came out unshadowed.
@@ -1756,7 +1756,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns whether this renderer's PBR shader honours an `ImageBasedLightEXT`.
          *
-         * plans/plan_modern.md `MOD-1699`. Same distinction as @ref SupportsShadowSamplingEXT: the
+         * `MOD-1699`. Same distinction as @ref SupportsShadowSamplingEXT: the
          * bundle is carried everywhere and shaded with in some places.
          *
          * @return True when a bound environment will actually light the surface.
@@ -1766,7 +1766,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns the colour space the swap chain is presenting in.
          *
-         * plans/plan_modern.md `MOD-2092`. `Srgb` on every CNA renderer today; see
+         * `MOD-2092`. `Srgb` on every CNA renderer today; see
          * @ref SetDisplayColorSpaceEXT for why that is an answer rather than a gap.
          *
          * @return The current display colour space.

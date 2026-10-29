@@ -265,7 +265,7 @@ class ShadercCompiler:
         return Toolchain(path, sha256(path.read_bytes()), version.value, revision.value)
 
 
-# ---- WGSL payloads (plans/plan_webgpu_modern_graphics.md WMG-0005) --------------------------------
+# ---- WGSL payloads (WMG-0005) --------------------------------
 #
 # A "wgsl" payload is derived from the SAME Vulkan GLSL source as the package's SPIR-V payload, so
 # the SPIR-V and WebGPU programs cannot drift apart: the source is rewritten into the WebGPU binding

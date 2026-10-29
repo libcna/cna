@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_street_webgpu.md STREETW-0001: an instanced PbrEffect draw is rendered by the PBR
+// STREETW-0001: an instanced PbrEffect draw is rendered by the PBR
 // family, not by the position-only instanced3d one.
 //
 // Before this task `WebGPURenderer::DrawInstancedPrimitivesEx` built an `InstancedDrawCommand` for

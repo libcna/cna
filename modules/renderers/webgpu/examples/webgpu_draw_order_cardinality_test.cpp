@@ -16,7 +16,7 @@
 //
 //   * render passes begun          -- must be exactly 1 for one bind cycle, whatever the mix
 //   * queue submits                -- must be exactly 1, so no family transition submits or waits.
-//                                     Since plans/plan_webgpu_perf.md WEBGPUPERF-0006 a flush only
+//                                     Since WEBGPUPERF-0006 a flush only
 //                                     records and the frame carries it, so each window starts with
 //                                     nothing recorded (Settle) and ends by submitting its cycle
 //                                     (Settle again): the 1 is the cycle's own submission

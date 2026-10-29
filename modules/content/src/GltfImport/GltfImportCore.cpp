@@ -3086,7 +3086,7 @@ namespace CNA::Internal::GltfImport
             const cgltf_float* color = prim.material->specular.specular_color_factor;
             out.material.specularColorFactorEXT = Vector3(color[0], color[1], color[2]);
         }
-        // plans/plan_modern.md MOD-2076: the extensions beyond what PbrEffect shades. cgltf already
+        // MOD-2076: the extensions beyond what PbrEffect shades. cgltf already
         // parses every one of them; what was missing was anyone copying the values out. Each block
         // is guarded by its own `has_` flag, so a file that does not declare an extension keeps the
         // extension's default and is byte-for-byte the material it was before this code existed.

@@ -2955,7 +2955,7 @@ namespace CNA::Internal::Renderers::EasyGL
         }
     }
 
-    // plans/plan_modern.md MOD-116: maps a Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal to
+    // MOD-116: maps a Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal to
     // the GL colour storage a render target of that format needs. Data, not a switch chain buried in
     // the allocation code, because the identical triple is needed in three places: the texture's
     // per-level storage, the multisample colour renderbuffer, and the probe that decides whether
@@ -3335,7 +3335,7 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLRenderTargetRenderer::CreateResources()
     {
         const FramebufferBindingPreserved restoreBinding;
-        // plans/plan_modern.md MOD-115: the colour storage this target's SurfaceFormat calls for. The
+        // MOD-115: the colour storage this target's SurfaceFormat calls for. The
         // request is validated before construction (EasyGLRenderer::CreateRenderTarget2DEXT refuses
         // a format this context cannot render to), so an unmapped ordinal here would be a caller
         // bypassing that route; fall back to Color rather than leaving the storage undefined.
@@ -3470,7 +3470,7 @@ namespace CNA::Internal::Renderers::EasyGL
             }
         }
 
-        // plans/plan_modern.md MOD-119: ask GL whether the combination it was just handed is actually
+        // MOD-119: ask GL whether the combination it was just handed is actually
         // renderable, and say so if it is not. A driver can accept every individual call above and
         // still refuse the assembled framebuffer -- a colour format that is sampleable but not
         // renderable, a sample count the depth attachment cannot match, a size beyond a limit. All
@@ -3534,7 +3534,7 @@ namespace CNA::Internal::Renderers::EasyGL
     bool EasyGLRenderTargetRenderer::GetData(
         int level, int x, int y, int w, int h, void* data, int dataLength) const
     {
-        // plans/plan_modern.md MOD-108: a float target's texels are 2, 4, 8 or 16 bytes wide, not always
+        // MOD-108: a float target's texels are 2, 4, 8 or 16 bytes wide, not always
         // 4. Reading one back as RGBA8 would silently clamp exactly the above-1.0 values the format
         // was chosen to keep -- the readback has to speak the target's own format.
         RenderTargetColorStorage colorStorage{};
@@ -3821,7 +3821,7 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLRenderTargetCubeRenderer::CreateResources()
     {
         const FramebufferBindingPreserved restoreBinding;
-        // plans/plan_modern.md MOD-107: the same storage description the 2D targets use, so a float cube
+        // MOD-107: the same storage description the 2D targets use, so a float cube
         // face and a float 2D target cannot end up with different GL formats.
         RenderTargetColorStorage cubeStorage{};
         if (!MapRenderTargetColorFormat(surfaceFormat_, cubeStorage))
@@ -5163,7 +5163,7 @@ namespace CNA::Internal::Renderers::EasyGL
                       << (ContextHasS3tcEXT()
                               ? " + Dxt1/Dxt3/Dxt5 (S3TC blocks)"
                               : " + Dxt1/Dxt3/Dxt5 (decoded, no S3TC extension)")
-                      // plans/plan_modern.md MOD-117: render targets are no longer Color-only, and the
+                      // MOD-117: render targets are no longer Color-only, and the
                       // answer is driver-dependent, so it is probed rather than asserted.
                       << "; render-target SurfaceFormat: Color"
                       << (ProbeNormalizedRenderTargetSupportEXT(static_cast<int>(
@@ -5864,7 +5864,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int multiSampleCount, int surfaceFormat)
     {
         EnsureCallingThreadContext();
-        // plans/plan_modern.md MOD-115: refuse rather than substitute. The shared default of this factory
+        // MOD-115: refuse rather than substitute. The shared default of this factory
         // drops the format and hands back a Color target, which is invisible to the caller; a
         // renderer that has genuinely implemented formats owes an honest answer instead, and
         // GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT() is the way to ask in advance.
@@ -9351,7 +9351,7 @@ namespace CNA::Internal::Renderers::EasyGL
     {
         if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned;
         if (params.pbr) return StockProgramShape::Pbr;
-        // plans/plan_modern.md MOD-840. A receiving draw is forced onto the per-pixel family whatever
+        // MOD-840. A receiving draw is forced onto the per-pixel family whatever
         // PreferPerPixelLighting says. Per-vertex lighting evaluates the shadow lookup at the
         // corners and interpolates the result across the triangle, so a ground plane drawn as two
         // large triangles would carry one shadow value per corner -- a gradient, not a shadow.
@@ -10407,7 +10407,7 @@ namespace CNA::Internal::Renderers::EasyGL
             }
         }
 
-        // plans/plan_modern.md MOD-1225: image-based lighting, units 10-12. Bound only when the
+        // MOD-1225: image-based lighting, units 10-12. Bound only when the
         // program has the uniforms at all, and each unit falls back to a texture whose sampled
         // value is the "no environment" constant -- but with uIblEnabled at 0 the shader never
         // reads them, so the fallbacks exist to keep the units complete rather than to be seen.

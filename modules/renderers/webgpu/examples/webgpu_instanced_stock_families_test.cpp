@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_street_webgpu.md STREETW-0004: an instanced stock draw is rendered by its OWN
+// STREETW-0004: an instanced stock draw is rendered by its OWN
 // family, not by the position-only instanced3d one -- for every stock effect, not just PbrEffect.
 //
 // `STREETW-0001` fixed PbrEffect because cna-street needed it. The same defect covered every other
@@ -364,7 +364,7 @@ protected:
         }
 
         // ---- Skinned: one bone palette, three instances. -----------------------------------
-        // plans/plan_street_webgpu.md STREETW-0005. The bone is the identity, so what the leg
+        // STREETW-0005. The bone is the identity, so what the leg
         // measures is the family and the per-instance matrix rather than the skin itself -- and a
         // single palette serving every instance is exactly what an instanced skinned draw means.
         {

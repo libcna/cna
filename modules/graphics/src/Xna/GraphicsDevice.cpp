@@ -3451,7 +3451,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // security/compatibility boundary requires a separate explicit renderer opt-in.
         if (capability == CNA::GraphicsCapability::CompiledEffects)
             return GetRenderer().SupportsCompiledEffects();
-        // plans/plan_modern.md MOD-100/MOD-101: the float render-target entries are derived, for the same
+        // MOD-100/MOD-101: the float render-target entries are derived, for the same
         // reason CompiledEffects is -- a renderer whose capability switch ends in
         // `default: return true` would otherwise claim that values above 1.0 survive a
         // render-to-target purely because it has never heard of the enumerator. Each is answered by
@@ -3783,7 +3783,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!Texture::IsRenderTargetFormatAllowedByProfileEXT(graphicsProfile_, format))
             return false;
-        // plans/plan_modern.md MOD-103/MOD-104: asks the same question RenderTarget2D's constructor asks
+        // MOD-103/MOD-104: asks the same question RenderTarget2D's constructor asks
         // (docs/runtime-renderer-selection.md design decision 9's tri-state verdict), so the two can never
         // disagree -- a format this returns true for is a format RenderTarget2D will accept, and one
         // it returns false for is one the constructor refuses.

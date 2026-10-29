@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plans/plan_modern.md MOD-134: every renderer identity still *configures* after the engine layer's
+# MOD-134: every renderer identity still *configures* after the engine layer's
 # renderer-interface additions.
 #
 # Usage:

@@ -567,7 +567,7 @@ TEST_F(SkinnedPbrEffectDefaultsTest, VertexColorEnabledDefaultsOffAndOverridesTh
 }
 
 // -----------------------------------------------------------------------
-// Image-based lighting (plans/plan_modern.md MOD-1223): the same surface PbrEffect carries, because a
+// Image-based lighting (MOD-1223): the same surface PbrEffect carries, because a
 // skinned character standing in a scene must be lit by the same environment as everything else.
 
 TEST_F(SkinnedPbrEffectDefaultsTest, ImageBasedLightRoundTripsAndReachesTheDrawParams)

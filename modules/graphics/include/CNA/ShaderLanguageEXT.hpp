@@ -6,7 +6,7 @@ namespace CNA
     /**
      * @brief Identifies the language or binary format of an explicit shader payload.
      *
-     * plans/plan_modern.md `MOD-2210`. Values are public and append-only so shader packages can
+     * `MOD-2210`. Values are public and append-only so shader packages can
      * describe several renderer variants without deriving a language from renderer identity or
      * inspecting payload contents.
      */

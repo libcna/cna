@@ -178,7 +178,7 @@ namespace Microsoft::Xna::Framework
         // the case that actually goes wrong.
         //
         // Both holders are deliberately IMMORTAL -- allocated once and never destroyed -- for the
-        // reason plans/plan_native_platform_validation.md NPV-0102 records: a Game can be
+        // reason NPV-0102 records: a Game can be
         // destroyed at ANY point of process teardown, so a registry it unregisters itself from has
         // to stay valid for longer than any ordinary static.
         //

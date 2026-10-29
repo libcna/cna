@@ -8,7 +8,7 @@
 //
 // Check A -- after a warm-up, the transient-buffer CREATE count stops climbing entirely across the
 //   remaining frames: a repeating scene allocates nothing new (the whole point of the pool).
-// Check B -- plans/plan_webgpu_perf.md WEBGPUPERF-0007: over those same frames the scene creates no
+// Check B -- WEBGPUPERF-0007: over those same frames the scene creates no
 //   bind group and makes a small, fixed number of queue writes per frame. This check used to assert
 //   that the pool's REUSE count kept climbing; the pool served this scene's per-draw uniform blocks
 //   and nothing else (its vertices and indices are resident since STREETPERF-0004), and those blocks

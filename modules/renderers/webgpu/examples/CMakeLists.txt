@@ -202,7 +202,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     # WEBGPU-12/59: transient per-draw buffer pool + 3-slot sprite vertex ring. Renders a fixed
     # scene for many frames and asserts the pool's create count plateaus and -- since
-    # plans/plan_webgpu_perf.md WEBGPUPERF-0007 moved the scene's per-draw blocks from the pool into
+    # WEBGPUPERF-0007 moved the scene's per-draw blocks from the pool into
     # the uniform arena -- that steady frames create no bind group and make a fixed few queue
     # writes, with zero uncaptured GPU errors. Reads the renderer's counters off the concrete
     # WebGPURenderer, so it also links WebGPU::WebGPU.
@@ -391,7 +391,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_Pbr_DoubleSided COMMAND cna_test_webgpu_pbr_double_sided
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plans/plan_webgpu_perf.md WEBGPUPERF-0001..0005/0007: PbrEffect and ShaderEffect draws still
+    # WEBGPUPERF-0001..0005/0007: PbrEffect and ShaderEffect draws still
     # reach the right uniforms through the arena's dynamic offsets, a steady frame of PBR, BasicEffect,
     # sprite or ShaderEffect draws creates no bind group, its queue writes do not grow with its draw
     # count, and a texture recreated every frame never meets a stale cached group. Reads the renderer's
@@ -401,13 +401,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_BindingCost COMMAND cna_test_webgpu_binding_cost
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plans/plan_street_webgpu.md STREETW-0001: the same family when the draw is INSTANCED, which
+    # STREETW-0001: the same family when the draw is INSTANCED, which
     # until then fell through to instanced3d.wgsl -- position-only, unlit, untextured.
     cna_webgpu_test(cna_test_webgpu_instanced_pbr3d webgpu_instanced_pbr3d_test.cpp)
     cna_register_renderer_test(NAME WebGPU_InstancedPbr3D COMMAND cna_test_webgpu_instanced_pbr3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plans/plan_street_webgpu.md STREETW-0004: and the same for every OTHER stock family --
+    # STREETW-0004: and the same for every OTHER stock family --
     # textured, lit, alpha-test, dual-texture and env-map instanced draws all fell through to
     # instanced3d.wgsl too.
     cna_webgpu_test(cna_test_webgpu_instanced_stock_families
@@ -420,7 +420,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # both rigid and identity-skinned WebGPU PBR pipelines.
     cna_webgpu_test(cna_test_webgpu_pbr_srgb_transfer
                     ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
-    # plans/plan_webgpu_modern_graphics.md WMG-0024: guarded, because CNA_ENABLE_SDL=OFF is a
+    # WMG-0024: guarded, because CNA_ENABLE_SDL=OFF is a
     # configuration that has to exist -- these two borrow an EasyGL source that reaches for SDL3
     # itself, and an unconditional link failed the whole CONFIGURE of an SDL-free tree.
     if(TARGET SDL3::SDL3)
@@ -549,7 +549,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         COMMAND cna_test_webgpu_effect_outlived_by_draw
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plans/plan_webgpu_modern_graphics.md WMG-0021: a per-instance vertex stream on the custom
+    # WMG-0021: a per-instance vertex stream on the custom
     # ShaderEffect route -- four instances that differ only in their per-instance record.
     cna_webgpu_test(cna_test_webgpu_shadereffect_instanced webgpu_shadereffect_instanced_test.cpp)
     cna_register_renderer_test(NAME WebGPU_ShaderEffectInstanced
