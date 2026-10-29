@@ -34,6 +34,8 @@ bool visible();
 void closeAll();
 /** @brief Draws the system UI over the game: avatar views, dim, screens, the game's message box
  * and keyboard, notifications. Handles their input. Call once per frame after the game's Draw.
+ * Leaves the title's blend, depth-stencil, rasterizer and sampler 0 states as it found them, the
+ * same object references included, so the next title frame does not inherit the overlay's own.
  * @param device Device. */
 void draw(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device);
 /** @brief Draws only the game's message box and keyboard (a game that draws the Guide itself).

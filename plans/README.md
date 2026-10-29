@@ -112,6 +112,9 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   the acceptance command are in [`../docs/avatars.md`](../docs/avatars.md), the accepted results in
   [`../docs/gamer-services-known-limitations.md`](../docs/gamer-services-known-limitations.md) §33.
   Comments cite the rows as "Avatar acceptance AVA-NN".
+- `plan_guide_render_states.md` (`GS-009h`, 2026-10-03) — the Guide overlay leaking its
+  SpriteBatch state into the title's next frame; done, deleted on 2026-10-29 (Git history only).
+  The contract is `GuideUi::draw`'s doc comment, pinned by `GuideRenderStateTests.cpp`.
 - `plan_binding.md` — native C API/C ABI campaign (`CBIND-000`–`CBIND-153`) and its historical
   phase ledger; deleted on 2026-10-28 (Git history only). Current measured coverage and planned
   owners are generated in [`../docs/c-api/COVERAGE.md`](../docs/c-api/COVERAGE.md), permanent
