@@ -149,15 +149,6 @@ Real, currently-open caveats worth knowing about instead:
 - `handoff.md` §5 is the actively-maintained current bug list — check it directly for anything not
   covered above before committing to a renderer.
 
-## What doesn't work at all yet
-
-These need a project-owner architecture decision before they can be implemented — not just more
-engineering time — so don't plan a port around them without checking current status first:
-
-- **Non-`Color` `SurfaceFormat` GPU texture data on any renderer** (Task 732) — if your game uses
-  compressed or non-8-bit-per-channel texture formats for real GPU sampling (not just file I/O),
-  this is currently blocked project-wide.
-
 ## Content pipeline: no longer the other big difference
 
 **This section described the state before the content pipeline existed, and was wrong from the
@@ -207,7 +198,7 @@ work above.
 A scannable, tick-through-your-own-source checklist for 2D-only games (`SpriteBatch`/`SpriteFont`/
 `Texture2D`). Every row was checked against the real current header (not assumed from XNA
 docs). Legend: ✅ ports as-is (after the property rewrite) · ⚠️ ports with a caveat, read the note
-· ❌ not supported, throws · ⛔ BLOCKED, needs a project-owner decision.
+· ❌ not supported, throws.
 
 **`SpriteBatch`**
 
@@ -247,7 +238,7 @@ docs). Legend: ✅ ports as-is (after the property rewrite) · ⚠️ ports with
 | `SetData(int level, Rectangle* rect, Color* data, int startIndex, int elementCount)` | ⚠️ | `level == 0` is fully correct everywhere; for mip levels (`level > 0`) check `graphics-renderer-feature-matrix.md` for your renderer. |
 | `GetData` (3 overloads) | ✅ | Pure CPU-side cache read on every renderer — renderer-independent by construction. |
 | `SaveAsPng`/`SaveAsJpeg` (stream + file-path `CNAEXT` overloads) | ✅ | |
-| Non-`Color` `SurfaceFormat` for real GPU sampling | ⛔ BLOCKED | Task 732 — file I/O round-trips fine; GPU texture upload of non-`Color` formats does not. |
+| Non-`Color` `SurfaceFormat` for real GPU sampling | ✅ | Per renderer. EasyGL uploads and samples XNA's classic formats (`Dxt1`/`3`/`5`, the packed 16-bit formats, `NormalizedByte2`/`4`, `Rgba1010102`, `Alpha8`, the float and half formats, and `Rg32`/`Rgba64` where the context has 16-bit normalized textures) and logs at start-up what its context took; the `ClassicTextureFormat` tests cover them. Other renderers: each renderer's own document. |
 
 **`BlendState`/`SamplerState` (as used via `SpriteBatch::Begin`)**
 
@@ -265,8 +256,7 @@ overload listed was checked against the real current CNA header **and** the real
 at `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/StockEffects/` — the same
 overload-diffing discipline that found Task 487's `SpriteBatch::Draw` gap (Task 922) — not assumed
 from memory. If you're 2D-only, see the checklist above instead and skip this section entirely. Legend:
-✅ ports as-is (after the property rewrite) · ⚠️ ports with a caveat, read the note · ❌ known gap
-· ⛔ BLOCKED.
+✅ ports as-is (after the property rewrite) · ⚠️ ports with a caveat, read the note · ❌ known gap.
 
 **The 5 stock Effects — construction**
 

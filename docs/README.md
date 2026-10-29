@@ -115,9 +115,6 @@ original phase closed — check each file's own status banner/date.
 
 Kept for their investigation methodology and root-cause detail, not as current status:
 
-- `graphics-compatibility-report.md` — Task 500's 2026-07-09 milestone declaration. Has a
-  2026-07-11 status banner: its "5 confirmed bugs" gate is closed; treat the percentages here as a
-  dated snapshot, not current.
 - `graphicsdevice-fna-audit.md`, `graphicsresource-fna-audit.md`, `graphics-resource-lifetime.md` —
   per-class FNA-fidelity audits, not re-verified in the 2026-07-11 pass.
 - `xna_culling_compatibility_audit.md`, `xna_depth_occlusion_compatibility_audit.md` — recent

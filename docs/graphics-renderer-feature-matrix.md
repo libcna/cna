@@ -139,7 +139,7 @@ all five public primitive types while rejecting an invalid ordinal. No D3D9 mapp
 unnamed default that can silently turn a future topology into a triangle list.
 
 Status legend: ✅ correct and verified · ⚠️ partial/emulated/environment-limited · ❌ known gap, not
-fixed · ⛔ BLOCKED, needs a project-owner architecture decision · 🟨 implemented but not
+fixed · 🟨 implemented but not
 independently verified (D3D9 column only, see above) · ⬜ not attempted this session (D3D9 column
 only).
 
@@ -177,7 +177,7 @@ itself could support.
 | Texture2D mip-level `SetData` (level > 0) | ✅ | ⬜ not attempted — no oracle scene exercises mip level > 0 |
 | Texture3D/TextureCube `SetData`/`GetData`, incl. mip | ✅ | 🟨 split: `TextureCube` `SetData` real, oracle-verified byte-exact via `envmap_quad`/`envmap_fresnel_quad`; `Texture3D` has only its `GraphicsProfile` size-ceiling mutation-verified (`D9-103`) — no oracle scene or GPU round-trip test exists for `Texture3D` at all |
 | Texture3D/TextureCube sampled in shaders | ❌ don't inherit `Texture` (Task 863, architectural) | 🟨 `TextureCube` sampled and oracle-verified byte-exact via `EnvironmentMapEffect` (`envmap_quad`/`envmap_fresnel_quad`); `Texture3D` has no consuming shader variant tested |
-| Non-`Color` `SurfaceFormat` for real GPU texture data | ⛔ **BLOCKED** (Task 732) | same shared-code limitation |
+| Non-`Color` `SurfaceFormat` for real GPU texture data | ✅ classic formats uploaded and sampled (`ClassicTextureFormat`, 14/14 on `OPENGLES3`, 2026-10-29) | 🟨 transfers are generic since `SOFTWARE-276`; no D3D9 oracle scene for a non-`Color` format (`directx9-renderer.md`) |
 
 ## GraphicsDevice state objects
 
@@ -204,12 +204,6 @@ itself could support.
 | Runtime API (`Model`/`ModelMesh`/`ModelMeshPart`/`ModelBone`) | ✅ fully audited/FNA-faithful, several real bugs found and fixed (Tasks 431-439) | ⬜ not separately tested against this renderer |
 | Content-pipeline loading (`ModelTypeReader`) | 🟨 the custom `.model.json` format is not XNB-compatible, but hierarchy/parent bones, textures/effects, skeleton animation and 32-bit indices are implemented and covered | ⬜ not separately tested against this renderer |
 | `Model` constructor root-bone-index flexibility | ✅ fixed (Task 916, 2026-07-09) | ⬜ not separately tested against this renderer |
-
-## Every currently-BLOCKED task (⛔)
-
-| Task | Renderer | One-line reason |
-|---|---|---|
-| 732 | EasyGL | Real `SurfaceFormat` GPU forwarding conflicts with an already-shipped, already-tested `Texture::ValidateFormat` contract (Task 176) plus the public `SetData`/`GetData` API being `Color*`-only |
 
 ## Known pre-existing test-failure baseline, per renderer
 
