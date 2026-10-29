@@ -211,7 +211,7 @@ As of the devices phase-8 plan: 2051 tests, 2 failures — both pre-existing, un
 GPU/display to actually run for the first time (previously silently `Not Run`
 headless) — confirmed via direct investigation to be 100% unrelated to
 `Microsoft::Devices` (see devices phase-5 plan Task P5-1's Resolution for the full
-finding).
+finding). Both pass now (`OPENGLES3`, 2026-10-29).
 
 **As of devices plan Phase 10 (2026-07-05):** 3348 tests, 36 failures — same root
 cause category (`EasyGL`/graphics-backend, headless-environment-dependent — this

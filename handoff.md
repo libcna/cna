@@ -400,6 +400,20 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   Lz4 compression, which CNA does not yet support", while the typed path decodes LZ4 since
   `CP-047` (`XnbCanonicalAsset.cpp`). Its LZX branch also skips the typed path's truncation check
   and decompression limits. Found by reading on 2026-10-29; not yet pinned by a test.
+- In browser fullscreen the drawable a GL renderer letterboxes into is not the rectangle the browser
+  presents. Measured 2026-09-08 with SAMPLE-071 (Yacht, 480x800 back buffer) on a headless Chrome
+  with an 800x600 screen: the canvas reported 800x600 while its CSS box was 800x544, and the game
+  covered about 71 % of its logical area in both axes, uniformly scaled, its bottom and right
+  outside the visible frame. `GlPresentationSurfaceState` computes the letterbox correctly from what
+  it is given (`EasyGLSurfaceState.LetterboxKeepsTheLogicalSizeAtTheBackbufferAndCentresTheRect`); the
+  wrong input is the drawable from `Sdl3Window::GetPixelSize()`'s web path
+  (`webDrawableOverride_`, which already special-cases leaving fullscreen). Not re-measured since;
+  not reproducible natively here, where X11 fullscreen has no window manager to resize the window.
+- An EasyGL `Texture3D` does not survive a GL context loss (WebGL 2, Android): unlike every other
+  EasyGL texture, buffer, render target and query, `EasyGLTexture3DRenderer` is not an
+  `easygl::RecoverableResource`, so it is never registered for restoration and keeps a dead handle.
+  `TextureCube` gained recovery on 2026-09-04. Found by reading; no context-loss test covers a
+  volume texture.
 
 ### 5.2 Limitations
 

@@ -10,9 +10,8 @@
 //   1. GL usage hint is NOT forwarded to the renderer at buffer creation time;
 //      all buffers use GL_DYNAMIC_DRAW regardless of the XNA flag.
 //      Impact: minor performance difference only; correctness is unaffected.
-//   2. GetData() is not implemented in CNA (no IVertexBufferRenderer readback
-//      method exists).  The WriteOnly restriction therefore cannot be enforced
-//      at runtime.  This is tracked in docs/easygl_bugs.md.
+//   GetData() on a WriteOnly buffer throws as in XNA; that is checked by
+//   DrawRouteValidation.AWriteOnlyBufferRefusesGetData, not here.
 //
 // What this test does verify:
 //   A. getBufferUsageProperty() returns the exact value passed to the ctor.

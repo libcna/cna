@@ -118,9 +118,6 @@ Kept for their investigation methodology and root-cause detail, not as current s
 - `graphics-compatibility-report.md` — Task 500's 2026-07-09 milestone declaration. Has a
   2026-07-11 status banner: its "5 confirmed bugs" gate is closed; treat the percentages here as a
   dated snapshot, not current.
-- `easygl_bugs.md` — dated Task 227 (2026-06-27), predates hundreds of subsequent EasyGL changes.
-  Has a 2026-07-11 status banner flagging 2 confirmed-stale rows (fixed inline) and noting the rest
-  is spot-checked, not exhaustively re-audited.
 - `coverage.md` — superseded for Graphics by `graphics-renderer-feature-matrix.md` (see that file's
   own header); its non-Graphics namespace estimates (Audio/Media/Content/Net/GamerServices) are
   the reason it's kept.

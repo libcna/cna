@@ -217,8 +217,10 @@ Confirmed most recently by this session's own regression runs (always run sequen
 renderer, never concurrently — concurrent runs have previously produced transient GPU/driver-
 contention false failures):
 
-- **EasyGL**: 3 — `EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`,
-  `easy-gl-resource-smoke-tests`. Reconfirmed as recently as Task 449's own regression (4510/4513).
+- **EasyGL**: none. The three tests that used to fail here -- `EasyGL_MRT_TwoAttachments`,
+  `EasyGL_GraphicsDevice_ReferenceStencil` and `easy-gl-resource-smoke-tests` (Task 449, 4510/4513)
+  -- pass on `OPENGLES3` (`cmake-build-multi`, private runner, 2026-10-29). Current EasyGL defects
+  are in `handoff.md` §5.
 
 ## New tracked follow-up tasks opened this session
 
