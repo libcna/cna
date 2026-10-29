@@ -49,8 +49,10 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
   The module is [`../docs/diagnostics.md`](../docs/diagnostics.md), the Inspector
   [`../docs/inspector.md`](../docs/inspector.md); the one public-API defect the audit left open
   is in [`../handoff.md`](../handoff.md) §5.1.
-- [`plan_inspector.md`](plan_inspector.md) — optional authenticated agent, compact protocol,
-  separate bridge/browser UI, security, tests, and performance validation.
+- `plan_inspector.md` — the optional CNA Inspector (`INSP-0001`, complete 2026-09-17): deleted on
+  2026-10-29 (Git history only). Its foundation, seven architecture decisions and verification
+  are in [`../docs/inspector.md`](../docs/inspector.md), the benchmark in
+  [`../docs/inspector-benchmark.md`](../docs/inspector-benchmark.md).
 - [`cna-samples/plan.md`](../../cna-samples/plan.md) — authoritative sample coverage,
   cross-repository gap fixes and native/web verification work.
 - `plan_cna_rts.md` — RTS-001/RTS-002, the 2026-10-27 `cna-rts` consumer validation and
