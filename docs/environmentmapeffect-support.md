@@ -160,7 +160,7 @@ relational, so registering it for another renderer is one line in that family's 
 
 **The unlit sibling is the same rule one effect over** (`vout.Diffuse : COLOR0`). See §6 of
 `docs/basiceffect-support.md` — including the colour-gradient case, where the two orders are 77
-levels apart. EasyGL's half is still open and belongs to `plans/plan_fx.md`.
+levels apart. Both clamp programs also run on EasyGL (`EasyGL_CrossFamily_*`) and pass there.
 
 ## Support matrix
 

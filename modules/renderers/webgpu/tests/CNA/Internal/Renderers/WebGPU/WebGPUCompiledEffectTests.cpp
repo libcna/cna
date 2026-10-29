@@ -425,7 +425,10 @@ TEST(WebGPUCompiledEffectDrawTest, SharedSpriteBatchTextureSlotContract)
 
 TEST(WebGPUCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
 {
-    GraphicsDevice device;
+    // HiDef: a default device is Reach, which has no volume textures, so the volume half of the
+    // contract used to skip on the profile rather than run.
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(800, 480));
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);

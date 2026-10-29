@@ -114,11 +114,12 @@ sampled at the centre:
 `178` is the midpoint of `saturate(2.0) = 255` and `saturate(0.4) = 102`. Interpolating the raw
 product first gives `1.2` and clips to `255` — the two orders are **77 levels** apart there.
 
-**Renderer status.** **EasyGL does not clamp at the vertex stage**, and its structure is different
-rather than merely unfixed: its unlit programs apply `uDiffuseColor` in the **fragment** stage
-(`FragColor = vc * uDiffuseColor`, `EasyGLRenderer.cpp:7768`), so there is no colour varying for the
-saturate to apply to. `FX-123` fixed only its two vertex-**lit** programs. That half belongs to
-`plans/plan_fx.md`, with the spike above as its oracle.
+**Renderer status.** EasyGL saturates at the vertex stage too: its unlit programs compute
+`vColor = clamp(vertexColour * uDiffuseColor, 0, 1)` before the interpolator
+(`GlStockShaderSources.hpp`), as `FX-123` already did for the vertex-**lit** ones.
+`basiceffect_diffuse_color_clamp_test.cpp` is the oracle on both families: `SdlGpu_BasicEffect_DiffuseColorClamp`
+and `EasyGL_CrossFamily_BasicEffect_DiffuseColorClamp` pass 9/9, the gradient leg included
+(2026-10-29).
 
 **Not applied to the per-pixel lit path, on purpose.** FNA's `VSBasicPixelLightingTx` writes
 `vout.Diffuse = float4(1, 1, 1, DiffuseColor.a)` and applies the material colour in the **pixel**

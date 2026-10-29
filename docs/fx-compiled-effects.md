@@ -210,12 +210,14 @@ GL parameter -- which is why FNA3D's own OpenGL driver skips it under ES too. CN
 approximate it there; it is accepted, published on the device state object, and documented as
 unrepresentable rather than mapped onto a nearby state. The shared contract is told which subset a
 backend can represent rather than guessing, so an ES build proves everything else and skips only
-that one section.
+that one section. The one exception is a compiled vertex shader's `TEXLDL` on ES 3, which already
+carries an explicit level: there the bias is added to that level in the generated GLSL (FX-146,
+[`sampler-state-support.md`](sampler-state-support.md)).
 
 `AddressW` is carried through the renderer-neutral contract by
-`IGraphicsRenderer::ApplySamplerAddressW` (`plans/plan_fx.md` FX-026). FNA3D and EasyGL apply it; SDL_GPU records it and carries it in its sampler-cache identity, but its
-compiled route resolves 2D textures only, so the axis is not observable there yet (FX-092,
-FX-110). It only matters for volume textures.
+`IGraphicsRenderer::ApplySamplerAddressW` (`plans/plan_fx.md` FX-026). FNA3D, EasyGL, SDL_GPU and
+WebGPU apply it; SDL_GPU and WebGPU prove it on a volume texture through the shared
+`RunCompiledEffectAddressWContract`. It only matters for volume textures.
 
 A slot no pass has assigned keeps whatever the game selected. The compiled-effect draw routes read
 `GraphicsDevice.SamplerStates[slot]` for those, so `SpriteBatch.Begin`'s own sampler state, for
@@ -253,7 +255,7 @@ shared.
 | Renderer | `CompiledEffects` | Build option | Why |
 |---|---|---|---|
 | `FNA3D` | **true** | always on | Owns the MojoShader Effect Framework runtime; passes the full shared contract including the draw matrix |
-| `SDL_GPU` | **true** | `CNA_SDL_GPU_COMPILED_EFFECTS` (off by default) | MojoShader's SDL_GPU adapter; passes the shared contract, multi-stream and instanced draws excepted -- it advertises neither capability, so `GraphicsDevice` refuses them before submission |
+| `SDL_GPU` | **true** | `CNA_SDL_GPU_COMPILED_EFFECTS` (off by default) | MojoShader's SDL_GPU adapter; passes the full shared contract, multi-stream, instanced, cube and volume draws included |
 | EasyGL family (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (off by default) | MojoShader's OpenGL adapter; passes the full shared contract, including multi-stream and instanced draws |
 | `WEBGPU` | **true** | `CNA_WEBGPU_COMPILED_EFFECTS` (off by default) | CNA's MojoShader SPIR-V binding, translated to WGSL for the browser (`plans/plan_webgpu.md` WEBGPU-167, WEBGPU-203/204) |
 | `SOFTWARE` | **true** | `CNA_SOFTWARE_COMPILED_EFFECTS` (off by default) | The CPU executor runs the shared public contract (`plans/plan_software.md` SOFTWARE-162/165) |
@@ -479,7 +481,7 @@ green matched the original exactly and only blue differed, and only where blue w
 | A backend/profile-specific `Texture3D`/`sampler3D` refusal | `NotSupportedException` | Volume sampling remains renderer/profile-dependent; cube sampling is supported by every compiled-Effect backend (`plans/plan_fx.md` FX-110) |
 | `...samples slot N, but no texture is bound there.` | `NotSupportedException` | The effect's texture parameter was never assigned, and nothing was selected on `GraphicsDevice.Textures` |
 | A vertex-stage texture sampling refusal | `NotSupportedException` | Check the selected renderer's compiled-effect path; this is no longer a universal CNA limitation (`plans/plan_fx.md` FX-109 and the museum B8 repair) |
-| `...cannot run after the GL context was recreated...` | `NotSupportedException` | EasyGL only: MojoShader's context and its linked programs died with the old GL context; recreate the `Effect` from its bytecode (`plans/plan_fx.md` FX-107) |
+| `...cannot run after the GL context was recreated...` | `NotSupportedException` | EasyGL only: a compiled draw reached the renderer before it had restored its MojoShader state for a recreated GL context. Recovery rebuilds every live compiled effect from its retained bytecode, values, textures and technique (FX-107), so this is a draw issued between the loss and that recovery |
 | `...cannot sample the RenderTarget2D it is drawing into.` | `NotSupportedException` | EasyGL only: reading and writing one target in a single draw, which is undefined in XNA too |
 | Any of the above while loading an asset | `ContentLoadException` | Same cause, wrapped with the asset name |
 

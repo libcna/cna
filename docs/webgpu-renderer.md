@@ -761,9 +761,9 @@ Verified by the shared EasyGL↔WebGPU parity fixtures (`WEBGPU-207`, see
 `Effect(GraphicsDevice&, byte[])` -- the XNA Effect Framework binary a game's `.xnb` carries --
 runs on this renderer **natively**, behind the off-by-default `CNA_WEBGPU_COMPILED_EFFECTS` option
 (MojoShader is a fetched dependency the renderer does not otherwise need, the same arrangement
-SDL_GPU and EasyGL use). It passes the shared `plans/plan_fx.md` `FX-060` conformance suite
-**23/23 with no skips**, and `GraphicsCapability::CompiledEffects` reports true at the
-`GraphicsDevice` seam.
+SDL_GPU and EasyGL use). It passes the shared `plans/plan_fx.md` `FX-060` conformance suite with
+no skips -- 66/66 compiled-effect tests on 2026-10-29, native and WGSL routes -- and
+`GraphicsCapability::CompiledEffects` reports true at the `GraphicsDevice` seam.
 
 **The route.** XNA/D3D9 bytecode -> MojoShader's portable `spirv` profile -> a combined-image-sampler
 rewrite -> `WGPUShaderSourceSPIRV`. There is no MojoShader WebGPU adapter, so the nine-function
@@ -798,11 +798,11 @@ slot it shares. The last two closed the six passes that used to be refused (`pla
 means SDL_GPU gained them too. **And the browser**: the same effects run under
 Emscripten, through WGSL translated from the same SPIR-V.
 
-**What does not, and why:**
-* **A vertex shader that samples a texture** is refused by name. Renderer-wide and CNA-wide:
-  `IGraphicsRenderer` has no vertex-sampler hook (`plans/plan_fx.md` `FX-109`).
-* **Nothing else.** `SamplerState.MipMapLevelOfDetailBias` was on this list twice and is now
-  implemented -- see *Compiled-effect LOD bias* below.
+**What does not:** nothing currently. The two former entries are implemented: a vertex shader
+that samples a texture receives the public `VertexTextures`/`VertexSamplerStates`, captured with
+each deferred draw (`VertexVector4TextureAndSamplerReachTheDraw`,
+`VertexSingleTextureAndSamplerReachTheDraw`, `PointVertexTexturesDoNotRequireFloat32Filterable`),
+and `SamplerState.MipMapLevelOfDetailBias` -- see *Compiled-effect LOD bias* below.
 
 **Compiled-effect LOD bias (`plans/plan_webgpu.md` `WEBGPU-208`, 2026-09-06).** All six
 `SamplerState` fields a compiled pass can set now reach the GPU. The first five ride
