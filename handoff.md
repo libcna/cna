@@ -166,10 +166,10 @@ contract has no cube sampler and refuses one with `NotSupportedException`
 binding. `effects.h` now documents that refusal on the three texture-binding routes. STUB fails
 the same stage creating textures, an expected STUB artefact.
 
-Consumer-only work still matters. cna-engine's `upstream-issues.md` reports UP-001, UP-006, UP-018,
-UP-019 and UP-020 resolved; its UP-002 (CNAEXT on C++ spellings of implicit XNA semantics) is
-answered by `99b54079e` in `docs/migration-guide.md` and awaits cna-engine's own reading. The
-museum has rerun its findings (above); the
+Consumer-only work still matters. cna-engine's `upstream-issues.md` reports every finding CNA
+answered resolved at its pin `cb377fa04`: UP-001, UP-002, UP-006, UP-018, UP-019 and UP-020 (the
+CNA-side intake log, `CNA_ENGINE_REPAIR_HANDOFF.md`, was deleted on 2026-10-29 and is in Git
+history). The museum has rerun its findings (above); the
 consumers also need to know that `new PresentationParameters()` is now XNA's 0x0 full-screen value,
 so a device built from it directly must state a size. Do not claim UBSan/TSan/hardware/service
 validation when its required tree or hardware is absent.
@@ -429,6 +429,10 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   Windows what it cannot provide: a Python interpreter where none can be started, `/dev/full`,
   aging a directory through `utime`, symbolic links, a renderer without 3D, and the ordering guard
   for tests that need an uninitialized `GamerServicesDispatcher`.
+- The installed C++ SDK (`CNA_INSTALL_CXX`, `docs/installed-cpp-sdk.md`) is validated on native
+  Linux only, shared and static; the static SDK was validated with the C API off, so a mixed static
+  C/C++ adapter is unproven. The MinGW-w64 and WebAssembly/WebGPU trees only configure and export
+  its package: no relocated Windows SDK or installed WebAssembly SDK has been run.
 - The content and content-pipeline *tests* are not Unicode-clean: about 1,150 `.string()` calls,
   most narrowing a fixture path before handing it to CNA, so under a non-ASCII `TEMP` on Windows
   they throw in the test body (Windows portability WINPORT-F5, measured on native Windows
