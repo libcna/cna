@@ -182,8 +182,8 @@ permanent issue history and handoff after every accepted batch.
 this campaign.** §5 records the ordinary CNA maintenance list; the matrix additionally records
 every historical cna-demos finding, including pending items that are not yet confirmed defects.
 Capability documents describe supported behavior, tests are executable evidence, and Git history
-preserves measurement history. Every implementation plan under `plans/` has been retired
-(2026-10-29); `plans/README.md` says where each one's content went. Do not let an issue disappear
+preserves measurement history. Every implementation plan has been retired and `plans/` removed
+(2026-10-29); `docs/task-id-index.md` says where each one's content went. Do not let an issue disappear
 from either applicable list.
 
 Ready to pick up next, when the owner asks: the near-future tasks of §8, starting with `XNB-61b`
@@ -328,7 +328,7 @@ runtime. CI: `general-tests-ci.yml` runs the unfiltered suite for
 | GamerServices / Net / Avatar boundary | `docs/gamer-services-known-limitations.md` |
 | Why is a subsystem in (or out of) an executable? Link boundaries, size options, footprint gates | `docs/link-size-architecture.md` |
 | Build rules (ccache, build directories, display isolation) | `CLAUDE.md` / `AGENTS.md` |
-| Index of the other documents | `docs/README.md`; where each retired plan's content went: `plans/README.md` |
+| Index of the other documents | `docs/README.md`; what a task ID belonged to: `docs/task-id-index.md` |
 
 ## 4. Working rules for this phase
 

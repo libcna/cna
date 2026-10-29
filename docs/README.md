@@ -21,6 +21,9 @@ on it) rather than assuming either way.
   **one** authoritative list of current known bugs and limitations; treat it as the source of truth
   for "is X still broken" over any dated snapshot below. Nothing else in the repository keeps a live
   bug list.
+- **[`task-id-index.md`](task-id-index.md)** — what a task ID in a comment or commit (`XNASWEEP-231`,
+  `GSC-0007`, `RRC-009`) belonged to, and where that work's surviving content lives. Every
+  implementation plan has been retired; the plans are in Git history.
 - **[`development-environment.md`](development-environment.md)** — the maintained Debian 13 /
   Linux development environment and system dependency guide: what the default build and its tests
   need, the sibling checkouts and submodules, and the optional feature, Wayland,

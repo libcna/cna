@@ -147,8 +147,8 @@ NEXT_FREE_ABI_VALUE = 52
 OBSOLETE_RENDERER_VOCABULARY = re.compile(
     r"\b\w*GraphicsBackend\w*|\bCNA_GRAPHICS_BACKEND\w*|\bcna_graphics_backend\w*")
 
-# CNA-owned active trees and root files. plans/ is the historical ledger: it records what
-# the code was called when the work was done, and rewriting it would falsify that.
+# CNA-owned active trees and root files. Git history is the historical ledger: it records
+# what the code was called when the work was done, and rewriting it would falsify that.
 VOCABULARY_ROOTS = ("modules", "cmake", "scripts", "tools", "tests", "examples", "spikes", "docs",
                     ".github")
 VOCABULARY_ROOT_FILES = ("CMakeLists.txt", "CMakePresets.json", "Doxyfile", "README.md",

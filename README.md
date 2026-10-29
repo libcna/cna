@@ -38,8 +38,8 @@ components, relocation, version semantics and tested platform coverage.
 
 > **Looking for a specific doc?** See [`docs/README.md`](docs/README.md) for an index of what's
 > current vs. historical. **Current state, known bugs and limitations:** [`handoff.md`](handoff.md) (§5 is
-> the one authoritative bug list). Implementation roadmaps and retained task logs are
-> indexed separately in [`plans/README.md`](plans/README.md).
+> the one authoritative bug list). Every implementation plan has been retired; what a task ID
+> in a comment belonged to is [`docs/task-id-index.md`](docs/task-id-index.md).
 
 ### Project Status
 
