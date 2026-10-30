@@ -375,8 +375,8 @@ namespace Microsoft::Xna::Framework::Content
          */
         void ReadSharedResources();
 
-        /** @brief FNA's internal `BoundingSphere ReadBoundingSphere()`. */
-        [[nodiscard]] BoundingSphere ReadBoundingSphere();
+        /** @brief CNAEXT. Reads the internal XNB representation of a bounding sphere. */
+        CNAEXT [[nodiscard]] BoundingSphere ReadBoundingSphere();
 
         /**
          * @brief CNAEXT bounds check for a collection reader's (`ArrayReader<T>`/`ListReader<T>`/
