@@ -41,7 +41,10 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   rather than retained as aliases; the C ABI is therefore 0.51.0, while the renderer constant's
   numeric value remains 31. Actual SDL API identifiers such as `SDL_GPUDevice` and the
   `SDL_GPU_DRIVER` hint are unchanged. The migration guide and changelog record the source-level
-  replacements. The full SDLGPU tree and the eight-renderer `CnaTests` target build; 19 focused
+  replacements. A follow-up preserves SDL's literal `SDL_GPU*` API prefix and Metal diagnostic in
+  the two explanatory texts that the rename had overreached, and directly tests both refused old
+  feature-option spellings. The full SDLGPU tree and the eight-renderer `CnaTests` target build;
+  21 focused
   standalone identity/ABI/selector tests, 20 multi-renderer identity/registry tests and four
   SDLGPU smoke/parity tests on the private GPU display pass.
 - `BENCH-001` (2026-10-27; CNA commit `421a38e4f`, consumer commit `ee012a8`): the external

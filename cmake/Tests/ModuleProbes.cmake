@@ -668,6 +668,26 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             PROPERTIES LABELS "renderer;configuration")
     endforeach()
 
+    # The identity routes above do not cover the two feature switches that were renamed with
+    # SDL_GPU. Define each obsolete option as OFF: even that must fail by name, because accepting
+    # an unread cache entry would make a stale build look configured while silently ignoring it.
+    set(_cna_renamed_sdlgpu_feature_options
+        CNA_SDL_GPU_SHADERCROSS=CNA_SDLGPU_SHADERCROSS
+        CNA_SDL_GPU_COMPILED_EFFECTS=CNA_SDLGPU_COMPILED_EFFECTS)
+    foreach(_cna_renamed_entry IN LISTS _cna_renamed_sdlgpu_feature_options)
+        string(REPLACE "=" ";" _cna_renamed_pair "${_cna_renamed_entry}")
+        list(GET _cna_renamed_pair 0 _cna_renamed_old)
+        list(GET _cna_renamed_pair 1 _cna_renamed_new)
+        add_test(NAME CnaRendererRenamedOption_${_cna_renamed_old}
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_RENAMED_OPTION_CASE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/RendererSelection.cmake
+                -DCNA_RENAMED_OPTION_CASE_OLD=${_cna_renamed_old}
+                -DCNA_RENAMED_OPTION_CASE_NEW=${_cna_renamed_new}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/RendererRenamedOptionCase.cmake)
+        set_tests_properties(CnaRendererRenamedOption_${_cna_renamed_old}
+            PROPERTIES LABELS "renderer;configuration")
+    endforeach()
+
     # GPU test isolation GTI-0006: no automated test may reach the owner's live
     # desktop by default. CnaTestDisplayPolicy runs the policy's decisions (which X displays are the
     # live desktop, the opt-in, the Wayland guard) in script mode; CnaTestDisplayIsolation checks this

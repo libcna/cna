@@ -336,7 +336,7 @@ directory on both Apple platforms, so bundled content works without changes.
   a gate: `SDLGPU` has no recorded iOS build, so whether the simulator probe is deterministic is
   unmeasured. In the Simulator the probe cannot run at all: SDL's Metal backend requires
   `MTLGPUFamilyApple3`, the Simulator's Metal device fails that check on the hosted runners, and
-  `SDL_CreateGPUDevice` refuses with "Device does not meet the hardware requirements for SDLGPU
+  `SDL_CreateGPUDevice` refuses with "Device does not meet the hardware requirements for SDL_GPU
   Metal" (every launch since 2026-10-14). The leg accepts exactly that refusal and fails on any
   other outcome. `macos-sdlgpu` is the gating Apple-side `SDLGPU` GPU evidence meanwhile.
 
