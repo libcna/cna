@@ -93,6 +93,7 @@ static CNA_Result load(CNA_Handle game, const CNA_GameTime* time, void* context,
         {"SoundEffect", cna_content_manager_load_sound_effect},
         {"Effect", cna_content_manager_load_effect},
         {"Model", cna_content_manager_load_model},
+        {"Video", cna_content_manager_load_video},
         {"ObjectDictionary", cna_content_manager_load_object_dictionary_ext}
     };
     for (size_t i = 0; i < sizeof(routes) / sizeof(routes[0]); ++i) {
@@ -141,6 +142,6 @@ int main(int argc, char** argv)
         return probe_finish(&demo);
     probe_check_result(&demo, cna_game_run(game), "execute every missing-asset probe");
     probe_check_result(&demo, cna_game_destroy(game), "destroy probe game");
-    probe_check(&demo, demo.checks == 43, "all eight five-check routes and setup controls ran");
+    probe_check(&demo, demo.checks == 48, "all nine five-check routes and setup controls ran");
     return probe_finish(&demo);
 }

@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/video.h"
+#include "CnaCApiContentDetail.hpp"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiOutput.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Media/MediaState.hpp"
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
 #include "Microsoft/Xna/Framework/Media/Video/VideoPlayer.hpp"
 
+#include <any>
 #include <cstddef>
 #include <cstring>
 #include <memory>
@@ -21,6 +25,7 @@ using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CreateGameFrameTexture2D;
 using CNA::C::Detail::CreateResourceHandle;
+using CNA::C::Detail::EmbeddedNul;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
@@ -33,6 +38,8 @@ namespace {
 
 using CNA::C::Detail::CreateHandle;
 using CNA::C::Detail::InvalidArgument;
+using CNA::C::Detail::IoError;
+using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ValidateVersionedStructure;
 
 using Microsoft::Xna::Framework::Graphics::Texture2D;
@@ -223,6 +230,39 @@ template<typename TRead>
     return PublishVideo(
         std::unique_ptr<Video>(Video::FromUriEXT(nativeUri, device->value)),
         outVideo);
+}
+
+[[nodiscard]] CNA_Result ContentManagerLoadVideo(
+    const CNA_Handle contentManagerHandle,
+    const CNA_StringView assetName,
+    CNA_VideoHandle* const outVideo)
+{
+    std::string assetNameCopy;
+    if (const CNA_Result result = ReadText(
+            assetName, "The content asset name is not valid UTF-8.", &assetNameCopy,
+            EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (assetNameCopy.empty()) {
+        return InvalidArgument("The content asset name must not be empty.");
+    }
+    CNA::C::Detail::BorrowedContentManager contentManager;
+    if (const CNA_Result result = CNA::C::Detail::BorrowContentManager(
+            contentManagerHandle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    try {
+        Video loaded = contentManager.value->Load<Video>(assetNameCopy);
+        return PublishVideo(std::make_unique<Video>(std::move(loaded)), outVideo);
+    } catch (const Microsoft::Xna::Framework::Content::ContentLoadException&) {
+        throw;
+    } catch (const std::bad_any_cast&) {
+        // A typed load reports a foreign root object as an I/O failure, as the other typed C
+        // loaders do, rather than allowing the exception barrier to call it an internal fault.
+        return IoError("The asset's root type reader did not produce a Video.");
+    }
 }
 
 [[nodiscard]] CNA_Result VideoGetInfo(const CNA_VideoHandle video, CNA_VideoInfo* const outInfo)

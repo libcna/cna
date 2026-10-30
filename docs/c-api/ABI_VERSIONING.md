@@ -2,7 +2,16 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.51.0** (2026-10-30). It renames the surviving public renderer
+The current experimental ABI is **0.52.0** (2026-10-30). It adds
+`cna_content_manager_load_video`, the canonical C producer for compiled Video assets through
+`ContentManager.Load<Video>`. The returned Video handle is independently owned, survives manager
+unload or destruction and can be created without the optional decoder; decoding remains a playback
+concern. This is a purely additive change: the library exports 3,213 symbols and no existing
+route, constant, layout or error rule changes.
+
+### Previous ABI 0.51.0
+
+The ABI was **0.51.0** (2026-10-30). It renames the surviving public renderer
 identity `SDL_GPU` to `SDLGPU` across the CMake selector, runtime name and C constant. The
 replacement `CNA_GRAPHICS_RENDERER_SDLGPU` keeps value `31`; the removed
 `CNA_GRAPHICS_RENDERER_SDL_GPU` name is not retained as an alias, and the textual `SDL_GPU`
@@ -31,7 +40,8 @@ it adds `CNA_CNB_MODEL_CHUNK_CAMERAS`, the versioned `CNA_CnbModelCamera` and fi
 adds the detailed renderer features `CNA_RENDERER_FEATURE_SAMPLER_LEVEL_OF_DETAIL_BIAS` (32),
 `_PBR_EFFECT_SHADING` (33) and `_SKINNED_PBR_EFFECT_SHADING` (34) (CNA-DEMOS-ISSUE-006), and
 `_MULTI_SAMPLE_MASK` (35, CNA-DEMOS DC-R2) and `_RENDER_TARGET_READBACK` (36, a museum finding);
-`CNA_RENDERER_FEATURE_MAXIMUM` moves to 36. The library exports 3,212 symbols. Purely additive: no existing route, constant, structure field or
+`CNA_RENDERER_FEATURE_MAXIMUM` moves to 36. The export surface grows only by the routes named
+above. Purely additive: no existing route, constant, structure field or
 error rule changes, but a binding that requires the new routes or names needs this minor.
 
 ### Previous ABI 0.49.0
@@ -772,7 +782,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,212 exports; build configurations must export the same surface.
+The current baseline records 3,213 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than

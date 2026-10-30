@@ -606,6 +606,20 @@ CNA_Result cna_video_create_from_uri_ext(
     });
 }
 
+CNA_Result cna_content_manager_load_video(
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    CNA_VideoHandle* const out_video)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_video == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_load_video: out_video is null.");
+        }
+        *out_video = CNA_INVALID_HANDLE;
+        return ContentManagerLoadVideo(content_manager, asset_name, out_video);
+    });
+}
+
 CNA_Result cna_video_player_create(
     const CNA_Handle game,
     CNA_VideoPlayerHandle* const out_player)

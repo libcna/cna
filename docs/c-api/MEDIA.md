@@ -203,16 +203,20 @@ state back rather than assume `play` began playing.
 ## Video
 
 `video.h` maps `Video` and `VideoPlayer`, the one media family that touches the graphics device.
-Each video-creating route takes a callback-scoped borrowed device handle, which is where the
-canonical device argument comes from — and the device is reported back only as **presence**
+The direct video factories take a callback-scoped borrowed device handle, which is where the
+canonical device argument comes from. Compiled assets instead use
+`cna_content_manager_load_video`, the C form of `ContentManager.Load<Video>`; it returns a distinct
+owned handle on every call, including cache hits, and the handle survives manager unload or
+destruction. The device is reported back only as **presence**
 (`cna_video_get_has_graphics_device`), because a borrowed device handle is valid solely inside the
 callback that produced it and handing one out later would be a promise this ABI cannot keep.
 
 The ABI is identical with or without the optional FFmpeg backend. Configure
-`CNA_ENABLE_VIDEO=OFF` to omit every FFmpeg dependency: metadata-only video construction and all
-player state/configuration routes remain available, while file-backed construction and playback
-return `CNA_RESULT_NOT_SUPPORTED`. `AUTO` (the default) uses FFmpeg when all required modules are
-present and otherwise exposes that same deterministic fallback; `ON` requires the backend.
+`CNA_ENABLE_VIDEO=OFF` to omit every FFmpeg dependency: metadata-only video construction, compiled
+Video loading and all player state/configuration routes remain available, while file-probing
+construction and playback return `CNA_RESULT_NOT_SUPPORTED`. `AUTO` (the default) uses FFmpeg when
+all required modules are present and otherwise exposes that same deterministic fallback; `ON`
+requires the backend.
 
 **The frame texture is solved by lifetime, not by copying.** The player owns and replaces its frame
 texture, so `cna_video_player_get_texture` hands back a borrowed `CNA_Texture2DHandle` that the C

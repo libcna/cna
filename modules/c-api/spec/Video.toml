@@ -58,6 +58,7 @@ cna_video_info_init = { result = "VideoInfoInit(out_info)" }
 cna_video_create = { result = "VideoCreate(graphics_device, file_name, out_video)" }
 cna_video_create_with_metadata = { result = "VideoCreateWithMetadata(graphics_device, file_name, duration_milliseconds, width, height, frames_per_second, soundtrack_type, out_video)" }
 cna_video_create_from_uri_ext = { result = "VideoCreateFromUriExt(graphics_device, uri, out_video)" }
+cna_content_manager_load_video = { result = "ContentManagerLoadVideo(content_manager, asset_name, out_video)" }
 cna_video_player_create = { result = "VideoPlayerCreate(game, out_player)" }
 cna_video_player_get_video = { result = "VideoPlayerGetVideo(player, out_video, out_available)" }
 cna_video_player_get_texture = { result = "VideoPlayerGetTexture(player, out_texture, out_available)" }

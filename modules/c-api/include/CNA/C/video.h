@@ -117,6 +117,29 @@ CNA_C_API CNA_Result cna_video_create_from_uri_ext(
     CNA_VideoHandle* out_video);
 
 /**
+ * @brief Loads a compiled Video asset through the native content pipeline.
+ *
+ * @param content_manager Owned or game-borrowed content-manager handle.
+ * @param asset_name Non-empty UTF-8 logical asset name, with or without its extension.
+ * @param out_video Receives a new independently owned video handle on success, destroyed with
+ *        `cna_video_destroy`. Failure leaves it `CNA_INVALID_HANDLE`.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_IO` for a missing, malformed or wrongly typed asset;
+ *         `CNA_RESULT_ENCODING`; or a documented argument/handle/thread/native failure.
+ *
+ * This is the C form of the canonical `ContentManager.Load<Video>` producer. Loading compiled
+ * metadata does not open the referenced media file and works when CNA is built without its
+ * optional video decoder; the first playback attempt then returns `CNA_RESULT_NOT_SUPPORTED`.
+ * Each successful call returns a distinct owned handle, including cache hits. That handle remains
+ * usable after content-manager unload or destruction and must still be destroyed explicitly.
+ *
+ * @since ABI 0.52.0.
+ */
+CNA_C_API CNA_Result cna_content_manager_load_video(
+    CNA_Handle content_manager,
+    CNA_StringView asset_name,
+    CNA_VideoHandle* out_video);
+
+/**
  * @brief Returns a video's frame width in pixels.
  *
  * @param video Owned video handle.

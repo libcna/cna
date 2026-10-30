@@ -11,17 +11,23 @@
 typedef struct VideoSmokeState {
     int validated;
     int real_frame_exercised;
+    CNA_Handle content_manager;
 } VideoSmokeState;
 
 typedef struct WrongThreadState {
     CNA_VideoPlayerHandle player;
-    CNA_Result result;
+    CNA_Handle content_manager;
+    CNA_Result player_result;
+    CNA_Result load_result;
+    CNA_VideoHandle video;
 } WrongThreadState;
 
 #ifndef CNA_C_API_TEST_ASSET_DIR
 #error "CNA_C_API_TEST_ASSET_DIR must be defined by the build"
 #endif
 #define RealVideoPath CNA_C_API_TEST_ASSET_DIR "/media/video/chroma_420.mkv"
+#define VideoContentRoot CNA_C_API_TEST_ASSET_DIR "/media/video"
+#define WrongTypeContentRoot CNA_C_API_TEST_ASSET_DIR "/xnb/cna/windows/uncompressed"
 
 static CNA_StringView view(const char* const value)
 {
@@ -34,7 +40,8 @@ static CNA_StringView view(const char* const value)
 /* Any existing file is enough to exercise the raw-file constructor: the probe simply fails on a
    file that is not a video, which is a contract worth pinning in its own right. The suite writes
    its own so it depends on no other test having run first. */
-static const char FixturePath[] = "cna_c_api_video_smoke_fixture.bin";
+static const char FixturePath[] = "cna_c_api_video_smoke_fixture.xnb";
+static const char FixtureAssetName[] = "cna_c_api_video_smoke_fixture";
 
 static int write_fixture(void)
 {
@@ -196,6 +203,122 @@ static int validate_video_values(
          (*out_video_available == 0 &&
           cna_video_destroy(video) == CNA_RESULT_INVALID_HANDLE)) &&
         cna_video_get_width(rejected, &number) == CNA_RESULT_INVALID_HANDLE;
+}
+
+static int validate_content_loaded_video(
+    const CNA_Handle game,
+    const CNA_Handle device,
+    const int video_available,
+    CNA_Handle* const out_manager)
+{
+    const CNA_ContentManagerCreateInfo create_info = {
+        sizeof(CNA_ContentManagerCreateInfo), UINT32_C(1), view(VideoContentRoot), UINT64_C(0)
+    };
+    const char invalid_utf8[] = {(char)0xC3, '('};
+    const char embedded_nul[] = {'x', '\0', 'y'};
+    CNA_Handle manager = CNA_INVALID_HANDLE;
+    CNA_VideoHandle loaded = CNA_INVALID_HANDLE;
+    CNA_VideoHandle loaded_again = CNA_INVALID_HANDLE;
+    CNA_VideoHandle rejected = UINT64_C(77);
+    CNA_VideoHandle playing = CNA_INVALID_HANDLE;
+    CNA_VideoPlayerHandle player = CNA_INVALID_HANDLE;
+    CNA_VideoSoundtrackType soundtrack = UINT32_C(99);
+    CNA_MediaState state = UINT32_C(99);
+    CNA_Bool flag = UINT8_C(9);
+    int32_t number = -1;
+    float fps = -1.0F;
+    int64_t ticks = INT64_C(-1);
+
+    if (cna_content_manager_create(device, &create_info, &manager) != CNA_RESULT_SUCCESS ||
+        manager == CNA_INVALID_HANDLE ||
+        cna_content_manager_load_video(manager, view("video_xnb_object_fixture"), 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_content_manager_load_video(CNA_INVALID_HANDLE,
+            view("video_xnb_object_fixture"), &rejected) != CNA_RESULT_INVALID_HANDLE ||
+        rejected != CNA_INVALID_HANDLE ||
+        cna_content_manager_load_video(manager, view(""), &rejected) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE ||
+        cna_content_manager_load_video(
+            manager, (CNA_StringView){invalid_utf8, UINT64_C(2)}, &rejected) !=
+            CNA_RESULT_ENCODING ||
+        rejected != CNA_INVALID_HANDLE ||
+        cna_content_manager_load_video(
+            manager, (CNA_StringView){embedded_nul, UINT64_C(3)}, &rejected) !=
+            CNA_RESULT_ENCODING ||
+        rejected != CNA_INVALID_HANDLE ||
+        cna_content_manager_load_video(manager, view("missing_video_asset"), &rejected) !=
+            CNA_RESULT_IO ||
+        rejected != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    if (cna_content_manager_load_video(
+            manager, view("video_xnb_object_fixture"), &loaded) != CNA_RESULT_SUCCESS ||
+        loaded == CNA_INVALID_HANDLE ||
+        cna_content_manager_load_video(
+            manager, view("video_xnb_object_fixture"), &loaded_again) != CNA_RESULT_SUCCESS ||
+        loaded_again == CNA_INVALID_HANDLE || loaded_again == loaded ||
+        cna_video_get_width(loaded, &number) != CNA_RESULT_SUCCESS || number != 160 ||
+        cna_video_get_height(loaded, &number) != CNA_RESULT_SUCCESS || number != 90 ||
+        cna_video_get_frames_per_second(loaded, &fps) != CNA_RESULT_SUCCESS || fps != 25.0F ||
+        cna_video_get_soundtrack_type(loaded, &soundtrack) != CNA_RESULT_SUCCESS ||
+        soundtrack != CNA_VIDEO_SOUNDTRACK_TYPE_MUSIC ||
+        cna_video_get_duration(loaded, &ticks) != CNA_RESULT_SUCCESS ||
+        ticks != INT64_C(20000000) ||
+        cna_video_get_has_graphics_device(loaded, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE) {
+        return 0;
+    }
+
+    /* The C handles own copies of the cached value, so manager unload cannot invalidate them. */
+    if (cna_content_manager_unload(manager) != CNA_RESULT_SUCCESS ||
+        cna_video_get_width(loaded, &number) != CNA_RESULT_SUCCESS || number != 160 ||
+        cna_video_player_create(game, &player) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (video_available) {
+        if (cna_video_player_play(player, loaded) != CNA_RESULT_SUCCESS ||
+            cna_video_player_get_video(player, &playing, &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_TRUE || playing != loaded ||
+            cna_video_destroy(loaded) != CNA_RESULT_SUCCESS ||
+            cna_video_player_get_state(player, &state) != CNA_RESULT_SUCCESS ||
+            state != CNA_MEDIA_STATE_PLAYING) {
+            return 0;
+        }
+        loaded = CNA_INVALID_HANDLE;
+    } else if (cna_video_player_play(player, loaded) != CNA_RESULT_NOT_SUPPORTED ||
+               cna_video_player_get_state(player, &state) != CNA_RESULT_SUCCESS ||
+               state != CNA_MEDIA_STATE_STOPPED) {
+        return 0;
+    }
+    if (cna_video_player_stop(player) != CNA_RESULT_SUCCESS ||
+        cna_video_player_destroy(player) != CNA_RESULT_SUCCESS ||
+        (loaded != CNA_INVALID_HANDLE && cna_video_destroy(loaded) != CNA_RESULT_SUCCESS)) {
+        return 0;
+    }
+
+    /* A valid asset with another root type and a malformed XNB both map to content I/O errors. */
+    if (cna_content_manager_set_root_directory(manager, view(WrongTypeContentRoot)) !=
+            CNA_RESULT_SUCCESS ||
+        cna_content_manager_load_video(manager, view("texture2d_color_mips"), &rejected) !=
+            CNA_RESULT_IO ||
+        rejected != CNA_INVALID_HANDLE ||
+        cna_content_manager_unload(manager) != CNA_RESULT_SUCCESS ||
+        cna_content_manager_set_root_directory(manager, view(".")) != CNA_RESULT_SUCCESS ||
+        cna_content_manager_load_video(manager, view(FixtureAssetName), &rejected) !=
+            CNA_RESULT_IO ||
+        rejected != CNA_INVALID_HANDLE ||
+        cna_content_manager_unload(manager) != CNA_RESULT_SUCCESS ||
+        cna_content_manager_set_root_directory(manager, view(VideoContentRoot)) !=
+            CNA_RESULT_SUCCESS ||
+        cna_video_get_height(loaded_again, &number) != CNA_RESULT_SUCCESS || number != 90 ||
+        cna_video_destroy(loaded_again) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    *out_manager = manager;
+    return 1;
 }
 
 static int validate_video_player(const CNA_Handle game, const CNA_Handle device,
@@ -480,6 +603,8 @@ static CNA_Result on_update(
         return CNA_RESULT_INVALID_STATE;
     }
     if (!validate_video_values(graphics_device, FixturePath, &video_available) ||
+        !validate_content_loaded_video(
+            game, graphics_device, video_available, &state->content_manager) ||
         !validate_video_player(game, graphics_device, FixturePath, video_available)) {
         return CNA_RESULT_INVALID_STATE;
     }
@@ -494,7 +619,9 @@ static int query_on_wrong_thread(void* const context)
 {
     WrongThreadState* const state = (WrongThreadState*)context;
     CNA_Bool disposed = CNA_FALSE;
-    state->result = cna_video_player_get_is_disposed(state->player, &disposed);
+    state->player_result = cna_video_player_get_is_disposed(state->player, &disposed);
+    state->load_result = cna_content_manager_load_video(
+        state->content_manager, view("video_xnb_object_fixture"), &state->video);
     return 0;
 }
 
@@ -504,7 +631,7 @@ int main(void)
         return 1;
     }
 
-    VideoSmokeState smoke_state = {0};
+    VideoSmokeState smoke_state = {0, 0, CNA_INVALID_HANDLE};
     CNA_GameCallbacks callbacks = {
         sizeof(CNA_GameCallbacks), UINT32_C(1), 0, on_update, 0, 0, 0, &smoke_state
     };
@@ -537,11 +664,19 @@ int main(void)
         (void)remove(FixturePath);
         return 3;
     }
-    WrongThreadState wrong_thread = {player, CNA_RESULT_SUCCESS};
+    WrongThreadState wrong_thread = {
+        player,
+        smoke_state.content_manager,
+        CNA_RESULT_SUCCESS,
+        CNA_RESULT_SUCCESS,
+        UINT64_C(77)
+    };
     thrd_t thread;
     if (thrd_create(&thread, query_on_wrong_thread, &wrong_thread) != thrd_success ||
         thrd_join(thread, 0) != thrd_success ||
-        wrong_thread.result != CNA_RESULT_THREAD) {
+        wrong_thread.player_result != CNA_RESULT_THREAD ||
+        wrong_thread.load_result != CNA_RESULT_THREAD ||
+        wrong_thread.video != CNA_INVALID_HANDLE) {
         (void)remove(FixturePath);
         return 4;
     }
@@ -613,7 +748,8 @@ int main(void)
         }
     }
 
-    if (cna_video_player_destroy(player) != CNA_RESULT_SUCCESS) {
+    if (cna_video_player_destroy(player) != CNA_RESULT_SUCCESS ||
+        cna_content_manager_destroy(smoke_state.content_manager) != CNA_RESULT_SUCCESS) {
         (void)remove(FixturePath);
         return 5;
     }

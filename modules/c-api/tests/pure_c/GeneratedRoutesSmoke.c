@@ -3080,6 +3080,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_video_create(v_CNA_Handle, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_video_create", "a null out_video");
     failures += expect(cna_video_create_with_metadata(v_CNA_Handle, v_CNA_StringView, v_int32_t, v_int32_t, v_int32_t, v_float, v_CNA_VideoSoundtrackType, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_video_create_with_metadata", "a null out_video");
     failures += expect(cna_video_create_from_uri_ext(v_CNA_Handle, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_video_create_from_uri_ext", "a null out_video");
+    failures += expect(cna_content_manager_load_video(v_CNA_Handle, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_manager_load_video", "a null out_video");
     failures += expect(cna_video_player_create(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_video_player_create", "a null out_player");
     failures += expect(cna_video_player_get_video(v_CNA_VideoPlayerHandle, NULL, &o_CNA_Bool), CNA_RESULT_INVALID_ARGUMENT, "cna_video_player_get_video", "a null out_video");
     failures += expect(cna_video_player_get_video(v_CNA_VideoPlayerHandle, &o_CNA_VideoHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_video_player_get_video", "a null out_available");
@@ -5272,6 +5273,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 3204 generated routes\n", failures);
+    printf("%d failed checks across 3205 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }
