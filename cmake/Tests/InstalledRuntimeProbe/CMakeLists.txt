@@ -18,6 +18,9 @@ function(find_sdk)
 endfunction()
 find_sdk()
 find_package(CNA 0.1 CONFIG REQUIRED)
+if(NOT COMMAND cna_deploy_runtime)
+    message(FATAL_ERROR "Installed CNA package does not export cna_deploy_runtime()")
+endif()
 set(_runtime_targets
     CNA::Core CNA::Math CNA::Input CNA::GraphicsCore
     CNA::Content CNA::Runtime CNA::Audio
@@ -56,6 +59,7 @@ foreach(_order IN ITEMS CppFirst CFirst)
         target_link_libraries(InstalledRuntime_${_order} PRIVATE CNA::CApi)
     endif()
     target_link_libraries(InstalledRuntime_${_order} PRIVATE ${_runtime_targets})
+    cna_deploy_runtime(InstalledRuntime_${_order})
     if(TARGET CNA::CApi)
         target_compile_definitions(InstalledRuntime_${_order} PRIVATE CNA_PACKAGE_TEST_C_API)
         if(_order STREQUAL "CppFirst")

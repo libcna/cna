@@ -50,6 +50,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_test(NAME CnaSdlRuntimeDeployment
         COMMAND ${CMAKE_COMMAND}
             -DCNA_SDL_RUNTIME_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/ThirdPartySDL.cmake
+            -DCNA_RENDERER_RUNTIME_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/RendererRuntime.cmake
+            -DCNA_DEPLOY_RUNTIME_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/DeployRuntime.cmake
             -DCNA_SDL_RUNTIME_PROBE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/SdlRuntimeProbe
             -DCNA_SDL_RUNTIME_WORKDIR=${CMAKE_CURRENT_BINARY_DIR}/sdl-runtime-probe
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/SdlRuntimeDeploymentCase.cmake)

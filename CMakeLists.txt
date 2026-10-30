@@ -343,6 +343,7 @@ include(cmake/RendererSelection.cmake)
 # Runtime payloads such as wgpu-native's shared library belong beside the
 # final application, not beside CNA's intermediate static renderer archive.
 include(cmake/RendererRuntime.cmake)
+include(cmake/DeployRuntime.cmake)
 
 # docs/runtime-renderer-selection.md design decision 3: emit the explicit table of renderer families
 # linked into this build. Must run after RendererSelection.cmake has resolved the identity.

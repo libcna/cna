@@ -117,6 +117,7 @@ function(cna_install_cxx_package)
         PATH_VARS CNA_INSTALL_LIBDIR CNA_INSTALL_INCLUDEDIR)
     install(FILES "${CNA_BINARY_DIR}/CNACppConfig.cmake"
         "${CNA_SOURCE_DIR}/cmake/CxxRuntimeLinkage.cmake"
+        "${CNA_SOURCE_DIR}/cmake/DeployRuntime.cmake"
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/CNA" COMPONENT CNACpp)
 
     # Preserve the established CNA package's C ABI version/compatibility contract,

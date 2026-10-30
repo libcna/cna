@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: MS-PL
 
-foreach(_required IN ITEMS CNA_SDL_RUNTIME_MODULE CNA_SDL_RUNTIME_PROBE CNA_SDL_RUNTIME_WORKDIR)
+foreach(_required IN ITEMS
+        CNA_SDL_RUNTIME_MODULE CNA_RENDERER_RUNTIME_MODULE CNA_DEPLOY_RUNTIME_MODULE
+        CNA_SDL_RUNTIME_PROBE CNA_SDL_RUNTIME_WORKDIR)
     if(NOT DEFINED ${_required})
         message(FATAL_ERROR "${_required} is required")
     endif()
@@ -12,12 +14,15 @@ file(MAKE_DIRECTORY "${_runtime_directory}")
 foreach(_dll IN ITEMS SDL3.dll SDL3_mixer.dll)
     file(WRITE "${_runtime_directory}/${_dll}" "${_dll} deployment fixture\n")
 endforeach()
+file(WRITE "${_runtime_directory}/wgpu_native.dll" "renderer deployment fixture\n")
 
 execute_process(
     COMMAND "${CMAKE_COMMAND}"
         -S "${CNA_SDL_RUNTIME_PROBE}"
         -B "${CNA_SDL_RUNTIME_WORKDIR}/build"
         -DTHIRD_PARTY_SDL=${CNA_SDL_RUNTIME_MODULE}
+        -DRENDERER_RUNTIME=${CNA_RENDERER_RUNTIME_MODULE}
+        -DDEPLOY_RUNTIME=${CNA_DEPLOY_RUNTIME_MODULE}
         -DRUNTIME_DIRECTORY=${_runtime_directory}
     RESULT_VARIABLE _configure_result
     OUTPUT_VARIABLE _configure_output
@@ -31,7 +36,7 @@ endif()
 
 execute_process(
     COMMAND "${CMAKE_COMMAND}" --build "${CNA_SDL_RUNTIME_WORKDIR}/build"
-        --target sdl_runtime_consumer --parallel 1
+        --target installed_runtime_consumer sdl_runtime_consumer --parallel 1
     RESULT_VARIABLE _build_result
     OUTPUT_VARIABLE _build_output
     ERROR_VARIABLE _build_error)
@@ -42,8 +47,11 @@ if(NOT _build_result EQUAL 0)
         "stderr:\n${_build_error}")
 endif()
 
-foreach(_dll IN ITEMS SDL3.dll SDL3_mixer.dll)
-    if(NOT EXISTS "${CNA_SDL_RUNTIME_WORKDIR}/build/${_dll}")
-        message(FATAL_ERROR "SDL runtime helper did not deploy ${_dll}")
-    endif()
+foreach(_route IN ITEMS installed source)
+    foreach(_dll IN ITEMS SDL3.dll SDL3_mixer.dll wgpu_native.dll)
+        if(NOT EXISTS "${CNA_SDL_RUNTIME_WORKDIR}/build/${_route}/${_dll}")
+            message(FATAL_ERROR
+                "Central ${_route} runtime deployment route did not deploy ${_dll}")
+        endif()
+    endforeach()
 endforeach()
