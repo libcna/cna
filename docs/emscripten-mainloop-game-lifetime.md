@@ -32,6 +32,15 @@ second C++/Wasm callback never re-enters a suspended Wasm instance, and the
 caller is not unwound. This preserves XNA's blocking `Run()` lifetime contract while still yielding
 the browser thread.
 
+Browser scheduling is the only separate layer. Native `Tick()` calls the shared tick state machine
+with fixed-step waiting enabled; `RunLoop()` and `RunFrameEXT()` call it without waiting because
+`requestAnimationFrame()` or the embedding host already provides the next execution opportunity.
+Both paths use the same `GameTime`, `TimeSpan` accumulator, 500 ms `MaxElapsedTime`, slow-frame
+history, reset, draw suppression, exit, disposal and renderer-context logic. There is no static
+Emscripten `Game*`, copied `GameTime` or floating-point millisecond accumulator to survive from one
+game into another. A frame exception is logged by `Run()` and continues unwinding as it does
+natively; the browser path does not turn it into a normal `EndRun()`.
+
 The exception ABI and blocking-loop facility are separate CMake interfaces:
 
 ```text
@@ -51,7 +60,7 @@ In a build that compiles the `WEBGPU` renderer in, `CNA::EmscriptenAsyncify` als
 4 KiB unwind buffer holds (see `webgpu-renderer.md`); nothing has to be added by hand.
 
 The generated `cna_c_api_wasm` library is intentionally different. JavaScript owns its event loop
-and calls `cna_game_run_one_frame` from `requestAnimationFrame`, so its final link explicitly uses
+and calls `cna_game_run_frame_ext` from `requestAnimationFrame`, so its final link explicitly uses
 `-sASYNCIFY=0`. This prevents Asyncify rewind from re-entering an exported i64-handle route without
 the original JavaScript `BigInt` argument.
 
@@ -61,9 +70,12 @@ The web template and CNA renderer examples intentionally use ordinary local owne
 browser checks must reach multiple `Update()`/`Draw()` frames, call `Exit()`, return from `Run()`,
 and destroy the game normally. Merely compiling the page does not verify this contract.
 
-The separate `CApi_WasmBrowserProbe` drives 5 frames externally, verifies exact Update/Draw counts,
-BigInt handles, no page errors or unhandled rejections, and clean destruction. The qualified
-WEBGL2 artifact also passed 60- and 600-frame canaries.
+The separate `CApi_WasmBrowserProbe` drives `RunFrameEXT()` from five animation frames. It verifies
+the initialize/load/begin/update/draw/exiting/end order, variable-step `ResetElapsedTime()`, one-draw
+suppression, no final draw after `Exit()`, exact Update/Draw counts, BigInt handles and clean
+destruction. A second fixed-step game verifies that a browser frame with no update still draws and
+inherits no timing state from the first game. The qualified WEBGL2 artifact also passed 60- and
+600-frame canaries before this stronger lifecycle coverage replaced the old `RunOneFrame()` probe.
 
 `emscripten-mainloop-stack-spike/` remains as the minimal reproduction of the obsolete unwind-based
 implementation and documents why heap allocation previously appeared necessary.

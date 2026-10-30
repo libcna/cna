@@ -151,8 +151,9 @@ What keeps CNA's accumulated state current: `Game::Tick()` (`Game.cpp`) uncondit
 `PollEvents()` → `IPlatform::PollEvents(batch)` → `PlatformInputBridge::ProcessEvent`, followed by
 `IPlatformKeyboard::Update()` and `IPlatformMouse::Update()`, exactly once per frame before
 `Update()`/`Draw()` run, on every code path that reaches a frame (`Run()`→`RunLoop()`→`Tick()`,
-`RunOneFrame()`→`Tick()`, and the Emscripten main-loop callback all funnel through this). As long
-as that per-frame pump keeps happening, the practical behavior is indistinguishable from FNA's
+`RunOneFrame()`→`Tick()`, and Emscripten `RunLoop()`/`RunFrameEXT()` all funnel through the shared
+tick core). As long as that per-frame pump keeps happening, the practical behavior is
+indistinguishable from FNA's
 poll-per-call model for game code that reads input once per `Update()`.
 
 Where the difference is actually visible:

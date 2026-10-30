@@ -241,7 +241,7 @@ permissions were superseded by cache-enabled builds with the appropriate filesys
 | Wine HEADLESS rerun of the six renderer-sensitive failures | 6/6 PASS with the same compiled library; this does not prove DirectX pixels. |
 | Wine DirectX11 corrected GraphicsDeviceSmoke | PASS; renderer-specific extra capability bits are valid. |
 | Emscripten WEBGL2+WEBGPU module/probe | Build PASS. Node smoke PASS, all 3,210 C API exports plus malloc/free present. Link contract PASS: WebGL2, Asyncify off. |
-| Actual Chromium browser C API probe | 13/13 PASS after fullscreen-property fix, including callbacks, frame counts, BigInt handles, render targets and teardown. |
+| Actual Chromium browser C API probe | 14/14 PASS, including callbacks, shared-loop lifecycle/timing, frame counts, BigInt handles, render targets and teardown. |
 | Existing .NET integration consumer assembly | All 261 tests covered successfully: 260/260 on multi-renderer with dummy audio, and the DEVICES-dependent dialog test 1/1 on the enabled Clang configuration. No managed source changes. |
 | Final whitespace / generated drift / header comparison | PASS. |
 

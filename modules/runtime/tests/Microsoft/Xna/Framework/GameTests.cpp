@@ -24,6 +24,7 @@
 #include "RuntimePlatformTestSupport.hpp"
 #include "CNA/Internal/Runtime/IGameOverlay.hpp"
 #include "CNA/Internal/Runtime/IModalFrames.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -45,6 +46,7 @@ namespace CNA::Internal
         static void SetWindowActive(Microsoft::Xna::Framework::Game& game, bool active) { game.setIsActiveProperty(active); }
         static bool IsSuspended(const Microsoft::Xna::Framework::Game& game) { return game.isSuspended_; }
         static void PollEvents(Microsoft::Xna::Framework::Game& game) { game.PollEvents(); }
+        static void TickWithoutWaiting(Microsoft::Xna::Framework::Game& game) { game.TickCore(false); }
     };
 }
 
@@ -141,6 +143,109 @@ namespace
         [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceDisposingEvent() override { return DeviceDisposingEvt; }
         [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceResetEvent() override { return DeviceResetEvt; }
         [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceResettingEvent() override { return DeviceResettingEvt; }
+    };
+
+    class ScriptedTimingPlatform final : public CNA::Platform::Testing::PlatformTestDecorator
+    {
+    public:
+        ScriptedTimingPlatform()
+            : PlatformTestDecorator(CNA::Platform::PlatformFactory::Create())
+        {
+        }
+
+        [[nodiscard]] std::uint64_t GetPerformanceCounter() const override { return counter_++; }
+        [[nodiscard]] std::uint64_t GetPerformanceFrequency() const override { return 10000; }
+        void Delay(const std::uint32_t milliseconds) override { Advance(milliseconds); }
+        void Advance(const std::uint32_t milliseconds)
+        {
+            counter_ += static_cast<std::uint64_t>(milliseconds) * 10U;
+        }
+
+    private:
+        mutable std::uint64_t counter_ = 10000;
+    };
+
+    class NonBlockingTimingGame final : public Game
+    {
+    public:
+        enum class UpdateAction
+        {
+            None,
+            SuppressDraw,
+            Exit,
+            Dispose,
+            Throw
+        };
+
+        explicit NonBlockingTimingGame(std::unique_ptr<CNA::Platform::IPlatform> platform)
+            : Game(std::move(platform))
+        {
+        }
+
+        std::vector<GameTime> updates;
+        std::vector<GameTime> draws;
+        UpdateAction updateAction = UpdateAction::None;
+        bool allowDraw = true;
+
+    protected:
+        void Update(GameTime& gameTime) override
+        {
+            updates.push_back(gameTime);
+            switch (updateAction)
+            {
+                case UpdateAction::SuppressDraw:
+                    SuppressDraw();
+                    break;
+                case UpdateAction::Exit:
+                    Exit();
+                    break;
+                case UpdateAction::Dispose:
+                    Dispose();
+                    return;
+                case UpdateAction::Throw:
+                    throw std::runtime_error("non-blocking frame failure");
+                case UpdateAction::None:
+                    break;
+            }
+            Game::Update(gameTime);
+        }
+
+        [[nodiscard]] bool BeginDraw() override
+        {
+            return allowDraw && Game::BeginDraw();
+        }
+
+        void Draw(const GameTime& gameTime) override
+        {
+            draws.push_back(gameTime);
+            Game::Draw(gameTime);
+        }
+    };
+
+    class NonBlockingTickTest : public ::testing::Test
+    {
+    protected:
+        void SetUp() override
+        {
+            if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+            {
+                GTEST_SKIP() << "The selected platform cannot create a test window.";
+            }
+
+            auto platform = std::make_unique<ScriptedTimingPlatform>();
+            clock = platform.get();
+            game = std::make_unique<NonBlockingTimingGame>(std::move(platform));
+            graphics = std::make_unique<GraphicsDeviceManager>(game.get());
+            game->setIsFixedTimeStepProperty(false);
+            game->setTargetElapsedTimeProperty(System::TimeSpan::FromMilliseconds(10));
+            game->RunOneFrame();
+            game->updates.clear();
+            game->draws.clear();
+        }
+
+        ScriptedTimingPlatform* clock = nullptr;
+        std::unique_ptr<NonBlockingTimingGame> game;
+        std::unique_ptr<GraphicsDeviceManager> graphics;
     };
 }
 
@@ -333,6 +438,168 @@ TEST(GameTest, RunExecutesLifecycleInDocumentedOrder)
     EXPECT_EQ(game.loadContentCalls, 1);
     EXPECT_GE(game.updateCalls, 1);
     EXPECT_GE(game.drawCalls, 1);
+}
+
+TEST_F(NonBlockingTickTest, FixedFrameDrawsEvenWhenNoUpdateIsDue)
+{
+    game->setIsFixedTimeStepProperty(true);
+
+    CNA::Internal::GameTestPeer::TickWithoutWaiting(*game);
+
+    EXPECT_TRUE(game->updates.empty());
+    ASSERT_EQ(game->draws.size(), 1U);
+    EXPECT_EQ(game->draws.front().getElapsedGameTimeProperty(), System::TimeSpan::Zero);
+}
+
+TEST_F(NonBlockingTickTest, FixedCatchUpUsesSharedClockSlowFlagAndAggregateDrawElapsedTime)
+{
+    game->setIsFixedTimeStepProperty(true);
+    clock->Advance(70);
+
+    CNA::Internal::GameTestPeer::TickWithoutWaiting(*game);
+
+    ASSERT_EQ(game->updates.size(), 7U);
+    ASSERT_EQ(game->draws.size(), 1U);
+    EXPECT_EQ(game->draws.front().getElapsedGameTimeProperty(),
+              System::TimeSpan::FromMilliseconds(70));
+    EXPECT_TRUE(game->draws.front().getIsRunningSlowlyProperty());
+    for (const GameTime& update : game->updates)
+    {
+        EXPECT_EQ(update.getElapsedGameTimeProperty(), game->getTargetElapsedTimeProperty());
+    }
+}
+
+TEST_F(NonBlockingTickTest, FixedCatchUpUsesTheSharedMaximumElapsedTime)
+{
+    game->setIsFixedTimeStepProperty(true);
+    clock->Advance(1000);
+
+    CNA::Internal::GameTestPeer::TickWithoutWaiting(*game);
+
+    EXPECT_EQ(game->updates.size(), 50U);
+    ASSERT_EQ(game->draws.size(), 1U);
+    EXPECT_EQ(game->draws.front().getElapsedGameTimeProperty(),
+              System::TimeSpan::FromMilliseconds(500));
+}
+
+TEST_F(NonBlockingTickTest, VariableResetZeroesOneUpdateWithoutAdvancingTotalTime)
+{
+    clock->Advance(20);
+    game->ResetElapsedTime();
+
+    CNA::Internal::GameTestPeer::TickWithoutWaiting(*game);
+
+    ASSERT_EQ(game->updates.size(), 1U);
+    EXPECT_EQ(game->updates.front().getElapsedGameTimeProperty(), System::TimeSpan::Zero);
+    const System::TimeSpan totalAfterReset =
+        game->draws.back().getTotalGameTimeProperty();
+
+    game->updates.clear();
+    game->draws.clear();
+    clock->Advance(20);
+    CNA::Internal::GameTestPeer::TickWithoutWaiting(*game);
+
+    ASSERT_EQ(game->updates.size(), 1U);
+    EXPECT_GT(game->updates.front().getElapsedGameTimeProperty().getTicksProperty(), 0);
+    EXPECT_EQ(game->updates.front().getTotalGameTimeProperty(), totalAfterReset);
+}
+
+TEST_F(NonBlockingTickTest, FixedResetConsumesTheNewClockSampleWithoutUpdateOrDraw)
+{
+    game->setIsFixedTimeStepProperty(true);
+    clock->Advance(200);
+    game->ResetElapsedTime();
+
+    CNA::Internal::GameTestPeer::TickWithoutWaiting(*game);
+
+    EXPECT_TRUE(game->updates.empty());
+    EXPECT_TRUE(game->draws.empty());
+
+    clock->Advance(10);
+    CNA::Internal::GameTestPeer::TickWithoutWaiting(*game);
+    EXPECT_EQ(game->updates.size(), 1U);
+    EXPECT_EQ(game->draws.size(), 1U);
+}
+
+TEST_F(NonBlockingTickTest, SuppressDrawSkipsExactlyOneEligibleDraw)
+{
+    game->updateAction = NonBlockingTimingGame::UpdateAction::SuppressDraw;
+    clock->Advance(10);
+
+    CNA::Internal::GameTestPeer::TickWithoutWaiting(*game);
+
+    ASSERT_EQ(game->updates.size(), 1U);
+    EXPECT_TRUE(game->draws.empty());
+
+    game->updateAction = NonBlockingTimingGame::UpdateAction::None;
+    clock->Advance(10);
+    CNA::Internal::GameTestPeer::TickWithoutWaiting(*game);
+    EXPECT_EQ(game->draws.size(), 1U);
+}
+
+TEST_F(NonBlockingTickTest, ExitDuringUpdatePreventsTheFinalDrawAndLaterFrames)
+{
+    game->updateAction = NonBlockingTimingGame::UpdateAction::Exit;
+    clock->Advance(10);
+
+    CNA::Internal::GameTestPeer::TickWithoutWaiting(*game);
+
+    ASSERT_EQ(game->updates.size(), 1U);
+    EXPECT_TRUE(game->draws.empty());
+    EXPECT_FALSE(game->RunApplication);
+
+    clock->Advance(10);
+    CNA::Internal::GameTestPeer::TickWithoutWaiting(*game);
+    EXPECT_EQ(game->updates.size(), 1U);
+    EXPECT_TRUE(game->draws.empty());
+}
+
+TEST_F(NonBlockingTickTest, BeginDrawFalseSkipsOnlyTheCurrentDraw)
+{
+    game->allowDraw = false;
+    clock->Advance(10);
+    CNA::Internal::GameTestPeer::TickWithoutWaiting(*game);
+    EXPECT_EQ(game->updates.size(), 1U);
+    EXPECT_TRUE(game->draws.empty());
+
+    game->allowDraw = true;
+    clock->Advance(10);
+    CNA::Internal::GameTestPeer::TickWithoutWaiting(*game);
+    EXPECT_EQ(game->updates.size(), 2U);
+    EXPECT_EQ(game->draws.size(), 1U);
+}
+
+TEST_F(NonBlockingTickTest, ADisposedGameIsRejectedBeforeItsNextUpdate)
+{
+    game->Dispose();
+    clock->Advance(10);
+
+    EXPECT_THROW(CNA::Internal::GameTestPeer::TickWithoutWaiting(*game),
+                 System::ObjectDisposedException);
+}
+
+TEST_F(NonBlockingTickTest, DisposalDuringUpdateSkipsDrawAndRejectsTheFollowingFrame)
+{
+    game->updateAction = NonBlockingTimingGame::UpdateAction::Dispose;
+    clock->Advance(10);
+
+    CNA::Internal::GameTestPeer::TickWithoutWaiting(*game);
+
+    ASSERT_EQ(game->updates.size(), 1U);
+    EXPECT_TRUE(game->draws.empty());
+
+    clock->Advance(10);
+    EXPECT_THROW(CNA::Internal::GameTestPeer::TickWithoutWaiting(*game),
+                 System::ObjectDisposedException);
+}
+
+TEST_F(NonBlockingTickTest, FrameExceptionsPropagateToTheScheduler)
+{
+    game->updateAction = NonBlockingTimingGame::UpdateAction::Throw;
+    clock->Advance(10);
+
+    EXPECT_THROW(CNA::Internal::GameTestPeer::TickWithoutWaiting(*game), std::runtime_error);
+    EXPECT_TRUE(game->draws.empty());
 }
 
 namespace

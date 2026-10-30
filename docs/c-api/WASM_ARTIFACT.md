@@ -78,9 +78,9 @@ these flags itself:
 | `WEBGL2` | `MIN_WEBGL_VERSION=2`, `MAX_WEBGL_VERSION=2` |
 | `WEBGPU` and other non-WebGL renderers | no WebGL version flags imposed |
 
-Measured in clean builds: `CApi_WasmBrowserProbe` created a real C-owned Game, cleared and
-presented five frames, and reported WebGL 2.0 for `WEBGL2`. The WEBGL2 artifact also completed
-60- and 600-frame canaries without a shader-version failure.
+Measured in clean builds: `CApi_WasmBrowserProbe` created a real C-owned Game, drove five host
+frames (three presented after suppression and exit), and reported WebGL 2.0 for `WEBGL2`. The
+WEBGL2 artifact also completed 60- and 600-frame canaries without a shader-version failure.
 
 **Caveat worth having:** reading the default framebuffer with `gl.readPixels` after a frame returns
 zeros unless the context was created with `preserveDrawingBuffer`. That looks exactly like "nothing
@@ -88,16 +88,18 @@ rendered". Screenshot the canvas instead.
 
 ## 7. Game loop
 
-`cna_game_create` / `cna_game_run_one_frame` / `cna_game_destroy` are exported and are the loop. The
-browser owns the event loop and calls `run_one_frame` from `requestAnimationFrame`; blocking
-`cna_game_run` is not the primary browser-library path.
+`cna_game_create` / `cna_game_run_frame_ext` / `cna_game_destroy` are exported and are the complete
+host-driven run. The browser owns the event loop and calls `run_frame_ext` from
+`requestAnimationFrame`; unlike `run_one_frame`, that route also delivers begin, exit and end-run
+lifecycle hooks. Blocking `cna_game_run` is not the primary browser-library path.
 
 The C-API module is explicitly linked with `ASYNCIFY=0`. Asyncify is useful for application-style
 executables whose C++ `Game::Run()` blocks, but it is unsafe for this JS-entered library model:
 rewinding an exported call can re-enter an i64-handle function without its original JavaScript
 arguments. `CApi_WasmLinkContract` checks the generated module has no Asyncify runtime, and the
 browser regression checks every requested frame returns exactly once with no page error or
-unhandled rejection.
+unhandled rejection. It also exercises time reset, draw suppression, exit-without-a-final-draw and
+a second fixed-step Game whose first host frame draws without an update.
 
 The wasm32 layouts used by the browser regression are compile-time-pinned in `module_entry.c`:
 

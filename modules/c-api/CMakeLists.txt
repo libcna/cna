@@ -153,7 +153,7 @@ if(EMSCRIPTEN)
     set_target_properties(cna_c_api_wasm PROPERTIES
         OUTPUT_NAME "cna_c_api"
         SUFFIX ".mjs"
-        # JavaScript owns this library's event loop and calls RunOneFrame from
+        # JavaScript owns this library's event loop and calls RunFrameEXT from
         # requestAnimationFrame. Re-entering an exported i64-handle route during an Asyncify rewind
         # loses its JavaScript arguments, so this target must not inherit application-loop policy.
         CNA_EMSCRIPTEN_ASYNCIFY OFF

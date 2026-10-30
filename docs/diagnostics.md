@@ -89,7 +89,8 @@ remains available in a snapshot.
 
 ## Frames and built-in engine metrics
 
-Native `Game::Tick` and the Emscripten main-loop callback publish one frame. A completed sample
+Every shared `Game` tick publishes one frame, whether native `Tick()` waits for a fixed step or an
+Emscripten scheduler supplies the next non-blocking frame opportunity. A completed sample
 contains its monotonically increasing frame number, monotonic start timestamp, elapsed duration,
 FPS,
 and frame counters. FULL additionally records `Game/Tick`, `Game/Update`, and `Game/Draw` zones.

@@ -37,7 +37,6 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
-#include <emscripten/html5.h>
 
 EM_ASYNC_JS(void, CNA_WaitForAnimationFrame, (), {
     await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -50,20 +49,6 @@ namespace Microsoft::Xna::Framework
     {
         std::vector<CNA::Platform::PlatformEvent> events;
     };
-
-#if defined(__EMSCRIPTEN__)
-    // Defined here rather than next to EmscriptenMainLoopCallback below because ~Game() reads it,
-    // and a nested type has to be complete by then.
-    struct Game::EmscriptenLoopState
-    {
-        Game* game = nullptr;
-        GameTime gameTime;
-        std::uint64_t lastTickMs = 0;
-        double accumulatorMs = 0.0;
-    };
-
-    Game::EmscriptenLoopState Game::s_emLoopState;
-#endif
 
     namespace
     {
@@ -459,17 +444,6 @@ namespace Microsoft::Xna::Framework
 
     Game::~Game()
     {
-#if defined(__EMSCRIPTEN__)
-        // Destruction from a re-entrant callback while this game owns the browser loop must stop
-        // RunLoop before its platform and graphics resources disappear.
-        if (s_emLoopState.game == this)
-        {
-            s_emLoopState.game = nullptr;
-            CNA::Logger::Error(
-                "CNA: the Game driving the Emscripten loop was destroyed while Run() was active; "
-                "the loop stops before its resources are released.");
-        }
-#endif
         Dispose(false);
         // Hand the ambient installation back to whichever game is still alive, if any. This runs
         // before platform_ is destroyed (members are destroyed after the body), so the accessor
@@ -688,14 +662,9 @@ namespace Microsoft::Xna::Framework
 
     void Game::Run()
     {
-        // EmscriptenMainLoopCallback catches what a FRAME throws, but everything before the loop --
-        // Initialize, LoadContent, the first device and content work -- had no reporting at all. On
-        // the web that is the difference between a diagnosis and a blank canvas: an exception that
-        // escapes Run() reaches the browser as a rejected promise carrying a bare `{excPtr}`, with
-        // no type, no what() and nothing in the console, and Emscripten exposes no helper to read
-        // it back. Log it where the message still exists and let it keep unwinding, so this changes
-        // what a developer is told and nothing else. A native build reaches std::terminate, which
-        // prints what() itself, so this only ever adds a line there.
+        // On the web an exception that escapes Run() reaches the browser as a rejected promise
+        // carrying a bare `{excPtr}`, with no type or what() text. Log it where the message still
+        // exists and let it keep unwinding, preserving the native exception contract.
         try
         {
             AssertNotDisposed();
@@ -756,31 +725,30 @@ namespace Microsoft::Xna::Framework
             }
             BeforeLoop();
             previousPerformanceCounter_ = platform_->GetPerformanceCounter();
-#if defined(__EMSCRIPTEN__)
-            s_emLoopState = {};
-            s_emLoopState.game = this;
-            s_emLoopState.gameTime = gameTime_;
-#endif
             hostRunState_ = HostRunState::Running;
         }
 
-        // The frame body is Run()'s own: on the web the one that steps fixed updates from the
-        // animation-frame clock without sleeping (and raises Exiting itself when the game has
-        // exited), elsewhere Tick().
+        // A browser host already supplies the wait between frames, so its fixed-step frame must
+        // not sleep. Every observable Game semantic remains in TickCore for both schedulers.
 #if defined(__EMSCRIPTEN__)
-        if (s_emLoopState.game == this)
+        try
         {
-            EmscriptenMainLoopCallback();
+            TickCore(false);
         }
-        const bool ended = s_emLoopState.game != this;
+        catch (...)
+        {
+            hostRunState_ = HostRunState::Ended;
+            RunApplication = false;
+            throw;
+        }
 #else
         Tick();
+#endif
         const bool ended = !RunApplication;
         if (ended)
         {
             OnExiting(this, System::EventArgs::Empty);
         }
-#endif
         if (!ended)
         {
             return true;
@@ -796,6 +764,11 @@ namespace Microsoft::Xna::Framework
     }
 
     void Game::Tick()
+    {
+        TickCore(true);
+    }
+
+    void Game::TickCore(const bool waitForTargetElapsedTime)
     {
         // XNA's Tick() begins with `if (ShouldExit) return;`: after Exit() a frame neither
         // updates nor draws, whether the loop or a caller of Tick()/RunOneFrame() drives it.
@@ -817,7 +790,7 @@ namespace Microsoft::Xna::Framework
             gameTime_.setIsRunningSlowlyProperty(false);
         }
 
-        if (IsFixedTimeStep_ && !resetElapsedTime)
+        if (waitForTargetElapsedTime && IsFixedTimeStep_ && !resetElapsedTime)
         {
             while (TimeSpanLess(accumulatedElapsedTime_ + worstCaseSleepPrecision_, TargetElapsedTime_))
             {
@@ -1318,115 +1291,6 @@ namespace Microsoft::Xna::Framework
         drawableComponents_.insert(it, drawable);
     }
 
-#if defined(__EMSCRIPTEN__)
-    void Game::EmscriptenMainLoopCallback()
-    {
-        try
-        {
-            EmscriptenLoopState& state = s_emLoopState;
-            if (state.game == nullptr)
-            {
-                return;
-            }
-            CNA_DIAGNOSTICS_FRAME_SCOPE();
-            CNA_PROFILE_SCOPE_CATEGORY("Game/Tick", CNA::Diagnostics::Category::Core);
-
-            state.game->PollEvents();
-
-            bool updated = false;
-            if (!state.game->IsFixedTimeStep_)
-            {
-                // IsFixedTimeStep = false is XNA's variable step: one Update with the real elapsed
-                // time, then one Draw, per displayed frame. The accumulator below would instead run
-                // zero, one or several 1/60 s Updates per requestAnimationFrame (browser frame times
-                // jitter around the display's period), pacing picture and input unevenly, and after
-                // every slow frame it would catch up with a burst of Updates that makes the next
-                // frame slower still.
-                const System::TimeSpan maxStep = System::TimeSpan::FromMilliseconds(250.0);
-                const System::TimeSpan advanced = state.game->AdvanceElapsedTime();
-                state.game->accumulatedElapsedTime_ = System::TimeSpan::Zero;
-                const System::TimeSpan step = TimeSpanGreater(advanced, maxStep) ? maxStep : advanced;
-                state.gameTime.setElapsedGameTimeProperty(step);
-                state.gameTime.setTotalGameTimeProperty(state.gameTime.getTotalGameTimeProperty() + step);
-                state.gameTime.setIsRunningSlowlyProperty(false);
-                if (state.game->RunApplication)
-                {
-                    CNA_PROFILE_SCOPE_CATEGORY("Game/Update", CNA::Diagnostics::Category::Update);
-                    state.game->Update(state.gameTime);
-                    CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/UpdateCount", 1);
-                    updated = true;
-                }
-            }
-            else
-            {
-                // The platform's epoch is its own creation rather than library init, which changes
-                // nothing here: only deltas are used, and the first callback seeds lastTickMs either way.
-                const std::uint64_t nowMs = state.game->GetPlatformEXT().GetTicksMilliseconds();
-                if (state.lastTickMs == 0)
-                {
-                    state.lastTickMs = nowMs;
-                }
-
-                double deltaMs = static_cast<double>(nowMs - state.lastTickMs);
-                state.lastTickMs = nowMs;
-
-                if (deltaMs > 250.0)
-                {
-                    deltaMs = 250.0;
-                }
-
-                state.accumulatorMs += deltaMs;
-                const double targetMs = state.game->getTargetMsFrameTimeProperty();
-                const auto stepSpan = System::TimeSpan::FromMilliseconds(targetMs);
-
-                while (state.game->RunApplication && state.accumulatorMs >= targetMs)
-                {
-                    state.accumulatorMs -= targetMs;
-
-                    state.gameTime.setElapsedGameTimeProperty(stepSpan);
-                    state.gameTime.setTotalGameTimeProperty(state.gameTime.getTotalGameTimeProperty() + stepSpan);
-                    state.gameTime.setIsRunningSlowlyProperty(false);
-
-                    {
-                        CNA_PROFILE_SCOPE_CATEGORY("Game/Update", CNA::Diagnostics::Category::Update);
-                        state.game->Update(state.gameTime);
-                    }
-                    CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/UpdateCount", 1);
-                    updated = true;
-                }
-            }
-
-            if (updated && state.game->BeginDraw())
-            {
-                {
-                    CNA_PROFILE_SCOPE_CATEGORY("Game/Draw", CNA::Diagnostics::Category::Draw);
-                    state.game->Draw(state.gameTime);
-                    if (auto* overlay = state.game->getServicesProperty().GetService<CNA::Internal::Runtime::IGameOverlay>()) overlay->draw();
-                    state.game->EndDraw();
-                }
-                CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/DrawCount", 1);
-            }
-
-            if (!state.game->RunApplication)
-            {
-                state.game->OnExiting(state.game, System::EventArgs::Empty);
-                state.game = nullptr;
-            }
-        }
-        catch (const std::exception& exception)
-        {
-            s_emLoopState.game = nullptr;
-            CNA::Logger::Error(
-                std::string("CNA: fatal exception in Emscripten main loop: ") + exception.what());
-        }
-        catch (...)
-        {
-            s_emLoopState.game = nullptr;
-            CNA::Logger::Error("CNA: unknown fatal exception in Emscripten main loop");
-        }
-    }
-#endif
-
     void Game::BeforeLoop()
     {
         // CBIND-155: XNA activated the game as its form was shown, on the game thread with its
@@ -1443,17 +1307,14 @@ namespace Microsoft::Xna::Framework
     void Game::RunLoop()
     {
 #if defined(__EMSCRIPTEN__)
-        s_emLoopState.game = this;
-        s_emLoopState.gameTime = gameTime_;
-
         // Asyncify suspends and resumes this same Wasm stack between frames. Calling the frame body
-        // directly is important: a separately registered browser callback cannot re-enter the
-        // Wasm instance while this Run() stack is suspended. Unlike simulateInfiniteLoop, this
-        // preserves the logical caller and therefore the ordinary stack-local XNA Game lifetime.
-        while (s_emLoopState.game == this)
+        // directly preserves the logical caller and therefore the ordinary stack-local XNA Game
+        // lifetime. The browser supplies pacing; TickCore supplies the same timing, update and
+        // draw state machine used by native Tick without blocking the browser thread.
+        while (RunApplication)
         {
-            EmscriptenMainLoopCallback();
-            if (s_emLoopState.game == this)
+            TickCore(false);
+            if (RunApplication)
                 CNA_WaitForAnimationFrame();
         }
 #else
@@ -1471,8 +1332,8 @@ namespace Microsoft::Xna::Framework
             Tick();
         }
 
-        OnExiting(this, System::EventArgs::Empty);
 #endif
+        OnExiting(this, System::EventArgs::Empty);
     }
 
     void Game::WaitWhileSuspended()

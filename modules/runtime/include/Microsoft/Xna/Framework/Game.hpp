@@ -496,6 +496,7 @@ namespace Microsoft::Xna::Framework
         void BeforeLoop();
         void AfterLoop();
         void RunLoop();
+        void TickCore(bool waitForTargetElapsedTime);
         System::TimeSpan AdvanceElapsedTime();
         void UpdateEstimatedSleepPrecision(const System::TimeSpan& timeSpentSleeping);
         void PollEvents();
@@ -505,14 +506,5 @@ namespace Microsoft::Xna::Framework
         void OnComponentRemoved(System::Object* sender, const GameComponentCollectionEventArgs& args);
         void OnUpdateOrderChanged(System::Object* sender, const System::EventArgs& args);
         void OnDrawOrderChanged(System::Object* sender, const System::EventArgs& args);
-
-#if defined(__EMSCRIPTEN__)
-    private:
-        // Emscripten loop state. RunLoop yields through Asyncify between frames until the frame body
-        // clears its game pointer, retaining the public Run() call's blocking lifetime semantics.
-        struct EmscriptenLoopState;
-        static EmscriptenLoopState s_emLoopState;
-        static void EmscriptenMainLoopCallback();
-#endif
     };
 }

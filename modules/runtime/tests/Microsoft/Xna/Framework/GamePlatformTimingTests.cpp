@@ -87,18 +87,6 @@ TEST(GamePlatformTimingTest, TheCounterActuallyAdvancesOverARealDelay)
     EXPECT_GT(after, before);
 }
 
-TEST(GamePlatformTimingTest, MillisecondTicksAdvanceOverARealDelay)
-{
-    // The Emscripten main-loop callback drives its accumulator from this rather than from the
-    // performance counter, so it needs its own check.
-    TimingGame game;
-    CNA::Platform::IPlatform& platform = game.GetPlatformEXT();
-
-    const std::uint64_t before = platform.GetTicksMilliseconds();
-    platform.Delay(5);
-    EXPECT_GE(platform.GetTicksMilliseconds(), before + 1);
-}
-
 TEST(GamePlatformTimingTest, AFixedTimestepFrameAdvancesGameTime)
 {
     // The end-to-end check that the loop is reading the platform's clock: with a fixed timestep

@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Emscripten `Game` loop parity (2026-10-30): native `Tick()`, application-style Asyncify
+  `Run()` and host-driven `RunFrameEXT()` now use one timing/update/draw state machine. Browser
+  scheduling disables only native fixed-step waiting; it retains the high-resolution clock,
+  `GameTime` ordering, the 500 ms cap, slow-frame history, reset, draw suppression, exit, disposal,
+  renderer-context and exception behavior. The separate static `Game*`, copied `GameTime` and
+  floating-point millisecond accumulator are gone. Eleven deterministic non-blocking tick
+  regressions plus the existing lifecycle/clock/reset set pass 22/22; the clean WEBGL2 C ABI build
+  and real Chrome probe pass 14/14, including a second sequential fixed-step game; and the WebGPU
+  application demo completes 30 `Run()`/Asyncify frames with clean teardown. The full
+  `CnaRuntimeTests` target passes 255/258 with the three environment-classified skips.
 - Renderer identity normalization (2026-10-30): CNA's public renderer key is now consistently
   `SDLGPU`, including CMake selection, compile definitions, runtime names, presets, CI and the C
   ABI. The former `SDL_GPU` selector, feature options and C constant are deliberately refused
