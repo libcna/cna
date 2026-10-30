@@ -218,6 +218,12 @@
       "impact": "`cna_effect_create_compiled`'s three refusals are renderer-independent and are tested, but none of the four trees this campaign builds -- HEADLESS, OPENGLES3 and SOFTWARE twice -- advertises `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`, so the accepting path is never taken. That leaves `cna_effect_get_is_compiled_ext` proved only on its `CNA_FALSE` branch, and clone-preserves-compiled-state asserted as a relationship between source and clone rather than on a genuinely compiled effect. A tree on a renderer that implements compiled effects would close both.",
       "status": "not tested here",
       "owner": "EFFECTS.md"
+    },
+    {
+      "subject": "C reflective enum fields are Int32-only",
+      "impact": "The native `EnumTypeReader<T>` and reflective builder honor all eight legal .NET enum underlying types. The established C route `cna_reflective_type_reader_builder_add_enum_field` has no C++ enum type from which to infer that width and explicitly declares an `int32_t` field, so a C-authored reflective reader cannot currently describe a Byte-, SByte-, Int16-, UInt16-, UInt32-, Int64- or UInt64-backed enum. It refuses no valid Int32 use and no longer hides a native reader defect; adding a width argument would be a reviewed C ABI addition.",
+      "status": "known limitation",
+      "owner": "content_readers.h"
     }
   ],
   "partial_kinds": {

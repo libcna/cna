@@ -16427,8 +16427,8 @@
         "constructor",
         "method"
       ],
-      "mapping": "Registered by `cna_reflective_type_reader_builder_add_enum_field`, with its name published by `cna_enum_type_reader_get_canonical_name_size` / `_copy_canonical_name`.\n\nIt gets no construction route of its own for the reason the canonical class exists at all: it is never dispatched to. A reflective payload writes an enum **inline** as its `Int32`; this reader exists so the `.xnb`'s type-reader table resolves in full, which it must do before any object is read. Publishing a way to make one by hand would suggest a use it does not have.",
-      "tests": "`ContentSmoke.c` names it in the fixture's reader table using the canonical-name route, and the mutation that stops registering it makes the load fail -- so the reader is proved load-bearing rather than assumed to be.",
+      "mapping": "Registered by `cna_reflective_type_reader_builder_add_enum_field`, with its name published by `cna_enum_type_reader_get_canonical_name_size` / `_copy_canonical_name`.\n\nThe native template reads each enum through its declared 1-, 2-, 4- or 8-byte signed/unsigned underlying type. The existing C builder route deliberately names the narrower shape it can describe: an enum field stored as `int32_t`. It gets no construction route of its own because the C reflective path uses this reader only to make the `.xnb` type-reader table resolve before reading the enum inline. Non-Int32 C enum fields remain an explicit non-symbol limitation in `docs/c-api/LIMITATIONS.md` rather than being silently read at the wrong width.",
+      "tests": "`ContentSmoke.c` names an Int32-backed enum in the fixture's reader table using the canonical-name route, and the mutation that stops registering it makes the load fail -- so the reader is proved load-bearing rather than assumed to be. Native tests separately cover all eight legal underlying width/sign combinations.",
       "status": "implemented",
       "task": "CBIND-105",
       "approved_symbols": [

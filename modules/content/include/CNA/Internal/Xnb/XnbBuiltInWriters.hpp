@@ -460,7 +460,7 @@ namespace CNA::Internal::Xnb
     };
 
     /**
-     * @brief Builds the reader identity of a 32-bit enum: `EnumReader\`1[[<enum>]]`.
+     * @brief Builds an enum reader identity: `EnumReader\`1[[<enum>]]`.
      *
      * The reader is generic over the enum; the enum itself is not, so the identity records that
      * the two do not share an argument list (@ref XnbReaderIdentity::targetSharesGenericArguments).
@@ -476,13 +476,12 @@ namespace CNA::Internal::Xnb
         XnbNameEvidence evidence = XnbNameEvidence::DerivedRule);
 
     /**
-     * @brief Writer for a .NET enum, serialized as its underlying `Int32`
-     *        (`XNAP-98`).
+     * @brief Writer for a .NET enum, serialized using its declared underlying type (`XNAP-98`).
      *
-     * XNA's `EnumReader<T>` reads a single `Int32` and casts, so the writer is its exact inverse.
-     * The enum's .NET name cannot be recovered from the C++ type, so it is supplied at
-     * registration; the C++ type is what the registry is keyed by, which is why a value can never
-     * reach the wrong enum's writer.
+     * XNA's `EnumReader<T>` resolves the primitive reader for `T`'s underlying type, so the writer
+     * emits that exact signed width. The enum's .NET name cannot be recovered from the C++ type,
+     * so it is supplied at registration; the C++ type is what the registry is keyed by, which is
+     * why a value can never reach the wrong enum's writer.
      *
      * @tparam TEnum The C++ enumeration type.
      */
@@ -490,9 +489,9 @@ namespace CNA::Internal::Xnb
     class XnbEnumTypeWriter final : public XnbTypeWriter<TEnum>
     {
         static_assert(std::is_enum_v<TEnum>, "XnbEnumTypeWriter serializes an enumeration.");
-        static_assert(sizeof(std::underlying_type_t<TEnum>) <= sizeof(std::int32_t),
-                      "XNA's EnumReader<T> stores an enum as a 32-bit Int32; a wider underlying "
-                      "type cannot round-trip through it.");
+        using Underlying = std::underlying_type_t<TEnum>;
+        static_assert(std::is_integral_v<Underlying> && !std::is_same_v<Underlying, bool>,
+                      "A .NET enum must use an integral, non-Boolean underlying type.");
 
     public:
         /**
@@ -517,15 +516,44 @@ namespace CNA::Internal::Xnb
 
     protected:
         /**
-         * @brief Writes the enum's underlying value as an `Int32`.
+         * @brief Writes the enum's underlying integral value with its declared width and sign.
          *
          * @param output Per-file object-graph writer.
          * @param value The enumeration value to serialize.
          */
         void Write(XnbWriter& output, const TEnum& value) const override
         {
-            output.WriteInt32(static_cast<std::int32_t>(
-                static_cast<std::underlying_type_t<TEnum>>(value)));
+            const Underlying underlying = static_cast<Underlying>(value);
+            if constexpr (sizeof(Underlying) == 1)
+            {
+                if constexpr (std::is_signed_v<Underlying>)
+                    output.WriteSByte(static_cast<std::int8_t>(underlying));
+                else
+                    output.WriteByte(static_cast<std::uint8_t>(underlying));
+            }
+            else if constexpr (sizeof(Underlying) == 2)
+            {
+                if constexpr (std::is_signed_v<Underlying>)
+                    output.WriteInt16(static_cast<std::int16_t>(underlying));
+                else
+                    output.WriteUInt16(static_cast<std::uint16_t>(underlying));
+            }
+            else if constexpr (sizeof(Underlying) == 4)
+            {
+                if constexpr (std::is_signed_v<Underlying>)
+                    output.WriteInt32(static_cast<std::int32_t>(underlying));
+                else
+                    output.WriteUInt32(static_cast<std::uint32_t>(underlying));
+            }
+            else
+            {
+                static_assert(sizeof(Underlying) == 8,
+                              "A .NET enum underlying type must be 1, 2, 4, or 8 bytes wide.");
+                if constexpr (std::is_signed_v<Underlying>)
+                    output.WriteInt64(static_cast<std::int64_t>(underlying));
+                else
+                    output.WriteUInt64(static_cast<std::uint64_t>(underlying));
+            }
         }
 
     private:
@@ -533,7 +561,7 @@ namespace CNA::Internal::Xnb
     };
 
     /**
-     * @brief Registers a 32-bit enum writer for `TEnum`.
+     * @brief Registers an enum writer for `TEnum` using its declared underlying type.
      *
      * @tparam TEnum The C++ enumeration type.
      * @param registry Mutable registry to configure.

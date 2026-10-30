@@ -278,7 +278,7 @@ namespace Microsoft::Xna::Framework::Content
     };
 
     /**
-     * @brief Reads an enum written by XNA's `EnumReader<T>`, which stores it as an `Int32`.
+     * @brief Reads an enum written by XNA's `EnumReader<T>` using its declared underlying type.
      *
      * Exists so that a reflectively-read type's enum fields can satisfy the `.xnb`'s type-reader
      * table; the reflective payload itself writes enums inline and never dispatches here.
@@ -288,6 +288,49 @@ namespace Microsoft::Xna::Framework::Content
     template <typename TEnum>
     class CNAEXT EnumTypeReader : public ContentTypeReader<TEnum>
     {
+    private:
+        template <typename>
+        friend class ReflectiveTypeReaderBuilder;
+
+        [[nodiscard]] static TEnum ReadUnderlyingValue(ContentReader& input)
+        {
+            static_assert(std::is_enum_v<TEnum>, "An enum value requires an enum type.");
+            using Underlying = std::underlying_type_t<TEnum>;
+            static_assert(std::is_integral_v<Underlying> && !std::is_same_v<Underlying, bool>,
+                          "A .NET enum must use an integral, non-Boolean underlying type.");
+
+            if constexpr (sizeof(Underlying) == 1)
+            {
+                if constexpr (std::is_signed_v<Underlying>)
+                    return static_cast<TEnum>(static_cast<Underlying>(input.ReadSByte()));
+                else
+                    return static_cast<TEnum>(static_cast<Underlying>(input.ReadByte()));
+            }
+            else if constexpr (sizeof(Underlying) == 2)
+            {
+                if constexpr (std::is_signed_v<Underlying>)
+                    return static_cast<TEnum>(static_cast<Underlying>(input.ReadInt16()));
+                else
+                    return static_cast<TEnum>(static_cast<Underlying>(input.ReadUInt16()));
+            }
+            else if constexpr (sizeof(Underlying) == 4)
+            {
+                if constexpr (std::is_signed_v<Underlying>)
+                    return static_cast<TEnum>(static_cast<Underlying>(input.ReadInt32()));
+                else
+                    return static_cast<TEnum>(static_cast<Underlying>(input.ReadUInt32()));
+            }
+            else
+            {
+                static_assert(sizeof(Underlying) == 8,
+                              "A .NET enum underlying type must be 1, 2, 4, or 8 bytes wide.");
+                if constexpr (std::is_signed_v<Underlying>)
+                    return static_cast<TEnum>(static_cast<Underlying>(input.ReadInt64()));
+                else
+                    return static_cast<TEnum>(static_cast<Underlying>(input.ReadUInt64()));
+            }
+        }
+
     public:
         /**
          * @brief Constructs the reader.
@@ -310,13 +353,13 @@ namespace Microsoft::Xna::Framework::Content
 
     protected:
         /**
-         * @brief Reads the enum's underlying `Int32`.
+         * @brief Reads the enum's underlying integral value.
          * @param input The reader.
          * @return The enum value.
          */
         TEnum Read(ContentReader& input, std::optional<TEnum>) override
         {
-            return static_cast<TEnum>(input.ReadInt32());
+            return ReadUnderlyingValue(input);
         }
     };
 
@@ -438,7 +481,7 @@ namespace Microsoft::Xna::Framework::Content
         {
             static_assert(std::is_enum_v<TEnum>, "EnumField requires an enum member.");
             fields_.push_back([member](T& target, ContentReader& input) {
-                target.*member = static_cast<TEnum>(input.ReadInt32());
+                target.*member = EnumTypeReader<TEnum>::ReadUnderlyingValue(input);
             });
             // The canonical name is computed BEFORE the lambda is built. Passing both as
             // arguments to emplace_back would leave their evaluation order unspecified, and the

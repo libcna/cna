@@ -54,6 +54,29 @@ namespace
         Point FrameSize;
     };
 
+    enum class ByteMood : std::uint8_t
+    {
+        Alert = 0xA5
+    };
+
+    enum class ShortMood : std::int16_t
+    {
+        Restless = -1234
+    };
+
+    enum class LongMood : std::int64_t
+    {
+        Dreaming = INT64_C(0x0102030405060708)
+    };
+
+    struct EnumWidthSettings
+    {
+        ByteMood ByteValue = ByteMood::Alert;
+        ShortMood ShortValue = ShortMood::Restless;
+        LongMood LongValue = LongMood::Dreaming;
+        std::uint32_t Sentinel = 0;
+    };
+
     void WriteBytes(const std::filesystem::path& path, const std::vector<std::uint8_t>& bytes)
     {
         std::ofstream f(path, std::ios::binary);
@@ -141,6 +164,59 @@ namespace
         return std::vector<std::uint8_t>(fileBytes.begin(), fileBytes.end());
     }
 
+    std::vector<std::uint8_t> BuildEnumWidthsXnb()
+    {
+        System::IO::MemoryStream body;
+        System::IO::BinaryWriter writer(&body, true);
+
+        const auto writeReader = [&writer](const std::string& name) {
+            writer.Write(name);
+            writer.Write(static_cast<std::int32_t>(0));
+        };
+
+        writer.Write7BitEncodedInt(8);
+        writeReader("Microsoft.Xna.Framework.Content.ReflectiveReader`1"
+                    "[[Bestiary.EnumWidthSettings, Bestiary, Version=1.0.0.0, "
+                    "Culture=neutral, PublicKeyToken=null]]");
+        writeReader("Microsoft.Xna.Framework.Content.EnumReader`1"
+                    "[[Bestiary.ByteMood, Bestiary, Version=1.0.0.0, "
+                    "Culture=neutral, PublicKeyToken=null]]");
+        writeReader("Microsoft.Xna.Framework.Content.EnumReader`1"
+                    "[[Bestiary.ShortMood, Bestiary, Version=1.0.0.0, "
+                    "Culture=neutral, PublicKeyToken=null]]");
+        writeReader("Microsoft.Xna.Framework.Content.EnumReader`1"
+                    "[[Bestiary.LongMood, Bestiary, Version=1.0.0.0, "
+                    "Culture=neutral, PublicKeyToken=null]]");
+        writeReader("Microsoft.Xna.Framework.Content.ByteReader");
+        writeReader("Microsoft.Xna.Framework.Content.Int16Reader");
+        writeReader("Microsoft.Xna.Framework.Content.Int64Reader");
+        writeReader("Microsoft.Xna.Framework.Content.UInt32Reader");
+
+        writer.Write7BitEncodedInt(0);
+        writer.Write7BitEncodedInt(1);
+        writer.Write(static_cast<std::uint8_t>(ByteMood::Alert));
+        writer.Write(static_cast<std::int16_t>(ShortMood::Restless));
+        writer.Write(static_cast<std::int64_t>(LongMood::Dreaming));
+        writer.Write(UINT32_C(0xD4C3B2A1));
+        writer.Flush();
+        const auto bodyBytes = body.ToArray();
+
+        System::IO::MemoryStream file;
+        System::IO::BinaryWriter fileWriter(&file, true);
+        fileWriter.Write(static_cast<std::uint8_t>('X'));
+        fileWriter.Write(static_cast<std::uint8_t>('N'));
+        fileWriter.Write(static_cast<std::uint8_t>('B'));
+        fileWriter.Write(static_cast<std::uint8_t>('w'));
+        fileWriter.Write(static_cast<std::uint8_t>(5));
+        fileWriter.Write(static_cast<std::uint8_t>(0));
+        fileWriter.Write(static_cast<std::int32_t>(10 + bodyBytes.size()));
+        fileWriter.Write(bodyBytes.data(), 0, static_cast<std::int32_t>(bodyBytes.size()));
+        fileWriter.Flush();
+
+        const auto fileBytes = file.ToArray();
+        return std::vector<std::uint8_t>(fileBytes.begin(), fileBytes.end());
+    }
+
     void DescribeCreature()
     {
         ReflectiveTypeReaderBuilder<CreatureSettings>("Bestiary.CreatureSettings")
@@ -150,6 +226,16 @@ namespace
             .EnumField(&CreatureSettings::Temper, "Bestiary.Mood")
             .Field(&CreatureSettings::Home)
             .Field(&CreatureSettings::FrameSize)
+            .Register();
+    }
+
+    void DescribeEnumWidths()
+    {
+        ReflectiveTypeReaderBuilder<EnumWidthSettings>("Bestiary.EnumWidthSettings")
+            .EnumField(&EnumWidthSettings::ByteValue, "Bestiary.ByteMood")
+            .EnumField(&EnumWidthSettings::ShortValue, "Bestiary.ShortMood")
+            .EnumField(&EnumWidthSettings::LongValue, "Bestiary.LongMood")
+            .Field(&EnumWidthSettings::Sentinel)
             .Register();
     }
 
@@ -177,6 +263,15 @@ namespace
                     "Bestiary.CreatureSettings"));
             ContentTypeReaderManager::RemoveTypeCreatorEXT(
                 "Microsoft.Xna.Framework.Content.EnumReader`1[[Bestiary.Mood]]");
+            ContentTypeReaderManager::RemoveTypeCreatorEXT(
+                ReflectiveTypeReader<EnumWidthSettings>::CanonicalReaderName(
+                    "Bestiary.EnumWidthSettings"));
+            ContentTypeReaderManager::RemoveTypeCreatorEXT(
+                "Microsoft.Xna.Framework.Content.EnumReader`1[[Bestiary.ByteMood]]");
+            ContentTypeReaderManager::RemoveTypeCreatorEXT(
+                "Microsoft.Xna.Framework.Content.EnumReader`1[[Bestiary.ShortMood]]");
+            ContentTypeReaderManager::RemoveTypeCreatorEXT(
+                "Microsoft.Xna.Framework.Content.EnumReader`1[[Bestiary.LongMood]]");
         }
     };
 
@@ -195,12 +290,31 @@ namespace
         EXPECT_EQ(6, loaded.Legs);
         EXPECT_EQ("Spindle", loaded.Name) << "a reference-type field carries its reader index";
         EXPECT_FLOAT_EQ(3.5f, loaded.Speed);
-        EXPECT_EQ(Mood::Furious, loaded.Temper) << "an enum is written inline as an Int32";
+        EXPECT_EQ(Mood::Furious, loaded.Temper)
+            << "this enum declares Int32 and is written inline at that width";
         EXPECT_FLOAT_EQ(-1.5f, loaded.Home.X);
         EXPECT_FLOAT_EQ(9.25f, loaded.Home.Y);
         EXPECT_EQ(192, loaded.FrameSize.X);
         EXPECT_EQ(128, loaded.FrameSize.Y)
             << "Point is an XNA value type and must not consume a reader-dispatch index";
+    }
+
+    TEST_F(ReflectiveTypeReaderTest, EnumFieldsUseTheirDeclaredWidthsWithoutShiftingLaterFields)
+    {
+        DescribeEnumWidths();
+
+        ScratchContentRoot root;
+        WriteBytes(root.path() / "enum-widths.xnb", BuildEnumWidthsXnb());
+
+        ContentManager content;
+        content.setRootDirectoryProperty(root.path().string());
+        const EnumWidthSettings loaded = content.Load<EnumWidthSettings>("enum-widths");
+
+        EXPECT_EQ(loaded.ByteValue, ByteMood::Alert);
+        EXPECT_EQ(loaded.ShortValue, ShortMood::Restless);
+        EXPECT_EQ(loaded.LongValue, LongMood::Dreaming);
+        EXPECT_EQ(loaded.Sentinel, UINT32_C(0xD4C3B2A1))
+            << "the sentinel catches any enum reader that consumed the wrong number of bytes";
     }
 
     // The registration key is the canonical name, with the assembly qualifiers stripped -- which

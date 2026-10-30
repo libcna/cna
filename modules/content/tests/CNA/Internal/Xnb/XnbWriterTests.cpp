@@ -1133,9 +1133,40 @@ namespace
         Active = 1,
         Failed = -7,
     };
+
+    enum class ByteQuestState : std::uint8_t { Value = UINT8_C(0xA5) };
+    enum class SByteQuestState : std::int8_t { Value = INT8_C(-101) };
+    enum class Int16QuestState : std::int16_t { Value = INT16_C(-12345) };
+    enum class UInt16QuestState : std::uint16_t { Value = UINT16_C(0xBEEF) };
+    enum class UInt32QuestState : std::uint32_t { Value = UINT32_C(0xFEDCBA98) };
+    enum class Int64QuestState : std::int64_t { Value = INT64_C(-0x0102030405060708) };
+    enum class UInt64QuestState : std::uint64_t { Value = UINT64_C(0xFEDCBA9876543210) };
+
+    template <typename TEnum>
+    void ExpectEnumUnderlyingTypeRoundTrip(
+        const TEnum value, const std::string& targetTypeName)
+    {
+        using Microsoft::Xna::Framework::Content::EnumTypeReader;
+
+        XnbTypeWriterRegistry registry;
+        RegisterBuiltInXnbWriters(registry);
+        RegisterXnbEnumWriter<TEnum>(registry, targetTypeName, XnbAssembly::None);
+
+        ContentTypeReaderManager::AddTypeCreator(
+            EnumTypeReader<TEnum>::CanonicalReaderName(targetTypeName),
+            [targetTypeName] { return std::make_unique<EnumTypeReader<TEnum>>(targetTypeName); });
+
+        const std::vector<std::uint8_t> written =
+            WriteXnbAsset(value, {}, "enum-width", registry);
+        LoadedXnb loaded(written);
+        EXPECT_EQ(loaded.ReadAsset<TEnum>(), value);
+        EXPECT_EQ(loaded.Reader().getBaseStreamProperty()->getPositionProperty(),
+                  loaded.Reader().getBaseStreamProperty()->getLengthProperty())
+            << targetTypeName << " left bytes behind, so its writer used the wrong width";
+    }
 }
 
-TEST_F(XnbWriterTest, AnEnumIsWrittenAsAnInt32AndReadBackByTheEnumReaderTheTableNames)
+TEST_F(XnbWriterTest, AnInt32EnumIsReadBackByTheEnumReaderTheTableNames)
 {
     using Microsoft::Xna::Framework::Content::EnumTypeReader;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
@@ -1156,7 +1187,7 @@ TEST_F(XnbWriterTest, AnEnumIsWrittenAsAnInt32AndReadBackByTheEnumReaderTheTable
     const std::vector<std::uint8_t> written =
         WriteXnbAsset(SurfaceFormat::Dxt5, {}, "format", registry);
 
-    // Four payload bytes: XNA's EnumReader<T> stores the underlying Int32 and nothing else.
+    // SurfaceFormat declares Int32 as its underlying type, so this payload uses four bytes.
     const std::string text(written.begin(), written.end());
     EXPECT_NE(text.find("Microsoft.Xna.Framework.Content.EnumReader`1"
                         "[[Microsoft.Xna.Framework.Graphics.SurfaceFormat, "
@@ -1165,6 +1196,18 @@ TEST_F(XnbWriterTest, AnEnumIsWrittenAsAnInt32AndReadBackByTheEnumReaderTheTable
         << "the enum reader has to reach the type table with its argument assembly-qualified";
 
     EXPECT_EQ(LoadedXnb(written).ReadAsset<SurfaceFormat>(), SurfaceFormat::Dxt5);
+}
+
+TEST_F(XnbWriterTest, EnumWritersPreserveEveryLegalUnderlyingWidthAndSignedness)
+{
+    ExpectEnumUnderlyingTypeRoundTrip(ByteQuestState::Value, "ExampleGame.ByteQuestState");
+    ExpectEnumUnderlyingTypeRoundTrip(SByteQuestState::Value, "ExampleGame.SByteQuestState");
+    ExpectEnumUnderlyingTypeRoundTrip(Int16QuestState::Value, "ExampleGame.Int16QuestState");
+    ExpectEnumUnderlyingTypeRoundTrip(UInt16QuestState::Value, "ExampleGame.UInt16QuestState");
+    ExpectEnumUnderlyingTypeRoundTrip(QuestState::Failed, "ExampleGame.Int32QuestState");
+    ExpectEnumUnderlyingTypeRoundTrip(UInt32QuestState::Value, "ExampleGame.UInt32QuestState");
+    ExpectEnumUnderlyingTypeRoundTrip(Int64QuestState::Value, "ExampleGame.Int64QuestState");
+    ExpectEnumUnderlyingTypeRoundTrip(UInt64QuestState::Value, "ExampleGame.UInt64QuestState");
 }
 
 TEST_F(XnbWriterTest, AGameEnumRoundTripsIncludingANegativeValue)
