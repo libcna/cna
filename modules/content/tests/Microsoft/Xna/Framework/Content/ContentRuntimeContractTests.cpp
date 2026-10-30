@@ -219,6 +219,19 @@ namespace
         explicit BaseStreamManager(const std::string& root) : ContentManager(nullptr, root) {}
     };
 
+    /// Records dispatch through XNA's public virtual Unload seam.
+    class UnloadProbeContentManager final : public ContentManager
+    {
+    public:
+        int unloadCalls = 0;
+
+        void Unload() override
+        {
+            ++unloadCalls;
+            ContentManager::Unload();
+        }
+    };
+
     class ContentRuntimeContractTest : public ::testing::Test
     {
     protected:
@@ -283,6 +296,16 @@ TEST_F(ContentRuntimeContractTest, DisposalThroughTheDisposableInterfaceReachesT
     asDisposable.Dispose();
     EXPECT_EQ(manager.disposeHookCalls, 1);
     EXPECT_TRUE(manager.lastDisposing);
+}
+
+TEST_F(ContentRuntimeContractTest, UnloadDispatchesThroughTheDocumentedVirtualSeam)
+{
+    UnloadProbeContentManager manager;
+    ContentManager& asContentManager = manager;
+
+    asContentManager.Unload();
+
+    EXPECT_EQ(manager.unloadCalls, 1);
 }
 
 TEST_F(ContentRuntimeContractTest, ADisposedManagerRefusesToReadAnAsset)

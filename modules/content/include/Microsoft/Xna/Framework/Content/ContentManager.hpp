@@ -355,7 +355,7 @@ namespace Microsoft::Xna::Framework::Content
          * still cleared, so a later unload does not retry those objects.
          * @throws System::ObjectDisposedException if this manager has been disposed.
          */
-        void Unload();
+        virtual void Unload();
 
         /**
          * @brief CNAEXT: (re)scans the content root and rebuilds the content manifest
