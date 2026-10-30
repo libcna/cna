@@ -190,9 +190,10 @@ not let an issue disappear from §5 or §8.
 Ready to pick up next, when the owner asks: the near-future tasks of §8, starting with `XNB-61b`
 (§8.1).
 
-Repository state last reconciled: **2026-10-29** (`next`, `225e88b09`), when the last plans were
-retired and §5 and §8 brought up to date. The campaign accounting above dates from 2026-10-24
-(`96577db26`), and the test runs in §0 and §2 carry their own dates. The last full test run is the
+Repository state last reconciled: **2026-10-30** (`next`, VSIDE-001..006), when the native Windows
+IDE, preset, runtime-deployment and automatic-CI baseline was added and §5 brought up to date. The
+last plans were retired on 2026-10-29 (`225e88b09`). The campaign accounting above dates from
+2026-10-24 (`96577db26`), and the test runs in §0 and §2 carry their own dates. The last full test run is the
 checkpoint identified above; do not upgrade later focused evidence into a full claim.
 
 ## 1. Project summary
@@ -237,7 +238,7 @@ browser are all reached through SDL3's drivers), `HEADLESS`, or POSIX-only `TERM
 | Target | What is actually verified |
 |---|---|
 | Linux x86_64 | Everything; this is where the suites run. |
-| Windows | MinGW-w64 cross builds run under Wine: `DIRECTX9` through DXVK, `SDL_GPU`'s Direct3D 12 backend through vkd3d-proton, `SOFTWARE`; the manual MSVC workflow builds and runs the `DIRECTX9` suite and, since RRC-051, an `SDL_GPU` Direct3D 12 smoke leg (`scripts/ci/run-sdlgpu-smoke.sh`; not run yet, the workflow is manual). No real-Windows hardware validation is current (§5.2). |
+| Windows | MinGW-w64 cross builds run under Wine: `DIRECTX9` through DXVK, `SDL_GPU`'s Direct3D 12 backend through vkd3d-proton, `SOFTWARE`. `windows-msvc-ci.yml` now automatically builds and tests an SDL-free native-MSVC contract and an SDL_GPU Direct3D 12 smoke set; it was added on 2026-10-30 and no successful run is recorded yet. The deeper `DIRECTX9` workflow remains manual. No real-Windows hardware validation is current (§5.2). |
 | Web (Emscripten) | `WEBGL2` and `WEBGPU` builds run in Chrome (`docs/web-emscripten-graphics-limitations.md`). |
 | Android | `OPENGLES3`, the default there, on an x86_64 emulator; `SDL_GPU` on Android is not qualified (`docs/android-graphics-limitations.md`). |
 | macOS / iOS | macOS CI builds CNA with `SOFTWARE` and runs the portable platform suites and a bundle smoke app, and (gating, since RRC-051, not run yet) builds `SDL_GPU` and runs its smoke set on SDL's Metal backend; iOS is a `SOFTWARE` simulator smoke app, with non-gating `SDL_GPU` legs. `SDL_GPU` is the default on both but is not re-qualified there (§5.2, `docs/apple-platforms.md`). |
@@ -436,8 +437,10 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   RADV, 2026-10-25.
 - Online sessions and invitations are native-only; a browser build refuses them explicitly
   (`docs/browser-network-readiness.md`, `docs/gamer-services-known-limitations.md` §26).
-- `DIRECTX9` is validated under Wine (+DXVK) only, and `SDL_GPU`'s Direct3D 12 backend under Wine
-  (+vkd3d-proton) only; real-Windows hardware validation is not current. The C API's pure-C suites
+- `DIRECTX9` is validated under Wine (+DXVK) only. `SDL_GPU`'s Direct3D 12 backend is validated
+  under Wine (+vkd3d-proton); an automatic hosted native-MSVC smoke workflow was added on
+  2026-10-30, but no successful run is recorded yet and hosted smoke is not real-hardware
+  qualification. The C API's pure-C suites
   run under Wine from the MinGW-w64 build; `MediaLibrarySmoke` reports a skip on Windows, whose
   known folders cannot be pointed at its fixture. The MinGW-w64 test binaries also skip on
   Windows what it cannot provide: a Python interpreter where none can be started, `/dev/full`,
@@ -455,8 +458,10 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 - **`SDL_GPU` is the default renderer on Windows, macOS and iOS but is not qualified there** since
   the 2026-10-13 retirement of `DIRECTX11` and `METAL` (`docs/removed-renderers.md`). Evidence that
   exists: the full tree passed with `SDL_GPU` (Metal backend) on a Mac mini M4 in the AM4 campaign,
-  before the retirement; Direct3D 12 runs under Wine. Not done: a native Windows (Direct3D 12) run,
-  a re-run on Apple hardware, and any iOS build (`SDL_GPU` has never been built for iOS; CI tries it
+  before the retirement; Direct3D 12 runs under Wine. The automatic hosted native-MSVC Direct3D 12
+  smoke gate was added on 2026-10-30, but its first successful run is still pending. Not done:
+  native Windows hardware qualification, a re-run on Apple hardware, and any iOS build (`SDL_GPU`
+  has never been built for iOS; CI tries it
   as a non-gating leg). Known gaps against the retired native backends, each to be implemented or
   capability-gated in that campaign: `ShaderEffect` (`CustomEffects`) is compiled out on Windows,
   Apple and the browser because no runtime GLSL-to-SPIR-V-to-DXIL/MSL path exists; occlusion queries

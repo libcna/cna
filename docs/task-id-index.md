@@ -1,11 +1,12 @@
 # Task ID index
 
 Comments, commit messages and documents across CNA cite task IDs such as `XNASWEEP-231`,
-`GSC-0007` or `RRC-009`. Each came from an implementation plan under `plans/`. Every plan was
+`GSC-0007` or `RRC-009`. Most came from an implementation plan under `plans/`. Every plan was
 finished or retired and deleted, the last on 2026-10-29, and the directory went with them; the
 plans themselves are in Git history (`git log --diff-filter=D -- 'plans/*'` lists them,
-`git show <commit>^:plans/<file>` prints one). This table says, for each prefix, which plan it
-belonged to, what that work was, and where whatever outlived it now lives.
+`git show <commit>^:plans/<file>` prints one). Later bounded maintenance audits may assign IDs
+directly from their source note. This table says where each prefix originated, what the work was,
+and where whatever outlived it now lives.
 
 Current defects and limitations are [`../handoff.md`](../handoff.md) §5, not here. Where a row
 says *Git history only*, nothing outside the plan survived: the work was retired with what it
@@ -73,6 +74,7 @@ served, or its result is only the code.
 | `TCR-1`..`8` | `plan_terminal_capi_repair.md`, 2026-10-29 | `SOFTWARE` presenting through the terminal, and the C API building again. | [`platform-terminal-analysis.md`](platform-terminal-analysis.md) |
 | `THREEJS-*` | `plan_threejs.md`, 2026-10-11 | A Three.js renderer feasibility study; never a renderer identity. | Git history only |
 | `VKPAR-0001`..`0029` | `plan_vulkan_parity.md`, 2026-10-26 | The Vulkan hardware-parity ledger. Cited "Vulkan parity VKPAR-NNNN". | `TwoSidedStencilTests.cpp`, `StockEffectNullTextureTests.cpp`, `../tools/xna-oracle/README.md` |
+| `VSIDE-001`..`006` | `_misc/cnavs.md` audit, 2026-10-30; no plan | Native Windows Visual Studio/VS Code presets, MSVC/SDL ABI consistency, runtime deployment, automatic CI, IDE target folders and documentation. | [`windows-visual-studio.md`](windows-visual-studio.md), [`installed-cpp-sdk.md`](installed-cpp-sdk.md), `../CMakePresets.json`, `../.github/workflows/windows-msvc-ci.yml` |
 | `WEBGPU-1`..`209` | `plan_webgpu.md`, 2026-10-29 | The WebGPU renderer. | [`webgpu-renderer.md`](webgpu-renderer.md) |
 | `WEBGPUPERF-*`, `WGF-*` | `plan_webgpu_perf.md`, `plan_webgpu_failing_eight.md`, 2026-10-11 | WebGPU's per-draw CPU cost, and eight failing WebGPU ctests (fixed). | Git history only; [`webgpu-renderer.md`](webgpu-renderer.md) for the renderer |
 | `WINPORT-*`, `WINCLOSE-*`, `WINNATIVE-*` | `plan_windows_portability.md`, `plan_windows_portability_closeout.md`, 2026-10-28; `plan_win32_native_validation.md`, 2026-10-11 | The Unicode filesystem path model on native Windows and its closing passes, run on a since-deleted Windows 10 VM. | [`filesystem-path-model.md`](filesystem-path-model.md) |

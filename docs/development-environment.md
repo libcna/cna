@@ -207,6 +207,8 @@ sudo apt-get install -y mesa-utils vulkan-tools vulkan-validationlayers apitrace
 - Android uses the Android NDK: [`devices-build.md`](devices-build.md),
   [`android-graphics-limitations.md`](android-graphics-limitations.md).
 - macOS and iOS: [`apple-platforms.md`](apple-platforms.md).
+- Native Windows development with Visual Studio, VS Code or the MSVC command line:
+  [`windows-visual-studio.md`](windows-visual-studio.md).
 - A windowless SDL-free build (`-DCNA_ENABLE_SDL=OFF`, with the `HEADLESS`, `SOFTWARE` or `STUB`
   renderer and `NULL` or `ALSA` audio) needs none of the SDL3 packages:
   [`platform-abstraction.md`](platform-abstraction.md).

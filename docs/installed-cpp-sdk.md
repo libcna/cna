@@ -51,6 +51,7 @@ add_executable(MyGame main.cpp)
 target_link_libraries(MyGame PRIVATE
     CNA::Core CNA::Math CNA::Input CNA::GraphicsCore
     CNA::Content CNA::Runtime CNA::Audio)
+cna_deploy_runtime(MyGame)
 ```
 
 Configure the consumer with `-DCMAKE_PREFIX_PATH=/path/to/moved-sdk`. No CNA source
@@ -58,6 +59,13 @@ directory, manually assembled include paths or `add_subdirectory` fallback is
 needed. `SharpRuntime::` component targets come from the installed Sharp Runtime
 package. `CNA::CNA` (and the existing `CNA` spelling) is the umbrella. Targets named
 `Internal_*` or `Dependency*` are implementation details, not stable public modules.
+
+`cna_deploy_runtime()` adds the post-build copies required by the configured package: selected
+SDL3/SDL3_mixer DLLs, renderer-owned runtime payloads such as wgpu-native, and dynamic MinGW
+runtime DLLs where applicable. It is harmless when the selected configuration has no runtime
+payload, and repeated calls for the same executable are ignored. This is the supported deployment
+route for both source-tree and installed-SDK consumers; do not duplicate renderer-specific copy
+rules in applications.
 
 With `CNA_SHARED_LIBRARY=ON`, use CMake 3.30 or newer. The exported umbrella/module
 combination retains the source build's single-runtime link-order contract. A Math-only
@@ -77,7 +85,7 @@ configuration error.
 
 The existing `CNAConfigVersion.cmake` version remains the **C ABI version**
 (currently 0.50.0, SameMajorVersion); it is not silently replaced with the C++
-runtime's 0.1.0. Thus existing `find_package(CNA 0.1 CONFIG)` consumers keep their
+runtime's product version. Thus existing `find_package(CNA 0.1 CONFIG)` consumers keep their
 contract. `CNA_RUNTIME_VERSION` exposes the separate runtime version after loading
 the C++ SDK. C++ consumers still require a compatible compiler, standard library,
 architecture and build configuration; the C ABI version is not a promise of C++

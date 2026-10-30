@@ -35,6 +35,8 @@ For binary C++ consumers, opt in to `CNA_INSTALL_CXX=ON` and install the configu
 SDK; it exports `CNA::` and `SharpRuntime::` modules for `find_package(CNA CONFIG)`.
 See [the installed SDK guide](docs/installed-cpp-sdk.md) for prerequisites, install
 components, relocation, version semantics and tested platform coverage.
+Native Windows developers should start with the shared Visual Studio/VS Code preset guide:
+[`docs/windows-visual-studio.md`](docs/windows-visual-studio.md).
 
 > **Looking for a specific doc?** See [`docs/README.md`](docs/README.md) for an index of what's
 > current vs. historical. **Current state, known bugs and limitations:** [`handoff.md`](handoff.md) (§5 is
@@ -58,7 +60,7 @@ components, relocation, version semantics and tested platform coverage.
 - **`WEBGPU` renderer:** Supported renderer (`GraphicsRendererMaturity::Supported`, the class `SDL_GPU` is in) using native `wgpu-native` (v29.0.1.1) and, since 2026-08-26, Emscripten's emdawnwebgpu port for a real in-browser path. Well past a 2D baseline: device/surface setup, clear/present, `Texture2D`/`TextureCube`/`Texture3D`, vertex/index uploads, a pixel-verified WGSL `SpriteBatch`, full 3D with every stock effect (`BasicEffect` incl. per-pixel/per-vertex lighting, `AlphaTestEffect`, `DualTextureEffect`, `SkinnedEffect` 72-bone palette, `EnvironmentMapEffect` — all with FNA fog parity, `WEBGPU-145`–`148`; plus `PbrEffect`/`SkinnedPbrEffect`), real instancing, `RenderTarget2D`/`RenderTargetCube`, MSAA, GPU occlusion queries, MRT (2-4 targets), custom WGSL `ShaderEffect`s (3D and `SpriteBatch`), full stencil state, and GPU-native block-compressed textures (DXT/BC7). The one open item is `WEBGPU-1`, verification of the Windows, macOS and linux-aarch64 wgpu-native packages — see [`docs/webgpu-renderer.md`](docs/webgpu-renderer.md).
 - **`DIRECTX9` renderer:** Windows-only native Direct3D 9 renderer targeting real **XNA 4.0 pixel authenticity**, not just feature parity — it runs Microsoft's own vendored Stock Effects HLSL bytecode, cross-compiled via MinGW-w64 and verified through Wine+DXVK on a real GPU. A checked-in 31-scene oracle corpus diffs CNA's render against the **real XNA 4.0 runtime's own render** of the same scene at `--tolerance 0`: **0/31 scenes currently diverge.** `GraphicsProfile.Reach`/`.HiDef` enforcement is real (the only CNA renderer where it is). Validation on real Windows hardware is still open. See [`docs/directx9-renderer.md`](docs/directx9-renderer.md), and [`docs/d3d9-divergence-report.md`](docs/d3d9-divergence-report.md).
 - **Verification methodology:** differential testing against a real, running `FNA.dll` reference implementation (`tools/fna-reference/`), disputed behavior settled against genuine XNA 4.0 on a Windows 7 VM, and a compile-time `CNAEXT` purity check (a dedicated CMake build option that turns every non-XNA-tagged declaration into a `[[deprecated]]` warning under `-Werror`) — see `CHECKLIST.md`'s "CNAEXT markers" section and `CMakeLists.txt`.
-- **Automatic CI is partial** (see `.github/workflows/`): `general-tests-ci.yml` runs the full unfiltered suite on Linux for one renderer (`OPENGLES3`) under Xvfb and fails if the run left the checkout dirty; other Linux workflows cover narrower subsystems. There is no automatic full GPU pixel matrix across renderers. The Apple workflow builds macOS with `SOFTWARE` and runs the portable platform suites plus a bundle smoke app; a separate manual-dispatch Windows MSVC workflow builds and runs the `DIRECTX9` CTest suite. There is no automatic Windows or Android gate.
+- **Automatic CI is partial** (see `.github/workflows/`): `general-tests-ci.yml` runs the full unfiltered suite on Linux for one renderer (`OPENGLES3`) under Xvfb and fails if the run left the checkout dirty; other Linux workflows cover narrower subsystems. There is no automatic full GPU pixel matrix across renderers. The Apple workflow builds macOS with `SOFTWARE` and runs the portable platform suites plus a bundle smoke app. `windows-msvc-ci.yml` now defines automatic MSVC headless and SDL_GPU/Direct3D 12 baselines (added 2026-10-30; no successful run recorded from this checkout yet), while `DIRECTX9` remains in a manual focused workflow. There is no automatic Android gate.
 
 ## 2. 🎯 Goals
 
@@ -141,8 +143,9 @@ The XNA-compatible graphics core, renderer backends, custom shaders, `PbrEffect`
   See [`docs/platform-abstraction.md`](docs/platform-abstraction.md).
 - Renderer abstraction supports targeting multiple rendering paths from one API layer.
 - **Windows:** `DIRECTX9` (through DXVK), `SDL_GPU` (its Direct3D 12 backend through vkd3d-proton)
-  and `SOFTWARE` are cross-compiled with MinGW-w64 and verified under Wine; a manual MSVC workflow
-  builds and runs the `DIRECTX9` suite. Validation on real Windows hardware is not current.
+  and `SOFTWARE` are cross-compiled with MinGW-w64 and verified under Wine. An automatic native
+  MSVC workflow now covers an SDL-free compiler contract and the focused SDL_GPU/Direct3D 12 smoke
+  set; the deeper `DIRECTX9` workflow remains manual. Validation on real Windows hardware is not current.
 - **Linux:** `OPENGLES3`/`OPENGL33`, `SDL_GPU` (Vulkan), `WEBGPU`, `FNA3D`, and the CPU/no-GPU
   renderers `SOFTWARE`, `HEADLESS` and `STUB`.
 - **Web (Emscripten) and Android (NDK) targets are implemented and verified**, not just
@@ -354,7 +357,7 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
 
 ### Prerequisites (Windows)
 
-- CMake 3.20+
+- CMake 3.21+ for the checked-in presets (direct non-preset configuration still supports 3.20)
 - One of:
     - **MSVC 2022** (Visual Studio 2022, v17.8+, with C++20/23 support)
     - **clang-cl** (LLVM for Windows, targeting MSVC ABI)
@@ -392,14 +395,16 @@ cmake --build build --target CnaTests
 
 ### Build (Windows — SDL_GPU renderer, vendored SDL)
 
-On Windows `SDL_GPU` is selected automatically when no renderer is named (native Windows
-qualification of it is still open). SDL is built from the vendored submodule — no pre-built SDL
-binaries or `CMAKE_PREFIX_PATH` needed.
+On Windows `SDL_GPU` is selected automatically when no renderer is named. SDL is built from the
+vendored submodule — no pre-built SDL binaries or `CMAKE_PREFIX_PATH` needed. The shared presets
+used by Visual Studio, VS Code and CI are documented in
+[`docs/windows-visual-studio.md`](docs/windows-visual-studio.md).
 
-```bash
+```powershell
 git submodule update --init
-cmake -S . -B build-win -DCNA_GRAPHICS_RENDERER=SDL_GPU
-cmake --build build-win --target CnaTests
+cmake --preset windows-msvc-sdlgpu-debug
+cmake --build --preset windows-msvc-sdlgpu-debug
+ctest --preset windows-msvc-sdlgpu-debug
 ```
 
 ### Build (Linux → Windows cross-compilation with MinGW-w64)
@@ -524,7 +529,7 @@ scripts/check_clean_checkout.sh -- tools/platform/run_gpu_tests_private.sh build
 |----------|----------|---------|--------|
 | Linux x86_64 | GCC 12+ | OPENGLES3, SDL_GPU | ✅ |
 | Linux x86_64 | Clang 15+ | OPENGLES3 | ✅ |
-| Windows x86_64 | MSVC 2022 | DIRECTX9, HEADLESS | covered by the Windows MSVC workflows (`d3d-windows-ci.yml`, `content-pipeline-windows-ci.yml`); not run locally |
+| Windows x86_64 | MSVC 2022 | HEADLESS, SDL_GPU, DIRECTX9 | automatic headless + SDL_GPU preset workflow added 2026-10-30 (first successful run not yet recorded here); focused DIRECTX9 workflow is manual; real-hardware qualification remains open |
 | Linux → Windows (cross) | MinGW-w64 | SDL_GPU, SOFTWARE | ✅ verified building + running under Wine (`SDL_GPU`'s Direct3D 12 backend through vkd3d-proton) |
 | Linux → Windows (cross) | MinGW-w64 | DIRECTX9 | ✅ verified building + `DIRECTX9`-labelled CTest suite under Wine+DXVK on a real GPU — 0/31 oracle scenes diverge from real XNA 4.0 at `--tolerance 0`; real Windows hardware verification still open, see `docs/directx9-renderer.md` |
 | Web (Emscripten) | emcc/Clang (emsdk) | WEBGL2, WEBGPU | ✅ verified building + running in Chrome; limits in `docs/web-emscripten-graphics-limitations.md` |

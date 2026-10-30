@@ -9,6 +9,9 @@ on it) rather than assuming either way.
 
 ## Start here
 
+- **[`windows-visual-studio.md`](windows-visual-studio.md)** — the native Windows Visual Studio,
+  VS Code and command-line workflow: shared presets, explicit MSVC CRT selection, vendored SDL
+  cache rules, runtime deployment and the boundary of the automatic Windows CI evidence.
 - **[`installed-cpp-sdk.md`](installed-cpp-sdk.md)** — opt-in binary C++ SDK, exported
   CNA/Sharp Runtime modules, relocation, C API coexistence and install regression gate.
 - **[`binding.md`](binding.md)** — language bindings: why every language goes through the C ABI,
