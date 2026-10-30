@@ -18,6 +18,8 @@ from typing import Any
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PRESETS_PATH = REPO / "CMakePresets.json"
 WORKFLOW_PATH = REPO / ".github" / "workflows" / "windows-msvc-ci.yml"
+VSCODE_SETTINGS_PATH = REPO / ".vscode" / "settings.json"
+VSCODE_EXTENSIONS_PATH = REPO / ".vscode" / "extensions.json"
 
 WINDOWS_CONFIGURE_PRESETS = {
     "windows-msvc-headless-debug",
@@ -170,6 +172,20 @@ def main() -> int:
                 errors.append(f"Windows MSVC workflow does not consume the shared contract: {command}")
         if "grep -q 'Skipped'" not in workflow:
             errors.append("Windows SDL_GPU workflow must reject CTest skips")
+
+    if not VSCODE_SETTINGS_PATH.exists() or not VSCODE_EXTENSIONS_PATH.exists():
+        errors.append("missing shared VS Code CMake configuration")
+    else:
+        vscode_settings = json.loads(VSCODE_SETTINGS_PATH.read_text(encoding="utf-8"))
+        if vscode_settings.get("cmake.useCMakePresets") != "always":
+            errors.append("VS Code must consume CMakePresets.json")
+        if vscode_settings.get("C_Cpp.default.configurationProvider") != "ms-vscode.cmake-tools":
+            errors.append("VS Code C++ configuration must come from CMake Tools")
+        extensions = json.loads(VSCODE_EXTENSIONS_PATH.read_text(encoding="utf-8"))
+        recommendations = set(extensions.get("recommendations", []))
+        for extension in ("ms-vscode.cmake-tools", "ms-vscode.cpptools"):
+            if extension not in recommendations:
+                errors.append(f"VS Code does not recommend {extension}")
 
     if errors:
         print("Windows IDE preset contract failed:", file=sys.stderr)

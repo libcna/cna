@@ -423,6 +423,11 @@ include(cmake/Tests/LinkFootprint.cmake)
 # every non-Apple target, and on macOS unless CNA_APPLE_BUNDLE_MACOS_EXECUTABLES is on.
 cna_apple_configure_all_bundles()
 
+# Keep Visual Studio's Solution Explorer usable without scattering IDE-only properties through
+# every physical module. This is inert for generators that do not expose target folders.
+include(cmake/IdeFolders.cmake)
+cna_assign_ide_folders("${CNA_SOURCE_DIR}")
+
 # Build policy is attached only after every CNA target exists. This keeps compiler/linker flags
 # target-scoped and excludes vendored projects while still covering tools, tests, and applications.
 cna_apply_build_support_to_cna_targets()

@@ -572,7 +572,7 @@
       "configurePreset": "windows-msvc-headless-debug",
       "filter": {
         "include": {
-          "name": "^(CnaPlatformTests|CnaAudioPlatformTests|CnaPlatformSelection_Retired|CnaAudioPlatformSelection_.*|CnaSdlOffFindsNoSdlPackage|CnaSdlPrebuiltFingerprint|RendererIdentityRegistry|RendererCurationApiDecisions|WindowsIdePresetContract)$"
+          "name": "^(CnaPlatformTests|CnaAudioPlatformTests|CnaPlatformSelection_Retired|CnaAudioPlatformSelection_.*|CnaSdlOffFindsNoSdlPackage|CnaSdlPrebuiltFingerprint|CnaIdeFolderContract|RendererIdentityRegistry|RendererCurationApiDecisions|WindowsIdePresetContract)$"
         }
       },
       "output": {

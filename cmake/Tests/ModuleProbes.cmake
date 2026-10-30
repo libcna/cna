@@ -47,6 +47,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     set_tests_properties(CnaCrossJsonHeaders PROPERTIES
         TIMEOUT 30 LABELS "configuration;cross-build")
 
+    add_test(NAME CnaIdeFolderContract
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_IDE_FOLDER_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/IdeFolders.cmake
+            -DCNA_IDE_FOLDER_PROBE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/IdeFoldersProbe
+            -DCNA_IDE_FOLDER_WORKDIR=${CMAKE_CURRENT_BINARY_DIR}/ide-folders-probe
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/IdeFoldersCase.cmake)
+    set_tests_properties(CnaIdeFolderContract PROPERTIES LABELS "configuration;ide")
+
     add_test(NAME CnaSdlRuntimeDeployment
         COMMAND ${CMAKE_COMMAND}
             -DCNA_SDL_RUNTIME_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/ThirdPartySDL.cmake
