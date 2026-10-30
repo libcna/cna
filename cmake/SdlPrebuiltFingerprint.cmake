@@ -18,7 +18,32 @@ include_guard(GLOBAL)
 
 # Bump when the manifest's format or the meaning of its fields changes, so every existing stamp
 # stops matching.
-set(CNA_SDL_PREBUILT_MANIFEST_SCHEMA "cna-sdl-prebuilt-manifest-v1")
+set(CNA_SDL_PREBUILT_MANIFEST_SCHEMA "cna-sdl-prebuilt-manifest-v2")
+
+# Generator selection is part of a native dependency's ABI-producing inputs just as a toolchain
+# file is for a cross build. Reuse the exact same list for the child configure and its manifest so
+# a generator, platform, toolset, Visual Studio instance or MSVC CRT change cannot silently reuse
+# an install produced by the old selection.
+function(cna_sdl_parent_configure_args out_var)
+    if(CMAKE_GENERATOR STREQUAL "")
+        message(FATAL_ERROR "CNA: cannot configure vendored SDL without a parent CMake generator")
+    endif()
+
+    set(_args -G "${CMAKE_GENERATOR}")
+    if(NOT CMAKE_GENERATOR_PLATFORM STREQUAL "")
+        list(APPEND _args -A "${CMAKE_GENERATOR_PLATFORM}")
+    endif()
+    if(NOT CMAKE_GENERATOR_TOOLSET STREQUAL "")
+        list(APPEND _args -T "${CMAKE_GENERATOR_TOOLSET}")
+    endif()
+    if(NOT CMAKE_GENERATOR_INSTANCE STREQUAL "")
+        list(APPEND _args "-DCMAKE_GENERATOR_INSTANCE=${CMAKE_GENERATOR_INSTANCE}")
+    endif()
+    if(MSVC AND NOT CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "")
+        list(APPEND _args "-DCMAKE_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}")
+    endif()
+    set(${out_var} "${_args}" PARENT_SCOPE)
+endfunction()
 
 # Content hash of a source tree: SHA-256 over the sorted list of (relative path, file SHA-256).
 # A revision string would miss a working tree that was edited or partly updated; the content cannot.
@@ -103,12 +128,11 @@ endfunction()
 #
 # A toolchain file is named in ARGS by its path only, and editing it in place -- another compiler,
 # sysroot or ABI flag -- would leave the manifest as it was (2026-10-26 dependency audit C-09). So
-# its content hash is recorded too, and with it the compiler identity the toolchain resolved to in
-# this configure (id, version, path), which also changes when a toolchain picks its SDK or NDK from
-# outside the file, and the settings the toolchain decided (cna_sdl_toolchain_settings), which also
+# its content hash is recorded too. The resolved compiler identity (id, version, path) is recorded
+# for every build, native or cross, because changing the native compiler or Visual Studio toolset is
+# just as capable of changing the ABI. Toolchain-resolved settings (cna_sdl_toolchain_settings) also
 # change when a file the toolchain includes is edited -- an ABI flag or a sysroot in a shared
-# settings file. Without a toolchain file none of these lines is written, so a native manifest is
-# exactly what it was before.
+# settings file. Without a toolchain file only those toolchain-specific lines are omitted.
 function(cna_sdl_build_manifest out_var)
     cmake_parse_arguments(_M "" "NAME;SOURCE;TOOLCHAIN_FILE;COMPILER" "PATCHES;ARGS;SETTINGS" ${ARGN})
     cna_sdl_source_tree_hash(_source_hash "${_M_SOURCE}")
@@ -126,6 +150,9 @@ function(cna_sdl_build_manifest out_var)
     foreach(_arg IN LISTS _M_ARGS)
         string(APPEND _manifest "arg ${_arg}\n")
     endforeach()
+    if(DEFINED _M_COMPILER AND NOT _M_COMPILER STREQUAL "")
+        string(APPEND _manifest "compiler ${_M_COMPILER}\n")
+    endif()
     if(DEFINED _M_TOOLCHAIN_FILE AND NOT _M_TOOLCHAIN_FILE STREQUAL "")
         if(EXISTS "${_M_TOOLCHAIN_FILE}")
             file(SHA256 "${_M_TOOLCHAIN_FILE}" _toolchain_hash)
@@ -133,9 +160,6 @@ function(cna_sdl_build_manifest out_var)
             set(_toolchain_hash "absent")
         endif()
         string(APPEND _manifest "toolchain-sha256 ${_toolchain_hash}\n")
-        if(DEFINED _M_COMPILER AND NOT _M_COMPILER STREQUAL "")
-            string(APPEND _manifest "toolchain-compiler ${_M_COMPILER}\n")
-        endif()
         foreach(_setting IN LISTS _M_SETTINGS)
             string(APPEND _manifest "toolchain-setting ${_setting}\n")
         endforeach()

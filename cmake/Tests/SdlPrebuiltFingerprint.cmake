@@ -279,15 +279,61 @@ unset(CMAKE_C_COMPILER)
 unset(CMAKE_C_FLAGS_RELEASE_INIT)
 unset(CMAKE_C_FLAGS_INIT)
 
-# 17. Without a toolchain file the manifest has no toolchain lines, so native installs built before
-#     these fields existed stay current.
-cna_sdl_build_manifest(_plain NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_args})
+# 17. Native builds record their compiler too. Before this contract only a non-empty toolchain file
+#     made COMPILER enter the manifest, so changing the compiler selected by a native Ninja/Visual
+#     Studio build could silently reuse an ABI-incompatible install.
 cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_args}
     TOOLCHAIN_FILE "" COMPILER "${_compiler}" SETTINGS "CMAKE_C_FLAGS_INIT=-m64")
-if(NOT _manifest STREQUAL _plain OR _manifest MATCHES "toolchain")
-    message(FATAL_ERROR "SdlPrebuiltFingerprint: a native manifest records a toolchain:\n${_manifest}")
+string(FIND "${_manifest}" "compiler ${_compiler}\n" _compiler_record)
+if(_compiler_record EQUAL -1 OR _manifest MATCHES "toolchain")
+    message(FATAL_ERROR "SdlPrebuiltFingerprint: a native compiler is not recorded cleanly:\n${_manifest}")
 endif()
-message(STATUS "ok: a native manifest is unchanged by the toolchain fields")
+file(WRITE "${_stamp}" "${_manifest}")
+cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}" ARGS ${_args}
+    COMPILER "MSVC 19.42 /fixture/bin/cl.exe")
+_expect_current(FALSE "changing a native compiler forces a rebuild")
+
+# 17b. The helper used by the production child configure carries the full Visual Studio generator
+#      identity and explicit CRT. These arguments are also manifest inputs, so changing either one
+#      invalidates the install through the already-tested argument contract.
+set(_saved_generator "${CMAKE_GENERATOR}")
+set(_saved_generator_platform "${CMAKE_GENERATOR_PLATFORM}")
+set(_saved_generator_toolset "${CMAKE_GENERATOR_TOOLSET}")
+set(_saved_generator_instance "${CMAKE_GENERATOR_INSTANCE}")
+set(_saved_msvc "${MSVC}")
+set(_saved_msvc_runtime "${CMAKE_MSVC_RUNTIME_LIBRARY}")
+set(CMAKE_GENERATOR "Visual Studio 17 2022")
+set(CMAKE_GENERATOR_PLATFORM "x64")
+set(CMAKE_GENERATOR_TOOLSET "v143")
+set(CMAKE_GENERATOR_INSTANCE "C:/VS/2022")
+set(MSVC TRUE)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+cna_sdl_parent_configure_args(_parent_args)
+set(_expected_parent_args
+    -G "Visual Studio 17 2022"
+    -A x64
+    -T v143
+    "-DCMAKE_GENERATOR_INSTANCE=C:/VS/2022"
+    "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL")
+if(NOT _parent_args STREQUAL _expected_parent_args)
+    message(FATAL_ERROR
+        "SdlPrebuiltFingerprint: parent generator arguments differ:\n"
+        "  expected: ${_expected_parent_args}\n  actual:   ${_parent_args}")
+endif()
+cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}"
+    ARGS ${_parent_args} COMPILER "MSVC 19.42 /fixture/bin/cl.exe")
+file(WRITE "${_stamp}" "${_manifest}")
+list(TRANSFORM _parent_args REPLACE "MultiThreadedDLL" "MultiThreaded")
+cna_sdl_build_manifest(_manifest NAME fixture SOURCE "${_src}" PATCHES "${_patch1}"
+    ARGS ${_parent_args} COMPILER "MSVC 19.42 /fixture/bin/cl.exe")
+_expect_current(FALSE "changing the native MSVC runtime forces a rebuild")
+set(CMAKE_GENERATOR "${_saved_generator}")
+set(CMAKE_GENERATOR_PLATFORM "${_saved_generator_platform}")
+set(CMAKE_GENERATOR_TOOLSET "${_saved_generator_toolset}")
+set(CMAKE_GENERATOR_INSTANCE "${_saved_generator_instance}")
+set(MSVC "${_saved_msvc}")
+set(CMAKE_MSVC_RUNTIME_LIBRARY "${_saved_msvc_runtime}")
+message(STATUS "ok: parent generator, platform, toolset, instance and MSVC CRT are propagated")
 
 # 18. Another tree rebuilding the shared install rewrites its stamp; a tree that watches the stamp
 #     re-runs its configure on its next build instead of linking that install unnoticed

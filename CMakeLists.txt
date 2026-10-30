@@ -2,6 +2,15 @@ cmake_minimum_required(VERSION 3.20)
 
 project(CNA VERSION 0.2.0 LANGUAGES CXX)
 
+# Keep CNA, Sharp Runtime and configure-time vendored dependencies on one explicit MSVC CRT.
+# The dynamic CRT is the normal Windows application contract; projects that deliberately need a
+# different runtime can still set CMAKE_MSVC_RUNTIME_LIBRARY before adding CNA.
+if(MSVC AND (NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY
+             OR CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL ""))
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL" CACHE STRING
+        "MSVC runtime library used by CNA and its vendored dependencies")
+endif()
+
 # --- Release identity (docs/releasing.md) --------------------------------------------------
 # project(VERSION) accepts numeric components only, so the Semantic Versioning pre-release
 # identifier lives beside it and is joined back on here. Deliberately a normal variable and not

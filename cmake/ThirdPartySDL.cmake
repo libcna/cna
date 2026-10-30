@@ -479,6 +479,7 @@ function(_cna_ensure_sdl_dep)
         "-DCMAKE_BUILD_TYPE=Release"
         "-DCMAKE_INSTALL_PREFIX=${_prefix}"
     )
+    cna_sdl_parent_configure_args(_generator_args)
     set(_cna_sdl_toolchain "")
     if(CMAKE_TOOLCHAIN_FILE)
         # Apple M4 AM4-105: a relative toolchain path (the documented
@@ -549,12 +550,13 @@ function(_cna_ensure_sdl_dep)
     # content, the compiler it resolved to (CXX: always enabled here, unlike C) and the settings it
     # decided. The compiler launcher is left out on purpose: ccache changes how long a build takes,
     # never what it produces.
-    cna_sdl_toolchain_settings(_toolchain_settings "${_cna_sdl_toolchain}" ${_base_args} ${_A_CMAKE_ARGS})
+    cna_sdl_toolchain_settings(_toolchain_settings "${_cna_sdl_toolchain}"
+        ${_generator_args} ${_base_args} ${_A_CMAKE_ARGS})
     cna_sdl_build_manifest(_manifest
         NAME    "${_A_NAME}"
         SOURCE  "${_A_SOURCE}"
         PATCHES ${_A_PATCHES}
-        ARGS    ${_base_args} ${_A_CMAKE_ARGS}
+        ARGS    ${_generator_args} ${_base_args} ${_A_CMAKE_ARGS}
         TOOLCHAIN_FILE "${_cna_sdl_toolchain}"
         COMPILER "${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} ${CMAKE_CXX_COMPILER}"
         SETTINGS ${_toolchain_settings})
@@ -596,6 +598,7 @@ function(_cna_ensure_sdl_dep)
     message(STATUS "CNA: Configuring ${_A_NAME}...")
     execute_process(
         COMMAND ${CMAKE_COMMAND}
+            ${_generator_args}
             ${_base_args}
             ${_A_CMAKE_ARGS}
             ${_launcher_args}
