@@ -7,7 +7,7 @@ Direct3D 9 Effect binary. This script turns the .fxb files sitting next to it (s
 their provenance) into one `Fna3dStockEffectBlobs.hpp` of `constexpr` byte arrays, so the renderer
 needs no runtime asset path and a test binary is self-contained.
 
-Same shape as the shaders/compile_shaders.py generator the SDL_GPU renderer family uses, except
+Same shape as the shaders/compile_shaders.py generator the SDLGPU renderer family uses, except
 that the inputs here are pre-compiled artefacts rather than sources this repo
 can rebuild -- no D3D9 effect compiler (fxc) exists on any platform CNA builds on.
 

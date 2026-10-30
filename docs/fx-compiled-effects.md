@@ -28,7 +28,7 @@ arithmetic-checked, and every rejection is a specific exception rather than a ge
 
 **Trust boundary.** A coverage-guided fuzz campaign is clean on both FNA3D drivers past the bar
 FX-051 set for it -- over three million executions on OpenGL/GLSL and over two and a
-half million on SDL_GPU/SPIR-V, under AddressSanitizer with asserts fatal, no new crash. Getting
+half million on SDLGPU/SPIR-V, under AddressSanitizer with asserts fatal, no new crash. Getting
 there fixed forty-one distinct ways untrusted bytecode crashed the process.
 
 That is a measured bound, not a proof. Fuzzing cannot establish absence, and the SPIR-V emitter
@@ -195,7 +195,7 @@ rejected by name.
 Publishing a pass's sampler state on `GraphicsDevice.SamplerStates` is only half the job; the other
 half is that the state actually filters the sampled texture. What each backend can express:
 
-| State | FNA3D | SDL_GPU | EasyGL / OpenGL ES 3 | EasyGL / OpenGL 3.3 |
+| State | FNA3D | SDLGPU | EasyGL / OpenGL ES 3 | EasyGL / OpenGL 3.3 |
 |---|---|---|---|---|
 | `Filter` | yes | yes | yes | yes |
 | `AddressU` / `AddressV` | yes | yes | yes | yes |
@@ -223,8 +223,8 @@ carries an explicit level: there the bias is added to that level in the generate
 [`sampler-state-support.md`](sampler-state-support.md)).
 
 `AddressW` is carried through the renderer-neutral contract by
-`IGraphicsRenderer::ApplySamplerAddressW` (FX-026). FNA3D, EasyGL, SDL_GPU and
-WebGPU apply it; SDL_GPU and WebGPU prove it on a volume texture through the shared
+`IGraphicsRenderer::ApplySamplerAddressW` (FX-026). FNA3D, EasyGL, SDLGPU and
+WebGPU apply it; SDLGPU and WebGPU prove it on a volume texture through the shared
 `RunCompiledEffectAddressWContract`. It only matters for volume textures.
 
 A slot no pass has assigned keeps whatever the game selected. The compiled-effect draw routes read
@@ -263,7 +263,7 @@ shared.
 | Renderer | `CompiledEffects` | Build option | Why |
 |---|---|---|---|
 | `FNA3D` | **true** | always on | Owns the MojoShader Effect Framework runtime; passes the full shared contract including the draw matrix |
-| `SDL_GPU` | **true** | `CNA_SDL_GPU_COMPILED_EFFECTS` (off by default) | MojoShader's SDL_GPU adapter; passes the full shared contract, multi-stream, instanced, cube and volume draws included |
+| `SDLGPU` | **true** | `CNA_SDLGPU_COMPILED_EFFECTS` (off by default) | MojoShader's SDL_GPU adapter; passes the full shared contract, multi-stream, instanced, cube and volume draws included |
 | EasyGL family (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (off by default) | MojoShader's OpenGL adapter; passes the full shared contract, including multi-stream and instanced draws |
 | `WEBGPU` | **true** | `CNA_WEBGPU_COMPILED_EFFECTS` (off by default) | CNA's MojoShader SPIR-V binding, translated to WGSL for the browser (WEBGPU-167, WEBGPU-203/204) |
 | `SOFTWARE` | **true** | `CNA_SOFTWARE_COMPILED_EFFECTS` (off by default) | The CPU executor runs the shared public contract (SOFTWARE-162/165) |
@@ -290,8 +290,8 @@ throws by name at draw time.
 
 A refusal also has to say *which kind* of limitation it is, because the two kinds mean different
 things to a port. A **renderer-wide** limitation is one the renderer has through every route.
-HiDef vertex textures are not a universal limitation: FNA3D, EasyGL and SDL_GPU route the public
-`VertexTextures`/`VertexSamplerStates` collections to compiled draws. SDL_GPU captures independent
+HiDef vertex textures are not a universal limitation: FNA3D, EasyGL and SDLGPU route the public
+`VertexTextures`/`VertexSamplerStates` collections to compiled draws. SDLGPU captures independent
 vertex-stage textures and sampler descriptions when a draw is issued, including changes after
 `EffectPass.Apply()`, and retains the sampled resources through deferred submission. Single and
 Vector4 textures have pixel regression coverage. WebGPU also captures vertex bindings and uses
@@ -303,11 +303,11 @@ the renderer supports elsewhere but this draw route cannot preserve; it is a deb
 compiled-effect work, and its refusal must say so rather than imply the renderer cannot do it.
 Neither kind is ever a silent fallback, a substituted texture, an ignored state or an ignored pass.
 §11 lists the refusals a supported backend still makes. Cube and volume sampling are no longer
-among them: FNA3D, SDL_GPU and WebGPU pass the shared cube/volume contract, and EasyGL's GLSL ES
+among them: FNA3D, SDLGPU and WebGPU pass the shared cube/volume contract, and EasyGL's GLSL ES
 profiles accept a volume sampler since FX-143.
 
 Running EasyGL's Shader Model 1-3 sections on the MojoShader SPIR-V route (Apple M4
-AM4-144) found silent wrong-pixel defects shared by every SPIR-V backend, all fixed for `SDL_GPU`
+AM4-144) found silent wrong-pixel defects shared by every SPIR-V backend, all fixed for `SDLGPU`
 and `WEBGPU`: a predicated `TEXKILL` that killed unconditionally
 (libcna/mojoshader `spirv-predicated-texkill`), `vPos` at the pixel centre rather than
 Direct3D 9's integer pixel (`spirv-vpos-pixel-corner`), and `TEXBEM`/
@@ -317,7 +317,7 @@ per sampler MojoShader appends to the uniform block). Three more are the pipelin
 is mirrored because both renderers keep counter-clockwise as the native front face; a colour output
 with no attachment becomes a private variable, which Vulkan's validation layer otherwise reports;
 and on WebGPU, whose viewport cannot leave its attachment, the vertex stage's clip position moves
-by XNA's pixel-centre correction (SDL_GPU moves the viewport, as FNA3D's SDL_GPU driver does).
+by XNA's pixel-centre correction (SDLGPU moves the viewport, as FNA3D's SDLGPU driver does).
 ps_1_4 `BEM` stays refused by name: the SPIR-V profile has no implementation of it.
 
 ### What "passes the shared contract" means
@@ -391,7 +391,7 @@ both absolute failures; `EasyGLCompiledEffectDrawTest.IsDepthTestedOnTheSameScal
 retains the mixed-path ordering proof after the workaround's removal.
 
 This is EasyGL-specific: `FNA3D` runs MojoShader's own OpenGL device end to end, and
-`SDL_GPU` has its own convention.
+`SDLGPU` has its own convention.
 
 ### 10.2 Row order when a compiled effect samples a render target, on EasyGL
 
@@ -418,7 +418,7 @@ source is the target currently being drawn into.
 Found on `BloomSample_4_0`. `RunCompiledEffectSpriteBatchRenderTargetSourceContract` pins it —
 one hop, two hops, and a plain `Texture2D` that must stay untouched.
 
-This is EasyGL-specific: `SDL_GPU` and `FNA3D` store render-target rows the same way
+This is EasyGL-specific: `SDLGPU` and `FNA3D` store render-target rows the same way
 up as an uploaded texture and need no correction on either route.
 
 ### 10.3 Fragment-shader precision on the GL ES profiles
@@ -546,7 +546,7 @@ See [`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) for the full notice
 
 ## 14. Performance baseline (FX-053)
 
-Measured with `cna_compiled_effect_benchmark` on an FNA3D/SDL_GPU (Vulkan, Intel Iris Xe) Debug
+Measured with `cna_compiled_effect_benchmark` on an FNA3D/SDLGPU (Vulkan, Intel Iris Xe) Debug
 build, `SDL_VIDEODRIVER=offscreen`, while a sanitizer build was competing for the same machine —
 so treat the absolutes as pessimistic and compare runs, not numbers.
 

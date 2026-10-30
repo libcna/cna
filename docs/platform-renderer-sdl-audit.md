@@ -15,7 +15,7 @@
 
 | Family | Identities | Verdict | SDL refs (all / in code) | Platform services needed | Presentation calls |
 |---|---|---|---:|---|---|
-| `sdl-gpu` | SDL_GPU | `sdl-native` | 2425 / 2143 | `window`, `display` | — |
+| `sdl-gpu` | SDLGPU | `sdl-native` | 2425 / 2143 | `window`, `display` | — |
 | `fna3d` | FNA3D | `sdl-upstream` | 15 / 11 | `window` | — |
 | `directx9` | DIRECTX9 | `sdl-free` | 0 / 0 | — | — |
 | `easygl` | OPENGL33 OPENGLES3 WEBGL2 | `sdl-free` | 0 / 0 | — | — |

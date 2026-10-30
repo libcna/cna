@@ -159,12 +159,12 @@ namespace
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, true};
-#elif defined(CNA_RENDERER_SDL_GPU)
-    // pre-SDL_GPU PSG-0008: wantHiDefProfile is now true here for the
+#elif defined(CNA_RENDERER_SDLGPU)
+    // pre-SDLGPU PSG-0008: wantHiDefProfile is now true here for the
     // reason WMG-0005 gave for the WebGPU row above -- this fixture reads the back buffer,
     // which SOFTWARE-213 made HiDef-only, so under Reach it threw before its first check and
     // reported as a renderer failure. profile_dead_tests.py named it DEAD-ON-PROFILE.
-    constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
+    constexpr Contract kContract{"SDLGPU", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
                                  Support::Exact, true};
 #elif defined(CNA_RENDERER_DIRECTX9)

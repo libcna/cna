@@ -5,9 +5,9 @@
 include_guard(GLOBAL)
 
 set(CNA_SDL_SHADERCROSS_GIT_REPOSITORY "https://github.com/libsdl-org/SDL_shadercross.git"
-    CACHE STRING "Official SDL_shadercross repository used by the SDL_GPU renderer")
+    CACHE STRING "Official SDL_shadercross repository used by the SDLGPU renderer")
 set(CNA_SDL_SHADERCROSS_GIT_TAG "1ff05bec573988a98ef9e0260b4da44f512b8367"
-    CACHE STRING "Pinned SDL_shadercross revision used by the SDL_GPU renderer")
+    CACHE STRING "Pinned SDL_shadercross revision used by the SDLGPU renderer")
 set(CNA_SPIRV_CROSS_GIT_REPOSITORY "https://github.com/KhronosGroup/SPIRV-Cross.git"
     CACHE STRING "SPIRV-Cross repository used by SDL_shadercross")
 set(CNA_SPIRV_CROSS_GIT_TAG "vulkan-sdk-1.4.350.0"

@@ -35,9 +35,9 @@
 //
 // 1. Every MOJOSHADER_gl* function relevant to MOJOSHADER_effectShaderContext omits the leading
 //    context-pointer argument the typedefs declare (MojoShader's OpenGL adapter keeps its context
-//    as implicit thread-local state, not an explicit per-call parameter -- unlike SDL_GPU/D3D11),
+//    as implicit thread-local state, not an explicit per-call parameter -- unlike SDLGPU/D3D11),
 //    and MOJOSHADER_glCompileShader additionally has no `mainfn` parameter at all. A direct
-//    function-pointer cast into those slots (this file's first attempt, mirroring the SDL_GPU
+//    function-pointer cast into those slots (this file's first attempt, mirroring the SDLGPU
 //    probe's MakeSdlBackend) silently misaligns every argument -- it reproduced as
 //    MOJOSHADER_parse() failing with "invalid swizzle" on every committed effect, immediately,
 //    regardless of which GLSL/GLSLES/GLSLES3 profile was requested, which is what proved it was a
@@ -211,7 +211,7 @@ namespace
         return reinterpret_cast<void*>(SDL_GL_GetProcAddress(fnname));
     }
 
-    // FX-062 finding: unlike the SDL_GPU/D3D11 adapters, every MOJOSHADER_gl* Effects-
+    // FX-062 finding: unlike the SDL GPU/D3D11 adapters, every MOJOSHADER_gl* Effects-
     // relevant function omits the leading context-pointer argument the MOJOSHADER_effectShaderContext
     // typedefs declare -- MojoShader's OpenGL adapter keeps its context as implicit thread-local
     // state (set via MOJOSHADER_glMakeContextCurrent), not an explicit per-call parameter, and

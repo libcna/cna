@@ -77,7 +77,7 @@ writes **no terminator**, reports the required byte count, and writes nothing at
 capacity is too small.
 
 The renderer name matches the `CNA_GRAPHICS_RENDERER` build option exactly, for example
-`"HEADLESS"` or `"SDL_GPU"`.
+`"HEADLESS"` or `"SDLGPU"`.
 
 ## The `CNAEXT` marker
 

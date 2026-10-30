@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SDLGPU-34: SkinnedEffect proof for the SDL_GPU graphics renderer, and the
+// SDLGPU-34: SkinnedEffect proof for the SDLGPU graphics renderer, and the
 // empirical spike this task itself needed: whether SDL_gpu's push-uniform-data mechanism can
 // carry a full 72-bone (4608-byte) palette. Verified: SDL_PushGPUVertexUniformData follows std140
 // UBO layout conventions (per its own doc comment), not a hardware push-constant register file, so

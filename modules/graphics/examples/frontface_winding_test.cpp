@@ -133,11 +133,11 @@ namespace
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
     constexpr const char* kRendererName = "WEBGPU";
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = false;
     constexpr bool kDraws3D = true;
-    constexpr const char* kRendererName = "SDL_GPU";
+    constexpr const char* kRendererName = "SDLGPU";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;

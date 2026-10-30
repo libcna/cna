@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// Transactional SDL_GPU renderer construction and lazy-initialization lifetime
-// regression. Failure injection is per renderer instance and still uses real SDL_GPU resources.
+// Transactional SDLGPU renderer construction and lazy-initialization lifetime
+// regression. Failure injection is per renderer instance and still uses real SDLGPU resources.
 // Every failed constructor must balance acquisition/release callbacks, leave no window-registry
 // entry, preserve the caller-owned SDL_Window, and permit an immediately succeeding renderer.
 
@@ -147,7 +147,7 @@ namespace
 
             const std::string prefix = std::string("constructor failure at ") + failure.label;
             Check(threw, prefix + " throws");
-            Check(diagnostic.find("CNA SDL_GPU: injected failure during") != std::string::npos,
+            Check(diagnostic.find("CNA SDLGPU: injected failure during") != std::string::npos,
                   prefix + " preserves stage diagnostic");
             Check(failedTracker.Balanced(),
                   prefix + " releases every acquired device/window/shader resource");
@@ -226,7 +226,7 @@ namespace
                     catch (const std::exception& exception)
                     {
                         threw = std::string(exception.what()).find(
-                                    "CNA SDL_GPU: injected failure during") !=
+                                    "CNA SDLGPU: injected failure during") !=
                                 std::string::npos;
                     }
 
@@ -293,7 +293,7 @@ namespace
                     catch (const std::exception& exception)
                     {
                         threw = std::string(exception.what()).find(
-                                    "CNA SDL_GPU: injected failure during") !=
+                                    "CNA SDLGPU: injected failure during") !=
                                 std::string::npos;
                     }
 
@@ -413,7 +413,7 @@ namespace
                   "depth/stencil-unavailable renderer destroys every resource exactly once");
         }
 
-#if defined(CNA_SDL_GPU_SHADERCROSS)
+#if defined(CNA_SDLGPU_SHADERCROSS)
         void ExerciseShaderCrossConstruction(SDL_Window* window)
         {
             ResourceTracker tracker;
@@ -519,7 +519,7 @@ int main()
         "default flat-normal texture creation");
     test.ExerciseIndependentInstances(firstWindow, secondWindow);
     test.ExerciseNoDepthStencilCapability(firstWindow);
-#if defined(CNA_SDL_GPU_SHADERCROSS)
+#if defined(CNA_SDLGPU_SHADERCROSS)
     test.ExerciseShaderCrossConstruction(firstWindow);
 #endif
 

@@ -67,7 +67,7 @@ below) — both need their own explicit registration.
 | `EffectMaterialReader`, `ExternalReferenceReader`, `DictionaryReader<String,Object>` | ✅ Full | A parameter dictionary's type-erased external reference is loaded according to the referenced XNB's concrete root reader, so `Texture2D`, `Texture3D`, and `TextureCube` parameters retain their real type and lifetime |
 | `VertexDeclarationReader`, `VertexBufferReader`, `IndexBufferReader` | ✅ Full | |
 | `ModelReader` | ✅ Full bone hierarchy, mesh/mesh-part, shared-resource (`VertexBuffer`/`IndexBuffer`/`Effect`) resolution | Verified against a real, externally-produced multi-bone fixture. This is a **different, real binary path** from the older `.model.json`-based `ModelTypeReader` — see the scope note above |
-| The general `EffectReader` (compiled XNA Effect Framework bytecode) | ✅ on FNA3D; SDL_GPU, EasyGL, WEBGPU, SOFTWARE and DIRECTX9 with their compiled-effect build options | Reads a bounded signed length and exact payload, constructs the same reflected `Effect` as the byte-array constructor, and preserves asset context in failures. The payload is XNA/FNA D3D9 Effect Framework bytecode, not MGFX or `.fx` source. |
+| The general `EffectReader` (compiled XNA Effect Framework bytecode) | ✅ on FNA3D; SDLGPU, EasyGL, WEBGPU, SOFTWARE and DIRECTX9 with their compiled-effect build options | Reads a bounded signed length and exact payload, constructs the same reflected `Effect` as the byte-array constructor, and preserves asset context in failures. The payload is XNA/FNA D3D9 Effect Framework bytecode, not MGFX or `.fx` source. |
 | `ReflectiveReader<T>` (any custom `.xnb` type compiled *without* an explicit `ContentTypeWriter`/reader pair, relying on XNA's content-pipeline reflection fallback) | ✅ Supported since SAMPLE-044 via `ReflectiveTypeReaderBuilder<T>` — the game declares its field list once, CNA builds the reader | See "`ReflectiveReader<T>`" below |
 
 ### Generic collections
@@ -311,7 +311,7 @@ A malformed `.xnb` is not a scan failure; its entry just has no reader names. Ne
 | Area | Status |
 |---|---|
 | Automatic reflection over an undeclared C++ type | ❌ Not supported by design; implicit `ReflectiveReader<T>` payloads are supported when the game declares their serialized members through `ReflectiveTypeReaderBuilder<T>` |
-| General `EffectReader` on a renderer without `CompiledEffects` | ❌ loading fails with an asset-specific capability diagnostic rather than a silent shader fallback. FNA3D supports it unconditionally; SDL_GPU, the EasyGL family, WEBGPU, SOFTWARE and DIRECTX9 support it behind their compiled-effect build options |
+| General `EffectReader` on a renderer without `CompiledEffects` | ❌ loading fails with an asset-specific capability diagnostic rather than a silent shader fallback. FNA3D supports it unconditionally; SDLGPU, the EasyGL family, WEBGPU, SOFTWARE and DIRECTX9 support it behind their compiled-effect build options |
 | LZ4 compression | ✅ MonoGame's raw-block XNB representation is supported; generic LZ4 frames are intentionally not an XNB format |
 | Reader names of a compressed `.xnb` in the content manifest | ❌ `xnbReaderNames` stays empty for an LZX- or LZ4-compressed file, and `GetXnbReaderUsageSummary()` does not count it: the scan reads only an uncompressed type-reader table, although loading decompresses both (`XNB-61b`) |
 | Generic collection readers for an unregistered `T` combination | ❌ Not supported — each closed combination needs its own explicit registration |

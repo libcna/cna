@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-#if defined(CNA_RENDERER_SDL_GPU) || defined(CNA_RENDERER_PRESENT_SDL_GPU)
+#if defined(CNA_RENDERER_SDLGPU) || defined(CNA_RENDERER_PRESENT_SDLGPU)
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuSpirvBindings.hpp"
 #include <gtest/gtest.h>
 #include <vector>

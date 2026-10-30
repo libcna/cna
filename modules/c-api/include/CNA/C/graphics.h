@@ -30,8 +30,8 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_STUB UINT32_C(13)
 /** @brief Identifies the Direct3D 9 backend. */
 #define CNA_GRAPHICS_RENDERER_DIRECTX9 UINT32_C(22)
-/** @brief Identifies the SDL_GPU backend. */
-#define CNA_GRAPHICS_RENDERER_SDL_GPU UINT32_C(31)
+/** @brief Identifies the SDLGPU renderer. */
+#define CNA_GRAPHICS_RENDERER_SDLGPU UINT32_C(31)
 /** @brief Identifies the FNA3D backend. */
 #define CNA_GRAPHICS_RENDERER_FNA3D UINT32_C(43)
 

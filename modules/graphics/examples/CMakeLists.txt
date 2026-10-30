@@ -198,9 +198,9 @@ if(CNA_BUILD_TESTS)
 endif()
 
 # One renderer-neutral inventory of the legacy capability ordinals and the complete detailed
-# profile, built for the EasyGL and SDL_GPU comparison identities so the two can be diffed.
+# profile, built for the EasyGL and SDLGPU comparison identities so the two can be diffed.
 if(CNA_BUILD_TESTS AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU"))
+        OR CNA_GRAPHICS_RENDERER STREQUAL "SDLGPU"))
     add_executable(cna_probe_renderer_capabilities renderer_capability_probe.cpp)
     target_link_libraries(cna_probe_renderer_capabilities PRIVATE cna_graphics_core)
     if(TARGET SDL3::SDL3main)

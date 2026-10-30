@@ -50,7 +50,7 @@ build CNA links, and therefore that a real 2D/3D pipeline is reachable at all.
    the Effect Framework structs live behind `MOJOSHADER_EFFECT_SUPPORT`. Consumers also need
    `MOJOSHADER_NO_VERSION_INCLUDE` (the generated `mojoshader_version.h` is not installed).
    `cmake/ThirdPartyFNA3D.cmake` carries all three on the interface target.
-2. **The SDL_GPU driver is first in FNA3D's driver list.** With no Vulkan ICD present it declines
+2. **The SDLGPU driver is first in FNA3D's driver list.** With no Vulkan ICD present it declines
    and FNA3D falls through to OpenGL by itself; `FNA3D_FORCE_DRIVER=OpenGL` pins that
    deterministically, which is what the CNA renderer's tests set.
 
@@ -96,7 +96,7 @@ pinned MojoShader.
 |---|---|
 | The assembled program parses without a MojoShader error | PASS |
 | Both CTAB symbols are reported, with the sampler at `register_set = SAMPLER` | PASS |
-| Translation succeeds on the `spirv` profile (FNA3D's SDL_GPU driver) | PASS, 7984 bytes |
+| Translation succeeds on the `spirv` profile (FNA3D's SDLGPU driver) | PASS, 7984 bytes |
 | Translation succeeds on the `glsl120` profile (FNA3D's OpenGL driver) | PASS, 144 bytes |
 
 The finding is what `Fna3dCompiledEffectTests.cpp` now relies on: `BuildSyntheticPixelShader()`

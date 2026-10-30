@@ -168,7 +168,7 @@ both negative checks. That is why the test asserts the exact value the arithmeti
 Guarded by `EasyGL_BasicEffect_PositionNormal` (`SAMPLE-002`) and
 `EasyGL_BasicEffectLitVertexColor` (`FX-125`). The `FX-125` source sets
 `PreferPerPixelLighting(false)`, so the per-pixel half is covered by the conformance program
-`basiceffect_lit_vertex_color_perpixel` (`<Renderer>_Conformance_*` on EasyGL, SDL_GPU and WebGPU).
+`basiceffect_lit_vertex_color_perpixel` (`<Renderer>_Conformance_*` on EasyGL, SDLGPU and WebGPU).
 
 ## Support matrix
 

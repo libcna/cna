@@ -62,7 +62,7 @@ jobs:
         run: ctest --preset windows-msvc-headless-debug
 
   sdlgpu:
-    name: SDL_GPU Direct3D 12 smoke (MSVC)
+    name: SDLGPU Direct3D 12 smoke (MSVC)
     runs-on: windows-latest
     timeout-minutes: 120
     defaults:
@@ -99,17 +99,17 @@ jobs:
           path: cna/.sdl-prebuilt-Windows-*
           key: windows-msvc-sdl-v2-${{ steps.sdlsha.outputs.sha }}-${{ hashFiles('cna/cmake/patches/sdl-*.patch', 'cna/cmake/ThirdPartySDL.cmake', 'cna/cmake/SdlPrebuiltFingerprint.cmake') }}
 
-      - name: Configure the SDL_GPU Windows preset
+      - name: Configure the SDLGPU Windows preset
         working-directory: cna
         run: cmake --preset windows-msvc-sdlgpu-debug
 
-      - name: Build the SDL_GPU smoke preset
+      - name: Build the SDLGPU smoke preset
         working-directory: cna
         run: cmake --build --preset windows-msvc-sdlgpu-debug
 
-      # CTest normally treats exit 77 as a successful skip. A supported Windows SDL_GPU baseline
+      # CTest normally treats exit 77 as a successful skip. A supported Windows SDLGPU baseline
       # must create a Direct3D 12 device and run every smoke program, so a skip is a failure here.
-      - name: Run SDL_GPU on Direct3D 12 without accepting skips
+      - name: Run SDLGPU on Direct3D 12 without accepting skips
         working-directory: cna
         run: |
           set -euo pipefail
@@ -119,6 +119,6 @@ jobs:
           }
           printf '%s\n' "$output"
           if grep -q 'Skipped' <<<"$output"; then
-            echo "::error::A required Windows SDL_GPU smoke program skipped." >&2
+            echo "::error::A required Windows SDLGPU smoke program skipped." >&2
             exit 1
           fi

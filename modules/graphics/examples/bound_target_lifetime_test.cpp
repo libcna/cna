@@ -165,8 +165,8 @@ namespace
     constexpr const char* kRendererName = "EASYGL";
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
-#elif defined(CNA_RENDERER_SDL_GPU)
-    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDLGPU)
+    constexpr const char* kRendererName = "SDLGPU";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr const char* kRendererName = "DIRECTX9";
 #else

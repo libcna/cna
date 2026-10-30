@@ -3,7 +3,7 @@
 Master, up-to-date cross-renderer feature matrix for CNA's established renderers, written for Task
 451 (Phase 51) and extended 2026-07-15 with a `DIRECTX9` column (`../the DX9 plan`, `D9-130`). The
 WebGPU renderer is intentionally tracked separately in [`webgpu-renderer.md`](webgpu-renderer.md);
-SDL_GPU ([`sdl-gpu-renderer.md`](sdl-gpu-renderer.md)) and FNA3D
+SDLGPU ([`sdl-gpu-renderer.md`](sdl-gpu-renderer.md)) and FNA3D
 ([`fna3d-renderer.md`](fna3d-renderer.md)) have no columns here. A cell is only marked ✅ if a real,
 GPU-facing pixel/behavior check actually exercised it; anything implemented but not independently
 pixel-tested is marked 🟨, and anything not attempted/not built at all is marked ⬜ (distinct from
@@ -116,12 +116,12 @@ runtime contract is independently exercised by
 | EasyGL | ✅ | Explicit factory; draw selects `GL_UNSIGNED_INT`. |
 | FNA3D | ✅ | Explicit factory; FNA3D 32-bit index element size. |
 | Headless | ◇ | Width-locked uint32 shadow and validated indexed-draw trace; no pixels. |
-| SDL_GPU | ✅ | Explicit width-locked factory; `SDL_GPU_INDEXELEMENTSIZE_32BIT`. |
+| SDLGPU | ✅ | Explicit width-locked factory; `SDL_GPU_INDEXELEMENTSIZE_32BIT`. |
 | Software | ✅ | Width-locked uint32 CPU buffer and raster path. |
 | Stub | ◇ | Explicit width-locked handle accepts uint32 exactly; renderer intentionally draws nothing. |
 | WebGPU | ✅ | Explicit factory; `WGPUIndexFormat_Uint32`. |
 
-SDL_GPU and Stub were exact-width implementations that previously relied on the unsafe shared
+SDLGPU and Stub were exact-width implementations that previously relied on the unsafe shared
 delegation. They now own explicit factories; Stub also rejects a direct renderer-level upload whose
 width disagrees with the factory declaration.
 

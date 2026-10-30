@@ -42,7 +42,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/SdlPrebuiltFingerprint.cmake")
 # upstream ships it.
 #
 # The pin is the first upstream commit with both Vulkan GPU fixes CNA used to carry as patches on
-# cbe3fbe9 -- the Vulkan backend of SDL_gpu is what CNA's SDL_GPU renderer and FNA3D's SDL_GPU driver
+# cbe3fbe9 -- the Vulkan backend of SDL_gpu is what CNA's SDLGPU renderer and FNA3D's SDLGPU driver
 # run on Linux and Android:
 #  f286e420afd3ccb0dedc7ec77eb09d4bd2e5e102  GPU: Refactor Vulkan barriers to fix defrag segfault
 #      The defragmenter barriered the replacement texture before it had a container, a null
@@ -83,7 +83,7 @@ if(ANDROID)
 endif()
 # VULKAN_GenerateMipmaps sizes each level's blit as width >> level and height >> level, so in a
 # non-square chain the shorter side reaches 0 first and those levels are never written (an 8x2
-# render target's levels 2 and 3 stay zero); D3D12 clamps them to one texel. FNA3D's SDL_GPU driver
+# render target's levels 2 and 3 stay zero); D3D12 clamps them to one texel. FNA3D's SDLGPU driver
 # resolves mipmapped render targets through it (2026-10-26 remediation review). SDL main still
 # does not clamp (checked 2026-10-26 at 52289a276). Every build with the Vulkan backend.
 if(NOT EMSCRIPTEN AND NOT APPLE)

@@ -103,27 +103,27 @@ The C ABI went to `0.28.0` for the 2026-09-17 retirement, to `0.31.0` for the 20
 
 An owner decision, final: CNA stops maintaining its own native Vulkan, Direct3D 11 and Metal
 renderers and SDL's 2D renderer (`RRC-030`..`RRC-039`, with a remediation series continuing from
-`RRC-040` through `RRC-054`). `SDL_GPU` is CNA's
-modern native path -- CNA maps XNA 4.0 onto SDL_GPU, and SDL owns the Vulkan, Direct3D 12 and Metal
-backends underneath it. None of the four is aliased to `SDL_GPU` or to anything else: each name is
+`RRC-040` through `RRC-054`). `SDLGPU` is CNA's
+modern native path -- CNA maps XNA 4.0 onto SDL's `SDL_GPU` API, and SDL owns the Vulkan, Direct3D 12 and Metal
+backends underneath it. None of the four is aliased to `SDLGPU` or to anything else: each name is
 refused at configure time by name and value, and at run time (`CNA_GRAPHICS_RENDERER`,
 `GraphicsRendererSelection::SetPreferred`, the C API's by-name route) with a message that says it
 was retired. CNA keeps 10 public renderer identities over 8 implementation families; C ABI 0.48.0.
 
 | Identity | C ABI | Reason | Coverage that remains |
 |---|---:|---|---|
-| `VULKAN` | 8 | A second, hand-written native Vulkan backend beside SDL_GPU's. | `SDL_GPU` (SDL's Vulkan backend on Linux and Android), `WEBGPU` (wgpu's), `FNA3D` through SDL_GPU. |
-| `DIRECTX11` | 14 | A native Direct3D 11 backend, with the shared `D3DCommon` core and its offline HLSL. | `SDL_GPU` (SDL's Direct3D 12 backend), `DIRECTX9`, `FNA3D` (its own D3D11 and SDL_GPU drivers). |
-| `METAL` | 42 | A native Metal backend for macOS and iOS (Objective-C++). | `SDL_GPU` (SDL's Metal backend); current qualification is tracked in `handoff.md` §5.2. |
-| `SDL_RENDERER` | 1 | SDL's 2D API: 2D-only, it refused every 3D call. | `SDL_GPU`, `OPENGLES3`/`OPENGL33`, `SOFTWARE`. |
+| `VULKAN` | 8 | A second, hand-written native Vulkan backend beside SDLGPU's. | `SDLGPU` (SDL's Vulkan backend on Linux and Android), `WEBGPU` (wgpu's), `FNA3D` through SDLGPU. |
+| `DIRECTX11` | 14 | A native Direct3D 11 backend, with the shared `D3DCommon` core and its offline HLSL. | `SDLGPU` (SDL's Direct3D 12 backend), `DIRECTX9`, `FNA3D` (its own D3D11 and SDLGPU drivers). |
+| `METAL` | 42 | A native Metal backend for macOS and iOS (Objective-C++). | `SDLGPU` (SDL's Metal backend); current qualification is tracked in `handoff.md` §5.2. |
+| `SDL_RENDERER` | 1 | SDL's 2D API: 2D-only, it refused every 3D call. | `SDLGPU`, `OPENGLES3`/`OPENGL33`, `SOFTWARE`. |
 
 **What went with them.** `modules/renderers/{vulkan,directx11,metal,sdl-renderer}` and
 `modules/renderers/common/d3d`; the platform's Vulkan-surface service and Metal window intent; the
 Vulkan and DirectX 11 glTF L7 corpora; the DirectX parity inventory, the D3D11 Wine/DXVK wrappers
 and HLSL toolchain; the HLSL post-process payloads graphics-ext carried for Direct3D 11; the
-`metal-macos-ci` workflow; the renderer documents and plans. Per-host defaults moved: `SDL_GPU` on
+`metal-macos-ci` workflow; the renderer documents and plans. Per-host defaults moved: `SDLGPU` on
 Windows, macOS and iOS, `OPENGLES3` everywhere else outside the browser. The iOS allow-list is
-`SDL_GPU` and `SOFTWARE`.
+`SDLGPU` and `SOFTWARE`.
 
 **Dependencies.** `VULKAN`: the system Vulkan loader and headers (`Vulkan::Vulkan`) and Python for
 its offline SPIR-V build. `DIRECTX11`: the Windows SDK's `d3d11`, `dxgi` and `d3dcompiler`.
@@ -149,23 +149,23 @@ current suite counts.
 
 **Tests.** Each suite was classified before deletion. Implementation tests went with their
 renderer; XNA behaviour not covered elsewhere became renderer-neutral conformance programs
-(`modules/graphics/examples/conformance/`, registered for EasyGL, SDL_GPU, WebGPU, SOFTWARE, FNA3D
+(`modules/graphics/examples/conformance/`, registered for EasyGL, SDLGPU, WebGPU, SOFTWARE, FNA3D
 and HEADLESS as `<Renderer>_Conformance_*`) or CnaTests cases. Current defects and limitations are
 recorded only in `handoff.md` §5.
 
 **Kept on purpose.** SDL's own Vulkan/D3D12 patches and the `run-wine-vkd3d*.sh` launchers
-(`SDL_GPU`); MojoShader's D3D11 and Metal patches (`FNA3D`'s own drivers); SPIRV-Cross for
+(`SDLGPU`); MojoShader's D3D11 and Metal patches (`FNA3D`'s own drivers); SPIRV-Cross for
 SDL_shadercross; the platform's SDL_Renderer-based surface presenter that shows `SOFTWARE`'s CPU
 frames; the `ShaderLanguageEXT` HLSL/MSL identities.
 
 **Validation.** On Linux, from empty caches: the multi-renderer tree (`OPENGLES3` default with
-`OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`) in Debug and Release and the
-`SDL_GPU`, `WEBGPU`, `HEADLESS`, `SOFTWARE` and `FNA3D` trees built and ran their full suites through
+`OPENGL33`, `WEBGPU`, `SDLGPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`) in Debug and Release and the
+`SDLGPU`, `WEBGPU`, `HEADLESS`, `SOFTWARE` and `FNA3D` trees built and ran their full suites through
 the private runner, with every failure matching the dated defect list; the Emscripten build ran the
 C API
 under node and two demos with `WEBGPU` and with `WEBGL2` in headless Chrome; on an x86_64 Android
 emulator the C API's identity checks passed and `OPENGLES3` ran the C API lifecycle smoke to exit 0;
-the MinGW cross build ran the C API, the `DIRECTX9` suite and `SDL_GPU`'s Direct3D 12 backend under
+the MinGW cross build ran the C API, the `DIRECTX9` suite and `SDLGPU`'s Direct3D 12 backend under
 Wine. The complete dated matrix and intermediate failure counts remain in Git history at commit
 `a37bb07ba`. Current platform qualification work is tracked only in `handoff.md` §5.2.
 
@@ -179,7 +179,7 @@ families; EasyGL implements three of them (`OPENGLES3`, `OPENGL33`, `WEBGL2`).
 
 | Identity | C ABI | Reason | Coverage that remains |
 |---|---:|---|---|
-| `DIRECTX12` | 15 | A second modern Direct3D renderer next to `DIRECTX11`, never validated beyond WARP and vkd3d-proton. | At the time `DIRECTX11` (retired 2026-10-13) and `DIRECTX9` for Windows; `SDL_GPU` and `FNA3D` reach Direct3D 12 through their own drivers. |
+| `DIRECTX12` | 15 | A second modern Direct3D renderer next to `DIRECTX11`, never validated beyond WARP and vkd3d-proton. | At the time `DIRECTX11` (retired 2026-10-13) and `DIRECTX9` for Windows; `SDLGPU` and `FNA3D` reach Direct3D 12 through their own drivers. |
 | `CANVAS` | 17 | A GPU-free browser 2D path (`canvas.getContext('2d')`), 2D only. | `WEBGL2` and `WEBGPU` in the browser. |
 | `OPENGLES2` | 2 | The GLSL ES 1.00 / ES 2.0 API generation of EasyGL. | `OPENGLES3` and `OPENGL33`. |
 | `WEBGL1` | 5 | The browser form of the same ES 2.0 generation. | `WEBGL2`. |
@@ -195,7 +195,7 @@ compile byte-for-byte as before on the three remaining profiles. The Emscripten 
 bundle is now `WEBGL2`+`WEBGPU`.
 
 **Kept on purpose.** `D3DCommon` itself (Direct3D 11 uses every header); the
-`scripts/run-wine-vkd3d*.sh` launchers, which SDL_GPU's cross-compiled Direct3D 12 lane uses; the
+`scripts/run-wine-vkd3d*.sh` launchers, which SDLGPU's cross-compiled Direct3D 12 lane uses; the
 GLSL ES 1.00-era shader forms (cross-product inverse transpose, literal PCF loop bounds,
 `uShadowTexel`), which are valid GLSL ES 3.00 and kept so pixels do not move; the sibling `easy-gl`
 library, which is not modified.
@@ -224,10 +224,10 @@ Software build that existed only for `GDI` in `590ac27c8` (`RRC-016`). None is r
 
 | Identity | C ABI | Reason | Coverage that remains |
 |---|---:|---|---|
-| `GDI` | 40 | Windows-specific duplicate 2D path: Software's CPU 2D rasterizer presented through Win32 GDI. | The full CPU `SOFTWARE` renderer for deterministic/reference rasterization; `DIRECTX9`/`11`/`12`, `SDL_RENDERER` and `SDL_GPU` for Windows presentation. |
+| `GDI` | 40 | Windows-specific duplicate 2D path: Software's CPU 2D rasterizer presented through Win32 GDI. | The full CPU `SOFTWARE` renderer for deterministic/reference rasterization; `DIRECTX9`/`11`/`12`, `SDL_RENDERER` and `SDLGPU` for Windows presentation. |
 | `HTML_DOM` | 18 | Specialized browser DOM/CSS 2D path (pooled `<div>` sprites). | `CANVAS`, `WEBGL1`/`WEBGL2` and `WEBGPU` in the browser. |
 | `SVG_DOM` | 44 | Specialized, experimental SVG DOM 2D path. | `CANVAS`, `WEBGL1`/`WEBGL2` and `WEBGPU` in the browser. |
-| `OPENGL4` | 33 | A second desktop GL implementation overlapping EasyGL. | `OPENGL33` stays CNA's desktop OpenGL identity with its 3.3 contract (there is deliberately no EasyGL OpenGL 4 profile); modern-GPU work is covered by `VULKAN`, `DIRECTX12`, `METAL`, `WEBGPU` and `SDL_GPU`. |
+| `OPENGL4` | 33 | A second desktop GL implementation overlapping EasyGL. | `OPENGL33` stays CNA's desktop OpenGL identity with its 3.3 contract (there is deliberately no EasyGL OpenGL 4 profile); modern-GPU work is covered by `VULKAN`, `DIRECTX12`, `METAL`, `WEBGPU` and `SDLGPU`. |
 
 **Shared code.** `GDI` recompiled eight Software CPU-2D units with `CNA_SOFTWARE_2D_ONLY`; that
 mode, `SoftwareRenderer2D.cpp`, the `CNA_GDI_SOFTWARE_SOURCES` list, the
@@ -294,7 +294,7 @@ allowed; no surviving C ABI value changed.
 shared source with them: `DIRECT2D` used only the common `PlatformRendererSurfaceState.hpp` (still
 included by `GDI`, `DIRECTX9`/`11`/`12`, `METAL` and `WEBGPU`), `FREEDIRECT` the common
 `NoOp3DResources.hpp` and `Sdl3RendererInterop.hpp` (still used by `SDL_RENDERER`, `CANVAS`,
-`SDL_GPU` and `FNA3D`), and `PORTABLEGL` `VertexDeclarationFidelity.hpp` (used throughout).
+`SDLGPU` and `FNA3D`), and `PORTABLEGL` `VertexDeclarationFidelity.hpp` (used throughout).
 The shared PBR-refusal guard was later removed when FNA3D gained its native PBR path. The Win32
 platform, the `IPlatformSurfacePresenter` CPU-frame path and the `TERMINAL` platform are unchanged;
 `TERMINAL` keeps `SOFTWARE`, `HEADLESS` and `STUB`.
@@ -320,7 +320,7 @@ renderer translation unit compiles.
 link on this tree for a reason that predates this change: `SoftwareRenderer2D.cpp`, compiled into
 `GDI` with `CNA_SOFTWARE_2D_ONLY`, calls helpers that are only defined outside that mode (since
 `8465377b1`/`0f213ebaf`, 2026-09-08), so the GDI tests were neither linked nor run. `DIRECTX9`,
-`DIRECTX11`, `DIRECTX12`, `METAL`, `WEBGPU`, `SDL_GPU`, `OPENGL4`, `FNA3D` and the Emscripten
+`DIRECTX11`, `DIRECTX12`, `METAL`, `WEBGPU`, `SDLGPU`, `OPENGL4`, `FNA3D` and the Emscripten
 renderers were not built; none of their sources changed.
 
 ### DIRECT2D
@@ -390,7 +390,7 @@ stays:
   reached by `DIRECTX9`/`DIRECTX11`/`DIRECTX12`, `GDI`, `OPENGLES2`/`OPENGL33`/`OPENGL4` or `SOFTWARE`.
 - **2D vector rasterizers** — `BLEND2D`, `OPENVG`, `NANOVG`. 2D-only by construction, so they could
   never satisfy the 3D half of `IGraphicsRenderer`; CNA's 2D already renders on the GPU through EasyGL
-  and SDL_GPU, and on the CPU through `SOFTWARE`.
+  and SDLGPU, and on the CPU through `SOFTWARE`.
 - **Duplicate CPU and browser routes** — `TINYGL` (covered by `SOFTWARE` and `PORTABLEGL`, the
   latter itself retired on 2026-09-27) and
   `PIXIJS` (covered by `WEBGL2`, `CANVAS`, `HTML_DOM` and `SVG_DOM`, the last two themselves
@@ -474,7 +474,7 @@ retirement and was retired on 2026-09-27.
 
 **What it proved.** The first programmable-only Direct3D generation under the DXVK route: real
 `vs_4_0`/`ps_4_0` HLSL, state objects and MRT (`plans/plan_d3d10.md`). `DIRECTX11` covered the same
-hardware class until its own retirement on 2026-10-13; `SDL_GPU` (Direct3D 12) and `DIRECTX9` do now.
+hardware class until its own retirement on 2026-10-13; `SDLGPU` (Direct3D 12) and `DIRECTX9` do now.
 
 ### OPENGLES1
 

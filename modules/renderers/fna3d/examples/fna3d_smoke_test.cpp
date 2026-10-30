@@ -157,7 +157,7 @@ public:
               "IndexBuffer reports the index count it was given");
 
         // Check F -- FNA3D's running driver decides whether a real query exists. Its OpenGL and
-        // D3D11 drivers expose one; the SDL_GPU public API currently has no query abstraction and
+        // D3D11 drivers expose one; the SDLGPU public API currently has no query abstraction and
         // FNA3D consequently reports the capability false. Both outcomes are part of the smoke
         // contract: never fake a count and never require a feature this driver truthfully lacks.
         if (device.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery))

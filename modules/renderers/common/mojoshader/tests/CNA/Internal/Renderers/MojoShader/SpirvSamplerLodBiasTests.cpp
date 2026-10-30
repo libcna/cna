@@ -387,7 +387,7 @@ namespace
                         (static_cast<std::size_t>(pixelData->output_len) -
                          static_cast<std::size_t>(patchTableSize)) / sizeof(std::uint32_t);
 
-                    // --- SDL_GPU shape: MojoShader's original combined samplers -------------
+                    // --- SDLGPU shape: MojoShader's original combined samplers -------------
                     const auto* pixelWordData =
                         reinterpret_cast<const std::uint32_t*>(pixelData->output);
                     const std::vector<std::uint32_t> combinedWords(

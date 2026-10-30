@@ -1,6 +1,6 @@
-# SDL_GPU ShaderEffect source and bytecode layout
+# SDLGPU ShaderEffect source and bytecode layout
 
-`ShaderEffect` is a CNA extension, not XNA compiled-effect bytecode. Its SDL_GPU
+`ShaderEffect` is a CNA extension, not XNA compiled-effect bytecode. Its SDLGPU
 source route requires the optional target-native GLSL compiler. Query the renderer's
 capability profile; source shaders remain unavailable on builds without that compiler.
 

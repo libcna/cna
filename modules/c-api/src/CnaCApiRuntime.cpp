@@ -66,7 +66,7 @@ struct RuntimeState final {
 // A C caller that leaves objects alive at process exit leaks the handles, and the registry still
 // destroys the objects (TeardownLifetimeSmoke.c). The registry is a static constructed before any
 // game, so its own destructor runs after the static teardown of every library a game's device
-// loaded afterwards -- the Vulkan validation layer under a Debug SDL_GPU device, whose finalized
+// loaded afterwards -- the Vulkan validation layer under a Debug SDLGPU device, whose finalized
 // state SDL's VULKAN_Wait then called into. A handler registered once each game exists runs before
 // those libraries are finalized, and destroys what is left while they are still usable.
 void DestroyRegisteredObjectsAtExit() noexcept

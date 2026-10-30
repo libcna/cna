@@ -1117,7 +1117,7 @@ namespace CNA::Internal::Renderers::WebGPU
             descriptor.mipmapFilter = mipMode;
             // WEBGPU-161: XNA's MaxMipLevel is the highest-resolution level sampling may use, so
             // it is a LOWER clamp on the level-of-detail -- the same mapping the reference renderer
-            // makes to GL_TEXTURE_MIN_LOD and FNA3D's SDL_GPU driver to min_lod. 0 is XNA's default
+            // makes to GL_TEXTURE_MIN_LOD and FNA3D's SDLGPU driver to min_lod. 0 is XNA's default
             // and means no restriction, which is also lodMinClamp's own default.
             // WGF-0005: bounded by the upper clamp. WebGPU
             // refuses a sampler whose lodMinClamp exceeds its lodMaxClamp -- "Invalid lodMaxClamp:
@@ -6490,7 +6490,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
      * @brief STREETW-0004: rewrites one stock family's WGSL into its instanced twin.
      *
      * Mechanical, and deliberately so: this is the WGSL counterpart of the `CNA_INSTANCED` define
-     * the SPIR-V stock shaders are compiled with a second time (SDL_GPU's
+     * the SPIR-V stock shaders are compiled with a second time (SDLGPU's
      * `modules/renderers/sdl-gpu/src/shaders/compile_shaders.py`), and it performs the same
      * substitutions that define's macros do.
      * WGSL has no preprocessor, so the rewrite happens here rather than in the source -- which
@@ -9403,7 +9403,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     void WebGPURenderer::ForgetEffectEXT(WebGPUEffectRenderer* effect) noexcept
     {
-        // pre-SDL_GPU PSG-0006. Both command kinds hold the effect as a raw
+        // pre-SDLGPU PSG-0006. Both command kinds hold the effect as a raw
         // pointer, so both have to let go of it here. Nulling is enough: every issue path already
         // begins by refusing a command whose effect is null, so the draw becomes a no-op instead
         // of a read of freed memory.
@@ -9626,7 +9626,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // WEBGPU-182.
         if (owner_ != nullptr)
         {
-            // pre-SDL_GPU PSG-0006: a queued sprite or custom-effect draw
+            // pre-SDLGPU PSG-0006: a queued sprite or custom-effect draw
             // holds this object as a RAW pointer and the frame carrying it may not have flushed
             // yet, so it must let go before the memory does (CNAEXT_LeakLoop's use-after-free).
             // XNA had drawn it at the call, so the draw keeps it: the state moves to an heir the

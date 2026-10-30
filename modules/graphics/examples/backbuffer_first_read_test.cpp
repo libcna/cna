@@ -78,8 +78,8 @@ namespace
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_SDL_GPU)
-    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDLGPU)
+    constexpr const char* kRendererName = "SDLGPU";
     constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr const char* kRendererName = "DIRECTX9";

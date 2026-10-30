@@ -46,7 +46,7 @@
 // Applies the World INVERSE-TRANSPOSE (computed in-shader via InverseTranspose3x3)
 //       after the skin-local rotation, not raw (float3x3)World. This is correct under non-uniform
 //       World scale as well as rotation, matching SkinnedEffect.fx's own WorldInverseTranspose and
-//       the corrected skinned shaders of EasyGL, SDL_GPU and the since-retired Vulkan and bgfx
+//       the corrected skinned shaders of EasyGL, SDLGPU and the since-retired Vulkan and bgfx
 //       renderers. EasyGL itself is
 //       out of scope for this task and was not touched.
 //

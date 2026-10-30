@@ -114,9 +114,9 @@ namespace
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "WEBGPU";
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "SDL_GPU";
+    constexpr const char* kRendererName = "SDLGPU";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX9";
@@ -472,7 +472,7 @@ class SamplerComponentIsolationTest : public Game
         }
 
         // A4: the correction must not turn Anisotropic into nearest -- it is a LINEAR filter, and
-        // that is precisely the half the nine-value TextureFilter contract found SDL_GPU had lost.
+        // that is precisely the half the nine-value TextureFilter contract found SDLGPU had lost.
         {
             const std::vector<Color> pix = Draw3D(dev, 3, 2, tex8x4_, aniso);
             check(Foreign(pix, p8x4_) > 0,

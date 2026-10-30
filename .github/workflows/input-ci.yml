@@ -1,7 +1,7 @@
 # INPUT-CI-001 / INPUT-CI-002 / INPUT-CI-005 — CI for the Input track.
 #
 # Matrix of build configurations, each running the (backend-agnostic) input test suite headless:
-#   - OPENGLES3 / SDL_GPU                      : two renderer identities.
+#   - OPENGLES3 / SDLGPU                      : two renderer identities.
 #   - ASan+UBSan (on OPENGLES3)                : built with -DCNA_SANITIZE=address,undefined; any UB /
 #                                             memory error fails the job (halt_on_error=1).
 # All sibling repos (sharp-runtime, easy-gl, meta-gl) are public and clone over HTTPS with no token.
@@ -48,8 +48,8 @@ jobs:
             sanitize: "address,undefined"
             asan_options: "detect_leaks=0:halt_on_error=1"
             ubsan_options: "print_stacktrace=1:halt_on_error=1"
-          - name: SDL_GPU
-            renderer: SDL_GPU
+          - name: SDLGPU
+            renderer: SDLGPU
             sanitize: ""
             asan_options: ""
             ubsan_options: ""

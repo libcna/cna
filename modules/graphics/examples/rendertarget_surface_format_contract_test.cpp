@@ -38,8 +38,8 @@ namespace
 {
 #if defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EasyGL";
-#elif defined(CNA_RENDERER_SDL_GPU)
-    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDLGPU)
+    constexpr const char* kRendererName = "SDLGPU";
 #else
     constexpr const char* kRendererName = "unknown";
 #endif
@@ -73,8 +73,8 @@ precision highp float;
 out vec4 FragColor;
 void main() { FragColor = vec4(0.25, 0.5, 0.75, 1.0); }
 )";
-#elif defined(CNA_RENDERER_SDL_GPU)
-    // RRC-046: SDL_GPU compiles Vulkan GLSL to SPIR-V. The sprite custom-effect contract is the one
+#elif defined(CNA_RENDERER_SDLGPU)
+    // RRC-046: SDLGPU compiles Vulkan GLSL to SPIR-V. The sprite custom-effect contract is the one
     // sdlgpu_mrt_test.cpp uses: vertex inputs 0-2 and the per-draw block at set 1, binding 0.
     const char* kVertexShader = R"(#version 450
 layout(location = 0) in vec2 inPos;
@@ -108,7 +108,7 @@ void main() { FragColor = vec4(0.25, 0.5, 0.75, 1.0); }
 )";
 #else
     // The HLSL sources the retired DIRECTX11 renderer compiled were removed with it (RRC-046).
-#error "rendertarget_surface_format_contract_test.cpp has ShaderEffect sources for EasyGL and SDL_GPU"
+#error "rendertarget_surface_format_contract_test.cpp has ShaderEffect sources for EasyGL and SDLGPU"
 #endif
 
     bool Near(float actual, float expected, float tolerance = 0.01f)

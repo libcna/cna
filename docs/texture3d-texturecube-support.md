@@ -85,8 +85,8 @@ derive from `Texture`; `ShaderEffect::SetTexture` has explicit 2D, cube and volu
 renderer's capability profile for the shader dialect and volume-sampling support; API
 presence does not imply that every renderer executes custom shader source.
 
-SDL_GPU source and portable-bytecode sampler layouts are documented in
-[SDL_GPU ShaderEffect layout](sdlgpu-shader-effect-layout.md). In particular a native
+SDLGPU source and portable-bytecode sampler layouts are documented in
+[SDLGPU ShaderEffect layout](sdlgpu-shader-effect-layout.md). In particular a native
 fragment `sampler3D` at set2/binding0 consumes the effect's volume unit0, not SpriteBatch's
 2D texture. Unsupported layouts are refused explicitly. The source-layout and existing
 portable per-unit-sampler regressions protect this distinction.

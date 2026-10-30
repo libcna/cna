@@ -119,8 +119,8 @@ namespace
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_SDL_GPU)
-    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDLGPU)
+    constexpr const char* kRendererName = "SDLGPU";
     constexpr bool kRasterizes = true;
 #else
 #error "this renderer has no declared MSAA/depth attachment contract."
@@ -522,7 +522,7 @@ class RenderTargetMsaaDepthContractTest : public Game
         // The APPLIED count is device- and renderer-dependent and the XNA contract permits rounding
         // DOWN to the nearest supported count: WebGPU gates render-target MSAA on the device's own
         // sample count and legitimately applies 0 here, EasyGL caps at GL_MAX_SAMPLES,
-        // and SDL_GPU clamps to what the adapter reports. Asserting one exact number per cell would
+        // and SDLGPU clamps to what the adapter reports. Asserting one exact number per cell would
         // therefore encode this machine rather than the contract. What IS universal -- and what a
         // silent MSAA drop to make a depth attachment legal would violate -- is that the count is a
         // legal reduction, and that it does not depend on whether depth is attached (leg S2).

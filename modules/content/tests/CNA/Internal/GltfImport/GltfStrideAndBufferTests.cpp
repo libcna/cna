@@ -432,7 +432,7 @@ TEST(RendererStrideConformance, AColourCarryingPbrPrimitiveEitherDrawsOrRefusesB
     // That distinction is not academic. Both of the following shipped with a complete layout row, a
     // complete shader and a passing source-text audit, and neither could draw the asset:
     //
-    //   - SDL_GPU built the stride-60/80 pipelines and left `DrawPrimitivesEx` selecting the PBR
+    //   - SDLGPU built the stride-60/80 pipelines and left `DrawPrimitivesEx` selecting the PBR
     //     queue for `stride == 48`/`68` only, so the draw fell through to the stride-16 coloured
     //     path and was refused there as "requires a stride-16 (VertexPositionColor) vertex buffer";
     //   - another renderer chose its skinned colour PBR program for stride 80 and then refused it

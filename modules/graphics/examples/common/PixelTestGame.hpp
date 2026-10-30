@@ -342,7 +342,7 @@ namespace CNA::Examples
             return kSkipExitCode;
 
         // LLGL-55: a real display is present (the probe above succeeded), but a Vulkan swapchain
-        // still cannot PRESENT on it when the X server has no DRI3 support. SDL_GPU's Vulkan
+        // still cannot PRESENT on it when the X server has no DRI3 support. SDLGPU's Vulkan
         // backend reports that as VK_ERROR_SURFACE_LOST_KHR in the SDL error the GraphicsDevice/
         // Game constructor throws, well after this function's own display probe passed. It is an
         // infrastructure gap, not a rendering defect, so it is reported the way "no display at

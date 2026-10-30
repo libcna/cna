@@ -170,18 +170,18 @@ namespace
     constexpr Contract kContract{"SOFTWARE", true, true, true, true, true,
                                  true, true, true,
                                  true, true, true, true, false, true, true};
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     // SDL_gpu delivers a clear colour only through SDL_GPUColorTargetInfo.load_op, and a render pass
     // has exactly one. the ordered mid-cycle Clear fix made the LOGICAL SEGMENT the unit that owns a load action
     // instead of the bind cycle: an observable Clear() closes the open segment and opens another one
     // over the same destination, so the clear is the new pass's load action and everything issued
     // after it joins that pass. `orderedClear` is therefore true and the whole declaration is
     // measured, not assumed.
-    // pre-SDL_GPU PSG-0008: wantHiDefProfile is now true here for the
+    // pre-SDLGPU PSG-0008: wantHiDefProfile is now true here for the
     // reason WMG-0005 gave for the WebGPU row above -- this fixture reads the back buffer,
     // which SOFTWARE-213 made HiDef-only, so under Reach it threw before its first check and
     // reported as a renderer failure. profile_dead_tests.py named it DEAD-ON-PROFILE.
-    constexpr Contract kContract{"SDL_GPU", true, true, false, true, true,
+    constexpr Contract kContract{"SDLGPU", true, true, false, true, true,
                                  true, true, false,
                                  true, true, true, true, false, true, true};
 #elif defined(CNA_RENDERER_WEBGPU)

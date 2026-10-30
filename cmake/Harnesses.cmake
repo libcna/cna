@@ -373,7 +373,7 @@ endif()
 
 # FX-061 existence gate: proves the pinned MojoShader's SDL_GPU adapter binds a
 # committed effect's shader pairs against a device this machine can create, linking only MojoShader
-# and SDL3. CNA's SDL_GPU renderer already builds pipelines from SPIR-V and MojoShader has both a
+# and SDL3. CNA's SDLGPU renderer already builds pipelines from SPIR-V and MojoShader has both a
 # SPIR-V profile and an SDL_GPU adapter, so the pairing looks obvious on paper -- what the probe
 # settles is whether it links real effect shaders and how much uniform plumbing the adapter owns,
 # which is what sizes the task.

@@ -7750,7 +7750,7 @@ namespace CNA::Internal::Renderers::EasyGL
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
         AcquireSampler(slot);
         // XNA's MaxMipLevel is the most detailed level the sampler may use, which is a lower bound
-        // on the computed level of detail -- GL_TEXTURE_MIN_LOD, the same mapping FNA3D's SDL_GPU
+        // on the computed level of detail -- GL_TEXTURE_MIN_LOD, the same mapping FNA3D's SDLGPU
         // driver makes with min_lod. Microsoft writes the signed property through D3D9's DWORD
         // sampler-state channel, so negative values first convert to UInt32 and clamp to the
         // resource's least-detailed available level rather than becoming zero.
@@ -11013,7 +11013,7 @@ namespace CNA::Internal::Renderers::EasyGL
     {
         // WEBGPU-158: a declaration that names no Normal is not a lit vertex at any
         // stride, so a lit BasicEffect draw of one takes the unlit family -- the rule WebGPU and
-        // SDL_GPU select their stock programs by. SOFTWARE-130 rightly made
+        // SDLGPU select their stock programs by. SOFTWARE-130 rightly made
         // the effect flags pick the program variant, and with it this question went unasked: the
         // lit program then read the disabled aNormal's (0,0,0) and normalized it. That is undefined
         // GLSL; macOS's GL lights such a vertex with no diffuse term at all, so the declared colour

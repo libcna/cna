@@ -161,14 +161,14 @@ namespace
     // return bug as expected output and thereby hid the conformance failure.
     constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true,
                                  true, true, true, true, true, true};
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     // SDLGPU-67: the current modular renderer has a real backbuffer proxy/readback path. Exercise
     // it here instead of preserving the obsolete pre-proxy Unsupported expectation.
     // `emptyScissorDrawsNothing` false: measured here.
     // `outOfBoundsScissorRejected` true: since SOFTWARE-226 GraphicsDevice itself rejects the
     // rectangle before any renderer sees it, so no renderer can declare clipping here; this row
     // predated that and was the only one still declaring false.
-    constexpr Contract kContract{"SDL_GPU", Support::Exact, Support::Exact, true,
+    constexpr Contract kContract{"SDLGPU", Support::Exact, Support::Exact, true,
                                  true, true, true, false, true, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", Support::Exact, Support::Exact, true,

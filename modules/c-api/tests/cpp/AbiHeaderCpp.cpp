@@ -147,7 +147,7 @@ static_assert(sizeof(CNA_SkinningDataHandle) == 8U);
 static_assert(sizeof(CNA_AnimationPlayerHandle) == 8U);
 static_assert(sizeof(CNA_SkinningDataDescriptor) == 64U);
 static_assert(sizeof(CNA_RendererInfo) == 32U);
-static_assert(CNA_GRAPHICS_RENDERER_SDL_GPU == UINT32_C(31));
+static_assert(CNA_GRAPHICS_RENDERER_SDLGPU == UINT32_C(31));
 static_assert(CNA_GRAPHICS_RENDERER_FNA3D == UINT32_C(43));
 static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_FNA3D);
 static_assert(CNA_GRAPHICS_CAPABILITY_THREE_D == UINT32_C(0));

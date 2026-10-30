@@ -63,10 +63,10 @@ namespace
     constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadbackRequired = true;
-#elif defined(CNA_RENDERER_SDL_GPU)
-    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDLGPU)
+    constexpr const char* kRendererName = "SDLGPU";
     constexpr bool kRasterizes = true;
-    // Supplies SDL_GPU's lazy readback proxy, so its backbuffer is measurable here.
+    // Supplies SDLGPU's lazy readback proxy, so its backbuffer is measurable here.
     constexpr bool kBackbufferReadbackRequired = true;
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr const char* kRendererName = "SOFTWARE";

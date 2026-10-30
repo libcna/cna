@@ -1,12 +1,12 @@
 # docs/fna3d-renderer.md: the FNA3D renderer draws through FNA3D (fetched and pinned by
-# cmake/ThirdPartyFNA3D.cmake), which itself dispatches onto SDL_GPU, Direct3D 11 or OpenGL at
+# cmake/ThirdPartyFNA3D.cmake), which itself dispatches onto SDLGPU, Direct3D 11 or OpenGL at
 # runtime. SDL3 supplies the window FNA3D presents into -- the same window every other windowed
 # renderer uses; FNA3D's own only dependency is that same SDL3.
 
 # FNA3D's sole shader entry point takes a compiled Direct3D 9 Effect binary, so the vendored XNA
 # stock effects (effects/, provenance in effects/README.md) are embedded into a generated header
 # rather than loaded from disk at run time -- a test binary stays self-contained, exactly like the
-# generated shader headers the SDL_GPU family carries.
+# generated shader headers the SDLGPU family carries.
 set(CNA_FNA3D_EMBEDDED_EFFECTS
     SpriteEffect
     BasicEffect

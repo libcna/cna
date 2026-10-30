@@ -1763,7 +1763,7 @@ namespace CNA::Internal::Renderers::EasyGL
          *
          * FX-062/FX-071: EasyGL draws immediately (no `Present()`-deferred queue), so
          * this is called directly from the `Draw*PrimitivesEx` compiled-effect branches rather
-         * than captured for later replay the way SDL_GPU's draw route has to. Every shader input
+         * than captured for later replay the way SDLGPU's draw route has to. Every shader input
          * is resolved against the whole bound stream set, so a shader consuming attributes from
          * several buffers binds each from its own buffer at its own stride and offset.
          *
@@ -2128,7 +2128,7 @@ namespace CNA::Internal::Renderers::EasyGL
          *
          * FX-083. `MaxMipLevel` becomes the sampler object's `GL_TEXTURE_MIN_LOD`, the
          * sampler-object expression of "never sample a level more detailed than this" -- the same
-         * mapping FNA3D's SDL_GPU driver makes (`min_lod = maxMipLevel`). FNA3D's own OpenGL
+         * mapping FNA3D's SDLGPU driver makes (`min_lod = maxMipLevel`). FNA3D's own OpenGL
          * driver instead writes `GL_TEXTURE_BASE_LEVEL` on the texture object, which is not
          * reachable from a per-slot sampler and would leak between two slots sampling one texture.
          *

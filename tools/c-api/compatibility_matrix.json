@@ -64,7 +64,7 @@
       "renderer": "OPENGLES3",
       "devices": "OFF",
       "role": "required",
-      "note": "EasyGL's GL ES 3 profile with a real GL context on the private display, in the multi-renderer tree that also compiles SDL_GPU, WEBGPU and FNA3D. It replaced the SDL_RENDERER configuration when that renderer was retired on 2026-10-13."
+      "note": "EasyGL's GL ES 3 profile with a real GL context on the private display, in the multi-renderer tree that also compiles SDLGPU, WEBGPU and FNA3D. It replaced the SDL_RENDERER configuration when that renderer was retired on 2026-10-13."
     },
     {
       "id": "software",

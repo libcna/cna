@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SDL_GPU RasterizerState.DepthBias/SlopeScaleDepthBias regression.
+// SDLGPU RasterizerState.DepthBias/SlopeScaleDepthBias regression.
 //
 // SDL 3.5 exposes constant factor, clamp, slope factor, and an explicit enable bit only in
 // SDL_GPUGraphicsPipelineCreateInfo::rasterizer_state. Before this remediation CNA captured both
@@ -10,7 +10,7 @@
 // This is deliberately a public rendering regression first: normalized XNA factors and exact
 // or near-coplanar, distinct-colour geometry make the depth winner deterministic. It does not use
 // the old Vulkan -1e6 flat-bias llvmpipe diagnostic as its oracle. Cache-cardinality checks then
-// prove that each genuinely static SDL_GPU state gets exactly one reusable pipeline, while
+// prove that each genuinely static SDLGPU state gets exactly one reusable pipeline, while
 // signed zero, target identity/dimensions, viewport state, and line-only state do not
 // fragment the cache.
 
@@ -189,7 +189,7 @@ class SdlGpuDepthBiasTest final : public Game
     static std::array<VertexPositionColor, 3> Triangle(
         bool sloped, const Color& color, float flatDepth = 0.5f)
     {
-        // SDL_GPU's cross-renderer clip-space depth is 0..1. Keep flat tests at 0.5 so both
+        // SDLGPU's cross-renderer clip-space depth is 0..1. Keep flat tests at 0.5 so both
         // positive and negative bias have room to move without near/far clamping.
         const float topDepth = sloped ? 0.25f : flatDepth;
         const float bottomDepth = sloped ? 0.75f : flatDepth;
@@ -410,10 +410,10 @@ class SdlGpuDepthBiasTest final : public Game
             SDL_MAJOR_VERSION == 3 && SDL_MINOR_VERSION == 5
                 && SDL_MICRO_VERSION == 0,
             "installed SDL headers report exactly 3.5.0");
-        Check(d24 || d32, "runtime exposes a depth-backed SDL_GPU target format");
+        Check(d24 || d32, "runtime exposes a depth-backed SDLGPU target format");
         Check(
             renderer.IsDebugModeEnabledEXT(),
-            "SDL_GPU debug mode is enabled for validation");
+            "SDLGPU debug mode is enabled for validation");
         Check(
             renderer.GetColoredPipelineCacheSizeEXT() == 0,
             "colored pipeline cache starts empty");
@@ -735,12 +735,12 @@ class SdlGpuDepthBiasTest final : public Game
         // contract depend on that out-of-scope capability.
         if (customEffect_->IsEffectValid())
         {
-            Check(true, "custom SDL_GPU ShaderEffect compiled for pipeline-family coverage");
+            Check(true, "custom SDLGPU ShaderEffect compiled for pipeline-family coverage");
             auto* customRenderer = dynamic_cast<SdlGpuEffectRenderer*>(
                 customEffect_->GetEffectRendererPtr());
             Check(
                 customRenderer != nullptr,
-                "custom effect exposes the SDL_GPU pipeline family");
+                "custom effect exposes the SDLGPU pipeline family");
             if (customRenderer != nullptr)
             {
                 Check(

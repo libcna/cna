@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SkinnedEffect.VertexColorEnabled proof for the SDL_GPU graphics renderer (stride-56
+// SkinnedEffect.VertexColorEnabled proof for the SDLGPU graphics renderer (stride-56
 // skinnedColoredVertexShader_/skinned_colored3d.vert.glsl+skinned_colored3d.frag.glsl) -- proves
 // the stride-56 skinned+Color vertex layout's Color attribute (location 5) is actually read and
 // correctly gated by the VertexColorEnabled uniform, and that the multiply happens AFTER the

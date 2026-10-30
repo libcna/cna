@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// SDL_GPU Texture3D transfer/subresource regression.
+// SDLGPU Texture3D transfer/subresource regression.
 //
 // The public CNA/FNA contract is an explicitly authored mip chain: mipMap=true allocates levels,
 // while SetData chooses which level receives exact texels. Plain Texture3D does not implicitly
-// regenerate the chain from level 0. SDL_GPU sampling is not part of CNA's current Texture3D
+// regenerate the chain from level 0. SDLGPU sampling is not part of CNA's current Texture3D
 // renderer; this test covers the implemented SetData/GetData contract only.
 //
 // The checks couple byte-exact content with validation-fatal CTest output. They cover:
@@ -404,10 +404,10 @@ public:
     SdlGpuTexture3DTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // pre-SDL_GPU PSG-0008: this test exercises a resource the
+        // pre-SDLGPU PSG-0008: this test exercises a resource the
         // Reach profile refuses outright, so under the default profile it threw before its
         // first check and reported as a renderer failure rather than as a test defect.
-        // profile_dead_tests.py named it DEAD-ON-PROFILE; GTI-0003 fixed three SDL_GPU
+        // profile_dead_tests.py named it DEAD-ON-PROFILE; GTI-0003 fixed three SDLGPU
         // tests this way and missed these.
         gdm_->setGraphicsProfileProperty(
             Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);

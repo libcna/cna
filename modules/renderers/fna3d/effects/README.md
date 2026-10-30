@@ -6,7 +6,7 @@
 a **compiled Direct3D 9 Effect Framework binary** and runs it through MojoShader. There is no
 "compile this GLSL/HLSL string" entry point anywhere in the library, and the OpenGL driver refuses
 to draw without a bound MojoShader program. A renderer built on FNA3D therefore cannot author its
-own shaders the way CNA's SDL_GPU family does — it must supply `.fxb` blobs.
+own shaders the way CNA's SDLGPU family does — it must supply `.fxb` blobs.
 
 These are the XNA 4.0 stock effects, exactly the artefacts FNA itself ships and loads through the
 same `FNA3D_CreateEffect()` call. Using them is not a shortcut around writing shaders: it is how
@@ -131,7 +131,7 @@ fxc.exe /nologo /Op /T fx_2_0 /Fo CnaSkinnedPbrEffect.fxb CnaSkinnedPbrEffect.fx
 MojoShader's SPIR-V profile formerly rejected `s4` and above because it compared every SM2/3
 sampler against the four-entry PS 1.x TEXBEM scratch table. CNA's pinned patch checks the real
 16-entry sampler register table; the same PBR witnesses pass through FNA3D OpenGL and
-SDL_GPU/Vulkan.
+SDLGPU/Vulkan.
 
 ---
 

@@ -78,7 +78,7 @@ namespace CNA::Internal::Renderers
      * renderer's existing factor/function→native mapping is untouched; only this genuinely-new
      * output state is added. `colorWriteChannels[i]` holds the raw XNA `ColorWriteChannels` int
      * (bit0=R, bit1=G, bit2=B, bit3=A; 15 = All) — a bit layout identical to the native colour
-     * masks of D3D9/WebGPU/SDL_GPU, so the value is usable directly on
+     * masks of D3D9/WebGPU/SDLGPU, so the value is usable directly on
      * mask-capable renderers and via the ColorWriteHas* helpers on boolean renderers.
      */
     struct BlendWriteState
@@ -1184,7 +1184,7 @@ namespace CNA::Internal::Renderers
     struct GpuVertexStreamBinding
     {
         /// Public binding slot -- the stream's index in the `SetVertexBuffers` array. Also the
-        /// native input slot on every API that has one (WebGPU vertex-buffer index, SDL_GPU
+        /// native input slot on every API that has one (WebGPU vertex-buffer index, SDLGPU
         /// `slot`).
         int slot = 0;
 

@@ -62,7 +62,7 @@ EasyGL consumes the declaration directly. STUB and HEADLESS keep honest non-rend
   `RendererStrideConformance.EveryPbrAndSkinnedFixtureImportsToItsCanonicalStride` pins the stride
   every PBR and skinned fixture imports to. These are standing renderer-conformance gates, not
   artefacts of the glTF campaign that found the bugs, and the reason to keep them is empirical:
-  between them they found three defects (`SDL_GPU`'s and `DILIGENT`'s (retired 2026-09-17)
+  between them they found three defects (`SDLGPU`'s and `DILIGENT`'s (retired 2026-09-17)
   unreachable `COLOR_0` shaders and `OPENGLES1`'s (retired 2026-09-17) misread PBR records) that
   **every static inventory in this repository reported as correct**, and the search they prompted
   found two more (`GLTF-475`). A source audit can only see what a renderer declares; only a draw
@@ -78,7 +78,7 @@ EasyGL consumes the declaration directly. STUB and HEADLESS keep honest non-rend
   multi-renderer build (`CNA_MULTI_RENDERER`) and colour readback, so it is not in the CI matrix
   below; it runs in `cmake-build-multi`.
 - `.github/workflows/gltf-renderer-stride-ci.yml` builds and runs those tests for `STUB`,
-  `HEADLESS`, `OPENGLES3`, `SDL_GPU` and `SOFTWARE` on every relevant push and pull request.
+  `HEADLESS`, `OPENGLES3`, `SDLGPU` and `SOFTWARE` on every relevant push and pull request.
 - `scripts/gltf-renderer-parity.sh` compares each renderer against the same committed L1–L5
   goldens. The 2026-08-14 run was byte-identical across renderers for all 42 selected L1–L5 tests;
   HEADLESS and OPENGLES3 also had identical outcomes for all 507 tests in `*Gltf*`.

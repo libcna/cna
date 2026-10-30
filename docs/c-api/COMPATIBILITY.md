@@ -39,7 +39,7 @@ different answers from the runtime underneath it.
 | Configuration | Renderer | `CNA_DEVICES` | Role | What it is for |
 |---|---|---|---|---|
 | `headless` | `HEADLESS` | OFF | required | No window, no GPU. Every route that needs neither is proven here, and every route that does is proven to refuse. |
-| `opengles3` | `OPENGLES3` | OFF | required | EasyGL's GL ES 3 profile with a real GL context on the private display, in the multi-renderer tree that also compiles SDL_GPU, WEBGPU and FNA3D. It replaced the SDL_RENDERER configuration when that renderer was retired on 2026-10-13. |
+| `opengles3` | `OPENGLES3` | OFF | required | EasyGL's GL ES 3 profile with a real GL context on the private display, in the multi-renderer tree that also compiles SDLGPU, WEBGPU and FNA3D. It replaced the SDL_RENDERER configuration when that renderer was retired on 2026-10-13. |
 | `software` | `SOFTWARE` | OFF | required | A CPU rasteriser: a third backend answer for every capability query, and the compiled-out devices half again. |
 | `asan` | `SOFTWARE` | ON | required | AddressSanitizer and UndefinedBehaviorSanitizer with leak detection on. This is what catches a handle that outlives its owner or an operation nobody released. It runs the CPU rasteriser with the devices half compiled in, which is the one pairing the other three rows leave out: SOFTWARE is therefore exercised in both CNA_DEVICES states. |
 

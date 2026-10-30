@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SDLGPU-37: Multiple Render Targets (MRT) proof for the SDL_GPU graphics renderer.
+// SDLGPU-37: Multiple Render Targets (MRT) proof for the SDLGPU graphics renderer.
 //
 // Stock (single fragment output) effects keep the same scope boundary the retired D3D11/D3D12
 // MRT support established: rts[0] is the real draw target; rts[1..count-1] are bound and
@@ -72,7 +72,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
 #include "CNA/TestSupport/CompiledEffectFixtures.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
@@ -378,7 +378,7 @@ class SdlGpuMrtTest : public Game
               "second cycle's second output");
     }
 
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
     void RunCompiledEffectMrtCheck(GraphicsDevice& dev)
     {
         Check(dev.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets),
@@ -670,7 +670,7 @@ protected:
                     stage = "MRT bind-cycle boundaries in one flush window";
                     RunMrtSegmentBoundaryCheck(dev);
                 }
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
                 stage = "ordinary compiled Effect MRT outputs and mixed formats";
                 RunCompiledEffectMrtCheck(dev);
 #endif
@@ -702,7 +702,7 @@ protected:
         if (frame_ == kTotalFrames)
         {
             int expectedPasses = 30 + (customEffectsSupported_ ? 15 : 0);
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
             expectedPasses += 10;
 #endif
             std::printf("=== %d/%d PASS ===\n", passCount_, expectedPasses);
@@ -715,10 +715,10 @@ public:
     SdlGpuMrtTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // pre-SDL_GPU PSG-0008: this test exercises a resource the
+        // pre-SDLGPU PSG-0008: this test exercises a resource the
         // Reach profile refuses outright, so under the default profile it threw before its
         // first check and reported as a renderer failure rather than as a test defect.
-        // profile_dead_tests.py named it DEAD-ON-PROFILE; GTI-0003 fixed three SDL_GPU
+        // profile_dead_tests.py named it DEAD-ON-PROFILE; GTI-0003 fixed three SDLGPU
         // tests this way and missed these.
         gdm_->setGraphicsProfileProperty(
             Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);

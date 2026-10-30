@@ -542,7 +542,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_SpriteBatch_SortMode COMMAND cna_test_webgpu_spritebatch_sortmode
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # pre-SDL_GPU PSG-0006: a queued draw whose ShaderEffect is disposed
+    # pre-SDLGPU PSG-0006: a queued draw whose ShaderEffect is disposed
     # before the frame flushes -- the CNAEXT_LeakLoop use-after-free, as a deterministic case.
     cna_webgpu_test(cna_test_webgpu_effect_outlived_by_draw webgpu_effect_outlived_by_draw_test.cpp)
     cna_register_renderer_test(NAME WebGPU_EffectOutlivedByDraw
@@ -895,7 +895,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # to.
     # Every public TextureFilter ordinal names a SEPARATE magnification, a separate
     # minification and a separate mipmap filter, so a renderer may not reduce the ordinal to one
-    # boolean. WebGPU's SpriteBatch sampler and SDL_GPU's ONE shared sampler helper both resolved
+    # boolean. WebGPU's SpriteBatch sampler and SDLGPU's ONE shared sampler helper both resolved
     # `textureFilter == 0 ? LINEAR : NEAREST`, and both keyed their sampler cache on
     # `filter == 0 ? 0 : 1`, so Anisotropic, LinearMipPoint, MinPointMagLinearMipLinear and
     # MinPointMagLinearMipPoint all magnified with POINT. This fixture measures the two DIFFERENT
@@ -908,7 +908,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     # Cross-renderer control: EnvironmentMapEffect samples TWO independent
     # resources -- the ordinary 2D texture through GraphicsDevice.SamplerStates[0] and the
-    # reflection cube through SamplerStates[1]. SDL_GPU bound a literal LinearClamp for the cube
+    # reflection cube through SamplerStates[1]. SDLGPU bound a literal LinearClamp for the cube
     # and captured only slot 0, so slot 1 could not reach replay at all. This fixture makes the
     # two slots independently observable (EnvironmentMapAmount 1 leaves the cube the only
     # contributor, 0 leaves the 2D texture the only one) and measures what every other renderer
@@ -971,7 +971,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Cross-renderer control: a RenderTarget2D handed to a stock or custom 3D effect as
-    # its texture must be sampled, not reinterpreted. The defect was SDL_GPU-local and fatal (its
+    # its texture must be sampled, not reinterpreted. The defect was SDLGPU-local and fatal (its
     # stock-effect paths static_cast an ITextureRenderer* to the unrelated sibling
     # SdlGpuTextureRenderer, fabricating an SDL_GPUTexture* out of a render target's own fields); this
     # run is what establishes that WEBGPU already honoured the contract rather than being made to.
@@ -1032,7 +1032,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 900 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Cross-renderer control: the same PUBLIC generated-mip readback contract on this
-    # renderer. The SIGSEGV was SDL_GPU-only and only SDL_GPU production changed; running the
+    # renderer. The SIGSEGV was SDLGPU-only and only SDLGPU production changed; running the
     # identical fixture here is what makes that claim falsifiable rather than asserted.
     cna_webgpu_test(cna_test_webgpu_msaa_mip_readback
         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_mip_readback_test.cpp)
@@ -1101,7 +1101,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # A rectangle-less GetBackBufferData must address the whole logical backbuffer
     # (PresentationParameters W x H) from the first observable frame, with no SetRenderTarget round
     # trip, no extra Present and no viewport reset -- sized from the backbuffer description, never from
-    # the renderer's live viewport. The defect was WebGPU/SDL_GPU-local (the rectangle-less path asked
+    # the renderer's live viewport. The defect was WebGPU/SDLGPU-local (the rectangle-less path asked
     # renderer_->GetViewportSize, which under FixedHeightDynamicWidth is aspect-scaled and, before the
     # window is realised, stale). Each leg runs in its own process so its first frame is genuinely first.
     cna_webgpu_test(cna_test_webgpu_backbuffer_readback_dimension

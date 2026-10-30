@@ -72,8 +72,15 @@ extensions regardless of this language-mapping distinction.
 ## Choosing a renderer
 
 CNA has 10 public renderer identities over 8 implementation families, chosen at CMake configure
-time (`-DCNA_GRAPHICS_RENDERER=<OPENGLES3|OPENGL33|WEBGL2|WEBGPU|HEADLESS|SOFTWARE|STUB|DIRECTX9|SDL_GPU|FNA3D>`). Full per-feature detail is in
+time (`-DCNA_GRAPHICS_RENDERER=<OPENGLES3|OPENGL33|WEBGL2|WEBGPU|HEADLESS|SOFTWARE|STUB|DIRECTX9|SDLGPU|FNA3D>`). Full per-feature detail is in
 `docs/graphics-renderer-feature-matrix.md`; the practical summary:
+
+The former `SDL_GPU` identity was renamed to `SDLGPU` on 2026-10-30. There is no compatibility
+alias: change selector values from `SDL_GPU` to `SDLGPU`, `CNA_RENDERER_SDL_GPU` to
+`CNA_RENDERER_SDLGPU`, every `CNA_SDL_GPU_*` build option or compile definition to
+`CNA_SDLGPU_*`, and the C constant `CNA_GRAPHICS_RENDERER_SDL_GPU` to
+`CNA_GRAPHICS_RENDERER_SDLGPU`. The numeric C ABI value remains 31. Do not rename SDL's own
+`SDL_GPU*` types/constants, the `SDL_GPU_DRIVER` hint or MojoShader's SDL_GPU adapter.
 
 - **Your game is 2D only** (SpriteBatch/SpriteFont, no 3D models or stock Effects): any drawing
   renderer works; keep the host default.
@@ -84,7 +91,7 @@ time (`-DCNA_GRAPHICS_RENDERER=<OPENGLES3|OPENGL33|WEBGL2|WEBGPU|HEADLESS|SOFTWA
 - **Your game loads custom compiled XNA/FNA effects:** choose **FNA3D**. It is currently the only
   renderer that advertises `GraphicsCapability::CompiledEffects`; all other renderers reject the
   same constructor explicitly instead of substituting a stock shader.
-- **SDL_GPU** is the modern native path (SDL's Vulkan, Direct3D 12 and Metal backends) and the
+- **SDLGPU** is the modern native path (SDL's Vulkan, Direct3D 12 and Metal backends) and the
   default on Windows, macOS and iOS; `ShaderEffect` is compiled out of it on Windows, Apple and
   Emscripten, and it has no occlusion queries.
 
@@ -106,7 +113,7 @@ Before the smaller caveats below — these two are the ones most likely to block
   Direct3D 9 Effect Framework bytecode (`.fxb` or an XNB Effect payload), not HLSL `.fx` source and
   not MonoGame MGFX. Public parameters, techniques/passes, cloning, pass state, general 3D draws,
   and `SpriteBatch` use the native MojoShader-backed runtime. Use FNA3D (always enabled), or enable
-  the matching `CNA_<RENDERER>_COMPILED_EFFECTS` option (`SDL_GPU`, `EASYGL`, `WEBGPU`,
+  the matching `CNA_<RENDERER>_COMPILED_EFFECTS` option (`SDLGPU`, `EASYGL`, `WEBGPU`,
   `SOFTWARE`, `DIRECTX9`; matrix in `docs/fx-compiled-effects.md` §10).
   Otherwise keep a renderer-specific CNAEXT `ShaderEffect` path.
 
@@ -189,7 +196,7 @@ work above.
    Existing `.xnb` files load as they are.
 4. Check the "what doesn't work yet" list above against your game's actual feature use before
    committing to a renderer.
-5. If your game loads compiled `.fx` bytecode, check the renderer: it needs FNA3D, SDL_GPU or the
+5. If your game loads compiled `.fx` bytecode, check the renderer: it needs FNA3D, SDLGPU or the
    EasyGL/OpenGL family with compiled effects configured in (see "The former blockers that matter
    to existing ports" above).
 
@@ -215,7 +222,7 @@ docs). Legend: ✅ ports as-is (after the property rewrite) · ⚠️ ports with
 | `Draw(Texture2D, Rectangle destination, Rectangle? source, Color, rotation, origin, SpriteEffects, layerDepth)` | ✅ **fixed, Task 922** (2026-07-09) | The real overload now takes an optional `std::optional<Rectangle> sourceRectangle`, matching FNA's `Rectangle?` exactly. Previously this was a `CNAEXT`-marked near-equivalent with a required `Rectangle` source parameter — not a drop-in signature match — found while verifying this checklist against the real header. |
 | `SpriteSortMode` (all 4 values) | ✅ | |
 | `transformMatrix` in `Begin()` | ✅ | |
-| Custom `Effect` via `Begin(effect)` | ⚠️ | Works on EasyGL; a custom `ShaderEffect` is compiled out of `SDL_GPU` on Windows, Apple and Emscripten. |
+| Custom `Effect` via `Begin(effect)` | ⚠️ | Works on EasyGL; a custom `ShaderEffect` is compiled out of `SDLGPU` on Windows, Apple and Emscripten. |
 | `DrawString` (6 overloads) | ✅ | |
 
 **`SpriteFont`**
@@ -321,11 +328,11 @@ knowledge.
 ### Picking/overriding the renderer at configure time
 
 ```bash
-cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3      # or SDL_GPU / WEBGPU / ...
+cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3      # or SDLGPU / WEBGPU / ...
 cmake --build build --target CnaTests
 ```
 
-`CNA_GRAPHICS_RENDERER` defaults to `WEBGL2` under Emscripten, `SDL_GPU` on Windows, macOS and iOS,
+`CNA_GRAPHICS_RENDERER` defaults to `WEBGL2` under Emscripten, `SDLGPU` on Windows, macOS and iOS,
 and `OPENGLES3` everywhere else. See the
 top-level `README.md` §9 for the full per-platform build matrix (Windows/MinGW cross-compile
 included) — not repeated here.
@@ -336,7 +343,7 @@ included) — not repeated here.
 |---|---|---|
 | `CNA: Missing sibling repository 'sharp-runtime'` / `'easy-gl'` | These are sibling checkouts next to this repo, **not** git submodules — `git submodule update --init` will not fetch them | `cd ..` and `git clone` the missing repo next to this one (the error message prints the exact URL) |
 | `Missing vendored 'SDL' …` right after a fresh clone | Downloaded a ZIP/release archive instead of cloning with Git, or forgot to init submodules — vendored `third_party/SDL`/`SDL_mixer` are empty | `git submodule update --init`, or pass `-DCNA_USE_SYSTEM_SDL=ON` to use system SDL3 packages instead |
-| `CNA: renderer <NAME> ... has been retired` | The named renderer was retired ([removed-renderers.md](removed-renderers.md)); nothing aliases it | Pick a surviving renderer — `SDL_GPU` reaches Vulkan, Direct3D 12 and Metal through SDL |
+| `CNA: renderer <NAME> ... has been retired` | The named renderer was retired ([removed-renderers.md](removed-renderers.md)); nothing aliases it | Pick a surviving renderer — `SDLGPU` reaches Vulkan, Direct3D 12 and Metal through SDL |
 | `CNA_ENABLE_VIDEO=ON` cannot find FFmpeg | The required FFmpeg development packages are missing; this is independent of the graphics renderer | Install `libavcodec-dev libavformat-dev libavutil-dev libswresample-dev`, use the default `AUTO` fallback, or configure `-DCNA_ENABLE_VIDEO=OFF` for a game without video. See [video-backend.md](video-backend.md). |
 
 ### Common runtime failures

@@ -391,7 +391,7 @@ After making changes:
    (`cmake --build <build-dir>`) or a specific test/example target by its own name (matching AGENTS.md).
 2. Report: changed files, added stubs, missing dependencies, intentional deviations, build result, remaining errors.
 
-Default debug build dir: `cmake-build-debug/`. SDL_GPU build dir: `cmake-build-sdlgpu/`.
+Default debug build dir: `cmake-build-debug/`. SDLGPU build dir: `cmake-build-sdlgpu/`.
 Multi-renderer build dir: `cmake-build-multi/` (see below).
 
 ### Runtime renderer selection (second build mode)
@@ -446,7 +446,7 @@ tools/platform/run_gpu_tests_private.sh <build-dir> [ctest arguments...]
 ```
 
 It starts a headless Weston and a private rootful Xwayland (DRI3, the real GPU — Xvfb cannot present
-Vulkan, which SDL_GPU uses on Linux) and runs `ctest` against them; nothing appears on the desktop. `CNA_TEST_DISPLAY` is empty by
+Vulkan, which SDLGPU uses on Linux) and runs `ctest` against them; nothing appears on the desktop. `CNA_TEST_DISPLAY` is empty by
 default, so registered tests inherit the launcher's `DISPLAY`; the live desktop needs an explicit
 `-DCNA_TEST_DISPLAY=:0 -DCNA_TEST_ALLOW_LIVE_DISPLAY=ON` (see `cmake/TestDisplayPolicy.cmake`, which
 explains the policy). The runner refuses a tree that still forces a display.
@@ -545,9 +545,9 @@ checklist. The migration task log (`PLAT-*`) is in Git history.
 
 Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 (`OPENGLES3` | `OPENGL33` | `WEBGL2` | `WEBGPU` | `HEADLESS` | `SOFTWARE` | `STUB` | `DIRECTX9` |
-`SDL_GPU` | `FNA3D`). These are exactly **10 public identities** over 8 implementation families;
-EasyGL remains an internal implementation shared by three GL profiles. `SDL_GPU` is CNA's modern
-native path: CNA maps XNA 4.0 onto SDL_GPU, and SDL owns its Vulkan, Direct3D 12 and Metal
+`SDLGPU` | `FNA3D`). These are exactly **10 public identities** over 8 implementation families;
+EasyGL remains an internal implementation shared by three GL profiles. `SDLGPU` is CNA's modern
+native path: CNA maps XNA 4.0 onto SDL's `SDL_GPU` API, and SDL owns its Vulkan, Direct3D 12 and Metal
 backends. The canonical list lives in
 `cmake/RendererIdentities.cmake` and is pinned by `scripts/check_renderer_identities.py`.
 CNA's graphics code says **renderer**, never backend, for a CNA graphics renderer
@@ -568,7 +568,7 @@ with its permanently reserved C ABI value, and at run time as retired rather tha
 number is never reassigned and no surviving renderer is an alias for it. Do not resurrect one
 without a fresh owner instruction -- see `docs/removed-renderers.md`.
 
-`WEBGPU` is supported (`GraphicsRendererMaturity::Supported` since 2026-10-17, the class `SDL_GPU`
+`WEBGPU` is supported (`GraphicsRendererMaturity::Supported` since 2026-10-17, the class `SDLGPU`
 is in), with a real 3D route (stock effects, instancing, render targets, MSAA, fog parity,
 GPU-native compressed textures, stencil ops) and Emscripten browser support.
 The *Status* and *Important limitations* sections of `docs/webgpu-renderer.md` are the single source
@@ -595,7 +595,7 @@ stay `UpperCamelCase`.
 
 **Asking a renderer what it will actually do.** `GraphicsCapability::CustomEffects` means the
 renderer *accepts* an effect, not that it runs your shader source: SOFTWARE and HEADLESS accept any
-source and keep rendering with their own fixed path, and SDL_GPU's `ShaderEffect` takes SPIR-V rather
+source and keep rendering with their own fixed path, and SDLGPU's `ShaderEffect` takes SPIR-V rather
 than GLSL. The detailed capability profile (`docs/renderer-capability-profiles.md`) answers the
 narrower question; new shader-based code must ask it rather than the coarse capability alone.
 

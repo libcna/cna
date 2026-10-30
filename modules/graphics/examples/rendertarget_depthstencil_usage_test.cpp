@@ -25,7 +25,7 @@
 // All three FNA3D drivers agree with the header:
 //   * OpenGL   -- `preserveTargetContents` is ignored outright; an FBO's depth/stencil attachment
 //                 simply persists across binds.
-//   * SDL_GPU  -- depth uses `LOADOP_LOAD` unless a clear is pending, stencil likewise, and both
+//   * SDLGPU  -- depth uses `LOADOP_LOAD` unless a clear is pending, stencil likewise, and both
 //                 store ops are unconditionally `STOREOP_STORE` ("We always have to store just in
 //                 case changing render state breaks the render pass").
 //   * D3D11    -- `preserveTargetContents` is ignored; `OMSetRenderTargets` has no load action and
@@ -289,12 +289,12 @@ namespace
     constexpr Contract kContract{"WEBGPU", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, false, false, true, true, false, false};
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     // Already FNA3D-shaped: every depth/stencil target info uses `clearX ? CLEAR : LOAD` with an
-    // unconditional STORE, which is what FNA3D's own SDL_GPU driver does.
+    // unconditional STORE, which is what FNA3D's own SDLGPU driver does.
     // `orderedClearInCycle` was false while the ordered mid-cycle Clear fix was open, the same boundary as WebGPU
     // (check K7); both now segment the bind cycle at every observable Clear.
-    constexpr Contract kContract{"SDL_GPU", Support::Exact, true, Support::Exact,
+    constexpr Contract kContract{"SDLGPU", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, true, true, true, true, false, false};
 #elif defined(CNA_RENDERER_DIRECTX9)

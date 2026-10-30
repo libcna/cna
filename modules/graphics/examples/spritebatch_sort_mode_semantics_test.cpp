@@ -23,8 +23,8 @@
 //      therefore rasterized every sprite of the batch against the texture's FINAL contents. That
 //      divergence from XNA was CNA-wide rather than Vulkan-specific, and it was recorded as
 //      VULKAN-057 rather than papered over here. SOFTWARE-252 later made EasyGL flush each
-//      Immediate sprite from Draw. SDL_GPU and WEBGPU still replayed the batch after the upload
-//      until an upload to a texture a queued draw samples was ordered after that draw (SDL_GPU
+//      Immediate sprite from Draw. SDLGPU and WEBGPU still replayed the batch after the upload
+//      until an upload to a texture a queued draw samples was ordered after that draw (SDLGPU
 //      submits the queued work first, WEBGPU writes into a fresh texture), so leg B now asserts
 //      XNA's answer on every renderer.
 //

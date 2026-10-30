@@ -35,7 +35,7 @@ function(_cna_renderer_identity_map out_var)
         SOFTWARE     Software
         STUB         Stub
         DIRECTX9     DirectX9
-        SDL_GPU      SdlGpu
+        SDLGPU       SdlGpu
         FNA3D        Fna3d)
 
     set(${out_var} "${_map}" PARENT_SCOPE)

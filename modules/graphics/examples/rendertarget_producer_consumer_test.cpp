@@ -130,9 +130,9 @@ namespace
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "WEBGPU";
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "SDL_GPU";
+    constexpr const char* kRendererName = "SDLGPU";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX9";
@@ -145,7 +145,7 @@ namespace
      *
      * CLOSED this (2026-07-29), and the declaration is now unconditionally true.
      *
-     * It used to read false on SDL_GPU, whose stock-effect paths
+     * It used to read false on SDLGPU, whose stock-effect paths
      * `static_cast<const SdlGpuTextureRenderer*>(params.textureN)` onto the unrelated sibling
      * SdlGpuRenderTargetRenderer and died. Leg C (four stock 3D consumers) was skipped there and now
      * runs: SIGSEGV against the pre-fix renderer, 4/4 exact after.
@@ -176,11 +176,11 @@ namespace
     /**
      * @brief Whether a `Clear()` issued AFTER a draw, in the same bind cycle, wins.
      *
-     * Measured this here first: on SDL_GPU **and WebGPU** a producer built as
+     * Measured this here first: on SDLGPU **and WebGPU** a producer built as
      * `Clear(A); draw pattern; Clear(B)` used to be sampled by its consumer as the PATTERN, not as
      * B -- the trailing clear was lost, so `Clear()` was not an ordered command there. Both
      * reported the identical value (20,25,40,255), i.e. the pattern's own texel (0,0), on all three
-     * RenderTargetUsage values, which is the SDL_GPU/WebGPU counterpart of the ordered Clear fix (fixed on,
+     * RenderTargetUsage values, which is the SDLGPU/WebGPU counterpart of the ordered Clear fix (fixed on,
      * and scoped to, the retired VULKAN renderer). Both renderers now cut their bind cycle into one
      * native render pass per observable Clear, so the ordered contract holds everywhere and this
      * declaration is unconditional -- the producer/consumer path being the second, independent

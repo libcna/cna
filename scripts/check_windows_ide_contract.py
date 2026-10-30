@@ -115,7 +115,7 @@ def main() -> int:
     expected_sdlgpu = {
         "CNA_PLATFORM": "SDL3",
         "CNA_AUDIO_PLATFORM": "SDL3",
-        "CNA_GRAPHICS_RENDERER": "SDL_GPU",
+        "CNA_GRAPHICS_RENDERER": "SDLGPU",
         "CNA_ENABLE_SDL": "ON",
         "CNA_BUILD_TESTS": "ON",
         "CNA_BUILD_EXAMPLES": "ON",
@@ -171,7 +171,7 @@ def main() -> int:
             if command not in workflow:
                 errors.append(f"Windows MSVC workflow does not consume the shared contract: {command}")
         if "grep -q 'Skipped'" not in workflow:
-            errors.append("Windows SDL_GPU workflow must reject CTest skips")
+            errors.append("Windows SDLGPU workflow must reject CTest skips")
 
     if not VSCODE_SETTINGS_PATH.exists() or not VSCODE_EXTENSIONS_PATH.exists():
         errors.append("missing shared VS Code CMake configuration")

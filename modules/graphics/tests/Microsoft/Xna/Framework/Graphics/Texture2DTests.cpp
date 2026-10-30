@@ -827,7 +827,7 @@ protected:
 
     // DIRECTX9 maps each classic format to its own D3DFORMAT and asks the device for it
     // (CheckDeviceFormat), so there whether a format is stored is a device fact, as Bgra4444 is
-    // on SDL_GPU, rather than a fact about the renderer.
+    // on SDLGPU, rather than a fact about the renderer.
     [[nodiscard]] bool Direct3D9DeviceStores(SurfaceFormat format)
     {
         return CNA_RENDERER_IS(DirectX9) &&
@@ -846,7 +846,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // `rgba8snorm`, so the format is stored natively there too, with no expansion.
     // Software retains the signed values in its canonical CPU sampling plane.
     // Apple M4 AM4-189: FNA3D stores it natively signed-normalized on its OpenGL and
-    // SDL_GPU drivers since MSR-019 -- the stale arm still expected its old refusal.
+    // SDLGPU drivers since MSR-019 -- the stale arm still expected its old refusal.
     if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Software, Fna3d) ||
         Direct3D9DeviceStores(SurfaceFormat::NormalizedByte2))
     {
@@ -861,7 +861,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
     // Apple M4 AM4-189: FNA3D stores it natively signed-normalized on its OpenGL and
-    // SDL_GPU drivers since MSR-019 -- the stale arm still expected its old refusal.
+    // SDLGPU drivers since MSR-019 -- the stale arm still expected its old refusal.
     if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Software, Fna3d) ||
         Direct3D9DeviceStores(SurfaceFormat::NormalizedByte4))
     {

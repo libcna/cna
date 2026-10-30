@@ -477,7 +477,7 @@ TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetIsCreatedInTheRequestedFormat
 
 // Apple M4 AM4-147: a float cube target's own texels through TextureCube.GetData and
 // SetData -- the declared-format transfer, not the Color one. First pinned on the retired METAL
-// renderer; SDL_GPU and WEBGPU refuse the typed read (handoff.md section 5.1).
+// renderer; SDLGPU and WEBGPU refuse the typed read (handoff.md section 5.1).
 TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetTransfersItsTypedTexels)
 {
     using namespace CNA::Testing::Renderers;   // NOLINT(google-build-using-namespace)

@@ -1,8 +1,8 @@
-# SDL_GPU renderer
+# SDLGPU renderer
 
-`-DCNA_GRAPHICS_RENDERER=SDL_GPU` maps XNA 4.0 onto SDL3's GPU API (`SDL_gpu.h`). SDL owns the
+`-DCNA_GRAPHICS_RENDERER=SDLGPU` maps XNA 4.0 onto SDL3's GPU API (`SDL_gpu.h`). SDL owns the
 drivers underneath it: Vulkan on Linux and Android, Direct3D 12 on Windows, Metal on macOS and iOS.
-Those are SDL's backends, not CNA renderer identities (`docs/renderer-registry.md`). `SDL_GPU` is
+Those are SDL's backends, not CNA renderer identities (`docs/renderer-registry.md`). `SDLGPU` is
 the default renderer on Windows, macOS and iOS (`cmake/RendererIdentityDefault.cmake`). The source
 is `modules/renderers/sdl-gpu/`.
 
@@ -13,8 +13,8 @@ rows as `SDLGPU-nnn`.
 
 | Option | Default | Effect |
 |---|---|---|
-| `CNA_SDL_GPU_SHADERCROSS` | ON on Windows and Apple, OFF elsewhere | Links the pinned SDL_shadercross statically and translates the stock SPIR-V shaders to the DXBC or MSL that the D3D12 and Metal drivers consume (`SDLGPU-92`). Vulkan takes the SPIR-V directly. SDL is linked after every static archive that calls it, because GNU/MinGW resolves archives in one pass (`SDLGPU-98`). |
-| `CNA_SDL_GPU_COMPILED_EFFECTS` | OFF | Runs compiled XNA `Effect` bytecode through MojoShader's SDL_GPU adapter (`FX-061`); with ShaderCross on, the same route reaches D3D12 and Metal (`SDLGPU-93`). |
+| `CNA_SDLGPU_SHADERCROSS` | ON on Windows and Apple, OFF elsewhere | Links the pinned SDL_shadercross statically and translates the stock SPIR-V shaders to the DXBC or MSL that the D3D12 and Metal drivers consume (`SDLGPU-92`). Vulkan takes the SPIR-V directly. SDL is linked after every static archive that calls it, because GNU/MinGW resolves archives in one pass (`SDLGPU-98`). |
+| `CNA_SDLGPU_COMPILED_EFFECTS` | OFF | Runs compiled XNA `Effect` bytecode through MojoShader's SDL_GPU adapter (`FX-061`); with ShaderCross on, the same route reaches D3D12 and Metal (`SDLGPU-93`). |
 
 The stock shaders are GLSL under `src/shaders/`, compiled by `compile_shaders.py` (libshaderc) into
 the committed `spirv_shaders.hpp`; regenerate it after editing a `.glsl` file. The CNAEXT
@@ -28,14 +28,14 @@ The final sweep (2026-09-11) found every audited ordinary XNA 4.0 graphics famil
 equivalent to EasyGL on Linux/Vulkan and on Direct3D 12, except three things SDL_gpu cannot
 express:
 
-| Feature | SDL_GPU behaviour |
+| Feature | SDLGPU behaviour |
 |---|---|
 | `BlendState.MultiSampleMask` | A mask keeping every sample or none is applied exactly; any other mask is refused, and `RendererFeature::MultiSampleMask` reports Restricted (CNA-DEMOS DC-R2, 2026-10-24). |
 | `PresentInterval::Two` | SDL_gpu has no half-rate present mode; it presents with plain VSYNC, as `One` does. |
 | `OcclusionQuery` | SDL_gpu has no query API. The renderer reports the limitation and refuses to construct a query rather than fabricate a result (`SDLGPU-80`). |
 
 Parity covers the ordinary XNA surface only, not the CNAEXT graphics extensions. Where the audit
-found EasyGL itself wrong, SDL_GPU follows XNA/FNA instead of copying it; the one such EasyGL
+found EasyGL itself wrong, SDLGPU follows XNA/FNA instead of copying it; the one such EasyGL
 defect still open is in [`../handoff.md`](../handoff.md) §5.1.
 
 ## Platform evidence
@@ -74,7 +74,7 @@ defect still open is in [`../handoff.md`](../handoff.md) §5.1.
 ## Tests
 
 The integration programs are in `modules/renderers/sdl-gpu/examples/` and register as `SdlGpu_*`
-only when `SDL_GPU` is the default renderer; the shared renderer-neutral parity fixtures are in
+only when `SDLGPU` is the default renderer; the shared renderer-neutral parity fixtures are in
 `modules/graphics/examples/parity/`. Every registration fails on a Vulkan validation or D3D12
 debug-layer error or warning (`SDLGPU-115`).
 

@@ -19,7 +19,7 @@
 //   decodes correctly too.
 // Check D -- GetData answers honestly for the driver in hand: FNA3D's OpenGL and Direct3D 11
 //   drivers refuse compressed readback outright, so the renderer must report that it read nothing
-//   rather than hand back an untouched buffer; where the driver does read back (SDL_GPU), the
+//   rather than hand back an untouched buffer; where the driver does read back (SDLGPU), the
 //   bytes must match exactly.
 // Check E -- a compressed TextureCube is refused by name rather than mis-sized.
 // Check F -- binding past the driver's real sampler-slot ceiling is refused by name.

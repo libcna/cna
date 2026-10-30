@@ -562,7 +562,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         "SingleRenderer|HEADLESS|EMPTY|ACCEPT|renderer set -- HEADLESS"
         "DefaultInsideTheSet|SOFTWARE|HEADLESS,SOFTWARE,STUB|ACCEPT|renderer set -- SOFTWARE"
         "DefaultIsListedFirst|STUB|HEADLESS,SOFTWARE,STUB|ACCEPT|renderer set -- STUB"
-        "DefaultOutsideTheSet|SOFTWARE|OPENGL33,SDL_GPU|REJECT|is not a member of")
+        "DefaultOutsideTheSet|SOFTWARE|OPENGL33,SDLGPU|REJECT|is not a member of")
     foreach(_cna_renderer_default_case IN LISTS _cna_renderer_default_cases)
         string(REPLACE "|" ";" _cna_renderer_default_fields "${_cna_renderer_default_case}")
         list(GET _cna_renderer_default_fields 0 _cna_case_name)
@@ -638,7 +638,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         "Option_DIRECTX11|OPTION|DIRECTX11|REFUSE|removed-renderers.md"
         "SetMember_METAL|SET|METAL|REFUSE|removed-renderers.md"
         "Option_SDL_RENDERER|OPTION|SDL_RENDERER|REFUSE|removed-renderers.md"
-        "LiveSelectorAccepted_SDL_GPU|SELECTOR|SDL_GPU|ACCEPT|"
+        "LiveSelectorAccepted_SDLGPU|SELECTOR|SDLGPU|ACCEPT|"
+        "FormerSelectorSDL_GPUIsRefused|SELECTOR|SDL_GPU|REFUSE|old spelling is not an alias"
+        "FormerSetMemberSDL_GPUIsRefused|SET|SDL_GPU|REFUSE|old spelling is not an alias"
+        "FormerOptionSDL_GPUIsRefused|OPTION|SDL_GPU|REFUSE|old spelling is not an alias"
         "LiveSelectorAccepted_FNA3D|SELECTOR|FNA3D|ACCEPT|"
         "LiveSetMemberAccepted_STUB|SET|STUB|ACCEPT|"
         "UnknownNameStillUnknown|SELECTOR|NOT_A_RENDERER|REFUSE|unknown graphics renderer")
@@ -694,10 +697,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         set_tests_properties(CnaTestDisplayIsolation PROPERTIES LABELS "configuration" TIMEOUT 300)
     endif()
     # VMG-0007 (the retired Vulkan renderer's workstream): every SPIR-V module the tree ships --
-    # SDL_GPU's stock shaders and every generated shader package -- validated by spirv-val. An
+    # SDLGPU's stock shaders and every generated shader package -- validated by spirv-val. An
     # offline gate like the package reproducibility tests: it exits 77 where spirv-val is not
     # installed.
-    if(Python3_Interpreter_FOUND AND "SDL_GPU" IN_LIST CNA_RENDERER_IDENTITIES)
+    if(Python3_Interpreter_FOUND AND "SDLGPU" IN_LIST CNA_RENDERER_IDENTITIES)
         add_test(NAME SpirvPayloadValidation
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/validate_spirv_payloads.py"

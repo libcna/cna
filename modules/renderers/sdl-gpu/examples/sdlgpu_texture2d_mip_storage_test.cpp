@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 //
-// SDL_GPU's ordinary Texture2D had no mip chain to filter.
+// SDLGPU's ordinary Texture2D had no mip chain to filter.
 //
-// Settled the CONTRACT a TextureFilter ordinal names and measured SDL_GPU at 55/87 on
+// Settled the CONTRACT a TextureFilter ordinal names and measured SDLGPU at 55/87 on
 // it, with all nine ordinals sampling level 0 at an exact 2x, 4x and 8x minification. That fixture
 // asks "which level did the sampler choose?" -- and on this renderer the honest answer was "the only
 // one that existed". This fixture asks the question underneath it, which no filter fixture can:
 // does the RESOURCE have the levels its public LevelCount claims, and can a caller put content in
 // them? Those are storage and upload questions, and they are answered here against the native
-// SDL_GPU texture rather than inferred from a sampled pixel.
+// SDLGPU texture rather than inferred from a sampled pixel.
 //
 // THE TWO PRE-FIX MECHANISMS, both in SdlGpuTextureRenderer and neither in the sampler:
 //
@@ -1095,7 +1095,7 @@ class SdlGpuTexture2DMipStorageTest : public Game
     void DrawEnvMap(GraphicsDevice& dev)
     {
         // The cube contributes nothing: this leg measures the BASE 2D texture's slot-0 sampler.
-        // (SDL_GPU's hardcoded cube sampler) is a separate, untouched finding.
+        // (SDLGPU's hardcoded cube sampler) is a separate, untouched finding.
         EnvironmentMapEffect fx(dev);
         Matrices(fx);
         fx.setTextureProperty(chain8_.get());
@@ -1323,7 +1323,7 @@ class SdlGpuTexture2DMipStorageTest : public Game
 
     void Finish()
     {
-        std::printf("=== %d/%d checks passed on SDL_GPU ===\n", passCount_, totalCount_);
+        std::printf("=== %d/%d checks passed on SDLGPU ===\n", passCount_, totalCount_);
         std::fflush(stdout);
         result_ = (totalCount_ > 0 && passCount_ == totalCount_) ? 0 : 1;
         Exit();
@@ -1348,7 +1348,7 @@ protected:
         done_ = true;
         auto& dev = getGraphicsDeviceProperty();
 
-        std::printf("=== SDL_GPU Texture2D mip storage and upload ===\n");
+        std::printf("=== SDLGPU Texture2D mip storage and upload ===\n");
         note("SCOPE: ordinary sampled Texture2D only. TextureCube, Texture3D, RenderTarget2D and "
              "RenderTargetCube already pass a real CalculateMipLevels to SDL and have their own "
              "level-aware upload paths; they are classified, not changed, by .");
@@ -1377,10 +1377,10 @@ public:
     SdlGpuTexture2DMipStorageTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // pre-SDL_GPU PSG-0008: this test exercises a resource the
+        // pre-SDLGPU PSG-0008: this test exercises a resource the
         // Reach profile refuses outright, so under the default profile it threw before its
         // first check and reported as a renderer failure rather than as a test defect.
-        // profile_dead_tests.py named it DEAD-ON-PROFILE; GTI-0003 fixed three SDL_GPU
+        // profile_dead_tests.py named it DEAD-ON-PROFILE; GTI-0003 fixed three SDLGPU
         // tests this way and missed these.
         gdm_->setGraphicsProfileProperty(
             Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);

@@ -195,7 +195,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         /// Wires MojoShader's own OpenGL adapter as the backend the effect parser compiles with.
         ///
-        /// FX-062 finding (tools/graphics/mojoshader_gl_probe.cpp): unlike the SDL_GPU/
+        /// FX-062 finding (tools/graphics/mojoshader_gl_probe.cpp): unlike the SDL GPU/
         /// D3D11 adapters, every MOJOSHADER_gl* function relevant to MOJOSHADER_effectShaderContext
         /// omits the leading context-pointer argument the typedefs declare -- the OpenGL adapter
         /// keeps its context as implicit thread-local state (MOJOSHADER_glMakeContextCurrent), not

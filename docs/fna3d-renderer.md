@@ -25,7 +25,7 @@ effects.
 
 Until 2026-08-18, FNA3D silently shaded PBR draws with Basic/Skinned. GLTF-477 changed that to an
 honest refusal. The native path above now supersedes the refusal and is pixel-verified on both the
-OpenGL and SDL_GPU/Vulkan drivers: analytic rigid/skinned BRDF 5/5, vertex colour 5/5, padded
+OpenGL and SDLGPU/Vulkan drivers: analytic rigid/skinned BRDF 5/5, vertex colour 5/5, padded
 declarations 3/3, and a 1,600-draw uniform ring 1,600/1,600. The shared IBL pixel oracle additionally
 checks ambient replacement, analytic diffuse/specular split-sum output, intensity, mip selection,
 sampler-controlled mip interpolation and the skinned path. The shared public double-sided oracle
@@ -43,7 +43,7 @@ storage but preserves every red-channel bit and the public Single transfer layou
 Regression coverage checks
 vertex-slot sampling with PointClamp/PointWrap, exact 2D mip/rectangle transfers and
 all six cube faces across mip levels. These checks pass on Linux with both FNA3D's
-OpenGL and SDL_GPU/Vulkan drivers; this is not a new Windows or Apple qualification.
+OpenGL and SDLGPU/Vulkan drivers; this is not a new Windows or Apple qualification.
 
 | Field | Value |
 |---|---|
@@ -77,9 +77,9 @@ not offered there. Both are linked statically into CNA only: they add entry poin
 (`MOJOSHADER_attribute`, `MOJOSHADER_effectState`), so neither is ABI-compatible with an upstream
 shared library.
 
-- **libcna/FNA3D** `cna`: the XNA/Direct3D 9 pixel-centre entry point (OpenGL, D3D11 and SDL_GPU
+- **libcna/FNA3D** `cna`: the XNA/Direct3D 9 pixel-centre entry point (OpenGL, D3D11 and SDLGPU
   drivers), OpenGL multisampled-target readback and cube mipmap resolve (FNA3D-54), per-call GL and
-  MojoShader context activation for several live devices (FNA3D-51), the SDL_GPU multisampled cube
+  MojoShader context activation for several live devices (FNA3D-51), the SDLGPU multisampled cube
   face (FNA3D-56) — and the MojoShader submodule switched to the fork. Since the 2026-10-26
   dependency audit also: bounded, format-exact GetData on all three drivers, VFACE's XNA sign,
   `FNA3D_SetLegacyBumpMapEnvEXT`, Depth vertex usage, disposal at device destruction, tracing of
@@ -87,14 +87,14 @@ shared library.
   `MOJOSHADER_STATIC_SPIRVCROSS`, and its own regression tests (`tests/cna`). Its review the same
   day added: readbacks that restore the context's pack state, OpenGL ES 3 reads in the
   implementation's own layout where that is the format's (`ColorSrgbEXT` is refused there: ES 3
-  decodes sRGB to linear as it reads), SDL_GPU downloads copying only their rectangle and a
+  decodes sRGB to linear as it reads), SDLGPU downloads copying only their rectangle and a
   checked `ReadBackbuffer`, pipeline-cache keys packed unsigned (blend states differing only in a
-  blend function or the multisample mask no longer share one), freed SDL_GPU vertex-binding
+  blend function or the multisample mask no longer share one), freed SDLGPU vertex-binding
   cache, dumpspirv effect table and trace lock, and tests for the backbuffer, Depth usage, the
   installed package, SDL 2 replay and trace round trips.
 - **libcna/mojoshader** `cna`: 133 commits — malformed-bytecode hardening of the Effect and
   preshader parsers, Direct3D 9 shader-model validation, GLSL/GLSL ES, SPIR-V and Metal profile
-  fixes (TEXCRD, vertex colour clamp, pixel centres, centroid, predication, precision), the SDL_GPU
+  fixes (TEXCRD, vertex colour clamp, pixel centres, centroid, predication, precision), the SDLGPU
   adapter hooks (static SDL_shadercross, SPIR-V transform, program identity, colour-target count)
   and the D3D11 bound-shader lifetime. Each commit names the CNA patch it was and the CNA commit that
   introduced it (`CNA-Patch:` trailer). One further commit adds the owner's `AGENTS.md` and
@@ -115,7 +115,7 @@ and push FNA3D, then move `CNA_FNA3D_GIT_TAG` here. A pin is always a full commi
 fork, never a branch name.
 
 **Testing an update** before the pin moves: configure a tree with
-`-DFETCHCONTENT_SOURCE_DIR_FNA3D=<the candidate checkout>` and run the FNA3D, SDL_GPU, WebGPU and
+`-DFETCHCONTENT_SOURCE_DIR_FNA3D=<the candidate checkout>` and run the FNA3D, SDLGPU, WebGPU and
 GL compiled-effect suites (`Fna3dCompiledEffect*`, `SdlGpuCompiledEffect*`, `WebGPUCompiledEffect*`,
 `CompiledEffect*`, `MojoShader*`, `RenderTargetSemantics.*`) per renderer, with `FNA3D_FORCE_DRIVER`
 set to `OpenGL` and to `SDLGPU`, plus `cna_mojoshader_effect_probe` and `CnaFna3dSamplerLifetimeTests`
@@ -135,15 +135,15 @@ CNA game code
   -> Microsoft::Xna::Framework::Graphics (GraphicsDevice / SpriteBatch / BasicEffect / ...)
   -> CNA::Internal::Renderers::Fna3d::Fna3dRenderer   (IGraphicsRenderer)
   -> FNA3D                                            (chooses its driver at runtime)
-  -> SDL_GPU  |  Direct3D 11  |  OpenGL
+  -> SDLGPU  |  Direct3D 11  |  OpenGL
 ```
 
-FNA3D tries its drivers in the order **SDL_GPU, Direct3D 11, OpenGL** and reports the SDL window
+FNA3D tries its drivers in the order **SDLGPU, Direct3D 11, OpenGL** and reports the SDL window
 flags the chosen driver needs. Pin a driver with the `FNA3D_FORCE_DRIVER` SDL hint
 (`OpenGL`, `D3D11`, `SDLGPU`, or the aliases `Vulkan`/`D3D12`/`Metal`, which FNA3D maps onto
 SDL_GPU backends). CNA's registered tests default `CNA_FNA3D_TEST_DRIVER` to `OpenGL` so a
 machine with a partially functional Vulkan stack cannot silently change the validation target.
-Set that CMake cache variable to `Vulkan` to run the same registered suite through SDL_GPU's
+Set that CMake cache variable to `Vulkan` to run the same registered suite through SDLGPU's
 Vulkan driver; the resulting CTest environment records the requested driver explicitly.
 
 ```bash
@@ -214,7 +214,7 @@ fixed from the descriptor's own request.
 | `MultipleRenderTargets` | true | `FNA3D_SetRenderTargets` takes the whole ordered set |
 | `AnisotropicFiltering` | true | `FNA3D_SamplerState::maxAnisotropy` |
 | `WireFrame` | true | `FNA3D_FILLMODE_WIREFRAME` |
-| `OcclusionQuery` | device-dependent | Probed from a real query on OpenGL/D3D11; false for FNA3D's SDL_GPU driver, whose public API has no query route |
+| `OcclusionQuery` | device-dependent | Probed from a real query on OpenGL/D3D11; false for FNA3D's SDLGPU driver, whose public API has no query route |
 | `Texture3D` | true | `FNA3D_CreateTexture3D` |
 | **`Instancing`** | device-dependent | `FNA3D_SupportsHardwareInstancing`; the draw additionally requires a compiled effect whose vertex shader consumes the instance stream. Stock effects are still rejected. |
 | `AdditiveBlending` | true | |
@@ -236,9 +236,9 @@ fixed from the descriptor's own request.
 - `Texture2D`, `Texture3D`, `TextureCube`: creation, mip levels, sub-rectangle upload and readback.
   The public `Texture2D` format gate includes native signed-normalized `NormalizedByte2/4` storage;
   byte round-trip, GPU sampling and authored mip levels are covered on both FNA3D OpenGL and
-  SDL_GPU drivers (`FNA3D-52` / `MSR-019`). `NormalizedByte2` is stored as `NormalizedByte4` with B
+  SDLGPU drivers (`FNA3D-52` / `MSR-019`). `NormalizedByte2` is stored as `NormalizedByte4` with B
   and A at +1, so every driver samples Direct3D 9's (R, G, 1, 1) -- no FNA3D driver swizzles, and
-  its SDL_GPU driver samples RG8 SNORM as (R, G, 0, 1) (`AM4-193`).
+  its SDLGPU driver samples RG8 SNORM as (R, G, 0, 1) (`AM4-193`).
 - `Texture3D::GetData` where the driver has no volume readback -- FNA3D's OpenGL driver
   implements no `GetTextureData3D` -- is served from a CPU mirror of the uploads, kept only where
   a 1×1×1 probe at device creation finds the readback missing. XNA's volume textures have no GPU
@@ -256,7 +256,7 @@ fixed from the descriptor's own request.
   ceiling, and oversized input is refused (FNA3D-36).
 - Blend / depth-stencil / rasterizer / sampler state, colour write masks, multisample mask, blend
   factor, standalone reference stencil, scissor and viewport.
-- XNA/D3D9 integer pixel centres for ordinary triangle draws across FNA3D's OpenGL, SDL_GPU and
+- XNA/D3D9 integer pixel centres for ordinary triangle draws across FNA3D's OpenGL, SDLGPU and
   D3D11 drivers, multisampled destinations included: XNA 4.0 keeps integer centres there too
   (`spikes/xna-msaa-pixel-center-spike/`). SpriteBatch explicitly keeps its own projection
   convention; point and line draws remain unshifted (`MSR-034`).
@@ -298,9 +298,9 @@ fixed from the descriptor's own request.
 | Unknown vertex stride with no `VertexDeclaration` | Throws, naming the stride. FNA3D binds real per-stream declarations and this renderer will not guess a layout. |
 | Out-of-contract state ordinals | Throw, naming the state and the ordinal, instead of casting into an undefined FNA3D enumerator. |
 | Instanced stock-effect drawing | `DrawInstancedPrimitivesEx` throws because stock shaders declare no instance input. A compatible compiled effect uses native instancing when the driver reports it. |
-| Compiled FX on non-FNA3D renderers | Outside this renderer. SDL_GPU, EasyGL, WebGPU, SOFTWARE and DIRECTX9 report true behind their own opt-in build options ([`fx-compiled-effects.md`](fx-compiled-effects.md) §10); other backends report `CompiledEffects == false`. |
+| Compiled FX on non-FNA3D renderers | Outside this renderer. SDLGPU, EasyGL, WebGPU, SOFTWARE and DIRECTX9 report true behind their own opt-in build options ([`fx-compiled-effects.md`](fx-compiled-effects.md) §10); other backends report `CompiledEffects == false`. |
 | Context-loss simulation | Not implemented; FNA3D exposes no device-loss surface, and the shared `DebugSimulateContextLoss` default is a no-op. |
-| Block-compressed readback on OpenGL / D3D11 | `GetData` returns false — "this renderer read nothing" — rather than reporting an untouched buffer as a successful read. Both drivers refuse compressed `GetTextureData2D` upstream; SDL_GPU forwards it. Which one applies is measured once per device by a 4×4 DXT1 probe, not guessed from the driver name. |
+| Block-compressed readback on OpenGL / D3D11 | `GetData` returns false — "this renderer read nothing" — rather than reporting an untouched buffer as a successful read. Both drivers refuse compressed `GetTextureData2D` upstream; SDLGPU forwards it. Which one applies is measured once per device by a 4×4 DXT1 probe, not guessed from the driver name. |
 | A compressed `Texture3D` / `TextureCube` | Refused by name. Volume and cube transfers are RGBA8 in CNA's own renderer contract (the DDS/XNB readers decompress on the CPU before upload), so a compressed request there would be mis-sized rather than served. |
 
 ### What FNA3D offers that CNA cannot currently reach
@@ -337,12 +337,12 @@ Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only
 
 ### Texture upload ordering (upstream, reported)
 
-FNA3D's SDL_GPU driver records uploads on a command buffer of its own and submits it ahead of the
+FNA3D's SDLGPU driver records uploads on a command buffer of its own and submits it ahead of the
 frame's draws. `SetTextureData2D` cycles the texture -- earlier draws keep the old resource -- only
 for a whole write of a single-level, single-layer texture; `SetTextureDataCube` and
 `SetTextureData3D` never cycle. So a `TextureCube` changed between two draws of one frame shows its
 new contents in the earlier draw too, where XNA's keeps the old (`texture_setdata_after_draw` leg
-B, measured 2026-10-24 on the SDL_GPU driver over Vulkan); by the same source a `Texture3D` or a
+B, measured 2026-10-24 on the SDLGPU driver over Vulkan); by the same source a `Texture3D` or a
 mipmapped `Texture2D` does the same. CNA reports it rather than working around it (handoff.md §5.3).
 
 ## Validation
@@ -355,11 +355,11 @@ mipmapped `Texture2D` does the same. CNA reports it rather than working around i
 | Compiled-effect unit/pixel tests (`Fna3dCompiledEffectTest`) | **Performed** — 34 focused tests cover fixture hashes, parse/apply, reflection, padded matrix arrays, clone/disposal, malformed cleanup, general draws, SpriteBatch pixels, and a legally reproducible synthetic multi-technique/pass/default/annotation/render-state conformance binary |
 | Sanitizers (ASan + UBSan), renderer suite | **Performed** — the enlarged 13-test suite passes, including post-device lifetime and the >16-bit SpriteBatch path. Leak detection is disabled for the external graphics stack; UBSan still reports the pre-existing MojoShader decimal-parser signed overflow, but found no CNA-originating defect (FNA3D-47). |
 | Sanitizers for the arbitrary compiled-effect path | **Performed for CNA-owned code** (FX-052, 2026-08-18) — 929 Effect, compiled-effect, XNB and sampler tests under ASan+UBSan with no AddressSanitizer finding; the five UBSan reports are all inside pinned MojoShader, and LeakSanitizer attributes every leak record to third-party code. The MojoShader fork's own `tests/cna` suite runs under ASan, UBSan and LSan (handoff §2). |
-| Native-allocation failure (FNA3D-50) | **Performed** — `Fna3d_AllocationFailure` fails every native creation and owning-wrapper allocation in turn, on the OpenGL and the SDL_GPU driver: each failure is reported, leaves every native object family at its prior count, and does not stop the same operation succeeding next. The seam is `Fna3dAllocationFailureInjectionEXT` (`Fna3dNativeAllocation.hpp`), through which every native creation and release passes. |
+| Native-allocation failure (FNA3D-50) | **Performed** — `Fna3d_AllocationFailure` fails every native creation and owning-wrapper allocation in turn, on the OpenGL and the SDLGPU driver: each failure is reported, leaves every native object family at its prior count, and does not stop the same operation succeeding next. The seam is `Fna3dAllocationFailureInjectionEXT` (`Fna3dNativeAllocation.hpp`), through which every native creation and release passes. |
 | Existence-gate spikes | **Performed** — `fna3d-spike/` |
-| SDL_GPU driver | **Exercised on AMD Radeon 780M / RADV**: the 13 registered FNA3D renderer executables, compiled-effect contracts and XNA oracle complete as a 66-test selection with 65 passes plus one intentional Reach-profile skip. The Linux sample corpus and focused pixel-centre/SpriteBatch contracts also run through this default driver. |
+| SDLGPU driver | **Exercised on AMD Radeon 780M / RADV**: the 13 registered FNA3D renderer executables, compiled-effect contracts and XNA oracle complete as a 66-test selection with 65 passes plus one intentional Reach-profile skip. The Linux sample corpus and focused pixel-centre/SpriteBatch contracts also run through this default driver. |
 | Direct3D 11 driver | **Cross-build only**: the patched driver and seven-renderer sample executable compile with MinGW-w64. No native Windows GPU execution has occurred, so runtime qualification remains an external gate. |
-| Driver matrix (FNA3D-34) | **Open only on native D3D11 execution.** OpenGL and SDL_GPU each complete the same 66-test renderer/compiled-effect/oracle selection (65 pass plus one intentional profile skip), and each visually restores `PrimitivesSample`'s one-pixel geometry. Driver-dependent readback/query behaviour still must not be conflated. |
+| Driver matrix (FNA3D-34) | **Open only on native D3D11 execution.** OpenGL and SDLGPU each complete the same 66-test renderer/compiled-effect/oracle selection (65 pass plus one intentional profile skip), and each visually restores `PrimitivesSample`'s one-pixel geometry. Driver-dependent readback/query behaviour still must not be conflated. |
 | macOS / iOS | Not exercised. External gate. |
 
 ## Tests

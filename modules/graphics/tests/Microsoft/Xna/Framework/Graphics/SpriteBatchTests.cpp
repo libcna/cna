@@ -2370,7 +2370,7 @@ TEST(SpriteBatchCrossDeviceTest, ATextureFromTheSameDeviceIsUnaffected)
 // ---------------------------------------------------------------------------------------------
 // SDLGPU-119: a deferred batch keeps its texture renderers alive across the renderer's End().
 //
-// The finding this pins was stated against the SDL_GPU renderer, whose compiled-effect SpriteBatch
+// The finding this pins was stated against the SDLGPU renderer, whose compiled-effect SpriteBatch
 // path holds a SECOND queue (`SdlGpuSpriteBatchRenderer::PendingSpriteEXT`) between Draw and End.
 // That queue owns the native GPU texture through `SdlGpuSampledTextureEXT::keepAlive`, but its
 // `texture` field is a BARE, NON-OWNING `const ITextureRenderer*`, and
@@ -2561,7 +2561,7 @@ TEST(SpriteBatchTextureLifetimeTest, EverySortedModeRetainsItTooBecauseTheyAllFl
 
 TEST(SpriteBatchTextureLifetimeTest, ImmediateModeNeedsNoRetentionBecauseItDispatchesInsideDraw)
 {
-    // The other half of the contract, and the reason the SDL_GPU renderer fills its second queue
+    // The other half of the contract, and the reason the SDLGPU renderer fills its second queue
     // only when `!immediateMode_`: in Immediate mode the renderer's Draw runs inside
     // SpriteBatch::Draw, while the caller's own Texture2D is necessarily still alive. There is no
     // window between Draw and End for a wrapper to be destroyed in.

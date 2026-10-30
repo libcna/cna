@@ -7,19 +7,19 @@ name: Apple platforms (macOS + iOS)
 #   macos-build   — native macOS build + the portable test suites that do not need a GPU.
 #                   This is a real gate: a green run is evidence that CNA builds and its
 #                   platform/storage contracts hold on macOS.
-#   macos-sdlgpu  — the default Apple renderer, SDL_GPU, built for macOS and run on SDL's Metal
+#   macos-sdlgpu  — the default Apple renderer, SDLGPU, built for macOS and run on SDL's Metal
 #                   backend: device, swapchain, drawing and read-back through a focused smoke set
 #                   (scripts/ci/run-sdlgpu-smoke.sh). A gate (RRC-051): before it, CI built the
-#                   retired METAL renderer here and SDL_GPU nowhere on Apple. It is a smoke set,
-#                   not the full SDL_GPU Apple qualification (handoff.md section 5.2).
+#                   retired METAL renderer here and SDLGPU nowhere on Apple. It is a smoke set,
+#                   not the full SDLGPU Apple qualification (handoff.md section 5.2).
 #   ios-device    — cross-compile and final-link a real arm64 iPhone/iPad application bundle.
 #   ios-simulator — build the same application for arm64 Simulator, install it, launch one CNA
 #                   frame, and require its success marker. See docs/apple-platforms.md for the
 #                   remaining device/rendering evidence boundary.
 #
-# SDL_GPU is the default renderer on Apple platforms, but it is not qualified there yet. macOS
-# gates its smoke set (macos-sdlgpu); the iOS SDL_GPU legs stay non-gating (continue-on-error):
-# SDL_GPU has never been built for iOS by a recorded run, so whether the simulator pixel probe is
+# SDLGPU is the default renderer on Apple platforms, but it is not qualified there yet. macOS
+# gates its smoke set (macos-sdlgpu); the iOS SDLGPU legs stay non-gating (continue-on-error):
+# SDLGPU has never been built for iOS by a recorded run, so whether the simulator pixel probe is
 # deterministic there is unknown, and promoting it on a guess would be a claim nobody measured.
 # In the Simulator SDL refuses the Metal device itself (no MTLGPUFamilyApple3); that leg accepts
 # exactly that refusal and still fails on anything else.
@@ -218,13 +218,13 @@ jobs:
           echo "$output"
           grep -q 'CNA_APPLE_SMOKE_OK' <<< "$output"
 
-  # RRC-051: SDL_GPU is the default renderer on macOS, and SDL drives Metal underneath it. This
-  # builds it for macOS and runs a focused smoke set that creates a real SDL_GPU device on that
+  # RRC-051: SDLGPU is the default renderer on macOS, and SDL drives Metal underneath it. This
+  # builds it for macOS and runs a focused smoke set that creates a real SDLGPU device on that
   # Metal backend, draws and reads pixels back (scripts/ci/run-sdlgpu-smoke.sh). The script, not
-  # ctest, decides the outcome: ctest reports exit 77 as a skip, and a runner on which SDL_GPU
+  # ctest, decides the outcome: ctest reports exit 77 as a skip, and a runner on which SDLGPU
   # could not create its device must fail this gate rather than pass it.
   macos-sdlgpu:
-    name: macOS (SDL_GPU on Metal, smoke)
+    name: macOS (SDLGPU on Metal, smoke)
     runs-on: macos-26
     timeout-minutes: 90
 
@@ -253,7 +253,7 @@ jobs:
         working-directory: cna
         run: >
           cmake -S . -B cmake-build-macos-sdlgpu
-          -DCNA_GRAPHICS_RENDERER=SDL_GPU
+          -DCNA_GRAPHICS_RENDERER=SDLGPU
           -DCNA_BUILD_TESTS=ON
           -DCNA_BUILD_EXAMPLES=OFF
           -DCNA_ENABLE_NET=OFF
@@ -263,13 +263,13 @@ jobs:
           -DCNA_MAX_VENDORED_BUILD_JOBS=2
           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-      - name: Build the SDL_GPU smoke set
+      - name: Build the SDLGPU smoke set
         working-directory: cna
         run: cmake --build cmake-build-macos-sdlgpu --parallel 3 --target $(bash scripts/ci/run-sdlgpu-smoke.sh --targets)
 
       # A hosted macOS runner has a real window server (see macos-build), and SDL's Metal driver
       # needs the cocoa video driver to create its Metal view, so the video driver is left alone.
-      - name: Run the SDL_GPU smoke set on Metal
+      - name: Run the SDLGPU smoke set on Metal
         working-directory: cna
         env:
           SDL_AUDIODRIVER: dummy
@@ -296,16 +296,16 @@ jobs:
             simulator: 'ON'
             renderer: SOFTWARE
             build_dir: cmake-build-ios-sim
-          # SDL_GPU on its Metal backend: never yet built for iOS, so these legs report without
+          # SDLGPU on its Metal backend: never yet built for iOS, so these legs report without
           # gating the workflow.
           - name: sdl-gpu device
             simulator: 'OFF'
-            renderer: SDL_GPU
+            renderer: SDLGPU
             build_dir: cmake-build-ios-sdlgpu
             experimental: true
           - name: sdl-gpu simulator
             simulator: 'ON'
-            renderer: SDL_GPU
+            renderer: SDLGPU
             build_dir: cmake-build-ios-sim-sdlgpu
             experimental: true
 
@@ -458,22 +458,22 @@ jobs:
           wait "$launch_pid" || true
           cat "$log_file"
           # SDL's Metal backend requires MTLGPUFamilyApple3 on iOS, and the Simulator's Metal device
-          # on these runners fails that check: every SDL_GPU simulator launch since the leg began
+          # on these runners fails that check: every SDLGPU simulator launch since the leg began
           # (2026-10-14) ended in exactly this refusal. The leg records it as the measured result
           # rather than a failure; any other outcome still fails, and a launch that succeeds goes
           # on to the pixel probe.
-          if [ "${{ matrix.renderer }}" = "SDL_GPU" ] && [ "$smoke_ok" -eq 0 ] &&
+          if [ "${{ matrix.renderer }}" = "SDLGPU" ] && [ "$smoke_ok" -eq 0 ] &&
              grep -q 'SDL_CreateGPUDevice failed: Device does not meet the hardware requirements for SDL_GPU Metal' "$log_file"; then
-            echo "::notice title=SDL_GPU in the iOS Simulator::SDL refused the Simulator's Metal device (no MTLGPUFamilyApple3); the pixel probe cannot run here."
+            echo "::notice title=SDLGPU in the iOS Simulator::SDL refused the Simulator's Metal device (no MTLGPUFamilyApple3); the pixel probe cannot run here."
             exit 0
           fi
           test "$smoke_ok" -eq 1
 
           # Apple M4 AM4-037: the pixel probe draws a clear colour, a SpriteBatch
           # quad and a BasicEffect triangle, reads them back before presenting and prints
-          # CNA_APPLE_PIXELS_OK or CNA_APPLE_PIXELS_FAILED. SDL_GPU only: the probe reads the back
+          # CNA_APPLE_PIXELS_OK or CNA_APPLE_PIXELS_FAILED. SDLGPU only: the probe reads the back
           # buffer through the letterbox scaling a phone's surface always needs.
-          if [ "${{ matrix.renderer }}" != "SDL_GPU" ]; then exit 0; fi
+          if [ "${{ matrix.renderer }}" != "SDLGPU" ]; then exit 0; fi
           probe="$(find ${{ matrix.build_dir }} -type d -name 'cna_ios_pixel_probe.app' -print -quit)"
           codesign --force --deep --sign - "$probe"
           xcrun simctl install "$udid" "$probe"

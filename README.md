@@ -49,18 +49,18 @@ Native Windows developers should start with the shared Visual Studio/VS Code pre
 - **Documented XNA 4.0 runtime API surface:** every public type and every documented member of the Microsoft reference corpus is represented in CNA. The [member audit](docs/xna-4-runtime-member-coverage.md) holds the current counts and classifications; its [JSON report](docs/xna-4-runtime-member-coverage.json) records every reference member. Run `python3 tools/audit_xna_runtime_surface.py --write-reports`. API representation does not establish behavioral compatibility; the Content Pipeline is measured separately.
 - **Compiled XNA effects:** `Effect(GraphicsDevice&, byte[])` and the canonical XNB `EffectReader`
   execute XNA/FNA Direct3D 9 Effect Framework bytecode on `FNA3D` unconditionally, and behind
-  opt-in `CNA_<RENDERER>_COMPILED_EFFECTS` build options on `SDL_GPU`, the EasyGL family,
+  opt-in `CNA_<RENDERER>_COMPILED_EFFECTS` build options on `SDLGPU`, the EasyGL family,
   `WEBGPU`, `SOFTWARE` and `DIRECTX9`. The shared
   public contract covers reflection, parameter mutation, techniques/passes, pass states, cloning,
   3D draws, and `SpriteBatch`. Unsupported renderers reject the constructor explicitly; MGFX and
   runtime `.fx` source compilation remain separate formats/projects. See
   [`docs/shader-effect-vs-fx-bytecode.md`](docs/shader-effect-vs-fx-bytecode.md).
 - **`OPENGLES3`/`OPENGL33`/`WEBGL2` renderers:** the most mature GL-family public renderers overall — one shared internal implementation (`EasyGL`, on top of `easy-gl`) driven by a GL profile choice, not three separate implementations. `OPENGLES3` (desktop/mobile GLES 3.0) and `WEBGL2` (Emscripten, GLES 3.0 → WebGL 2.0) have full 2D+3D pixel-verified coverage — this is what was previously the single `EASYGL` public renderer, split into its real public identities. `OPENGL33` (desktop GL 3.3 core) is the desktop-GL profile of the same implementation; per-profile limits are in [`docs/renderer-registry.md`](docs/renderer-registry.md) and [`docs/graphics-renderer-feature-matrix.md`](docs/graphics-renderer-feature-matrix.md).
-- **`SDL_GPU` renderer:** CNA's modern native cross-platform path and the default on Windows, macOS and iOS; CNA maps XNA 4.0 onto SDL_GPU, and SDL owns its Vulkan, Direct3D 12 and Metal backends. Fully exercised on Linux (Vulkan); its Direct3D 12 backend runs under Wine through vkd3d-proton. Open gaps: `ShaderEffect` is compiled out on Windows, Apple and Emscripten, and there are no occlusion queries.
-- **`WEBGPU` renderer:** Supported renderer (`GraphicsRendererMaturity::Supported`, the class `SDL_GPU` is in) using native `wgpu-native` (v29.0.1.1) and, since 2026-08-26, Emscripten's emdawnwebgpu port for a real in-browser path. Well past a 2D baseline: device/surface setup, clear/present, `Texture2D`/`TextureCube`/`Texture3D`, vertex/index uploads, a pixel-verified WGSL `SpriteBatch`, full 3D with every stock effect (`BasicEffect` incl. per-pixel/per-vertex lighting, `AlphaTestEffect`, `DualTextureEffect`, `SkinnedEffect` 72-bone palette, `EnvironmentMapEffect` — all with FNA fog parity, `WEBGPU-145`–`148`; plus `PbrEffect`/`SkinnedPbrEffect`), real instancing, `RenderTarget2D`/`RenderTargetCube`, MSAA, GPU occlusion queries, MRT (2-4 targets), custom WGSL `ShaderEffect`s (3D and `SpriteBatch`), full stencil state, and GPU-native block-compressed textures (DXT/BC7). The one open item is `WEBGPU-1`, verification of the Windows, macOS and linux-aarch64 wgpu-native packages — see [`docs/webgpu-renderer.md`](docs/webgpu-renderer.md).
+- **`SDLGPU` renderer:** CNA's modern native cross-platform path and the default on Windows, macOS and iOS; CNA maps XNA 4.0 onto SDL's `SDL_GPU` API, and SDL owns its Vulkan, Direct3D 12 and Metal backends. Fully exercised on Linux (Vulkan); its Direct3D 12 backend runs under Wine through vkd3d-proton. Open gaps: `ShaderEffect` is compiled out on Windows, Apple and Emscripten, and there are no occlusion queries.
+- **`WEBGPU` renderer:** Supported renderer (`GraphicsRendererMaturity::Supported`, the class `SDLGPU` is in) using native `wgpu-native` (v29.0.1.1) and, since 2026-08-26, Emscripten's emdawnwebgpu port for a real in-browser path. Well past a 2D baseline: device/surface setup, clear/present, `Texture2D`/`TextureCube`/`Texture3D`, vertex/index uploads, a pixel-verified WGSL `SpriteBatch`, full 3D with every stock effect (`BasicEffect` incl. per-pixel/per-vertex lighting, `AlphaTestEffect`, `DualTextureEffect`, `SkinnedEffect` 72-bone palette, `EnvironmentMapEffect` — all with FNA fog parity, `WEBGPU-145`–`148`; plus `PbrEffect`/`SkinnedPbrEffect`), real instancing, `RenderTarget2D`/`RenderTargetCube`, MSAA, GPU occlusion queries, MRT (2-4 targets), custom WGSL `ShaderEffect`s (3D and `SpriteBatch`), full stencil state, and GPU-native block-compressed textures (DXT/BC7). The one open item is `WEBGPU-1`, verification of the Windows, macOS and linux-aarch64 wgpu-native packages — see [`docs/webgpu-renderer.md`](docs/webgpu-renderer.md).
 - **`DIRECTX9` renderer:** Windows-only native Direct3D 9 renderer targeting real **XNA 4.0 pixel authenticity**, not just feature parity — it runs Microsoft's own vendored Stock Effects HLSL bytecode, cross-compiled via MinGW-w64 and verified through Wine+DXVK on a real GPU. A checked-in 31-scene oracle corpus diffs CNA's render against the **real XNA 4.0 runtime's own render** of the same scene at `--tolerance 0`: **0/31 scenes currently diverge.** `GraphicsProfile.Reach`/`.HiDef` enforcement is real (the only CNA renderer where it is). Validation on real Windows hardware is still open. See [`docs/directx9-renderer.md`](docs/directx9-renderer.md), and [`docs/d3d9-divergence-report.md`](docs/d3d9-divergence-report.md).
 - **Verification methodology:** differential testing against a real, running `FNA.dll` reference implementation (`tools/fna-reference/`), disputed behavior settled against genuine XNA 4.0 on a Windows 7 VM, and a compile-time `CNAEXT` purity check (a dedicated CMake build option that turns every non-XNA-tagged declaration into a `[[deprecated]]` warning under `-Werror`) — see `CHECKLIST.md`'s "CNAEXT markers" section and `CMakeLists.txt`.
-- **Automatic CI is partial** (see `.github/workflows/`): `general-tests-ci.yml` runs the full unfiltered suite on Linux for one renderer (`OPENGLES3`) under Xvfb and fails if the run left the checkout dirty; other Linux workflows cover narrower subsystems. There is no automatic full GPU pixel matrix across renderers. The Apple workflow builds macOS with `SOFTWARE` and runs the portable platform suites plus a bundle smoke app. `windows-msvc-ci.yml` now defines automatic MSVC headless and SDL_GPU/Direct3D 12 baselines (added 2026-10-30; no successful run recorded from this checkout yet), while `DIRECTX9` remains in a manual focused workflow. There is no automatic Android gate.
+- **Automatic CI is partial** (see `.github/workflows/`): `general-tests-ci.yml` runs the full unfiltered suite on Linux for one renderer (`OPENGLES3`) under Xvfb and fails if the run left the checkout dirty; other Linux workflows cover narrower subsystems. There is no automatic full GPU pixel matrix across renderers. The Apple workflow builds macOS with `SOFTWARE` and runs the portable platform suites plus a bundle smoke app. `windows-msvc-ci.yml` now defines automatic MSVC headless and SDLGPU/Direct3D 12 baselines (added 2026-10-30; no successful run recorded from this checkout yet), while `DIRECTX9` remains in a manual focused workflow. There is no automatic Android gate.
 
 ## 2. 🎯 Goals
 
@@ -142,16 +142,16 @@ The XNA-compatible graphics core, renderer backends, custom shaders, `PbrEffect`
   the browser are all reached through SDL3's own drivers), `HEADLESS`, and POSIX-only `TERMINAL`.
   See [`docs/platform-abstraction.md`](docs/platform-abstraction.md).
 - Renderer abstraction supports targeting multiple rendering paths from one API layer.
-- **Windows:** `DIRECTX9` (through DXVK), `SDL_GPU` (its Direct3D 12 backend through vkd3d-proton)
+- **Windows:** `DIRECTX9` (through DXVK), `SDLGPU` (its Direct3D 12 backend through vkd3d-proton)
   and `SOFTWARE` are cross-compiled with MinGW-w64 and verified under Wine. An automatic native
-  MSVC workflow now covers an SDL-free compiler contract and the focused SDL_GPU/Direct3D 12 smoke
+  MSVC workflow now covers an SDL-free compiler contract and the focused SDLGPU/Direct3D 12 smoke
   set; the deeper `DIRECTX9` workflow remains manual. Validation on real Windows hardware is not current.
-- **Linux:** `OPENGLES3`/`OPENGL33`, `SDL_GPU` (Vulkan), `WEBGPU`, `FNA3D`, and the CPU/no-GPU
+- **Linux:** `OPENGLES3`/`OPENGL33`, `SDLGPU` (Vulkan), `WEBGPU`, `FNA3D`, and the CPU/no-GPU
   renderers `SOFTWARE`, `HEADLESS` and `STUB`.
 - **Web (Emscripten) and Android (NDK) targets are implemented and verified**, not just
   architecturally planned — see section 7 (Networking, Services & Avatar) below for what `Net`
   does on each (browsers have no multiplayer through the XNA API).
-- **macOS** has a native CI build/test gate (`SOFTWARE`); `SDL_GPU`'s Metal backend passed the full
+- **macOS** has a native CI build/test gate (`SOFTWARE`); `SDLGPU`'s Metal backend passed the full
   test tree on a Mac mini M4 once and has not been re-qualified since. **iOS/iPadOS** is
   experimental platform support. The Apple workflow final-links an actual `.app` for device and
   simulator and launches a one-frame `SOFTWARE` `Game` smoke application in the simulator. There
@@ -214,13 +214,13 @@ CNA is organized into clear layers with strict responsibility boundaries:
 
 The API surface is renderer-agnostic, while rendering behavior is executed by renderer-specific `ISpriteBatchRenderer` implementations.
 
-This keeps game code stable while allowing renderer-specific optimizations in EasyGL, SDL_GPU,
+This keeps game code stable while allowing renderer-specific optimizations in EasyGL, SDLGPU,
 WebGPU and the other renderers.
 
 ## 6. 🔌 Renderer System
 
 CNA exposes **10 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
-configuration; when none is named the default is `WEBGL2` under Emscripten, `SDL_GPU` on Windows,
+configuration; when none is named the default is `WEBGL2` under Emscripten, `SDLGPU` on Windows,
 macOS and iOS, and `OPENGLES3` everywhere else). The set is curated: a renderer is added only when
 it provides meaningful platform coverage, compatibility value, architectural value, or a capability
 the existing set does not reasonably cover, and forty-one identities have been retired
@@ -244,7 +244,7 @@ The former `ASCII` renderer identity was removed 2026-08 in favor of a renderer-
 effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usable with any renderer's
 `RenderTarget2D` output — see [`docs/ascii-post-process-effect.md`](docs/ascii-post-process-effect.md).
 
-- `SDL_GPU`
+- `SDLGPU`
 - `OPENGLES3` (internal implementation: EasyGL)
 - `OPENGL33` (internal implementation: EasyGL)
 - `WEBGL2` (Emscripten only; internal implementation: EasyGL)
@@ -253,14 +253,14 @@ effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usabl
 - `SOFTWARE`
 - `STUB`
 - `DIRECTX9` (Windows-only; native Direct3D 9 running Microsoft's own vendored Stock Effects HLSL bytecode)
-- `FNA3D` (FNA's own XNA-shaped graphics library; picks SDL_GPU/Direct3D 11/OpenGL at runtime, executes XNA's stock effects and CNA's compiled punctual/PBR extensions — see [`docs/fna3d-renderer.md`](docs/fna3d-renderer.md))
+- `FNA3D` (FNA's own XNA-shaped graphics library; picks SDLGPU/Direct3D 11/OpenGL at runtime, executes XNA's stock effects and CNA's compiled punctual/PBR extensions — see [`docs/fna3d-renderer.md`](docs/fna3d-renderer.md))
 
 ### Tradeoffs
 
 - **EasyGL renderer (OpenGL-based path through `easy-gl`)**
     - Custom shader-driven rendering path across GL ES 3.0, GL 3.3 core and WebGL 2.
 
-- **SDL_GPU renderer**
+- **SDLGPU renderer**
     - One native path to SDL's Vulkan, Direct3D 12 and Metal backends.
     - `ShaderEffect` is compiled out on Windows, Apple and Emscripten; no occlusion queries.
 
@@ -393,9 +393,9 @@ cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3
 cmake --build build --target CnaTests
 ```
 
-### Build (Windows — SDL_GPU renderer, vendored SDL)
+### Build (Windows — SDLGPU renderer, vendored SDL)
 
-On Windows `SDL_GPU` is selected automatically when no renderer is named. SDL is built from the
+On Windows `SDLGPU` is selected automatically when no renderer is named. SDL is built from the
 vendored submodule — no pre-built SDL binaries or `CMAKE_PREFIX_PATH` needed. The shared presets
 used by Visual Studio, VS Code and CI are documented in
 [`docs/windows-visual-studio.md`](docs/windows-visual-studio.md).
@@ -421,11 +421,11 @@ sudo apt install mingw-w64
 git submodule update --init
 cmake -S . -B build-windows \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
-      -DCNA_GRAPHICS_RENDERER=SDL_GPU
+      -DCNA_GRAPHICS_RENDERER=SDLGPU
 cmake --build build-windows --target CnaTests
 ```
 
-The resulting `.exe`s run under Wine; `SDL_GPU`'s Direct3D 12 backend needs vkd3d-proton
+The resulting `.exe`s run under Wine; `SDLGPU`'s Direct3D 12 backend needs vkd3d-proton
 (`scripts/run-wine-vkd3d.sh`).
 
 ### Build (macOS)
@@ -434,11 +434,11 @@ The resulting `.exe`s run under Wine; `SDL_GPU`'s Direct3D 12 backend needs vkd3
 brew install ccache ffmpeg
 git submodule update --init
 
-cmake -S . -B cmake-build-macos -DCNA_GRAPHICS_RENDERER=SDL_GPU
+cmake -S . -B cmake-build-macos -DCNA_GRAPHICS_RENDERER=SDLGPU
 cmake --build cmake-build-macos --target CnaTests --parallel
 ```
 
-CI builds macOS with `SOFTWARE`; `SDL_GPU` (Metal backend) is not currently re-qualified on macOS.
+CI builds macOS with `SOFTWARE`; `SDLGPU` (Metal backend) is not currently re-qualified on macOS.
 
 ### Build (macOS → iOS / iPadOS cross-compilation)
 
@@ -446,7 +446,7 @@ Requires a macOS host with Xcode. This produces a final-linked `cna_ios_smoke.ap
 or simulator; the Apple workflow also launches its one-frame `Game` path in the simulator. This
 is not evidence for a physical device or correct pixels/input/audio/storage — see
 [`docs/apple-platforms.md`](docs/apple-platforms.md) for the exact boundary. iOS accepts `SOFTWARE`
-and `SDL_GPU`; `SDL_GPU` has never been built for iOS.
+and `SDLGPU`; `SDLGPU` has never been built for iOS.
 
 ```bash
 cmake -S . -B cmake-build-ios \
@@ -477,7 +477,7 @@ those packages to be present on the system (e.g. installed via your package mana
 
 ```bash
 cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGL33
-cmake -S . -B build -DCNA_GRAPHICS_RENDERER=SDL_GPU
+cmake -S . -B build -DCNA_GRAPHICS_RENDERER=SDLGPU
 ```
 
 ### Build (Windows cross-compilation — DIRECTX9 renderer)
@@ -489,7 +489,7 @@ verified on this repo's own Debian dev machine via the MinGW-w64 cross toolchain
 through Wine + DXVK (`scripts/run-wine-dxvk9.sh`). See
 [`docs/directx9-renderer.md`](docs/directx9-renderer.md) and
 [`docs/d3d9-divergence-report.md`](docs/d3d9-divergence-report.md) for full detail.
-The Windows libcurl note of the MinGW `SDL_GPU` build above applies here too.
+The Windows libcurl note of the MinGW `SDLGPU` build above applies here too.
 
 ```bash
 # Install cross toolchain
@@ -527,10 +527,10 @@ scripts/check_clean_checkout.sh -- tools/platform/run_gpu_tests_private.sh build
 
 | Platform | Compiler | Renderer | Status |
 |----------|----------|---------|--------|
-| Linux x86_64 | GCC 12+ | OPENGLES3, SDL_GPU | ✅ |
+| Linux x86_64 | GCC 12+ | OPENGLES3, SDLGPU | ✅ |
 | Linux x86_64 | Clang 15+ | OPENGLES3 | ✅ |
-| Windows x86_64 | MSVC 2022 | HEADLESS, SDL_GPU, DIRECTX9 | automatic headless + SDL_GPU preset workflow added 2026-10-30 (first successful run not yet recorded here); focused DIRECTX9 workflow is manual; real-hardware qualification remains open |
-| Linux → Windows (cross) | MinGW-w64 | SDL_GPU, SOFTWARE | ✅ verified building + running under Wine (`SDL_GPU`'s Direct3D 12 backend through vkd3d-proton) |
+| Windows x86_64 | MSVC 2022 | HEADLESS, SDLGPU, DIRECTX9 | automatic headless + SDLGPU preset workflow added 2026-10-30 (first successful run not yet recorded here); focused DIRECTX9 workflow is manual; real-hardware qualification remains open |
+| Linux → Windows (cross) | MinGW-w64 | SDLGPU, SOFTWARE | ✅ verified building + running under Wine (`SDLGPU`'s Direct3D 12 backend through vkd3d-proton) |
 | Linux → Windows (cross) | MinGW-w64 | DIRECTX9 | ✅ verified building + `DIRECTX9`-labelled CTest suite under Wine+DXVK on a real GPU — 0/31 oracle scenes diverge from real XNA 4.0 at `--tolerance 0`; real Windows hardware verification still open, see `docs/directx9-renderer.md` |
 | Web (Emscripten) | emcc/Clang (emsdk) | WEBGL2, WEBGPU | ✅ verified building + running in Chrome; limits in `docs/web-emscripten-graphics-limitations.md` |
 | Android (NDK) | Clang (NDK 29/30) | OPENGLES3 | ✅ verified building + running on an x86_64 emulator; limits in `docs/android-graphics-limitations.md` |

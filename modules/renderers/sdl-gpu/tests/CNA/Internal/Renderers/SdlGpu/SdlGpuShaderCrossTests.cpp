@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // SDLGPU-92: exact stock-shader route selection.
 
-#if defined(CNA_RENDERER_SDL_GPU)
+#if defined(CNA_RENDERER_SDLGPU)
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
@@ -71,4 +71,4 @@ TEST(SdlGpuShaderCrossTest, TestOverrideExercisesCompilerOnlyWhenItCanServeTheDe
         SdlGpuShaderCreationRouteEXT::DirectSpirv);
 }
 
-#endif  // CNA_RENDERER_SDL_GPU
+#endif  // CNA_RENDERER_SDLGPU

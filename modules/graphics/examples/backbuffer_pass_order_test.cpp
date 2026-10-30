@@ -38,7 +38,7 @@
 //      been queued.
 //
 // Renderers whose backbuffer cannot be read publicly declare `backbufferReadback ==
-// Support::Unsupported` and their checks report an explicit skip naming the reason. SDL_GPU left
+// Support::Unsupported` and their checks report an explicit skip naming the reason. SDLGPU left
 // that group when SDLGPU-68 added its proxy readback; unsupported renderers retain structural
 // native-pass evidence instead.
 //
@@ -204,15 +204,15 @@ namespace
     // HiDef, and under Reach this test died on a profile refusal before its first check.
     constexpr Contract kContract{"WEBGPU", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, true};
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     // SDLGPU-68's proxy preserves each ordered backbuffer segment and makes its contents exactly
     // readable. The formerly false clear-after-draw and depth-only-clear declarations are also
     // now measured true: both operations split the logical cycle at their public position.
-    // pre-SDL_GPU PSG-0008: wantHiDefProfile is now true here for the
+    // pre-SDLGPU PSG-0008: wantHiDefProfile is now true here for the
     // reason WMG-0005 gave for the WebGPU row above -- this fixture reads the back buffer,
     // which SOFTWARE-213 made HiDef-only, so under Reach it threw before its first check and
     // reported as a renderer failure. profile_dead_tests.py named it DEAD-ON-PROFILE.
-    constexpr Contract kContract{"SDL_GPU", Support::Exact, true, Support::Exact,
+    constexpr Contract kContract{"SDLGPU", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", Support::Exact, true, Support::Exact,

@@ -104,9 +104,9 @@ namespace
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "WEBGPU";
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "SDL_GPU";
+    constexpr const char* kRendererName = "SDLGPU";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "DIRECTX9";

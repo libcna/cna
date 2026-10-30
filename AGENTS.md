@@ -389,7 +389,7 @@ After making changes:
    in-repo `cmake-build-webgpu/` (see `docs/webgpu-renderer.md`); default debug is `cmake-build-debug/`.
 2. Report: changed files, added stubs, missing dependencies, intentional deviations, build result, remaining errors.
 
-Default debug build dir: `cmake-build-debug/`. SDL_GPU build dir: `cmake-build-sdlgpu/`.
+Default debug build dir: `cmake-build-debug/`. SDLGPU build dir: `cmake-build-sdlgpu/`.
 
 Compile with **at most 8 parallel jobs** — `cmake --build <dir> --parallel 8`, `ninja -j8` (owner,
 2026-10-17); never `-j$(nproc)` or a bare `--parallel`, since the machine's 16 cores are shared by
@@ -406,7 +406,7 @@ tools/platform/run_gpu_tests_private.sh <build-dir> [ctest arguments...]
 ```
 
 It starts a headless Weston and a private rootful Xwayland (DRI3, the real GPU — Xvfb cannot present
-Vulkan, which SDL_GPU uses on Linux) and runs `ctest` against them; nothing appears on the desktop. `CNA_TEST_DISPLAY` is empty by
+Vulkan, which SDLGPU uses on Linux) and runs `ctest` against them; nothing appears on the desktop. `CNA_TEST_DISPLAY` is empty by
 default, so registered tests inherit the launcher's `DISPLAY`; the live desktop needs an explicit
 `-DCNA_TEST_DISPLAY=:0 -DCNA_TEST_ALLOW_LIVE_DISPLAY=ON` (see `cmake/TestDisplayPolicy.cmake`, which
 explains the policy). The runner refuses a tree that still forces a display.
@@ -444,10 +444,10 @@ individual task. Do not push unless the user explicitly asks to push.
 | CNA utilities             | `modules/core/include/CNA/…`, `modules/*-ext/…`                 | CNAEXT helpers, logging, etc.  |
 
 Renderer selection is compile-time via the `CNA_GRAPHICS_RENDERER` CMake option (10 public identities:
-`OPENGLES3`, `OPENGL33`, `WEBGL2`, `WEBGPU`, `HEADLESS`, `SOFTWARE`, `STUB`, `DIRECTX9`, `SDL_GPU`,
+`OPENGLES3`, `OPENGL33`, `WEBGL2`, `WEBGPU`, `HEADLESS`, `SOFTWARE`, `STUB`, `DIRECTX9`, `SDLGPU`,
 `FNA3D`; the canonical list is `cmake/RendererIdentities.cmake`, and `docs/removed-renderers.md` lists
 the forty-one retired ones -- `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER` among them -- whose
-selectors are refused by name). `SDL_GPU` is the modern native path; SDL owns its Vulkan, Direct3D 12
+selectors are refused by name). `SDLGPU` is the modern native path; SDL owns its Vulkan, Direct3D 12
 and Metal backends. CNA's graphics code says **renderer**, never backend, for a CNA graphics
 renderer (`GraphicsRenderer*`, `CNA_GRAPHICS_RENDERER*`, `cna_graphics_renderer_*`; see
 `docs/renderer-registry.md`), and `scripts/check_renderer_identities.py` refuses the old

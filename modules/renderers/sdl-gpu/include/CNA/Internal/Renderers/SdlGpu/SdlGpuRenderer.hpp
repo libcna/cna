@@ -3,7 +3,7 @@
 
 #include "CNA/CNAHelper.hpp"
 
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
 #include "mojoshader.h"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #endif
@@ -32,7 +32,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     class SdlGpuRenderer;
     class SdlGpuRenderTargetRenderer;
     class SdlGpuRenderTargetCubeRenderer;
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
     class SdlGpuCompiledEffect;
 #endif
 
@@ -130,11 +130,11 @@ namespace CNA::Internal::Renderers::SdlGpu
     };
 
     /**
-     * @brief Scoped, renderer-instance-local failure points used by the SDL_GPU lifetime
+     * @brief Scoped, renderer-instance-local failure points used by the SDLGPU lifetime
      * regression. CNAEXT.
      *
      * These hooks deliberately sit above SDL rather than replacing it: successful stages still
-     * acquire real SDL_GPU resources, and a selected later stage throws before making its native
+     * acquire real SDLGPU resources, and a selected later stage throws before making its native
      * call. Production construction uses None and pays only one predictable branch per stage.
      */
     enum class SdlGpuFailurePointEXT : std::uint8_t
@@ -895,7 +895,7 @@ namespace CNA::Internal::Renderers::SdlGpu
      * via `SDL_GPUColorTargetInfo.resolve_texture`/`resolve_layer` at render-pass end (no manual
      * resolve step needed, unlike D3D11/D3D12).
      * The multisampled attachments are six independent, level-zero-only 2D textures because
-     * `SDL_GPU_TEXTURETYPE_CUBE` has no multisampled variant and SDL_GPU forbids multisampled
+     * `SDL_GPU_TEXTURETYPE_CUBE` has no multisampled variant and SDLGPU forbids multisampled
      * arrays. The resolve regenerates only the resolved face's complete chain through clamped
      * per-level GPU blits immediately after that face's pass ends, so later passes can sample its
      * finalized mips. The actual GPU state lives in a separate, shared_ptr-owned
@@ -1665,7 +1665,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool immediateMode_ = false;
         int projectionWidth_ = 0;
         int projectionHeight_ = 0;
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         std::unique_ptr<ICompiledEffectRuntime> spriteCompiledEffect_;
         std::uint32_t spriteMatrixParameterIndex_ = 0;
         bool compiledSpriteStockApplied_ = false;
@@ -1723,7 +1723,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     };
 
     /**
-     * @brief `SDL_gpu`-backed graphics renderer (`CNA_GRAPHICS_RENDERER=SDL_GPU`).
+     * @brief `SDL_gpu`-backed graphics renderer (`CNA_GRAPHICS_RENDERER=SDLGPU`).
      *
      * See `docs/sdl-gpu-renderer.md` for the build options, parity verdict and platforms. Device,
      * swapchain, multisampled backbuffer, all classic texture/target/buffer/draw families,
@@ -1873,7 +1873,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap,
             Skinned, Sprite, Pbr, CustomEffect3D
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
             // FX-071: guarded like every other compiled-effect member in this header,
             // so a build without the option never declares an enumerator no switch handles.
             , CompiledEffect
@@ -1954,7 +1954,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // dimensions added by those remediations. ScissorTestEnable is deliberately NOT here:
         // its rect+enable are per-draw pass state carried in QueuedDrawRef instead
         // (applied via SDL_SetGPUScissor in ApplyScissorForRef, exactly like the
-        // viewport), not baked into the pipeline. SDL_GPU depth bias has no dynamic setter, so
+        // viewport), not baked into the pipeline. SDLGPU depth bias has no dynamic setter, so
         // both public bias floats must live here and be replayed into the pipeline selected for
         // this exact queued draw.
         struct RenderStateSnapshot
@@ -1962,7 +1962,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             bool blendEnabled = false;
             BlendKeyParams blend;
             // Slot-aligned XNA ColorWriteChannels (bit0=R..bit3=A), baked
-            // into the corresponding SDL_GPU target description and cache identity. 15 = All.
+            // into the corresponding SDLGPU target description and cache identity. 15 = All.
             std::array<int, 4> colorWriteMasks{{15, 15, 15, 15}};
             int cullMode = 0;   // XNA CullMode ordinal; 0 = None
             bool wireframe = false;
@@ -2024,7 +2024,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::array<SamplerSlotState, 3> samplers{};
         };
 
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         /** @brief One resolved sampler binding, in ascending slot order. CNAEXT. */
         struct CompiledEffectSamplerBinding
         {
@@ -2034,7 +2034,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressV = 0;
             int maxAnisotropy = 4;
             /// FX-083: the effect's own MaxMipLevel/MipMapLevelOfDetailBias, which
-            /// SDL_GPU expresses through min_lod plus a native or shader-side bias. Before this
+            /// SDLGPU expresses through min_lod plus a native or shader-side bias. Before this
             /// they were published on GraphicsDevice.SamplerStates and then dropped on the way to
             /// the GPU. SDLGPU-122 snapshots the compiled value into its own per-register fragment
             /// uniform and uses zero in the native descriptor so Vulkan/D3D12 cannot apply it twice.
@@ -2098,7 +2098,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// Independent vertex-stage slots, with the same lifetime and dummy-binding rules.
             std::vector<CompiledEffectSamplerBinding> vertexSamplers;
         };
-#endif  // CNA_SDL_GPU_COMPILED_EFFECTS
+#endif  // CNA_SDLGPU_COMPILED_EFFECTS
 
         struct SpriteCommand
         {
@@ -2157,7 +2157,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::shared_ptr<const std::vector<SpirvResourceBindingEXT>> customVertexUniforms;
             /** @brief SMG-0010: the fragment counterpart. */
             std::shared_ptr<const std::vector<SpirvResourceBindingEXT>> customFragmentUniforms;
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
             // FX-071: the compiled-effect counterpart of customEffect/customUniforms
             // above -- mutually exclusive with them, since one Effect is either ShaderEffect-derived
             // or compiled, never both. compiledEffect.vertexShader == nullptr means "not used",
@@ -2179,7 +2179,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @brief The native arguments one indexed draw submits.
          *
          * Resolved once from the public XNA draw parameters and then carried by value on the draw
-         * command, so a deferred draw keeps its own range. All three are in SDL_GPU's own units:
+         * command, so a deferred draw keeps its own range. All three are in SDLGPU's own units:
          * `firstIndex` is an index *element* offset (never a byte offset), `vertexOffset` is the
          * signed value SDL adds to each decoded index before vertex fetch, and `indexCount` is the
          * exact topology-derived number of indices the draw consumes.
@@ -2753,7 +2753,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUTexture* uploadedBoneTexture = nullptr;  ///< only set when skinned == true
         };
 
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         /**
          * @brief FX-071: one compiled-effect draw, deferred like every other draw kind.
          *
@@ -2802,7 +2802,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             ResidentGeometryEXT resident;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;   ///< transient, set by UploadSceneDrawData
         };
-#endif  // CNA_SDL_GPU_COMPILED_EFFECTS
+#endif  // CNA_SDLGPU_COMPILED_EFFECTS
 
         /**
          * @brief Constructs the renderer against an already-created SDL window.
@@ -2870,7 +2870,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /** @brief Releases the window from the `SDL_GPUDevice` and destroys the device. */
         ~SdlGpuRenderer() override;
 
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         /**
          * @brief Parses a compiled XNA effect for this device (FX-061).
          * @param effectCode Compiled effect bytes.
@@ -3616,7 +3616,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             return coloredPipelines_.size();
         }
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         /** @brief Number of cached ordinary compiled-effect pipelines. Test-only. CNAEXT. */
         CNAEXT [[nodiscard]] std::size_t GetCompiledEffectPipelineCacheSizeEXT() const;
 #endif
@@ -3763,7 +3763,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          *        for `TextureFilter::Anisotropic`, but always part of the cache key.
          * @param family Public draw family, for `CNA_SDLGPU_SAMPLER_TRACE` only.
          * @param maxMipLevel Public `SamplerState.MaxMipLevel`; becomes `min_lod`
-         *        (FX-083), the same mapping FNA3D's own SDL_GPU driver makes.
+         *        (FX-083), the same mapping FNA3D's own SDLGPU driver makes.
          * @param lodBias Native `SDL_GPUSamplerCreateInfo::mip_lod_bias`. Stock and compiled-XNA
          *        shaders pass zero here and carry the public value in Bias uniforms instead; the
          *        CNAEXT custom-shader route still passes its caller-supplied native value.
@@ -4205,7 +4205,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                          SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
                          SDL_GPUGraphicsPipeline*& boundPipeline);
 
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         // FX-071: compiled-effect draw route. Unlike every stock family above, there is
         // no fixed shader/pipeline table -- the pipeline is keyed on the applied pass's own linked
         // shader pair, vertex layout and render state, all captured at queue time (see
@@ -4506,7 +4506,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_Window* window_ = nullptr;
         SDL_GPUDevice* device_ = nullptr;
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         // One MojoShader context per SDL_GPU device, created on first compiled effect.
         MOJOSHADER_sdlContext* mojoShaderContext_ = nullptr;
         // The texture stages' TEXBEM/TEXBEML state, device state the compiled passes assign.
@@ -4690,7 +4690,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// The 1x1 opaque-black cube an unbound EnvironmentMapEffect.EnvironmentMap samples.
         std::unique_ptr<SdlGpuTextureCubeRenderer> defaultBlackCubeTexture_;
 
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         struct CompiledProgramLifetimeStateEXT
         {
             SdlGpuRenderer* owner = nullptr;
@@ -4714,7 +4714,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::shared_ptr<CompiledProgramLifetimeStateEXT> compiledProgramLifetimeState_ =
             std::make_shared<CompiledProgramLifetimeStateEXT>();
         /// Live runtimes whose native effects must be released before the shared MojoShader
-        /// context and SDL_GPU device. The public Effect/runtime wrapper itself may outlive both.
+        /// context and SDLGPU device. The public Effect/runtime wrapper itself may outlive both.
         std::vector<SdlGpuCompiledEffect*> compiledEffects_;
         void RegisterCompiledEffectEXT(SdlGpuCompiledEffect* effect);
         void UnregisterCompiledEffectEXT(SdlGpuCompiledEffect* effect);

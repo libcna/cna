@@ -608,7 +608,7 @@ namespace CNA::Internal::Renderers::Fna3d
         int levelCount_ = 1;
         int surfaceFormat_ = 0;
         // FNA3D's OpenGL driver implements no GetTextureData3D at all (it logs
-        // "GetTextureData3D is unsupported!" and writes nothing), while its SDL_GPU and Direct3D
+        // "GetTextureData3D is unsupported!" and writes nothing), while its SDLGPU and Direct3D
         // 11 drivers do. A volume texture in XNA has no GPU write path -- its content can only
         // come from SetData -- so mirroring the uploads is exact only if every requested voxel is
         // known to have been supplied. `uploadMirrorDefined_` tracks that coverage and makes a
@@ -976,7 +976,7 @@ namespace CNA::Internal::Renderers::Fna3d
      * FNA3D is the XNA-shaped C graphics library FNA itself renders through: its device API is a
      * near one-to-one match for `IGraphicsRenderer`, and every enumeration it exposes is the XNA
      * 4.0 enumeration CNA already ports. Like LLGL, Diligent, sokol and bgfx it is a portable
-     * middleware layer rather than one native API -- it selects SDL_GPU, Direct3D 11 or OpenGL at
+     * middleware layer rather than one native API -- it selects SDLGPU, Direct3D 11 or OpenGL at
      * runtime, overridable with the `FNA3D_FORCE_DRIVER` SDL hint.
      *
      * Shaders are the one place FNA3D constrains its consumer: `FNA3D_CreateEffect` accepting a
@@ -1520,7 +1520,7 @@ namespace CNA::Internal::Renderers::Fna3d
         /** @brief CNA's compiled skinned PBR effect. @return Whether a device exists. */
         [[nodiscard]] bool ShadesSkinnedPbrEffectEXT() const override { return device_ != nullptr; }
         /**
-         * @brief FNA3D's OpenGL driver applies the mask with `glSampleMaski`; its SDL_GPU driver
+         * @brief FNA3D's OpenGL driver applies the mask with `glSampleMaski`; its SDLGPU driver
          *        writes SDL's reserved `sample_mask`, which has no effect.
          * @return Supported on the OpenGL driver, otherwise Unsupported.
          */
@@ -1562,8 +1562,8 @@ namespace CNA::Internal::Renderers::Fna3d
          * @brief Whether `SamplerState.MipMapLevelOfDetailBias` reaches the GPU. CNAEXT.
          *
          * Apple M4 AM4-191: FNA3D hands the bias to its driver's native sampler. On
-         * Apple its SDL_GPU driver runs on SDL's Metal backend, which ignores `mip_lod_bias` (CNA's
-         * own SDL_GPU renderer carries the bias in its shaders instead, SDLGPU-121; FNA3D's
+         * Apple its SDLGPU driver runs on SDL's Metal backend, which ignores `mip_lod_bias` (CNA's
+         * own SDLGPU renderer carries the bias in its shaders instead, SDLGPU-121; FNA3D's
          * MojoShader shaders have no such input), so there the bias has no effect.
          *
          * @return False on Apple with any driver but OpenGL, otherwise true.
@@ -1661,7 +1661,7 @@ namespace CNA::Internal::Renderers::Fna3d
          * @brief CNAEXT. Whether the running driver reads block-compressed textures back.
          *
          * Measured once at device creation, because FNA3D's drivers disagree (its OpenGL and
-         * Direct3D 11 drivers refuse compressed `GetTextureData2D` outright, its SDL_GPU driver
+         * Direct3D 11 drivers refuse compressed `GetTextureData2D` outright, its SDLGPU driver
          * forwards it) and expose no query. `GetData` on a compressed texture reports that it read
          * nothing when this is false, rather than returning a buffer the driver never wrote.
          *
@@ -1847,7 +1847,7 @@ namespace CNA::Internal::Renderers::Fna3d
         /// Whether the selected internal FNA3D driver creates real raster occlusion queries.
         bool supportsOcclusionQueries_ = false;
         /// Apple M4 AM4-190: whether the selected driver reads a default for a vertex
-        /// input the declaration lacks -- FNA3D's OpenGL driver does; its SDL_GPU and Direct3D 11
+        /// input the declaration lacks -- FNA3D's OpenGL driver does; its SDLGPU and Direct3D 11
         /// drivers fail the pipeline instead, so a stock draw missing an input is refused first.
         bool driverDefaultsMissingVertexInputs_ = false;
         /// Whether FNA3D selected its OpenGL driver, the one with glSampleMaski.

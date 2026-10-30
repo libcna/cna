@@ -6,7 +6,7 @@ for one never implies support for the other.
 | API | Input | Capability | Current renderer support |
 |---|---|---|---|
 | `CNAEXT::ShaderEffect` | Caller-authored GLSL, SPIR-V, or another backend-native source pair | `CustomEffects` | Renderer-specific |
-| `Effect(GraphicsDevice&, byte[])` | XNA/FNA Direct3D 9 Effect Framework binary (`.fxb`, normally stored in XNB) | `CompiledEffects` | FNA3D; SDL_GPU, EasyGL/OpenGL, WebGPU, Software and DirectX 9 behind their own `CNA_<RENDERER>_COMPILED_EFFECTS` build options |
+| `Effect(GraphicsDevice&, byte[])` | XNA/FNA Direct3D 9 Effect Framework binary (`.fxb`, normally stored in XNB) | `CompiledEffects` | FNA3D; SDLGPU, EasyGL/OpenGL, WebGPU, Software and DirectX 9 behind their own `CNA_<RENDERER>_COMPILED_EFFECTS` build options |
 
 The six stock effects remain portable CNA APIs and do not require either custom-effect capability.
 
@@ -75,7 +75,7 @@ format/backend mismatch. The XNB reader translates either into an asset-scoped
 ## The other renderers
 
 Besides `FNA3D`, every renderer with a `CNA_<RENDERER>_COMPILED_EFFECTS` build option has a
-compiled-effect runtime: `SDL_GPU`, the EasyGL/OpenGL family, WebGPU, Software and DirectX 9.
+compiled-effect runtime: `SDLGPU`, the EasyGL/OpenGL family, WebGPU, Software and DirectX 9.
 MojoShader is a fetched dependency those renderers do not otherwise need. With the option off they report
 `CompiledEffects == false` and refuse, exactly like any unsupported backend.
 `fx-compiled-effects.md` §10 carries the current matrix and each backend's remaining refusals.

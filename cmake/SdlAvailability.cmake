@@ -67,7 +67,7 @@ endif()
 if(CNA_AUDIO_PLATFORM STREQUAL "SDL3")
     list(APPEND _cna_sdl_reasons "CNA_AUDIO_PLATFORM=${CNA_AUDIO_PLATFORM}")
 endif()
-foreach(_cna_sdl_renderer IN ITEMS SDL_GPU FNA3D)
+foreach(_cna_sdl_renderer IN ITEMS SDLGPU FNA3D)
     if(_cna_sdl_effective_renderer STREQUAL "${_cna_sdl_renderer}"
             OR "${_cna_sdl_renderer}" IN_LIST CNA_GRAPHICS_RENDERERS)
         list(APPEND _cna_sdl_reasons "CNA_GRAPHICS_RENDERER=${_cna_sdl_renderer}")

@@ -25,7 +25,7 @@
 // ordinals 1, 4, 7 and 8 minify POINT. Those two partitions are DIFFERENT sets, which is exactly
 // what a single boolean cannot express and what this fixture measures.
 //
-// THE DEFECT. Both WebGPU and SDL_GPU resolved a native sampler with, literally,
+// THE DEFECT. Both WebGPU and SDLGPU resolved a native sampler with, literally,
 //
 //     filter = textureFilter == 0 ? LINEAR : NEAREST
 //
@@ -33,9 +33,9 @@
 // alike, and -- the half that would have defeated a descriptor-only correction -- they keyed the
 // sampler cache with `filterIndex = filter == 0 ? 0 : 1`, so all eight non-Linear ordinals shared
 // ONE cached native sampler per address-mode pair. On WebGPU that expression served SpriteBatch
-// only (the 3D families already reached a complete table). On SDL_GPU the same function served
+// only (the 3D families already reached a complete table). On SDLGPU the same function served
 // SpriteBatch AND every 3D family -- Textured3D, LitTextured3D, AlphaTest3D, DualTexture3D (both
-// slots), EnvironmentMap3D, Skinned3D and Pbr3D -- and SDL_GPU never set enable_anisotropy at all,
+// slots), EnvironmentMap3D, Skinned3D and Pbr3D -- and SDLGPU never set enable_anisotropy at all,
 // so TextureFilter::Anisotropic was a plain nearest fetch there.
 //
 // THE ORACLE. Magnification and minification are measured by the SAME differential GFX-150
@@ -144,9 +144,9 @@ namespace
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "WEBGPU";
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "SDL_GPU";
+    constexpr const char* kRendererName = "SDLGPU";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX9";

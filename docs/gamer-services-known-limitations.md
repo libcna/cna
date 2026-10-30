@@ -686,7 +686,7 @@ been run.
   every face control at both ends, every hairstyle from the front and from behind, every garment,
   headwear, facial-hair style, ear shape, accessory and makeup style, portraits, face presets,
   builds, key frames of every animation, every expression) rendered on OpenGL 3.3, OpenGL ES 3,
-  SOFTWARE, SDL_GPU (Vulkan), WebGPU and FNA3D (its SDL_GPU Vulkan driver) from one multi-renderer
+  SOFTWARE, SDLGPU (Vulkan), WebGPU and FNA3D (its SDLGPU Vulkan driver) from one multi-renderer
   build through the private GPU runner, each confirmed by its log, all frames rendered. Against
   OpenGL 3.3 (`avatar_review.py compare`) the worst mean absolute pixel difference is 0.09/255
   (WebGPU) and the worst silhouette overlap 0.9992 (SOFTWARE); OpenGL ES 3 is identical. At catalog
@@ -698,12 +698,12 @@ been run.
   visual regression (`GamerServices_AvatarVisualRegression`) on the six that draw, against goldens
   captured on SOFTWARE (it also passed on Mesa llvmpipe at revision 4).
   Through Windows translation layers, not native drivers, and not repeated for revision 5:
-  revision 4's 258-frame review rendered on DIRECTX9 (Wine with DXVK) and on SDL_GPU's Direct3D 12
+  revision 4's 258-frame review rendered on DIRECTX9 (Wine with DXVK) and on SDLGPU's Direct3D 12
   backend (Wine with vkd3d-proton) from the MinGW build on 2026-10-16, and the Windows build's
   gamer-services suite passed under Wine at revision 2 on 2026-10-15. The XNA AvatarShadows sample ran on OpenGL ES 3
   (Mesa software) on 2026-09-30, not re-run since. HEADLESS runs the API tests. Pending external
-  qualification, not simulated here: SDL_GPU's Metal backend on macOS, and DIRECTX9, FNA3D and
-  SDL_GPU's Direct3D 12 backend on native Windows drivers.
+  qualification, not simulated here: SDLGPU's Metal backend on macOS, and DIRECTX9, FNA3D and
+  SDLGPU's Direct3D 12 backend on native Windows drivers.
 - **Reason:** Metal and native Windows drivers need another host.
 - **Observable impact:** unknown on those; none found on the ones measured.
 - **Porting impact:** none known.

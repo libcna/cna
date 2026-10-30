@@ -122,8 +122,8 @@ namespace
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_SDL_GPU)
-    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDLGPU)
+    constexpr const char* kRendererName = "SDLGPU";
     constexpr bool kRasterizes = true;
 #else
 #error "this renderer has no declared first-readback contract."
@@ -166,13 +166,13 @@ namespace
     /**
      * @brief Whether probing mip level 1 of a mipmapped MULTISAMPLED target is survivable here.
      *
-     * TRUE EVERYWHERE, INCLUDING SDL_GPU -- and that is now a measurement rather than a hope.
+     * TRUE EVERYWHERE, INCLUDING SDLGPU -- and that is now a measurement rather than a hope.
      *
-     * This was false on SDL_GPU, which SEGFAULTED on `GetData(1, rect, ...)` of a
+     * This was false on SDLGPU, which SEGFAULTED on `GetData(1, rect, ...)` of a
      * `RenderTarget2D(16,16,mipMap=true,MSAA=4)` while level 0 of the very same target read back
      * exactly. the multisampled readback contract isolated that, recorded it as **and declared it here
      * rather than issuing an uncatchable signal from a fixture scoped to Bgfx production.
-     * Has since fixed it -- SDL_GPU's multisampled target now carries the full
+     * Has since fixed it -- SDLGPU's multisampled target now carries the full
      * declared mip chain on its resolved single-sample texture, and an out-of-range level is a
      * catchable public exception -- so the carve-out is gone and leg G1 issues the read on every
      * renderer again.

@@ -175,8 +175,8 @@ class RenderTargetCubePluralBindingTest final : public Game
         device.SetRenderTargets({});
 
 #if defined(CNA_GFX096_CUBE_GETDATA)
-        // SDL_GPU and WebGPU expose exact per-face RenderTargetCube readback.
-        // Use that stronger subresource oracle (SDL_GPU intentionally has no
+        // SDLGPU and WebGPU expose exact per-face RenderTargetCube readback.
+        // Use that stronger subresource oracle (SDLGPU intentionally has no
         // swapchain ReadBackbuffer implementation).
         std::array<Color, 6> result = {
             Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0),

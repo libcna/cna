@@ -9,6 +9,28 @@ include(cmake/RendererIdentityDefault.cmake)
 # CNA_GRAPHICS_RENDERER. Included again here (a no-op after the first time) so this file keeps
 # working on its own.
 include(cmake/RendererIdentities.cmake)
+
+# Reject stale public SDLGPU option spellings instead of leaving them as unused cache entries.
+# These are migration diagnostics, not compatibility aliases.
+set(_cna_renamed_sdlgpu_options
+    CNA_SDL_GPU_SHADERCROSS=CNA_SDLGPU_SHADERCROSS
+    CNA_SDL_GPU_COMPILED_EFFECTS=CNA_SDLGPU_COMPILED_EFFECTS)
+foreach(_cna_entry IN LISTS _cna_renamed_sdlgpu_options)
+    string(REPLACE "=" ";" _cna_pair "${_cna_entry}")
+    list(GET _cna_pair 0 _cna_old_option)
+    list(GET _cna_pair 1 _cna_new_option)
+    if(DEFINED ${_cna_old_option})
+        message(FATAL_ERROR
+            "CNA: CMake option ${_cna_old_option} was renamed to ${_cna_new_option}; "
+            "the old spelling is not an alias.")
+    endif()
+endforeach()
+unset(_cna_renamed_sdlgpu_options)
+unset(_cna_entry)
+unset(_cna_pair)
+unset(_cna_old_option)
+unset(_cna_new_option)
+
 list(JOIN CNA_RENDERER_PUBLIC_IDENTITIES ", " _cna_public_renderer_text)
 set(CNA_GRAPHICS_RENDERER "${_cna_default_renderer}" CACHE STRING "Graphics renderer to use (${_cna_public_renderer_text})")
 unset(_cna_public_renderer_text)
@@ -26,10 +48,10 @@ option(CNA_RENDERER_SOFTWARE "Enable Software (CPU rasterizer) graphics renderer
 # avoid colliding with the <cstddef>/<cstdlib> NULL macro (see docs/stub-renderer.md, Naming).
 option(CNA_RENDERER_STUB "Enable Stub (no-op) graphics renderer" OFF)
 option(CNA_RENDERER_DIRECTX9 "Enable Direct3D 9 graphics renderer (Windows only)" OFF)
-option(CNA_RENDERER_SDL_GPU "Enable SDL_gpu graphics renderer" OFF)
+option(CNA_RENDERER_SDLGPU "Enable SDL_gpu graphics renderer" OFF)
 
 # docs/fna3d-renderer.md: FNA3D (https://github.com/FNA-XNA/FNA3D) -- the XNA-shaped C graphics library FNA
-# itself renders through. It names a portable middleware layer rather than one native API: FNA3D picks SDL_GPU, Direct3D 11 or OpenGL at RUNTIME (overridable
+# itself renders through. It names a portable middleware layer rather than one native API: FNA3D picks SDLGPU, Direct3D 11 or OpenGL at RUNTIME (overridable
 # with the FNA3D_FORCE_DRIVER SDL hint). Shaders are Direct3D 9 Effect Framework binaries executed
 # through MojoShader -- FNA3D has no other shader entry point at all, so the stock-effect blobs are
 # fetched from the pinned FNA checkout alongside FNA3D itself (see cmake/ThirdPartyFNA3D.cmake).
@@ -202,7 +224,7 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL 
     # entirely in parallel to EasyGL's own GLSL ES 3.00-authored-and-string-rewritten stock shaders.
     # Off by default because it pulls a fetched dependency into a renderer that does not otherwise
     # need one. Uses add_compile_definitions directly rather than _cna_identity_defines, matching
-    # the sibling CNA_SDL_GPU_COMPILED_EFFECTS option below: an opt-in flag, not a per-identity
+    # the sibling CNA_SDLGPU_COMPILED_EFFECTS option below: an opt-in flag, not a per-identity
     # define every build of this renderer needs.
     option(CNA_EASYGL_COMPILED_EFFECTS
            "Build EasyGL support for compiled XNA Effect bytecode (FX-062)" OFF)
@@ -222,7 +244,7 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
     # WEBGPU-167: compiled XNA Effect bytecode through MojoShader's portable
     # SPIR-V profile plus the combined-image-sampler split WebGPU's shading model needs. Off by
     # default and shaped exactly like the CNA_EASYGL_COMPILED_EFFECTS and
-    # CNA_SDL_GPU_COMPILED_EFFECTS options, for the same reason: MojoShader is a fetched dependency
+    # CNA_SDLGPU_COMPILED_EFFECTS options, for the same reason: MojoShader is a fetched dependency
     # this renderer does not otherwise need. There is no MojoShader-provided WebGPU adapter -- the
     # nine-function effect backend is CNA's own.
     option(CNA_WEBGPU_COMPILED_EFFECTS
@@ -251,7 +273,7 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     list(APPEND _cna_identity_defines CNA_RENDERER_SOFTWARE)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SOFTWARE")
     # SOFTWARE-162/165: compiled Effects remain opt-in for the same dependency reason as EasyGL
-    # and SDL_GPU. When selected, however, the completed CPU executor advertises and runs
+    # and SDLGPU. When selected, however, the completed CPU executor advertises and runs
     # the full shared public contract rather than exposing a private staging-only runtime.
     option(CNA_SOFTWARE_COMPILED_EFFECTS
            "Build Software support for compiled XNA Effect bytecode" OFF)
@@ -281,12 +303,12 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         cna_configure_mojoshader()
         add_compile_definitions(CNA_DIRECTX9_COMPILED_EFFECTS)
     endif()
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
-    message(STATUS "CNA: Using SDL_GPU graphics renderer")
+elseif(CNA_GRAPHICS_RENDERER STREQUAL "SDLGPU")
+    message(STATUS "CNA: Using SDLGPU graphics renderer")
     set(RENDERER_DIR "modules/renderers/sdl-gpu")
     set(RENDERER_TARGET "cna_renderer_sdl_gpu")
-    list(APPEND _cna_identity_defines CNA_RENDERER_SDL_GPU)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_SDL_GPU")
+    list(APPEND _cna_identity_defines CNA_RENDERER_SDLGPU)
+    set(CNA_RENDERER_DEFINE "CNA_RENDERER_SDLGPU")
     # SDLGPU-92: SDL_gpu's Vulkan driver consumes CNA's committed SPIR-V stock shaders
     # directly. D3D12 and Metal require SDL_shadercross to translate those same blobs to DXBC or
     # MSL. Keep Linux/Android's already-native route dependency-free by default, while making the
@@ -296,10 +318,10 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     else()
         set(_cna_sdl_gpu_shadercross_default OFF)
     endif()
-    option(CNA_SDL_GPU_SHADERCROSS
+    option(CNA_SDLGPU_SHADERCROSS
            "Enable portable SPIR-V stock shaders through SDL_shadercross"
            ${_cna_sdl_gpu_shadercross_default})
-    if(CNA_SDL_GPU_SHADERCROSS)
+    if(CNA_SDLGPU_SHADERCROSS)
         include(cmake/ThirdPartySDLShaderCross.cmake)
         cna_configure_sdl_shadercross()
     endif()
@@ -307,15 +329,15 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # adapter, which emits SPIR-V -- the format this renderer already builds its pipelines from.
     # Off by default because it pulls a fetched dependency into a renderer that does not otherwise
     # need one; the capability stays false until the FX-060 shared suite passes here.
-    option(CNA_SDL_GPU_COMPILED_EFFECTS
-           "Build SDL_GPU support for compiled XNA Effect bytecode (FX-061)" OFF)
-    if(CNA_SDL_GPU_COMPILED_EFFECTS)
+    option(CNA_SDLGPU_COMPILED_EFFECTS
+           "Build SDLGPU support for compiled XNA Effect bytecode (FX-061)" OFF)
+    if(CNA_SDLGPU_COMPILED_EFFECTS)
         include(cmake/ThirdPartyFNA3D.cmake)
         cna_configure_mojoshader()
-        if(CNA_SDL_GPU_SHADERCROSS)
+        if(CNA_SDLGPU_SHADERCROSS)
             cna_enable_mojoshader_sdl_gpu_shadercross()
         endif()
-        add_compile_definitions(CNA_SDL_GPU_COMPILED_EFFECTS)
+        add_compile_definitions(CNA_SDLGPU_COMPILED_EFFECTS)
     endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     message(STATUS "CNA: Using FNA3D graphics renderer (libcna/FNA3D + MojoShader forks)")

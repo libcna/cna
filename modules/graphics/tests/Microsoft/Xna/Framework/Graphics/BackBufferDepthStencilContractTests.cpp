@@ -502,7 +502,7 @@ TEST(BackBufferDepthStencilContractTest, NoneAndDepth24SelectDepthFragmentAccept
 }
 
 // MSR-035: the public state cache starts on the XNA presets, so constructor-time setters must
-// still apply them to the native renderer before the first draw. SDL_GPU otherwise retained its
+// still apply them to the native renderer before the first draw. SDLGPU otherwise retained its
 // zero-initialized, depth-disabled native state until an application selected a different state.
 TEST(BackBufferDepthStencilContractTest, ConstructorAppliesDefaultDepthStateBeforeFirstDraw)
 {

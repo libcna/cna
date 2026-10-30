@@ -194,7 +194,7 @@ namespace
     // the fix landed, which is what turned this declaration over.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, false};
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     // `segmentsBindCycles` true since the per-bind-cycle render pass fix. SdlGpu collapsed bind cycles exactly as Vulkan
     // did and for the same reason -- `EnsureFrameRendered` gave each DISTINCT `DrawTarget` one
     // `SDL_BeginGPURenderPass` holding every draw ever queued against it that frame -- and declared
@@ -205,7 +205,7 @@ namespace
     // another segment over the same destination and X3 asserts the ordered result; it was measured
     // red the moment the fix landed. `clearOnPreserveTarget` is true, and X2 proves it holds in a
     // SECOND cycle too, because that cycle is a real second pass with its own load op.
-    constexpr Contract kContract{"SDL_GPU", true, Support::Exact, true, Support::Exact,
+    constexpr Contract kContract{"SDLGPU", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, true, Support::Exact,

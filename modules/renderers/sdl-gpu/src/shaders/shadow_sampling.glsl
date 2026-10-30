@@ -3,7 +3,7 @@
 // compile_shaders.py. Set 1 is deliberately identical for every family; set 0 remains the
 // family's material/lighting bundle.
 //
-// SMG-0032: the SDL_GPU renderer includes this same file,
+// SMG-0032: the SDLGPU renderer includes this same file,
 // but SDL_gpu fixes its own descriptor sets (fragment samplers in set 2, fragment uniform buffers
 // in set 3, each numbered from zero), so an including shader may place the four resources by
 // defining these first. The defaults are this renderer's own layout and leave its SPIR-V

@@ -3,13 +3,13 @@
 
 /**
  * @file SdlGpuCompiledEffect.hpp
- * @brief FX-061: compiled XNA Effect Framework bytecode on the SDL_GPU renderer.
+ * @brief FX-061: compiled XNA Effect Framework bytecode on the SDLGPU renderer.
  *
  * MojoShader's own SDL_GPU adapter owns translation, shader creation, program linking and
  * uniform-buffer mapping; the renderer-neutral reflection and state translation live in
  * CNA::Internal::Renderers::MojoShaderEffect, shared with the FNA3D backend. What is left here is
  * this renderer's own share: creating and disposing the native effect against its `SDL_GPUDevice`,
- * selecting a technique, applying a pass, and resolving a texture parameter to an SDL_GPU texture.
+ * selecting a technique, applying a pass, and resolving a texture parameter to an SDLGPU texture.
  *
  * FX-071 gives both ordinary 3D draws (`SdlGpuRenderer::QueueCompiledEffectDraw`/
  * `GetOrCreatePipelineCompiledEffect`/`IssueCompiledEffectDraw`) and SpriteBatch
@@ -31,7 +31,7 @@
  * ordinary compiled-effect instancing are supported as well.
  */
 
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Renderers/Common/ICompiledEffectRuntime.hpp"
@@ -55,7 +55,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     class SdlGpuRenderer;
 
     /**
-     * @brief One compiled XNA effect owned by the SDL_GPU renderer.
+     * @brief One compiled XNA effect owned by the SDLGPU renderer.
      */
     class SdlGpuCompiledEffect final : public ICompiledEffectRuntime
     {
@@ -221,7 +221,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         /**
          * @brief Reports whether the last linked pixel module consumes the injected LOD-bias UBO.
-         * @return True when the SDL_GPU MojoShader transform rewrote at least one implicit sample.
+         * @return True when the SDLGPU MojoShader transform rewrote at least one implicit sample.
          */
         CNAEXT [[nodiscard]] bool LinkedPixelShaderUsesLodBiasEXT() const;
 
@@ -305,4 +305,4 @@ namespace CNA::Internal::Renderers::SdlGpu
     };
 }
 
-#endif  // CNA_SDL_GPU_COMPILED_EFFECTS
+#endif  // CNA_SDLGPU_COMPILED_EFFECTS

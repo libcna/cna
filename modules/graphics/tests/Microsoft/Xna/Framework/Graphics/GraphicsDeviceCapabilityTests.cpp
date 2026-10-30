@@ -113,9 +113,9 @@ struct CapabilityExpectation
 }
 
 // FNA3D has no separate compiled-effects opt-in: MojoShader is already its own graphics
-// dependency, so support is unconditional whenever this renderer is selected at all. SDL_GPU,
+// dependency, so support is unconditional whenever this renderer is selected at all. SDLGPU,
 // EasyGL, WebGPU and DirectX 9 all pull MojoShader in only as an extra,
-// off-by-default dependency none of them otherwise needs (CNA_SDL_GPU_COMPILED_EFFECTS /
+// off-by-default dependency none of them otherwise needs (CNA_SDLGPU_COMPILED_EFFECTS /
 // CNA_EASYGL_COMPILED_EFFECTS / CNA_WEBGPU_COMPILED_EFFECTS /
 // CNA_DIRECTX9_COMPILED_EFFECTS) -- selecting the renderer alone
 // is not enough to expect the capability true for any of them.
@@ -139,7 +139,7 @@ struct CapabilityExpectation
         case GraphicsRendererType::Fna3d:
             return true;
         case GraphicsRendererType::SdlGpu:
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
             return true;
 #else
             return false;
@@ -186,7 +186,7 @@ TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
     GraphicsDevice gd;
     if (CNA_RENDERER_IS(SdlGpu))
     {
-        // Apple M4 AM4-175: SDL_GPU answers the capability as GraphicsCapability.hpp
+        // Apple M4 AM4-175: SDLGPU answers the capability as GraphicsCapability.hpp
         // documents it -- "a complete real depth/stencil attachment on the active target"
         // (SDLGPU-132) -- and a default device's back buffer has none, as in XNA, whose
         // PresentationParameters.DepthStencilFormat defaults to None. Ask both ways.
@@ -288,7 +288,7 @@ TEST(GraphicsDeviceCapabilityTest, SupportsOcclusionQuery)
     {
         // Apple M4 AM4-189: FNA3D's answer is its selected driver's, measured at
         // device creation by creating a query: the OpenGL and Direct3D 11 drivers have queries,
-        // its SDL_GPU driver (the one macOS gets) has none, as SDL3's GPU API has none. So the
+        // its SDLGPU driver (the one macOS gets) has none, as SDL3's GPU API has none. So the
         // capability is asked to agree with what OcclusionQuery's constructor does on HiDef.
         Microsoft::Xna::Framework::Graphics::GraphicsDevice hiDef(
             Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
@@ -415,13 +415,13 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 // in a file that is compiled once per renderer and gated on nothing. It encoded ONE renderer's
 // documented gap -- EasyGL's "GLES3 has no polygon mode" entry in the graphics plan's XNA 4.0
 // coverage table -- as though every renderer shared it, and therefore failed on Software, Headless,
-// bgfx, WebGPU, Vulkan and SDL_GPU. It could never pass falsely, so it hid nothing; it was simply
+// bgfx, WebGPU, Vulkan and SDLGPU. It could never pass falsely, so it hid nothing; it was simply
 // a standing red in six principal suites.
 //
 // THE MEASURED CONTRACT, one renderer at a time. Every row below is a real reading from the pixel
 // oracle in this file, not a reading of the source:
 //
-//   Software, SDL_GPU, D3D9                       reports true, renders a real wireframe
+//   Software, SDLGPU, D3D9                       reports true, renders a real wireframe
 //   EasyGL desktop/native-extension contexts       report true, render native wireframe
 //   EasyGL GLES/WebGL without polygon-mode ext     report false, refuse (SOFTWARE-178)
 //   WebGPU                                        reports FALSE, refuses the draw (WEBGPU-115)
@@ -502,7 +502,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
            "fallen back to IGraphicsRenderer's default true, which no no-op renderer can back";
 #else
     // Every other renderer in this file answers true, either because it renders a real wireframe
-    // (Software, SDL_GPU, D3D9, asserted by the pixel oracle below) or
+    // (Software, SDLGPU, D3D9, asserted by the pixel oracle below) or
     // because it inherits IGraphicsRenderer's default (Headless, which rasterizes nothing at all).
     EXPECT_TRUE(reported);
 #endif

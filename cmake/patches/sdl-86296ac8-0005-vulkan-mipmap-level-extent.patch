@@ -12,7 +12,7 @@ clamps them with SDL_max(..., 1).
 
 Not an upstream commit: SDL main still sizes them unclamped (checked
 2026-10-26 at 52289a276). Carried by CNA (2026-10-26 remediation review:
-FNA3D's SDL_GPU driver resolves mipmapped render targets with
+FNA3D's SDLGPU driver resolves mipmapped render targets with
 SDL_GenerateMipmapsForGPUTexture).
 ---
 --- a/src/gpu/vulkan/SDL_gpu_vulkan.c

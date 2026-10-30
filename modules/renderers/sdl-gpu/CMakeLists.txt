@@ -7,41 +7,41 @@ set_property(TARGET ${RENDERER_TARGET} PROPERTY REQUIRES_PLATFORM SDL3)
 # SDLGPU-92: the built-in shader path links SDL_shadercross statically when
 # configured. Windows and Apple default this on because their native SDL_gpu drivers consume
 # DXBC/MSL, not SPIR-V. Linux/Android retain the direct dependency-free Vulkan route by default.
-if(CNA_SDL_GPU_SHADERCROSS)
+if(CNA_SDLGPU_SHADERCROSS)
     if(NOT TARGET cna_sdl_shadercross)
         message(FATAL_ERROR
-            "CNA_SDL_GPU_SHADERCROSS=ON but the pinned SDL_shadercross target was not configured")
+            "CNA_SDLGPU_SHADERCROSS=ON but the pinned SDL_shadercross target was not configured")
     endif()
     target_link_libraries(${RENDERER_TARGET} PRIVATE cna_sdl_shadercross)
-    target_compile_definitions(${RENDERER_TARGET} PRIVATE CNA_SDL_GPU_SHADERCROSS)
+    target_compile_definitions(${RENDERER_TARGET} PRIVATE CNA_SDLGPU_SHADERCROSS)
 endif()
 
 # FX-061: compiled XNA effects go through MojoShader's own SDL_GPU adapter plus the
 # translation shared with every other compiled-effect backend. Opt-in, because MojoShader is a
 # fetched dependency this renderer does not otherwise need.
-if(CNA_SDL_GPU_COMPILED_EFFECTS)
+if(CNA_SDLGPU_COMPILED_EFFECTS)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
-    set(CNA_SDL_GPU_STOCK_EFFECT
+    set(CNA_SDLGPU_STOCK_EFFECT
         "${CMAKE_CURRENT_SOURCE_DIR}/../fna3d/effects/SpriteEffect.fxb")
-    set(CNA_SDL_GPU_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
-    set(CNA_SDL_GPU_STOCK_EFFECT_HEADER
-        "${CNA_SDL_GPU_GENERATED_DIR}/Fna3dStockEffectBlobs.hpp")
+    set(CNA_SDLGPU_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    set(CNA_SDLGPU_STOCK_EFFECT_HEADER
+        "${CNA_SDLGPU_GENERATED_DIR}/Fna3dStockEffectBlobs.hpp")
     add_custom_command(
-        OUTPUT "${CNA_SDL_GPU_STOCK_EFFECT_HEADER}"
+        OUTPUT "${CNA_SDLGPU_STOCK_EFFECT_HEADER}"
         COMMAND ${Python3_EXECUTABLE}
                 "${CMAKE_CURRENT_SOURCE_DIR}/../fna3d/effects/embed_effects.py"
-                "${CNA_SDL_GPU_STOCK_EFFECT_HEADER}"
-                "SpriteEffect=${CNA_SDL_GPU_STOCK_EFFECT}"
+                "${CNA_SDLGPU_STOCK_EFFECT_HEADER}"
+                "SpriteEffect=${CNA_SDLGPU_STOCK_EFFECT}"
         DEPENDS
                 "${CMAKE_CURRENT_SOURCE_DIR}/../fna3d/effects/embed_effects.py"
-                "${CNA_SDL_GPU_STOCK_EFFECT}"
-        COMMENT "CNA: embedding the XNA SpriteEffect for SDL_GPU compiled-effect inheritance"
+                "${CNA_SDLGPU_STOCK_EFFECT}"
+        COMMENT "CNA: embedding the XNA SpriteEffect for SDLGPU compiled-effect inheritance"
         VERBATIM)
     add_custom_target(cna_renderer_sdl_gpu_sprite_effect
-        DEPENDS "${CNA_SDL_GPU_STOCK_EFFECT_HEADER}")
+        DEPENDS "${CNA_SDLGPU_STOCK_EFFECT_HEADER}")
     add_dependencies(${RENDERER_TARGET} cna_renderer_sdl_gpu_sprite_effect)
-    target_sources(${RENDERER_TARGET} PRIVATE "${CNA_SDL_GPU_STOCK_EFFECT_HEADER}")
-    target_include_directories(${RENDERER_TARGET} PRIVATE "${CNA_SDL_GPU_GENERATED_DIR}")
+    target_sources(${RENDERER_TARGET} PRIVATE "${CNA_SDLGPU_STOCK_EFFECT_HEADER}")
+    target_include_directories(${RENDERER_TARGET} PRIVATE "${CNA_SDLGPU_GENERATED_DIR}")
     target_link_libraries(${RENDERER_TARGET} PUBLIC cna_renderer_mojoshader_effect)
 endif()
 
@@ -57,36 +57,36 @@ target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
 # Metal also cannot consume ShaderEffect's raw SPIR-V path, so they truthfully leave this optional
 # CNA-specific capability disabled until that path gains native output translation. This does not
 # affect ordinary compiled XNA effects, which use the separate MojoShader/ShaderCross route.
-set(CNA_SDL_GPU_SHADER_EFFECTS_AVAILABLE OFF)
+set(CNA_SDLGPU_SHADER_EFFECTS_AVAILABLE OFF)
 set(_cna_sdl_gpu_shader_effect_spirv_target ON)
 if(WIN32 OR APPLE OR EMSCRIPTEN)
     set(_cna_sdl_gpu_shader_effect_spirv_target OFF)
 endif()
 if(_cna_sdl_gpu_shader_effect_spirv_target)
-    find_library(CNA_SDL_GPU_SHADERC_LIBRARY NAMES shaderc_shared shaderc)
-    if(NOT CNA_SDL_GPU_SHADERC_LIBRARY AND NOT CMAKE_CROSSCOMPILING)
-        file(GLOB CNA_SDL_GPU_SHADERC_CANDIDATES
+    find_library(CNA_SDLGPU_SHADERC_LIBRARY NAMES shaderc_shared shaderc)
+    if(NOT CNA_SDLGPU_SHADERC_LIBRARY AND NOT CMAKE_CROSSCOMPILING)
+        file(GLOB CNA_SDLGPU_SHADERC_CANDIDATES
             /usr/lib/*/libshaderc.so*
             /usr/lib/libshaderc.so*
             /usr/local/lib/libshaderc.so*
         )
-        if(CNA_SDL_GPU_SHADERC_CANDIDATES)
-            list(GET CNA_SDL_GPU_SHADERC_CANDIDATES 0 CNA_SDL_GPU_SHADERC_LIBRARY)
+        if(CNA_SDLGPU_SHADERC_CANDIDATES)
+            list(GET CNA_SDLGPU_SHADERC_CANDIDATES 0 CNA_SDLGPU_SHADERC_LIBRARY)
         endif()
     endif()
 endif()
 
-if(_cna_sdl_gpu_shader_effect_spirv_target AND CNA_SDL_GPU_SHADERC_LIBRARY)
-    set(CNA_SDL_GPU_SHADER_EFFECTS_AVAILABLE ON)
+if(_cna_sdl_gpu_shader_effect_spirv_target AND CNA_SDLGPU_SHADERC_LIBRARY)
+    set(CNA_SDLGPU_SHADER_EFFECTS_AVAILABLE ON)
     message(STATUS
-        "CNA: SDL_GPU ShaderEffect enabled with target libshaderc at ${CNA_SDL_GPU_SHADERC_LIBRARY}")
+        "CNA: SDLGPU ShaderEffect enabled with target libshaderc at ${CNA_SDLGPU_SHADERC_LIBRARY}")
     add_library(CNA::Shaderc UNKNOWN IMPORTED GLOBAL)
-    set_target_properties(CNA::Shaderc PROPERTIES IMPORTED_LOCATION "${CNA_SDL_GPU_SHADERC_LIBRARY}")
+    set_target_properties(CNA::Shaderc PROPERTIES IMPORTED_LOCATION "${CNA_SDLGPU_SHADERC_LIBRARY}")
     target_link_libraries(${RENDERER_TARGET} PRIVATE CNA::Shaderc)
-    target_compile_definitions(${RENDERER_TARGET} PRIVATE CNA_SDL_GPU_SHADER_EFFECTS)
+    target_compile_definitions(${RENDERER_TARGET} PRIVATE CNA_SDLGPU_SHADER_EFFECTS)
 else()
     message(STATUS
-        "CNA: SDL_GPU ShaderEffect disabled (no target-native GLSL-to-driver shader path); "
+        "CNA: SDLGPU ShaderEffect disabled (no target-native GLSL-to-driver shader path); "
         "CustomEffects will report false")
 endif()
 unset(_cna_sdl_gpu_shader_effect_spirv_target)

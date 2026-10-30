@@ -21,7 +21,7 @@
  * a split-screen sub-viewport, a scissored HUD, or simply re-applying the value it had just read
  * back — programmed the GPU in logical space and bypassed the letterbox/scale placement.
  *
- * The other renderer family (Diligent, Sokol, LLGL, SDL_GPU, WebGPU) deliberately treats the
+ * The other renderer family (Diligent, Sokol, LLGL, SDLGPU, WebGPU) deliberately treats the
  * pushed rectangle as logical and rescales internally, and therefore does not override
  * `GetDefaultViewportRect()`. That is exactly the case this mapping leaves alone: when the
  * physical rectangle equals `(0, 0, logicalWidth, logicalHeight)` the mapping is the identity.

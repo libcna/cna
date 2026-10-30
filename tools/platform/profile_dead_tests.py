@@ -5,7 +5,7 @@
 A test that throws a Reach-profile refusal before its first check -- the `SOFTWARE-213` class: a
 GetBackBufferData, a second render target, a volume texture on a device that never asked for
 HiDef -- fails exactly like a renderer defect. 103 Vulkan examples, then 23 more, then 32 WebGPU and
-3 SDL_GPU ones sat in "known red" that way, filed as transfer or render-target bugs because of what
+3 SDLGPU ones sat in "known red" that way, filed as transfer or render-target bugs because of what
 they were named (Vulkan parity VKPAR-0006/0018, GPU test isolation
 GTI-0003). A test process launched is not a test that ran its assertions.
 
@@ -158,7 +158,7 @@ Test Passed.
 7/7 Test: SdlGpu_BoundTargetLifetime
 Output:
 ----------------------------------------------------------
-[INFO] A1: oracle unavailable on SDL_GPU (NotSupportedException) -- boundary recorded
+[INFO] A1: oracle unavailable on SDLGPU (NotSupportedException) -- boundary recorded
 <end of output>
 Test time =   0.30 sec
 ----------------------------------------------------------

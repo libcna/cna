@@ -3,7 +3,7 @@
 //
 // XNA draws each call with the texture as it is at that call, so a texture changed between two
 // draws of one frame shows its old contents in the first and its new contents in the second.
-// SDL_GPU and WEBGPU record a frame and replay it later while an upload goes out at once, so both
+// SDLGPU and WEBGPU record a frame and replay it later while an upload goes out at once, so both
 // draws used to show the new contents (handoff.md 5.1; the SpriteBatch Immediate case is
 // spritebatch_sort_mode_semantics_test.cpp leg B). Each leg draws the left half with the texture
 // red, changes it to blue, draws the right half, and reads both halves back:

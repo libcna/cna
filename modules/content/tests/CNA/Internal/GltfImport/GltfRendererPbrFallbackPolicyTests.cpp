@@ -606,7 +606,7 @@ namespace
          "effect.SetMatrix(\"World\", world)",
          "vout.Position = mul(float4(vin.Position, 1.0), WorldViewProj)",
          "vout.Position = mul(float4(skinnedPos, 1.0), WorldViewProj)"},
-        // STREETS-0001: SDL_GPU compiles its PBR vertex shaders twice
+        // STREETS-0001: SDLGPU compiles its PBR vertex shaders twice
         // from one source, the per-instance transform spelled CNA_INSTANCE_POSITION() (VULKAN-232's
         // scheme); same evidence, current spelling.
         {"sdl-gpu",
@@ -1943,7 +1943,7 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
     constexpr std::array<VertexColourPbrAudit, 3> upload{{
         {"easygl", "p.loc_vertexcolor"},
         {"fna3d", "useVertexColor ? 1.0f : 0.0f"},
-        // SDL_GPU's PC block already carried the flag -- its own comment called it "unused".
+        // SDLGPU's PC block already carried the flag -- its own comment called it "unused".
         {"sdl-gpu", "float vertexColorEnabled; // GLTF-465: gates the COLOR_0 product below"},
     }};
     for (const VertexColourPbrAudit& audit : upload)
@@ -2087,7 +2087,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
     //
     //   - an OpenGL renderer selected its PBR program for stride 48 only, so a stride-60 draw fell
     //     through to its Blinn-Phong `lit` branch;
-    //   - SDL_GPU shipped the stride-60/80 pipelines, shaders and attributes and left
+    //   - SDLGPU shipped the stride-60/80 pipelines, shaders and attributes and left
     //     `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` gating on `stride == 48`/`68`, so every such
     //     draw fell past every branch into the stride-16 coloured path and was refused there;
     //   - another renderer chose its skinned colour PBR program for stride 80 in one switch and then
@@ -2151,7 +2151,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
                    " instanceCount, instanceStream); return; }"},
         {"sdl-gpu", "if (params.pbr && !params.skinned) { if (streams.count != 1)"
                     " throw System::NotSupportedException("
-                    "\"CNA SDL_GPU: PbrEffect requires one per-vertex stream\");"
+                    "\"CNA SDLGPU: PbrEffect requires one per-vertex stream\");"
                     " QueuePbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);"
                     " return; }"},
         {"easygl", "if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned;"},

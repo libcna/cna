@@ -162,7 +162,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// (Apple M4 AM4-035) renderers translated the declaration too.
 [[nodiscard]] inline bool TranslatesDeclarations()
 {
-    // Apple M4 AM4-092: SDL_GPU builds its vertex input from the declaration since
+    // Apple M4 AM4-092: SDLGPU builds its vertex input from the declaration since
     // SDLGPU-59; the arm predates it. D3D9 builds its IDirect3DVertexDeclaration9 from the
     // declaration and its stock effects accept any layout that supplies the elements they read.
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software,
@@ -668,7 +668,7 @@ protected:
     ///   * every renderer except bgfx and EasyGL left `SetVertexDeclaration` an empty override
     ///     (Vulkan, WebGPU, Software, SdlGpu, D3D9, D3D11, D3D12), so the declaration was discarded
     ///     and a layout selected by stride -- the vertex-declaration fidelity guard (since translated by WebGPU, Software
-    ///     and SDL_GPU, as it was by the since-retired Vulkan and, per DX-221/DX-222, D3D11 -- see
+    ///     and SDLGPU, as it was by the since-retired Vulkan and, per DX-221/DX-222, D3D11 -- see
     ///     TranslatesDeclarations());
     ///   * EasyGL consumes the declaration but assigns each attribute's location from its INDEX in
     ///     the element list rather than from its semantic, so any declaration whose element order

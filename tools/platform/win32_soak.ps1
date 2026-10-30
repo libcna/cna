@@ -13,7 +13,7 @@
 # the window being real, foreground and on a window station with a shell.
 #
 # Usage (inside the interactive session):
-#   win32_soak.ps1 -Exe C:\cna\build\...\cna_demo_2d.exe [-Seconds 300] [-Renderer SDL_GPU]
+#   win32_soak.ps1 -Exe C:\cna\build\...\cna_demo_2d.exe [-Seconds 300] [-Renderer SDLGPU]
 
 [CmdletBinding()]
 param(

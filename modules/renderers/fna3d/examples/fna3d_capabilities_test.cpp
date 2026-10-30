@@ -101,7 +101,7 @@ public:
         if (systemRenderer.rendererType == FNA3D_RENDERER_TYPE_SDL_GPU_EXT)
         {
             Check(!reportsOcclusionQueries,
-                  "the selected FNA3D SDL_GPU driver reports no occlusion queries");
+                  "the selected FNA3D SDLGPU driver reports no occlusion queries");
         }
         Check(renderer.SupportsCapability(GraphicsCapability::Texture3D) ==
                   (renderer.CreateTexture3D(4, 4, 4, false, 0) != nullptr),

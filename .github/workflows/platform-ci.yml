@@ -36,9 +36,9 @@ jobs:
             renderer: OPENGLES3
             audio: SDL3
             display: true
-          - name: SDL3 + SDL_GPU
+          - name: SDL3 + SDLGPU
             platform: SDL3
-            renderer: SDL_GPU
+            renderer: SDLGPU
             audio: SDL3
             display: true
           # wgpu-native's Vulkan backend on lavapipe; configure downloads the pinned package.
@@ -248,12 +248,12 @@ jobs:
   # from SDL3's windows video driver, and a Direct3D renderer receives the HWND through
   # IPlatformWindow::GetNativeHandle(). This configures CNA for SDL3, builds the platform module's
   # focused suite and the process-exit harness, and runs them with the expectation that the native
-  # handle is an HWND. Windows -> SDL3 -> HWND -> Direct3D itself is exercised by the SDL_GPU leg
+  # handle is an HWND. Windows -> SDL3 -> HWND -> Direct3D itself is exercised by the SDLGPU leg
   # of d3d-windows-ci.yml (SDL's Direct3D 12 backend on the window SDL3 created), which replaced
   # the retired DIRECTX11 renderer's DirectX11_Win32HardwareSmoke (RRC-051).
   #
   # workflow_dispatch-only: this is the deeper platform-module/exit-order qualification. The
-  # automatic current-head MSVC compiler and SDL_GPU baseline lives in windows-msvc-ci.yml.
+  # automatic current-head MSVC compiler and SDLGPU baseline lives in windows-msvc-ci.yml.
   sdl3-windows:
     name: SDL3 on Windows (native MSVC, windows-latest)
     runs-on: windows-latest

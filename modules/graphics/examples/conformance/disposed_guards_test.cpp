@@ -204,7 +204,7 @@ public:
     DisposedGuardsTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // pre-SDL_GPU PSG-0008: GetBackBufferData is HiDef-only
+        // pre-SDLGPU PSG-0008: GetBackBufferData is HiDef-only
         // (SOFTWARE-213), so under the default Reach profile this aborted before its first
         // check (GTI-0003).
         gdm_->setGraphicsProfileProperty(

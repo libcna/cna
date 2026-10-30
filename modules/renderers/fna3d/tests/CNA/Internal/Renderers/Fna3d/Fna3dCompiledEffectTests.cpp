@@ -1791,7 +1791,7 @@ TEST(Fna3dCompiledEffectTest, SingleCubePreservesFloatValuesAcrossFacesAndMips)
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters::CreateWindowedEXT(800, 480));
     // FNA3D stores Single cubes, and so does any renderer whose cube classifier says Supported;
-    // SDL_GPU and WEBGPU declare no Single cube storage and refuse it at construction, which is
+    // SDLGPU and WEBGPU declare no Single cube storage and refuse it at construction, which is
     // their capability answer rather than a result. FNA3D itself is never excused.
     using CNA::Internal::Renderers::RendererFormatVerdict;
     if (dynamic_cast<const CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(&device.GetRenderer()) ==

@@ -8,7 +8,7 @@ namespace CNA::Internal::Renderers::Fna3d::Detail
      *
      * FNA3D chooses its driver at runtime and reports the window flags that driver needs through
      * `FNA3D_PrepareWindowAttributes()` -- `SDL_WINDOW_OPENGL` for the OpenGL driver, none for
-     * SDL_GPU or Direct3D 11. That call must happen *before* `SDL_CreateWindow`, because it also
+     * SDLGPU or Direct3D 11. That call must happen *before* `SDL_CreateWindow`, because it also
      * primes the GL attributes the visual is chosen from, so `GraphicsDevice` asks for it while
      * assembling the window flags (the same shape the retired LLGL, Diligent and bgfx renderers
      * used for their own runtime-selected APIs).

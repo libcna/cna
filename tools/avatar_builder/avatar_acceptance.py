@@ -4,7 +4,7 @@
 
     python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi                  # its default renderer
     python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --all-renderers  # every one compiled in
-    python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --renderer SDL_GPU --renderer SOFTWARE
+    python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --renderer SDLGPU --renderer SOFTWARE
     python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --all-renderers --configure  # a fresh checkout
     python3 tools/avatar_builder/avatar_acceptance.py cmake-build-multi --all-renderers --service ../cna-gamer-services-server
     python3 tools/avatar_builder/avatar_acceptance.py --static   # no build: catalog, docs, visual manifest metadata
@@ -77,7 +77,7 @@ NO_PIXELS = {"HEADLESS", "STUB"}
 # What --configure gives a tree that does not exist yet (docs/avatars.md, "Acceptance").
 CONFIGURE = ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Debug", "-DCNA_BUILD_TESTS=ON", "-DCNA_BUILD_EXAMPLES=ON", "-DCNA_BUILD_C_API=ON",
              "-DCNA_GRAPHICS_RENDERER=OPENGLES3",
-             "-DCNA_GRAPHICS_RENDERERS=OPENGLES3;OPENGL33;WEBGPU;SDL_GPU;FNA3D;SOFTWARE;HEADLESS;STUB",
+             "-DCNA_GRAPHICS_RENDERERS=OPENGLES3;OPENGL33;WEBGPU;SDLGPU;FNA3D;SOFTWARE;HEADLESS;STUB",
              "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache", "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
              "-DFETCHCONTENT_UPDATES_DISCONNECTED=ON"]
 # The binaries the stages run themselves (hashed in the report); the build stage builds them and the

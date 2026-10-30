@@ -167,8 +167,8 @@ namespace
     // adapter offers.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
-#elif defined(CNA_RENDERER_SDL_GPU)
-    constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
+#elif defined(CNA_RENDERER_SDLGPU)
+    constexpr Contract kContract{"SDLGPU", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     // D3D9RenderTargetCubeRenderer reports GetMultiSampleCount() == 0 unconditionally (no MSAA

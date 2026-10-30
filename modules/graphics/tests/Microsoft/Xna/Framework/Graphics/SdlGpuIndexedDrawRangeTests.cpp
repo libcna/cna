@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// SDL_GPU indexed draws must propagate the public startIndex/baseVertex arguments
+// SDLGPU indexed draws must propagate the public startIndex/baseVertex arguments
 // to the native indexed-draw first-index/vertex-offset parameters.
 //
-// SDL_GPU implements no backbuffer readback at all, so RenderTarget2D::GetData is this renderer's
+// SDLGPU implements no backbuffer readback at all, so RenderTarget2D::GetData is this renderer's
 // exact-pixel oracle (the same control the PointList topology fix established). Every test in this file renders
 // into a render target, unbinds it, and reads the target's own pixels back.
 
@@ -339,7 +339,7 @@ namespace
     class SdlGpuIndexedDrawRangeTest : public ::testing::Test
     {
     protected:
-        // pre-SDL_GPU PSG-0008: HiDef, because a default GraphicsDevice is
+        // pre-SDLGPU PSG-0008: HiDef, because a default GraphicsDevice is
         // Reach and Reach refuses thirty-two-bit index buffers outright --
         // IndexedDrawHonorsOffsetsWithThirtyTwoBitIndices therefore threw before its first check
         // and reported as a renderer failure. profile_dead_tests.py named it DEAD-ON-PROFILE.
@@ -349,7 +349,7 @@ namespace
             Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(800, 480)};
 
         // RTR-P9-5: this whole file used to sit behind
-        // `#ifdef CNA_RENDERER_SDL_GPU`, so on every other renderer its 27 tests did not exist and
+        // `#ifdef CNA_RENDERER_SDLGPU`, so on every other renderer its 27 tests did not exist and
         // reported nothing at all. The gate belongs in SetUp() rather than in a helper: GTEST_SKIP()
         // returns from the function it is written in, and SetUp() is where GoogleTest itself checks
         // for a skip and suppresses the test body.
@@ -620,7 +620,7 @@ TEST_F(SdlGpuIndexedDrawRangeTest, IndexedDrawHonorsOffsetsWithDynamicBuffers)
     ExpectColorAbsent(pixels, Color::Blue, "dynamic based suffix");
 }
 
-// SDL_GPU supports all five CNA topologies natively (the PointList topology fix established the mapping), so
+// SDLGPU supports all five CNA topologies natively (the PointList topology fix established the mapping), so
 // every one of them owes the same addressing contract. Strips and lists differ in how
 // primitiveCount becomes an index count, which is exactly what the resolver derives.
 TEST_F(SdlGpuIndexedDrawRangeTest, IndexedTriangleStripHonorsOffsets)
@@ -718,7 +718,7 @@ TEST_F(SdlGpuIndexedDrawRangeTest, IndexedLineStripHonorsOffsets)
     ExpectColorAbsent(pixels, Color::Lime, "line strip decoy");
 }
 
-// Gave SDL_GPU real point topology but deliberately left indexed addressing at
+// Gave SDLGPU real point topology but deliberately left indexed addressing at
 // offset zero because of this task. Points are the sharpest addressing probe available: one
 // consumed index is exactly one lit pixel, so a dropped offset lights a different pixel entirely.
 TEST_F(SdlGpuIndexedDrawRangeTest, IndexedPointListHonorsOffsets)
@@ -1017,7 +1017,7 @@ TEST_F(SdlGpuIndexedDrawRangeTest, DrawUserIndexedPrimitivesRebasesBeforeTheRend
 
 // ---------------------------------------------------------------------------
 // Apple M4 AM4-183: XNA forwards startIndex, baseVertex and the range hints to the
-// native draw rather than validating them, and SDL_GPU now does too. An index window it cannot
+// native draw rather than validating them, and SDLGPU now does too. An index window it cannot
 // issue draws nothing; a forwarded baseVertex or hint reaches the GPU as given. Only the
 // arguments XNA itself refuses still throw.
 // ---------------------------------------------------------------------------

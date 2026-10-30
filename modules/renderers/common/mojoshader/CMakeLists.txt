@@ -1,6 +1,6 @@
 # FX-061/FX-062/FX-063/FX-065: the MojoShader-to-CNA half of compiled effect support,
 # shared by every backend that executes XNA Effect Framework bytecode. Extracted from the FNA3D
-# renderer once SDL_GPU needed the same code; before that it had exactly one consumer and there was
+# renderer once SDLGPU needed the same code; before that it had exactly one consumer and there was
 # nothing to share.
 #
 # Built only for the configurations that ask for it, and added by the renderers composition rather

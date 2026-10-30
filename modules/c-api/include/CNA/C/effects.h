@@ -1216,7 +1216,7 @@ CNA_C_API CNA_Result cna_effect_create_empty(
  * Support is a renderer property, not a property of this ABI, and
  * `cna_graphics_device_supports_capability` with `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`
  * answers it for the running build. It is true for the `FNA3D` renderer always, and for the
- * `SDL_GPU` and EasyGL-family (`OPENGLES3`, `OPENGL33`, `WEBGL2`) renderers when
+ * `SDLGPU` and EasyGL-family (`OPENGLES3`, `OPENGL33`, `WEBGL2`) renderers when
  * their build option is on -- the effect runtime is a fetched dependency
  * those families do not otherwise need, so the capability never claims more than the binary
  * actually contains. Every other renderer identity reports false and refuses the bytecode rather

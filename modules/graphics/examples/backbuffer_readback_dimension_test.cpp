@@ -9,7 +9,7 @@
 // must come from the backbuffer description, never from the renderer's live viewport, a previously bound
 // target, a stale drawable size or a lazily initialised pass extent.
 //
-// Pre-fix, WebGPU and SDL_GPU sized the rectangle-less region from the renderer's live viewport
+// Pre-fix, WebGPU and SDLGPU sized the rectangle-less region from the renderer's live viewport
 // (GraphicsDevice::GetBackBufferData asked renderer_->GetViewportSize), which under the default
 // FixedHeightDynamicWidth presentation mode is height-locked to the virtual resolution and width-scaled
 // by the window's aspect and, before the window is realised, is derived from a stale physical size --
@@ -77,8 +77,8 @@ namespace
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_SDL_GPU)
-    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDLGPU)
+    constexpr const char* kRendererName = "SDLGPU";
     constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr const char* kRendererName = "DIRECTX9";
@@ -88,7 +88,7 @@ namespace
 #endif
 
     // Cross-renderer control scope. These are PRE-EXISTING renderer behaviours this task
-    // must NOT change (only WebGPU/SDL_GPU production changes here); they are recorded as independent
+    // must NOT change (only WebGPU/SDLGPU production changes here); they are recorded as independent
     // findings and declared as boundaries rather than failed:
     //   - BGFX's backbuffer read honours only a full-surface read; a sub-rectangle reads back zeros
     //     (the rectangle-coordinate path through GraphicsDevice::GetBackBufferData is unchanged by this

@@ -370,7 +370,7 @@ namespace CNA::Internal::Renderers::Fna3d
         // the same method), and it always reported the back buffer. A batch drawn into a target
         // smaller than the window therefore projected its pixels into a fraction of clip space and
         // rasterized into a corner of the target -- for an 8x8 target against an 800x600 back
-        // buffer, into nothing at all. EasyGL and SDL_GPU both size this from the bound target.
+        // buffer, into nothing at all. EasyGL and SDLGPU both size this from the bound target.
         if (!boundTargets_.empty() &&
             boundTargets_.front().binding.type == FNA3D_RENDERTARGET_TYPE_2D)
         {

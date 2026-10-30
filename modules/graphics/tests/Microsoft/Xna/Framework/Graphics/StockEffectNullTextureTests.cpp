@@ -70,7 +70,7 @@ namespace
         {
             // WMG-0025 adds WebGPU, which had no null-texture
             // handling at all until it gained the same 1x1 opaque-black 2D and cube.
-            // Apple M4 AM4-066 gave SDL_GPU the same opaque black for every classic
+            // Apple M4 AM4-066 gave SDLGPU the same opaque black for every classic
             // slot (AM4-107 enrols it here, so that rule is measured rather than only reviewed).
             // FNA3D and DIRECTX9 are enrolled too (graphics shared cleanup GSC-F2), so every
             // surviving rasterizing renderer is held to the measured rule rather than assumed.

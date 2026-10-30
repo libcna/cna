@@ -15,7 +15,7 @@ Verdicts
 --------
 Every renderer family is placed in exactly one bucket, from measured usage:
 
-  sdl-native        Its identity is an SDL3 API. Calls SDL_GPU*/SDL_Render* as its actual
+  sdl-native        Its identity is an SDL3 API. Calls SDLGPU*/SDL_Render* as its actual
                     rendering path. Allowlisted permanently.
   sdl-upstream      Its own sources are SDL-free (or nearly), but the third-party library it wraps
                     links SDL3 itself. Allowlisted for a dependency reason, not a source reason --

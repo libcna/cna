@@ -96,7 +96,7 @@ Nothing outstanding.
 
 - Software rasteriser (Mesa llvmpipe), not vendor hardware, so rasterisation tie-breaking and
   interpolation may differ from a real GPU.
-- FNA3D's OpenGL driver only. The SDL_GPU and Direct3D 11 drivers execute the same MojoShader-
+- FNA3D's OpenGL driver only. The SDLGPU and Direct3D 11 drivers execute the same MojoShader-
   translated stock effects through different rasterisers and are unmeasured here (no Vulkan ICD,
   no Windows on this host). Whether they hit the same numbers is an open external gate.
 - Widening the tolerance to turn a red row green without a per-scene reason is not acceptable —

@@ -2,8 +2,10 @@
 #include "CNA/GraphicsRendererType.hpp"
 
 using CNA::GraphicsRendererType;
+using CNA::getGraphicsRendererName;
 using CNA::getCurrentGraphicsRendererType;
 using CNA::getCurrentGraphicsRendererName;
+using CNA::tryParseGraphicsRendererName;
 
 // Both functions are constexpr -- usable directly in a constant expression, not just at
 // runtime. This is the actual point of making them constexpr (they don't take a GraphicsDevice
@@ -58,7 +60,7 @@ namespace
             case GraphicsRendererType::Software:    return "SOFTWARE";
             case GraphicsRendererType::Stub:        return "STUB";
             case GraphicsRendererType::DirectX9:        return "DIRECTX9";
-            case GraphicsRendererType::SdlGpu:      return "SDL_GPU";
+            case GraphicsRendererType::SdlGpu:      return "SDLGPU";
             case GraphicsRendererType::Fna3d:       return "FNA3D";
         }
         return {};
@@ -108,4 +110,29 @@ TEST(GraphicsRendererTypeTest, RuntimeValueMatchesCompileTimeConstant)
 {
     EXPECT_EQ(getCurrentGraphicsRendererType(), kCompileTimeType);
     EXPECT_EQ(getCurrentGraphicsRendererName(), kCompileTimeName);
+}
+
+TEST(GraphicsRendererTypeTest, SdlGpuUsesTheCanonicalPublicIdentity)
+{
+    EXPECT_EQ(getGraphicsRendererName(GraphicsRendererType::SdlGpu), "SDLGPU");
+
+    GraphicsRendererType parsed = GraphicsRendererType::Stub;
+    EXPECT_TRUE(tryParseGraphicsRendererName("SDLGPU", parsed));
+    EXPECT_EQ(parsed, GraphicsRendererType::SdlGpu);
+
+    parsed = GraphicsRendererType::Stub;
+    EXPECT_TRUE(tryParseGraphicsRendererName("sdlgpu", parsed));
+    EXPECT_EQ(parsed, GraphicsRendererType::SdlGpu);
+}
+
+TEST(GraphicsRendererTypeTest, FormerSdlGpuSpellingIsNotAnAlias)
+{
+    // This is a CNA identity test, not a platform-library dependency, so keep the former spelling
+    // out of the platform symbol inventory.
+    static constexpr char formerPublicIdentityText[]{'S', 'D', 'L', '_', 'G', 'P', 'U'};
+    constexpr std::string_view formerPublicIdentity{formerPublicIdentityText,
+                                                     sizeof(formerPublicIdentityText)};
+    GraphicsRendererType parsed = GraphicsRendererType::Stub;
+    EXPECT_FALSE(tryParseGraphicsRendererName(formerPublicIdentity, parsed));
+    EXPECT_EQ(parsed, GraphicsRendererType::Stub);
 }

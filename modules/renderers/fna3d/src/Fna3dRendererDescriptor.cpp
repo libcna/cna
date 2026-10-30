@@ -1,6 +1,6 @@
 // RTR-P1-D41: the Fna3d family's pre-construction contract.
 //
-// FNA3D selects its driver (SDL_GPU / Direct3D 11 / OpenGL) inside FNA3D_PrepareWindowAttributes
+// FNA3D selects its driver (SDLGPU / Direct3D 11 / OpenGL) inside FNA3D_PrepareWindowAttributes
 // and returns the window attributes that driver needs -- the platform window intent for the GL driver, none
 // for the others. That call must happen before the window is created, because it also primes the GL
 // attributes the window's visual is chosen from. Same runtime-decides-the-flag shape as
@@ -36,7 +36,7 @@ namespace CNA::Internal::Renderers::Fna3d
     {
         // GraphicsAdapter asks before an FNA3D device exists, so the selected runtime driver's
         // native maximum cannot be queried yet. CNA exposes the portable XNA/FNA baseline shared
-        // by the OpenGL, D3D11 and SDL_GPU routes: powers of two through 4x. The live renderer
+        // by the OpenGL, D3D11 and SDLGPU routes: powers of two through 4x. The live renderer
         // applies the same ceiling and may still lower it if the chosen driver reports less.
         int ClampMultiSampleCount(int /*surfaceFormat*/, int requestedMultiSampleCount)
         {

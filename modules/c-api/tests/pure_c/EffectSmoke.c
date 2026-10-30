@@ -167,7 +167,7 @@ static int validate_base_effect(const CNA_Handle device)
     }
     {
         /* The payload dialect a custom ShaderEffect must use. Every renderer answers, and an
-           undeclared one answers UNKNOWN rather than guessing. SDL_GPU's value specifically proves
+           undeclared one answers UNKNOWN rather than guessing. SDLGPU's value specifically proves
            that the C mapping keeps compiled SPIR-V distinct from Vulkan GLSL source. */
         CNA_ShaderDialect dialect = UINT32_MAX;
         CNA_RendererInfo renderer = {
@@ -176,7 +176,7 @@ static int validate_base_effect(const CNA_Handle device)
                     CNA_RESULT_SUCCESS &&
                 dialect <= CNA_SHADER_DIALECT_MAXIMUM &&
                 cna_graphics_device_get_renderer_info(device, &renderer) == CNA_RESULT_SUCCESS &&
-                (renderer.renderer_type != CNA_GRAPHICS_RENDERER_SDL_GPU ||
+                (renderer.renderer_type != CNA_GRAPHICS_RENDERER_SDLGPU ||
                  dialect == CNA_SHADER_DIALECT_SPIRV) &&
                 cna_graphics_device_get_shader_dialect_ext(device, 0) ==
                     CNA_RESULT_INVALID_ARGUMENT &&

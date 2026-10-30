@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// The SDL_GPU-specific half of "every public bind cycle is its own logical pass".
+// The SDLGPU-specific half of "every public bind cycle is its own logical pass".
 //
 // The shared oracle `examples/rendertarget_pass_boundary_test.cpp` proves the boundary itself, on
 // every renderer, using SpriteBatch only. Three things it deliberately cannot ask are asked here,
@@ -612,7 +612,7 @@ protected:
             // first frame and a per-frame leak would show up as a changed result.
             phase_ = 3;
             RunManySegments(dev);
-            std::printf("%d/%d checks passed on SDL_GPU\n", passCount_, totalCount_);
+            std::printf("%d/%d checks passed on SDLGPU\n", passCount_, totalCount_);
             result_ = (passCount_ == totalCount_) ? 0 : 1;
             Exit();
             return;
@@ -620,7 +620,7 @@ protected:
         if (phase_ != 1) { Exit(); return; }
         phase_ = 2;
 
-        std::printf("SDL_GPU pass boundaries: 3D families, uploads, depth clears\n");
+        std::printf("SDLGPU pass boundaries: 3D families, uploads, depth clears\n");
         RunIndexedThenNonIndexed(dev);
         RunIndexedThenNonIndexedPreserve(dev);
         RunIndexedOffsetsPerCycle(dev);

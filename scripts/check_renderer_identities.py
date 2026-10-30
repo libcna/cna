@@ -104,7 +104,7 @@ IDENTITIES = [
     ("SOFTWARE", "Software", 12),
     ("STUB", "Stub", 13),
     ("DIRECTX9", "DirectX9", 22),
-    ("SDL_GPU", "SdlGpu", 31),
+    ("SDLGPU", "SdlGpu", 31),
     ("FNA3D", "Fna3d", 43),
 ]
 
@@ -142,7 +142,7 @@ NEXT_FREE_ABI_VALUE = 52
 # on 2026-10-17 (C ABI 0.49.0). This is that check, held to identifiers rather than prose: the three
 # spellings below only ever named a CNA renderer, so other subsystems' backends (audio, input,
 # ENetBackend, device test backends) and an upstream library's own backend vocabulary
-# (WGPUBackendType, SDL_GPU's drivers) do not match them.
+# (WGPUBackendType, SDLGPU's drivers) do not match them.
 OBSOLETE_RENDERER_VOCABULARY = re.compile(
     r"\b\w*GraphicsBackend\w*|\bCNA_GRAPHICS_BACKEND\w*|\bcna_graphics_backend\w*")
 

@@ -1930,7 +1930,7 @@ namespace CNA::Internal::Renderers::WebGPU
          * `ApplySamplerMipState` was not overridden, so `MaxMipLevel` was discarded in silence.
          * XNA's `MaxMipLevel` is the highest-resolution mip level sampling may use -- level 0 means
          * "no restriction" -- which is `WGPUSamplerDescriptor::lodMinClamp`, the same mapping the
-         * reference renderer makes to `GL_TEXTURE_MIN_LOD` and FNA3D's SDL_GPU driver to `min_lod`.
+         * reference renderer makes to `GL_TEXTURE_MIN_LOD` and FNA3D's SDLGPU driver to `min_lod`.
          *
          * The `lodBias` argument is deliberately NOT consumed here: `WEBGPU-205` owns it, and it is
          * an implementation task rather than a limitation, so nothing in this renderer may claim
@@ -6079,7 +6079,7 @@ namespace CNA::Internal::Renderers::WebGPU
     public:
         /**
          * @brief Drops every queued draw that still names a `ShaderEffect` renderer which is about
-         * to be destroyed (pre-SDL_GPU PSG-0006).
+         * to be destroyed (pre-SDLGPU PSG-0006).
          *
          * This renderer replays a frame later, and a queued sprite or custom-effect draw holds its
          * effect as a RAW pointer. An application that disposes an `Effect` before the frame

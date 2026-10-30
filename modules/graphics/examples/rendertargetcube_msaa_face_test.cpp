@@ -157,11 +157,11 @@ namespace
     // own applied count.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, true,
                                  Support::Exact, false, false};
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     // Pre-fix: ONE single-layer scratch texture that had to be cycled on every pass. Post-fix: six
     // single-layer multisampled textures (SDL_gpu forbids sample_count > 1 on an array texture), no
     // cycling, LOAD + RESOLVE_AND_STORE for a preserving target.
-    constexpr Contract kContract{"SDL_GPU", true, Support::Exact, true,
+    constexpr Contract kContract{"SDLGPU", true, Support::Exact, true,
                                  Support::Exact, false, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     // `msaaEngages` false: D3D9RenderTargetCubeRenderer::Recreate() allocates a plain

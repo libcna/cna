@@ -153,9 +153,9 @@ namespace
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "WEBGPU";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "SDL_GPU";
+    constexpr const char* kRendererName = "SDLGPU";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr RtContract kRtContract = RtContract::Exact;

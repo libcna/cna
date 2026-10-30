@@ -133,8 +133,8 @@ namespace
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_SDL_GPU)
-    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDLGPU)
+    constexpr const char* kRendererName = "SDLGPU";
     constexpr bool kRasterizes = true;
 #else
 #error "this renderer has no declared present-lifecycle contract."
@@ -593,7 +593,7 @@ class PresentLifecycleContractTest : public Game
     /**
      * @brief Leg A11 (matrix 14/15) -- a backbuffer readback on either side of a Present.
      *
-     * SDL_GPU serves this through the lazily created proxy, which changes the present
+     * SDLGPU serves this through the lazily created proxy, which changes the present
      * path the first time it is asked for. This leg exists to prove that turning that path on does
      * not make the device unpresentable, and that a read before a Present and a read after one are
      * both legal.

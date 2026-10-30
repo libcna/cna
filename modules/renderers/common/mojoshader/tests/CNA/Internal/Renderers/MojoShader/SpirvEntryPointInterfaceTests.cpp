@@ -4,7 +4,7 @@
 // the committed compiled-effect corpus.
 //
 // This suite belongs to the SHARED MojoShader half rather than to any one renderer because the
-// SPIR-V profile and MOJOSHADER_linkSPIRVShaders() are shared: WebGPU and SDL_GPU both
+// SPIR-V profile and MOJOSHADER_linkSPIRVShaders() are shared: WebGPU and SDLGPU both
 // consume exactly these bytes. The defect it guards was found through WebGPU only because WebGPU
 // is the backend whose consumer (naga) rejects the module instead of accepting it quietly.
 //

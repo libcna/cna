@@ -34,7 +34,7 @@ true:
   implementation.
 - **SDL3 is the one graphical platform.** Where SDL3 runs, CNA uses it rather than a backend of its
   own. That matters for consoles, because SDL3 already reaches most of them (next section).
-- **The graphics stack matches FNA's.** CNA has an `SDL_GPU` renderer and an `FNA3D` renderer, the
+- **The graphics stack matches FNA's.** CNA has an `SDLGPU` renderer and an `FNA3D` renderer, the
   graphics path FNA ships with.
 - **Builds can leave SDL out.** `CNA_ENABLE_SDL=OFF` gives a windowless build (`HEADLESS`/`TERMINAL`),
   and `CNA_AUDIO_PLATFORM=ALSA` has CNA's own mixer. Neither is a console platform, but both show
@@ -63,7 +63,7 @@ There are two ways a framework can ship on NDA consoles:
 
 CNA's layering makes the FNA model achievable: a licensed developer would take public CNA, bring
 the NDA SDL port for the console, and build. What that has not been tested against, and cannot be
-without an SDK, is whether the console's SDL port carries everything the `SDL_GPU` renderer needs.
+without an SDK, is whether the console's SDL port carries everything the `SDLGPU` renderer needs.
 
 ### Rules that apply before any code exists
 
@@ -101,7 +101,7 @@ For CNA it would mean a platform implementation of its own, which is an owner de
 ### What a licensed port would still need from CNA
 
 - **Precompiled shaders.** FNA's PlayStation notes say shaders "must be precompiled ahead of time".
-  CNA translates at load time today: XNA effects go through MojoShader, and the `SDL_GPU` renderer's
+  CNA translates at load time today: XNA effects go through MojoShader, and the `SDLGPU` renderer's
   built-in SPIR-V goes through SDL_shadercross where a driver needs another format. A console
   profile needs a precompiled path.
 - **The lifecycle and policies in the [certification checklist](#what-certification-asks-of-a-framework).**
@@ -129,7 +129,7 @@ What stands in the way today:
    conversions, threading.
 4. **Rendering.** None of CNA's GPU renderers fits: the GL renderers need OpenGL ES 3 or OpenGL 3.3,
    while these consoles offer fixed-function or GL1-level APIs (vitaGL, pspgl, picaGL, gsKit), and
-   `SDL_GPU` has no backend for them. `SOFTWARE` is the realistic first renderer. A GPU renderer
+   `SDLGPU` has no backend for them. `SOFTWARE` is the realistic first renderer. A GPU renderer
    would be a new renderer family, and CNA adds renderers only for clear platform value
    (`renderer-registry.md`).
 5. **Memory.** PSP and PS2 have 32 MB (PSP-2000 and later 64 MB), the 3DS 128 MB (New 3DS 256 MB),
@@ -168,7 +168,7 @@ console class at once.
 
 | Console | Renderer |
 |---|---|
-| Switch, Switch 2, PS4, PS5, Xbox One/Series | `SDL_GPU` (or `FNA3D`) over the console's NDA SDL port: to be confirmed with the SDK |
+| Switch, Switch 2, PS4, PS5, Xbox One/Series | `SDLGPU` (or `FNA3D`) over the console's NDA SDL port: to be confirmed with the SDK |
 | PS Vita, PSP, PS2, 3DS | `SOFTWARE` through SDL3; a GPU path would be a new renderer family |
 | Wii, GameCube, Dreamcast, Xbox (2001), PS3 | `SOFTWARE` at best, after a new platform implementation |
 | Steam Deck and other PC handhelds | Any desktop renderer, as today |

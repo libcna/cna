@@ -367,7 +367,7 @@ namespace CNA::Internal::Renderers::Fna3d
             return false;
         }
         // FNA3D's OpenGL and Direct3D 11 drivers refuse a compressed GetTextureData2D and write
-        // nothing; only its SDL_GPU driver forwards it. Reporting success there would hand the
+        // nothing; only its SDLGPU driver forwards it. Reporting success there would hand the
         // caller whatever the destination already held, which is precisely what this method's
         // contract forbids, so a driver that cannot read compressed blocks answers "read nothing".
         if (!compressedReadback_ && IsBlockCompressedFormat(surfaceFormat_))
@@ -1245,7 +1245,7 @@ namespace CNA::Internal::Renderers::Fna3d
         const int height = data.height > 0 ? data.height : 1;
         const int levelCount = data.mipLevels > 0 ? data.mipLevels : 1;
         // Apple M4 AM4-193: NormalizedByte2 is stored as NormalizedByte4, B and A at
-        // +1, because no FNA3D driver swizzles: its SDL_GPU driver samples RG8 SNORM as
+        // +1, because no FNA3D driver swizzles: its SDLGPU driver samples RG8 SNORM as
         // (R, G, 0, 1), where Direct3D 9 samples (R, G, 1, 1). Fna3dTextureRenderer widens on
         // upload and narrows on readback; the texture's own format stays NormalizedByte2.
         const bool widenNormalizedByte2 =
@@ -1275,7 +1275,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         // FNA3D forwards this to the native API's own debug-object naming (glObjectLabel,
-        // ID3D11DeviceChild::SetPrivateData, SDL_GPU's texture name), so a RenderDoc/apitrace
+        // ID3D11DeviceChild::SetPrivateData, SDLGPU's texture name), so a RenderDoc/apitrace
         // capture of a CNA frame shows recognisable resources instead of anonymous handles.
         FNA3D_SetTextureName(device_, texture, "CNA Texture2D");
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// FX-091: the SDL_GPU sampler cache's key identity.
+// FX-091: the SDLGPU sampler cache's key identity.
 //
 // The renderer keeps ONE native sampler object per distinct sampler description and looks it up by
 // key on every draw. A key that cannot tell two descriptions apart therefore does not merely lose a
@@ -12,7 +12,7 @@
 // bias shifted to bit 40, so its top eight bits -- the float's sign and seven of its eight exponent
 // bits -- fell off the end. 0.0, +/-0.5, +/-2.0 and +/-8.0 all collapsed onto one key.
 
-#if defined(CNA_RENDERER_SDL_GPU)
+#if defined(CNA_RENDERER_SDLGPU)
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -161,7 +161,7 @@ TEST(SdlGpuSamplerCacheKeyTest, MaxMipLevelKeepsItsFullSignedRange)
                 << "MaxMipLevel " << levels[i] << " and " << levels[j] << " aliased";
 }
 
-// SDLGPU-126: EasyGL mutates one sampler object per slot, but SDL_GPU's immutable sampler cache
+// SDLGPU-126: EasyGL mutates one sampler object per slot, but SDLGPU's immutable sampler cache
 // used to retain every state ever observed until GraphicsDevice destruction. MaxMipLevel is an
 // unrestricted ordinary-XNA integer, so a long-running game could grow native sampler ownership
 // without bound even while keeping one Texture2D and one SamplerState alive at a time.
@@ -224,4 +224,4 @@ TEST(SdlGpuSamplerCacheLifetimeTest, DistinctStatesAreBoundedAcrossSubmittedFram
               SdlGpuRenderer::MaxRetainedSamplerCountEXT);
 }
 
-#endif  // CNA_RENDERER_SDL_GPU
+#endif  // CNA_RENDERER_SDLGPU

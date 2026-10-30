@@ -838,7 +838,7 @@ TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderE
         0,
         1);
 
-    // RTR-P9-5: SDL_GPU has no backbuffer readback, so it is the one
+    // RTR-P9-5: SDLGPU has no backbuffer readback, so it is the one
     // renderer with nothing to compare here.
     if (!CNA_RENDERER_IS(SdlGpu))
     {

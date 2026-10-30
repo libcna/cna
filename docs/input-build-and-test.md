@@ -48,7 +48,7 @@ running the input tests. EasyGL is the default.
 ```bash
 # Configure with tests enabled (pick ONE backend):
 cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON
-# or SDL_GPU / SOFTWARE
+# or SDLGPU / SOFTWARE
 
 # Build the test binary:
 cmake --build cmake-build-input-easygl --target CnaTests
@@ -220,7 +220,7 @@ deviations.
 |---------|-------|-----|
 | CMake configure fails: `Missing vendored 'SDL' …` | submodules not initialized | `git submodule update --init` |
 | CMake configure fails: `required sibling repository 'sharp-runtime' … not found` | sibling repo not checked out next to `cna_input` | `git -C .. clone <sharp-runtime-url> sharp-runtime` |
-| CMake configure fails: `the OPENGLES3 backend requires … 'easy-gl'` | `easy-gl` sibling missing | clone it next to `cna_input`, or use `-DCNA_GRAPHICS_RENDERER=SDL_GPU` (or `SOFTWARE`) |
+| CMake configure fails: `the OPENGLES3 backend requires … 'easy-gl'` | `easy-gl` sibling missing | clone it next to `cna_input`, or use `-DCNA_GRAPHICS_RENDERER=SDLGPU` (or `SOFTWARE`) |
 | `ctest -L input` fails on 3 `MouseCursor` cases | headless `SDL_VIDEODRIVER=dummy` (null cursors) | run under a display: `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest -L input` |
 | ASan reports leaks in `libGLX_mesa` | third-party Mesa GLX at process exit (not CNA) | run with `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1` (what CI uses) |
 | Gamepad panels stay "disconnected" in `demo_input` | no controller / SDL can't map the device | attach a controller SDL knows (see `gamecontrollerdb`); Steam Input presents a virtual pad |

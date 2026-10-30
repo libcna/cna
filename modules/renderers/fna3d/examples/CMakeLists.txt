@@ -1,11 +1,11 @@
 # FNA3D renderer example/test registration (module-local, following the module-examples
 # convention every other renderer family uses).
 #
-# The FNA3D driver order is SDL_GPU, Direct3D 11, OpenGL. Every test below defaults to an explicit
-# OpenGL pin so a CI machine with a partially functional Vulkan/SDL_GPU stack cannot silently
+# The FNA3D driver order is SDLGPU, Direct3D 11, OpenGL. Every test below defaults to an explicit
+# OpenGL pin so a CI machine with a partially functional Vulkan/SDLGPU stack cannot silently
 # change the validation target. A qualification build can select another FNA3D driver for the
 # whole registered suite through CNA_FNA3D_TEST_DRIVER; FNA3D's aliases Vulkan/D3D12/Metal select
-# the corresponding SDL_GPU native driver, while D3D11 and SDLGPU are its direct driver names.
+# the corresponding SDLGPU native driver, while D3D11 and SDLGPU are its direct driver names.
 
 # Example/test executables historically live at the build root (scripts, docs and
 # the golden-image working-directory conventions rely on it); keep them there.
@@ -19,7 +19,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
 
     # Apple M4 AM4-051: on Apple the OpenGL pin is the deprecated legacy GL 2.1
     # context (macOS's compatibility profile), not a validation target anybody ships on; FNA3D's
-    # SDL_GPU driver on Metal is. It passes the whole registered suite, the XNA-oracle corpus
+    # SDLGPU driver on Metal is. It passes the whole registered suite, the XNA-oracle corpus
     # included, where GL 2.1 leaks a draw into an unbound cube face.
     if(APPLE)
         set(_cna_fna3d_default_test_driver "Metal")

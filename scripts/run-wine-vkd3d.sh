@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # DX-100/DX-102: run a Windows cross-compiled .exe that uses
-# Direct3D 12 (today only SDL_GPU's D3D12 driver, through run-wine-vkd3d-headless.sh; the
+# Direct3D 12 (today only SDLGPU's D3D12 driver, through run-wine-vkd3d-headless.sh; the
 # DIRECTX12 renderer was retired on 2026-10-06) under Wine with vkd3d-proton, using a dedicated Wine
 # prefix distinct from the DXVK prefix (~/.wine-cna-d3d11, which run-wine-dxvk9.sh uses for D3D9;
 # the name is historical) -- DXVK and vkd3d-proton are different translation layers with different

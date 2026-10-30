@@ -164,8 +164,8 @@ namespace
     constexpr const char* kRendererName = "EASYGL";
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
-#elif defined(CNA_RENDERER_SDL_GPU)
-    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDLGPU)
+    constexpr const char* kRendererName = "SDLGPU";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr const char* kRendererName = "DIRECTX9";
 #else
@@ -319,7 +319,7 @@ class DeferredSourceLifetimeTest : public Game
      *
      * Is fixed: a rectangle-less GetBackBufferData now sizes its region from the
      * authoritative PresentationParameters backbuffer, not the renderer's live viewport, so a
-     * correctly-sized W*H array reads the whole backbuffer on WebGPU and SDL_GPU too. This used to
+     * correctly-sized W*H array reads the whole backbuffer on WebGPU and SDLGPU too. This used to
      * name an explicit rectangle to avoid that defect; the workaround has been removed now that the
      * overload it worked around is correct.
      */

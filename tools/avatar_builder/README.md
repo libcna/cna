@@ -91,7 +91,7 @@ and compares every view with its golden within the renderer's tolerance; `update
 
 ```
 P=cmake-build-multi/cna_avatar_review
-tools/platform/run_gpu_tests_private.sh --exec python3 tools/avatar_builder/avatar_visual_regression.py check --program $P --renderer SDL_GPU
+tools/platform/run_gpu_tests_private.sh --exec python3 tools/avatar_builder/avatar_visual_regression.py check --program $P --renderer SDLGPU
 ```
 
 It replaces `scripts/avatar_visual_regression_check.py`, which took three `demo_avatar` screenshots

@@ -13,14 +13,14 @@
  * (element usage/index/offset/format) and the applied pass's own vertex shader reflection (which
  * usage/index pairs it actually declares as inputs, and at which location).
  *
- * SDL_GPU's SPIR-V vertex inputs are located by MojoShader in the same order as
+ * SDLGPU's SPIR-V vertex inputs are located by MojoShader in the same order as
  * `MOJOSHADER_parseData::attributes`: `MOJOSHADER_sdlGetVertexAttribLocation` (mojoshader_sdlgpu.c)
  * returns the array index of the matching entry, not a value queried from the compiled shader
  * module. This builder iterates that same array directly rather than calling that accessor once per
  * declared element, since the array index it would return back is exactly the loop index here.
  */
 
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
 
 #include "mojoshader.h"
 
@@ -57,14 +57,14 @@ namespace CNA::Internal::Renderers::SdlGpu
     };
 
     /**
-     * @brief Maps one XNA vertex element format to its SDL_GPU vertex attribute format.
+     * @brief Maps one XNA vertex element format to its SDLGPU vertex attribute format.
      *
      * `VertexElementFormat::Color` maps to a normalized four-byte format, matching every existing
      * hardcoded stock pipeline's own convention for XNA `Color`-typed elements (e.g.
      * `GetOrCreatePipelineColored3D`); `Byte4` maps to the unnormalized equivalent.
      *
      * @param format The XNA vertex element format.
-     * @return The equivalent SDL_GPU format.
+     * @return The equivalent SDLGPU format.
      * @throws std::invalid_argument if @p format is not one of the twelve XNA formats.
      */
     [[nodiscard]] SDL_GPUVertexElementFormat ToSdlGpuVertexElementFormat(
@@ -86,7 +86,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         Microsoft::Xna::Framework::Graphics::VertexElementUsage usage);
 
     /**
-     * @brief Builds the SDL_GPU vertex attribute set a compiled effect's applied vertex shader needs.
+     * @brief Builds the SDLGPU vertex attribute set a compiled effect's applied vertex shader needs.
      *
      * Walks @p vertexParseData's own reflected attribute list -- not @p declaredElements -- because
      * that list is exactly, and only, what the shader consumes: a declared element the shader does
@@ -97,7 +97,7 @@ namespace CNA::Internal::Renderers::SdlGpu
      * @param vertexParseData The applied pass's vertex shader reflection
      *        (`MOJOSHADER_sdlGetShaderParseData` on the bound vertex shader data).
      * @param declaredElements The caller's `VertexDeclaration` elements, in declaration order.
-     * @param bufferSlot The SDL_GPU vertex buffer slot every attribute binds to. This compatibility
+     * @param bufferSlot The SDLGPU vertex buffer slot every attribute binds to. This compatibility
      *        wrapper builds one stream; multi-stream draws use BuildCompiledEffectVertexLayoutEXT.
      * @return One `SDL_GPUVertexAttribute` per shader attribute, `location` set to that attribute's
      *         index in @p vertexParseData (matching `MOJOSHADER_sdlGetVertexAttribLocation`'s own
@@ -165,4 +165,4 @@ namespace CNA::Internal::Renderers::SdlGpu
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements);
 }
 
-#endif  // CNA_SDL_GPU_COMPILED_EFFECTS
+#endif  // CNA_SDLGPU_COMPILED_EFFECTS

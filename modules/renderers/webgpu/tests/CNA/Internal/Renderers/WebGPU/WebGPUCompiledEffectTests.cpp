@@ -11,7 +11,7 @@
 // The runtime-level tests go through `WebGPURenderer::CreateCompiledEffect` DIRECTLY, so they keep
 // testing the backend rather than the layer above it. The shared cross-renderer contracts go through
 // the public `Effect`/`GraphicsDevice` API instead, which is what makes them the same evidence
-// FNA3D, SDL_GPU and EasyGL produce.
+// FNA3D, SDLGPU and EasyGL produce.
 
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
 
@@ -268,7 +268,7 @@ TEST(WebGPUCompiledEffectTest, TheSpirvSplitRefusesSomethingThatIsNotSpirv)
 
 TEST(WebGPUCompiledEffectTest, SharedBackendConformanceContract)
 {
-    // HiDef, as SDL_GPU's copy of this test asks for: the contract's first line
+    // HiDef, as SDLGPU's copy of this test asks for: the contract's first line
     // asserts it (its render-state section uses separate alpha blending), and under the default
     // Reach device that assertion was the only thing this test ever ran.
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
@@ -493,7 +493,7 @@ TEST(WebGPUCompiledEffectDrawTest, SpriteBatchAlternatesCompiledAndStockAcrossBa
     CNA::TestSupport::RunCompiledEffectSpriteBatchAlternationContract(device);
 }
 
-// Shader Model 1-3 on the MojoShader SPIR-V route, which SDL_GPU and WebGPU share (EasyGL's
+// Shader Model 1-3 on the MojoShader SPIR-V route, which SDLGPU and WebGPU share (EasyGL's
 // sections are the oracle): ps_3_0's vPos is D3D9's integer pixel, not the pixel centre FragCoord
 // carries; vFace is positive on XNA's clockwise front face although this renderer's native front
 // face is counter-clockwise; and TEXBEM/TEXBEML read the texture stage's bump-environment matrix

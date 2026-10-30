@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# SDLGPU-12: first end-to-end proof for the SDL_GPU graphics renderer -- a real
+# SDLGPU-12: first end-to-end proof for the SDLGPU graphics renderer -- a real
 # window, a real SDL_GPUDevice, and a 60-frame Clear()+Present() loop. Needs a real
 # display/GPU -- run through tools/platform/run_gpu_tests_private.sh.
 
@@ -14,9 +14,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 # the graphics module's examples directory.
 include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 
-# The museum volume-source regression also runs when SDL_GPU is a non-default
+# The museum volume-source regression also runs when SDLGPU is a non-default
 # member of a multi-renderer build. It requires the optional native GLSL compiler.
-if(CNA_BUILD_TESTS AND CNA_SDL_GPU_SHADER_EFFECTS_AVAILABLE)
+if(CNA_BUILD_TESTS AND CNA_SDLGPU_SHADER_EFFECTS_AVAILABLE)
     enable_testing()
     add_executable(CnaSdlGpuVolumeLayoutTest sdlgpu_volume_layout_test.cpp)
     target_link_libraries(CnaSdlGpuVolumeLayoutTest PRIVATE CNA)
@@ -26,13 +26,13 @@ if(CNA_BUILD_TESTS AND CNA_SDL_GPU_SHADER_EFFECTS_AVAILABLE)
         cna_register_renderer_test(NAME SdlGpu_ShaderEffect_SourceLayout_${_volume_layout}
             COMMAND CnaSdlGpuVolumeLayoutTest ${_volume_layout}
             TIMEOUT 60 LABELS "SdlGpu;ShaderEffect;Texture3D"
-            ENVIRONMENT "CNA_GRAPHICS_RENDERER=SDL_GPU")
+            ENVIRONMENT "CNA_GRAPHICS_RENDERER=SDLGPU")
         set_tests_properties(SdlGpu_ShaderEffect_SourceLayout_${_volume_layout} PROPERTIES
             FAIL_REGULAR_EXPRESSION "Validation Error")
     endforeach()
 endif()
 
-if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDLGPU")
     enable_testing()
 
     if(WIN32)
@@ -47,7 +47,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         set(_cna_sdlgpu_default_test_video_driver "x11")
     endif()
     set(CNA_SDLGPU_TEST_VIDEO_DRIVER "${_cna_sdlgpu_default_test_video_driver}" CACHE STRING
-        "SDL video driver used by SDL_GPU renderer integration tests")
+        "SDL video driver used by SDLGPU renderer integration tests")
 
     # SDLGPU-116: only X11 consumes CNA_TEST_DISPLAY. Offscreen/dummy runs explicitly clear both
     # display transports, while native Windows/Apple/Android drivers do not inherit an unrelated
@@ -111,7 +111,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         endif()
     endmacro()
 
-    # The 2D demo's three-frame smoke run: SDL_GPU's entry in the cross-renderer GraphicsSmoke set
+    # The 2D demo's three-frame smoke run: SDLGPU's entry in the cross-renderer GraphicsSmoke set
     # (scripts/run-all-renderer-smoke-tests.sh), which the retired VULKAN suite used to provide.
     if(CNA_BUILD_EXAMPLES)
         cna_register_renderer_test(NAME SdlGpu_Demo2D_SmokeTest COMMAND cna_demo_2d --smoke 3
@@ -119,7 +119,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     endif()
 
     # SDLGPU-81: build the complete renderer-neutral EasyGL parity corpus from its one canonical
-    # inventory. TARGET_PREFIX preserves the established SDL_GPU executable names, so adopting the
+    # inventory. TARGET_PREFIX preserves the established SDLGPU executable names, so adopting the
     # registry does not force 31 pointless relinks. Every fixture gets the validation-fatal policy
     # that the former hand-maintained family loops applied individually.
     include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)
@@ -138,12 +138,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         "CNA_SDLGPU_TEST_REJECT_NATIVE_LOD_BIAS=1")
 
     # RRC-046: programs EasyGL (or DIRECTX9) held alone after the 2026-10-13 retirement -- most of
-    # them the shared corpus DIRECTX11 also ran -- get SDL_GPU as their independent second family
+    # them the shared corpus DIRECTX11 also ran -- get SDLGPU as their independent second family
     # (parity/CrossFamilyPrograms.cmake).
     include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/CrossFamilyPrograms.cmake)
     cna_register_cross_family_programs(
         BUILDER cna_sdlgpu_test
-        FAMILY SDL_GPU
+        FAMILY SDLGPU
         TEST_PREFIX SdlGpu
         LABELS "SdlGpu"
         ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}"
@@ -168,8 +168,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-;\\[FAIL\\]")
 
     cna_sdlgpu_test(cna_test_sdlgpu_smoke sdlgpu_smoke_test.cpp)
-    if(CNA_SDL_GPU_SHADER_EFFECTS_AVAILABLE)
-        target_compile_definitions(cna_test_sdlgpu_smoke PRIVATE CNA_SDL_GPU_SHADER_EFFECTS)
+    if(CNA_SDLGPU_SHADER_EFFECTS_AVAILABLE)
+        target_compile_definitions(cna_test_sdlgpu_smoke PRIVATE CNA_SDLGPU_SHADER_EFFECTS)
     endif()
     cna_register_renderer_test(NAME SdlGpu_Smoke COMMAND cna_test_sdlgpu_smoke
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -220,7 +220,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # unrelated relink while preserving all reflection, state, draw, SpriteBatch, sampler,
     # texture-lifetime and malformed-bytecode checks verbatim.  The cross-compile emulator set by
     # cna_sdlgpu_test supplies the isolated dummy/Xvfb D3D12 environment.
-    if(CNA_SDL_GPU_COMPILED_EFFECTS)
+    if(CNA_SDLGPU_COMPILED_EFFECTS)
         cna_sdlgpu_test(cna_test_sdlgpu_compiled_effect_runtime
             ${CNA_SOURCE_DIR}/modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectTests.cpp)
         target_link_libraries(cna_test_sdlgpu_compiled_effect_runtime PRIVATE gtest_main)
@@ -370,9 +370,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         target_link_libraries(cna_test_sdlgpu_constructor_exception_safety PRIVATE
             "$<LINK_GROUP:RESCAN,${_cna_sdlgpu_archive_group}>")
     endif()
-    if(CNA_SDL_GPU_SHADERCROSS)
+    if(CNA_SDLGPU_SHADERCROSS)
         target_compile_definitions(cna_test_sdlgpu_constructor_exception_safety PRIVATE
-            CNA_SDL_GPU_SHADERCROSS)
+            CNA_SDLGPU_SHADERCROSS)
     endif()
     cna_register_renderer_test(NAME SdlGpu_ConstructorExceptionSafety
         COMMAND cna_test_sdlgpu_constructor_exception_safety
@@ -710,7 +710,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # SDLGPU-42/43/97: custom ShaderEffect requires a target-native runtime
     # compiler. Do not build or register a test which promises that optional CNA-specific feature
     # on a target where the renderer truthfully reports it unavailable.
-    if(CNA_SDL_GPU_SHADER_EFFECTS_AVAILABLE)
+    if(CNA_SDLGPU_SHADER_EFFECTS_AVAILABLE)
         cna_sdlgpu_test(cna_test_sdlgpu_shadereffect sdlgpu_shadereffect_test.cpp)
         cna_register_renderer_test(NAME SdlGpu_ShaderEffect COMMAND cna_test_sdlgpu_shadereffect
             TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -747,7 +747,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_SpriteBatch_Sampler0Publication PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # SDL_GPU: real chronological draw-order proof (adversarial-review finding #4).
+    # SDLGPU: real chronological draw-order proof (adversarial-review finding #4).
     cna_sdlgpu_test(cna_test_sdlgpu_draworder sdlgpu_draworder_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_DrawOrder COMMAND cna_test_sdlgpu_draworder
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -775,7 +775,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # SDLGPU-68: compile the exact renderer-neutral EasyGL presentation/lifecycle oracles against
-    # SDL_GPU. Together they cover public resize/reset events, requested VSync forwarding,
+    # SDLGPU. Together they cover public resize/reset events, requested VSync forwarding,
     # PresentationParameters behavior, and a real window-system resize. The EasyGL MSAA-change
     # source is intentionally excluded: it asserts EasyGL's known inability to change backbuffer
     # MSAA after construction, while SDLGPU-85 implements the ordinary XNA/FNA Reset semantics.
@@ -893,7 +893,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_CompressedContentFallback PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # SDL_GPU: render-target-destroyed-before-flush use-after-free regression proof.
+    # SDLGPU: render-target-destroyed-before-flush use-after-free regression proof.
     cna_sdlgpu_test(cna_test_sdlgpu_rt_lifetime sdlgpu_rendertarget_lifetime_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetLifetime COMMAND cna_test_sdlgpu_rt_lifetime
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -926,7 +926,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # full target dims while ApplyViewportForRef (GFX-064) mapped NDC into the sub-region, squishing
     # the sprite. The per-QueuedDrawRef viewport must also drive the sprite NDC divide. SdlGpu does
     # keeps the RenderTarget2D-readback variant so target-local coordinates remain independently
-    # covered now that SDL_GPU also implements real proxy-backed GetBackBufferData. It additionally
+    # covered now that SDLGPU also implements real proxy-backed GetBackBufferData. It additionally
     # covers the two-viewports-per-frame (per-QueuedDrawRef) and transformMatrix cases.
     cna_sdlgpu_test(cna_test_sdlgpu_spritebatch_custom_viewport ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_rt_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_SpriteBatch_CustomViewport COMMAND cna_test_sdlgpu_spritebatch_custom_viewport
@@ -1015,7 +1015,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # to.
     # Every public TextureFilter ordinal names a SEPARATE magnification, a separate
     # minification and a separate mipmap filter, so a renderer may not reduce the ordinal to one
-    # boolean. WebGPU's SpriteBatch sampler and SDL_GPU's ONE shared sampler helper both resolved
+    # boolean. WebGPU's SpriteBatch sampler and SDLGPU's ONE shared sampler helper both resolved
     # `textureFilter == 0 ? LINEAR : NEAREST`, and both keyed their sampler cache on
     # `filter == 0 ? 0 : 1`, so Anisotropic, LinearMipPoint, MinPointMagLinearMipLinear and
     # MinPointMagLinearMipPoint all magnified with POINT. This fixture measures the two DIFFERENT
@@ -1052,7 +1052,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # slot 1 could reach replay. This fixture makes the two slots independently observable --
     # EnvironmentMapAmount 1 makes the cube the ONLY contributor and 0 makes the 2D texture the
     # only one -- so a hardcoded sampler shows up as interpolated colours that exist in no stored
-    # texel. SDL_GPU is where the defect lives; the other renderers run it as controls.
+    # texel. SDLGPU is where the defect lives; the other renderers run it as controls.
     cna_sdlgpu_test(cna_test_sdlgpu_envmap_cube_sampler
         ${CNA_GRAPHICS_EXAMPLES_DIR}/envmap_cube_sampler_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_EnvMapCubeSamplerContract COMMAND cna_test_sdlgpu_envmap_cube_sampler
@@ -1063,7 +1063,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # DECLARE_TEXTURE(Texture2, 1). WebGPU declared ONE WGSL sampler for both texture views, so
     # SamplerStates[1] was inexpressible and slot 1 inherited slot 0's. This fixture observes both
     # layers in the SAME image -- slot 0's texture varies along X only, slot 1's along Y only, and
-    # the shader's product is separable -- so independence is measured, not inferred. SDL_GPU
+    # the shader's product is separable -- so independence is measured, not inferred. SDLGPU
     # already carries texture0*/texture1* sampler fields per command and runs this as a control.
     cna_sdlgpu_test(cna_test_sdlgpu_dualtexture_slot_sampler
         ${CNA_GRAPHICS_EXAMPLES_DIR}/dualtexture_slot_sampler_contract_test.cpp)
@@ -1075,7 +1075,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # Cross-renderer control: the slot-1 sampler questions the fixture above does not
     # ask -- returning to a previous sampler, interleaving with an unrelated effect, sweeping either
     # slot with the other fixed, the magnification partition of the public enum, create/sample/
-    # destroy lifetime and a degenerate reflection direction. The defect is Software-local; SDL_GPU
+    # destroy lifetime and a degenerate reflection direction. The defect is Software-local; SDLGPU
     # is the corrected renderer and a DEFERRED one, so it is where "a later sampler
     # change must not reach back into a queued draw" has teeth.
     cna_sdlgpu_test(cna_test_sdlgpu_envmap_cube_sampler_state
@@ -1129,7 +1129,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # that same frame -- bound, cleared and/or drawn into, unbound and observed -- with no warm-up
     # frame, Present, GetData-before-first-render, dummy draw, empty bind cycle, manual frame advance
     # or wait. The defect was bgfx-local (`bgfx::reset()` discards every view's framebuffer binding,
-    # including the bound target's), so this run is what establishes that SDL_GPU already honoured the
+    # including the bound target's), so this run is what establishes that SDLGPU already honoured the
     # contract rather than being made to.
     cna_sdlgpu_test(cna_test_sdlgpu_rt_first_use
         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_first_use_test.cpp)
@@ -1137,7 +1137,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         TIMEOUT 180 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # A RenderTarget2D handed to a stock or custom 3D effect as its Texture must be
-    # sampled, not reinterpreted. The defect was SDL_GPU-local and fatal -- thirteen sites
+    # sampled, not reinterpreted. The defect was SDLGPU-local and fatal -- thirteen sites
     # static_cast an ITextureRenderer* to the unrelated sibling SdlGpuTextureRenderer, fabricating an
     # SDL_GPUTexture* out of a render target's mipMap_/padding/multiSampleCount_ bytes -- so this
     # fixture supervises each leg in its own process and reports a SIGSEGV as an attributable
@@ -1167,7 +1167,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # next target and the backbuffer exactly correct. The defect was EasyGL-local -- it remembered
     # the bound destination as a raw IRenderTargetRenderer* and the next transition called
     # UnbindAsRenderTarget() on it, so a scoped target leaving scope while bound made that
-    # transition a virtual call through freed storage. This run is what establishes that SDL_GPU
+    # transition a virtual call through freed storage. This run is what establishes that SDLGPU
     # already honoured the contract rather than being made to; each leg runs in its own process so
     # a SIGSEGV is an attributable result instead of a lost shard.
     cna_sdlgpu_test(cna_test_sdlgpu_bound_target_lifetime
@@ -1441,7 +1441,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
     endforeach()
 
-    # The SDL_GPU-specific half of the same contract. The shared oracle above drives
+    # The SDLGPU-specific half of the same contract. The shared oracle above drives
     # SpriteBatch only and scopes itself to colour, so it cannot see a segment filter that works for
     # `DrawKind::Sprite` and not for the eight 3D families, a transient upload arena aliasing
     # between passes (its producer draws identical rectangles and varies only the texture), or a
@@ -1463,7 +1463,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
 
     # A rectangle-less GetBackBufferData must address the whole logical backbuffer
     # (PresentationParameters W x H) from the first observable frame, with no SetRenderTarget round
-    # trip and no extra Present. SDL_GPU had no backbuffer readback at all (the swapchain texture is
+    # trip and no extra Present. SDLGPU had no backbuffer readback at all (the swapchain texture is
     # write-only by permanent SDL contract), and its rectangle-less size check tripped on the same
     # aspect-scaled live viewport WebGPU used; both are addressed here.
     cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_readback_dimension
@@ -1491,7 +1491,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     endif()
 
     # Cross-renderer control for the first-read completion contract (preserves the
-    # GFX-165 lazy-proxy backbuffer read; no SDL_GPU production change here).
+    # GFX-165 lazy-proxy backbuffer read; no SDLGPU production change here).
     cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_first_read
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_first_read_test.cpp)
     if(WIN32)
@@ -1533,7 +1533,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     endif()
 
     # SDLGPU-74: RenderTarget2D inherits Texture2D::SetData and RenderTargetCube inherits
-    # TextureCube::SetData. The SDL_GPU 2D target used to accept-and-discard both level-zero and
+    # TextureCube::SetData. The SDLGPU 2D target used to accept-and-discard both level-zero and
     # authored-mip writes through ITextureRenderer's empty defaults, while the cube inherited an
     # explicit refusal despite EasyGL having a real face upload. Exercise full and partial uploads,
     # authored mips, multiple cube faces, PreserveContents first bind, render->upload chronology and

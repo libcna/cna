@@ -39,7 +39,7 @@ namespace CNA::Internal::Renderers
         /** @brief No window at all (HEADLESS, SOFTWARE, STUB). */
         None,
 
-        /** @brief An ordinary window with no graphics-API intent (SDL_GPU, WEBGPU, DIRECTX9). */
+        /** @brief An ordinary window with no graphics-API intent (SDLGPU, WEBGPU, DIRECTX9). */
         Plain,
 
         /** @brief A window created with an OpenGL render intent. */

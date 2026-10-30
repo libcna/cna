@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // SDLGPU-18/19/20: real dynamic BlendState/DepthStencilState/RasterizerState proof
-// for the SDL_GPU graphics renderer -- before this task every pipeline hardcoded Opaque blending,
+// for the SDLGPU graphics renderer -- before this task every pipeline hardcoded Opaque blending,
 // CullMode::None, FillMode::Solid, and no stencil test at all; GraphicsDevice.BlendState/
 // DepthStencilState/RasterizerState assignments never reached SDL_gpu's own pipeline-baked state.
 //
@@ -693,10 +693,10 @@ public:
     SdlGpuRenderStateTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // pre-SDL_GPU PSG-0008: this test exercises a resource the
+        // pre-SDLGPU PSG-0008: this test exercises a resource the
         // Reach profile refuses outright, so under the default profile it threw before its
         // first check and reported as a renderer failure rather than as a test defect.
-        // profile_dead_tests.py named it DEAD-ON-PROFILE; GTI-0003 fixed three SDL_GPU
+        // profile_dead_tests.py named it DEAD-ON-PROFILE; GTI-0003 fixed three SDLGPU
         // tests this way and missed these.
         gdm_->setGraphicsProfileProperty(
             Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);

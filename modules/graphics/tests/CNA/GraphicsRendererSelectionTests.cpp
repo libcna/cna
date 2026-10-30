@@ -221,7 +221,7 @@ TEST_F(GraphicsRendererSelectionTest, AnUnknownNameIsNotReportedAsRetired)
 
 // RRC-042: a program launched with CNA_GRAPHICS_RENDERER still naming one of the four renderers
 // retired on 2026-10-13 is refused on every query, and told it was retired and which value stays
-// reserved -- never handed the default renderer, and never an alias such as SDL_GPU.
+// reserved -- never handed the default renderer, and never an alias such as SDLGPU.
 class GraphicsRendererSelectionRetiredEnvironmentTest
     : public GraphicsRendererSelectionTest,
       public ::testing::WithParamInterface<std::pair<std::string, std::string>>
@@ -409,7 +409,7 @@ TEST_F(GraphicsRendererSelectionTest, AutomaticFallbackCoversEveryCompiledInRend
 TEST_F(GraphicsRendererSelectionTest, AutomaticFallbackTriesEveryPictureBeforeHeadlessAndStub)
 {
     // A published set rather than this build's own, so the order is checked whatever is compiled
-    // in. Published in reverse, so the ranking decides; only the WEBGPU/SDL_GPU tie keeps the
+    // in. Published in reverse, so the ranking decides; only the WEBGPU/SDLGPU tie keeps the
     // published order.
     const std::vector<GraphicsRendererType> published{
         GraphicsRendererType::Stub,     GraphicsRendererType::Headless,

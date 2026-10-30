@@ -13,7 +13,7 @@
 // What this proves that the existence-gate probe does not: the runtime honours CNA's own contract
 // -- reflection matching the source, technique and pass selection, parameter and texture
 // validation, render state translation, clone independence -- against the same committed fixtures
-// the FNA3D and SDL_GPU backends use.
+// the FNA3D and SDLGPU renderers use.
 
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
 
@@ -374,7 +374,7 @@ TEST(EasyGLCompiledEffectDrawTest, RendersTheAppliedPassesExpectedPixelsIntoARen
     // (texture-sampling, struct-driven preshader) and FlatPixelShader (no sampling, array-driven
     // preshader) into a RenderTarget2D through the real EasyGLRenderer::DrawPrimitivesEx path and
     // reads the centre pixel back via RenderTarget2D::GetData(), matching the exact bytes
-    // independently hand-verified for both the SDL_GPU adapter
+    // independently hand-verified for both MojoShader's SDL GPU adapter
     // (SdlGpuCompiledEffectDrawTest.RendersTheAppliedPassesExpectedPixelsIntoARenderTarget) and
     // this renderer's own standalone existence-gate probe
     // (tools/graphics/mojoshader_gl_probe.cpp --render).
@@ -556,7 +556,7 @@ TEST(EasyGLCompiledEffectTest, AppliedSamplerRetainsNativeTextureAfterValueWrapp
 
 TEST(EasyGLCompiledEffectTest, SharedBackendConformanceContract)
 {
-    // FX-060/FX-062: the same cross-renderer contract FNA3D's and SDL_GPU's own
+    // FX-060/FX-062: the same cross-renderer contract FNA3D's and SDLGPU's own
     // SharedBackendConformanceContract tests run -- format, reflection, parameter API,
     // techniques/passes, render state, state policy, samplers, texture binding, clone and
     // lifetime -- through the public Effect/GraphicsDevice API, since SupportsCompiledEffects()

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
 // RenderTargetCube(mipMap=true, multiSampleCount>1) owns the complete
-// single-sample cube mip chain on SDL_GPU. The six multisample attachments remain one-level 2D
+// single-sample cube mip chain on SDLGPU. The six multisample attachments remain one-level 2D
 // render resources; each pass resolves into level 0 of its selected cube face, and that face's
 // lower levels are generated before a later pass can sample them.
 //
@@ -62,8 +62,8 @@
 #include <string>
 #include <vector>
 
-#ifndef CNA_RENDERER_SDL_GPU
-#error "'s native/public cube-mip regression is SDL_GPU-only."
+#ifndef CNA_RENDERER_SDLGPU
+#error "'s native/public cube-mip regression is SDLGPU-only."
 #endif
 
 using namespace Microsoft::Xna::Framework;
@@ -231,7 +231,7 @@ class SdlGpuRenderTargetCubeMsaaMipTest final : public Game
             device, size, mipMap, SurfaceFormat::Color, DepthFormat::None,
             requestedSamples, usage);
         SdlGpuRenderTargetCubeRenderer* native = Native(*cube);
-        Check(native != nullptr, label + ": concrete SDL_GPU cube renderer is reachable");
+        Check(native != nullptr, label + ": concrete SDLGPU cube renderer is reachable");
 
         const int expectedLevels = mipMap ? ChainLength(size) : 1;
         Check(cube->getLevelCountProperty() == expectedLevels,
@@ -700,7 +700,7 @@ protected:
         done_ = true;
         auto& device = getGraphicsDeviceProperty();
         renderer_ = dynamic_cast<SdlGpuRenderer*>(&device.GetRenderer());
-        Check(renderer_ != nullptr, "SDL_GPU renderer is reachable from GraphicsDevice");
+        Check(renderer_ != nullptr, "SDLGPU renderer is reachable from GraphicsDevice");
 
         try
         {
@@ -735,22 +735,22 @@ protected:
     void EndRun() override
     {
         if (renderer_ != nullptr)
-            Check(renderer_->IsDebugModeEnabledEXT(), "SDL_GPU native debug mode is enabled");
-        std::printf("[INFO] SDL_GPU cube mip matrix: %d/%d checks passed\n",
+            Check(renderer_->IsDebugModeEnabledEXT(), "SDLGPU native debug mode is enabled");
+        std::printf("[INFO] SDLGPU cube mip matrix: %d/%d checks passed\n",
                     passed_, total_);
         std::fflush(stdout);
         result_ = passed_ == total_ ? 0 : 1;
     }
 
 public:
-    /** @brief Creates the serial SDL_GPU cube-mip regression game. */
+    /** @brief Creates the serial SDLGPU cube-mip regression game. */
     SdlGpuRenderTargetCubeMsaaMipTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // pre-SDL_GPU PSG-0008: this test exercises a resource the
+        // pre-SDLGPU PSG-0008: this test exercises a resource the
         // Reach profile refuses outright, so under the default profile it threw before its
         // first check and reported as a renderer failure rather than as a test defect.
-        // profile_dead_tests.py named it DEAD-ON-PROFILE; GTI-0003 fixed three SDL_GPU
+        // profile_dead_tests.py named it DEAD-ON-PROFILE; GTI-0003 fixed three SDLGPU
         // tests this way and missed these.
         gdm_->setGraphicsProfileProperty(
             Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);

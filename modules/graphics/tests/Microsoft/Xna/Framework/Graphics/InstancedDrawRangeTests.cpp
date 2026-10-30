@@ -2115,7 +2115,7 @@ TEST_F(InstancedDrawRangeTest, BaseInstanceSelectsAbsoluteInstanceRecords)
 }
 
 // RRC-043: XNA's DrawInstancedPrimitives with no per-instance stream bound draws instanceCount
-// identical copies (Direct3D 9's indexed-data stream frequency on stream 0); SDL_GPU drew one.
+// identical copies (Direct3D 9's indexed-data stream frequency on stream 0); SDLGPU drew one.
 TEST_F(InstancedDrawRangeTest, InstancedDrawWithoutInstanceStreamRepeatsTheDraw)
 {
     // Both by design: HEADLESS does not rasterize, so there is no pixel to count, and FNA3D refuses

@@ -96,7 +96,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # dump -- not registered as a ctest, just a plain executable a developer/script runs by
         # hand alongside SOFTWARE's own cna_diag_software and cna_diag_compare.
         # VULKAN-214: first registered as the control beside the since-retired Vulkan renderer --
-        # 'preserve survives a resize' is a claim about the XNA contract. SDL_GPU now runs the same
+        # 'preserve survives a resize' is a claim about the XNA contract. SDLGPU now runs the same
         # program as SdlGpu_CrossFamily_RenderTargetPreserveAcrossResize (RRC-046).
         cna_easygl_test(cna_test_easygl_rendertarget_preserve_across_resize
                         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_preserve_across_resize_test.cpp)
@@ -105,7 +105,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # VULKAN-058: the control that turned a candidate finding into a defect -- EasyGL masked the
-        # sprite correctly while the since-retired Vulkan renderer painted the whole target. SDL_GPU
+        # sprite correctly while the since-retired Vulkan renderer painted the whole target. SDLGPU
         # now runs it too (SdlGpu_CrossFamily_SpriteBatch_DepthStencilState, RRC-046).
         cna_easygl_test(cna_test_easygl_spritebatch_depthstencil_state
                         ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_depthstencil_state_test.cpp)
@@ -2232,7 +2232,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # are the XNA contract rather than a description of the Software fix.
         # Every public TextureFilter ordinal names a SEPARATE magnification, a separate
         # minification and a separate mipmap filter, so a renderer may not reduce the ordinal to one
-        # boolean. WebGPU's SpriteBatch sampler and SDL_GPU's ONE shared sampler helper both resolved
+        # boolean. WebGPU's SpriteBatch sampler and SDLGPU's ONE shared sampler helper both resolved
         # `textureFilter == 0 ? LINEAR : NEAREST`, and both keyed their sampler cache on
         # `filter == 0 ? 0 : 1`, so Anisotropic, LinearMipPoint, MinPointMagLinearMipLinear and
         # MinPointMagLinearMipPoint all magnified with POINT. This fixture measures the two DIFFERENT
@@ -2246,7 +2246,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     # Cross-renderer control: EnvironmentMapEffect samples TWO independent
     # resources -- the ordinary 2D texture through GraphicsDevice.SamplerStates[0] and the
-    # reflection cube through SamplerStates[1]. SDL_GPU bound a literal LinearClamp for the cube
+    # reflection cube through SamplerStates[1]. SDLGPU bound a literal LinearClamp for the cube
     # and captured only slot 0, so slot 1 could not reach replay at all. This fixture makes the
     # two slots independently observable (EnvironmentMapAmount 1 leaves the cube the only
     # contributor, 0 leaves the 2D texture the only one) and measures what every other renderer
@@ -2381,7 +2381,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Cross-renderer control: a RenderTarget2D handed to a stock or custom 3D effect as
-    # its texture must be sampled, not reinterpreted. The defect was SDL_GPU-local and fatal (its
+    # its texture must be sampled, not reinterpreted. The defect was SDLGPU-local and fatal (its
     # stock-effect paths static_cast an ITextureRenderer* to the unrelated sibling
     # SdlGpuTextureRenderer, fabricating an SDL_GPUTexture* out of a render target's own fields); this
     # run is what establishes that EASYGL already honoured the contract rather than being made to.
@@ -2459,7 +2459,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Cross-renderer control: the same PUBLIC generated-mip readback contract on this
-        # renderer. The SIGSEGV was SDL_GPU-only and only SDL_GPU production changed; running the
+        # renderer. The SIGSEGV was SDLGPU-only and only SDLGPU production changed; running the
         # identical fixture here is what makes that claim falsifiable rather than asserted.
         cna_easygl_test(cna_test_easygl_msaa_mip_readback
             ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_mip_readback_test.cpp)

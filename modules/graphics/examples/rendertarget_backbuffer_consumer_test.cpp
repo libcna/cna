@@ -128,9 +128,9 @@ namespace
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "WEBGPU";
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "SDL_GPU";
+    constexpr const char* kRendererName = "SDLGPU";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX9";
@@ -143,7 +143,7 @@ namespace
      *
      * CLOSED this (2026-07-29), and the declaration is now unconditionally true.
      *
-     * It used to read false on SDL_GPU, whose stock-effect paths
+     * It used to read false on SDLGPU, whose stock-effect paths
      * `static_cast<const SdlGpuTextureRenderer*>(params.textureN)` onto the unrelated sibling
      * SdlGpuRenderTargetRenderer and died, so the 3D consumer cases were skipped there. They now run
      * and were A/B-proven against the pre-fix renderer.

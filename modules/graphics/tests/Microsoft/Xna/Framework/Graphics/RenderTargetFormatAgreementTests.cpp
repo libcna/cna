@@ -337,7 +337,7 @@ TEST(RenderTargetFormatAgreement, ASixteenBitFloatTargetsContentIsSamplableBack)
     }
     // Apple M4 AM4-189: FNA3D's declared boundary. Its render targets other than
     // Color defer to the shared rule (a Color target): promoting the float ones is measured but not
-    // done -- its SDL_GPU driver has no channel swizzle, Metal refuses Bgra4444 as an attachment,
+    // done -- its SDLGPU driver has no channel swizzle, Metal refuses Bgra4444 as an attachment,
     // and float cubes and partial transfers have their own gaps.
     // DIRECTX9 stores every render target as A8B8G8R8 (D3D9RenderTargets) and says so through
     // SupportsSurfaceFormatAsRenderTargetEXT; its float targets are the same declared boundary.

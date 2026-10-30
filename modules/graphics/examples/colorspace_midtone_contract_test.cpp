@@ -167,12 +167,12 @@ namespace
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
     constexpr const char* kRendererName = "WEBGPU";
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = false;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kRendererName = "SDL_GPU";
+    constexpr const char* kRendererName = "SDLGPU";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = true;

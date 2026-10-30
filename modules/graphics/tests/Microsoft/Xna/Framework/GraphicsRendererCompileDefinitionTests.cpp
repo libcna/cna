@@ -38,7 +38,7 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     // EXPECT_EQ(enabled, 1) the same way D3D9's did.
     // DX30-*: same class of gap DX2-84's own comment above documents -- DIRECTX3 needs its own
     // entry here too, added proactively this time rather than discovered by a from-scratch regression.
-#ifdef CNA_RENDERER_SDL_GPU
+#ifdef CNA_RENDERER_SDLGPU
     ++enabled;
 #endif
     // OPENGLES1-* (retired 2026-09-17): same class of gap DX2-84's comment above

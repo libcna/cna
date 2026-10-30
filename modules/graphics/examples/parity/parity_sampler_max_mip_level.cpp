@@ -4,7 +4,7 @@
 //
 // XNA's `MaxMipLevel` is the HIGHEST-RESOLUTION mip level sampling may use -- 0 means no
 // restriction, 2 means "never read level 0 or 1". It is therefore a lower clamp on the computed
-// level of detail: `GL_TEXTURE_MIN_LOD` on the reference renderer, `min_lod` in FNA3D's SDL_GPU
+// level of detail: `GL_TEXTURE_MIN_LOD` on the reference renderer, `min_lod` in FNA3D's SDLGPU
 // driver, `WGPUSamplerDescriptor::lodMinClamp` here. `ApplySamplerMipState` was not overridden on
 // WebGPU, so the value was discarded in silence.
 //

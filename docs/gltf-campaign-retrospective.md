@@ -49,7 +49,7 @@ value was not evenly distributed either.
 
 **The gap the ladder did not cover, and the lesson of the last week:** every layer above reads either
 data or source. None of them asks whether a draw *arrives*. Five defects lived in exactly that gap —
-`SDL_GPU` and `DILIGENT`'s (retired 2026-09-17) unreachable `COLOR_0` (`GLTF-472`), `OPENGLES1`'s
+`SDLGPU` and `DILIGENT`'s (retired 2026-09-17) unreachable `COLOR_0` (`GLTF-472`), `OPENGLES1`'s
 (retired 2026-09-17) misread PBR record
 (`GLTF-473`), and `OPENGL4`'s and `DILIGENT`'s stride-chosen programs (`GLTF-475`) — and **every
 static inventory in the repository reported all five as correct**, because each renderer genuinely

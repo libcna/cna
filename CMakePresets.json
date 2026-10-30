@@ -59,15 +59,15 @@
     },
     {
       "name": "windows-msvc-sdlgpu-debug",
-      "displayName": "Windows MSVC SDL_GPU (Debug)",
-      "description": "Native Windows SDL3 + SDL_GPU development and smoke-test configuration using Ninja and cl.exe.",
+      "displayName": "Windows MSVC SDLGPU (Debug)",
+      "description": "Native Windows SDL3 + SDLGPU development and smoke-test configuration using Ninja and cl.exe.",
       "inherits": "windows-msvc-base",
       "binaryDir": "${sourceDir}/cmake-build-windows-msvc-sdlgpu-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CNA_PLATFORM": "SDL3",
         "CNA_AUDIO_PLATFORM": "SDL3",
-        "CNA_GRAPHICS_RENDERER": "SDL_GPU",
+        "CNA_GRAPHICS_RENDERER": "SDLGPU",
         "CNA_ENABLE_SDL": "ON",
         "CNA_BUILD_TESTS": "ON",
         "CNA_BUILD_EXAMPLES": "ON"
@@ -75,8 +75,8 @@
     },
     {
       "name": "windows-msvc-sdlgpu-relwithdebinfo",
-      "displayName": "Windows MSVC SDL_GPU (RelWithDebInfo)",
-      "description": "Optimized native Windows SDL3 + SDL_GPU configuration with debugger symbols using Ninja and cl.exe.",
+      "displayName": "Windows MSVC SDLGPU (RelWithDebInfo)",
+      "description": "Optimized native Windows SDL3 + SDLGPU configuration with debugger symbols using Ninja and cl.exe.",
       "inherits": "windows-msvc-sdlgpu-debug",
       "binaryDir": "${sourceDir}/cmake-build-windows-msvc-sdlgpu-relwithdebinfo",
       "cacheVariables": {
@@ -108,14 +108,14 @@
     },
     {
       "name": "windows-vs2022-sdlgpu",
-      "displayName": "Visual Studio 2022 SDL_GPU",
-      "description": "Visual Studio solution view for native Windows SDL3 + SDL_GPU development. Select Debug or RelWithDebInfo in the IDE.",
+      "displayName": "Visual Studio 2022 SDLGPU",
+      "description": "Visual Studio solution view for native Windows SDL3 + SDLGPU development. Select Debug or RelWithDebInfo in the IDE.",
       "inherits": "windows-vs2022-base",
       "binaryDir": "${sourceDir}/cmake-build-windows-vs2022-sdlgpu",
       "cacheVariables": {
         "CNA_PLATFORM": "SDL3",
         "CNA_AUDIO_PLATFORM": "SDL3",
-        "CNA_GRAPHICS_RENDERER": "SDL_GPU",
+        "CNA_GRAPHICS_RENDERER": "SDLGPU",
         "CNA_ENABLE_SDL": "ON",
         "CNA_BUILD_TESTS": "ON",
         "CNA_BUILD_EXAMPLES": "ON"
@@ -271,12 +271,12 @@
     },
     {
       "name": "macos",
-      "displayName": "macOS (SDL_GPU, Release)",
+      "displayName": "macOS (SDLGPU, Release)",
       "description": "Apple APPLE-1: native macOS desktop build. Requires the sibling sharp-runtime checkout and initialized submodules; the first configure builds SDL3/SDL3_mixer into .sdl-prebuilt-Darwin-<arch>/ (several minutes) and every later configure reuses it. The deployment target defaults to CNA_MACOS_DEPLOYMENT_TARGET (13.3); executables stay plain binaries unless CNA_APPLE_BUNDLE_MACOS_EXECUTABLES=ON.",
       "binaryDir": "${sourceDir}/cmake-build-macos",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE":      "Release",
-        "CNA_GRAPHICS_RENDERER": "SDL_GPU",
+        "CNA_GRAPHICS_RENDERER": "SDLGPU",
         "CNA_BUILD_TESTS":       "ON",
         "CNA_BUILD_EXAMPLES":    "ON"
       }
@@ -363,7 +363,7 @@
     },
     {
       "name": "windows-msvc-sdlgpu-debug",
-      "displayName": "Build the Windows MSVC SDL_GPU smoke set (Debug)",
+      "displayName": "Build the Windows MSVC SDLGPU smoke set (Debug)",
       "configurePreset": "windows-msvc-sdlgpu-debug",
       "jobs": 2,
       "targets": [
@@ -379,7 +379,7 @@
     },
     {
       "name": "windows-msvc-sdlgpu-relwithdebinfo",
-      "displayName": "Build the Windows MSVC SDL_GPU smoke set (RelWithDebInfo)",
+      "displayName": "Build the Windows MSVC SDLGPU smoke set (RelWithDebInfo)",
       "configurePreset": "windows-msvc-sdlgpu-relwithdebinfo",
       "jobs": 2,
       "targets": [
@@ -395,7 +395,7 @@
     },
     {
       "name": "windows-vs2022-sdlgpu-debug",
-      "displayName": "Build the Visual Studio 2022 SDL_GPU smoke set (Debug)",
+      "displayName": "Build the Visual Studio 2022 SDLGPU smoke set (Debug)",
       "configurePreset": "windows-vs2022-sdlgpu",
       "configuration": "Debug",
       "jobs": 2,
@@ -412,7 +412,7 @@
     },
     {
       "name": "windows-vs2022-sdlgpu-relwithdebinfo",
-      "displayName": "Build the Visual Studio 2022 SDL_GPU smoke set (RelWithDebInfo)",
+      "displayName": "Build the Visual Studio 2022 SDLGPU smoke set (RelWithDebInfo)",
       "configurePreset": "windows-vs2022-sdlgpu",
       "configuration": "RelWithDebInfo",
       "jobs": 2,
@@ -585,7 +585,7 @@
     },
     {
       "name": "windows-msvc-sdlgpu-debug",
-      "displayName": "Test the Windows MSVC SDL_GPU smoke set (Debug)",
+      "displayName": "Test the Windows MSVC SDLGPU smoke set (Debug)",
       "configurePreset": "windows-msvc-sdlgpu-debug",
       "filter": {
         "include": {
@@ -607,20 +607,20 @@
     },
     {
       "name": "windows-msvc-sdlgpu-relwithdebinfo",
-      "displayName": "Test the Windows MSVC SDL_GPU smoke set (RelWithDebInfo)",
+      "displayName": "Test the Windows MSVC SDLGPU smoke set (RelWithDebInfo)",
       "inherits": "windows-msvc-sdlgpu-debug",
       "configurePreset": "windows-msvc-sdlgpu-relwithdebinfo"
     },
     {
       "name": "windows-vs2022-sdlgpu-debug",
-      "displayName": "Test the Visual Studio 2022 SDL_GPU smoke set (Debug)",
+      "displayName": "Test the Visual Studio 2022 SDLGPU smoke set (Debug)",
       "inherits": "windows-msvc-sdlgpu-debug",
       "configurePreset": "windows-vs2022-sdlgpu",
       "configuration": "Debug"
     },
     {
       "name": "windows-vs2022-sdlgpu-relwithdebinfo",
-      "displayName": "Test the Visual Studio 2022 SDL_GPU smoke set (RelWithDebInfo)",
+      "displayName": "Test the Visual Studio 2022 SDLGPU smoke set (RelWithDebInfo)",
       "inherits": "windows-msvc-sdlgpu-debug",
       "configurePreset": "windows-vs2022-sdlgpu",
       "configuration": "RelWithDebInfo"

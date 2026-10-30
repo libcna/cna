@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 
@@ -33,7 +33,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             case VertexElementFormat::HalfVector4:      return SDL_GPU_VERTEXELEMENTFORMAT_HALF4;
         }
         throw std::invalid_argument(
-            "CNA SDL_GPU: unrecognized VertexElementFormat ordinal " +
+            "CNA SDLGPU: unrecognized VertexElementFormat ordinal " +
             std::to_string(static_cast<int>(format)));
     }
 
@@ -56,7 +56,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             case VertexElementUsage::TessellateFactor:   return MOJOSHADER_USAGE_TESSFACTOR;
         }
         throw std::invalid_argument(
-            "CNA SDL_GPU: unrecognized VertexElementUsage ordinal " +
+            "CNA SDLGPU: unrecognized VertexElementUsage ordinal " +
             std::to_string(static_cast<int>(usage)));
     }
 
@@ -78,7 +78,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             case VertexElementFormat::HalfVector4:      return MOJOSHADER_VERTEXELEMENTFORMAT_HALFVECTOR4;
         }
         throw std::invalid_argument(
-            "CNA SDL_GPU: unrecognized VertexElementFormat ordinal " +
+            "CNA SDLGPU: unrecognized VertexElementFormat ordinal " +
             std::to_string(static_cast<int>(format)));
     }
 
@@ -109,7 +109,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             {
                 const char* name = shaderInput.name != nullptr ? shaderInput.name : "<unnamed>";
                 throw System::NotSupportedException(
-                    "CNA SDL_GPU: this compiled effect's vertex shader requires attribute '" +
+                    "CNA SDLGPU: this compiled effect's vertex shader requires attribute '" +
                     std::string(name) + "' (usage " + std::to_string(static_cast<int>(shaderInput.usage)) +
                     ", index " + std::to_string(shaderInput.index) +
                     "), but the VertexDeclaration supplied to this draw does not declare an element "
@@ -155,7 +155,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             {
                 const char* name = shaderInput.name != nullptr ? shaderInput.name : "<unnamed>";
                 throw System::NotSupportedException(
-                    "CNA SDL_GPU: this compiled effect's vertex shader requires attribute '" +
+                    "CNA SDLGPU: this compiled effect's vertex shader requires attribute '" +
                     std::string(name) + "' (usage " + std::to_string(static_cast<int>(shaderInput.usage)) +
                     ", index " + std::to_string(shaderInput.index) +
                     "), but the VertexDeclaration supplied to this draw does not declare an element "
@@ -205,7 +205,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             {
                 const char* name = shaderInput.name != nullptr ? shaderInput.name : "<unnamed>";
                 throw System::NotSupportedException(
-                    "CNA SDL_GPU: this compiled effect's vertex shader requires attribute '" +
+                    "CNA SDLGPU: this compiled effect's vertex shader requires attribute '" +
                     std::string(name) + "' (usage " +
                     std::to_string(static_cast<int>(shaderInput.usage)) + ", index " +
                     std::to_string(shaderInput.index) +
@@ -242,4 +242,4 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 }
 
-#endif  // CNA_SDL_GPU_COMPILED_EFFECTS
+#endif  // CNA_SDLGPU_COMPILED_EFFECTS

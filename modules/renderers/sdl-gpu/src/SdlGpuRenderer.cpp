@@ -20,7 +20,7 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
 #include "Fna3dStockEffectBlobs.hpp"
 #include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffect.hpp"
@@ -31,7 +31,7 @@
 #endif
 
 #include <SDL3/SDL.h>
-#if defined(CNA_SDL_GPU_SHADERCROSS)
+#if defined(CNA_SDLGPU_SHADERCROSS)
 #include <SDL3_shadercross/SDL_shadercross.h>
 #endif
 
@@ -51,7 +51,7 @@
 
 namespace CNA::Internal::Renderers::SdlGpu
 {
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
     SdlGpuRenderer::CompiledEffectShaderLease::CompiledEffectShaderLease(
         MOJOSHADER_sdlContext* shaderContext,
         MOJOSHADER_sdlShaderData* vertexData,
@@ -161,7 +161,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // platform without SDL video (HEADLESS, TERMINAL) never starts it; the dummy video driver
         // offers Vulkan nothing, and neither isolated driver has a Metal layer. Those pairings are
         // the platform declining what this renderer needs, which GraphicsDevice reports as XNA
-        // does (NoSuitableGraphicsDeviceException around the platform's refusal), not an SDL_GPU
+        // does (NoSuitableGraphicsDeviceException around the platform's refusal), not an SDLGPU
         // failure. Applies both when no driver accepts the shader formats and when the device
         // itself cannot be created.
         [[noreturn]] void ThrowDeviceUnavailable(bool headless, const std::string& failure)
@@ -169,7 +169,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             const bool videoAbsent = headless && SDL_WasInit(SDL_INIT_VIDEO) == 0;
             if (videoAbsent || IsIsolatedVideoDriver(SDL_GetCurrentVideoDriver()))
                 throw CNA::Platform::PlatformException(
-                    "SDL_GPU device",
+                    "SDLGPU device",
                     std::string(videoAbsent
                         ? "this SDL GPU driver needs SDL's video subsystem, which the selected "
                           "platform does not start: "
@@ -178,7 +178,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             throw std::runtime_error(failure);
         }
 
-#if defined(CNA_SDL_GPU_SHADERCROSS)
+#if defined(CNA_SDLGPU_SHADERCROSS)
         std::mutex shaderCrossSessionMutex;
         std::size_t shaderCrossSessionReferences = 0;
 
@@ -296,7 +296,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             {
                 injected = true;
                 throw std::runtime_error(
-                    std::string("CNA SDL_GPU: injected failure during ") + FailurePointName(point));
+                    std::string("CNA SDLGPU: injected failure during ") + FailurePointName(point));
             }
         }
 
@@ -446,7 +446,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             createInfo.mip_lod_bias = 0.0f;
             // Only TextureFilter::Anisotropic names anisotropic filtering; every other ordinal
             // must leave it off, or a Point ordinal would silently become a filtered fetch. The
-            // Vulkan driver under SDL_GPU rejects a maxAnisotropy above its own device limit, so
+            // Vulkan driver under SDLGPU rejects a maxAnisotropy above its own device limit, so
             // the public value is clamped to the 16 the XNA API tops out at.
             createInfo.enable_anisotropy = enableAniso;
             createInfo.max_anisotropy =
@@ -682,7 +682,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                     if (scratchDestination == nullptr)
                     {
                         throw std::runtime_error(
-                            std::string("CNA SDL_GPU: failed to create render-target mip scratch texture: ") +
+                            std::string("CNA SDLGPU: failed to create render-target mip scratch texture: ") +
                             SDL_GetError());
                     }
                     // Keep the scratch alive through submission. SDL_gpu's resource release is
@@ -734,7 +734,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                     if (copyPass == nullptr)
                     {
                         throw std::runtime_error(
-                            std::string("CNA SDL_GPU: failed to begin render-target mip copy pass: ") +
+                            std::string("CNA SDLGPU: failed to begin render-target mip copy pass: ") +
                             SDL_GetError());
                     }
                     CopyPassOwner copyPassOwner(copyPass);
@@ -877,7 +877,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // SDLGPU-20: XNA CullMode ordinals -> SDL_GPUCullMode. Every pipeline in this renderer uses
         // front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE (matches this project's own EasyGL
         // renderer's real, hardware-validated "OpenGL default front face is CCW; CW faces are back
-        // faces" convention -- confirmed this session that SDL_GPU's 3D shaders, like EasyGL's,
+        // faces" convention -- confirmed this session that SDLGPU's 3D shaders, like EasyGL's,
         // need no NDC Y-flip, so no Vulkan-style winding-reversal adjustment applies here): None=0,
         // CullClockwiseFace=1 (cull the CW/back faces), CullCounterClockwiseFace=2 (cull the
         // CCW/front faces).
@@ -920,7 +920,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 case VertexElementFormat::HalfVector4:      return SDL_GPU_VERTEXELEMENTFORMAT_HALF4;
             }
             throw std::invalid_argument(
-                "CNA SDL_GPU: unrecognized stock VertexElementFormat ordinal " +
+                "CNA SDLGPU: unrecognized stock VertexElementFormat ordinal " +
                 std::to_string(static_cast<int>(format)));
         }
 
@@ -1171,7 +1171,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             key = HashCombine(key, depthTest ? 1u : 0u);
             key = HashCombine(key, depthWrite ? 1u : 0u);
             key = HashCombine(key, static_cast<std::size_t>(depthFunc));
-            // SDL_GPU/Vulkan render-pass compatibility is slot-aligned. SDLGPU-72 made several
+            // SDLGPU/Vulkan render-pass compatibility is slot-aligned. SDLGPU-72 made several
             // native RT formats reachable, so slot 0 alone is insufficient: {Color,Color} and
             // {Color,HalfVector4} need different immutable pipelines even though their primary
             // attachment and every public render state are identical.
@@ -1622,7 +1622,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             int width, int height)
         {
             if (source == nullptr)
-                throw std::invalid_argument("CNA SDL_GPU: texture conversion source cannot be null");
+                throw std::invalid_argument("CNA SDLGPU: texture conversion source cannot be null");
 
             if (IsClassicDxtFormat(format))
             {
@@ -1712,7 +1712,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 else
                 {
                     throw std::invalid_argument(
-                        "CNA SDL_GPU: no renderer-side conversion for SurfaceFormat ordinal " +
+                        "CNA SDLGPU: no renderer-side conversion for SurfaceFormat ordinal " +
                         std::to_string(static_cast<int>(format)));
                 }
                 result[i * 4u + 0u] = r;
@@ -1929,7 +1929,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 out[i] = 0.0f;
         }
 
-#if defined(CNA_SDL_GPU_SHADER_EFFECTS)
+#if defined(CNA_SDLGPU_SHADER_EFFECTS)
         // ---- Runtime GLSL->SPIR-V compile for SdlGpuEffectRenderer (SDLGPU-42/43) ----
         // No libshaderc-dev package is available in this environment (see CMakeLists.txt's own
         // find_library fallback comment), so there is no shaderc.h to include -- these extern "C"
@@ -2008,7 +2008,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             shader = SDL_CreateGPUShader(device, &createInfo);
         }
-#if defined(CNA_SDL_GPU_SHADERCROSS)
+#if defined(CNA_SDLGPU_SHADERCROSS)
         else if (route == SdlGpuShaderCreationRouteEXT::ShaderCross)
         {
             SDL_ShaderCross_SPIRV_Info crossInfo{};
@@ -2116,7 +2116,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 NotifyResource(hooks, SdlGpuResourceKindEXT::Device,
                                SdlGpuResourceEventEXT::Released);
             }
-#if defined(CNA_SDL_GPU_SHADERCROSS)
+#if defined(CNA_SDLGPU_SHADERCROSS)
             if (shaderCrossAcquired)
             {
                 ReleaseShaderCrossSession();
@@ -2230,12 +2230,12 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (driverName == nullptr || driverName[0] == '\0')
             throw std::invalid_argument(
-                "CNA SDL_GPU: stock-shader portability probe requires a driver name");
+                "CNA SDLGPU: stock-shader portability probe requires a driver name");
 
-#if defined(CNA_SDL_GPU_SHADERCROSS)
+#if defined(CNA_SDLGPU_SHADERCROSS)
         if (!AcquireShaderCrossSession())
             throw std::runtime_error(
-                std::string("CNA SDL_GPU: SDL_shadercross initialization failed: ") +
+                std::string("CNA SDLGPU: SDL_shadercross initialization failed: ") +
                 SDL_GetError());
         resources.shaderCrossAcquired = true;
         resources.shaderCrossFormats = SDL_ShaderCross_GetSPIRVShaderFormats();
@@ -2247,16 +2247,16 @@ namespace CNA::Internal::Renderers::SdlGpu
             requestedShaderFormats, /*debug_mode=*/false, driverName);
         if (resources.device == nullptr)
             throw std::runtime_error(
-                std::string("CNA SDL_GPU: headless SDL_CreateGPUDevice failed for '") +
+                std::string("CNA SDLGPU: headless SDL_CreateGPUDevice failed for '") +
                 driverName + "': " + SDL_GetError());
 
         const char* actualDriver = SDL_GetGPUDeviceDriver(resources.device);
         if (actualDriver == nullptr)
             throw std::runtime_error(
-                "CNA SDL_GPU: headless device did not report its selected driver");
+                "CNA SDLGPU: headless device did not report its selected driver");
         if (std::string_view(actualDriver) != driverName)
             throw std::runtime_error(
-                std::string("CNA SDL_GPU: requested headless driver '") + driverName +
+                std::string("CNA SDLGPU: requested headless driver '") + driverName +
                 "' but SDL selected '" + actualDriver + "'");
 
         CreateConstructionShaders(resources);
@@ -2265,8 +2265,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         (void)resources;
         (void)driverName;
         throw std::runtime_error(
-            "CNA SDL_GPU: stock-shader portability probe requires "
-            "CNA_SDL_GPU_SHADERCROSS=ON");
+            "CNA SDLGPU: stock-shader portability probe requires "
+            "CNA_SDLGPU_SHADERCROSS=ON");
 #endif
     }
 
@@ -2274,7 +2274,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
             throw std::runtime_error(
-                std::string("CNA SDL_GPU: headless probe video initialization failed: ") +
+                std::string("CNA SDLGPU: headless probe video initialization failed: ") +
                 SDL_GetError());
         struct VideoGuard
         {
@@ -2289,7 +2289,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
             throw std::runtime_error(
-                std::string("CNA SDL_GPU: headless probe video initialization failed: ") +
+                std::string("CNA SDLGPU: headless probe video initialization failed: ") +
                 SDL_GetError());
         struct VideoGuard
         {
@@ -2339,7 +2339,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const auto fail = [](const char* operation)
         {
             throw std::runtime_error(
-                std::string("CNA SDL_GPU: headless stock draw failed during ") + operation +
+                std::string("CNA SDLGPU: headless stock draw failed during ") + operation +
                 ": " + SDL_GetError());
         };
 
@@ -2526,7 +2526,7 @@ namespace CNA::Internal::Renderers::SdlGpu
           virtualHeight_(virtualHeight),
           presentationMode_(presentationMode)
     {
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         compiledProgramLifetimeState_->owner = this;
 #endif
         ConstructionResources resources(window_, testHooks);
@@ -2540,7 +2540,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             !IsIsolatedVideoDriver(SDL_GetCurrentVideoDriver()))
         {
             throw std::runtime_error(
-                "CNA SDL_GPU: CNA_SDLGPU_TEST_FORCE_HEADLESS=1 requires the SDL dummy or "
+                "CNA SDLGPU: CNA_SDLGPU_TEST_FORCE_HEADLESS=1 requires the SDL dummy or "
                 "offscreen video driver");
         }
         resources.headless = window_ == nullptr || forceTestHeadless;
@@ -2557,10 +2557,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.debugModeEnabled = false;
 #endif
         SDL_GPUShaderFormat requestedShaderFormats = SDL_GPU_SHADERFORMAT_SPIRV;
-#if defined(CNA_SDL_GPU_SHADERCROSS)
+#if defined(CNA_SDLGPU_SHADERCROSS)
         if (!AcquireShaderCrossSession())
             throw std::runtime_error(
-                std::string("CNA SDL_GPU: SDL_shadercross initialization failed: ") +
+                std::string("CNA SDLGPU: SDL_shadercross initialization failed: ") +
                 SDL_GetError());
         resources.shaderCrossAcquired = true;
         NotifyResource(testHooks, SdlGpuResourceKindEXT::ShaderCross,
@@ -2571,15 +2571,15 @@ namespace CNA::Internal::Renderers::SdlGpu
 #else
         if (!SDL_GPUSupportsShaderFormats(requestedShaderFormats, /*name=*/nullptr))
             ThrowDeviceUnavailable(resources.headless,
-                "CNA SDL_GPU: no installed SDL_gpu driver accepts SPIR-V; rebuild with "
-                "CNA_SDL_GPU_SHADERCROSS=ON for native D3D12/Metal stock shaders");
+                "CNA SDLGPU: no installed SDL_gpu driver accepts SPIR-V; rebuild with "
+                "CNA_SDLGPU_SHADERCROSS=ON for native D3D12/Metal stock shaders");
 #endif
         resources.FailAt(SdlGpuFailurePointEXT::DeviceCreation);
         resources.device = SDL_CreateGPUDevice(
             requestedShaderFormats, resources.debugModeEnabled, /*name=*/nullptr);
         if (resources.device == nullptr)
             ThrowDeviceUnavailable(resources.headless,
-                std::string("CNA SDL_GPU: SDL_CreateGPUDevice failed: ") + SDL_GetError());
+                std::string("CNA SDLGPU: SDL_CreateGPUDevice failed: ") + SDL_GetError());
         NotifyResource(testHooks, SdlGpuResourceKindEXT::Device,
                        SdlGpuResourceEventEXT::Acquired);
 
@@ -2590,7 +2590,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             {
                 const std::string error = SDL_GetError();
                 throw std::runtime_error(
-                    "CNA SDL_GPU: SDL_ClaimWindowForGPUDevice failed: " + error);
+                    "CNA SDLGPU: SDL_ClaimWindowForGPUDevice failed: " + error);
             }
             resources.windowClaimed = true;
             NotifyResource(testHooks, SdlGpuResourceKindEXT::WindowClaim,
@@ -2619,7 +2619,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             else
             {
                 throw std::runtime_error(
-                    "CNA SDL_GPU: headless mode requires an RGBA8 or BGRA8 color target");
+                    "CNA SDLGPU: headless mode requires an RGBA8 or BGRA8 color target");
             }
         }
         else
@@ -2666,7 +2666,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             const std::string error = SDL_GetError();
             throw std::runtime_error(
-                "CNA SDL_GPU: SDL_GetWindowSizeInPixels failed: " + error);
+                "CNA SDLGPU: SDL_GetWindowSizeInPixels failed: " + error);
         }
 
         resources.FailAt(SdlGpuFailurePointEXT::RendererRegistration);
@@ -2687,11 +2687,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         // would never be recorded at all.
         BeginBackbufferSegment();
 
-        // SMG-0031: the backend SDL_gpu actually chose is named here, because "SDL_GPU validated"
+        // SMG-0031: the backend SDL_gpu actually chose is named here, because "SDLGPU validated"
         // is not a claim anyone can check without it -- SDL picks its own driver, and a run that
         // silently landed on a software device would look identical in every other respect.
         const std::string driver = GetDriverNameEXT();
-        SDL_Log("[SDL_GPU] Renderer initialised (%dx%d), debug mode %s, %s, SDL_gpu backend '%s'",
+        SDL_Log("[SDLGPU] Renderer initialised (%dx%d), debug mode %s, %s, SDL_gpu backend '%s'",
                 physicalWidth_, physicalHeight_, debugModeEnabled_ ? "enabled" : "disabled",
                 headless_ ? "headless" : "swapchain",
                 driver.empty() ? "unknown" : driver.c_str());
@@ -2731,7 +2731,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         DestroyTexturedResources();
         DestroyColoredResources();
         DestroySpriteResources();
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         // Compiled-effect pipelines must go before their shader-owning MojoShader context. Queued
         // shader leases were already released by ReleaseSceneDrawBuffers()/spriteCommands_.clear().
         for (auto& [programIdentity, pipelines] : compiledEffectPipelines_)
@@ -2745,7 +2745,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         compiledProgramLeases_.clear();
         compiledProgramLifetimeState_->owner = nullptr;
         // FX-061: released after its queued leases and pipelines, but before the
-        // SDL_GPU device it was created against.
+        // SDLGPU device it was created against.
         if (mojoShaderContext_ != nullptr)
         {
             MOJOSHADER_sdlDestroyContext(mojoShaderContext_);
@@ -2786,7 +2786,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                 SdlGpuResourceEventEXT::Released);
             device_ = nullptr;
         }
-#if defined(CNA_SDL_GPU_SHADERCROSS)
+#if defined(CNA_SDLGPU_SHADERCROSS)
         if (shaderCrossAcquired_)
         {
             ReleaseShaderCrossSession();
@@ -2816,7 +2816,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             case CNA::GraphicsCapability::MultipleRenderTargets:
                 return true;
             case CNA::GraphicsCapability::CustomEffects:
-#if defined(CNA_SDL_GPU_SHADER_EFFECTS)
+#if defined(CNA_SDLGPU_SHADER_EFFECTS)
                 return true;
 #else
                 return false;
@@ -2856,7 +2856,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
         // Without this every engine-layer pass that samples the HDR scene -- FXAA's sub-texel
-        // taps, bloom's downsample -- was forced onto point sampling on SDL_GPU, and cna-street's
+        // taps, bloom's downsample -- was forced onto point sampling on SDLGPU, and cna-street's
         // anti-aliasing visibly did less than on Vulkan on the same GPU.
         return device_ != nullptr &&
                ClassifyRenderTargetFormatEXT(static_cast<int>(SurfaceFormat::HalfVector4)) ==
@@ -2981,7 +2981,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (depthStencilTexture_ == nullptr)
         {
             CNA::Logger::Warn(
-                std::string("CNA SDL_GPU: failed to create depth/stencil texture: ") + SDL_GetError(),
+                std::string("CNA SDLGPU: failed to create depth/stencil texture: ") + SDL_GetError(),
                 CNA::LogCategory::GPU);
             depthStencilWidth_ = 0;
             depthStencilHeight_ = 0;
@@ -3030,7 +3030,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             backbufferMsaaHeight_ = 0;
             backbufferMsaaFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
             throw std::runtime_error(
-                std::string("CNA SDL_GPU: failed to create multisample backbuffer: ") +
+                std::string("CNA SDLGPU: failed to create multisample backbuffer: ") +
                 SDL_GetError());
         }
 
@@ -3054,7 +3054,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         MaybeFailForTest(SdlGpuFailurePointEXT::FrameCommandBufferAcquisition);
         SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device_);
         if (cmd == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
         FrameCommandBufferOwner commandBuffer(cmd, testHooks_);
 
         // SMG-0027: the labels this frame accumulated, emitted onto the command buffer that
@@ -3073,7 +3073,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             {
                 if (!EnsureBackbufferProxy(swapchainWidth, swapchainHeight))
                     throw std::runtime_error(
-                        "CNA SDL_GPU: failed to create the headless backbuffer proxy");
+                        "CNA SDLGPU: failed to create the headless backbuffer proxy");
                 swapchainTexture = backbufferProxy_;
             }
             else
@@ -3090,7 +3090,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                     const std::string error = SDL_GetError();
                     (void)commandBuffer.Submit();
                     throw std::runtime_error(
-                        "CNA SDL_GPU: SDL_WaitAndAcquireGPUSwapchainTexture failed: " + error);
+                        "CNA SDLGPU: SDL_WaitAndAcquireGPUSwapchainTexture failed: " + error);
                 }
 
                 if (forceNextNullSwapchainTextureForTest_)
@@ -3200,7 +3200,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
             if (!commandBuffer.Submit())
                 throw std::runtime_error(
-                    std::string("CNA SDL_GPU: SDL_SubmitGPUCommandBuffer failed: ") +
+                    std::string("CNA SDLGPU: SDL_SubmitGPUCommandBuffer failed: ") +
                     SDL_GetError());
 
         // Whatever was pending has now been handed to the GPU (recorded into a submitted command
@@ -3516,7 +3516,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (backbufferProxy_ == nullptr)
         {
             CNA::Logger::Warn(
-                std::string("CNA SDL_GPU: backbuffer readback proxy creation failed: ") + SDL_GetError(),
+                std::string("CNA SDLGPU: backbuffer readback proxy creation failed: ") + SDL_GetError(),
                 CNA::LogCategory::GPU);
             backbufferProxyWidth_ = 0;
             backbufferProxyHeight_ = 0;
@@ -3557,7 +3557,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (const char* trace = std::getenv("CNA_BACKBUFFER_READ_TRACE"); trace != nullptr && *trace != '\0')
         {
             std::fprintf(stderr,
-                         "[GFX-165][SDL_GPU] ReadBackbuffer req=(%d,%d,%dx%d) physical=%dx%d proxy=%dx%d "
+                         "[GFX-165][SDLGPU] ReadBackbuffer req=(%d,%d,%dx%d) physical=%dx%d proxy=%dx%d "
                          "fmt=%d virtual=%dx%d\n",
                          x, y, w, h, physicalWidth_, physicalHeight_, backbufferProxyWidth_,
                          backbufferProxyHeight_, static_cast<int>(backbufferProxyFormat_),
@@ -3587,13 +3587,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         transferInfo.size = regionBytes;
         SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device_, &transferInfo);
         if (transferBuffer == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: ReadBackbuffer: failed to create transfer buffer: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: ReadBackbuffer: failed to create transfer buffer: ") + SDL_GetError());
 
         SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device_);
         if (cmd == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device_, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: ReadBackbuffer: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: ReadBackbuffer: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
         }
 
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
@@ -3615,7 +3615,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (fence == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device_, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: ReadBackbuffer: SDL_SubmitGPUCommandBufferAndAcquireFence failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: ReadBackbuffer: SDL_SubmitGPUCommandBufferAndAcquireFence failed: ") + SDL_GetError());
         }
         SDL_WaitForGPUFences(device_, true, &fence, 1);
         SDL_ReleaseGPUFence(device_, fence);
@@ -3624,7 +3624,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (mapped == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device_, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: ReadBackbuffer: SDL_MapGPUTransferBuffer failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: ReadBackbuffer: SDL_MapGPUTransferBuffer failed: ") + SDL_GetError());
         }
 
         // The proxy carries the swapchain's own channel order; CNA's public Color is RGBA. Swap R<->B
@@ -4068,11 +4068,11 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (window_ == nullptr)
             throw std::invalid_argument(
-                "CNA SDL_GPU: a headless renderer has no platform surface to change");
+                "CNA SDLGPU: a headless renderer has no platform surface to change");
         if (surface.windowId != SDL_GetWindowID(window_))
         {
             throw std::invalid_argument(
-                "CNA SDL_GPU: a renderer's platform window identity cannot change");
+                "CNA SDLGPU: a renderer's platform window identity cannot change");
         }
         physicalWidth_ = std::max(0, surface.drawableSize.width);
         physicalHeight_ = std::max(0, surface.drawableSize.height);
@@ -4144,7 +4144,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (mode < static_cast<int>(CnaPresentationMode::Letterbox) ||
             mode > static_cast<int>(CnaPresentationMode::FixedHeightDynamicWidth))
-            throw std::out_of_range("CNA SDL_GPU: invalid presentation mode");
+            throw std::out_of_range("CNA SDLGPU: invalid presentation mode");
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
     }
 
@@ -4175,7 +4175,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             // Genuine per-device/driver capability gap, not a "not implemented yet" stub.
             CNA::Logger::Warn(
-                std::string("CNA SDL_GPU: SDL_SetGPUSwapchainParameters failed: ") + SDL_GetError(),
+                std::string("CNA SDLGPU: SDL_SetGPUSwapchainParameters failed: ") + SDL_GetError(),
                 CNA::LogCategory::GPU);
             return -1;
         }
@@ -4652,7 +4652,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     std::unique_ptr<IOcclusionQueryRenderer> SdlGpuRenderer::CreateOcclusionQuery()
     {
         throw System::NotSupportedException(
-            "CNA SDL_GPU: OcclusionQuery is unavailable because vendored SDL_gpu 3.5.0 exposes "
+            "CNA SDLGPU: OcclusionQuery is unavailable because vendored SDL_gpu 3.5.0 exposes "
             "no occlusion-query or query-pool commands; GPU fences report only command-buffer "
             "completion and cannot count samples that pass depth/stencil.");
     }
@@ -4865,7 +4865,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 if (kept != all)
                 {
                     throw System::NotSupportedException(
-                        "CNA SDL_GPU: a MultiSampleMask that keeps only some of a multisampled "
+                        "CNA SDLGPU: a MultiSampleMask that keeps only some of a multisampled "
                         "target's samples is not supported (SDL_gpu reserves its sample mask); "
                         "only a mask keeping every sample or none is applied.");
                 }
@@ -5004,7 +5004,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (ClassifyRenderTargetFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
         {
             throw std::runtime_error(
-                "CNA SDL_GPU: SurfaceFormat ordinal " + std::to_string(surfaceFormat) +
+                "CNA SDLGPU: SurfaceFormat ordinal " + std::to_string(surfaceFormat) +
                 " is not supported as an exact RenderTarget2D color attachment on this device");
         }
         return std::make_unique<SdlGpuRenderTargetRenderer>(
@@ -5056,7 +5056,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             RendererFormatVerdict::Supported)
         {
             throw std::runtime_error(
-                "CNA SDL_GPU: SurfaceFormat ordinal " + std::to_string(surfaceFormat) +
+                "CNA SDLGPU: SurfaceFormat ordinal " + std::to_string(surfaceFormat) +
                 " is not supported as an exact RenderTargetCube color attachment on this device");
         }
         return std::make_unique<SdlGpuRenderTargetCubeRenderer>(
@@ -5120,7 +5120,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::SpriteVertex,
             SdlGpuFailurePointEXT::SpriteVertexShaderCreation, vsInfo,
-            "CNA SDL_GPU: failed to create sprite vertex shader: ");
+            "CNA SDLGPU: failed to create sprite vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kSprite2dFragSpv);
@@ -5133,7 +5133,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::SpriteFragment,
             SdlGpuFailurePointEXT::SpriteFragmentShaderCreation, fsInfo,
-            "CNA SDL_GPU: failed to create sprite fragment shader: ");
+            "CNA SDLGPU: failed to create sprite fragment shader: ");
     }
 
     void SdlGpuRenderer::DestroySpriteResources()
@@ -5219,7 +5219,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_GPUGraphicsPipeline* pipeline =
             CreateGraphicsPipeline(pipelineInfo,
-                                   "CNA SDL_GPU: failed to create sprite pipeline: ");
+                                   "CNA SDLGPU: failed to create sprite pipeline: ");
         return CacheGraphicsPipeline(spritePipelines_, key, pipeline);
     }
 
@@ -5231,8 +5231,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         const int clampedAniso = std::clamp(maxAnisotropy, 1, 16);
         // FX-083: XNA's MaxMipLevel is the most detailed level the sampler may use,
-        // i.e. a lower bound on the computed level of detail -- SDL_GPU's min_lod. That is the
-        // same translation FNA3D's own SDL_GPU driver makes.
+        // i.e. a lower bound on the computed level of detail -- SDLGPU's min_lod. That is the
+        // same translation FNA3D's own SDLGPU driver makes.
         // XNA writes MaxMipLevel into Direct3D 9's UNSIGNED sampler field, so a negative value is a
         // huge level index that names the LAST stored level, exactly as 99 does; folding it to 0
         // selected the most detailed level instead (texture_filter_mip_contract_test L3/L9). 32 is
@@ -5257,7 +5257,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // creation, proving the observed mip shift came from the same shader route Metal needs.
         if (TestRejectNativeLodBiasEnabled() && lodBias != 0.0f)
             throw std::runtime_error(
-                "CNA SDL_GPU test guard: a shader-emulated draw requested native LOD bias");
+                "CNA SDLGPU test guard: a shader-emulated draw requested native LOD bias");
 
         SDL_GPUSampler* sampler = nullptr;
         if (hit)
@@ -5270,7 +5270,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             MaybeFailForTest(SdlGpuFailurePointEXT::SamplerCreation);
             sampler = SDL_CreateGPUSampler(device_, &createInfo);
             if (sampler == nullptr)
-                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create sampler: ") + SDL_GetError());
+                throw std::runtime_error(std::string("CNA SDLGPU: failed to create sampler: ") + SDL_GetError());
             NotifyResourceEvent(SdlGpuResourceKindEXT::Sampler,
                                 SdlGpuResourceEventEXT::Acquired);
             try
@@ -5284,7 +5284,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 throw;
             }
 
-            // SDLGPU-126: EasyGL owns one mutable sampler per slot, whereas SDL_GPU needs
+            // SDLGPU-126: EasyGL owns one mutable sampler per slot, whereas SDLGPU needs
             // immutable descriptor objects. Retain a generous working set across frames, not
             // every unrestricted MaxMipLevel/LOD-bias value the application has ever supplied.
             // SDL tracks every bound sampler on the recording command buffer; releasing an older
@@ -5527,7 +5527,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             bufferInfo.size = requiredBytes;
             spriteVertexBuffer_ = SDL_CreateGPUBuffer(device_, &bufferInfo);
             if (spriteVertexBuffer_ == nullptr)
-                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create sprite vertex buffer: ") + SDL_GetError());
+                throw std::runtime_error(std::string("CNA SDLGPU: failed to create sprite vertex buffer: ") + SDL_GetError());
             spriteVertexCapacityBytes_ = requiredBytes;
         }
 
@@ -5536,13 +5536,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         transferInfo.size = requiredBytes;
         SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device_, &transferInfo);
         if (transferBuffer == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create sprite transfer buffer: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: failed to create sprite transfer buffer: ") + SDL_GetError());
 
         void* mapped = SDL_MapGPUTransferBuffer(device_, transferBuffer, false);
         if (mapped == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device_, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to map sprite transfer buffer: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: failed to map sprite transfer buffer: ") + SDL_GetError());
         }
         auto* dest = static_cast<SpriteVertex*>(mapped);
         for (std::size_t i = 0; i < spriteCommands_.size(); ++i)
@@ -5801,7 +5801,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 cmd, command.customFragmentUniforms.get(), uniforms,
                 command.customUniformArrays.get(), /*fragment=*/true);
         }
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         else if (command.compiledEffect.vertexShader != nullptr)
         {
             // Uniform bytes and (for slots > 0) sampler bindings were already captured at
@@ -6086,7 +6086,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             command.customVertexUniforms = customEffect->SnapshotVertexUniformsEXT();
             command.customFragmentUniforms = customEffect->SnapshotFragmentUniformsEXT();
         }
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         // FX-071: the compiled-effect counterpart of the customEffect snapshot above --
         // captured NOW for the same reason (SpriteCommand's own doc comment) and against the same
         // fixed SpriteVertex layout every sprite shares, since SpriteBatch's vertex data is CNA's
@@ -6099,7 +6099,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (sdlGpuEffect == nullptr)
             {
                 throw std::runtime_error(
-                    "CNA SDL_GPU: the applied compiled effect was not created by this renderer.");
+                    "CNA SDLGPU: the applied compiled effect was not created by this renderer.");
             }
             using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
             using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
@@ -6159,7 +6159,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             case PrimitiveType::LineStrip: return SDL_GPU_PRIMITIVETYPE_LINESTRIP;
             case PrimitiveType::PointListEXT: return SDL_GPU_PRIMITIVETYPE_POINTLIST;
         }
-        throw std::invalid_argument("CNA SDL_GPU: unsupported primitive topology");
+        throw std::invalid_argument("CNA SDLGPU: unsupported primitive topology");
     }
 
     int SdlGpuRenderer::PrimitiveVertexCount(PrimitiveType primitive, int primitiveCount) const
@@ -6191,13 +6191,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             throw System::ArgumentOutOfRangeException(
                 "primitiveCount", std::to_string(primitiveCount),
-                "CNA SDL_GPU: an indexed draw must consume at least one primitive.");
+                "CNA SDLGPU: an indexed draw must consume at least one primitive.");
         }
         if (startIndex < 0)
         {
             throw System::ArgumentOutOfRangeException(
                 "startIndex", std::to_string(startIndex),
-                "CNA SDL_GPU: startIndex is an index-element offset and cannot be negative.");
+                "CNA SDLGPU: startIndex is an index-element offset and cannot be negative.");
         }
 
         // Computed in 64-bit so an overflowing request is rejected instead of wrapping, exactly as
@@ -6221,7 +6221,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 consumedIndexCount = primitiveCount;
                 break;
             default:
-                throw std::invalid_argument("CNA SDL_GPU: unsupported primitive topology");
+                throw std::invalid_argument("CNA SDLGPU: unsupported primitive topology");
         }
 
         const std::int64_t availableIndexCount = static_cast<std::int64_t>(ib.GetIndexCount());
@@ -6230,7 +6230,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             throw System::ArgumentOutOfRangeException(
                 "primitiveCount", std::to_string(primitiveCount),
-                "CNA SDL_GPU: the requested index range exceeds the bound index buffer.");
+                "CNA SDLGPU: the requested index range exceeds the bound index buffer.");
         }
 
         // Apple M4 AM4-183: baseVertex reaches SDL_gpu's Sint32 vertex_offset as XNA
@@ -6247,7 +6247,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             throw System::ArgumentOutOfRangeException(
                 "primitiveCount", std::to_string(primitiveCount),
-                "CNA SDL_GPU: the requested indexed draw range is too large for SDL_gpu.");
+                "CNA SDLGPU: the requested indexed draw range is too large for SDL_gpu.");
         }
 
         NativeIndexedRange range;
@@ -6269,7 +6269,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::ColoredVertex,
             SdlGpuFailurePointEXT::ColoredVertexShaderCreation, vsInfo,
-            "CNA SDL_GPU: failed to create colored3d vertex shader: ");
+            "CNA SDLGPU: failed to create colored3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kColored3dFragSpv);
@@ -6280,7 +6280,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::ColoredFragment,
             SdlGpuFailurePointEXT::ColoredFragmentShaderCreation, fsInfo,
-            "CNA SDL_GPU: failed to create colored3d fragment shader: ");
+            "CNA SDLGPU: failed to create colored3d fragment shader: ");
     }
 
     void SdlGpuRenderer::DestroyColoredResources()
@@ -6335,7 +6335,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_GPUGraphicsPipeline* pipeline =
             CreateGraphicsPipeline(pipelineInfo,
-                                   "CNA SDL_GPU: failed to create colored3d pipeline: ");
+                                   "CNA SDLGPU: failed to create colored3d pipeline: ");
         return CacheGraphicsPipeline(coloredPipelines_, key, pipeline);
     }
 
@@ -6351,7 +6351,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::TexturedVertex,
             SdlGpuFailurePointEXT::TexturedVertexShaderCreation, vsInfo,
-            "CNA SDL_GPU: failed to create textured3d vertex shader: ");
+            "CNA SDLGPU: failed to create textured3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo cvsInfo{};
         cvsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kColoredTextured3dVertSpv);
@@ -6363,7 +6363,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::ColoredTexturedVertex,
             SdlGpuFailurePointEXT::ColoredTexturedVertexShaderCreation, cvsInfo,
-            "CNA SDL_GPU: failed to create colored_textured3d vertex shader: ");
+            "CNA SDLGPU: failed to create colored_textured3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kTextured3dFragSpv);
@@ -6376,7 +6376,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::TexturedFragment,
             SdlGpuFailurePointEXT::TexturedFragmentShaderCreation, fsInfo,
-            "CNA SDL_GPU: failed to create textured3d fragment shader: ");
+            "CNA SDLGPU: failed to create textured3d fragment shader: ");
     }
 
     void SdlGpuRenderer::DestroyTexturedResources()
@@ -6435,7 +6435,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_GPUGraphicsPipeline* pipeline =
             CreateGraphicsPipeline(pipelineInfo,
-                                   "CNA SDL_GPU: failed to create textured3d pipeline: ");
+                                   "CNA SDLGPU: failed to create textured3d pipeline: ");
         return CacheGraphicsPipeline(texturedPipelines_, key, pipeline);
     }
 
@@ -6484,7 +6484,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUGraphicsPipeline* pipeline =
             CreateGraphicsPipeline(
                 pipelineInfo,
-                "CNA SDL_GPU: failed to create colored_textured3d pipeline: ");
+                "CNA SDLGPU: failed to create colored_textured3d pipeline: ");
         return CacheGraphicsPipeline(coloredTexturedPipelines_, key, pipeline);
     }
 
@@ -6500,7 +6500,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::LitTexturedVertex,
             SdlGpuFailurePointEXT::LitTexturedVertexShaderCreation, vsInfo,
-            "CNA SDL_GPU: failed to create lit_textured3d vertex shader: ");
+            "CNA SDLGPU: failed to create lit_textured3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kLitTextured3dFragSpv);
@@ -6513,7 +6513,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::LitTexturedFragment,
             SdlGpuFailurePointEXT::LitTexturedFragmentShaderCreation, fsInfo,
-            "CNA SDL_GPU: failed to create lit_textured3d fragment shader: ");
+            "CNA SDLGPU: failed to create lit_textured3d fragment shader: ");
     }
 
     void SdlGpuRenderer::DestroyLitTexturedResources()
@@ -6569,7 +6569,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUGraphicsPipeline* pipeline =
             CreateGraphicsPipeline(
                 pipelineInfo,
-                "CNA SDL_GPU: failed to create lit_textured3d pipeline: ");
+                "CNA SDLGPU: failed to create lit_textured3d pipeline: ");
         return CacheGraphicsPipeline(litTexturedPipelines_, key, pipeline);
     }
 
@@ -6778,7 +6778,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::AlphaTestVertex,
             SdlGpuFailurePointEXT::AlphaTestVertexShaderCreation, vsInfo,
-            "CNA SDL_GPU: failed to create alpha_test3d vertex shader: ");
+            "CNA SDLGPU: failed to create alpha_test3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo cvsInfo{};
         cvsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kAlphaTestColored3dVertSpv);
@@ -6790,7 +6790,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::AlphaTestColoredVertex,
             SdlGpuFailurePointEXT::AlphaTestColoredVertexShaderCreation, cvsInfo,
-            "CNA SDL_GPU: failed to create alpha_test_colored3d vertex shader: ");
+            "CNA SDLGPU: failed to create alpha_test_colored3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kAlphaTest3dFragSpv);
@@ -6803,7 +6803,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::AlphaTestFragment,
             SdlGpuFailurePointEXT::AlphaTestFragmentShaderCreation, fsInfo,
-            "CNA SDL_GPU: failed to create alpha_test3d fragment shader: ");
+            "CNA SDLGPU: failed to create alpha_test3d fragment shader: ");
     }
 
     void SdlGpuRenderer::DestroyAlphaTestResources()
@@ -6867,7 +6867,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUGraphicsPipeline* pipeline =
                 CreateGraphicsPipeline(
                     pipelineInfo,
-                    "CNA SDL_GPU: failed to create alpha_test_colored3d pipeline: ");
+                    "CNA SDLGPU: failed to create alpha_test_colored3d pipeline: ");
             return CacheGraphicsPipeline(alphaTestColoredPipelines_, key, pipeline);
         }
 
@@ -6909,7 +6909,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUGraphicsPipeline* pipeline =
             CreateGraphicsPipeline(
                 pipelineInfo,
-                "CNA SDL_GPU: failed to create alpha_test3d pipeline: ");
+                "CNA SDLGPU: failed to create alpha_test3d pipeline: ");
         return CacheGraphicsPipeline(alphaTestPipelines_, key, pipeline);
     }
 
@@ -6925,7 +6925,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::DualTextureVertex,
             SdlGpuFailurePointEXT::DualTextureVertexShaderCreation, vsInfo,
-            "CNA SDL_GPU: failed to create dual_texture3d vertex shader: ");
+            "CNA SDLGPU: failed to create dual_texture3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo cvsInfo{};
         cvsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kDualTextureColored3dVertSpv);
@@ -6937,7 +6937,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::DualTextureColoredVertex,
             SdlGpuFailurePointEXT::DualTextureColoredVertexShaderCreation, cvsInfo,
-            "CNA SDL_GPU: failed to create dual_texture_colored3d vertex shader: ");
+            "CNA SDLGPU: failed to create dual_texture_colored3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kDualTexture3dFragSpv);
@@ -6950,7 +6950,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::DualTextureFragment,
             SdlGpuFailurePointEXT::DualTextureFragmentShaderCreation, fsInfo,
-            "CNA SDL_GPU: failed to create dual_texture3d fragment shader: ");
+            "CNA SDLGPU: failed to create dual_texture3d fragment shader: ");
     }
 
     void SdlGpuRenderer::DestroyDualTextureResources()
@@ -7015,7 +7015,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUGraphicsPipeline* pipeline =
             CreateGraphicsPipeline(
                 pipelineInfo,
-                "CNA SDL_GPU: failed to create dual_texture3d pipeline: ");
+                "CNA SDLGPU: failed to create dual_texture3d pipeline: ");
         return CacheGraphicsPipeline(cache, key, pipeline);
     }
 
@@ -7031,7 +7031,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::EnvMapVertex,
             SdlGpuFailurePointEXT::EnvMapVertexShaderCreation, vsInfo,
-            "CNA SDL_GPU: failed to create env_map3d vertex shader: ");
+            "CNA SDLGPU: failed to create env_map3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kEnvMap3dFragSpv);
@@ -7044,7 +7044,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::EnvMapFragment,
             SdlGpuFailurePointEXT::EnvMapFragmentShaderCreation, fsInfo,
-            "CNA SDL_GPU: failed to create env_map3d fragment shader: ");
+            "CNA SDLGPU: failed to create env_map3d fragment shader: ");
     }
 
     void SdlGpuRenderer::DestroyEnvMapResources()
@@ -7108,7 +7108,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUGraphicsPipeline* pipeline =
             CreateGraphicsPipeline(
                 pipelineInfo,
-                "CNA SDL_GPU: failed to create env_map3d pipeline: ");
+                "CNA SDLGPU: failed to create env_map3d pipeline: ");
         return CacheGraphicsPipeline(envMapPipelines_, key, pipeline);
     }
 
@@ -7125,7 +7125,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::SkinnedVertex,
             SdlGpuFailurePointEXT::SkinnedVertexShaderCreation, vsInfo,
-            "CNA SDL_GPU: failed to create skinned3d vertex shader: ");
+            "CNA SDLGPU: failed to create skinned3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo colVsInfo{};
         colVsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kSkinnedColored3dVertSpv);
@@ -7138,7 +7138,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::SkinnedColoredVertex,
             SdlGpuFailurePointEXT::SkinnedColoredVertexShaderCreation, colVsInfo,
-            "CNA SDL_GPU: failed to create skinned_colored3d vertex shader: ");
+            "CNA SDLGPU: failed to create skinned_colored3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo colFsInfo{};
         colFsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kSkinnedColored3dFragSpv);
@@ -7151,7 +7151,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::SkinnedColoredFragment,
             SdlGpuFailurePointEXT::SkinnedColoredFragmentShaderCreation, colFsInfo,
-            "CNA SDL_GPU: failed to create skinned_colored3d fragment shader: ");
+            "CNA SDLGPU: failed to create skinned_colored3d fragment shader: ");
     }
 
     void SdlGpuRenderer::DestroySkinnedResources()
@@ -7236,7 +7236,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUGraphicsPipeline* pipeline =
             CreateGraphicsPipeline(
                 pipelineInfo,
-                "CNA SDL_GPU: failed to create skinned3d pipeline: ");
+                "CNA SDLGPU: failed to create skinned3d pipeline: ");
         return CacheGraphicsPipeline(cache, key, pipeline);
     }
 
@@ -7309,7 +7309,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::PbrVertex,
             SdlGpuFailurePointEXT::PbrVertexShaderCreation, vsInfo,
-            "CNA SDL_GPU: failed to create pbr3d vertex shader: ");
+            "CNA SDLGPU: failed to create pbr3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo skinnedVsInfo{};
         skinnedVsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kPbrSkinned3dVertSpv);
@@ -7322,7 +7322,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::PbrSkinnedVertex,
             SdlGpuFailurePointEXT::PbrSkinnedVertexShaderCreation, skinnedVsInfo,
-            "CNA SDL_GPU: failed to create pbr_skinned3d vertex shader: ");
+            "CNA SDLGPU: failed to create pbr_skinned3d vertex shader: ");
 
         // GLTF-462/GLTF-465: the stride-60 and stride-80 twins. Same uniform/sampler
         // shape as the two above -- only the vertex input set differs -- so they are created the same
@@ -7333,7 +7333,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::PbrColorVertex,
             SdlGpuFailurePointEXT::PbrColorVertexShaderCreation, colorVsInfo,
-            "CNA SDL_GPU: failed to create pbr3d (vertex colour) vertex shader: ");
+            "CNA SDLGPU: failed to create pbr3d (vertex colour) vertex shader: ");
 
         SDL_GPUShaderCreateInfo skinnedColorVsInfo = skinnedVsInfo;
         skinnedColorVsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kPbrSkinned3dColorVertSpv);
@@ -7341,7 +7341,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::PbrSkinnedColorVertex,
             SdlGpuFailurePointEXT::PbrSkinnedColorVertexShaderCreation, skinnedColorVsInfo,
-            "CNA SDL_GPU: failed to create pbr_skinned3d (vertex colour) vertex shader: ");
+            "CNA SDLGPU: failed to create pbr_skinned3d (vertex colour) vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kPbr3dFragSpv);
@@ -7357,7 +7357,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.CreateShader(
             ConstructionShader::PbrFragment,
             SdlGpuFailurePointEXT::PbrFragmentShaderCreation, fsInfo,
-            "CNA SDL_GPU: failed to create pbr3d fragment shader: ");
+            "CNA SDLGPU: failed to create pbr3d fragment shader: ");
     }
 
     void SdlGpuRenderer::DestroyPbrResources()
@@ -7429,7 +7429,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             if (!cube->SetData(face, 0, 0, 0, 1, 1, white.data(), static_cast<int>(white.size())))
                 throw std::runtime_error(
-                    "CNA SDL_GPU: could not upload the white cube a shadow-receiving draw binds "
+                    "CNA SDLGPU: could not upload the white cube a shadow-receiving draw binds "
                     "when it has no point-light shadow cube");
         }
         defaultWhiteCubeTexture_ = std::move(cube);
@@ -7459,7 +7459,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 if (!cube->SetData(face, 0, 0, 0, 1, 1, black.data(),
                                    static_cast<int>(black.size())))
                     throw std::runtime_error(
-                        "CNA SDL_GPU: could not upload the opaque-black cube an unbound "
+                        "CNA SDLGPU: could not upload the opaque-black cube an unbound "
                         "EnvironmentMapEffect.EnvironmentMap samples");
             }
             defaultBlackCubeTexture_ = std::move(cube);
@@ -7646,7 +7646,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_GPUGraphicsPipeline* pipeline =
             CreateGraphicsPipeline(pipelineInfo,
-                                   "CNA SDL_GPU: failed to create pbr3d pipeline: ");
+                                   "CNA SDLGPU: failed to create pbr3d pipeline: ");
         return CacheGraphicsPipeline(cache, key, pipeline);
     }
 
@@ -8016,7 +8016,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (!NormalizeSkinnedStreamEXT(declaredElements, sdlGpuVb.ShadowData(), stride,
                                            normalized, normalizedStride))
                 throw std::invalid_argument(
-                    "CNA SDL_GPU: SkinnedEffect needs POSITION0 (Vector3), NORMAL0 (Vector3), "
+                    "CNA SDLGPU: SkinnedEffect needs POSITION0 (Vector3), NORMAL0 (Vector3), "
                     "TEXCOORD0 (Vector2), BLENDWEIGHT0 (Vector4), and BLENDINDICES0 "
                     "(Byte4 or Vector4), with an optional COLOR0 (Color or Vector4)");
             stream = &normalized;
@@ -8025,7 +8025,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         else if (stride != 52 && stride != 56)
         {
             throw std::invalid_argument(
-                "CNA SDL_GPU: SkinnedEffect received no VertexDeclaration and its stride is "
+                "CNA SDLGPU: SkinnedEffect received no VertexDeclaration and its stride is "
                 "neither the canonical 52 nor 56 bytes");
         }
 
@@ -8103,7 +8103,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (!skinned && !CNA::Internal::Graphics::NormalizeRigidPbrStreamEXT(
                 sdlGpuVb.Declaration().GetElements(), sdlGpuVb.ShadowData(), stride, normalized))
             throw System::NotSupportedException(
-                "CNA SDL_GPU: PbrEffect requires POSITION0/ NORMAL0 Vector3 and TEXCOORD0 Vector2; "
+                "CNA SDLGPU: PbrEffect requires POSITION0/ NORMAL0 Vector3 and TEXCOORD0 Vector2; "
                 "optional TANGENT0 Vector4, TEXCOORD1 Vector2 and COLOR0 Color");
         // GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the same two records with
         // TEXCOORD_1 and a packed COLOR_0 appended, and glTF 3.9.2 makes that colour a multiplier on
@@ -8113,9 +8113,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                                         : (stride == 48u || stride == 60u);
         if (!acceptable)
             throw std::invalid_argument(skinned
-                ? "CNA SDL_GPU: pbr_skinned3d requires a stride-68 or stride-80 "
+                ? "CNA SDLGPU: pbr_skinned3d requires a stride-68 or stride-80 "
                   "(VertexPositionNormalTangentTextureSkinned, optionally with COLOR_0) vertex buffer"
-                : "CNA SDL_GPU: pbr3d requires a stride-48 or stride-60 "
+                : "CNA SDLGPU: pbr3d requires a stride-48 or stride-60 "
                   "(VertexPositionNormalTangentTexture, optionally with COLOR_0) vertex buffer");
 
         EnsureDefaultPbrTextures();
@@ -8229,7 +8229,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         framePending_ = true;
     }
 
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
     std::size_t SdlGpuRenderer::GetCompiledEffectPipelineCacheSizeEXT() const
     {
         std::size_t count = 0;
@@ -8243,7 +8243,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (programIdentity == 0)
             throw std::invalid_argument(
-                "CNA SDL_GPU: cannot retain a zero compiled-program identity.");
+                "CNA SDLGPU: cannot retain a zero compiled-program identity.");
 
         const auto existing = compiledProgramLeases_.find(programIdentity);
         if (existing != compiledProgramLeases_.end())
@@ -8346,7 +8346,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_GPUGraphicsPipeline* pipeline =
             CreateGraphicsPipeline(pipelineInfo,
-                                   "CNA SDL_GPU: failed to create compiled-effect pipeline: ");
+                                   "CNA SDLGPU: failed to create compiled-effect pipeline: ");
         return CacheGraphicsPipeline(programPipelines, key, pipeline);
     }
 
@@ -8375,7 +8375,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (binding.programIdentity == 0)
         {
             throw std::runtime_error(
-                "CNA SDL_GPU: linked compiled effect has no stable program identity.");
+                "CNA SDLGPU: linked compiled effect has no stable program identity.");
         }
         binding.programLease = effect.RetainProgramIdentityEXT(binding.programIdentity);
         binding.pixelUsesLodBias = effect.LinkedPixelShaderUsesLodBiasEXT();
@@ -8394,8 +8394,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         effect.CaptureUniformSnapshotEXT(binding.vertexUniformBytes, binding.pixelUniformBytes);
 
         // MOJOSHADER_sdlCompileShader (mojoshader_sdlgpu.c) always reports at least one sampler
-        // slot for the compiled SDL_GPU shader module -- its own maxSamplerIndex starts at 0, not
-        // -1, so a shader with zero reflected samplers still gets num_samplers=1 -- and SDL_GPU's
+        // slot for the compiled SDLGPU shader module -- its own maxSamplerIndex starts at 0, not
+        // -1, so a shader with zero reflected samplers still gets num_samplers=1 -- and SDLGPU's
         // own debug validation checks that declared count, not MojoShader's reflected usage. Every
         // slot in [0, GetSamplerSlots) therefore needs a real binding regardless of whether this
         // pass's reflection lists one for it; an unlisted slot gets this renderer's default white
@@ -8476,7 +8476,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                     if (reflectedSampler->type != MOJOSHADER_SAMPLER_2D)
                     {
                         throw System::NotSupportedException(
-                            "CNA SDL_GPU: SpriteBatch texture slot 0 is Texture2D, but the compiled "
+                            "CNA SDLGPU: SpriteBatch texture slot 0 is Texture2D, but the compiled "
                             "effect declares a different sampler dimension there.");
                     }
                     samplerBinding.texture = *spriteTextureOverride;
@@ -8498,11 +8498,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                     const char* name = reflectedSampler->name != nullptr ? reflectedSampler->name
                                                                           : "<unnamed>";
                     throw std::runtime_error(
-                        std::string("CNA SDL_GPU: this compiled effect's ") + stageName + " shader samples '" +
+                        std::string("CNA SDLGPU: this compiled effect's ") + stageName + " shader samples '" +
                         name + "', but no texture is bound to it.");
                 }
                 // FX-110: the shader's declared sampler dimension decides which resolver
-                // the bound texture has to go through, and the two must agree. SDL_GPU binds a texture
+                // the bound texture has to go through, and the two must agree. SDLGPU binds a texture
                 // by handle rather than by target, so a cube bound where the shader declared sampler2D
                 // is a validation error at best and a wrongly-sampled image at worst -- named here
                 // instead of either.
@@ -8527,7 +8527,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 if (reflectedSampler->type != boundKind)
                 {
                     throw System::NotSupportedException(
-                        std::string("CNA SDL_GPU: this compiled effect's ") + stageName + " shader declares " +
+                        std::string("CNA SDLGPU: this compiled effect's ") + stageName + " shader declares " +
                         kindName(reflectedSampler->type) + " at slot " + std::to_string(slot) +
                         ", but the texture bound there is a " + kindName(boundKind) +
                         ". The dimensions must match.");
@@ -8606,7 +8606,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (sdlGpuEffect == nullptr)
         {
             throw std::runtime_error(
-                "CNA SDL_GPU: the applied compiled effect was not created by this renderer.");
+                "CNA SDLGPU: the applied compiled effect was not created by this renderer.");
         }
 
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
@@ -8621,7 +8621,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (elements == nullptr || elements->empty())
             {
                 throw System::NotSupportedException(
-                    "CNA SDL_GPU: a compiled-effect draw needs every consumed vertex buffer's "
+                    "CNA SDLGPU: a compiled-effect draw needs every consumed vertex buffer's "
                     "own VertexDeclaration; this renderer does not infer one from stride for "
                     "this route.");
             }
@@ -8646,7 +8646,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 command.binding.vertexStreamSourceIndices[nativeSlot];
             if (sourceIndex >= streams.count || streams.sources[sourceIndex].buffer == nullptr)
                 throw std::runtime_error(
-                    "CNA SDL_GPU: a compiled-effect draw lost a consumed vertex stream");
+                    "CNA SDLGPU: a compiled-effect draw lost a consumed vertex stream");
 
             const StockVertexStreamSourceEXT& source = streams.sources[sourceIndex];
             const auto& shadow = source.buffer->ShadowData();
@@ -8669,7 +8669,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 {
                     throw System::ArgumentOutOfRangeException(
                         "instanceCount", std::to_string(instanceCount),
-                        "CNA SDL_GPU: a compiled-effect per-instance stream does not contain "
+                        "CNA SDLGPU: a compiled-effect per-instance stream does not contain "
                         "the requested record.");
                 }
                 destination->resize(static_cast<std::size_t>(command.instanceCount) * stride);
@@ -8692,7 +8692,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             {
                 throw System::ArgumentOutOfRangeException(
                     "vertexOffset", std::to_string(source.vertexOffset),
-                    "CNA SDL_GPU: a compiled-effect per-vertex stream offset leaves its buffer.");
+                    "CNA SDLGPU: a compiled-effect per-vertex stream offset leaves its buffer.");
             }
             const std::size_t byteOffset = static_cast<std::size_t>(firstVertex) * stride;
             if (byteOffset <= shadow.size())
@@ -8844,7 +8844,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_DrawGPUPrimitives(pass, command.vertexCount, command.instanceCount, 0, 0);
         }
     }
-#endif  // CNA_SDL_GPU_COMPILED_EFFECTS
+#endif  // CNA_SDLGPU_COMPILED_EFFECTS
 
     void SdlGpuRenderer::IssueAlphaTestDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                                                    const AlphaTestDrawCommand& command, SDL_GPUTextureFormat colorFormat,
@@ -9265,13 +9265,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (count != layout.streamCount)
         {
             throw std::runtime_error(
-                "CNA SDL_GPU: a stock draw is missing one of its captured vertex streams");
+                "CNA SDLGPU: a stock draw is missing one of its captured vertex streams");
         }
         if (layout.usesNeutralRecord)
         {
             if (neutralVertexBuffer == nullptr)
                 throw std::runtime_error(
-                    "CNA SDL_GPU: a stock draw needs the neutral vertex record, but it was not uploaded");
+                    "CNA SDLGPU: a stock draw needs the neutral vertex record, but it was not uploaded");
             bindings[count++].buffer = neutralVertexBuffer;
         }
         SDL_BindGPUVertexBuffers(pass, 0, bindings.data(), count);
@@ -9289,7 +9289,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             coloredDrawCommands_.empty() && texturedDrawCommands_.empty() && litTexturedDrawCommands_.empty() &&
             alphaTestDrawCommands_.empty() && dualTextureDrawCommands_.empty() && envMapDrawCommands_.empty() &&
             skinnedDrawCommands_.empty() && pbrDrawCommands_.empty()
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
             && compiledEffectDrawCommands_.empty()
 #endif
             )
@@ -9346,7 +9346,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                     slot.capacity = slot.buffer != nullptr ? wanted : 0;
                     if (slot.buffer == nullptr)
                         throw std::runtime_error(std::string(
-                            "CNA SDL_GPU: failed to create scene draw transfer buffer: ") + SDL_GetError());
+                            "CNA SDLGPU: failed to create scene draw transfer buffer: ") + SDL_GetError());
                 }
             }
             item.chunk = chunk;
@@ -9521,7 +9521,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (command.skinned)
                 command.uploadedBoneTexture = uploadBonePalette(command.boneUniforms);
         }
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         for (CompiledEffectDrawCommand& command : compiledEffectDrawCommands_)
         {
             if (command.vertexCount == 0 || !uploadVertices(command))
@@ -9540,7 +9540,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             auto* mapped = static_cast<std::uint8_t*>(SDL_MapGPUTransferBuffer(device_, transfer, true));
             if (mapped == nullptr)
                 throw std::runtime_error(std::string(
-                    "CNA SDL_GPU: failed to map scene draw transfer buffer: ") + SDL_GetError());
+                    "CNA SDLGPU: failed to map scene draw transfer buffer: ") + SDL_GetError());
             for (const StagedUpload& item : staged)
                 if (item.chunk == chunk)
                     std::memcpy(mapped + item.offset, item.bytes, item.sizeBytes);
@@ -9600,7 +9600,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             buffer = SDL_CreateGPUBuffer(device_, &bufferInfo);
             if (buffer == nullptr)
                 throw std::runtime_error(std::string(
-                    "CNA SDL_GPU: failed to create scene draw buffer: ") + SDL_GetError());
+                    "CNA SDLGPU: failed to create scene draw buffer: ") + SDL_GetError());
         }
         sceneBufferInUseEXT_[buffer] = key;
         return buffer;
@@ -9621,7 +9621,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                     SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_SAMPLER))
             {
                 throw std::runtime_error(
-                    "CNA SDL_GPU: the active driver cannot sample the RGBA32F bone palette");
+                    "CNA SDLGPU: the active driver cannot sample the RGBA32F bone palette");
             }
             SDL_GPUTextureCreateInfo textureInfo{};
             textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
@@ -9635,7 +9635,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             texture = SDL_CreateGPUTexture(device_, &textureInfo);
             if (texture == nullptr)
                 throw std::runtime_error(std::string(
-                    "CNA SDL_GPU: failed to create bone-palette texture: ") + SDL_GetError());
+                    "CNA SDLGPU: failed to create bone-palette texture: ") + SDL_GetError());
         }
         bonePaletteInUseEXT_.push_back(texture);
         return texture;
@@ -9980,7 +9980,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                      depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
                 }
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
                 case DrawKind::CompiledEffect:
                 {
                     const CompiledEffectDrawCommand& c = compiledEffectDrawCommands_[ref.index];
@@ -9989,7 +9989,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                         // A compiled vertex shader computes its own clip position, so XNA's integer
                         // pixel centres (ApplyXnaPixelCenter) move the viewport instead, by the
                         // same 63/128 px, for filled primitives at any sample count -- FNA3D's
-                        // SDL_GPU driver's correction for the same MojoShader output.
+                        // SDLGPU driver's correction for the same MojoShader output.
                         const bool filled = c.topology == SDL_GPU_PRIMITIVETYPE_TRIANGLELIST ||
                                             c.topology == SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
                         if (filled)
@@ -10121,7 +10121,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             releaseTexture(command.uploadedBoneTexture);
         }
         if (clearCommands) pbrDrawCommands_.clear();
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         for (CompiledEffectDrawCommand& command : compiledEffectDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
@@ -10151,7 +10151,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 if (streams.count >= streams.declarations.size())
                 {
                     throw System::NotSupportedException(
-                        "CNA SDL_GPU: this stock draw uses more than sixteen vertex streams");
+                        "CNA SDLGPU: this stock draw uses more than sixteen vertex streams");
                 }
 
                 auto& declaration = streams.declarations[streams.count];
@@ -10302,7 +10302,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
             sdlGpuVb.Declaration(), static_cast<int>(sdlGpuVb.Stride()),
             CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt,
-            "SDL_GPU", route);
+            "SDLGPU", route);
     }
 
     SdlGpuRenderer::StockVertexShapeEXT SdlGpuRenderer::SelectStockVertexShapeEXT(
@@ -10322,7 +10322,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             !AnyStreamNamesSemanticEXT(streams, streamCount, VertexElementUsage::Position, 0))
         {
             throw System::NotSupportedException(
-                "CNA SDL_GPU: stock effects require POSITION0, but this VertexDeclaration does not declare it");
+                "CNA SDLGPU: stock effects require POSITION0, but this VertexDeclaration does not declare it");
         }
 
         const bool hasNormal = haveDeclaration
@@ -10433,14 +10433,14 @@ namespace CNA::Internal::Renderers::SdlGpu
                     streams, streamCount, VertexElementUsage::Position, 0))
             {
                 throw System::NotSupportedException(
-                    "CNA SDL_GPU: stock effects require POSITION0, but this VertexDeclaration does not declare it");
+                    "CNA SDLGPU: stock effects require POSITION0, but this VertexDeclaration does not declare it");
             }
             for (std::size_t i = 0; i < streamCount; ++i)
             {
                 if (streams[i].elements != nullptr)
                 {
                     RequireDeclarationMatchesStockProgram(
-                        *streams[i].elements, inputs, inputCount, "SDL_GPU", programName);
+                        *streams[i].elements, inputs, inputCount, "SDLGPU", programName);
                 }
             }
             return ResolveStockVertexLayoutAcrossStreamsEXT(
@@ -10451,7 +10451,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             static_cast<int>(vb.Stride()), UnlistedStrideLayout::RendererRefusesIt);
         if (!inferred.known)
             throw System::NotSupportedException(
-                "CNA SDL_GPU: no VertexDeclaration was propagated and this vertex stride has no canonical stock layout");
+                "CNA SDLGPU: no VertexDeclaration was propagated and this vertex stride has no canonical stock layout");
         std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> synthesized;
         synthesized.reserve(inferred.count);
         for (std::size_t i = 0; i < inferred.count; ++i)
@@ -10484,7 +10484,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 if (column >= 4 || element.getVertexElementFormatProperty() != VertexElementFormat::Vector4)
                 {
                     throw System::NotSupportedException(
-                        "CNA SDL_GPU: instanced stock effects require exactly four per-instance Vector4 "
+                        "CNA SDLGPU: instanced stock effects require exactly four per-instance Vector4 "
                         "world-matrix columns");
                 }
                 columns.source[static_cast<std::size_t>(column)] = source;
@@ -10495,7 +10495,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (column != 4)
         {
             throw System::NotSupportedException(
-                "CNA SDL_GPU: instanced stock effects require exactly four per-instance Vector4 "
+                "CNA SDLGPU: instanced stock effects require exactly four per-instance Vector4 "
                 "world-matrix columns");
         }
         return columns;
@@ -10525,7 +10525,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
         if (perVertexCount == 0)
             throw System::NotSupportedException(
-                "CNA SDL_GPU: instanced stock effects require POSITION0 in a per-vertex stream");
+                "CNA SDLGPU: instanced stock effects require POSITION0 in a per-vertex stream");
 
         ResolvedStockVertexLayoutEXT layout = perVertex;
         for (std::size_t i = 0; i < layout.streamCount; ++i)
@@ -10533,7 +10533,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             const auto perVertexIndex = static_cast<std::size_t>(layout.streams[i].sourceIndex);
             if (perVertexIndex >= perVertexCount)
                 throw std::logic_error(
-                    "CNA SDL_GPU: a resolved stock stream is not one of the draw's per-vertex streams");
+                    "CNA SDLGPU: a resolved stock stream is not one of the draw's per-vertex streams");
             layout.streams[i].sourceIndex = static_cast<int>(fullIndexOfPerVertex[perVertexIndex]);
         }
 
@@ -10542,7 +10542,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             if (layout.count >= layout.attributes.size())
                 throw System::NotSupportedException(
-                    "CNA SDL_GPU: this stock effect's vertex inputs leave no room for the "
+                    "CNA SDLGPU: this stock effect's vertex inputs leave no room for the "
                     "per-instance world matrix");
             const std::size_t source = columns.source[column];
             int streamIndex = -1;
@@ -10598,7 +10598,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             if (source != columns.source[0])
                 throw System::NotSupportedException(
-                    "CNA SDL_GPU: SkinnedEffect and PbrEffect need all four per-instance "
+                    "CNA SDLGPU: SkinnedEffect and PbrEffect need all four per-instance "
                     "world-matrix columns in one vertex stream");
         }
 
@@ -10632,7 +10632,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             return;
         if (instance.uploadedBuffer == nullptr)
             throw std::runtime_error(
-                "CNA SDL_GPU: an instanced draw's per-instance matrices were not uploaded");
+                "CNA SDLGPU: an instanced draw's per-instance matrices were not uploaded");
         SDL_GPUBufferBinding binding{};
         binding.buffer = instance.uploadedBuffer;
         SDL_BindGPUVertexBuffers(pass, 1, &binding, 1);
@@ -10700,7 +10700,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 case Kind::Count:
                     break;
             }
-            throw std::logic_error("CNA SDL_GPU: unknown instanced stock vertex module");
+            throw std::logic_error("CNA SDLGPU: unknown instanced stock vertex module");
         }();
 
         SDL_GPUShaderCreateInfo info{};
@@ -10712,7 +10712,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         info.num_samplers = module.samplers;
         info.num_uniform_buffers = module.uniformBuffers;
         shader = CreateRoutedSpirvShaderEXT(
-            info, "CNA SDL_GPU: failed to create an instanced stock vertex shader: ");
+            info, "CNA SDLGPU: failed to create an instanced stock vertex shader: ");
         NotifyResourceEvent(SdlGpuResourceKindEXT::Shader, SdlGpuResourceEventEXT::Acquired);
         return shader;
     }
@@ -10720,7 +10720,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     SDL_GPUShader* SdlGpuRenderer::CreateRoutedSpirvShaderEXT(
         const SDL_GPUShaderCreateInfo& createInfo, const char* diagnostic)
     {
-#if defined(CNA_SDL_GPU_SHADERCROSS)
+#if defined(CNA_SDLGPU_SHADERCROSS)
         const SDL_GPUShaderFormat shaderCrossFormats =
             shaderCrossAcquired_ ? SDL_ShaderCross_GetSPIRVShaderFormats()
                                  : static_cast<SDL_GPUShaderFormat>(0);
@@ -10748,7 +10748,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             const auto* elements = streams.declarations[i].elements;
             if (elements == nullptr || elements->empty())
                 throw System::NotSupportedException(
-                    "CNA SDL_GPU: a 3D ShaderEffect draw needs the VertexDeclaration of its vertex "
+                    "CNA SDLGPU: a 3D ShaderEffect draw needs the VertexDeclaration of its vertex "
                     "buffer, and none was propagated");
         }
 
@@ -10797,7 +10797,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 });
             if (!supplied)
                 throw System::NotSupportedException(
-                    "CNA SDL_GPU: this ShaderEffect's vertex stage consumes location "
+                    "CNA SDLGPU: this ShaderEffect's vertex stage consumes location "
                     + std::to_string(location)
                     + ", but the active VertexDeclaration does not supply it");
         }
@@ -10822,7 +10822,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             const StockVertexStreamSourceEXT& source = streams.sources[stream];
             if (source.buffer == nullptr)
-                throw std::runtime_error("CNA SDL_GPU: a 3D ShaderEffect draw lost a vertex stream");
+                throw std::runtime_error("CNA SDLGPU: a 3D ShaderEffect draw lost a vertex stream");
             const std::vector<std::uint8_t>& shadow = source.buffer->ShadowData();
             const std::size_t stride = static_cast<std::size_t>(std::max(1, source.stride));
             std::vector<std::uint8_t>* destination = &command.vertexData;
@@ -10840,7 +10840,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 if (source.vertexOffset < 0 || lastRecord >= source.vertexCount)
                     throw System::ArgumentOutOfRangeException(
                         "instanceCount", std::to_string(instanceCount),
-                        "CNA SDL_GPU: a 3D ShaderEffect per-instance stream does not contain "
+                        "CNA SDLGPU: a 3D ShaderEffect per-instance stream does not contain "
                         "the requested record.");
                 destination->resize(static_cast<std::size_t>(command.instanceCount) * stride);
                 for (Uint32 instance = 0; instance < command.instanceCount; ++instance)
@@ -10973,7 +10973,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             if (stream.uploadedBuffer == nullptr || bindingCount >= vbBindings.size())
                 throw std::runtime_error(
-                    "CNA SDL_GPU: a 3D ShaderEffect draw is missing one of its vertex streams");
+                    "CNA SDLGPU: a 3D ShaderEffect draw is missing one of its vertex streams");
             vbBindings[bindingCount++].buffer = stream.uploadedBuffer;
         }
         SDL_BindGPUVertexBuffers(pass, 0, vbBindings.data(), bindingCount);
@@ -11033,7 +11033,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             {
                 if (streams.count != 1)
                     throw System::NotSupportedException(
-                        "CNA SDL_GPU: PbrEffect requires one per-vertex stream");
+                        "CNA SDLGPU: PbrEffect requires one per-vertex stream");
                 QueuePbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);
                 return;
             }
@@ -11047,7 +11047,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 return;
             }
             throw System::NotSupportedException(
-                "CNA SDL_GPU: the selected stock effect cannot be matched to this VertexDeclaration");
+                "CNA SDLGPU: the selected stock effect cannot be matched to this VertexDeclaration");
         }
 
         auto layout = ResolveStockVertexLayoutForDrawEXT(
@@ -11135,7 +11135,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Apple M4 AM4-183: a window SDL_gpu cannot issue draws nothing.
         if (!BufferedDrawWindowIsServableEXT(vb, nullptr, primitive, primitiveCount, params))
             return;
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         // FX-071: a compiled effect's vertex layout is arbitrary and validated against
         // the applied pass's own shader reflection (BuildCompiledEffectVertexAttributes), not
         // against the fixed-stride table RequireFaithfulDeclarationEXT enforces below -- so this
@@ -11158,7 +11158,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Apple M4 AM4-183: a window SDL_gpu cannot issue draws nothing.
         if (!BufferedDrawWindowIsServableEXT(vb, &ib, primitive, primitiveCount, params))
             return;
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         // FX-071: see DrawPrimitivesEx's identical guard for why this dispatches before
         // RequireFaithfulDeclarationEXT rather than after.
         if (params.compiledEffectRuntime != nullptr)
@@ -11180,7 +11180,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Apple M4 AM4-183: a window SDL_gpu cannot issue draws nothing.
         if (!BufferedDrawWindowIsServableEXT(vb, &ib, primitive, primitiveCount, params))
             return;
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         if (params.compiledEffectRuntime != nullptr)
         {
             QueueCompiledEffectDraw(
@@ -11195,7 +11195,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             auto* effect = dynamic_cast<SdlGpuEffectRenderer*>(params.customEffectRenderer);
             if (effect == nullptr || !effect->IsValid())
                 throw System::NotSupportedException(
-                    "CNA SDL_GPU: this instanced draw names a custom effect that did not compile");
+                    "CNA SDLGPU: this instanced draw names a custom effect that did not compile");
             QueueCustomEffect3DDrawEXT(vb, &ib, world, view, projection, primitive, primitiveCount,
                                        params, *effect, instanceCount);
             return;
@@ -11233,7 +11233,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 {
                     throw System::ArgumentOutOfRangeException(
                         "vertexOffset", std::to_string(source.vertexOffset),
-                        "CNA SDL_GPU: the per-instance stream bound to slot " +
+                        "CNA SDLGPU: the per-instance stream bound to slot " +
                         std::to_string(source.slot) + " starts before its buffer.");
                 }
             }
@@ -11243,7 +11243,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 // binding offset is where the host copy starts, so it must lie inside the buffer.
                 throw System::ArgumentOutOfRangeException(
                     "vertexOffset", std::to_string(source.vertexOffset),
-                    "CNA SDL_GPU: a per-vertex binding offset leaves its buffer.");
+                    "CNA SDLGPU: a per-vertex binding offset leaves its buffer.");
             }
         }
 
@@ -11317,9 +11317,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (const auto* target = dynamic_cast<const SdlGpuRenderTargetRenderer*>(texture))
             return target->Sampled();
         throw std::invalid_argument(
-            std::string("CNA SDL_GPU: ") + usage +
-            " received a texture this renderer cannot sample -- it is neither an SDL_GPU Texture2D "
-            "nor an SDL_GPU RenderTarget2D (a resource from another graphics renderer?)");
+            std::string("CNA SDLGPU: ") + usage +
+            " received a texture this renderer cannot sample -- it is neither an SDLGPU Texture2D "
+            "nor an SDLGPU RenderTarget2D (a resource from another graphics renderer?)");
     }
 
     SdlGpuSampledTextureEXT ResolveSampledCubeEXT(const ITextureCubeRenderer* texture, const char* usage)
@@ -11331,9 +11331,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (const auto* target = dynamic_cast<const SdlGpuRenderTargetCubeRenderer*>(texture))
             return target->Sampled();
         throw std::invalid_argument(
-            std::string("CNA SDL_GPU: ") + usage +
-            " received a cube texture this renderer cannot sample -- it is neither an SDL_GPU "
-            "TextureCube nor an SDL_GPU RenderTargetCube (a resource from another graphics renderer?)");
+            std::string("CNA SDLGPU: ") + usage +
+            " received a cube texture this renderer cannot sample -- it is neither an SDLGPU "
+            "TextureCube nor an SDLGPU RenderTargetCube (a resource from another graphics renderer?)");
     }
 
     SdlGpuSampledTextureEXT ResolveSampledVolumeEXT(
@@ -11344,7 +11344,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (const auto* plain = dynamic_cast<const SdlGpuTexture3DRenderer*>(texture))
             return plain->Sampled();
         throw std::invalid_argument(
-            std::string("CNA SDL_GPU: ") + usage +
+            std::string("CNA SDLGPU: ") + usage +
             " received a volume texture this renderer cannot sample (a resource from another "
             "graphics renderer?)");
     }
@@ -11361,7 +11361,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // reported as an out-of-memory device error rather than as the invalid request it is.
         if (width_ <= 0 || height_ <= 0)
             throw std::invalid_argument(
-                "CNA SDL_GPU: Texture2D dimensions must be positive (got " +
+                "CNA SDLGPU: Texture2D dimensions must be positive (got " +
                 std::to_string(width_) + "x" + std::to_string(height_) + ")");
 
         // The declared chain, from the ONE authority on it: ImageData::mipLevels, which
@@ -11375,7 +11375,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // sample correctly while reporting a LevelCount the resource does not have.
         if (requestedLevels > maxLevels)
             throw std::invalid_argument(
-                "CNA SDL_GPU: Texture2D requested " + std::to_string(requestedLevels) +
+                "CNA SDLGPU: Texture2D requested " + std::to_string(requestedLevels) +
                 " mip levels but " + std::to_string(width_) + "x" + std::to_string(height_) +
                 " has at most " + std::to_string(maxLevels));
         levelCount_ = requestedLevels;
@@ -11384,7 +11384,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         logicalBlockBytes_ = LogicalTextureBlockBytes(format);
         if (logicalBlockBytes_ == 0)
             throw std::invalid_argument(
-                "CNA SDL_GPU: Texture2D received unsupported SurfaceFormat ordinal " +
+                "CNA SDLGPU: Texture2D received unsupported SurfaceFormat ordinal " +
                 std::to_string(surfaceFormat_));
         compressed_ = IsClassicDxtFormat(format);
         if (compressed_)
@@ -11406,7 +11406,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // exact native representation.
         if (!preferredSupported && TextureFormatNeedsExactStorage(format))
             throw System::NotSupportedException(
-                "CNA SDL_GPU: this device has no " + std::to_string(static_cast<int>(preferredFormat)) +
+                "CNA SDLGPU: this device has no " + std::to_string(static_cast<int>(preferredFormat)) +
                 " sampled-texture storage for SurfaceFormat ordinal " +
                 std::to_string(surfaceFormat_) + ", and it has no lossless RGBA8 stand-in");
         nativeFormat_ = preferredSupported
@@ -11422,7 +11422,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                   static_cast<std::size_t>(logicalBlockBytes_);
         if (data.pixels.size() < logicalLevelZeroBytes)
             throw std::invalid_argument(
-                "CNA SDL_GPU: Texture2D pixel buffer is smaller than the requested format's "
+                "CNA SDLGPU: Texture2D pixel buffer is smaller than the requested format's "
                 "level-zero storage");
 
         SDL_GPUTextureCreateInfo createInfo{};
@@ -11437,7 +11437,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         state_->texture = SDL_CreateGPUTexture(owner_->Device(), &createInfo);
         if (state_->texture == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create Texture2D: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: failed to create Texture2D: ") + SDL_GetError());
 
         if (TextureTraceEnabled())
         {
@@ -11517,20 +11517,20 @@ namespace CNA::Internal::Renderers::SdlGpu
         const int expectedH = std::max(1, height_ >> level);
         if (levelW != expectedW || levelH != expectedH)
             throw std::invalid_argument(
-                "CNA SDL_GPU: Texture2D level " + std::to_string(level) + " of a " +
+                "CNA SDLGPU: Texture2D level " + std::to_string(level) + " of a " +
                 std::to_string(width_) + "x" + std::to_string(height_) + " texture is " +
                 std::to_string(expectedW) + "x" + std::to_string(expectedH) + ", not " +
                 std::to_string(levelW) + "x" + std::to_string(levelH));
 
         if (pixels == nullptr)
-            throw std::invalid_argument("CNA SDL_GPU: Texture2D upload source cannot be null");
+            throw std::invalid_argument("CNA SDLGPU: Texture2D upload source cannot be null");
 
         const int logicalRows = compressed_ ? (levelH + 3) / 4 : levelH;
         const int logicalRowBytes = compressed_
             ? ((levelW + 3) / 4) * logicalBlockBytes_
             : levelW * logicalBlockBytes_;
         if (stride < logicalRowBytes)
-            throw std::invalid_argument("CNA SDL_GPU: Texture2D upload stride is too small");
+            throw std::invalid_argument("CNA SDLGPU: Texture2D upload stride is too small");
 
         std::vector<std::uint8_t> tightLogical;
         const std::uint8_t* logicalPixels = pixels;
@@ -11576,7 +11576,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             nativeFormat_, static_cast<Uint32>(levelW), static_cast<Uint32>(levelH), 1);
         if (uploadBytes != expectedUploadBytes)
             throw std::runtime_error(
-                "CNA SDL_GPU: Texture2D converted upload size does not match SDL_gpu's format size");
+                "CNA SDLGPU: Texture2D converted upload size does not match SDL_gpu's format size");
 
         owner_->SubmitQueuedSamplersEXT(state_);
         SDL_GPUDevice* device = owner_->Device();
@@ -11587,13 +11587,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         transferInfo.size = sizeBytes;
         SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
         if (transferBuffer == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create texture transfer buffer: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: failed to create texture transfer buffer: ") + SDL_GetError());
 
         void* mapped = SDL_MapGPUTransferBuffer(device, transferBuffer, false);
         if (mapped == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to map texture transfer buffer: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: failed to map texture transfer buffer: ") + SDL_GetError());
         }
         std::memcpy(mapped, uploadPixels, sizeBytes);
         SDL_UnmapGPUTransferBuffer(device, transferBuffer);
@@ -11602,7 +11602,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (cmd == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: SDL_AcquireGPUCommandBuffer (texture upload) failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: SDL_AcquireGPUCommandBuffer (texture upload) failed: ") + SDL_GetError());
         }
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
         SDL_GPUTextureTransferInfo source{};
@@ -11630,7 +11630,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (!SDL_SubmitGPUCommandBuffer(cmd))
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: SDL_SubmitGPUCommandBuffer (texture upload) failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: SDL_SubmitGPUCommandBuffer (texture upload) failed: ") + SDL_GetError());
         }
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
 
@@ -11715,7 +11715,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 SDL_GPU_TEXTUREUSAGE_SAMPLER))
         {
             throw std::invalid_argument(
-                "CNA SDL_GPU: Texture3D received unsupported SurfaceFormat ordinal " +
+                "CNA SDLGPU: Texture3D received unsupported SurfaceFormat ordinal " +
                 std::to_string(surfaceFormat_));
         }
         bytesPerTexel_ = formatInfo.bytesPerPixel;
@@ -11739,7 +11739,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         state_->texture = SDL_CreateGPUTexture(owner_->Device(), &createInfo);
         if (state_->texture == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create Texture3D: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: failed to create Texture3D: ") + SDL_GetError());
     }
 
     SdlGpuTexture3DRenderer::~SdlGpuTexture3DRenderer() = default;
@@ -11768,13 +11768,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         transferInfo.size = sizeBytes;
         SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
         if (transferBuffer == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::SetData: failed to create transfer buffer: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: Texture3D::SetData: failed to create transfer buffer: ") + SDL_GetError());
 
         void* mapped = SDL_MapGPUTransferBuffer(device, transferBuffer, false);
         if (mapped == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::SetData: failed to map transfer buffer: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: Texture3D::SetData: failed to map transfer buffer: ") + SDL_GetError());
         }
         std::memcpy(mapped, data, sizeBytes);
         SDL_UnmapGPUTransferBuffer(device, transferBuffer);
@@ -11783,7 +11783,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (cmd == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::SetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: Texture3D::SetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
         }
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
         SDL_GPUTextureTransferInfo source{};
@@ -11812,7 +11812,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (!SDL_SubmitGPUCommandBuffer(cmd))
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::SetData: SDL_SubmitGPUCommandBuffer failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: Texture3D::SetData: SDL_SubmitGPUCommandBuffer failed: ") + SDL_GetError());
         }
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
         return true;
@@ -11828,7 +11828,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) *
                                  static_cast<Uint32>(depth) * bytesPerTexel_;
         if (static_cast<Uint32>(dataLength) < sizeBytes)
-            throw std::out_of_range("CNA SDL_GPU: Texture3D::GetData: dataLength too small for the requested region");
+            throw std::out_of_range("CNA SDLGPU: Texture3D::GetData: dataLength too small for the requested region");
 
         SDL_GPUDevice* device = owner_->Device();
         SDL_GPUTransferBufferCreateInfo transferInfo{};
@@ -11836,13 +11836,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         transferInfo.size = sizeBytes;
         SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
         if (transferBuffer == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::GetData: failed to create transfer buffer: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: Texture3D::GetData: failed to create transfer buffer: ") + SDL_GetError());
 
         SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
         if (cmd == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::GetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: Texture3D::GetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
         }
 
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
@@ -11866,7 +11866,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (fence == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::GetData: SDL_SubmitGPUCommandBufferAndAcquireFence failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: Texture3D::GetData: SDL_SubmitGPUCommandBufferAndAcquireFence failed: ") + SDL_GetError());
         }
         SDL_WaitForGPUFences(device, true, &fence, 1);
         SDL_ReleaseGPUFence(device, fence);
@@ -11875,7 +11875,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (mapped == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::GetData: SDL_MapGPUTransferBuffer failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: Texture3D::GetData: SDL_MapGPUTransferBuffer failed: ") + SDL_GetError());
         }
         std::memcpy(data, mapped, sizeBytes);
         SDL_UnmapGPUTransferBuffer(device, transferBuffer);
@@ -11899,7 +11899,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if ((!compressed_ && format != SurfaceFormat::Color) || blockBytes_ == 0)
         {
             throw std::invalid_argument(
-                "CNA SDL_GPU: TextureCube received unsupported SurfaceFormat ordinal " +
+                "CNA SDLGPU: TextureCube received unsupported SurfaceFormat ordinal " +
                 std::to_string(surfaceFormat_));
         }
 
@@ -11944,7 +11944,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         state_->texture = SDL_CreateGPUTexture(owner_->Device(), &createInfo);
         if (state_->texture == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create TextureCube: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: failed to create TextureCube: ") + SDL_GetError());
     }
 
     SdlGpuTextureCubeRenderer::~SdlGpuTextureCubeRenderer() = default;
@@ -11968,13 +11968,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         transferInfo.size = sizeBytes;
         SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
         if (transferBuffer == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: TextureCube::SetData: failed to create transfer buffer: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: TextureCube::SetData: failed to create transfer buffer: ") + SDL_GetError());
 
         void* mapped = SDL_MapGPUTransferBuffer(device, transferBuffer, false);
         if (mapped == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: TextureCube::SetData: failed to map transfer buffer: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: TextureCube::SetData: failed to map transfer buffer: ") + SDL_GetError());
         }
         std::memcpy(mapped, data, sizeBytes);
         SDL_UnmapGPUTransferBuffer(device, transferBuffer);
@@ -11983,7 +11983,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (cmd == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: TextureCube::SetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: TextureCube::SetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
         }
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
         SDL_GPUTextureTransferInfo source{};
@@ -12008,7 +12008,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (!SDL_SubmitGPUCommandBuffer(cmd))
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: TextureCube::SetData: SDL_SubmitGPUCommandBuffer failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: TextureCube::SetData: SDL_SubmitGPUCommandBuffer failed: ") + SDL_GetError());
         }
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
         return true;
@@ -12037,7 +12037,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (uploadByteCount != expectedBytes)
         {
             throw std::runtime_error(
-                "CNA SDL_GPU: TextureCube converted upload size does not match SDL_gpu's "
+                "CNA SDLGPU: TextureCube converted upload size does not match SDL_gpu's "
                 "format size");
         }
 
@@ -12051,7 +12051,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (transferBuffer == nullptr)
         {
             throw std::runtime_error(
-                std::string("CNA SDL_GPU: TextureCube compressed upload transfer allocation "
+                std::string("CNA SDLGPU: TextureCube compressed upload transfer allocation "
                             "failed: ") + SDL_GetError());
         }
 
@@ -12060,7 +12060,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
             throw std::runtime_error(
-                std::string("CNA SDL_GPU: TextureCube compressed upload map failed: ") +
+                std::string("CNA SDLGPU: TextureCube compressed upload map failed: ") +
                 SDL_GetError());
         }
         std::memcpy(mapped, uploadBytes, expectedBytes);
@@ -12071,7 +12071,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
             throw std::runtime_error(
-                std::string("CNA SDL_GPU: TextureCube compressed upload command buffer failed: ") +
+                std::string("CNA SDLGPU: TextureCube compressed upload command buffer failed: ") +
                 SDL_GetError());
         }
 
@@ -12098,7 +12098,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
             throw std::runtime_error(
-                std::string("CNA SDL_GPU: TextureCube compressed upload submit failed: ") +
+                std::string("CNA SDLGPU: TextureCube compressed upload submit failed: ") +
                 SDL_GetError());
         }
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
@@ -12218,7 +12218,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
         if (static_cast<Uint32>(dataLength) < sizeBytes)
-            throw std::out_of_range("CNA SDL_GPU: TextureCube::GetData: dataLength too small for the requested region");
+            throw std::out_of_range("CNA SDLGPU: TextureCube::GetData: dataLength too small for the requested region");
 
         if (compressed_)
         {
@@ -12247,13 +12247,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         transferInfo.size = sizeBytes;
         SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
         if (transferBuffer == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: TextureCube::GetData: failed to create transfer buffer: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: TextureCube::GetData: failed to create transfer buffer: ") + SDL_GetError());
 
         SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
         if (cmd == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: TextureCube::GetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: TextureCube::GetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
         }
 
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
@@ -12277,7 +12277,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (fence == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: TextureCube::GetData: SDL_SubmitGPUCommandBufferAndAcquireFence failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: TextureCube::GetData: SDL_SubmitGPUCommandBufferAndAcquireFence failed: ") + SDL_GetError());
         }
         SDL_WaitForGPUFences(device, true, &fence, 1);
         SDL_ReleaseGPUFence(device, fence);
@@ -12286,7 +12286,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (mapped == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: TextureCube::GetData: SDL_MapGPUTransferBuffer failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: TextureCube::GetData: SDL_MapGPUTransferBuffer failed: ") + SDL_GetError());
         }
         std::memcpy(data, mapped, sizeBytes);
         SDL_UnmapGPUTransferBuffer(device, transferBuffer);
@@ -12335,7 +12335,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER))
         {
             throw std::invalid_argument(
-                "CNA SDL_GPU: RenderTarget2D received unsupported SurfaceFormat ordinal " +
+                "CNA SDLGPU: RenderTarget2D received unsupported SurfaceFormat ordinal " +
                 std::to_string(surfaceFormat));
         }
         state_->colorFormat = formatInfo.nativeFormat;
@@ -12347,7 +12347,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 depthInfo))
         {
             throw std::invalid_argument(
-                "CNA SDL_GPU: RenderTarget2D received unsupported exact DepthFormat ordinal " +
+                "CNA SDLGPU: RenderTarget2D received unsupported exact DepthFormat ordinal " +
                 std::to_string(depthFormat));
         }
         state_->depthFormat = depthInfo.nativeFormat;
@@ -12369,7 +12369,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // SDL a mip index the texture did not own.
         //
         // This is exactly what FNA does: RenderTarget2D forwards mipMap to its Texture2D base
-        // regardless of preferredMultiSampleCount, and FNA3D's own SDL_GPU driver allocates the
+        // regardless of preferredMultiSampleCount, and FNA3D's own SDLGPU driver allocates the
         // full levelCount on the single-sample texture while SDLGPU_GenColorRenderbuffer creates
         // the multisample attachment with one level. The two jobs are then ordered by
         // FNA3D_ResolveTarget at unbind -- resolve into level 0, then regenerate the chain from it
@@ -12394,7 +12394,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         state_->colorTexture = SDL_CreateGPUTexture(device, &colorInfo);
         if (state_->colorTexture == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTarget2D color texture: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: failed to create RenderTarget2D color texture: ") + SDL_GetError());
 
         if (multiSampleCount_ > 0)
         {
@@ -12413,7 +12413,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             state_->msaaTexture = SDL_CreateGPUTexture(device, &msaaInfo);
             if (state_->msaaTexture == nullptr)
             {
-                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTarget2D MSAA texture: ") + SDL_GetError());
+                throw std::runtime_error(std::string("CNA SDLGPU: failed to create RenderTarget2D MSAA texture: ") + SDL_GetError());
             }
         }
 
@@ -12433,7 +12433,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             state_->depthTexture = SDL_CreateGPUTexture(device, &depthInfo);
             if (state_->depthTexture == nullptr)
             {
-                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTarget2D depth texture: ") + SDL_GetError());
+                throw std::runtime_error(std::string("CNA SDLGPU: failed to create RenderTarget2D depth texture: ") + SDL_GetError());
             }
         }
     }
@@ -12500,7 +12500,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const int expectedH = std::max(1, state_->height >> level);
         if (levelW != expectedW || levelH != expectedH)
             throw std::invalid_argument(
-                "CNA SDL_GPU: RenderTarget2D::SetData supplied incorrect mip dimensions");
+                "CNA SDLGPU: RenderTarget2D::SetData supplied incorrect mip dimensions");
         UploadLevel(level, pixels, levelW, levelH,
                     levelW * static_cast<int>(state_->colorBytesPerPixel));
     }
@@ -12510,20 +12510,20 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (level < 0 || level >= levelCount_)
             throw std::out_of_range(
-                "CNA SDL_GPU: RenderTarget2D::SetData mip level is outside the native chain");
+                "CNA SDLGPU: RenderTarget2D::SetData mip level is outside the native chain");
 
         // Public SetData is chronological with queued draws. Flush every earlier segment before
         // the copy so a subsequent upload cannot be overwritten by work recorded before it.
         owner_->EnsureFrameRendered();
         UploadTargetRegion(owner_->Device(), state_->colorTexture, state_->colorFormat,
                            state_->colorBytesPerPixel, 0, level, 0, 0, levelW, levelH,
-                           pixels, stride, "CNA SDL_GPU: RenderTarget2D::SetData");
+                           pixels, stride, "CNA SDLGPU: RenderTarget2D::SetData");
         if (level == 0 && state_->msaaTexture != nullptr)
         {
             owner_->SeedMultisampleTargetFromResolved(
                 state_->colorTexture, -1, state_->msaaTexture,
                 state_->colorFormat, state_->sampleCount, state_->surfaceFormat,
-                levelW, levelH, "CNA SDL_GPU: RenderTarget2D::SetData");
+                levelW, levelH, "CNA SDLGPU: RenderTarget2D::SetData");
         }
         state_->definedMipLevels[static_cast<std::size_t>(level)] = true;
         if (level == 0)
@@ -12551,13 +12551,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         // out-of-range level was a signal here and a public exception everywhere else.
         if (level < 0 || level >= levelCount_)
             throw std::out_of_range(
-                "CNA SDL_GPU: RenderTarget2D::GetData: mip level " + std::to_string(level) +
+                "CNA SDLGPU: RenderTarget2D::GetData: mip level " + std::to_string(level) +
                 " does not exist (this target has " + std::to_string(levelCount_) +
                 (levelCount_ == 1 ? " level)" : " levels)"));
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) *
                                  state_->colorBytesPerPixel;
         if (static_cast<Uint32>(dataLength) < sizeBytes)
-            throw std::out_of_range("CNA SDL_GPU: RenderTarget2D::GetData: dataLength too small for the requested region");
+            throw std::out_of_range("CNA SDLGPU: RenderTarget2D::GetData: dataLength too small for the requested region");
 
         // Must reflect this frame's draws, not stale/uninitialized GPU memory -- a no-op if
         // nothing is pending (matches EnsureFrameRendered's own early-return contract).
@@ -12569,13 +12569,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         transferInfo.size = sizeBytes;
         SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
         if (transferBuffer == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTarget2D::GetData: failed to create transfer buffer: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: RenderTarget2D::GetData: failed to create transfer buffer: ") + SDL_GetError());
 
         SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
         if (cmd == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTarget2D::GetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: RenderTarget2D::GetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
         }
 
         // Always downloads from the single-sample, sampleable colorTexture -- already
@@ -12622,7 +12622,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (fence == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTarget2D::GetData: SDL_SubmitGPUCommandBufferAndAcquireFence failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: RenderTarget2D::GetData: SDL_SubmitGPUCommandBufferAndAcquireFence failed: ") + SDL_GetError());
         }
         SDL_WaitForGPUFences(device, true, &fence, 1);
         SDL_ReleaseGPUFence(device, fence);
@@ -12631,7 +12631,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (mapped == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTarget2D::GetData: SDL_MapGPUTransferBuffer failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: RenderTarget2D::GetData: SDL_MapGPUTransferBuffer failed: ") + SDL_GetError());
         }
         std::memcpy(data, mapped, sizeBytes);
         SDL_UnmapGPUTransferBuffer(device, transferBuffer);
@@ -12681,7 +12681,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER))
         {
             throw std::invalid_argument(
-                "CNA SDL_GPU: RenderTargetCube received unsupported SurfaceFormat ordinal " +
+                "CNA SDLGPU: RenderTargetCube received unsupported SurfaceFormat ordinal " +
                 std::to_string(surfaceFormat));
         }
         state_->colorFormat = formatInfo.nativeFormat;
@@ -12693,7 +12693,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 depthInfo))
         {
             throw std::invalid_argument(
-                "CNA SDL_GPU: RenderTargetCube received unsupported exact DepthFormat ordinal " +
+                "CNA SDLGPU: RenderTargetCube received unsupported exact DepthFormat ordinal " +
                 std::to_string(depthFormat));
         }
         state_->depthFormat = depthInfo.nativeFormat;
@@ -12723,7 +12723,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         cubeInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;  // the cube texture itself is always single-sample
         state_->cubeTexture = SDL_CreateGPUTexture(device, &cubeInfo);
         if (state_->cubeTexture == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTargetCube color texture: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: failed to create RenderTargetCube color texture: ") + SDL_GetError());
 
         if (multiSampleCount_ > 0)
         {
@@ -12758,7 +12758,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 {
                     const std::string what = SDL_GetError();
                     throw std::runtime_error(
-                        "CNA SDL_GPU: failed to create RenderTargetCube MSAA texture: " + what);
+                        "CNA SDLGPU: failed to create RenderTargetCube MSAA texture: " + what);
                 }
             }
         }
@@ -12779,7 +12779,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             {
                 const std::string what = SDL_GetError();
                 throw std::runtime_error(
-                    "CNA SDL_GPU: failed to create RenderTargetCube depth texture: " + what);
+                    "CNA SDLGPU: failed to create RenderTargetCube depth texture: " + what);
             }
         }
     }
@@ -12851,14 +12851,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         UploadTargetRegion(owner_->Device(), state_->cubeTexture, state_->colorFormat,
                            4, face, level, x, y, w, h,
                            static_cast<const std::uint8_t*>(data), w * 4,
-                           "CNA SDL_GPU: RenderTargetCube::SetData");
+                           "CNA SDLGPU: RenderTargetCube::SetData");
         if (level == 0 && state_->msaaTextures[static_cast<std::size_t>(face)] != nullptr)
         {
             owner_->SeedMultisampleTargetFromResolved(
                 state_->cubeTexture, face,
                 state_->msaaTextures[static_cast<std::size_t>(face)],
                 state_->colorFormat, state_->sampleCount, state_->surfaceFormat,
-                state_->size, state_->size, "CNA SDL_GPU: RenderTargetCube::SetData");
+                state_->size, state_->size, "CNA SDLGPU: RenderTargetCube::SetData");
         }
         if (level == 0)
         {
@@ -12901,7 +12901,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) *
                                  state_->colorBytesPerPixel;
         if (static_cast<Uint32>(dataLength) < sizeBytes)
-            throw std::out_of_range("CNA SDL_GPU: RenderTargetCube::GetData: dataLength too small for the requested region");
+            throw std::out_of_range("CNA SDLGPU: RenderTargetCube::GetData: dataLength too small for the requested region");
 
         // Must reflect this frame's draws, not stale/uninitialized GPU memory -- a no-op if
         // nothing is pending (matches EnsureFrameRendered's own early-return contract).
@@ -12913,13 +12913,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         transferInfo.size = sizeBytes;
         SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
         if (transferBuffer == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTargetCube::GetData: failed to create transfer buffer: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: RenderTargetCube::GetData: failed to create transfer buffer: ") + SDL_GetError());
 
         SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
         if (cmd == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTargetCube::GetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: RenderTargetCube::GetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
         }
 
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
@@ -12964,7 +12964,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (fence == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTargetCube::GetData: SDL_SubmitGPUCommandBufferAndAcquireFence failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: RenderTargetCube::GetData: SDL_SubmitGPUCommandBufferAndAcquireFence failed: ") + SDL_GetError());
         }
         SDL_WaitForGPUFences(device, true, &fence, 1);
         SDL_ReleaseGPUFence(device, fence);
@@ -12973,7 +12973,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (mapped == nullptr)
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTargetCube::GetData: SDL_MapGPUTransferBuffer failed: ") + SDL_GetError());
+            throw std::runtime_error(std::string("CNA SDLGPU: RenderTargetCube::GetData: SDL_MapGPUTransferBuffer failed: ") + SDL_GetError());
         }
         std::memcpy(data, mapped, sizeBytes);
         SDL_UnmapGPUTransferBuffer(device, transferBuffer);
@@ -12998,7 +12998,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         createInfo.size = capacity;
         buffer = SDL_CreateGPUBuffer(device, &createInfo);
         if (buffer == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create ") +
+            throw std::runtime_error(std::string("CNA SDLGPU: failed to create ") +
                                      (usage == SDL_GPU_BUFFERUSAGE_INDEX ? "index" : "vertex") +
                                      " buffer: " + SDL_GetError());
     }
@@ -13237,7 +13237,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 || (resource.textureDimension == SpirvTextureDimensionEXT::Cube
                     && boundTexturesEXT_.texturesCube[unit].texture == nullptr))
                 throw System::InvalidOperationException(
-                    "SDL_GPU ShaderEffect requires a bound cube/volume texture at unit "
+                    "SDLGPU ShaderEffect requires a bound cube/volume texture at unit "
                     + std::to_string(unit) + " before drawing.");
         }
         if (textureSnapshotEXT_ == nullptr)
@@ -13281,7 +13281,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             // silently truncated bone palette or light list is a wrong picture with no diagnostic.
             if (static_cast<std::size_t>(count) > writable)
                 throw System::NotSupportedException(
-                    "SDL_GPU ShaderEffect: uniform array '" + std::string(name ? name : "") +
+                    "SDLGPU ShaderEffect: uniform array '" + std::string(name ? name : "") +
                     "' has room for " + std::to_string(writable) + " elements; " +
                     std::to_string(count) + " were set.");
             const std::size_t elements = static_cast<std::size_t>(count);
@@ -13400,11 +13400,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             return CompileSpirvProgramEXT(vertSrc, fragSrc);
         }
 
-#if !defined(CNA_SDL_GPU_SHADER_EFFECTS)
+#if !defined(CNA_SDLGPU_SHADER_EFFECTS)
         (void) vertSrc;
         (void) fragSrc;
         compileError_ =
-            "SDL_GPU ShaderEffect is unavailable: this build has no target-native "
+            "SDLGPU ShaderEffect is unavailable: this build has no target-native "
             "GLSL-to-driver shader compiler";
         return false;
 #else
@@ -13622,13 +13622,13 @@ namespace CNA::Internal::Renderers::SdlGpu
     SdlGpuSpriteBatchRenderer::SdlGpuSpriteBatchRenderer(SdlGpuRenderer& owner)
         : owner_(&owner)
     {
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         const auto& bytes =
             CNA::Internal::Renderers::Fna3d::StockEffectBlobs::kSpriteEffectFxb;
         spriteCompiledEffect_ = owner_->CreateCompiledEffect(bytes, sizeof(bytes));
         if (spriteCompiledEffect_ == nullptr)
             throw std::runtime_error(
-                "CNA SDL_GPU SpriteBatch could not create its embedded XNA SpriteEffect.");
+                "CNA SDLGPU SpriteBatch could not create its embedded XNA SpriteEffect.");
         const auto& parameters = spriteCompiledEffect_->GetDescription().parameters;
         const auto matrix = std::find_if(
             parameters.begin(), parameters.end(),
@@ -13638,7 +13638,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             });
         if (matrix == parameters.end())
             throw std::runtime_error(
-                "CNA SDL_GPU SpriteBatch embedded XNA SpriteEffect has no MatrixTransform parameter.");
+                "CNA SDLGPU SpriteBatch embedded XNA SpriteEffect has no MatrixTransform parameter.");
         spriteMatrixParameterIndex_ = matrix->runtimeIndex;
 #endif
     }
@@ -13659,8 +13659,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     void SdlGpuSpriteBatchRenderer::Begin()
     {
         if (begun_)
-            throw std::logic_error("CNA SDL_GPU SpriteBatch.Begin called twice without End");
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+            throw std::logic_error("CNA SDLGPU SpriteBatch.Begin called twice without End");
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         // FX-102: a batch starts empty even if the previous one threw out of its flush.
         // Nothing else clears this, and a leftover sprite would be replayed into an unrelated batch
         // with that batch's transform and sampler.
@@ -13673,14 +13673,14 @@ namespace CNA::Internal::Renderers::SdlGpu
     void SdlGpuSpriteBatchRenderer::End()
     {
         if (!begun_)
-            throw std::logic_error("CNA SDL_GPU SpriteBatch.End called without Begin");
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+            throw std::logic_error("CNA SDLGPU SpriteBatch.End called without Begin");
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         FlushPendingCompiledSpritesEXT();
 #endif
         begun_ = false;
     }
 
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
     void SdlGpuSpriteBatchRenderer::ApplyCompiledSpriteVertexShaderEXT()
     {
         if (compiledSpriteStockApplied_)
@@ -13689,7 +13689,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             projectionWidth_ <= 0 || projectionHeight_ <= 0)
         {
             throw std::runtime_error(
-                "CNA SDL_GPU SpriteBatch compiled stock vertex effect is unavailable.");
+                "CNA SDLGPU SpriteBatch compiled stock vertex effect is unavailable.");
         }
 
         const Matrix projection = Matrix::CreateOrthographicOffCenter(
@@ -13742,7 +13742,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             pendingSprites_.clear();
             throw std::logic_error(
-                "CNA SDL_GPU: a compiled Effect used with SpriteBatch must have a current "
+                "CNA SDLGPU: a compiled Effect used with SpriteBatch must have a current "
                 "technique with at least one pass.");
         }
 
@@ -13780,14 +13780,14 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuSpriteBatchRenderer::FlushPendingSpritesEXT()
     {
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         FlushPendingCompiledSpritesEXT();
 #endif
     }
 
     void SdlGpuSpriteBatchRenderer::DiscardPendingSpritesEXT() noexcept
     {
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         pendingSprites_.clear();
 #endif
     }
@@ -13795,7 +13795,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     void SdlGpuSpriteBatchRenderer::SetTextureBindingEXT(
         const CNA::Internal::Graphics::SpriteTextureBinding& binding)
     {
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         if (textureBinding_ != binding)
             FlushPendingCompiledSpritesEXT();
 #endif
@@ -13834,7 +13834,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                         float layerDepth)
     {
         if (!begun_)
-            throw std::logic_error("CNA SDL_GPU SpriteBatch.Draw called outside Begin/End");
+            throw std::logic_error("CNA SDLGPU SpriteBatch.Draw called outside Begin/End");
         // A drawn texture is either a plain Texture2D (SdlGpuTextureRenderer) or a RenderTarget2D
         // sampled after being rendered into (SdlGpuRenderTargetRenderer, Phase SDLGPU-8) -- unrelated
         // concrete classes, resolved through the one shared resolver the 3D effect paths also use,
@@ -13865,7 +13865,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // null for a ShaderEffect and GetEffectRendererPtr() returns null for a compiled effect.
         ICompiledEffectRuntime* compiledEffectRuntime =
             customEffect_ ? customEffect_->GetCompiledRuntimePtr() : nullptr;
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
         if (compiledEffectRuntime != nullptr)
         {
             // FX-080: SpriteBatch applies the effect's passes itself, exactly as FNA's
@@ -13881,7 +13881,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (passCount == 0)
             {
                 throw std::logic_error(
-                    "CNA SDL_GPU: a compiled Effect used with SpriteBatch must have a current "
+                    "CNA SDLGPU: a compiled Effect used with SpriteBatch must have a current "
                     "technique with at least one pass.");
             }
             if (!immediateMode_)

@@ -9,7 +9,7 @@
 // RenderTarget2D and reads it back with GetData(). That is deliberate: on some renderers (notably
 // WebGPU) the fixed internal SpriteBatch pipeline does NOT consume ColorWriteChannels, so only the
 // keyed 3D pipeline path actually exercises the GFX-077 fix. The 3D path is common to every renderer
-// this harness is compiled for (SDL_GPU / WEBGPU / D3D9), so one scene verifies them all.
+// this harness is compiled for (SDLGPU / WEBGPU / D3D9), so one scene verifies them all.
 //
 // Isolation strategy: the quad is drawn with Opaque blend (SrcBlend=One, DstBlend=Zero -> blend
 // disabled, output == source), so the ONLY thing that can preserve a destination channel is the

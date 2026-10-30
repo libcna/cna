@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// Canonical SDL_GPU render-pass/pipeline compatibility reproducer.
+// Canonical SDLGPU render-pass/pipeline compatibility reproducer.
 //
 // A depthless RenderTargetCube face is a valid public SpriteBatch destination. The selected face
-// must receive the opaque draw, every other face must remain unchanged, and the SDL_GPU Vulkan
+// must receive the opaque draw, every other face must remain unchanged, and the SDLGPU Vulkan
 // route must not report VUID-vkCmdDraw-renderPass-02684. CTest makes that exact VUID fatal; the
 // checks below independently prove target/face identity and pixel correctness.
 
@@ -207,7 +207,7 @@ protected:
         auto& renderer = static_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuRenderer&>(
             device.GetRenderer());
         Check(renderer.IsDebugModeEnabledEXT(),
-              "SDL_GPU debug mode requested for the validation route");
+              "SDLGPU debug mode requested for the validation route");
         Check(renderer.GetSpritePipelineCacheSizeEXT() == 0,
               "SpriteBatch pipeline cache begins empty");
 
@@ -314,7 +314,7 @@ protected:
         Check(renderer.GetSpritePipelineCacheSizeEXT() == 2,
               "cube object and face identity do not fragment the pipeline cache");
 
-        // Backbuffer transition. Its color format may or may not be distinct on a given SDL_GPU
+        // Backbuffer transition. Its color format may or may not be distinct on a given SDLGPU
         // driver, so the first use may add at most one entry; a repeat and return to cube must not.
         const std::size_t beforeBackbuffer = renderer.GetSpritePipelineCacheSizeEXT();
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -387,7 +387,7 @@ protected:
         DrawCubeFace(depthlessWithDepthState, CubeMapFace::NegativeY, *marker_, false,
                      BlendState::Opaque, defaultDepth);
         Check(Matches(ReadCube(depthlessWithDepthState, CubeMapFace::NegativeY), kMarker),
-              "depth-testing state on a depthless pass follows established SDL_GPU behavior");
+              "depth-testing state on a depthless pass follows established SDLGPU behavior");
 
         // MSAA source -> selected-face resolve retains the same depthless target metadata.
         RenderTargetCube msaa(device, kCubeSize, false, SurfaceFormat::Color,

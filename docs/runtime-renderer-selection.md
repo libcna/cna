@@ -67,7 +67,7 @@ mechanism rather than inventing one:
 
 | Renderer | Decides | Via |
 |---|---|---|
-| `FNA3D` | SDL_GPU / D3D11 / OpenGL | `FNA3D_PrepareWindowAttributes`, which also primes the GL attributes |
+| `FNA3D` | SDLGPU / D3D11 / OpenGL | `FNA3D_PrepareWindowAttributes`, which also primes the GL attributes |
 
 Several retired renderers used the same mechanism (bgfx, LLGL and Diligent each chose their own
 native API at runtime), which is why the descriptor carries a hook for it rather than a fixed
@@ -88,7 +88,7 @@ int main()
     // Before any GraphicsDevice is constructed:
     CNA::GraphicsRendererSelection::SetPreferred(CNA::GraphicsRendererType::SdlGpu);
 
-    // Optional, off by default: try these in order if SDL_GPU is unavailable or fails to start.
+    // Optional, off by default: try these in order if SDLGPU is unavailable or fails to start.
     CNA::GraphicsRendererSelection::SetFallbackChain({
         CNA::GraphicsRendererType::OpenGLES3,
         CNA::GraphicsRendererType::Software,
@@ -118,7 +118,7 @@ whole point: the compiled-in set is published into the selection layer before `m
 
 **Default: hard failure.** If the selected renderer is not compiled into the build, reports itself
 unavailable, or throws during initialization, CNA throws. There is no silent substitution — a game
-that asked for SDL_GPU and quietly got a CPU rasterizer is a worse outcome than a clear error.
+that asked for SDLGPU and quietly got a CPU rasterizer is a worse outcome than a clear error.
 
 **Fallback is opt-in.** `SetFallbackChain()` or `EnableAutomaticFallback(true)` enables it. When
 enabled:
@@ -131,7 +131,7 @@ enabled:
 
 ### The window-kind limitation
 
-A window created for an OpenGL context (`SDL_WINDOW_OPENGL`) is not the plain window `SDL_GPU` and
+A window created for an OpenGL context (`SDL_WINDOW_OPENGL`) is not the plain window `SDLGPU` and
 `WEBGPU` claim, and the other way round. Falling back across that boundary therefore requires the SDL window to be destroyed and recreated, which is
 only legal while CNA owns it. When the game supplied its own window through
 `PresentationParameters::DeviceWindowHandle`, such a candidate is skipped and recorded as
@@ -165,7 +165,7 @@ outside the list is a **configure error**:
 ```text
 CMake Error at cmake/RendererDefaultSelection.cmake:54 (message):
   CNA: CNA_GRAPHICS_RENDERER=SOFTWARE is not a member of
-  CNA_GRAPHICS_RENDERERS="OPENGL33;SDL_GPU".
+  CNA_GRAPHICS_RENDERERS="OPENGL33;SDLGPU".
 
     CNA_GRAPHICS_RENDERER names the DEFAULT renderer chosen from the compiled-in set, so it has to be one of them.
     Either add SOFTWARE to CNA_GRAPHICS_RENDERERS, or set -DCNA_GRAPHICS_RENDERER=OPENGL33 to make the list's first entry the default.
@@ -234,7 +234,7 @@ configure time, not merely to exist.
 | Set | Status |
 |---|---|
 | `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
-| `OPENGLES3;OPENGL33;WEBGPU;SDL_GPU;FNA3D;SOFTWARE;HEADLESS;STUB` | ✅ builds with tests and examples (`RRC-035`, 2026-10-14): only the default's example suite registers; every renderer is selectable at run time, and the retirement campaign's focused suites ran with SDL_GPU, WEBGPU, SOFTWARE, FNA3D, HEADLESS and STUB selected that way ([retirement record](removed-renderers.md#the-2026-10-13-retirement)). |
+| `OPENGLES3;OPENGL33;WEBGPU;SDLGPU;FNA3D;SOFTWARE;HEADLESS;STUB` | ✅ builds with tests and examples (`RRC-035`, 2026-10-14): only the default's example suite registers; every renderer is selectable at run time, and the retirement campaign's focused suites ran with SDLGPU, WEBGPU, SOFTWARE, FNA3D, HEADLESS and STUB selected that way ([retirement record](removed-renderers.md#the-2026-10-13-retirement)). |
 | `WEBGL2;WEBGPU` (Emscripten) | ✅ one wasm bundle carries both. In headless Chrome on the real GPU (2026-10-07, emsdk 6.0.9) the renderer benchmark and `cna_house3d_demo --depth-probe` ran under each, selected at runtime through `Module.cnaPreferredRenderer`, with no extra link flags: a build that compiles `WEBGPU` in sizes the Asyncify stack for it automatically (`RRC-025`). With Emscripten's default 4 KiB stack `WEBGPU` aborted with `unreachable` (`RRC-018`) |
 
 Combinations whose evidence involved a renderer retired on 2026-09-17, 2026-09-27, 2026-09-28,
@@ -307,7 +307,7 @@ environment variable. A renderer with no smoke test registered in that build is 
 **skipped**, never as a pass — `ctest -L <label that matches nothing>` exits 0, so a wrong label
 would otherwise look like success. Only the default's family registers its example suite
 (`RRC-022`), so another renderer is smoke-tested through the default family's `GraphicsSmoke`
-tests where it has some (the GL, SDL_GPU and WebGPU families do) and is otherwise
+tests where it has some (the GL, SDLGPU and WebGPU families do) and is otherwise
 reported as skipped: in the set above, `SOFTWARE` and `STUB` are.
 
 ### Comparing renderers against the XNA oracle, from one binary
@@ -332,7 +332,7 @@ without breaking a driver to do it:
 
 ```bash
 CNA_DEBUG_UNAVAILABLE_RENDERERS=HEADLESS ./mygame   # fails the availability probe
-CNA_DEBUG_FAIL_RENDERER_INIT=SDL_GPU ./mygame       # fails during initialization
+CNA_DEBUG_FAIL_RENDERER_INIT=SDLGPU ./mygame       # fails during initialization
 ```
 
 The two are materially different. A failed probe happens before any window exists; a failed
@@ -467,7 +467,7 @@ The third-party archives behind LLGL were much larger than CNA's own wrapper —
 final executable grew by only ~4 MB, because the linker takes what is referenced rather than whole
 archives. **A renderer's cost in the binary is not its library's size on disk**, and estimating from
 archive sizes overstated it by an order of magnitude there. That conclusion is about linking, not
-about LLGL, and still applies to `SDL_GPU`, `WEBGPU` and `FNA3D`.
+about LLGL, and still applies to `SDLGPU`, `WEBGPU` and `FNA3D`.
 
 ### What is NOT measured here, and why
 

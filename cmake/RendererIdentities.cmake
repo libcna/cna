@@ -26,7 +26,13 @@ cmake_policy(SET CMP0057 NEW)
 # The public renderer identities, in C ABI value order.
 set(CNA_RENDERER_PUBLIC_IDENTITIES
     OPENGLES3 OPENGL33 WEBGL2 WEBGPU HEADLESS SOFTWARE STUB
-    DIRECTX9 SDL_GPU FNA3D)
+    DIRECTX9 SDLGPU FNA3D)
+
+# Public identities that were renamed rather than retired. They are refused explicitly on every
+# selection route so a stale CNA_RENDERER_<X>=ON option cannot be ignored while the host default is
+# selected. The old spelling is not an alias; the diagnostic only supplies the migration target.
+set(CNA_RENDERER_RENAMED_IDENTITIES
+    SDL_GPU=SDLGPU)
 
 # Retired identities as <NAME>=<C ABI value>. A retired value stays reserved forever: it is never
 # assigned to another renderer, and the next new identity takes value 52. See
@@ -68,9 +74,20 @@ function(cna_require_public_renderer_identity identity route)
         return()
     endif()
     list(JOIN CNA_RENDERER_PUBLIC_IDENTITIES ", " _cna_public_text)
+    string(TOUPPER "${identity}" _cna_upper)
+    foreach(_cna_entry IN LISTS CNA_RENDERER_RENAMED_IDENTITIES)
+        string(REPLACE "=" ";" _cna_pair "${_cna_entry}")
+        list(GET _cna_pair 0 _cna_old_name)
+        list(GET _cna_pair 1 _cna_new_name)
+        if(_cna_upper STREQUAL _cna_old_name)
+            message(FATAL_ERROR
+                "CNA: renderer ${_cna_old_name} (requested through ${route}) was renamed to "
+                "${_cna_new_name}; the old spelling is not an alias.\n"
+                "  Supported renderers: ${_cna_public_text}.")
+        endif()
+    endforeach()
     cna_renderer_retired_value("${identity}" _cna_retired)
     if(NOT _cna_retired STREQUAL "")
-        string(TOUPPER "${identity}" _cna_upper)
         message(FATAL_ERROR
             "CNA: renderer ${_cna_upper} (requested through ${route}) has been retired and is no "
             "longer supported. It is not replaced by another renderer; its C ABI value "
@@ -87,6 +104,15 @@ endfunction()
 # CNA_GRAPHICS_RENDERERS, and the per-identity CNA_RENDERER_<X> switches. An empty
 # CNA_GRAPHICS_RENDERER means the per-host default applies (cmake/RendererIdentityDefault.cmake).
 function(cna_validate_renderer_identity_selection)
+    foreach(_cna_entry IN LISTS CNA_RENDERER_RENAMED_IDENTITIES)
+        string(REPLACE "=" ";" _cna_pair "${_cna_entry}")
+        list(GET _cna_pair 0 _cna_old_name)
+        if(CNA_RENDERER_${_cna_old_name})
+            cna_require_public_renderer_identity(
+                "${_cna_old_name}" "CNA_RENDERER_${_cna_old_name}=ON")
+        endif()
+    endforeach()
+
     foreach(_cna_entry IN LISTS CNA_RENDERER_RETIRED_IDENTITIES)
         string(REPLACE "=" ";" _cna_pair "${_cna_entry}")
         list(GET _cna_pair 0 _cna_name)

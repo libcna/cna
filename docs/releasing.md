@@ -88,7 +88,7 @@ are `alpha.N` → `beta.N` → `rc.N`, ordered as SemVer orders them. `0.1.0-alp
    ```
 
    `cmake-build-multi` is the tree that builds the most renderers at once (OPENGLES3 as the
-   default, plus OPENGL33, WEBGPU, SDL_GPU, FNA3D, SOFTWARE, HEADLESS and STUB), and the only one that exercises all three siblings, because easy-gl and meta-gl are
+   default, plus OPENGL33, WEBGPU, SDLGPU, FNA3D, SOFTWARE, HEADLESS and STUB), and the only one that exercises all three siblings, because easy-gl and meta-gl are
    added only for the GL renderers. Its GPU and window tests must run on the private display,
    never on the owner's desktop (`CLAUDE.md` § *Running GPU/window tests*). The configure output
    prints `CNA: version <x.y.z>` and one `CNA: <sibling> <version> at <path>` line per sibling —

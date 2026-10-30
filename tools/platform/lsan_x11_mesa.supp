@@ -17,7 +17,7 @@ leak:libGLX_mesa.so
 # initialiser during vkCreateInstance (reproduced the same way with a CNA-free program; absent with
 # only the lavapipe ICD loaded). Its frames belong to a module already unloaded at exit, so no
 # suppression can name it without also matching genuine leaks through libvulkan. Sanitizer runs
-# that reach Vulkan (SDL_GPU's or WebGPU's Vulkan backend) therefore select lavapipe with
+# that reach Vulkan (SDLGPU's or WebGPU's Vulkan backend) therefore select lavapipe with
 # VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json, and the RADV allocation is recorded as a
 # driver finding instead of being hidden.
 #

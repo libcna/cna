@@ -211,7 +211,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Binds a volume (3D) texture to an additional sampler unit, for a custom
          * shader that declares a `sampler3D` uniform.
          *
-         * SDL_GPU source GLSL uses fragment `layout(set=2,binding=unit) uniform sampler3D`,
+         * SDLGPU source GLSL uses fragment `layout(set=2,binding=unit) uniform sampler3D`,
          * or portable `set=1,binding=8+unit`, with units 0..3. Unsupported layouts are
          * reported by GetCompileErrorEXT; a declared volume must be bound before drawing.
          * See docs/sdlgpu-shader-effect-layout.md for uniforms and coordinate conventions.

@@ -7,7 +7,7 @@
 // itself (per-instance streams, the neutral record, bone palettes, rewritten geometry) are staged.
 // BufferRewriteWithinFrameTests holds the other half: that a rewritten buffer still draws right.
 
-#if defined(CNA_RENDERER_SDL_GPU)
+#if defined(CNA_RENDERER_SDLGPU)
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"

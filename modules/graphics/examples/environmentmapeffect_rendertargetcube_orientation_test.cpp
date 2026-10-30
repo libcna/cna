@@ -13,7 +13,7 @@
 //
 // GL's rasterizer fills a render target bottom-up, so an unmodified GL sampler reads a rendered face upside
 // down (that is what made EasyGL show the museum's reflection sphere with the floor in both hemispheres).
-// Direct3D, SDL_GPU, WebGPU and the software renderer store the rendered face top-down. One shared source,
+// Direct3D, SDLGPU, WebGPU and the software renderer store the rendered face top-down. One shared source,
 // no renderer-specific knowledge: it passes where the orientation is right and fails where it is not.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.

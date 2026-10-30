@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SDLGPU-38: RenderTarget2D MSAA proof for the SDL_GPU graphics renderer --
+// SDLGPU-38: RenderTarget2D MSAA proof for the SDLGPU graphics renderer --
 // SDL_GPUSampleCount texture creation + SDL_GPUColorTargetInfo.resolve_texture automatic
 // resolve-on-render-pass-end (the exact mechanism SdlGpuRenderTargetCubeRenderer's own MSAA
 // support, SDLGPU-36, already proved out; this closes the matching RenderTarget2D leg).

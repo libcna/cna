@@ -126,7 +126,7 @@ namespace CNA::Internal::Renderers::Fna3d
             // Apple M4 AM4-188: a platform without SDL windows (HEADLESS, TERMINAL)
             // declining what this renderer needs, which GraphicsDevice reports as XNA does
             // (NoSuitableGraphicsDeviceException around the platform's refusal) -- the same
-            // answer SDL_GPU gives since AM4-176 -- not an FNA3D failure.
+            // answer SDLGPU gives since AM4-176 -- not an FNA3D failure.
             throw CNA::Platform::PlatformException(
                 "FNA3D device",
                 "no SDL window was supplied. FNA3D presents into an OS window and has no "
@@ -190,7 +190,7 @@ namespace CNA::Internal::Renderers::Fna3d
         if (device_ == nullptr)
         {
             throw std::runtime_error(
-                "FNA3D renderer: FNA3D_CreateDevice failed -- no FNA3D driver (SDL_GPU, Direct3D "
+                "FNA3D renderer: FNA3D_CreateDevice failed -- no FNA3D driver (SDLGPU, Direct3D "
                 "11 or OpenGL) could create a device for this window. Set the FNA3D_FORCE_DRIVER "
                 "hint to pin a specific driver.");
         }
@@ -342,7 +342,7 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_GetSysRendererEXT(device_, &systemRenderer);
         if (systemRenderer.rendererType != FNA3D_RENDERER_TYPE_SDL_GPU_EXT)
         {
-            // FNA3D has no dedicated query-capability function. Its SDL_GPU driver is explicit
+            // FNA3D has no dedicated query-capability function. Its SDLGPU driver is explicit
             // that queries are unsupported; the other current drivers expose a real CreateQuery
             // implementation, whose allocation is the narrowest public-API probe available.
             FNA3D_Query* probe = Detail::CreateQuery(device_);
@@ -506,7 +506,7 @@ namespace CNA::Internal::Renderers::Fna3d
     {
         // FNA3D's drivers disagree here and expose no query: the OpenGL driver implements no
         // GetTextureData3D at all (it logs "GetTextureData3D is unsupported!" and writes nothing),
-        // while the SDL_GPU and Direct3D 11 drivers do. Rather than hard-code a driver name, this
+        // while the SDLGPU and Direct3D 11 drivers do. Rather than hard-code a driver name, this
         // measures it once with a 1x1x1 volume: upload a known value, read it back into a buffer
         // pre-filled with a different one, and see whether the readback actually happened.
         // Fna3dTexture3DRenderer mirrors uploads only when the answer is no.
@@ -547,7 +547,7 @@ namespace CNA::Internal::Renderers::Fna3d
     {
         // Same shape as the volume-readback probe above, for the same reason: FNA3D's OpenGL and
         // Direct3D 11 drivers both refuse GetTextureData2D on a block-compressed texture (they log
-        // "GetData with compressed textures unsupported!" and write nothing), while the SDL_GPU
+        // "GetData with compressed textures unsupported!" and write nothing), while the SDLGPU
         // driver forwards it, and FNA3D exposes no query to tell them apart. Reporting the region
         // as read when the driver wrote nothing would hand the caller a buffer of whatever it
         // happened to contain, which is exactly what ITextureRenderer::GetData forbids, so this is
@@ -1134,7 +1134,7 @@ namespace CNA::Internal::Renderers::Fna3d
     int Fna3dRenderer::GetMaxTextureDimension() const
     {
         // FNA3D exposes no maximum-texture-size query; XNA 4.0 HiDef guarantees 4096 and every
-        // driver FNA3D can select (SDL_GPU, D3D11, desktop GL) guarantees at least the shared
+        // driver FNA3D can select (SDLGPU, D3D11, desktop GL) guarantees at least the shared
         // interface default. Keeping the shared default is the honest answer -- inventing a
         // narrower number would reject textures this renderer can actually create.
         return IGraphicsRenderer::GetMaxTextureDimension();

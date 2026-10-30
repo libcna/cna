@@ -2,8 +2,8 @@
 
 CNA exposes exactly **10 public renderer identities** over 8 implementation families. EasyGL is an
 internal implementation shared by three public GL profiles and does not add a public identity.
-Internal renderer/API choices made by an abstraction such as SDL_GPU or FNA3D likewise do not add
-CNA identities: SDL_GPU's Vulkan, Direct3D 12 and Metal backends are SDL's, not CNA's.
+Internal renderer/API choices made by an abstraction such as SDLGPU or FNA3D likewise do not add
+CNA identities: SDLGPU's Vulkan, Direct3D 12 and Metal backends are SDL's, not CNA's.
 
 CNA intentionally maintains a curated renderer set. A new renderer is added only when it provides
 meaningful platform coverage, compatibility value, architectural value, or a capability not
@@ -26,7 +26,7 @@ identity's value is permanently reserved and never reassigned, so the range has 
 | 12 | `Software` | `SOFTWARE` | `CNA_RENDERER_SOFTWARE` | Software / `SoftwareRenderer` | none |
 | 13 | `Stub` | `STUB` | `CNA_RENDERER_STUB` | Stub / `StubRenderer` | none |
 | 22 | `DirectX9` | `DIRECTX9` | `CNA_RENDERER_DIRECTX9` | Direct3D 9 / `DirectX9Renderer` | Windows |
-| 31 | `SdlGpu` | `SDL_GPU` | `CNA_RENDERER_SDL_GPU` | SDL GPU / `SdlGpuRenderer` | SDL3 with a GPU driver (Vulkan, Direct3D 12 or Metal) |
+| 31 | `SdlGpu` | `SDLGPU` | `CNA_RENDERER_SDLGPU` | SDL GPU / `SdlGpuRenderer` | SDL3 with a GPU driver (Vulkan, Direct3D 12 or Metal) |
 | 43 | `Fna3d` | `FNA3D` | `CNA_RENDERER_FNA3D` | FNA3D / `Fna3dRenderer` | FNA3D dependency |
 
 The three GL profiles share one implementation target, macro, and factory, so 10 public identities
@@ -44,14 +44,15 @@ implementation they exercise, whichever of the three profiles builds them (GLB-1
   fidelity claim.
 - **CPU bounded 3D:** `SOFTWARE`.
 - **Programmable/modern, with renderer-specific limits:** `OPENGLES3`, `OPENGL33`, `WEBGL2`,
-  `WEBGPU`, `DIRECTX9` and `SDL_GPU`.
-- **Abstraction layer:** `SDL_GPU` is CNA's modern native path: CNA maps XNA 4.0 onto SDL_GPU, and
-  SDL picks Vulkan, Direct3D 12 or Metal underneath it. `FNA3D` selects SDL_GPU, Direct3D 11 or
+  `WEBGPU`, `DIRECTX9` and `SDLGPU`.
+- **Abstraction layer:** `SDLGPU` is CNA's modern native path: CNA maps XNA 4.0 onto SDL's
+  `SDL_GPU` API, and
+  SDL picks Vulkan, Direct3D 12 or Metal underneath it. `FNA3D` selects SDLGPU, Direct3D 11 or
   OpenGL at runtime. Neither internal choice is another CNA identity.
 
 These classes are descriptive, not blanket parity claims. `WEBGPU` is validated on Linux x86_64
 (native) and in headless Chrome; its Windows, macOS and linux-aarch64 packages are unverified
-(`WEBGPU-1`). `SDL_GPU`
+(`WEBGPU-1`). `SDLGPU`
 is validated on Linux (Vulkan) and, cross-compiled, under Wine with vkd3d-proton (Direct3D 12);
 native Windows, macOS and iOS qualification is open (`handoff.md` §5.2). A capability query and
 each renderer document remain authoritative for the narrower operation-level boundary.
@@ -65,13 +66,13 @@ reaches its factory or rejects at its documented gate; every retired one is refu
 configure time and at run time. `scripts/check_renderer_identities.py` holds the enum, the CMake
 list, the runtime registry, the C ABI table, the retired-value table and the run-time retired-name
 list to each other. The per-host default (`cmake/RendererIdentityDefault.cmake`) is `WEBGL2` under Emscripten,
-`SDL_GPU` on Windows, macOS (`Darwin`) and iOS, and `OPENGLES3` on every other system -- Linux,
+`SDLGPU` on Windows, macOS (`Darwin`) and iOS, and `OPENGLES3` on every other system -- Linux,
 Android, the BSDs and any host not named above.
 
 CNA's own graphics code calls a CNA graphics renderer a **renderer**, never a backend:
 `GraphicsRenderer*`, `CNA_GRAPHICS_RENDERER*`, `cna_graphics_renderer_*`,
 `CNA::Internal::Renderers`. "Backend" stays for other subsystems (audio, input, `ENetBackend`,
-device test backends) and for an upstream library's own vocabulary, such as SDL_GPU's backends
+device test backends) and for an upstream library's own vocabulary, such as SDLGPU's backends
 above. Inside a family, a class that wraps a native API object keeps that API's prefix
 (`D3D9EffectRenderer`, `D3D9Buffers`); only the identity class and the selection surface carry
 the identity's name (`DirectX9Renderer`, `DIRECTX9`). The same check refuses the old

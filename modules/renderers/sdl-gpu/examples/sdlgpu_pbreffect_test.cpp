@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// PbrEffect proof for the SDL_GPU graphics renderer (SdlGpuRenderer::CreatePbrResources()/
+// PbrEffect proof for the SDLGPU graphics renderer (SdlGpuRenderer::CreatePbrResources()/
 // GetOrCreatePipelinePbr3D(), pbr3d.vert.glsl/pbr3d.frag.glsl) -- proves the stride-48
 // VertexPositionNormalTangentTexture layout, TBN construction, and the metallic-roughness BRDF
 // itself all work end-to-end via a real GPU draw. The projection translates clip Z by +1: the

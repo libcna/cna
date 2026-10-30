@@ -167,7 +167,7 @@ Accepting a valid asset and rendering it with different core semantics would be 
 reported as success; refusing it is limited backend coverage, which is what it actually is.
 
 One qualification belongs next to that count, measured by drawing rather than by reading shader
-source (`GLTF-472`). `GLTF-474` removed `SDL_GPU`'s own unreachable strides, so it now
+source (`GLTF-472`). `GLTF-474` removed `SDLGPU`'s own unreachable strides, so it now
 draws every canonical glTF stride. Nothing in the tree now accepts a
 valid core glTF primitive and renders it with different semantics.
 

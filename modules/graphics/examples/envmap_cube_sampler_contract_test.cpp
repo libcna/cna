@@ -15,7 +15,7 @@
 // explicit sampler must never be replaced by a fixed constant. An unset slot uses the documented
 // device default (`SamplerState::LinearWrap`).
 //
-// THE DEFECT this reproduces is SDL_GPU-local. `SdlGpuRenderer::IssueEnvMapDraw` binds
+// THE DEFECT this reproduces is SDLGPU-local. `SdlGpuRenderer::IssueEnvMapDraw` binds
 // `samplerBindings[1].sampler = GetOrCreateSampler(0, 1, 1, ...)` -- a literal LinearClamp -- for
 // the cube, and `QueueEnvMapDraw` captures only `samplerSlots_[0]`, so `EnvMapDrawCommand` has no
 // field in which slot 1 could survive to replay even if the constant were removed. Both halves are
@@ -133,9 +133,9 @@ namespace
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "WEBGPU";
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "SDL_GPU";
+    constexpr const char* kRendererName = "SDLGPU";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX9";

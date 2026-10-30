@@ -19,7 +19,7 @@ namespace CNA
         /** @brief Compiled against exactly one fixed real graphics API, with no runtime backend negotiation. */
         Native,
 
-        /** @brief An intermediate library picks/abstracts the real backend at runtime (a "portable RHI" such as FNA3D/SDL_GPU/WebGPU). */
+        /** @brief An intermediate library picks/abstracts the real backend at runtime (a "portable RHI" such as FNA3D/SDLGPU/WebGPU). */
         TranslationLayer,
 
         /** @brief Renders entirely on the CPU; no real GPU driver is involved. */

@@ -9,7 +9,7 @@
 //     effect.Texture = A                  // consumer -- A is now an ordinary sampler source
 //     DrawUserPrimitives(...)
 //
-// THE DEFECT this file reproduces is SDL_GPU-local, and it is a TYPE defect, not a
+// THE DEFECT this file reproduces is SDLGPU-local, and it is a TYPE defect, not a
 // synchronization, ordering, layout or resource-visibility one. A public `Texture2D` and a public
 // `RenderTarget2D` reach every draw as the same static type, `const ITextureRenderer*`. Their
 // concrete renderers are `SdlGpuTextureRenderer` and `SdlGpuRenderTargetRenderer` -- unrelated
@@ -181,8 +181,8 @@ namespace
     constexpr const char* kRendererName = "EASYGL";
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
-#elif defined(CNA_RENDERER_SDL_GPU)
-    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDLGPU)
+    constexpr const char* kRendererName = "SDLGPU";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr const char* kRendererName = "DIRECTX9";
 #else
@@ -192,7 +192,7 @@ namespace
     /**
      * @brief Whether a custom `ShaderEffect` can be bound to a 3D draw on this renderer.
      *
-     * EasyGL binds a custom effect on its 3D paths. SDL_GPU routes custom effects through
+     * EasyGL binds a custom effect on its 3D paths. SDLGPU routes custom effects through
      * SpriteBatch only; the remaining renderer families need their own measured 3D contract.
      */
     constexpr bool kCustomEffectIn3D =
@@ -205,7 +205,7 @@ namespace
     /**
      * @brief Whether this renderer can create a `RenderTarget2D` in a second sampleable format.
      *
-     * SDL_GPU creates every `Texture2D` and every render target as `R8G8B8A8_UNORM` — one fixed
+     * SDLGPU creates every `Texture2D` and every render target as `R8G8B8A8_UNORM` — one fixed
      * format, chosen at the call to `SDL_CreateGPUTexture` and not derived from the public
      * `SurfaceFormat`. So `SurfaceFormat::Color` is the only sampleable colour format it genuinely
      * offers, and leg J1 declares that boundary instead of pretending to measure a second one.
@@ -213,10 +213,10 @@ namespace
     // RTR-P9-10: this guard used to answer `false` in BOTH arms, so it
     // decided nothing and every renderer printed the boundary note below -- a note whose text
     // ("creates every Texture2D and render target as one fixed native colour format") is true of
-    // SDL_GPU and of no other renderer here. It now says what its own comment above always
-    // described, so only SDL_GPU declares that boundary.
+    // SDLGPU and of no other renderer here. It now says what its own comment above always
+    // described, so only SDLGPU declares that boundary.
     constexpr bool kSecondSampleableFormat =
-#if defined(CNA_RENDERER_SDL_GPU)
+#if defined(CNA_RENDERER_SDLGPU)
         false;
 #else
         true;
@@ -2309,7 +2309,7 @@ protected:
                     onlyLeg_.empty() ? "" : (", leg " + onlyLeg_).c_str());
         std::fflush(stdout);
 
-        if (std::string(kRendererName) == "SDL_GPU")
+        if (std::string(kRendererName) == "SDLGPU")
             info(std::string("D legs: ") + kRendererName + " has no custom-effect slot on its stock "
                  "3D paths (a custom ShaderEffect is a SpriteBatch route there) -- leg C1 exercises "
                  "a custom effect on the route that has one");

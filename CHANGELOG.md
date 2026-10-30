@@ -9,6 +9,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ## [Unreleased]
 
+### Changed
+
+- **The public renderer identity `SDL_GPU` is now `SDLGPU`.** The CMake selector, runtime name,
+  compile definitions, build options, test/CI selectors and C constant use the new spelling;
+  `CNA_GRAPHICS_RENDERER_SDLGPU` keeps value 31. The old spelling is not an alias. The experimental
+  C ABI is 0.51.0 because the old C constant name was removed. SDL's own `SDL_GPU*` API,
+  `SDL_GPU_DRIVER` hint and MojoShader SDL_GPU adapter names are unchanged.
+
 ## [0.2.0] — 2026-10-28
 
 The 0.2.0 release, cut from `next`. It narrows what a program links to what it uses, retires four

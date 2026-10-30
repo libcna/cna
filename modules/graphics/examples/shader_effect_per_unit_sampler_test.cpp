@@ -42,7 +42,7 @@
 //      reused under another is exactly the shape VULKAN-164 had to fix for a single unit.
 //   D  the two SamplerStates differ in the W axis and in nothing else.
 //
-// First written for the retired VULKAN renderer; SDL_GPU had the same defect (STREETS-0004) and
+// First written for the retired VULKAN renderer; SDLGPU had the same defect (STREETS-0004) and
 // runs it. The payload is SPIR-V, so it runs only where ShaderEffect consumes SPIR-V.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.

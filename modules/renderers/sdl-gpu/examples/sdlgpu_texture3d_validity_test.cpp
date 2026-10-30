@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Minimal regression: creating a mipmapped public Texture3D must not make SDL_GPU's
+// Minimal regression: creating a mipmapped public Texture3D must not make SDLGPU's
 // Vulkan backend create an invalid image view. The original defect occurs during construction,
 // before any SetData/GetData call: an 8x8x2, four-level SDL_GPU_TEXTURETYPE_3D texture created
 // with COLOR_TARGET usage makes SDL create 2D depth-plane views for every base-depth plane at
@@ -56,10 +56,10 @@ public:
     SdlGpuTexture3DValidityTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // pre-SDL_GPU PSG-0008: this test exercises a resource the
+        // pre-SDLGPU PSG-0008: this test exercises a resource the
         // Reach profile refuses outright, so under the default profile it threw before its
         // first check and reported as a renderer failure rather than as a test defect.
-        // profile_dead_tests.py named it DEAD-ON-PROFILE; GTI-0003 fixed three SDL_GPU
+        // profile_dead_tests.py named it DEAD-ON-PROFILE; GTI-0003 fixed three SDLGPU
         // tests this way and missed these.
         gdm_->setGraphicsProfileProperty(
             Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);

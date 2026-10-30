@@ -160,13 +160,13 @@ namespace
     // It now honours its own request, clamped down to a count the adapter actually offers.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, true, true,
                                  true, Support::Exact, false, true, false};
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     // `msaaPreserves` was false here: this renderer's multisampled cube target rendered into ONE
     // shared single-layer scratch texture that had to be cycled on every pass and was resolved away
     // immediately, so there was nothing per-face to load back. the per-face multisample attachment fix gave every face its own
     // texture, dropped the cycling and switched a preserving target to
     // SDL_GPU_STOREOP_RESOLVE_AND_STORE, so it is now true and M2/M3 require exact content.
-    constexpr Contract kContract{"SDL_GPU", true, Support::Exact, true, true,
+    constexpr Contract kContract{"SDLGPU", true, Support::Exact, true, true,
                                  true, Support::Exact, true, true, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     // `mipMapCubeTargets` true only in the sense that construction and level-0 rendering work:

@@ -7,15 +7,15 @@
  *
  * MojoShader's own OpenGL adapter (`mojoshader_opengl.c`) owns translation, shader compilation,
  * program linking and uniform pushing; the renderer-neutral reflection and state translation live
- * in `CNA::Internal::Renderers::MojoShaderEffect`, shared with the FNA3D and SDL_GPU backends. What
+ * in `CNA::Internal::Renderers::MojoShaderEffect`, shared with the FNA3D and SDLGPU renderers. What
  * is left here is this renderer's own share: creating and disposing the native effect against this
  * renderer's one `MOJOSHADER_glContext`, selecting a technique, and applying a pass.
  *
- * Unlike the SDL_GPU adapter, this one needs no separate explicit link step and no uniform
+ * Unlike MojoShader's SDL GPU adapter, this one needs no separate explicit link step and no uniform
  * snapshot captured ahead of a deferred draw: `MOJOSHADER_glBindShaders` (driven internally by
  * `ApplyPass()`'s `bindShaders` backend callback) links AND binds (`glUseProgram`) the program in
  * one step, and EasyGL draws immediately rather than deferring GPU submission to `Present()` the
- * way SDL_GPU does -- so a compiled-effect draw route can read the live shared register files
+ * way SDLGPU does -- so a compiled-effect draw route can read the live shared register files
  * directly at `MOJOSHADER_glProgramReady()` time, in the same synchronous call chain as `ApplyPass`.
  * That draw route lives in `EasyGLRenderer.cpp`'s `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`
  * (FX-062), calling the global `MOJOSHADER_gl*` functions directly rather than through

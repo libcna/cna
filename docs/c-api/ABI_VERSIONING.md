@@ -2,7 +2,20 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.50.0** (2026-10-23). It adds two routes,
+The current experimental ABI is **0.51.0** (2026-10-30). It renames the surviving public renderer
+identity `SDL_GPU` to `SDLGPU` across the CMake selector, runtime name and C constant. The
+replacement `CNA_GRAPHICS_RENDERER_SDLGPU` keeps value `31`; the removed
+`CNA_GRAPHICS_RENDERER_SDL_GPU` name is not retained as an alias, and the textual `SDL_GPU`
+selector is rejected rather than silently mapped. No renderer is added, removed or renumbered and
+compiled consumers that carry value `31` keep the same behaviour. Source consumers must adopt the
+new constant and textual name. SDL's own `SDL_GPU*` API, `SDL_GPU_DRIVER` hint and MojoShader
+SDL_GPU adapter names are unchanged. Under the experimental `0.x` rule, removing the old C name is
+an incompatible source change and therefore takes this minor increment, release note and updated
+baseline.
+
+### Previous ABI 0.50.0
+
+The ABI was **0.50.0** (2026-10-23). It adds two routes,
 `cna_skinned_model_ext_get_part_diffuse_color_at` and
 `cna_skinned_model_ext_set_part_diffuse_color_at`, for the diffuse colour and alpha a
 `SkinnedModelEXT` part now carries (`PartEXT::DiffuseColor`, the converter's glTF

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 //
 // FX-061 existence gate: prove that the pinned MojoShader's SDL_GPU adapter turns a
-// committed compiled effect into shaders SDL_GPU accepts, against a device this machine can
+// committed compiled effect into shaders SDLGPU accepts, against a device this machine can
 // actually create -- before any CNA renderer code is written for it.
 //
-// The reason to spend a probe on this rather than start implementing: CNA's SDL_GPU renderer
+// The reason to spend a probe on this rather than start implementing: CNA's SDLGPU renderer
 // already builds its pipelines from SPIR-V (SDL_GPU_SHADERFORMAT_SPIRV), and MojoShader has both a
 // SPIR-V profile and an SDL_GPU adapter, so the pairing *looks* obvious on paper. What is not
 // obvious from paper is whether the adapter links a program from a real effect's shader pair, what
@@ -18,11 +18,11 @@
 //
 // FX-071 golden-pixel investigation (2026-08-16): a second mode,
 // `cna_mojoshader_sdlgpu_probe --render <file.fxb>`, goes one step further than the reflection
-// exercise below -- it links a real SDL_GPU pipeline from the effect's own compiled shaders,
+// exercise below -- it links a real SDLGPU pipeline from the effect's own compiled shaders,
 // draws a full-screen quad with it into an offscreen render target, and reads the pixels back.
 // Nothing in this dependency chain had ever exercised MojoShader's SPIR-V Effect Framework
 // translation all the way to an actual GPU-rendered pixel before this: FNA3D's own compiled-effect
-// tests use its OpenGL/D3D11 drivers, never SPIR-V, and CNA's own stock SDL_GPU shaders are
+// tests use its OpenGL/D3D11 drivers, never SPIR-V, and CNA's own stock SDLGPU shaders are
 // hand-written SPIR-V that never goes through MOJOSHADER_compileEffect at all. This mode is what
 // isolated the FX-071 all-black golden-pixel result to two register-count/float-count unit
 // mismatches in CNA's own MojoShader Effect-parser-robustness fix (the libcna/mojoshader
@@ -365,7 +365,7 @@ namespace
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
         // Matches the real MojoShader quirk CNA's own draw route already works around: a shader
         // with zero reflected samplers still gets num_samplers=1 at compile time (maxSamplerIndex
-        // starts at 0, not -1), so SDL_GPU's validator expects a vertex sampler binding here even
+        // starts at 0, not -1), so SDLGPU's validator expects a vertex sampler binding here even
         // though MainVertexShader never samples anything.
         SDL_GPUTextureSamplerBinding vertexDummyBinding{};
         vertexDummyBinding.texture = whiteTexture;

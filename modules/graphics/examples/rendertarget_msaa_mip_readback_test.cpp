@@ -5,7 +5,7 @@
 //
 // THE DEFECT
 // ----------
-// On SDL_GPU the public sequence
+// On SDLGPU the public sequence
 //
 //     RenderTarget2D rt(dev, 16, 16, /*mipMap=*/true, Color, DepthFormat::None, 4, DiscardContents);
 //     dev.SetRenderTarget(&rt);
@@ -28,13 +28,13 @@
 // runs when a target is UNBOUND, does both jobs in the one required order:
 //
 //   1. the multisample colour buffer resolves into the SINGLE-SAMPLE texture's level 0
-//      (`OPENGL_ResolveTarget`'s `glBlitFramebuffer`; under SDL_GPU the render pass' own
+//      (`OPENGL_ResolveTarget`'s `glBlitFramebuffer`; under SDLGPU the render pass' own
 //      `resolve_texture` store action);
 //   2. then, `if (levelCount > 1)`, the WHOLE CHAIN is regenerated from that resolved level 0
 //      (`glGenerateMipmap` / `SDL_GenerateMipmapsForGPUTexture`).
 //
-// FNA3D's own SDL_GPU driver states it outright: `SDLGPU_ResolveTarget` returns early only when
-// `texture->createInfo.num_levels <= 1` ("Nothing to do, SDL_GPU resolves MSAA for us"), and
+// FNA3D's own SDLGPU driver states it outright: `SDLGPU_ResolveTarget` returns early only when
+// `texture->createInfo.num_levels <= 1` ("Nothing to do, SDLGPU resolves MSAA for us"), and
 // otherwise ends the render pass and calls `SDL_GenerateMipmapsForGPUTexture` on the single-sample
 // texture. The MULTISAMPLE attachment is a separate 1-level `COLOR_TARGET`-only resource
 // (`SDLGPU_GenColorRenderbuffer`) and never owns level 1 at all.
@@ -137,8 +137,8 @@ namespace
     constexpr const char* kRendererName = "EASYGL";
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
-#elif defined(CNA_RENDERER_SDL_GPU)
-    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDLGPU)
+    constexpr const char* kRendererName = "SDLGPU";
 #else
 #error "this renderer has no declared target mip-readback contract."
 #endif
@@ -199,13 +199,13 @@ namespace
     /**
      * @brief Whether the CONTENT of an MRT extra attachment's generated level is claimable here.
      *
-     * SDL_GPU leaves attachment 1 at the pass' explicit clear colour when a stock
+     * SDLGPU leaves attachment 1 at the pass' explicit clear colour when a stock
      * single-output draw writes attachment 0 only, so its regenerated chain is independently
      * claimable there. XNA leaves a genuinely unwritten MRT output undefined, so everywhere else
      * this file measures and prints what the extra attachment holds rather than inventing a value.
      */
     constexpr bool kMrtExtraAttachmentContentClaimable =
-#if defined(CNA_RENDERER_SDL_GPU)
+#if defined(CNA_RENDERER_SDLGPU)
         true;
 #else
         false;
@@ -1372,10 +1372,10 @@ class RenderTargetMsaaMipReadbackTest : public Game
     /**
      * @brief I2 -- a mipmapped MULTISAMPLED RenderTargetCube, re-armed for the resolved-face mip regeneration fix.
      *
-     * GFX-186 originally classified the SDL_GPU cube as a separate, safely refusing route. GFX-188
-     * now requires its resolved cube to own and populate every public level, so the SDL_GPU branch
+     * GFX-186 originally classified the SDLGPU cube as a separate, safely refusing route. GFX-188
+     * now requires its resolved cube to own and populate every public level, so the SDLGPU branch
      * below must answer and expose the generated level-1 content. Other renderers retain this
-     * fixture's original all-or-nothing safety boundary; the focused GFX-188 matrix is SDL_GPU-only.
+     * fixture's original all-or-nothing safety boundary; the focused GFX-188 matrix is SDLGPU-only.
      */
     void LegI2()
     {
@@ -1432,18 +1432,18 @@ class RenderTargetMsaaMipReadbackTest : public Game
                  (threw ? ("REFUSED -- " + what) : "answered") + "; " + std::to_string(untouched) +
                  "/" + std::to_string(count) + " destination elements untouched, " +
                  std::to_string(zeroed) + "/" + std::to_string(count) + " exactly (0,0,0,0)");
-#if defined(CNA_RENDERER_SDL_GPU)
-        check(!threw, "I2: SDL_GPU answers the valid multisampled cube level-1 read");
+#if defined(CNA_RENDERER_SDLGPU)
+        check(!threw, "I2: SDLGPU answers the valid multisampled cube level-1 read");
         check(untouched == 0,
-              "I2: SDL_GPU writes the complete level-1 destination window");
+              "I2: SDLGPU writes the complete level-1 destination window");
         check(zeroed == 0,
-              "I2: SDL_GPU's generated cube level contains no fabricated zero texels");
+              "I2: SDLGPU's generated cube level contains no fabricated zero texels");
         if (!threw)
         {
             check(Near(buf[static_cast<std::size_t>(kGuard + 1 * (kRT / 2) + 1)], kTL),
-                  "I2: SDL_GPU level 1 retains the rendered top-left colour");
+                  "I2: SDLGPU level 1 retains the rendered top-left colour");
             check(Near(buf[static_cast<std::size_t>(kGuard + 6 * (kRT / 2) + 6)], kBase),
-                  "I2: SDL_GPU level 1 retains the resolved clear colour away from the draw");
+                  "I2: SDLGPU level 1 retains the resolved clear colour away from the draw");
         }
 #else
         check(true, "I2: the cube route completed without a signal");

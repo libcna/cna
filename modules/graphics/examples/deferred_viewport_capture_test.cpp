@@ -141,10 +141,10 @@ namespace
     constexpr Contract kContract{"WEBGPU", Support::Exact, Support::Exact, true, true, true, false};
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true, true, true, true};
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     // SDLGPU-67: the current modular renderer has a real backbuffer proxy/readback path. Exercise
     // it here instead of preserving the obsolete pre-proxy Unsupported expectation.
-    constexpr Contract kContract{"SDL_GPU", Support::Exact, Support::Exact, true, true, true, false};
+    constexpr Contract kContract{"SDLGPU", Support::Exact, Support::Exact, true, true, true, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
     // `depthRangeApplies` true: measured, not assumed. The software rasterizer's depth COMPARE is a
     // fixed LessEqual (the documented boundary), but it does remap the interpolated

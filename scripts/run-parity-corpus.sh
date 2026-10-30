@@ -33,7 +33,7 @@ case "$COMPARISON_RENDERER" in
         ;;
     sdlgpu)
         COMPARISON_BUILD="${2:-cmake-build-sdlgpu}"
-        COMPARISON_LABEL="SDL_GPU"
+        COMPARISON_LABEL="SDLGPU"
         comparison_binary() { printf '%s/cna_test_sdlgpu_parity_%s' "$REPO_ROOT/$COMPARISON_BUILD" "$1"; }
         ;;
     *)
@@ -48,7 +48,7 @@ trap 'rm -rf "$WORK"' EXIT
 # --- the policy table -------------------------------------------------------------------------
 # Anything not named here is `strict`.
 declare -A POLICY=(
-  [backbuffer_msaa]="allow:520:the triangle's three coverage boundaries; MSAA sample locations are implementation-defined, while both fixtures assert a resolved partial-coverage pixel and opaque interior -- measured EasyGL vs SDL_GPU: 506 pixels, all on those boundaries"
+  [backbuffer_msaa]="allow:520:the triangle's three coverage boundaries; MSAA sample locations are implementation-defined, while both fixtures assert a resolved partial-coverage pixel and opaque interior -- measured EasyGL vs SDLGPU: 506 pixels, all on those boundaries"
   [compressed_cube]="internal:a reflection's cube FACE depends on the pixel-centre convention (WEBGPU-187); this fixture's oracle is a BC cube against an RGBA8 cube WITHIN one renderer"
   [sampler_filters]="internal:magnification lands a linear gradient half a texel apart under the two pixel-centre conventions (WEBGPU-187); the claims are point-vs-linear A/Bs within one renderer"
   [rasterizer_viewport]="allow:400:the triangle hypotenuses, rasterized under the two pixel-centre conventions (WEBGPU-187) -- measured 276 of 12800, all in the four triangle cells and none in the quad cells"
@@ -58,8 +58,8 @@ declare -A POLICY=(
   [fill_mode_wireframe]="allow:512:the drawn LINE pixels themselves -- GL line rules and a WebGPU line-list rasterize a diagonal differently, on top of the pixel-centre convention (WEBGPU-187). Measured 367 of 32768, 1.1 percent"
 )
 
-# SDLGPU-81 measured the SDL_GPU comparison independently. Do not inherit WebGPU exceptions merely
-# because both APIs commonly run over Vulkan: SDL_GPU's XNA half-pixel correction makes the
+# SDLGPU-81 measured the SDLGPU comparison independently. Do not inherit WebGPU exceptions merely
+# because both APIs commonly run over Vulkan: SDLGPU's XNA half-pixel correction makes the
 # rasterizer/viewport, EnvironmentMap and Skinned frames exact. Only the genuinely inapplicable
 # reflection/filter pictures and the two coverage-rule cases remain exceptions.
 if [[ "$COMPARISON_RENDERER" == "sdlgpu" ]]; then

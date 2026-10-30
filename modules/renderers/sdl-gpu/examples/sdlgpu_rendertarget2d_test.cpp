@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SDLGPU-35: RenderTarget2D proof for the SDL_GPU graphics renderer -- a
+// SDLGPU-35: RenderTarget2D proof for the SDLGPU graphics renderer -- a
 // COLOR_TARGET|SAMPLER texture rendered into during its own render pass and sampled during a
 // later pass within the same frame (Phase SDLGPU-8's per-target multi-pass EnsureFrameRendered).
 //

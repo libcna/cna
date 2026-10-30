@@ -27,8 +27,8 @@
 #include <string>
 #include <vector>
 
-#ifndef CNA_RENDERER_SDL_GPU
-#error "SDLGPU-74's target upload regression is SDL_GPU-only."
+#ifndef CNA_RENDERER_SDLGPU
+#error "SDLGPU-74's target upload regression is SDLGPU-only."
 #endif
 
 using namespace Microsoft::Xna::Framework;

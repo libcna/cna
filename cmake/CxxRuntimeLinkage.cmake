@@ -18,7 +18,7 @@ endfunction()
 # weak copies of the ones it uses. mold resolves a symbol that a not-yet-extracted archive member
 # and a shared library both define weakly to whichever comes first on the command line, and the
 # compiler driver names the runtime last. A std::string member that a C++ shared library needs
-# (libshaderc, in a build with SDL_GPU) then extracts the first CNA archive member that defines it:
+# (libshaderc, in a build with SDLGPU) then extracts the first CNA archive member that defines it:
 # in a multi-renderer 2D game, the gamer-services backend, the system Guide and the avatar
 # catalog. Named first, the shared runtime satisfies such a reference, and no member is extracted
 # for a standard-library symbol alone. As-needed, so it adds no dependency; GNU ld and lld link the

@@ -198,7 +198,7 @@ struct VertexOutput {
      * @brief WMG-0014: directional, cascaded, point and spot
      *        shadow reception, appended to every lit fragment program that receives shadows.
      *
-     * The WGSL twin of SDL_GPU's `shadow_sampling.glsl` (first written for the retired VULKAN
+     * The WGSL twin of SDLGPU's `shadow_sampling.glsl` (first written for the retired VULKAN
      * renderer), function for
      * function and constant for constant. Group 2 is
      * deliberately identical for every family that includes it; groups 0 and 1 stay the family's
@@ -472,7 +472,7 @@ struct VertexOutput {
     let dotl1 = dot(n, -nl1); let zerol1 = step(0.0, dotl1); let ndotl1 = max(dotl1, 0.0);
     let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
     // WMG-0014: the directional shadow scales the three directional lights' diffuse and the
-    // specular that follows from them, exactly as on EasyGL and SDL_GPU; the ambient term and the
+    // specular that follows from them, exactly as on EasyGL and SDLGPU; the ambient term and the
     // punctual light are outside it -- the punctual light carries its own shadow.
     let shadow = cnaShadowFactor(input.worldPos);
     let lightSum = u.ambientLighting.xyz
@@ -1425,7 +1425,7 @@ fn skinNormal(m: mat3x3f, n: vec3f) -> vec3f {
     output.position = u.mvp * skinnedPos;
     output.uv = input.uv;
     // WEBGPU-148: FNA fog keep factor from the SKINNED view-space position (matches FNA
-    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and SDL_GPU's
+    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and SDLGPU's
     // skinned3d.vert.glsl).
     output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
@@ -1556,7 +1556,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     output.position = u.mvp * skinnedPos;
     output.uv = input.uv;
     // WEBGPU-148: FNA fog keep factor from the SKINNED view-space position (matches FNA
-    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and SDL_GPU's
+    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and SDLGPU's
     // skinned3d.vert.glsl).
     output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
@@ -1687,7 +1687,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     output.position = u.mvp * skinnedPos;
     output.uv = input.uv;
     // WEBGPU-148: FNA fog keep factor from the SKINNED view-space position (matches FNA
-    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and SDL_GPU's
+    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and SDLGPU's
     // skinned3d.vert.glsl).
     output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
@@ -1811,7 +1811,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     output.position = u.mvp * skinnedPos;
     output.uv = input.uv;
     // WEBGPU-148: FNA fog keep factor from the SKINNED view-space position (matches FNA
-    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and SDL_GPU's
+    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and SDLGPU's
     // skinned3d.vert.glsl).
     output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     output.color = input.color;

@@ -965,7 +965,7 @@ TEST(ClassicTextureFormat, VolumeGenericTransfersUseTotalByteSize)
     std::vector<Vector4> wrongCount(2);
     EXPECT_THROW(volume.GetData(wrongCount.data(), 1), System::ArgumentException);
 
-    // Vector4 volume storage does not imply Vector2 (SDL_GPU stores the one and refuses the other).
+    // Vector4 volume storage does not imply Vector2 (SDLGPU stores the one and refuses the other).
     if (device.GetRenderer().ClassifyTexture3DFormatEXT(
             static_cast<int>(SurfaceFormat::Vector2)) == RendererFormatVerdict::Supported)
     {

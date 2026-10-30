@@ -63,7 +63,7 @@ if(CNA_BUILD_TESTS)
         add_executable(CnaPbrVertexContractTest modules/graphics/examples/pbr_vertex_contract_test.cpp)
         target_link_libraries(CnaPbrVertexContractTest PRIVATE CNA)
         cna_link_sharp_runtime(CnaPbrVertexContractTest PRIVATE)
-        foreach(_pbr_renderer SOFTWARE OPENGLES3 OPENGL33 WEBGPU SDL_GPU)
+        foreach(_pbr_renderer SOFTWARE OPENGLES3 OPENGL33 WEBGPU SDLGPU)
             if(_pbr_renderer IN_LIST CNA_RENDERER_IDENTITIES)
                 add_test(NAME PbrVertexContract_${_pbr_renderer} COMMAND CnaPbrVertexContractTest)
                 set_tests_properties(PbrVertexContract_${_pbr_renderer} PROPERTIES
@@ -73,7 +73,7 @@ if(CNA_BUILD_TESTS)
         endforeach()
     endif()
 
-    # Observe real native texture retirement and deferred SDL_GPU binding, without
+    # Observe real native texture retirement and deferred SDLGPU binding, without
     # replacing either driver. ELF interposition requires the shared CNA library.
     if("FNA3D" IN_LIST CNA_RENDERER_IDENTITIES AND CNA_SHARED_LIBRARY
        AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING)
@@ -453,11 +453,11 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Fna3d/.*\\.cpp$")
     endif()
 
-    # pre-SDL_GPU PSG-0007, the third instance of the same shape: the EasyGL
+    # pre-SDLGPU PSG-0007, the third instance of the same shape: the EasyGL
     # suites under modules/renderers/easygl/tests/ include <metagl/metagl.hpp>, whose include root
-    # arrives with the easy-gl sibling checkout that only a GL identity adds. Configuring SDL_GPU
-    # therefore produced a CnaTests that could not compile, which is what blocked the SDL_GPU
-    # classic baseline this closeout exists to measure. Found by configuring SDL_GPU, exactly as
+    # arrives with the easy-gl sibling checkout that only a GL identity adds. Configuring SDLGPU
+    # therefore produced a CnaTests that could not compile, which is what blocked the SDLGPU
+    # classic baseline this closeout exists to measure. Found by configuring SDLGPU, exactly as
     # WMG-0028's twin was found by configuring Vulkan.
     set(_cna_gl_identities OPENGLES3 OPENGL33 WEBGL2)
     set(_cna_have_gl_identity FALSE)
@@ -884,7 +884,7 @@ if(CNA_BUILD_TESTS)
     # WEBGPU-167: the same is now true of WebGPU's compiled-effect headers,
     # which the renderer header includes unconditionally once the option is on -- so the condition
     # is the presence of the MojoShader target, not one family's option. Any family that configured
-    # it -- EasyGL, WebGPU, SDL_GPU, SOFTWARE or DirectX 9 -- has public headers a test TU can reach.
+    # it -- EasyGL, WebGPU, SDLGPU, SOFTWARE or DirectX 9 -- has public headers a test TU can reach.
     if(TARGET cna_mojoshader)
         target_link_libraries(cna_test_build_config INTERFACE cna_mojoshader)
     endif()
@@ -1316,15 +1316,15 @@ if(CNA_BUILD_TESTS)
     # themselves and still in parallel with everything else.
     set(_cna_unit_tests_network_filter
         "ENetBackendTest.*:ENetHostHandleTest.*:ENetDiscoveryServiceTest.*:NetworkSessionTest.*:ServiceSearchTest.*:OnlineNetworkSessionTest.*:NetworkSessionTypePolicyTest.*:TwoProcessLoopbackTest.*:AvailableNetworkSession*.*:QualityOfServiceTest.*:OnlineLeaderboardTest.*:LocalNetworkGamerTest.*:GamerServicesDispatcherHangRegressionTest.*:RelayTransportTest.*")
-    # Avatar acceptance AVH-07: the SDL_GPU and FNA3D compiled-effect suites test their
+    # Avatar acceptance AVH-07: the SDLGPU and FNA3D compiled-effect suites test their
     # renderer's own runtime and need it to be the device's. In a multi-renderer tree whose default
     # is another renderer they were discovered with the default, so most cases skipped and those
     # that assert the runtime exists failed (15 in cmake-build-multi). They are discovered on their
     # own, with their renderer selected, wherever it is compiled in but not the default.
     set(_cna_unit_tests_renderer_suites)
-    if(NOT CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU" AND "SDL_GPU" IN_LIST CNA_RENDERER_IDENTITIES)
+    if(NOT CNA_GRAPHICS_RENDERER STREQUAL "SDLGPU" AND "SDLGPU" IN_LIST CNA_RENDERER_IDENTITIES)
         list(APPEND _cna_unit_tests_renderer_suites
-            "SDL_GPU|SdlGpuCompiledEffectTest.*:SdlGpuCompiledEffectDrawTest.*:SdlGpuCompiledEffectVertexLayoutTest.*")
+            "SDLGPU|SdlGpuCompiledEffectTest.*:SdlGpuCompiledEffectDrawTest.*:SdlGpuCompiledEffectVertexLayoutTest.*")
     endif()
     if(NOT CNA_GRAPHICS_RENDERER STREQUAL "FNA3D" AND "FNA3D" IN_LIST CNA_RENDERER_IDENTITIES)
         list(APPEND _cna_unit_tests_renderer_suites "FNA3D|Fna3dCompiledEffectTest.*:Fna3dCompiledEffectDrawTest.*")

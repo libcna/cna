@@ -42,7 +42,7 @@ cmake -P "${script}" 2>&1 | grep -q "PROBE-OK non-apple" || {
 # ---------------------------------------------------------------------------
 # 2. iOS + allow-listed renderer: accepted.
 # ---------------------------------------------------------------------------
-for renderer in SOFTWARE SDL_GPU; do
+for renderer in SOFTWARE SDLGPU; do
     cat > "${script}" <<EOF
 set(CMAKE_SOURCE_DIR "${repo_root}")
 include("${repo_root}/cmake/ApplePlatform.cmake")
@@ -92,7 +92,7 @@ cmake -P "${script}" 2>&1 | grep -q "PROBE-OK escape-hatch" || {
 }
 
 # ---------------------------------------------------------------------------
-# 4b. A renderer stays allow-listed only while the real Apple workflow builds it (SDL_GPU in a
+# 4b. A renderer stays allow-listed only while the real Apple workflow builds it (SDLGPU in a
 #     non-gating leg, as it is not yet qualified for iOS). EasyGL needs two additional sibling
 #     repositories the workflow does not supply; accepting it would only postpone a known failure.
 # ---------------------------------------------------------------------------

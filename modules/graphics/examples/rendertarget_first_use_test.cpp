@@ -142,9 +142,9 @@ namespace
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "WEBGPU";
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "SDL_GPU";
+    constexpr const char* kRendererName = "SDLGPU";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX9";
@@ -157,15 +157,15 @@ namespace
      *
      * CLOSED this (2026-07-29), and the declaration is now unconditionally true.
      *
-     * It used to read false on SDL_GPU, whose stock-effect paths cast a RenderTarget2D's renderer to
+     * It used to read false on SDLGPU, whose stock-effect paths cast a RenderTarget2D's renderer to
      * the unrelated `SdlGpuTextureRenderer` sibling and died.
      *
      * Recorded accurately rather than claimed as a crash proof: in THIS file the flag was
      * OVER-APPLIED. Legs J and K carry `needsStockEffectRtSource = true`, but neither hands a
      * render target to an effect -- both bind an ordinary `Texture2D` (`patternTex_`,
      * `altPatternTex_`) and merely RENDER INTO a target, which was never the defect. So the skip
-     * cost SDL_GPU three checks of genuine first-use coverage while hiding nothing: both legs were
-     * measured against the pre-fix renderer and PASS there (J 1/1, K 2/2). SDL_GPU 17/17 -> 20/20,
+     * cost SDLGPU three checks of genuine first-use coverage while hiding nothing: both legs were
+     * measured against the pre-fix renderer and PASS there (J 1/1, K 2/2). SDLGPU 17/17 -> 20/20,
      * the three newly-enabled checks green on both builds. The legs that really do sample a target
      * through a stock effect live in rendertarget_effect_source_test.cpp, and those are the ones
      * that SIGSEGV pre-fix.

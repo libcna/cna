@@ -16,7 +16,7 @@
 # docs/renderer-registry.md: EasyGL is an internal implementation family, not a public renderer
 # name. It is selected publicly via one of 3 GL-profile names -- OPENGLES3/OPENGL33
 # (desktop/mobile, non-Emscripten) and WEBGL2 (Emscripten only). WEBGL2 is the default under
-# Emscripten. Windows, macOS and iOS default to SDL_GPU, CNA's modern native path (SDL's Direct3D 12
+# Emscripten. Windows, macOS and iOS default to SDLGPU, CNA's modern native path (SDL's Direct3D 12
 # and Metal backends); every other system -- Linux, Android, the BSDs -- defaults to OPENGLES3, the
 # path validated there.
 # =====================================================================================
@@ -26,7 +26,7 @@ include_guard(GLOBAL)
 if(EMSCRIPTEN)
     set(_cna_default_renderer "WEBGL2")
 elseif(CMAKE_SYSTEM_NAME MATCHES "^(Windows|Darwin|iOS)$")
-    set(_cna_default_renderer "SDL_GPU")
+    set(_cna_default_renderer "SDLGPU")
 else()
     set(_cna_default_renderer "OPENGLES3")
 endif()

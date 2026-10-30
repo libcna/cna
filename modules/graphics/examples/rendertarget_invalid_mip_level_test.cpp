@@ -23,7 +23,7 @@
 // Every sibling route on this very renderer already had the guard -- `VulkanTexture3DRenderer`,
 // `VulkanTextureCubeRenderer` and `VulkanRenderTargetCubeRenderer` all test
 // `level < 0 || level >= levelCount_` -- and `VulkanRenderTargetRenderer` was the one route that
-// never learned it. That is the same shape the generated-mip readback contract closed on SDL_GPU, where the symptom was a
+// never learned it. That is the same shape the generated-mip readback contract closed on SDLGPU, where the symptom was a
 // SIGSEGV instead of fabrication.
 //
 // THE PUBLIC CONTRACT THIS FILE ENCODES
@@ -134,8 +134,8 @@ namespace
     constexpr const char* kRendererName = "EASYGL";
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
-#elif defined(CNA_RENDERER_SDL_GPU)
-    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDLGPU)
+    constexpr const char* kRendererName = "SDLGPU";
 #else
 #error "this renderer has no declared invalid-mip-level contract."
 #endif

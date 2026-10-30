@@ -52,7 +52,7 @@ int main()
         return CNA::Examples::kSkipExitCode;
 
     // HiDef, because Reach refuses OcclusionQuery for every renderer before capability is even
-    // consulted; the subject here is the SDL_GPU capability answer, which only HiDef reaches.
+    // consulted; the subject here is the SDLGPU capability answer, which only HiDef reaches.
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters::CreateWindowedEXT(800, 480));
     auto& renderer = dynamic_cast<SdlGpuRenderer&>(device.GetRenderer());
@@ -65,7 +65,7 @@ int main()
           "detailed capability profile reports occlusion queries unsupported");
 
     constexpr std::string_view expectedMessage =
-        "CNA SDL_GPU: OcclusionQuery is unavailable because vendored SDL_gpu 3.5.0 exposes "
+        "CNA SDLGPU: OcclusionQuery is unavailable because vendored SDL_gpu 3.5.0 exposes "
         "no occlusion-query or query-pool commands; GPU fences report only command-buffer "
         "completion and cannot count samples that pass depth/stencil.";
     // Since SOFTWARE-199 the public constructor follows recovered XNA: it checks the profile and

@@ -42,7 +42,7 @@ only for context or surface lifecycle and at most once per presented frame.
 a missing required service is a deterministic construction error naming the capability.
 Native-handle renderers (`DIRECTX9`, the native WebGPU path) need no service pointer at all.
 
-The two deliberate SDL exceptions (`SDL_GPU`, `FNA3D`) may keep their SDL-specific construction
+The two deliberate SDL exceptions (`SDLGPU`, `FNA3D`) may keep their SDL-specific construction
 internally. They still do not make SDL types part of the common renderer interface.
 
 ## Lifetime and ownership

@@ -110,7 +110,7 @@ namespace CNA::Internal::Graphics
          * @brief The renderer falls back to its `VertexPositionColor` layout: Position at offset 0
          * and a packed colour at offset 12, strided by the buffer's own stride.
          *
-         * SDL_GPU's ordinary route does this, as the since-retired Vulkan renderer's did; it is
+         * SDLGPU's ordinary route does this, as the since-retired Vulkan renderer's did; it is
          * why a position-only stride-12 declaration rendered correctly there.
          */
         PositionColorFallback,

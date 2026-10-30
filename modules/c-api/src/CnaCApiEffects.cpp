@@ -2026,7 +2026,7 @@ namespace {
 }
 
 // CNA_SHADER_DIALECT_SPIRV makes a ShaderEffect's two views compiled modules, which carry NUL
-// bytes and are not UTF-8; reading them as text refused the only payload SDL_GPU documents. A
+// bytes and are not UTF-8; reading them as text refused the only payload SDLGPU documents. A
 // view is a module when it is whole 32-bit words, holds at least the five-word header and starts
 // with the SPIR-V magic number in host byte order. Everything else is still source text.
 [[nodiscard]] bool IsSpirvModuleView(const CNA_StringView view) noexcept

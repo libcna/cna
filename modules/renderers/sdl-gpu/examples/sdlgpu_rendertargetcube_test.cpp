@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SDLGPU-36: RenderTargetCube proof for the SDL_GPU graphics renderer -- a single
+// SDLGPU-36: RenderTargetCube proof for the SDLGPU graphics renderer -- a single
 // SDL_GPU_TEXTURETYPE_CUBE texture (6 layers), one face bound as the active render target at a
 // time, including real MSAA (auto-resolved via SDL_GPUColorTargetInfo.resolve_texture/
 // resolve_layer at render-pass end) and mip generation.

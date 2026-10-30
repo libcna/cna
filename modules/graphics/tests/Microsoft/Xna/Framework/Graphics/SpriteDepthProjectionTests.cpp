@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // ISSUE-156: the default sprite projection preserves XNA's zero-to-one Z interval.
-// Prepared witness; run before repairing SDL_GPU and do not infer coverage from compilation.
+// Prepared witness; run before repairing SDLGPU and do not infer coverage from compilation.
 #include <gtest/gtest.h>
 #include <optional>
 #include <string>

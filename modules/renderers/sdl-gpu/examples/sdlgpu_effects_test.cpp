@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SDLGPU-31/32: AlphaTestEffect and DualTextureEffect proof for the SDL_GPU
+// SDLGPU-31/32: AlphaTestEffect and DualTextureEffect proof for the SDLGPU
 // graphics renderer, through the real public XNA API, verified via a real screenshot (same bar
 // as sdlgpu_3d_test.cpp).
 //

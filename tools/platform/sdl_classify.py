@@ -13,7 +13,7 @@ because identifiers were classified into it, not because a design sketch propose
 The classification is rule-based and ordered -- first match wins -- because SDL's naming is
 overlapping rather than hierarchical. `SDL_GetWindowProperties` is native-handle extraction, not
 window management; `SDL_GL_GetProcAddress` is GL interop, not a window flag; `SDL_GPUTexture` is
-SDL_GPU-renderer-specific, not graphics-general. Ordering those rules correctly is the actual work
+SDLGPU-renderer-specific, not graphics-general. Ordering those rules correctly is the actual work
 here, so the rule table below is the deliverable, not the CSV it emits.
 
 Completeness is mechanical, not claimed: the script exits non-zero if any identifier falls through
@@ -117,7 +117,7 @@ AREAS: dict[str, tuple[str, str, str]] = {
         "GL context creation.",
     ),
     "renderer-sdl-api": (
-        "allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",
+        "allowlisted renderers (SDLGPU, FNA3D) and the CPU-frame surface presenter",
         "PLAT-3/PLAT-76",
         "Legitimately SDL3-bound: these renderers *are* an SDL3 API. Never on the common interface.",
     ),
@@ -160,7 +160,7 @@ RULES: list[tuple[str, str, str]] = [
     # GenerateMipmapsForGPUTexture). Anchoring on the infix is what makes this area complete.
     (r"^SDL_\w*GPU", "renderer-sdl-api", "SDL_GPU API"),
 
-    # SDL_shadercross is the companion library the SDL_GPU renderer compiles its shaders with
+    # SDL_shadercross is the companion library the SDLGPU renderer compiles its shaders with
     # (SDL_shadercross.h). It carries no "GPU" in its names, so the infix catch-all above misses
     # it, yet it belongs to the same renderer-specific area: it is a shader toolchain, never an
     # IPlatform service. The one pattern covers both the API (SDL_ShaderCross_Init) and the bare

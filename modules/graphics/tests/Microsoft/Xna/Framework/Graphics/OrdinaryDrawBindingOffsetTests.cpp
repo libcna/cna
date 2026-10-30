@@ -46,7 +46,7 @@
 //   * a stale previous binding offset   -> the previous leg's slot
 //
 // Renderer scope. The render-target group is the portable one: it runs on every renderer that
-// rasterizes 3D triangles and implements RenderTarget2D::GetData, which includes SDL_GPU (whose
+// rasterizes 3D triangles and implements RenderTarget2D::GetData, which includes SDLGPU (whose
 // only exact-pixel oracle that is --. The backbuffer group additionally needs
 // GetBackBufferData and therefore carries the renderer set the non-indexed range fix established. The
 // ordinary -> instanced -> ordinary transition additionally needs a working instanced route, so it

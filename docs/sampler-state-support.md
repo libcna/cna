@@ -98,8 +98,8 @@ change what the GPU samples. That was true of **every** renderer except FNA3D un
 
 | Renderer | `MaxMipLevel` | `MipMapLevelOfDetailBias` |
 |---|---|---|
-| FNA3D | `GL_TEXTURE_BASE_LEVEL` / SDL_GPU `min_lod`, whichever driver is active | desktop GL only; FNA3D's own GL driver skips it under ES |
-| SDL_GPU | **implemented** — `SDL_GPUSamplerCreateInfo::min_lod`, and part of the sampler cache key | **implemented on every ordinary stock/SpriteBatch and compiled-XNA-effect route** — SDLGPU-121/122 use SPIR-V's Bias operand because SDL documents native `mip_lod_bias` as a Metal no-op; Vulkan and D3D12 run the same shader emulation so the proof cannot pass through their working descriptor field |
+| FNA3D | `GL_TEXTURE_BASE_LEVEL` / SDLGPU `min_lod`, whichever driver is active | desktop GL only; FNA3D's own GL driver skips it under ES |
+| SDLGPU | **implemented** — `SDL_GPUSamplerCreateInfo::min_lod`, and part of the sampler cache key | **implemented on every ordinary stock/SpriteBatch and compiled-XNA-effect route** — SDLGPU-121/122 use SPIR-V's Bias operand because SDL documents native `mip_lod_bias` as a Metal no-op; Vulkan and D3D12 run the same shader emulation so the proof cannot pass through their working descriptor field |
 | EasyGL, ES 3 profiles (`OPENGLES3`, `WEBGL2`) | **implemented** — sampler-object `GL_TEXTURE_MIN_LOD` | **not representable as sampler state**: OpenGL ES has no `GL_TEXTURE_LOD_BIAS`; compiled vertex `TEXLDL` is nevertheless implemented by shader emulation (`FX-146`) |
 | EasyGL, `OPENGL33` | **implemented** — `GL_TEXTURE_MIN_LOD` | **implemented** — `GL_TEXTURE_LOD_BIAS` |
 | EasyGL `AddressW` | **implemented** since FX-092 — sampler-object `GL_TEXTURE_WRAP_R` | — |
@@ -168,7 +168,7 @@ Why `GL_TEXTURE_MIN_LOD` rather than FNA3D's `GL_TEXTURE_BASE_LEVEL`: base level
 state, and CNA's contract is per **slot**. Two slots sampling one texture with different
 `MaxMipLevel` values would fight over a single base level, whereas `min_lod` on a sampler object is
 exactly "never resolve a level more detailed than this" and is per slot. It is also the mapping
-FNA3D's own SDL_GPU driver makes (`samplerCreateInfo.min_lod = samplerState->maxMipLevel`).
+FNA3D's own SDLGPU driver makes (`samplerCreateInfo.min_lod = samplerState->maxMipLevel`).
 
 **SDL GPU stock routes are complete since SDLGPU-121 (2026-09-11).** SDLGPU-64 established that
 every stock deferred command captures all seven sampler properties per slot. `MaxMipLevel`, filter,
@@ -184,7 +184,7 @@ Texture3D/compiled-effect volume work tracked by `SDLGPU-71`/`SDLGPU-79`.
 **Compiled XNA Effects are complete since SDLGPU-122 (2026-09-11).** The pinned MojoShader adapter
 now exposes one bounded callback after SPIR-V linking and before native shader creation. CNA uses it
 to apply the shared `InjectSamplerLodBias` rewrite directly to MojoShader's combined samplers,
-placing one vec4 per D3D9 sampler register in SDL_GPU fragment-uniform set 3/binding 1. Replay
+placing one vec4 per D3D9 sampler register in SDLGPU fragment-uniform set 3/binding 1. Replay
 snapshots and pushes those values at fragment UBO slot 1 and deliberately zeros the corresponding
 native sampler bias, preventing double application on Vulkan/D3D12. On Apple, the statically linked
 ShaderCross configuration now consumes the same transformed SPIR-V and translates it to Metal's
@@ -198,7 +198,7 @@ unimplemented sampler semantic.
 
 Two follow-up findings, both about the same thing: what a renderer's sampler is a function OF.
 
-**SDL_GPU's sampler cache key was lossy.** It packed the description into a `uint64` with the
+**SDLGPU's sampler cache key was lossy.** It packed the description into a `uint64` with the
 32-bit LOD bias shifted to bit 40, so an IEEE-754 float's sign and seven of its eight exponent bits
 fell off the end. `0.0`, `+/-0.5`, `+/-2.0` and `+/-8.0` produced one key; `+/-1.0`, `+/-4.0` and
 `0.25` produced another; each family was served the first native sampler ever built for it.
@@ -302,7 +302,7 @@ CNA-wide, not renderer-specific. A game that relied on the old behaviour should 
 `SamplerStates[0]` explicitly after `End()` — which is what it would have had to do on XNA too.
 
 Asserted by `modules/graphics/examples/spritebatch_sampler0_publication_test.cpp`, registered on
-EasyGL and SDL_GPU.
+EasyGL and SDLGPU.
 
 ## 10. The W axis reaches EasyGL (2026-09-07)
 

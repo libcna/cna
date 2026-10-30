@@ -20,7 +20,7 @@ as for Linux. Audio, input and sensors on Android are covered in `docs/devices-a
 
 - Physical devices: only the emulator's GLES (`swiftshader_indirect`/`swangle_indirect`) has run
   CNA.
-- `SDL_GPU`: unqualified on Android; no Android build or run of it is recorded.
+- `SDLGPU`: unqualified on Android; no Android build or run of it is recorded.
 - CI: no job builds for Android.
 
 ## Floating-point render-target readback

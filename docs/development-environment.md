@@ -36,7 +36,7 @@ sudo apt-get install -y \
 | `libx11-dev` … `libxtst-dev` | SDL3 is built from the vendored submodule, but its configure looks for the X11 headers of its x11 video driver on the system. Once it finds `libx11-dev` it stops if any of these extension packages is missing; XTest is one of them. Xinerama is no longer used. |
 | `libgl-dev`, `libegl-dev` | The OpenGL and EGL headers SDL3 probes for its GL context support, which the GL renderers use. Without them SDL3 silently builds without that support. meta-gl carries its own GLES headers. The older names `libgl1-mesa-dev` and `libegl1-mesa-dev` that CI uses install the same headers. |
 | `libasound2-dev`, `libpulse-dev` | SDL3's ALSA and PulseAudio output backends. `libasound2-dev` is also what `CNA_AUDIO_PLATFORM=ALSA` needs ([`audio-alsa.md`](audio-alsa.md)). Tests use SDL's dummy audio driver either way. |
-| `weston`, `xwayland`, `mesa-vulkan-drivers` | [`tools/platform/run_gpu_tests_private.sh`](../tools/platform/run_gpu_tests_private.sh) is the standard way to run GPU and window tests, never on the live desktop. It starts a headless Weston and a private rootful Xwayland, which has DRI3 and so presents Vulkan on the real GPU. Without Weston or Xwayland it exits 77 (skip). `mesa-vulkan-drivers` is the Vulkan driver (RADV, Intel, or lavapipe on a machine with no usable GPU) that `SDL_GPU` and `WEBGPU` run on; neither needs Vulkan headers to build. |
+| `weston`, `xwayland`, `mesa-vulkan-drivers` | [`tools/platform/run_gpu_tests_private.sh`](../tools/platform/run_gpu_tests_private.sh) is the standard way to run GPU and window tests, never on the live desktop. It starts a headless Weston and a private rootful Xwayland, which has DRI3 and so presents Vulkan on the real GPU. Without Weston or Xwayland it exits 77 (skip). `mesa-vulkan-drivers` is the Vulkan driver (RADV, Intel, or lavapipe on a machine with no usable GPU) that `SDLGPU` and `WEBGPU` run on; neither needs Vulkan headers to build. |
 | `xvfb`, `x11-utils` | Xvfb serves the X11-protocol tests (`CnaPlatformSdl3X11Tests`, through `tools/platform/x11_test_server.sh`) and the `xvfb-run` harnesses under `scripts/`. It is **not** a substitute for the private runner: it has no DRI3, so Vulkan cannot present on it, and its OpenGL is Mesa's software llvmpipe. `x11-utils` gives the runner `xdpyinfo` for its DRI3 check. |
 | `python3`, `python3-pil` | Configure works without Python, but with it the default suite registers its Python checks, and the platform boundary gates are Python scripts ([`platform-abstraction.md`](platform-abstraction.md)). `EasyGL_XnaLineCoverage` diffs images with Pillow. |
 | `libfreetype-dev`, `doxygen` | The default suite checks these rather than skipping them. FreeType is the build-time `.spritefont` pipeline (`CNA_ENABLE_FONT_PIPELINE=AUTO`), whose link boundary `CnaXnbDependencyBoundary` verifies. The C API coverage gates parse headers with Doxygen 1.9.x, which is the version trixie ships. |
@@ -90,7 +90,7 @@ git submodule update --init --recursive   # an existing clone, and after a pull 
   release for `WEBGPU` (`CNA_WEBGPU_ROOT` for an offline build), FNA3D and MojoShader -- CNA's
   forks libcna/FNA3D and libcna/mojoshader, see `docs/fna3d-renderer.md` -- for `FNA3D` and the
   `*_COMPILED_EFFECTS` options (`FETCHCONTENT_SOURCE_DIR_FNA3D`), and SDL_shadercross for
-  `SDL_GPU` on Windows and Apple targets.
+  `SDLGPU` on Windows and Apple targets.
 - Third-party code is built as upstream ships it, with three exceptions, each explained where it
   is applied: SDL carries two Emscripten-only patches, one iOS-only and one Android-only patch, and
   one Vulkan-backend patch for every build that has that backend (`cmake/ThirdPartySDL.cmake`), SDL_shadercross one build-integration patch
@@ -125,7 +125,7 @@ sudo apt-get install -y \
 | `libzstd-dev` | Zstandard-compressed `.cnb` chunks. | `CNA_CNB_ZSTD` (`AUTO`) |
 | `libopus-dev` | Network voice (`NetworkGamer.HasVoice`). | `CNA_ENABLE_VOICE` (`AUTO`) |
 | `zlib1g-dev` | Compressed arrays of binary FBX files in the build-time content pipeline. Nothing else in the default configuration needs zlib. | probed |
-| `libshaderc1` | `SDL_GPU`'s `ShaderEffect` (GLSL compiled at run time). Without it `CustomEffects` reports false. The runtime library is enough. | probed |
+| `libshaderc1` | `SDLGPU`'s `ShaderEffect` (GLSL compiled at run time). Without it `CustomEffects` reports false. The runtime library is enough. | probed |
 | `libudev-dev`, `libdbus-1-dev` | SDL3's udev device hotplug and its D-Bus integration (screensaver inhibition, IME, portals). SDL3 builds without them. | SDL3's own configure |
 | `mold` (or `lld`) | Faster links. `CNA_LINKER=AUTO` tries mold first, then lld ([`build-performance.md`](build-performance.md)). | `CNA_LINKER` (`AUTO`) |
 
@@ -152,7 +152,7 @@ sudo apt-get install -y mingw-w64 wine dxvk dxvk-wine64
 ```
 
 - `mingw-w64` provides the compilers for `cmake/toolchains/mingw-w64.cmake`, which builds CNA for
-  Windows; `DIRECTX9` configures only there, and `SDL_GPU` is the Windows default. The resulting
+  Windows; `DIRECTX9` configures only there, and `SDLGPU` is the Windows default. The resulting
   `.exe`s run under Wine. Trixie's Wine has a single `wine` command for 32- and 64-bit
   executables; there is no `wine64` command.
 - GamerServices and Net need a Windows libcurl, which Debian does not package. Point
@@ -177,7 +177,7 @@ sudo apt-get install -y mingw-w64 wine dxvk dxvk-wine64
   [`../tools/xna-oracle/README.md`](../tools/xna-oracle/README.md) and
   [`../tests/interop/xna40/README.md`](../tests/interop/xna40/README.md). How to build, run and
   test the renderer: [`directx9-renderer.md`](directx9-renderer.md).
-- `SDL_GPU`'s Direct3D 12 driver runs under Wine through vkd3d-proton, which Debian does not
+- `SDLGPU`'s Direct3D 12 driver runs under Wine through vkd3d-proton, which Debian does not
   package. It uses its own prefix (`scripts/run-wine-vkd3d.sh`).
 
 ## Diagnostics and debugging tools
@@ -188,7 +188,7 @@ sudo apt-get install -y mesa-utils vulkan-tools vulkan-validationlayers apitrace
 
 - `mesa-utils`: `glxinfo -B` and `eglinfo` show which GL driver and version a display provides —
   llvmpipe on Xvfb, the real GPU on the private runner's Xwayland.
-- `vulkan-tools`: `vulkaninfo --summary` lists the Vulkan devices `SDL_GPU` and `WEBGPU` can use.
+- `vulkan-tools`: `vulkaninfo --summary` lists the Vulkan devices `SDLGPU` and `WEBGPU` can use.
 - `vulkan-validationlayers`: the Khronos validation layer, enabled through the loader with
   `VK_LOADER_LAYERS_ENABLE='*validation'`.
 - `apitrace`: `apitrace trace` and `apitrace dump` record and print every GL/EGL call a program

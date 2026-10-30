@@ -16,7 +16,7 @@
 // pixels.
 //
 // Renderer scope. D3D9, EasyGL, WebGPU and Software render points and support backbuffer readback,
-// so they carry the permanent pixel coverage here. SDL_GPU maps PointListEXT natively but
+// so they carry the permanent pixel coverage here. SDLGPU maps PointListEXT natively but
 // implements no backbuffer readback, so it is covered by a separate practical control. The retired
 // VULKAN renderer joined this matrix with GLTF-393; the Direct3D disposition
 // closes GLTF-394. SOFTWARE-133 reconciled the oracle after the CPU renderer gained
@@ -1249,9 +1249,9 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount
 // primitiveCount vertices/indices, but implements no backbuffer readback. Its practical exact-pixel
 // control therefore runs through RenderTarget2D::GetData, which this renderer does support.
 //
-// Indexed addressing is deliberately exercised only at offset zero here: SDL_GPU passes literal
+// Indexed addressing is deliberately exercised only at offset zero here: SDLGPU passes literal
 // 0/0 for first_index and vertex_offset at every native indexed-draw site, so public
-// startIndex/baseVertex do not reach the native draw (the SDL_GPU counterpart of
+// startIndex/baseVertex do not reach the native draw (the SDLGPU counterpart of
 // the specular/vertex-colour fix/060/107, recorded separately as the indexed startIndex/baseVertex fix). That is an addressing defect, not a
 // topology defect, and is not corrected here. The non-indexed case below does carry a nonzero
 // vertexStart, which this renderer honours.
@@ -1305,12 +1305,12 @@ TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)
     device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
     const FrameSnapshot indexed = CaptureRenderTarget(target, kSize, kSize);
-    ExpectPointRendered(indexed, wanted[0], "SDL_GPU indexed render-target point 0");
-    ExpectPointRendered(indexed, wanted[1], "SDL_GPU indexed render-target point 1");
-    ExpectPointRendered(indexed, wanted[2], "SDL_GPU indexed render-target point 2");
-    ExpectColorAbsent(indexed, Color::Magenta, "SDL_GPU indexed decoy points");
+    ExpectPointRendered(indexed, wanted[0], "SDLGPU indexed render-target point 0");
+    ExpectPointRendered(indexed, wanted[1], "SDLGPU indexed render-target point 1");
+    ExpectPointRendered(indexed, wanted[2], "SDLGPU indexed render-target point 2");
+    ExpectColorAbsent(indexed, Color::Magenta, "SDLGPU indexed decoy points");
     ExpectPointCoverageBudget(
-        indexed, Color::Black, 3, "SDL_GPU indexed render-target point coverage");
+        indexed, Color::Black, 3, "SDLGPU indexed render-target point coverage");
 
     // Non-indexed: vertexStart selects the first consumed vertex and primitiveCount limits the
     // range to exactly three points, with decoys on both sides.
@@ -1322,10 +1322,10 @@ TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)
     device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
     const FrameSnapshot direct = CaptureRenderTarget(target, kSize, kSize);
-    ExpectPointRendered(direct, wanted[0], "SDL_GPU non-indexed render-target point 0");
-    ExpectPointRendered(direct, wanted[1], "SDL_GPU non-indexed render-target point 1");
-    ExpectPointRendered(direct, wanted[2], "SDL_GPU non-indexed render-target point 2");
-    ExpectColorAbsent(direct, Color::Magenta, "SDL_GPU non-indexed decoy points");
+    ExpectPointRendered(direct, wanted[0], "SDLGPU non-indexed render-target point 0");
+    ExpectPointRendered(direct, wanted[1], "SDLGPU non-indexed render-target point 1");
+    ExpectPointRendered(direct, wanted[2], "SDLGPU non-indexed render-target point 2");
+    ExpectColorAbsent(direct, Color::Magenta, "SDLGPU non-indexed decoy points");
     ExpectPointCoverageBudget(
-        direct, Color::Black, 3, "SDL_GPU non-indexed render-target point coverage");
+        direct, Color::Black, 3, "SDLGPU non-indexed render-target point coverage");
 }

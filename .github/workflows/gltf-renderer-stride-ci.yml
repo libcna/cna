@@ -35,10 +35,10 @@ jobs:
         # SOFTWARE joined on 2026-08-18 (GLTF-473): it is a CPU rasteriser, so it
         # needs no driver on the runner, and it is one of the four L7 golden policies -- which
         # makes it the cheapest way to widen the live draw-boundary gate below.
-        # SDL_GPU replaced the retired VULKAN leg on 2026-10-13; on the runner its Vulkan backend
+        # SDLGPU replaced the retired VULKAN leg on 2026-10-13; on the runner its Vulkan backend
         # runs on lavapipe, exactly as the VULKAN leg did. WEBGPU joined on 2026-10-17, when it
         # became a supported renderer; wgpu-native's Vulkan backend runs on lavapipe too.
-        renderer: [STUB, HEADLESS, OPENGLES3, SDL_GPU, WEBGPU, SOFTWARE]
+        renderer: [STUB, HEADLESS, OPENGLES3, SDLGPU, WEBGPU, SOFTWARE]
     env:
       CC: gcc-14
       CXX: g++-14
@@ -100,7 +100,7 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: 1
         run: |
           set -euo pipefail
-          if [[ "${{ matrix.renderer }}" == "SDL_GPU" || "${{ matrix.renderer }}" == "WEBGPU" ]]; then
+          if [[ "${{ matrix.renderer }}" == "SDLGPU" || "${{ matrix.renderer }}" == "WEBGPU" ]]; then
             lvp_icd="$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)"
             test -n "${lvp_icd}"
             export VK_ICD_FILENAMES="${lvp_icd}"
@@ -114,7 +114,7 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: 1
         run: |
           set -euo pipefail
-          if [[ "${{ matrix.renderer }}" == "SDL_GPU" || "${{ matrix.renderer }}" == "WEBGPU" ]]; then
+          if [[ "${{ matrix.renderer }}" == "SDLGPU" || "${{ matrix.renderer }}" == "WEBGPU" ]]; then
             lvp_icd="$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)"
             test -n "${lvp_icd}"
             export VK_ICD_FILENAMES="${lvp_icd}"

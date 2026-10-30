@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SDLGPU-26..30: end-to-end 3D vertex-format proof for the SDL_GPU graphics
+// SDLGPU-26..30: end-to-end 3D vertex-format proof for the SDLGPU graphics
 // renderer -- colored3d, textured3d, colored_textured3d, and lit_textured3d (BasicEffect), all
 // drawn through the real public XNA API (VertexBuffer/BasicEffect/GraphicsDevice.DrawPrimitives),
 // exercising DrawPrimitivesEx's real GpuDrawParams dispatch by declaration semantics, plus a real

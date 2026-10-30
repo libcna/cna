@@ -50,7 +50,7 @@ What a renderer needs from the window system still reaches it unchanged.
 | Android | `android` | `Android`: `ANativeWindow*` | WebGPU |
 
 The other renderers do not read the handle themselves: the OpenGL/OpenGL ES (EasyGL) family asks
-`IPlatformGlContext`, implemented over SDL by the SDL3 platform for the same window, and `SDL_GPU`
+`IPlatformGlContext`, implemented over SDL by the SDL3 platform for the same window, and `SDLGPU`
 and `FNA3D` are handed the SDL window itself.
 
 CNA's own direct `WIN32`, `X11` and `WAYLAND` platform implementations were retired on 2026-10-06,
@@ -255,7 +255,7 @@ regression beyond it is investigated rather than waived.
   implementation, yet `IPlatform` stays virtual: the conformance suite needs several
   implementations live in one process, which a devirtualized `using ActivePlatform = …` would rule
   out for a gain the performance contract below already calls irrelevant.
-- **Two renderers depend on SDL3, for two different reasons.** `SDL_GPU` is an SDL3 API by
+- **Two renderers depend on SDL3, for two different reasons.** `SDLGPU` is an SDL3 API by
   identity. `FNA3D` depends on SDL3 through the third-party library it wraps, while CNA's own
   sources for it stay platform-neutral. Both declare `REQUIRES_PLATFORM SDL3` and are the explicit
   allowlist of `tools/platform/renderer_sdl_audit.py`; every other renderer is SDL-free.
@@ -372,14 +372,14 @@ Regenerate with `python3 tools/platform/sdl_inventory.py --update`; `--check` (o
 above) fails when it is stale. Do not hand-edit the block. A reference counts when it is a textual
 SDL identifier or an `SDL3/`-rooted include, forward declarations and doc comments in SDL's
 vocabulary included. Two CNA spellings that only look like SDL are excluded: the
-`CNA_RENDERER_SDL_RENDERER`/`CNA_RENDERER_SDL_GPU` build macros and the bare identity names
-`SDL_GPU`/`SDL_RENDERER`.
+`CNA_RENDERER_SDL_RENDERER`/`CNA_RENDERER_SDLGPU` build macros and the bare identity names
+`SDLGPU`/`SDL_RENDERER`.
 
 <!-- BEGIN GENERATED: tools/platform/sdl_inventory.py -->
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **959** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **960** |
 | Files referencing SDL (all) | **134** |
 | Production files (`src/` + `include/`) referencing SDL | **50** |
 | …of which are renderer production files | **13** |

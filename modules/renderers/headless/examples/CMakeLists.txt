@@ -125,7 +125,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
     # to.
     # Every public TextureFilter ordinal names a SEPARATE magnification, a separate
     # minification and a separate mipmap filter, so a renderer may not reduce the ordinal to one
-    # boolean. WebGPU's SpriteBatch sampler and SDL_GPU's ONE shared sampler helper both resolved
+    # boolean. WebGPU's SpriteBatch sampler and SDLGPU's ONE shared sampler helper both resolved
     # `textureFilter == 0 ? LINEAR : NEAREST`, and both keyed their sampler cache on
     # `filter == 0 ? 0 : 1`, so Anisotropic, LinearMipPoint, MinPointMagLinearMipLinear and
     # MinPointMagLinearMipPoint all magnified with POINT. This fixture measures the two DIFFERENT
@@ -138,7 +138,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
 
     # Cross-renderer control: EnvironmentMapEffect samples TWO independent
     # resources -- the ordinary 2D texture through GraphicsDevice.SamplerStates[0] and the
-    # reflection cube through SamplerStates[1]. SDL_GPU bound a literal LinearClamp for the cube
+    # reflection cube through SamplerStates[1]. SDLGPU bound a literal LinearClamp for the cube
     # and captured only slot 0, so slot 1 could not reach replay at all. This fixture makes the
     # two slots independently observable (EnvironmentMapAmount 1 leaves the cube the only
     # contributor, 0 leaves the 2D texture the only one) and measures what every other renderer
@@ -204,7 +204,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
         TIMEOUT 120 LABELS "Headless")
 
     # Cross-renderer control: a RenderTarget2D handed to a stock or custom 3D effect as
-    # its texture must be sampled, not reinterpreted. The defect was SDL_GPU-local and fatal (its
+    # its texture must be sampled, not reinterpreted. The defect was SDLGPU-local and fatal (its
     # stock-effect paths static_cast an ITextureRenderer* to the unrelated sibling
     # SdlGpuTextureRenderer, fabricating an SDL_GPUTexture* out of a render target's own fields); this
     # run is what establishes that HEADLESS already honoured the contract rather than being made to.
@@ -271,7 +271,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
             TIMEOUT 900 LABELS "Headless")
 
         # Cross-renderer control: the same PUBLIC generated-mip readback contract on this
-        # renderer. The SIGSEGV was SDL_GPU-only and only SDL_GPU production changed; running the
+        # renderer. The SIGSEGV was SDLGPU-only and only SDLGPU production changed; running the
         # identical fixture here is what makes that claim falsifiable rather than asserted.
         cna_headless_test(cna_test_headless_msaa_mip_readback
             ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_mip_readback_test.cpp)

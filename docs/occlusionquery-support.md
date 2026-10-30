@@ -44,8 +44,8 @@ profiles.
 |---|---|---|---|---|
 | **EasyGL** | ✅ Yes — `glBeginQuery`/`glEndQuery`, asking for `GL_SAMPLES_PASSED` and falling back to the boolean `GL_ANY_SAMPLES_PASSED` | Shared XNA validation (SOFTWARE-199) | ✅ Verified both directions (Tasks 445/446) **and count-vs-flag** (SAMPLE-041) | **Desktop GL is XNA-equivalent; GLES3 is truthfully boolean-only and cannot run coverage-ratio consumers faithfully** |
 | **WebGPU** | ✅ Yes — draw tagging, a real `WGPUQuerySet`, resolve and asynchronous readback | Shared XNA validation (SOFTWARE-199) | ✅ Exact count verified by `WebGPU_OcclusionQuery`; representative LensFlare visually matches OPENGL33 | **Correct for a contiguous render-pass segment; a query spanning segments records only its first segment** |
-| **SDL_GPU** | N/A — construction throws the documented SDL_gpu API limitation | N/A | N/A | **Correctly unsupported: SDL_gpu 3.5.0 exposes fences but no occlusion/query-pool commands** |
-| **FNA3D** | Driver-dependent — the selected internal driver must create a real FNA3D query | Shared XNA validation (SOFTWARE-199) | ✅ OpenGL driver verified by capability tests and LensFlare; default SDL_GPU driver has no query | **Truthfully selected at device creation; not a renderer-wide unconditional capability** |
+| **SDLGPU** | N/A — construction throws the documented SDL_gpu API limitation | N/A | N/A | **Correctly unsupported: SDL_gpu 3.5.0 exposes fences but no occlusion/query-pool commands** |
+| **FNA3D** | Driver-dependent — the selected internal driver must create a real FNA3D query | Shared XNA validation (SOFTWARE-199) | ✅ OpenGL driver verified by capability tests and LensFlare; default SDLGPU driver has no query | **Truthfully selected at device creation; not a renderer-wide unconditional capability** |
 
 ### EasyGL — correct, with a precision boundary that depends on the profile
 
@@ -119,5 +119,5 @@ in the cna-samples result `matrix-results/msr-046-postfix-visual-representative`
 | `Dispose()`/active-query-destruction safety | ✅ Verified safe on EasyGL via 50-iteration stress test (Task 449) |
 | EasyGL pixel/query correctness | ✅ Both directions (visible → positive, occluded → zero) pixel-verified (Tasks 445-446) |
 | WebGPU | ✅ Real exact-count query and representative LensFlare visual pass; cross-render-pass-span limitation remains explicit |
-| SDL_GPU | ⛔ Truthfully unsupported by the current public SDL_gpu API; no fake result |
-| FNA3D | ✅/⛔ Selected-driver dependent: OpenGL query and LensFlare pass; default SDL_GPU driver is truthfully unsupported |
+| SDLGPU | ⛔ Truthfully unsupported by the current public SDL_gpu API; no fake result |
+| FNA3D | ✅/⛔ Selected-driver dependent: OpenGL query and LensFlare pass; default SDLGPU driver is truthfully unsupported |

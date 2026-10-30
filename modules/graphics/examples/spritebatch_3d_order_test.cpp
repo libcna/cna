@@ -165,13 +165,13 @@ namespace
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
     constexpr const char* kRendererName = "WEBGPU";
-#elif defined(CNA_RENDERER_SDL_GPU)
+#elif defined(CNA_RENDERER_SDLGPU)
     // SDLGPU-68's backbuffer proxy makes the public readback exact, so the backbuffer legs carry
     // The same ordering contract as the render-target controls instead of silently skipping it.
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
-    constexpr const char* kRendererName = "SDL_GPU";
+    constexpr const char* kRendererName = "SDLGPU";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
@@ -249,7 +249,7 @@ namespace
      * PreserveContents render target and is not this task's subject either way -- it is declared so
      * that a clear-ordering regression cannot hide inside a family-ordering fixture.
      *
-     * WEBGPU joined SDL_GPU here when the WebGPU draw-order fix landed, and the two facts are independent: leg
+     * WEBGPU joined SDLGPU here when the WebGPU draw-order fix landed, and the two facts are independent: leg
      * J had been skipping behind the family-order gate above, so turning that gate over is what
      * first RAN it. Measured then: a `Clear()` between the two families left the earlier sprite
      * standing and a `Clear()` after both left both standing, because `clearColorPending_` only
@@ -1450,7 +1450,7 @@ class SpriteBatch3DOrderTest : public Game
         if (!kDraws3D) { skip("J: skipped -- no stock 3D rasterization here"); return; }
         if (!RequirePublicFamilyOrder("J")) return;
         static_assert(kClearAfterDrawWins,
-                      "leg J used to be SKIPPED behind this gate on SDL_GPU and "
+                      "leg J used to be SKIPPED behind this gate on SDLGPU and "
                       "WebGPU, which is how a whole file's worth of Clear coverage measured "
                       "nothing on the two renderers that needed it. A renderer that regresses must "
                       "restore the declaration rather than re-introduce the skip.");

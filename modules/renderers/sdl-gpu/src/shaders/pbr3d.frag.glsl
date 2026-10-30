@@ -57,7 +57,7 @@ layout(set = 3, binding = 1) uniform LitLightParams {
 } lp;
 
 // New tertiary uniform block (PbrEffect-only fields that don't fit the PC/LitLightParams shapes
-// every other SDL_GPU 3D shader in this renderer already shares).
+// every other SDLGPU 3D shader in this renderer already shares).
 layout(set = 3, binding = 2) uniform PbrParams {
     float metallicFactor;
     float roughnessFactor;
@@ -133,7 +133,7 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec
 // A disabled/never-configured DirectionalLight can forward Direction=(0,0,0) (matches
 // lit_textured3d.frag.glsl's own established workaround) -- normalize() on a true zero vector is
 // undefined and can poison the whole light sum with NaN. Not present in EasyGLRenderer's
-// own PbrLight callers (an OpenGL-driver-specific tolerance this SDL_GPU renderer does not
+// own PbrLight callers (an OpenGL-driver-specific tolerance this SDLGPU renderer does not
 // share) -- a deliberate, documented improvement over the reference, not a behavior change for
 // any enabled light (NdotL already collapses the whole per-light term to zero when L=0).
 vec3 safeNormalize(vec3 v) {

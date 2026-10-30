@@ -41,7 +41,7 @@ Each renderer's own build runs its half as an ordinary test:
 ```bash
 ctest --test-dir cmake-build-debug  -R 'EasyGL_Parity'  --output-on-failure   # OPENGL33 build
 ctest --test-dir cmake-build-webgpu -R 'WebGPU_Parity' --output-on-failure    # WEBGPU build
-ctest --test-dir cmake-build-sdlgpu -R 'SdlGpu_Parity' --output-on-failure    # SDL_GPU build
+ctest --test-dir cmake-build-sdlgpu -R 'SdlGpu_Parity' --output-on-failure    # SDLGPU build
 ```
 
 The cross-renderer pixel comparison needs both builds, because `CNA_GRAPHICS_RENDERER` is a

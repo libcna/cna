@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MS-PL
 """VMG-0005 (the retired Vulkan renderer's workstream): validate every checked-in SPIR-V payload.
 
-SDL_GPU's stock shaders and every generated shader package (`*ShaderPackage.generated.hpp`,
+SDLGPU's stock shaders and every generated shader package (`*ShaderPackage.generated.hpp`,
 tools/shader_package) embed SPIR-V as `uint32_t NAME[] = { ... };` word arrays. A driver may accept
 a malformed module and misbehave, or reject it only on another vendor, so each array whose first
 word is the SPIR-V magic number is extracted and run through `spirv-val` against a Vulkan 1.1

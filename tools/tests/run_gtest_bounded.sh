@@ -1,7 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: MS-PL
 #
-# pre-SDL_GPU PSG-0002: run a GoogleTest binary in BOUNDED MEMORY.
+# pre-SDLGPU PSG-0002: run a GoogleTest binary in BOUNDED MEMORY.
 #
 # Why this exists, stated as the measurement that forced it. A CNA test builds a GraphicsDevice,
 # and on some renderers a device is not cheap to have had: the provider keeps per-device state that
@@ -32,7 +32,7 @@
 #     --allow-live-display  permit DISPLAY=:0 / WAYLAND_DISPLAY=wayland-0
 #
 # It is renderer-agnostic: it reads nothing about the renderer and passes the environment through,
-# so `CNA_GRAPHICS_RENDERER=SDL_GPU tools/tests/run_gtest_bounded.sh ...` shards SDL_GPU.
+# so `CNA_GRAPHICS_RENDERER=SDLGPU tools/tests/run_gtest_bounded.sh ...` shards SDLGPU.
 #
 # It does NOT create a display. Compose it with the private compositor, so one compositor serves
 # every shard rather than one per shard:

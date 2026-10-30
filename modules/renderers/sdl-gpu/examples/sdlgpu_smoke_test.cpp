@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SDLGPU-6..12: end-to-end smoke test for the SDL_GPU graphics renderer's
+// SDLGPU-6..12: end-to-end smoke test for the SDLGPU graphics renderer's
 // device/window/swapchain lifecycle and color+depth+stencil clear/present. Real window, real
 // SDL_GPUDevice, a real 60-frame Clear()+Present() loop -- this is the renderer's first genuine
 // proof gate (SDLGPU-12's own bar). Texture2D/VertexBuffer/SpriteBatch are not yet implemented on
@@ -60,7 +60,7 @@ using namespace CNA::Internal::Renderers::SdlGpu;
 namespace
 {
     constexpr int kTotalFrames = 60;
-#if defined(CNA_SDL_GPU_SHADER_EFFECTS)
+#if defined(CNA_SDLGPU_SHADER_EFFECTS)
     constexpr int kExpectedChecks = 31;
 #else
     // Unsupported-compiler builds also verify the diagnostic returned by CreateEffectRenderer.
@@ -198,7 +198,7 @@ protected:
                   "StencilBuffer agrees with the selected combined format");
             check(dev.SupportsCapability(CNA::GraphicsCapability::AnisotropicFiltering),
                   "AnisotropicFiltering is enabled by the default SDL GPU device contract");
-#if defined(CNA_SDL_GPU_SHADER_EFFECTS)
+#if defined(CNA_SDLGPU_SHADER_EFFECTS)
             check(dev.SupportsCapability(CNA::GraphicsCapability::CustomEffects),
                   "CustomEffects is reported because target-native ShaderEffect compilation is available");
 #else

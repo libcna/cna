@@ -156,17 +156,17 @@ deeper afterwards: on the GLSL profile the first crash moved from iteration 0 to
 | `mojoshader_effects.c` `MOJOSHADER_cloneEffect` | Dereferenced a shader's parse data without checking the shader compiled at all, and indexed its symbol and parameter tables unbounded |
 | `mojoshader_effects.c` sampler binding | A shader's sampler symbol was matched to an effect parameter by name alone, and its value storage then reinterpreted as an array of sampler states. A parameter that is not a sampler makes that count and that pointer disagree by a factor of the struct size |
 | `mojoshader_profile_common.c` output stack, `mojoshader_profile_spirv.c` `emit_SPIRV_attribute` | The emitters' output-section stack was guarded by asserts, and how often an emitter pushes depends on the shader it translates; and an attribute declared for a register the shader never used dereferenced a null register-list entry |
-| `mojoshader.c` / `mojoshader_effects.c` preshader temps | The temp-register count is grown from operand indices and `run_preshader` `alloca()`s one double per temp, so an invented index blew the process stack. Bounded structurally at parse time, with a ceiling in the interpreter as a second line of defence. Found after 536,926 SDL_GPU executions |
+| `mojoshader.c` / `mojoshader_effects.c` preshader temps | The temp-register count is grown from operand indices and `run_preshader` `alloca()`s one double per temp, so an invented index blew the process stack. Bounded structurally at parse time, with a ceiling in the interpreter as a second line of defence. Found after 536,926 SDLGPU executions |
 | `mojoshader_effects.c` struct member tables | `readvalue` and `copysymboltypeinfo` both allocated member tables without zeroing them, and neither assigns every field: the parser leaves the nested-struct fields alone (upstream's FIXME) and the copy assigns nothing when a member name is NULL. A consumer then read a garbage name pointer and a garbage nested member count -- the first finding that surfaced inside CNA's own frame, and one CNA could not have defended against |
-| `mojoshader_profile_spirv.c` `emit_SPIRV_sampler` | Dereferenced the register list's result for a sampler stage the shader never declared, and indexed the per-stage extras array with an unbounded stage. Found after 400,319 SDL_GPU executions |
+| `mojoshader_profile_spirv.c` `emit_SPIRV_sampler` | Dereferenced the register list's result for a sampler stage the shader never declared, and indexed the per-stage extras array with an unbounded stage. Found after 400,319 SDLPU executions |
 | `mojoshader_profile_spirv.c` operand-type asserts | `emit_SPIRV_MAD`, `emit_SPIRV_LRP`, `emit_SPIRV_MOVA`, the matrix-instruction helper and the exp/log helper asserted that their operands share a type, or that a destination shape is one of the legal ones. Both come from parsed bytecode, and a load that was already refused returns a zeroed type |
-| `mojoshader_profile_spirv.c` branch/loop stacks | `spv_branch_push/get/pop` and `spv_loop_push/get/pop` were guarded only by asserts, so a shader closing a branch or loop it never opened underflowed the stack and deep nesting overflowed it. Found by the SDL_GPU campaign after 56,261 executions |
+| `mojoshader_profile_spirv.c` branch/loop stacks | `spv_branch_push/get/pop` and `spv_loop_push/get/pop` were guarded only by asserts, so a shader closing a branch or loop it never opened underflowed the stack and deep nesting overflowed it. Found by the SDLGPU campaign after 56,261 executions |
 | `mojoshader_effects.c` object tables | Three related holes that all end in the shader parser running off the payload: an object block's length was never bounded against what remains, the XNA4 wrapper skip *added* to the remaining-length counter instead of subtracting (and every real XNA4-wrapped effect takes that branch), and a zero-length shader program told `MOJOSHADER_parse` the size was unknown, which sets its token count to 4 billion and scans for an end token that is not there. Found after 395,357 coverage-guided executions |
 | `mojoshader.c` `parse_ctab_typeinfo` | A struct's member-table offset was read from the constant table and never bounded, so a structure in untrusted bytecode could point its member list anywhere. Found after 275,896 coverage-guided executions |
 | `mojoshader_common.c` `MOJOSHADER_printFloat` | Advances its cursor past the buffer on purpose, so the return value stays the length the caller needed -- but then kept formatting *through* that cursor, writing past the end. Each step now asks `snprintf` for the needed length instead of writing once the cursor is out of bounds |
-| `mojoshader.c` `parse_preshader` | How many preshaders a shader declares is content, and it was guarded by an assert -- upstream's own `// !!! FIXME: can you have more than one?` is still unanswered. A second declaration also overwrote the first and leaked it. Found after 8,192 SDL_GPU executions |
-| `Fna3dCompiledEffect.cpp` `BuildSamplerMap` | **The one finding whose root cause is CNA's own.** Same defect as the row below, in CNA's code and with every fact needed to avoid it in hand: the sampler-texture map selected parameters by sampler *type* and then walked `valuesSS`, so a parameter naming a sampler type in a non-object class had its much smaller value buffer read as an array of sampler states. Found after 1,627,248 SDL_GPU executions -- the deepest finding so far, and past the point where the driver had already run a million clean |
-| `mojoshader_effects.c` `freevalue` | A value's storage layout is chosen by its class first and its type second: only an OBJECT of a sampler type is allocated as an array of sampler states. `readvalue` and `copyvalue` both ask that two-part question; `freevalue` asked about the type alone, so a parameter naming a sampler type in some other class was freed as an array of much larger structures -- `free()` on whatever the heap held past the end. The two-part test is now one shared predicate, used by `freevalue`, by both shader-sampler binding sites and by the object table's sampler-state lookup, which also gained the range checks its content-supplied indices never had. Found after 660,870 SDL_GPU executions |
+| `mojoshader.c` `parse_preshader` | How many preshaders a shader declares is content, and it was guarded by an assert -- upstream's own `// !!! FIXME: can you have more than one?` is still unanswered. A second declaration also overwrote the first and leaked it. Found after 8,192 SDLGPU executions |
+| `Fna3dCompiledEffect.cpp` `BuildSamplerMap` | **The one finding whose root cause is CNA's own.** Same defect as the row below, in CNA's code and with every fact needed to avoid it in hand: the sampler-texture map selected parameters by sampler *type* and then walked `valuesSS`, so a parameter naming a sampler type in a non-object class had its much smaller value buffer read as an array of sampler states. Found after 1,627,248 SDLGPU executions -- the deepest finding so far, and past the point where the driver had already run a million clean |
+| `mojoshader_effects.c` `freevalue` | A value's storage layout is chosen by its class first and its type second: only an OBJECT of a sampler type is allocated as an array of sampler states. `readvalue` and `copyvalue` both ask that two-part question; `freevalue` asked about the type alone, so a parameter naming a sampler type in some other class was freed as an array of much larger structures -- `free()` on whatever the heap held past the end. The two-part test is now one shared predicate, used by `freevalue`, by both shader-sampler binding sites and by the object table's sampler-state lookup, which also gained the range checks its content-supplied indices never had. Found after 660,870 SDLGPU executions |
 
 The one pre-existing fix in the same patch -- a missing shader-to-effect parameter match, which
 asserted and then dereferenced -- was found earlier by the deterministic in-build corpus.
@@ -177,7 +177,7 @@ Fuzzing cannot prove absence, so the gate needs a number rather than a feeling. 
 FX-051 the bar is:
 
 - **one million coverage-guided executions on each FNA3D driver** CNA can select at runtime
-  (OpenGL/GLSL and SDL_GPU/SPIR-V), from the committed seed corpus,
+  (OpenGL/GLSL and SDLGPU/SPIR-V), from the committed seed corpus,
 - under AddressSanitizer, with `SDL_ASSERT=abort` so an assert counts as a finding,
 - **producing no new crash artifact**, no timeout, and no allocation the limits did not catch.
 
@@ -190,7 +190,7 @@ the crash corpus, and start the count again.
 The gate above is met, so what follows is what the gate does *not* cover.
 
 Fuzzing bounds exposure; it does not prove absence. Five and a half million coverage-guided
-executions across both FNA3D drivers found nothing new, but the SPIR-V emitter the SDL_GPU driver
+executions across both FNA3D drivers found nothing new, but the SPIR-V emitter the SDLGPU driver
 uses still validates untrusted shader bytecode with `assert()` in roughly fifty places that no
 campaign has yet reached, and the effect parser was written for compiler output rather than hostile
 content. A longer campaign, a different seed corpus, or a driver CNA does not exercise here may
@@ -213,12 +213,12 @@ harder to weaponise, not as safe.
 ## Current status
 
 Both FNA3D drivers met the FX-051 bar on 2026-08-15 at commit `17bab8ee2`: **3,079,834**
-coverage-guided executions on the OpenGL/GLSL driver and **2,669,555** on SDL_GPU/SPIR-V, each a
+coverage-guided executions on the OpenGL/GLSL driver and **2,669,555** on SDLGPU/SPIR-V, each a
 full campaign window from the committed seed corpus, under AddressSanitizer with `SDL_ASSERT=abort`,
 producing no new crash artifact. Forty-one crash classes were found and fixed on the way there.
 
 Alongside that, a full ASan+UBSan+LSan pass over the 340 FX, Effect, XNB, capability and
-content-reader tests on the SDL_GPU driver passes. AddressSanitizer reports nothing. Every UBSan
+content-reader tests on the SDLGPU driver passes. AddressSanitizer reports nothing. Every UBSan
 report and every leak record belongs to third-party code -- `SpirvPatchTable` alignment and
 null-argument reports plus SPIR-V emitter leaks in the pinned MojoShader, one shift overflow in
 FNA3D's pipeline cache, and 32 bytes per device inside `FNA3D_CreateDevice`. None is attributable

@@ -48,7 +48,7 @@ SIZE = 256
 # (a ring, a stud, a changed ear); silhouette, intersection over union of the pixels that differ from
 # the background; area, the pixels of a solid patch (every pixel of its 3x3 neighbourhood too) that
 # differ by more than STRONG -- a moved, missing or recoloured part, never the one-pixel edge
-# differences between rasterizers. Measured against SOFTWARE's goldens, the GL renderers, SDL_GPU,
+# differences between rasterizers. Measured against SOFTWARE's goldens, the GL renderers, SDLGPU,
 # FNA3D and Mesa llvmpipe stay within mean 0.08, block 1, silhouette 0.9985 and area 0; WEBGPU's
 # skinned shading differs on posed frames, up to block 21. Removing a hoop, a ring or a watch,
 # swapping an ear shape or shoes, 2 cm of height or a 20-level hair colour change fails on every

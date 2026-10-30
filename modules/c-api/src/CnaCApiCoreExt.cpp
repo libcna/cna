@@ -187,7 +187,7 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_SOFTWARE, CNA::GraphicsRendererType::Software},
         {CNA_GRAPHICS_RENDERER_STUB, CNA::GraphicsRendererType::Stub},
         {CNA_GRAPHICS_RENDERER_DIRECTX9, CNA::GraphicsRendererType::DirectX9},
-        {CNA_GRAPHICS_RENDERER_SDL_GPU, CNA::GraphicsRendererType::SdlGpu},
+        {CNA_GRAPHICS_RENDERER_SDLGPU, CNA::GraphicsRendererType::SdlGpu},
         {CNA_GRAPHICS_RENDERER_FNA3D, CNA::GraphicsRendererType::Fna3d},
     }};
 

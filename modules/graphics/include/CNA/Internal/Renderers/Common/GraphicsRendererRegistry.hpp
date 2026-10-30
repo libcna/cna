@@ -60,7 +60,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Finds the descriptor whose name matches, case-insensitively.
          *
-         * Accepts exactly the CNA_GRAPHICS_RENDERER spellings ("SDL_GPU", "OPENGLES3", ...).
+         * Accepts exactly the CNA_GRAPHICS_RENDERER spellings ("SDLGPU", "OPENGLES3", ...).
          * Case-insensitive because these names reach CNA through environment variables and command
          * lines, which are typed by hand.
          *

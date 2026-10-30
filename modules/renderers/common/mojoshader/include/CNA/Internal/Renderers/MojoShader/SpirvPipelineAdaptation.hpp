@@ -6,7 +6,7 @@
 // vFace. Direct3D 9's `vFace` is positive on a front face, and an XNA front face is one wound
 // clockwise as displayed. MojoShader's SPIR-V profile derives the sign from the `FrontFacing`
 // built-in, which is right for a pipeline whose native front face is that same winding (FNA3D's
-// SDL_GPU driver makes its front face clockwise). CNA's SDL_GPU and WebGPU pipelines keep
+// SDLGPU driver makes its front face clockwise). CNA's SDLGPU and WebGPU pipelines keep
 // counter-clockwise as the native front face and map culling and two-sided stencil onto it
 // instead, so there `FrontFacing` is true on XNA's BACK face. The one place MojoShader turns
 // `FrontFacing` into `vFace` is

@@ -319,7 +319,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::uint32_t base = pointerIt->second;
             if (storage == kStorageClassUniformConstant && arrayElement.count(base) != 0)
             {
-                result.error = "SDL_GPU ShaderEffect cannot bind sampler descriptor arrays";
+                result.error = "SDLGPU ShaderEffect cannot bind sampler descriptor arrays";
                 return result;
             }
             std::uint32_t arrayLength = 1;
@@ -365,7 +365,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                     if (imageSampled[base] != 1u)
                     {
                         result.error =
-                            "SPIR-V module declares a storage image; an SDL_GPU ShaderEffect binds "
+                            "SPIR-V module declares a storage image; an SDLGPU ShaderEffect binds "
                             "sampled textures and uniform buffers only";
                         return result;
                     }
@@ -390,7 +390,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                      || (storage == kStorageClassUniform && bufferBlockStructs.count(base) != 0))
             {
                 result.error =
-                    "SPIR-V module declares a storage buffer; an SDL_GPU ShaderEffect binds "
+                    "SPIR-V module declares a storage buffer; an SDLGPU ShaderEffect binds "
                     "sampled textures and uniform buffers only";
                 return result;
             }
@@ -417,7 +417,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 if (image == imageTypes.end() || image->second.arrayed || image->second.multisampled
                     || image->second.dimension < 1 || image->second.dimension > 3)
                 {
-                    result.error = "SDL_GPU ShaderEffect requires a non-array, non-multisampled 2D, cube or volume sampler";
+                    result.error = "SDLGPU ShaderEffect requires a non-array, non-multisampled 2D, cube or volume sampler";
                     return result;
                 }
                 entry.classified.textureDimension =
@@ -807,7 +807,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 else mapped = false;
                 if (!mapped)
                 {
-                    result.error = "SDL_GPU ShaderEffect cannot map sampler at set "
+                    result.error = "SDLGPU ShaderEffect cannot map sampler at set "
                         + std::to_string(binding.originalSet) + ", binding "
                         + std::to_string(binding.originalBinding)
                         + " to a supported fragment texture unit/dimension";

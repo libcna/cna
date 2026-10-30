@@ -17,7 +17,7 @@ six shader dialects, `Texture3D` sampling, base-instance drawing, the sampler mi
 bias, `PbrEffect` and `SkinnedPbrEffect` shading, the multisample mask and render-target readback.
 The three of 32-34 (CNA-DEMOS-ISSUE-006) describe state a renderer accepts either way: where
 unsupported, the bias has no effect and the PBR effects draw an untextured, unlit fallback.
-`MultiSampleMask` (35, CNA-DEMOS DC-R2) is Restricted on SDL_GPU, which applies only a mask keeping
+`MultiSampleMask` (35, CNA-DEMOS DC-R2) is Restricted on SDLGPU, which applies only a mask keeping
 every sample or none and refuses any other. `RenderTargetReadback` (36, a museum finding) is
 Unsupported on HEADLESS and STUB, where `Texture2D.GetData` on a render target throws
 `NotSupportedException`. `CrossRendererContractTest` exercises each of the five on every

@@ -552,7 +552,7 @@ CNA_C_API CNA_Result cna_graphics_renderer_set_preferred_ext(CNA_GraphicsRendere
 /**
  * @brief Requests the renderer by name, accepting the `CNA_GRAPHICS_RENDERER` spellings.
  *
- * @param name UTF-8 renderer name, matched case-insensitively, e.g. `"SDL_GPU"`.
+ * @param name UTF-8 renderer name, matched case-insensitively, e.g. `"SDLGPU"`.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the name is not a public
  *         renderer identity (a retired name is refused too, and the error message says it was
  *         retired and which C ABI value stays reserved for it), `CNA_RESULT_INVALID_STATE` under
@@ -778,7 +778,7 @@ CNA_C_API CNA_Result cna_graphics_renderer_get_current_name_size(uint64_t* out_b
  * for a null output. No partial value is written.
  *
  * The name matches the `CNA_GRAPHICS_RENDERER` build option exactly, for example `"HEADLESS"` or
- * `"SDL_GPU"`.
+ * `"SDLGPU"`.
  */
 CNA_C_API CNA_Result cna_graphics_renderer_copy_current_name(
     char* destination,

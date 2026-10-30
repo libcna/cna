@@ -63,8 +63,8 @@ namespace
     constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadback = true;
-#elif defined(CNA_RENDERER_SDL_GPU)
-    constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_SDLGPU)
+    constexpr const char* kRendererName = "SDLGPU";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadback = false;
 #elif defined(CNA_RENDERER_WEBGPU)

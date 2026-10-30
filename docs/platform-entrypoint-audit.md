@@ -48,7 +48,7 @@ The design is correct. The implementation has three defects, all found by this a
 ```
 
 **`CNA_RENDERER_SDL` is never defined anywhere in the repository.** Its only occurrence is this
-`#elif`. The real compile definitions are `CNA_RENDERER_SDL_GPU`, `CNA_RENDERER_EASYGL` and so
+`#elif`. The real compile definitions are `CNA_RENDERER_SDLGPU`, `CNA_RENDERER_EASYGL` and so
 on (`cmake/RendererSelection.cmake`); there is no bare
 `CNA_RENDERER_SDL`.
 

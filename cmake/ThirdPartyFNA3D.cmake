@@ -256,11 +256,11 @@ endfunction()
 function(cna_enable_mojoshader_sdl_gpu_shadercross)
     if(NOT TARGET mojoshader OR NOT TARGET cna_mojoshader)
         message(FATAL_ERROR
-            "CNA: the SDL_GPU ShaderCross bridge requires cna_configure_mojoshader() first")
+            "CNA: the MojoShader SDL_GPU ShaderCross bridge requires cna_configure_mojoshader() first")
     endif()
     if(NOT TARGET cna_sdl_shadercross)
         message(FATAL_ERROR
-            "CNA: the SDL_GPU MojoShader bridge requires the pinned SDL_shadercross target")
+            "CNA: the MojoShader SDL_GPU bridge requires the pinned SDL_shadercross target")
     endif()
 
     target_compile_definitions(mojoshader PRIVATE

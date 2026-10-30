@@ -11,7 +11,7 @@
 // it ineffective on one driver. In both cases the value has to reach the SHADER.
 //
 // It reaches it here, once, before a renderer translates the SPIR-V into its backend's native
-// shader language. WebGPU consumes it through `WGPUShaderSourceSPIRV` or `SpirvToWgsl`; SDL_GPU
+// shader language. WebGPU consumes it through `WGPUShaderSourceSPIRV` or `SpirvToWgsl`; SDLGPU
 // consumes it directly or through ShaderCross. The XNA semantic therefore cannot vary with the
 // downstream driver by construction. `WEBGPU-205` and `SDLGPU-121` made the same choice for stock
 // effects and put the value in a per-draw uniform; this is that idea applied to a shader CNA does

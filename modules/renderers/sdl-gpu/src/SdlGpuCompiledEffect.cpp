@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 //
-// FX-061: built only when CNA_SDL_GPU_COMPILED_EFFECTS is on, because MojoShader is a
+// FX-061: built only when CNA_SDLGPU_COMPILED_EFFECTS is on, because MojoShader is a
 // fetched dependency this renderer does not otherwise need. The whole translation unit is guarded
 // rather than excluded from the source glob, so the renderer's source list stays the plain
 // directory contents every other renderer family uses.
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffect.hpp"
 #include "CNA/Internal/Graphics/TextureKind.hpp"
@@ -48,7 +48,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (output == nullptr || outputLength == nullptr || addedUniformBuffer == nullptr ||
                 allocate == nullptr)
             {
-                error = "CNA SDL_GPU: invalid MojoShader SPIR-V transform arguments";
+                error = "CNA SDLGPU: invalid MojoShader SPIR-V transform arguments";
                 return error.c_str();
             }
             *output = nullptr;
@@ -56,7 +56,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             *addedUniformBuffer = 0;
             if (input == nullptr || inputLength % sizeof(std::uint32_t) != 0)
             {
-                error = "CNA SDL_GPU: compiled effect produced misaligned SPIR-V";
+                error = "CNA SDLGPU: compiled effect produced misaligned SPIR-V";
                 return error.c_str();
             }
 
@@ -66,7 +66,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                     inputLength / sizeof(std::uint32_t));
             if (!mirrored.error.empty())
             {
-                error = "CNA SDL_GPU: could not mirror a compiled effect's vFace: " +
+                error = "CNA SDLGPU: could not mirror a compiled effect's vFace: " +
                         mirrored.error;
                 return error.c_str();
             }
@@ -78,7 +78,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                     attached.words.data(), attached.words.size(), colorTargetCount);
                 if (!attached.error.empty())
                 {
-                    error = "CNA SDL_GPU: could not fit a compiled effect's outputs to its targets: " +
+                    error = "CNA SDLGPU: could not fit a compiled effect's outputs to its targets: " +
                             attached.error;
                     return error.c_str();
                 }
@@ -90,7 +90,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                     /*binding=*/1u);
             if (!transformed.error.empty())
             {
-                error = "CNA SDL_GPU: could not inject compiled-effect sampler LOD bias: " +
+                error = "CNA SDLGPU: could not inject compiled-effect sampler LOD bias: " +
                         transformed.error;
                 return error.c_str();
             }
@@ -100,14 +100,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (byteCount > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
                 byteCount > static_cast<std::size_t>(std::numeric_limits<unsigned int>::max()))
             {
-                error = "CNA SDL_GPU: transformed compiled-effect SPIR-V is too large";
+                error = "CNA SDLGPU: transformed compiled-effect SPIR-V is too large";
                 return error.c_str();
             }
             auto* bytes = static_cast<unsigned char*>(
                 allocate(static_cast<int>(byteCount), allocatorData));
             if (bytes == nullptr)
             {
-                error = "CNA SDL_GPU: could not allocate transformed compiled-effect SPIR-V";
+                error = "CNA SDLGPU: could not allocate transformed compiled-effect SPIR-V";
                 return error.c_str();
             }
             std::memcpy(bytes, transformed.words.data(), byteCount);
@@ -117,7 +117,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             return nullptr;
         }
 
-        /// Resolves a public texture to the SDL_GPU resource behind it, or null if it is not one.
+        /// Resolves a public texture to the SDLGPU resource behind it, or null if it is not one.
         /// FX-099: a `RenderTarget2D` is a `Texture2D` whose renderer is an
         /// SdlGpuRenderTargetRenderer, not an SdlGpuTextureRenderer. Recognising only the latter
         /// refused every rendered source outright, so the most ordinary use a compiled Effect has
@@ -197,12 +197,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (effectCode == nullptr || effectCodeLength == 0 ||
             effectCodeLength > std::numeric_limits<std::uint32_t>::max())
         {
-            throw std::invalid_argument("SDL_GPU compiled effect: invalid bytecode buffer.");
+            throw std::invalid_argument("SDLGPU compiled effect: invalid bytecode buffer.");
         }
         if (context_ == nullptr)
         {
             throw std::runtime_error(
-                "SDL_GPU compiled effect: MojoShader has no context for this device.");
+                "SDLGPU compiled effect: MojoShader has no context for this device.");
         }
 
         MOJOSHADER_effectShaderContext backend = MakeBackend(context_);
@@ -313,7 +313,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (techniqueIndex >= static_cast<std::uint32_t>(effectData_->technique_count))
         {
-            throw std::out_of_range("SDL_GPU compiled effect: technique index is out of range.");
+            throw std::out_of_range("SDLGPU compiled effect: technique index is out of range.");
         }
         techniqueIndex_ = techniqueIndex;
         MOJOSHADER_effectSetTechnique(effectData_, &effectData_->techniques[techniqueIndex]);
@@ -323,13 +323,13 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                  std::size_t dataBytes)
     {
         if (runtimeIndex >= static_cast<std::uint32_t>(effectData_->param_count))
-            throw std::out_of_range("SDL_GPU compiled effect: parameter index is out of range.");
+            throw std::out_of_range("SDLGPU compiled effect: parameter index is out of range.");
         MOJOSHADER_effectParam& parameter = effectData_->params[runtimeIndex];
         const std::size_t capacity = static_cast<std::size_t>(parameter.value.value_count) * 4;
         if (dataBytes > capacity)
-            throw std::invalid_argument("SDL_GPU compiled effect: parameter value is too large.");
+            throw std::invalid_argument("SDLGPU compiled effect: parameter value is too large.");
         if (dataBytes > 0 && data == nullptr)
-            throw std::invalid_argument("SDL_GPU compiled effect: parameter data is null.");
+            throw std::invalid_argument("SDLGPU compiled effect: parameter data is null.");
         if (dataBytes > 0)
         {
             MOJOSHADER_effectSetRawValueHandle(&parameter, data, 0,
@@ -342,19 +342,19 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (runtimeIndex >= textures_.size())
         {
             throw std::out_of_range(
-                "SDL_GPU compiled effect: texture parameter index is out of range.");
+                "SDLGPU compiled effect: texture parameter index is out of range.");
         }
         const auto parameterType = static_cast<std::underlying_type_t<MOJOSHADER_symbolType>>(
             effectData_->params[runtimeIndex].value.type.parameter_type);
         if (parameterType < MOJOSHADER_SYMTYPE_TEXTURE ||
             parameterType > MOJOSHADER_SYMTYPE_TEXTURECUBE)
         {
-            throw std::invalid_argument("SDL_GPU compiled effect: parameter is not a texture.");
+            throw std::invalid_argument("SDLGPU compiled effect: parameter is not a texture.");
         }
         if (texture != nullptr && !OwnsSampleableTexture(texture))
         {
             throw std::invalid_argument(
-                "SDL_GPU compiled effect: texture was not created by the active SDL_GPU renderer.");
+                "SDLGPU compiled effect: texture was not created by the active SDLGPU renderer.");
         }
         textures_[runtimeIndex] = texture;
     }
@@ -365,7 +365,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         const MOJOSHADER_effectTechnique& technique = effectData_->techniques[techniqueIndex_];
         if (passIndex >= technique.pass_count)
-            throw std::out_of_range("SDL_GPU compiled effect: pass index is out of range.");
+            throw std::out_of_range("SDLGPU compiled effect: pass index is out of range.");
 
         // MojoShader's effect runtime is a begin/pass/end state machine rather than FNA3D's single
         // apply call, so a pass left open by a previous apply has to be closed first. Reopening
@@ -394,7 +394,7 @@ namespace CNA::Internal::Renderers::SdlGpu
              stateChanges_.vertex_sampler_state_changes == nullptr))
         {
             throw std::runtime_error(
-                "SDL_GPU compiled effect: native pass state changes exceed the safety limit.");
+                "SDLGPU compiled effect: native pass state changes exceed the safety limit.");
         }
 
         MojoShaderEffect::TranslateRenderStates(stateChanges_, deviceState, changes);
@@ -477,7 +477,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         vertexShader = nullptr;
         pixelShader = nullptr;
         if (context_ == nullptr)
-            throw std::runtime_error("SDL_GPU compiled effect: no MojoShader context.");
+            throw std::runtime_error("SDLGPU compiled effect: no MojoShader context.");
 
         MOJOSHADER_sdlShaderData* vertex = nullptr;
         MOJOSHADER_sdlShaderData* pixel = nullptr;
@@ -485,14 +485,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (vertex == nullptr || pixel == nullptr)
         {
             throw std::runtime_error(
-                "SDL_GPU compiled effect: the applied pass bound no shader pair.");
+                "SDLGPU compiled effect: the applied pass bound no shader pair.");
         }
 
         const MOJOSHADER_parseData* vertexParseData = MOJOSHADER_sdlGetShaderParseData(vertex);
         if (vertexParseData == nullptr)
         {
             throw std::runtime_error(
-                "SDL_GPU compiled effect: the applied vertex shader has no reflection.");
+                "SDLGPU compiled effect: the applied vertex shader has no reflection.");
         }
 
         SdlGpuCompiledEffectVertexLayoutEXT layout =
@@ -517,14 +517,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (program == nullptr)
         {
             throw std::runtime_error(
-                "SDL_GPU compiled effect: failed to link the applied pass's shaders.");
+                "SDLGPU compiled effect: failed to link the applied pass's shaders.");
         }
 
         MOJOSHADER_sdlGetShaders(context_, &vertexShader, &pixelShader);
         if (vertexShader == nullptr || pixelShader == nullptr)
         {
             throw std::runtime_error(
-                "SDL_GPU compiled effect: the linked program has no native shader modules.");
+                "SDLGPU compiled effect: the linked program has no native shader modules.");
         }
 
         return layout;
@@ -548,7 +548,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (programIdentity == 0)
             throw std::invalid_argument(
-                "SDL_GPU compiled effect: cannot retain a zero program identity.");
+                "SDLGPU compiled effect: cannot retain a zero program identity.");
         const auto existing = programLeases_.find(programIdentity);
         if (existing != programLeases_.end())
             return existing->second;
@@ -628,7 +628,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 MOJOSHADER_sdlDestroyContext(mojoShaderContext_);
                 mojoShaderContext_ = nullptr;
                 throw std::runtime_error(
-                    "CNA SDL_GPU: could not install the compiled-effect SPIR-V transform.");
+                    "CNA SDLGPU: could not install the compiled-effect SPIR-V transform.");
             }
         }
         return mojoShaderContext_;
@@ -669,4 +669,4 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 }
 
-#endif  // CNA_SDL_GPU_COMPILED_EFFECTS
+#endif  // CNA_SDLGPU_COMPILED_EFFECTS

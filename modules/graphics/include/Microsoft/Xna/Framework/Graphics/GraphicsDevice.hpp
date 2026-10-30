@@ -2329,7 +2329,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * `GetViewportSize()` (logical) and `GetDefaultViewportRect()` (physical). It is the
          * identity whenever those agree, which is exactly the case for every renderer that does
          * not override `GetDefaultViewportRect()` — including the family that deliberately treats
-         * the pushed rectangle as logical and rescales internally (Diligent, Sokol, LLGL, SDL_GPU,
+         * the pushed rectangle as logical and rescales internally (Diligent, Sokol, LLGL, SDLGPU,
          * WebGPU). It is also the identity while a render target is bound, because a render
          * target's viewport and scissor are in that target's own pixel space.
          *

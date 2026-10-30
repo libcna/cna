@@ -112,8 +112,8 @@ namespace CNA::Internal::Renderers::Fna3d
         /**
          * Apple M4 AM4-190: the inputs the selected XNA stock vertex shader reads,
          * from the stock effects' own HLSL (BasicEffect.fx and its siblings), as (usage, index).
-         * XNA refuses a draw whose declaration omits one; FNA3D's SDL_GPU and Direct3D 11 drivers
-         * fail the pipeline, and its SDL_GPU driver then draws with a null one and crashes.
+         * XNA refuses a draw whose declaration omits one; FNA3D's SDLGPU and Direct3D 11 drivers
+         * fail the pipeline, and its SDLGPU driver then draws with a null one and crashes.
          */
         void RequireStockVertexInputsDeclared(const GpuDrawParams& params,
                                               const FNA3D_VertexBufferBinding* bindings,
@@ -218,7 +218,7 @@ namespace CNA::Internal::Renderers::Fna3d
                         std::string("FNA3D renderer (FNA3D-MISSING-STOCK-INPUT): the ") + effectName +
                         " variant this draw selects reads " + needed[i].name +
                         ", which no bound VertexDeclaration declares. XNA refuses such a draw, and "
-                        "FNA3D's SDL_GPU and Direct3D 11 drivers cannot create a pipeline for it "
+                        "FNA3D's SDLGPU and Direct3D 11 drivers cannot create a pipeline for it "
                         "(only its OpenGL driver reads a default for a missing input).");
                 }
             }

@@ -45,7 +45,7 @@ namespace {
 #if defined(_WIN32)
 // Windows calls this before it runs the library's atexit handlers and static destructors. When the
 // process is terminating (reserved is not null), every other thread is already gone: a device whose
-// teardown waits for its own worker threads -- SDL_GPU's Direct3D 12 backend -- would wait forever,
+// teardown waits for its own worker threads -- SDLGPU's Direct3D 12 backend -- would wait forever,
 // so the objects a game left alive are abandoned to the operating system, as Windows prescribes for
 // that case. A library unloaded with FreeLibrary still destroys them.
 extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID reserved)

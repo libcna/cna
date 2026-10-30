@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SDLGPU-22..25: end-to-end 2D vertical-slice proof for the SDL_GPU graphics
+// SDLGPU-22..25: end-to-end 2D vertical-slice proof for the SDLGPU graphics
 // renderer -- a real Texture2D upload and real SpriteBatch draws (tint, alpha, rotation, both
 // flips, and Point/Linear + Wrap/Clamp/Mirror samplers), rendered for many frames with no
 // exception. This is the "declare a verified native 2D baseline" gate (SDLGPU-25's own bar,

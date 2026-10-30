@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// FX-061/FX-071: the SDL_GPU compiled-effect runtime and its draw route.
+// FX-061/FX-071: the SDLGPU compiled-effect runtime and its draw route.
 //
 // SupportsCompiledEffects() reports true (FX-071 is done: ordinary 3D draws and SpriteBatch both
 // draw with a compiled pass, verified by RendersTheAppliedPassesExpectedPixelsIntoARenderTarget
@@ -15,7 +15,7 @@
 // validation, render and sampler state translation, clone independence -- against the same
 // committed fixtures the FNA3D backend uses.
 
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffect.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
@@ -70,12 +70,12 @@ namespace
         return dynamic_cast<SdlGpuRenderer*>(&device.GetRenderer());
     }
 
-    /// The skip reason of a test about SDL_GPU's own runtime when another renderer backs the
+    /// The skip reason of a test about SDLGPU's own runtime when another renderer backs the
     /// device -- which a multi-renderer build does whenever CNA_GRAPHICS_RENDERER selects one.
-    /// Once SDL_GPU is active, a missing runtime is a failure again, not a skip.
+    /// Once SDLGPU is active, a missing runtime is a failure again, not a skip.
     std::string NotSdlGpu(const GraphicsDevice& device)
     {
-        return "needs the SDL_GPU renderer; the active renderer is " +
+        return "needs the SDLGPU renderer; the active renderer is " +
                std::string(device.GetGraphicsRendererName());
     }
 
@@ -94,7 +94,7 @@ TEST(SdlGpuCompiledEffectTest, TheCapabilityIsTrueNowThatDrawsExecuteTheEffect)
 {
     GraphicsDevice device;
     if (RendererOf(device) == nullptr)
-        GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
+        GTEST_SKIP() << "this build did not select the SDLGPU renderer";
     // FX-071: ordinary 3D draws and SpriteBatch both draw with a compiled pass now
     // (RendersTheAppliedPassesExpectedPixelsIntoARenderTarget, DrawsASpriteWithACompiledEffect),
     // verified by a real golden-pixel readback and the FX-060 shared conformance contract
@@ -108,7 +108,7 @@ TEST(SdlGpuCompiledEffectTest, ReflectionMatchesTheConformanceSource)
     GraphicsDevice device;
     if (RendererOf(device) == nullptr) GTEST_SKIP() << NotSdlGpu(device);
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
-    ASSERT_NE(runtime, nullptr) << "SDL_GPU created no runtime from CnaConformanceEffect.fxb";
+    ASSERT_NE(runtime, nullptr) << "SDLGPU created no runtime from CnaConformanceEffect.fxb";
 
     const auto& description = runtime->GetDescription();
     // CnaConformanceEffect.fx declares Gain, Tint, Transform, Weights, Lighting, FxTexture and
@@ -133,7 +133,7 @@ TEST(SdlGpuCompiledEffectTest, StatePassPublishesTheStatesItsSourceAssigns)
     GraphicsDevice device;
     if (RendererOf(device) == nullptr) GTEST_SKIP() << NotSdlGpu(device);
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
-    ASSERT_NE(runtime, nullptr) << "SDL_GPU created no runtime from CnaConformanceEffect.fxb";
+    ASSERT_NE(runtime, nullptr) << "SDLGPU created no runtime from CnaConformanceEffect.fxb";
 
     const BlendState blend = BlendState::Opaque;
     const DepthStencilState depth = DepthStencilState::Default;
@@ -163,7 +163,7 @@ TEST(SdlGpuCompiledEffectTest, APassThatAssignsNoStateLeavesTheGamesSelectionAlo
     GraphicsDevice device;
     if (RendererOf(device) == nullptr) GTEST_SKIP() << NotSdlGpu(device);
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
-    ASSERT_NE(runtime, nullptr) << "SDL_GPU created no runtime from CnaConformanceEffect.fxb";
+    ASSERT_NE(runtime, nullptr) << "SDLGPU created no runtime from CnaConformanceEffect.fxb";
 
     const BlendState blend = BlendState::Opaque;
     const DepthStencilState depth = DepthStencilState::Default;
@@ -187,7 +187,7 @@ TEST(SdlGpuCompiledEffectTest, EachPassBindsItsOwnShaderPair)
     GraphicsDevice device;
     if (RendererOf(device) == nullptr) GTEST_SKIP() << NotSdlGpu(device);
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
-    ASSERT_NE(runtime, nullptr) << "SDL_GPU created no runtime from CnaConformanceEffect.fxb";
+    ASSERT_NE(runtime, nullptr) << "SDLGPU created no runtime from CnaConformanceEffect.fxb";
     auto* sdlGpuEffect =
         dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(runtime.get());
     ASSERT_NE(sdlGpuEffect, nullptr);
@@ -211,7 +211,7 @@ TEST(SdlGpuCompiledEffectTest, OutOfRangeTechniqueAndPassAreRejected)
     GraphicsDevice device;
     if (RendererOf(device) == nullptr) GTEST_SKIP() << NotSdlGpu(device);
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
-    ASSERT_NE(runtime, nullptr) << "SDL_GPU created no runtime from CnaConformanceEffect.fxb";
+    ASSERT_NE(runtime, nullptr) << "SDLGPU created no runtime from CnaConformanceEffect.fxb";
 
     EXPECT_THROW(runtime->SetTechnique(99), std::out_of_range);
     runtime->SetTechnique(1);
@@ -225,7 +225,7 @@ TEST(SdlGpuCompiledEffectTest, ParameterWritesAreBoundedAndTypeChecked)
     GraphicsDevice device;
     if (RendererOf(device) == nullptr) GTEST_SKIP() << NotSdlGpu(device);
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
-    ASSERT_NE(runtime, nullptr) << "SDL_GPU created no runtime from CnaConformanceEffect.fxb";
+    ASSERT_NE(runtime, nullptr) << "SDLGPU created no runtime from CnaConformanceEffect.fxb";
 
     const float tooMuch[64] = {};
     EXPECT_THROW(runtime->SetParameterValue(0, tooMuch, sizeof(tooMuch)), std::invalid_argument);
@@ -242,7 +242,7 @@ TEST(SdlGpuCompiledEffectTest, MalformedBytecodeIsRejected)
 {
     GraphicsDevice device;
     SdlGpuRenderer* renderer = RendererOf(device);
-    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the SDLGPU renderer";
 
     const std::vector<std::uint8_t> garbage(512, 0xAB);
     EXPECT_ANY_THROW(renderer->CreateCompiledEffect(garbage.data(), garbage.size()));
@@ -254,7 +254,7 @@ TEST(SdlGpuCompiledEffectTest, CloneCarriesItsOwnValuesAndSurvivesTheSource)
     GraphicsDevice device;
     if (RendererOf(device) == nullptr) GTEST_SKIP() << NotSdlGpu(device);
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
-    ASSERT_NE(runtime, nullptr) << "SDL_GPU created no runtime from CnaConformanceEffect.fxb";
+    ASSERT_NE(runtime, nullptr) << "SDLGPU created no runtime from CnaConformanceEffect.fxb";
 
     runtime->SetTechnique(1);
     auto clone = runtime->Clone();
@@ -279,7 +279,7 @@ TEST(SdlGpuCompiledEffectTest, RuntimeCanBeDestroyedAfterItsGraphicsDevice)
         GraphicsDevice device;
         if (RendererOf(device) == nullptr) GTEST_SKIP() << NotSdlGpu(device);
         runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
-        ASSERT_NE(runtime, nullptr) << "SDL_GPU created no runtime from CnaConformanceEffect.fxb";
+        ASSERT_NE(runtime, nullptr) << "SDLGPU created no runtime from CnaConformanceEffect.fxb";
         clone = runtime->Clone();
         ASSERT_NE(clone, nullptr);
         concrete = dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(
@@ -342,7 +342,7 @@ TEST(SdlGpuCompiledEffectVertexLayoutTest, BuildsOneAttributePerShaderInputLocat
     GraphicsDevice device;
     if (RendererOf(device) == nullptr) GTEST_SKIP() << NotSdlGpu(device);
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
-    ASSERT_NE(runtime, nullptr) << "SDL_GPU created no runtime from CnaConformanceEffect.fxb";
+    ASSERT_NE(runtime, nullptr) << "SDLGPU created no runtime from CnaConformanceEffect.fxb";
     auto* sdlGpuEffect =
         dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(runtime.get());
     ASSERT_NE(sdlGpuEffect, nullptr);
@@ -387,7 +387,7 @@ TEST(SdlGpuCompiledEffectVertexLayoutTest, RefusesADeclarationMissingAShaderInpu
     GraphicsDevice device;
     if (RendererOf(device) == nullptr) GTEST_SKIP() << NotSdlGpu(device);
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
-    ASSERT_NE(runtime, nullptr) << "SDL_GPU created no runtime from CnaConformanceEffect.fxb";
+    ASSERT_NE(runtime, nullptr) << "SDLGPU created no runtime from CnaConformanceEffect.fxb";
     auto* sdlGpuEffect =
         dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(runtime.get());
     ASSERT_NE(sdlGpuEffect, nullptr);
@@ -420,7 +420,7 @@ TEST(SdlGpuCompiledEffectTest, CapturedUniformSnapshotReflectsTheAppliedPassAndC
     GraphicsDevice device;
     if (RendererOf(device) == nullptr) GTEST_SKIP() << NotSdlGpu(device);
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
-    ASSERT_NE(runtime, nullptr) << "SDL_GPU created no runtime from CnaConformanceEffect.fxb";
+    ASSERT_NE(runtime, nullptr) << "SDLGPU created no runtime from CnaConformanceEffect.fxb";
     auto* sdlGpuEffect =
         dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(runtime.get());
     ASSERT_NE(sdlGpuEffect, nullptr);
@@ -457,7 +457,7 @@ TEST(SdlGpuCompiledEffectTest, BoundSamplerPersistsAcrossAPassThatDoesNotReassig
     GraphicsDevice device;
     if (RendererOf(device) == nullptr) GTEST_SKIP() << NotSdlGpu(device);
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
-    ASSERT_NE(runtime, nullptr) << "SDL_GPU created no runtime from CnaConformanceEffect.fxb";
+    ASSERT_NE(runtime, nullptr) << "SDLGPU created no runtime from CnaConformanceEffect.fxb";
     auto* sdlGpuEffect =
         dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(runtime.get());
     ASSERT_NE(sdlGpuEffect, nullptr);
@@ -497,7 +497,7 @@ TEST(SdlGpuCompiledEffectVertexLayoutTest, LinksTheAppliedPassAndReturnsStableSh
     GraphicsDevice device;
     if (RendererOf(device) == nullptr) GTEST_SKIP() << NotSdlGpu(device);
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
-    ASSERT_NE(runtime, nullptr) << "SDL_GPU created no runtime from CnaConformanceEffect.fxb";
+    ASSERT_NE(runtime, nullptr) << "SDLGPU created no runtime from CnaConformanceEffect.fxb";
     auto* sdlGpuEffect =
         dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(runtime.get());
     ASSERT_NE(sdlGpuEffect, nullptr);
@@ -536,7 +536,7 @@ TEST(SdlGpuCompiledEffectDrawTest, DrawsIndexedAndNonIndexedPrimitivesWithTheApp
 {
     GraphicsDevice device;
     SdlGpuRenderer* renderer = RendererOf(device);
-    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the SDLGPU renderer";
 
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
     ASSERT_NE(runtime, nullptr);
@@ -614,7 +614,7 @@ TEST(SdlGpuCompiledEffectDrawTest, RendersTheAppliedPassesExpectedPixelsIntoARen
     // preshader lands on (20,41,61,82).
     GraphicsDevice device;
     SdlGpuRenderer* renderer = RendererOf(device);
-    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the SDLGPU renderer";
 
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
     ASSERT_NE(runtime, nullptr);
@@ -725,7 +725,7 @@ TEST(SdlGpuCompiledEffectDrawTest, RefusesADrawWithNoVertexDeclaration)
 {
     GraphicsDevice device;
     SdlGpuRenderer* renderer = RendererOf(device);
-    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the SDLGPU renderer";
 
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
     ASSERT_NE(runtime, nullptr);
@@ -757,7 +757,7 @@ TEST(SdlGpuCompiledEffectDrawTest, DrawsASpriteWithACompiledEffect)
 {
     GraphicsDevice device;
     SdlGpuRenderer* renderer = RendererOf(device);
-    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the SDLGPU renderer";
 
     auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
     ASSERT_NE(runtime, nullptr);
@@ -797,7 +797,7 @@ TEST(SdlGpuCompiledEffectTest, EveryCommittedStockEffectParses)
 {
     GraphicsDevice device;
     if (RendererOf(device) == nullptr)
-        GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
+        GTEST_SKIP() << "this build did not select the SDLGPU renderer";
 
     for (const char* name : {"SpriteEffect.fxb", "BasicEffect.fxb", "AlphaTestEffect.fxb",
                              "DualTextureEffect.fxb", "EnvironmentMapEffect.fxb",
@@ -874,12 +874,12 @@ TEST(SdlGpuCompiledEffectDrawTest, BaseInstanceDrawReadsInstanceRecordsFromFirst
 {
     GraphicsDevice device;
     if (RendererOf(device) == nullptr)
-        GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
+        GTEST_SKIP() << "this build did not select the SDLGPU renderer";
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     ASSERT_TRUE(device.SupportsCapability(CNA::GraphicsCapability::Instancing));
     ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing))
-        << "SDL_GPU has reported base-instance drawing since RRC-043";
+        << "SDLGPU has reported base-instance drawing since RRC-043";
 
     Effect effect(device,
                   CNA::TestSupport::BuildSyntheticDrawableEffect(/*readsSecondStream=*/true));
@@ -1131,7 +1131,7 @@ TEST(SdlGpuCompiledEffectDrawTest, QueuedVolumeSamplerRetainsTextureUntilReplay)
     device.DrawUserPrimitives(
         PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2, declaration);
 
-    // SDL_GPU submits the draw only when the target is consumed below. Destroying the public
+    // SDLGPU submits the draw only when the target is consumed below. Destroying the public
     // object here therefore proves that the queued sampler binding, rather than the wrapper,
     // owns the native volume until replay completes.
     volume.reset();
@@ -1148,7 +1148,7 @@ TEST(SdlGpuCompiledEffectDrawTest, QueuedDrawRetainsShadersAfterEffectDestructio
 {
     GraphicsDevice device;
     // The read-back pixels are every compiled-effect renderer's contract, so they run on whichever
-    // one is active; only the pipeline-cache lease at the end is SDL_GPU's own (null elsewhere).
+    // one is active; only the pipeline-cache lease at the end is SDLGPU's own (null elsewhere).
     SdlGpuRenderer* renderer = RendererOf(device);
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
@@ -1185,7 +1185,7 @@ TEST(SdlGpuCompiledEffectDrawTest, QueuedDrawRetainsShadersAfterEffectDestructio
     device.DrawUserPrimitives(
         PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2, declaration);
 
-    // DrawUserPrimitives has already accepted the draw, but SDL_GPU will not create its pipeline
+    // DrawUserPrimitives has already accepted the draw, but SDLGPU will not create its pipeline
     // or encode it until the target is consumed below. The queued command must therefore retain
     // the applied pass's native shaders independently of the public Effect wrapper.
     effect.reset();
@@ -1207,7 +1207,7 @@ TEST(SdlGpuCompiledEffectDrawTest, QueuedSpriteRetainsShadersAfterEffectDisposal
 {
     GraphicsDevice device;
     // The read-back pixels are every compiled-effect renderer's contract, so they run on whichever
-    // one is active; only the pipeline-cache lease at the end is SDL_GPU's own (null elsewhere).
+    // one is active; only the pipeline-cache lease at the end is SDLGPU's own (null elsewhere).
     SdlGpuRenderer* renderer = RendererOf(device);
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
@@ -1233,7 +1233,7 @@ TEST(SdlGpuCompiledEffectDrawTest, QueuedSpriteRetainsShadersAfterEffectDisposal
     batch.Draw(source, Rectangle(0, 0, kSize, kSize), Color::White);
     batch.End();
 
-    // End queues the sprite geometry but SDL_GPU still resolves the compiled pipeline at replay.
+    // End queues the sprite geometry but SDLGPU still resolves the compiled pipeline at replay.
     // Disposing and releasing the only public Effect owner must not invalidate that already-issued
     // sprite; Dispose resets the compiled runtime immediately.
     effect->Dispose();
@@ -1426,7 +1426,7 @@ TEST(SdlGpuCompiledEffectDrawTest, SharedTruncationContract)
 // Renderer-neutral draw contracts first carried by the retired METAL renderer (AM4-144/146) and by
 // WebGPU (WEBGPU-160/170/208); every compiled-effect family runs them from
 // CompiledEffectConformance.hpp.
-// Shader Model 1-3 on the MojoShader SPIR-V route, which SDL_GPU and WebGPU share (EasyGL's
+// Shader Model 1-3 on the MojoShader SPIR-V route, which SDLGPU and WebGPU share (EasyGL's
 // sections are the oracle): ps_3_0's vPos is D3D9's integer pixel, not the pixel centre FragCoord
 // carries; vFace is positive on XNA's clockwise front face although this renderer's native front
 // face is counter-clockwise; and TEXBEM/TEXBEML read the texture stage's bump-environment matrix
@@ -1548,4 +1548,4 @@ TEST(SdlGpuCompiledEffectDrawTest, SharedSpriteBatchAlternationContract)
     CNA::TestSupport::RunCompiledEffectSpriteBatchAlternationContract(device);
 }
 
-#endif  // CNA_SDL_GPU_COMPILED_EFFECTS
+#endif  // CNA_SDLGPU_COMPILED_EFFECTS

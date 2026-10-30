@@ -17,7 +17,7 @@ CMake 3.21 or newer, and Ninja. The project itself still accepts CMake 3.20 for 
 configures; CMake 3.21 is required to read the repository's preset schema. VS Code users should
 install the extensions recommended by `.vscode/extensions.json`.
 
-Every build needs Sharp Runtime as a sibling checkout. The SDL_GPU and HEADLESS presets do not need
+Every build needs Sharp Runtime as a sibling checkout. The SDLGPU and HEADLESS presets do not need
 the `easy-gl` or `meta-gl` siblings:
 
 ```text
@@ -43,8 +43,8 @@ match its manifest.
 | Configure preset | Purpose | Generator |
 |---|---|---|
 | `windows-msvc-headless-debug` | SDL-free compiler and portable-contract baseline | Ninja + MSVC, Debug |
-| `windows-msvc-sdlgpu-debug` | Native SDL3/SDL_GPU development and smoke tests | Ninja + MSVC, Debug |
-| `windows-msvc-sdlgpu-relwithdebinfo` | Optimized SDL_GPU build with symbols | Ninja + MSVC, RelWithDebInfo |
+| `windows-msvc-sdlgpu-debug` | Native SDL3/SDLGPU development and smoke tests | Ninja + MSVC, Debug |
+| `windows-msvc-sdlgpu-relwithdebinfo` | Optimized SDLGPU build with symbols | Ninja + MSVC, RelWithDebInfo |
 | `windows-vs2022-sdlgpu` | Conventional multi-configuration generated solution | Visual Studio 17 2022, x64 |
 
 Matching build and test presets carry the same names. The Visual Studio generator has separate
@@ -100,7 +100,7 @@ ctest --preset windows-msvc-sdlgpu-debug
 ```
 
 For the compiler-only/portable contract, replace the preset name with
-`windows-msvc-headless-debug`. The SDL_GPU test preset forces SDL's `windows` video driver and
+`windows-msvc-headless-debug`. The SDLGPU test preset forces SDL's `windows` video driver and
 Direct3D 12 GPU driver. CTest reports an unavailable device as a skip; the automatic CI workflow
 additionally rejects any such skip so it cannot pass without running the smoke programs.
 
@@ -128,10 +128,10 @@ calls on one target are ignored.
 
 - the headless job configures, builds `CnaTests`, and runs the portable platform/audio/configuration
   contract without SDL;
-- the SDL_GPU job builds the focused eight-program smoke set and runs it through SDL's Direct3D 12
+- the SDLGPU job builds the focused eight-program smoke set and runs it through SDL's Direct3D 12
   driver, failing on a CTest skip.
 
-`d3d-windows-ci.yml` remains a manual focused qualification for `DIRECTX9` and SDL_GPU, and the
+`d3d-windows-ci.yml` remains a manual focused qualification for `DIRECTX9` and SDLGPU, and the
 Windows platform-module job in `platform-ci.yml` remains manual. A hosted-runner smoke is not a
 full real-hardware qualification. Current gaps remain: the full renderer pixel suite on native
 Windows, relocated installed-SDK execution on Windows, the non-ASCII `TEMP` limitation of the

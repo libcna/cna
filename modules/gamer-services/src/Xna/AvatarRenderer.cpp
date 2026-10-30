@@ -141,7 +141,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
         // Resources belong to one device; a different device (or a recreated one) rebuilds them,
         // and a device being disposed takes them with it rather than leaving them to outlive it
-        // (an SDL_GPU device torn down under live textures crashes).
+        // (an SDLGPU device torn down under live textures crashes).
         Graphics::GraphicsDevice& Bind()
         {
             auto& current = CNA::Internal::GamerServices::dispatcherGraphicsDevice();

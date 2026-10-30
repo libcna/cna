@@ -3,7 +3,7 @@
 > **Note (2026-10-14).** References below to CNA's Vulkan backend (`VulkanCompiledEffect`,
 > `FX-065`) and to `tools/graphics/mojoshader_vulkan_probe.cpp` describe code that was deleted with
 > the `VULKAN` renderer on 2026-10-13 (`docs/removed-renderers.md`); they are kept as the context
-> this spike was measured in. The SPIR-V findings themselves still apply to `WEBGPU` and `SDL_GPU`.
+> this spike was measured in. The SPIR-V findings themselves still apply to `WEBGPU` and `SDLGPU`.
 
 Can the pinned WebGPU stack run a **compiled XNA Effect**? Measured on **wgpu-native v29.0.1.1**
 (`~/deps/wgpu-native-v29.0.1.1`) against an AMD Radeon 780M (RADV, Mesa 25.0.7) under `Xvfb :131`,
@@ -281,7 +281,7 @@ identical bytes, so both were carrying both defects. That is why the regression 
 half, device-free, reading the two words back out of the finished module — rather than a WebGPU
 test asserting that wgpu happened to accept something.
 
-**These are shared fixes, not WebGPU-local ones.** The Vulkan (`FX-065`) and SDL_GPU (`FX-061`)
+**These are shared fixes, not WebGPU-local ones.** The Vulkan (`FX-065`) and SDLGPU (`FX-061`)
 backends consume the same SPIR-V profile and the same linker, so both gain `ps_1_x` support from
 this patch series — which is also why the evidence belongs here rather than in a WebGPU-only note.
 

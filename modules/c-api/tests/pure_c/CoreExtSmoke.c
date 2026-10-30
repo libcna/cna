@@ -176,7 +176,7 @@ static const CNA_GraphicsRendererType live_renderer_identities[] = {
         CNA_GRAPHICS_RENDERER_SOFTWARE,
         CNA_GRAPHICS_RENDERER_STUB,
         CNA_GRAPHICS_RENDERER_DIRECTX9,
-        CNA_GRAPHICS_RENDERER_SDL_GPU,
+        CNA_GRAPHICS_RENDERER_SDLGPU,
         CNA_GRAPHICS_RENDERER_FNA3D
 };
 

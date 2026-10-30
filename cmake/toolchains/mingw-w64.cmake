@@ -3,7 +3,7 @@
 # Usage (from the cna repo root):
 #   cmake -B build-windows \
 #         -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
-#         -DCNA_GRAPHICS_RENDERER=SDL_GPU
+#         -DCNA_GRAPHICS_RENDERER=SDLGPU
 #   cmake --build build-windows
 #
 # Prerequisites:

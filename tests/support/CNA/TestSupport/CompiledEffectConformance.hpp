@@ -5885,7 +5885,7 @@ namespace CNA::TestSupport
      * pixel shader writes takes XNA's ColorWriteChannels for its own slot (ColorWriteChannels1 for
      * slot 1) under the one BlendState; a {Color, Single} set (XNA requires equal bit depths) keeps
      * slot 1's float output exact; and returning to the first state draws the first picture again.
-     * First written for the retired METAL renderer (AM4-144/146), the shape of SDL_GPU's SDLGPU-75.
+     * First written for the retired METAL renderer (AM4-144/146), the shape of SDLGPU's SDLGPU-75.
      *
      * @param device HiDef device whose renderer claims CompiledEffects.
      */

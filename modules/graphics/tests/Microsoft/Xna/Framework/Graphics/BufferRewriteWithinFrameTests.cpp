@@ -3,7 +3,7 @@
 // STREETPERF-0002: a draw renders the vertex and index data its buffers
 // held when the draw was issued, even when the game rewrites those buffers before the frame is
 // presented. Immediate renderers get this for free; a renderer that records draws and replays
-// them at Present() has to keep what each draw was issued with. SDL_GPU used to copy every
+// them at Present() has to keep what each draw was issued with. SDLGPU used to copy every
 // draw's whole buffer to do it (~430 MB a frame in cna-street) and now binds the buffers' own
 // storage, moving a buffer to fresh storage when it is rewritten under a queued draw. These
 // cases are what that move exists for, on every renderer.

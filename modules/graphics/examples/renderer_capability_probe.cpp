@@ -2,7 +2,7 @@
 
 // One repeatable runtime inventory of a renderer's capabilities: the legacy GraphicsCapability
 // answers in ordinal order, then the complete detailed RendererCapabilityProfile report. Built
-// for the EasyGL and SDL_GPU comparison identities so the two can be diffed from one source.
+// for the EasyGL and SDLGPU comparison identities so the two can be diffed from one source.
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"

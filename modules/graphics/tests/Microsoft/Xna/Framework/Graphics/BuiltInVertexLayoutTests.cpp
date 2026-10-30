@@ -20,7 +20,7 @@
 //
 // Section A (layout) needs no rendering and runs on every renderer. Section B renders the same
 // public fixture through every DrawUser path on the renderers that raster 3D triangles and can
-// read the backbuffer back; Section C is the SDL_GPU equivalent through its render-target oracle.
+// read the backbuffer back; Section C is the SDLGPU equivalent through its render-target oracle.
 // Section D pins the declaration/range validation contract and needs only a device.
 
 #include <array>
@@ -1060,7 +1060,7 @@ TEST_F(BuiltInVertexLayoutTest, VertexBufferPathIsUnchangedByTheCorrectedDeclara
 
 
 // =========================================================================================
-// Section C — SDL_GPU, whose only exact-pixel oracle is a render target
+// Section C — SDLGPU, whose only exact-pixel oracle is a render target
 // =========================================================================================
 
 TEST_F(BuiltInVertexLayoutTest, SdlGpuObjectArrayWithStaticDeclarationRendersIntoATarget)
@@ -1071,7 +1071,7 @@ TEST_F(BuiltInVertexLayoutTest, SdlGpuObjectArrayWithStaticDeclarationRendersInt
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
     // lets the caller run on to fail anyway.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, Software);
-    // RTR-P9-5: SDL_GPU's own render-target oracle.
+    // RTR-P9-5: SDLGPU's own render-target oracle.
     CNA_SKIP_IF_RENDERER_IS_NOT(SdlGpu);
     RequireLayoutRendering();
     const SlotLayout layout = BackbufferLayout();
@@ -1099,7 +1099,7 @@ TEST_F(BuiltInVertexLayoutTest, SdlGpuObjectArrayWithStaticDeclarationRendersInt
 
     ExpectExactlySlots(
         CaptureTarget(target, layout.width, layout.height), layout, 1, 3,
-        "SDL_GPU object array + static declaration", true);
+        "SDLGPU object array + static declaration", true);
 }
 
 

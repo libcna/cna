@@ -1,6 +1,6 @@
 // RTR-P1-D29: the SdlGpu family's pre-construction contract.
 //
-// SDL_GPU claims the window through SDL_ClaimWindowForGPUDevice, which needs no creation-time flag.
+// SDLGPU claims the window through SDL_ClaimWindowForGPUDevice, which needs no creation-time flag.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"
