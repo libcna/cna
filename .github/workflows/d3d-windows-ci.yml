@@ -6,10 +6,9 @@
 # real swap-chain/device-lost/driver-parity verification on a machine with a display and a GPU
 # driver, which a hosted runner does not reliably provide.
 #
-# Deliberately workflow_dispatch-only (manual): Windows GitHub-hosted runners are slower and more
-# expensive than this project's Linux CI. This workflow is a narrow, project-owner-approved
-# exception to this project's general "no CI automation" stance, scoped to native-MSVC Direct3D
-# verification -- not a precedent for broader automatic-trigger CI elsewhere in this project.
+# Deliberately workflow_dispatch-only (manual): this remains the focused DIRECTX9 qualification
+# workflow. The automatic current-head compiler and SDL_GPU baseline is
+# windows-msvc-ci.yml and consumes the same checked-in CMake presets developers use locally.
 #
 # The DIRECTX9 leg builds only the renderer's own self-contained CTest executables (label
 # DIRECTX9), not CnaTests. The SDL_GPU leg builds and runs the focused smoke set in

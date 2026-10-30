@@ -17,6 +17,7 @@ from typing import Any
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PRESETS_PATH = REPO / "CMakePresets.json"
+WORKFLOW_PATH = REPO / ".github" / "workflows" / "windows-msvc-ci.yml"
 
 WINDOWS_CONFIGURE_PRESETS = {
     "windows-msvc-headless-debug",
@@ -150,6 +151,25 @@ def main() -> int:
     present_retired = sorted(name for name in RETIRED_WINDOWS_RENDERERS if name in serialized)
     if present_retired:
         errors.append(f"Windows presets name retired renderers: {present_retired}")
+
+    if not WORKFLOW_PATH.exists():
+        errors.append("missing automatic .github/workflows/windows-msvc-ci.yml baseline")
+    else:
+        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+        for trigger in ("push:", "pull_request:"):
+            if trigger not in workflow:
+                errors.append(f"Windows MSVC workflow lacks the automatic {trigger[:-1]} trigger")
+        for command in (
+                "cmake --preset windows-msvc-headless-debug",
+                "cmake --build --preset windows-msvc-headless-debug",
+                "ctest --preset windows-msvc-headless-debug",
+                "cmake --preset windows-msvc-sdlgpu-debug",
+                "cmake --build --preset windows-msvc-sdlgpu-debug",
+                "ctest --preset windows-msvc-sdlgpu-debug"):
+            if command not in workflow:
+                errors.append(f"Windows MSVC workflow does not consume the shared contract: {command}")
+        if "grep -q 'Skipped'" not in workflow:
+            errors.append("Windows SDL_GPU workflow must reject CTest skips")
 
     if errors:
         print("Windows IDE preset contract failed:", file=sys.stderr)

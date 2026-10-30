@@ -1,0 +1,124 @@
+name: Windows MSVC baseline
+
+on:
+  push:
+    branches: [next, develop, main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [next, develop, main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-msvc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  headless:
+    name: Headless compiler and portable contract (MSVC)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout CNA (with submodules)
+        uses: actions/checkout@v4
+        with:
+          path: cna
+          submodules: true
+
+      - name: Clone the Sharp Runtime sibling
+        run: |
+          set -euo pipefail
+          GITHUB_WORKSPACE="${GITHUB_WORKSPACE}/cna" bash cna/scripts/ci/clone_siblings.sh \
+            "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime
+
+      - name: Set up MSVC developer environment (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Set up Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v4
+
+      - name: Configure the SDL-free Windows baseline preset
+        working-directory: cna
+        run: cmake --preset windows-msvc-headless-debug
+
+      - name: Build the Windows baseline preset
+        working-directory: cna
+        run: cmake --build --preset windows-msvc-headless-debug
+
+      - name: Run the portable Windows contract preset
+        working-directory: cna
+        run: ctest --preset windows-msvc-headless-debug
+
+  sdlgpu:
+    name: SDL_GPU Direct3D 12 smoke (MSVC)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout CNA (with submodules)
+        uses: actions/checkout@v4
+        with:
+          path: cna
+          submodules: true
+
+      - name: Clone the Sharp Runtime sibling
+        run: |
+          set -euo pipefail
+          GITHUB_WORKSPACE="${GITHUB_WORKSPACE}/cna" bash cna/scripts/ci/clone_siblings.sh \
+            "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime
+
+      - name: Set up MSVC developer environment (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Set up Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v4
+
+      - name: Record the vendored SDL revision
+        id: sdlsha
+        run: echo "sha=$(git -C cna/third_party/SDL rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the ABI-fingerprinted SDL install
+        uses: actions/cache@v4
+        with:
+          path: cna/.sdl-prebuilt-Windows-*
+          key: windows-msvc-sdl-v2-${{ steps.sdlsha.outputs.sha }}-${{ hashFiles('cna/cmake/patches/sdl-*.patch', 'cna/cmake/ThirdPartySDL.cmake', 'cna/cmake/SdlPrebuiltFingerprint.cmake') }}
+
+      - name: Configure the SDL_GPU Windows preset
+        working-directory: cna
+        run: cmake --preset windows-msvc-sdlgpu-debug
+
+      - name: Build the SDL_GPU smoke preset
+        working-directory: cna
+        run: cmake --build --preset windows-msvc-sdlgpu-debug
+
+      # CTest normally treats exit 77 as a successful skip. A supported Windows SDL_GPU baseline
+      # must create a Direct3D 12 device and run every smoke program, so a skip is a failure here.
+      - name: Run SDL_GPU on Direct3D 12 without accepting skips
+        working-directory: cna
+        run: |
+          set -euo pipefail
+          output="$(ctest --preset windows-msvc-sdlgpu-debug 2>&1)" || {
+            printf '%s\n' "$output"
+            exit 1
+          }
+          printf '%s\n' "$output"
+          if grep -q 'Skipped' <<<"$output"; then
+            echo "::error::A required Windows SDL_GPU smoke program skipped." >&2
+            exit 1
+          fi

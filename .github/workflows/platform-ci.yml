@@ -252,9 +252,8 @@ jobs:
   # of d3d-windows-ci.yml (SDL's Direct3D 12 backend on the window SDL3 created), which replaced
   # the retired DIRECTX11 renderer's DirectX11_Win32HardwareSmoke (RRC-051).
   #
-  # workflow_dispatch-only, matching the precedent d3d-windows-ci.yml set and for the same reasons
-  # recorded there: Windows runners are slower and more expensive than this project's Linux CI, and
-  # automatic Windows triggering is a deliberate exception rather than the default here.
+  # workflow_dispatch-only: this is the deeper platform-module/exit-order qualification. The
+  # automatic current-head MSVC compiler and SDL_GPU baseline lives in windows-msvc-ci.yml.
   sdl3-windows:
     name: SDL3 on Windows (native MSVC, windows-latest)
     runs-on: windows-latest
