@@ -2,7 +2,7 @@
   "version": 3,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 20,
+    "minor": 21,
     "patch": 0
   },
   "configurePresets": [
@@ -13,6 +13,112 @@
       "cacheVariables": {
         "CNA_EXPORT_COMPILE_COMMANDS": "ON",
         "CNA_USE_CCACHE": "ON"
+      }
+    },
+    {
+      "name": "windows-msvc-base",
+      "hidden": true,
+      "displayName": "Windows MSVC base",
+      "description": "Shared native Windows settings for the Ninja/MSVC presets. Run from an x64 Visual Studio developer environment.",
+      "inherits": "base-ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "cl.exe",
+        "CNA_USE_CCACHE": "OFF",
+        "CNA_BUILD_C_API": "OFF",
+        "CNA_ENABLE_NET": "OFF",
+        "CNA_ENABLE_GAMER_SERVICES": "OFF",
+        "CNA_ENABLE_VIDEO": "OFF",
+        "CNA_ENABLE_DRACO": "OFF",
+        "CNA_MAX_VENDORED_BUILD_JOBS": "2"
+      }
+    },
+    {
+      "name": "windows-msvc-headless-debug",
+      "displayName": "Windows MSVC headless (Debug)",
+      "description": "SDL-free Windows compiler and portable-test baseline using Ninja and cl.exe.",
+      "inherits": "windows-msvc-base",
+      "binaryDir": "${sourceDir}/cmake-build-windows-msvc-headless-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CNA_PLATFORM": "HEADLESS",
+        "CNA_AUDIO_PLATFORM": "NULL",
+        "CNA_GRAPHICS_RENDERER": "HEADLESS",
+        "CNA_ENABLE_SDL": "OFF",
+        "CNA_BUILD_TESTS": "ON",
+        "CNA_BUILD_EXAMPLES": "OFF"
+      }
+    },
+    {
+      "name": "windows-msvc-sdlgpu-debug",
+      "displayName": "Windows MSVC SDL_GPU (Debug)",
+      "description": "Native Windows SDL3 + SDL_GPU development and smoke-test configuration using Ninja and cl.exe.",
+      "inherits": "windows-msvc-base",
+      "binaryDir": "${sourceDir}/cmake-build-windows-msvc-sdlgpu-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CNA_PLATFORM": "SDL3",
+        "CNA_AUDIO_PLATFORM": "SDL3",
+        "CNA_GRAPHICS_RENDERER": "SDL_GPU",
+        "CNA_ENABLE_SDL": "ON",
+        "CNA_BUILD_TESTS": "ON",
+        "CNA_BUILD_EXAMPLES": "ON"
+      }
+    },
+    {
+      "name": "windows-msvc-sdlgpu-relwithdebinfo",
+      "displayName": "Windows MSVC SDL_GPU (RelWithDebInfo)",
+      "description": "Optimized native Windows SDL3 + SDL_GPU configuration with debugger symbols using Ninja and cl.exe.",
+      "inherits": "windows-msvc-sdlgpu-debug",
+      "binaryDir": "${sourceDir}/cmake-build-windows-msvc-sdlgpu-relwithdebinfo",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "windows-vs2022-base",
+      "hidden": true,
+      "displayName": "Visual Studio 2022 base",
+      "description": "Shared native Windows settings for Visual Studio's multi-configuration generator.",
+      "generator": "Visual Studio 17 2022",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "architecture": "x64",
+      "cacheVariables": {
+        "CNA_EXPORT_COMPILE_COMMANDS": "OFF",
+        "CNA_USE_CCACHE": "OFF",
+        "CNA_BUILD_C_API": "OFF",
+        "CNA_ENABLE_NET": "OFF",
+        "CNA_ENABLE_GAMER_SERVICES": "OFF",
+        "CNA_ENABLE_VIDEO": "OFF",
+        "CNA_ENABLE_DRACO": "OFF",
+        "CNA_MAX_VENDORED_BUILD_JOBS": "2"
+      }
+    },
+    {
+      "name": "windows-vs2022-sdlgpu",
+      "displayName": "Visual Studio 2022 SDL_GPU",
+      "description": "Visual Studio solution view for native Windows SDL3 + SDL_GPU development. Select Debug or RelWithDebInfo in the IDE.",
+      "inherits": "windows-vs2022-base",
+      "binaryDir": "${sourceDir}/cmake-build-windows-vs2022-sdlgpu",
+      "cacheVariables": {
+        "CNA_PLATFORM": "SDL3",
+        "CNA_AUDIO_PLATFORM": "SDL3",
+        "CNA_GRAPHICS_RENDERER": "SDL_GPU",
+        "CNA_ENABLE_SDL": "ON",
+        "CNA_BUILD_TESTS": "ON",
+        "CNA_BUILD_EXAMPLES": "ON"
       }
     },
     {
@@ -247,6 +353,81 @@
   ],
   "buildPresets": [
     {
+      "name": "windows-msvc-headless-debug",
+      "displayName": "Build the Windows MSVC headless baseline",
+      "configurePreset": "windows-msvc-headless-debug",
+      "jobs": 2,
+      "targets": [
+        "CnaTests"
+      ]
+    },
+    {
+      "name": "windows-msvc-sdlgpu-debug",
+      "displayName": "Build the Windows MSVC SDL_GPU smoke set (Debug)",
+      "configurePreset": "windows-msvc-sdlgpu-debug",
+      "jobs": 2,
+      "targets": [
+        "cna_test_sdlgpu_smoke",
+        "cna_test_sdlgpu_2d",
+        "cna_conformance_clear_options_matrix_sdlgpu",
+        "cna_conformance_effect_orientation_sdlgpu",
+        "cna_conformance_texture2d_fromstream_sdlgpu",
+        "cna_conformance_spritebatch_draw_overloads_sdlgpu",
+        "cna_conformance_multisample_count_clamp_sdlgpu",
+        "cna_conformance_disposed_guards_sdlgpu"
+      ]
+    },
+    {
+      "name": "windows-msvc-sdlgpu-relwithdebinfo",
+      "displayName": "Build the Windows MSVC SDL_GPU smoke set (RelWithDebInfo)",
+      "configurePreset": "windows-msvc-sdlgpu-relwithdebinfo",
+      "jobs": 2,
+      "targets": [
+        "cna_test_sdlgpu_smoke",
+        "cna_test_sdlgpu_2d",
+        "cna_conformance_clear_options_matrix_sdlgpu",
+        "cna_conformance_effect_orientation_sdlgpu",
+        "cna_conformance_texture2d_fromstream_sdlgpu",
+        "cna_conformance_spritebatch_draw_overloads_sdlgpu",
+        "cna_conformance_multisample_count_clamp_sdlgpu",
+        "cna_conformance_disposed_guards_sdlgpu"
+      ]
+    },
+    {
+      "name": "windows-vs2022-sdlgpu-debug",
+      "displayName": "Build the Visual Studio 2022 SDL_GPU smoke set (Debug)",
+      "configurePreset": "windows-vs2022-sdlgpu",
+      "configuration": "Debug",
+      "jobs": 2,
+      "targets": [
+        "cna_test_sdlgpu_smoke",
+        "cna_test_sdlgpu_2d",
+        "cna_conformance_clear_options_matrix_sdlgpu",
+        "cna_conformance_effect_orientation_sdlgpu",
+        "cna_conformance_texture2d_fromstream_sdlgpu",
+        "cna_conformance_spritebatch_draw_overloads_sdlgpu",
+        "cna_conformance_multisample_count_clamp_sdlgpu",
+        "cna_conformance_disposed_guards_sdlgpu"
+      ]
+    },
+    {
+      "name": "windows-vs2022-sdlgpu-relwithdebinfo",
+      "displayName": "Build the Visual Studio 2022 SDL_GPU smoke set (RelWithDebInfo)",
+      "configurePreset": "windows-vs2022-sdlgpu",
+      "configuration": "RelWithDebInfo",
+      "jobs": 2,
+      "targets": [
+        "cna_test_sdlgpu_smoke",
+        "cna_test_sdlgpu_2d",
+        "cna_conformance_clear_options_matrix_sdlgpu",
+        "cna_conformance_effect_orientation_sdlgpu",
+        "cna_conformance_texture2d_fromstream_sdlgpu",
+        "cna_conformance_spritebatch_draw_overloads_sdlgpu",
+        "cna_conformance_multisample_count_clamp_sdlgpu",
+        "cna_conformance_disposed_guards_sdlgpu"
+      ]
+    },
+    {
       "name": "dev",
       "displayName": "Build the fast local-development content tool",
       "configurePreset": "dev",
@@ -382,6 +563,67 @@
       "targets": [
         "CnaTests"
       ]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-msvc-headless-debug",
+      "displayName": "Test the Windows MSVC headless baseline",
+      "configurePreset": "windows-msvc-headless-debug",
+      "filter": {
+        "include": {
+          "name": "^(CnaPlatformTests|CnaAudioPlatformTests|CnaPlatformSelection_Retired|CnaAudioPlatformSelection_.*|CnaSdlOffFindsNoSdlPackage|CnaSdlPrebuiltFingerprint|RendererIdentityRegistry|RendererCurationApiDecisions|WindowsIdePresetContract)$"
+        }
+      },
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 2,
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "windows-msvc-sdlgpu-debug",
+      "displayName": "Test the Windows MSVC SDL_GPU smoke set (Debug)",
+      "configurePreset": "windows-msvc-sdlgpu-debug",
+      "filter": {
+        "include": {
+          "name": "^(SdlGpu_(Smoke|2D|Conformance_(clear_options_matrix|effect_orientation|texture2d_fromstream|spritebatch_draw_overloads|multisample_count_clamp|disposed_guards)))$"
+        }
+      },
+      "environment": {
+        "SDL_AUDIODRIVER": "dummy",
+        "SDL_GPU_DRIVER": "direct3d12",
+        "SDL_VIDEODRIVER": "windows"
+      },
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 1,
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "windows-msvc-sdlgpu-relwithdebinfo",
+      "displayName": "Test the Windows MSVC SDL_GPU smoke set (RelWithDebInfo)",
+      "inherits": "windows-msvc-sdlgpu-debug",
+      "configurePreset": "windows-msvc-sdlgpu-relwithdebinfo"
+    },
+    {
+      "name": "windows-vs2022-sdlgpu-debug",
+      "displayName": "Test the Visual Studio 2022 SDL_GPU smoke set (Debug)",
+      "inherits": "windows-msvc-sdlgpu-debug",
+      "configurePreset": "windows-vs2022-sdlgpu",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-vs2022-sdlgpu-relwithdebinfo",
+      "displayName": "Test the Visual Studio 2022 SDL_GPU smoke set (RelWithDebInfo)",
+      "inherits": "windows-msvc-sdlgpu-debug",
+      "configurePreset": "windows-vs2022-sdlgpu",
+      "configuration": "RelWithDebInfo"
     }
   ]
 }

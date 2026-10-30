@@ -253,6 +253,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 
     if(Python3_Interpreter_FOUND)
+        add_test(NAME WindowsIdePresetContract
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_windows_ide_contract.py")
+        set_tests_properties(WindowsIdePresetContract PROPERTIES LABELS "configuration;windows;ide")
+
         add_test(NAME RendererIdentityRegistry
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_identities.py")
