@@ -41,6 +41,18 @@ side by side, redrawn under all 3 `CullMode` values:
 | `CullCounterClockwiseFace` (XNA default) | visible (RED) | culled (background) |
 | `CullClockwiseFace` | culled (background) | visible (GREEN) |
 
+Task 954 independently verified this mapping against real XNA 4.0 on a Windows 7 VM with a
+dedicated two-winding C# reproducer. `None` kept both triangles, `CullClockwiseFace` kept only the
+counter-clockwise triangle, and both `CullCounterClockwiseFace` and the untouched default kept only
+the clockwise triangle. The table is therefore a measured XNA contract, not only an interpretation
+of FNA. The complete investigation and its removed screenshots remain in Git history at
+`be7707579` and `76a305efd`.
+
+The shared `rasterizerstate_cullmode_camera_test.cpp` extends the contract through orthographic and
+perspective `CreateLookAt` transforms and positive- and negative-determinant world matrices.
+`rasterizerstate_cullmode_indexed_basiceffect_test.cpp` covers the bound vertex/index-buffer,
+`BasicEffect` and `DrawIndexedPrimitives` path. Both remain registered for EasyGL and SDLGPU.
+
 All 6 checks pass. This directly satisfies Task 323's own goal (`CullNone`
 disables culling for both windings) and, because each quad's visibility is checked under all 3
 modes rather than just one, also fully satisfies Tasks 324 (`CullClockwiseFace`) and 325

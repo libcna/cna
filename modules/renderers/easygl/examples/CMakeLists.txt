@@ -2022,16 +2022,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_alpha_test_effect_contract
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # XNA culling-compatibility audit (docs/xna_culling_compatibility_audit.md): extends the
+        # Task 954 culling conformance (docs/rasterizerstate-support.md, section 3): extends the
         # identity-only CullMode test above with a real Matrix::CreateLookAt camera and
-        # perspective/orthographic projection -- verbatim reuse of the shared renderer-agnostic
-        # source, registered on all 3 renderers.
+        # perspective/orthographic projection. The shared source is registered here for EasyGL
+        # and through parity/CrossFamilyPrograms.cmake for SDLGPU.
         cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode_camera
                         ${CNA_GRAPHICS_EXAMPLES_DIR}/rasterizerstate_cullmode_camera_test.cpp)
         cna_register_renderer_test(NAME EasyGL_RasterizerState_CullMode_Camera COMMAND cna_test_easygl_rasterizerstate_cullmode_camera
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # XNA culling-compatibility audit: same real-camera reproducer, but through
+        # Task 954 culling conformance: same real-camera reproducer, but through
         # GraphicsDevice::DrawIndexedPrimitives with a real VertexBuffer/IndexBuffer/BasicEffect
         # -- the exact code path Model/ModelMesh::Draw() uses -- instead of DrawUserPrimitives'
         # separate DrawColoredPrimitives dispatch. Verbatim reuse of the shared source.

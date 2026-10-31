@@ -1,6 +1,6 @@
 # DX9 D9-21 scene corpus: cullmode_ccwface_quad
-# Same triangle as cullmode_none_quad.scene (negative NDC signed area, the "CW"-labeled winding per
-# docs/xna_culling_compatibility_audit.md's real-XNA-4.0-hardware-verified table). Explicitly
+# Same triangle as cullmode_none_quad.scene (negative NDC signed area, the "CW"-labeled winding in
+# docs/rasterizerstate-support.md's real-XNA-4.0-verified table). Explicitly
 # requests CullMode.CullCounterClockwiseFace -- XNA's own documented default, so the expected
 # result is identical to every scene that never sets cullmode= at all: the triangle survives and
 # is visible. This scene exists to prove the enum value itself dispatches correctly (not just that

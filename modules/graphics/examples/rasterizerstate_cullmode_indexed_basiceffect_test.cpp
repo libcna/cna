@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// XNA culling-compatibility investigation (docs/xna_culling_compatibility_audit.md), Phase 3/5:
-// checks whether CullMode is handled consistently on the REAL code path
+// RasterizerState culling conformance (docs/rasterizerstate-support.md, section 3): checks whether
+// CullMode is handled consistently on the REAL code path
 // Microsoft::Xna::Framework::Graphics::Model / ModelMesh::Draw() actually uses --
 // GraphicsDevice::DrawIndexedPrimitives() with a real bound VertexBuffer/IndexBuffer and a
 // BasicEffect -- as opposed to examples/rasterizerstate_cullmode_camera_test.cpp, which (like
@@ -182,15 +182,9 @@ protected:
         // own dispatch) instead of DrawUserPrimitives' separate DrawColoredPrimitives path.
         // Normal is irrelevant here (lighting is off), filled with a placeholder.
         //
-        // Deliberately TWO SEPARATE VertexBuffer/IndexBuffer pairs (startIndex=0 for both),
-        // matching how a real Model's ModelMeshPart objects each own their own dedicated,
-        // complete buffer (confirmed directly in tank.model.json: every mesh has its own
-        // "vertices"/"indices" .bin pair, never a shared buffer with per-part offsets) --
-        // NOT one shared buffer read at two different startIndex offsets. The latter was
-        // tried first and found a genuine, separate, confirmed bug (not this task's own root
-        // cause): BgfxRenderer::DrawIndexedPrimitivesEx's non-wireframe path calls
-        // bgfx::setIndexBuffer(ib.handle) with no offset/count, silently ignoring
-        // GpuDrawParams::startIndex entirely -- see the audit doc's own dedicated section.
+        // Deliberately TWO SEPARATE VertexBuffer/IndexBuffer pairs (startIndex=0 for both). This
+        // keeps the regression focused on culling through the bound indexed-draw path rather than
+        // coupling it to independent shared-buffer subrange semantics.
         const Vector3 dummyNormal(0.0f, 0.0f, 1.0f);
         const Vector2 dummyUv(0.0f, 0.0f);
         VertexPositionNormalTexture vertsA[3] = {

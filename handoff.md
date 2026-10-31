@@ -35,6 +35,12 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Culling-audit documentation cleanup (2026-10-31): the resolved Task 954 investigation was
+  retired after its measured real-XNA winding contract and active regression inventory moved to
+  `docs/rasterizerstate-support.md`. All oracle, test and follow-up references now point to the
+  live contract. The old SimpleAnimation index-buffer repair is superseded by `cna-samples`'s
+  official-XNB re-port, and the incidental Bgfx subrange finding left no current renderer defect;
+  the full investigation and screenshots remain in Git history.
 - Graphics-extension documentation cleanup (2026-10-31): the closed `MOD-RETIRE-1` pre-deletion
   scope audit was removed after its surviving API inventory was checked against
   `modules/graphics-ext`, its ABI consequence against the 0.30.0 record, and its historical

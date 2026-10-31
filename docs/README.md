@@ -106,8 +106,9 @@ original phase closed — check each file's own status banner/date.
 - `depthstencilstate-support.md` — refreshed 2026-07-11.
 - `sampler-state-support.md` — **refreshed 2026-07-11**: mip-level `SetData` (Tasks 924-926) and
   EasyGL anisotropic filtering (Task 918) corrected from stale ❌ to ✅/fixed.
-- `rasterizerstate-support.md` — Phase 38 audit; see `graphics-renderer-feature-matrix.md` for the
-  current per-renderer `DepthBias` status.
+- `rasterizerstate-support.md` — Phase 38 audit plus the real-XNA Task 954 culling contract and
+  current regressions; see `graphics-renderer-feature-matrix.md` for the current per-renderer
+  `DepthBias` status.
 - `model-content-pipeline-support.md` — `Model`'s FNA-audited runtime API and its four loading
   routes (`.xnb`, `.cnb`, `.cnj`, glTF) with what each builds; refreshed 2026-10-25.
 - `occlusionquery-support.md` — per-renderer `OcclusionQuery` support.
@@ -124,9 +125,9 @@ Kept for their investigation methodology and root-cause detail, not as current s
 
 - `graphicsdevice-fna-audit.md`, `graphicsresource-fna-audit.md`, `graphics-resource-lifetime.md` —
   per-class FNA-fidelity audits, not re-verified in the 2026-07-11 pass.
-- `xna_culling_compatibility_audit.md`, `xna_depth_occlusion_compatibility_audit.md` — recent
-  (Tasks 954/955, 2026-07-11), cross-repo `../cna-samples` investigation write-ups; current as of
-  their own dates. Their screenshots were removed on 2026-10-11 and remain in Git history.
+- `xna_depth_occlusion_compatibility_audit.md` — Task 955's 2026-07-11 cross-repo
+  `../cna-samples` investigation write-up, current as of its own date. Its screenshots were removed
+  on 2026-10-11 and remain in Git history.
 
 ## Platform / renderer limitations
 

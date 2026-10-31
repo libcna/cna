@@ -9,16 +9,17 @@ syncing all 3 state objects at `GraphicsDevice` construction, matching FNA's own
 `GraphicsDevice.cs` constructor line-for-line. No asset/data change and no sample-side change
 were needed or made.
 
-Date: 2026-07-11. Follow-up investigation to `docs/xna_culling_compatibility_audit.md` (the
-turret-winding investigation on the same sample) -- this is a **separate, unrelated bug**, found
-after that investigation's own asset fix was applied and verified. Do not conflate the two.
+Date: 2026-07-11. Follow-up to Task 954's turret-winding investigation on the same sample (the
+historical write-up is retained in Git; the current culling contract is in
+`docs/rasterizerstate-support.md`) -- this is a **separate, unrelated bug**, found after that
+investigation's own asset fix was applied and verified. Do not conflate the two.
 
 ---
 
 ## 1. Reported symptom
 
-After `docs/xna_culling_compatibility_audit.md`'s asset-level winding fix was applied and
-verified (all 12 `tank_*_idx.bin` mesh parts), the project owner reported the tank was
+After Task 954's asset-level winding fix was applied and verified (all 12 `tank_*_idx.bin` mesh
+parts), the project owner reported the tank was
 "closer to the original" but still visibly wrong: **some tank parts render fully visible when
 they should be occluded by other parts in front of them from the camera's point of view** --
 placement and winding were no longer the issue; visible-surface (depth) occlusion was.
@@ -262,6 +263,6 @@ the full write-up and the new `EasyGL_SpriteBatch_BlendStateLeak` regression tes
   different renderer, different one of the 3 states.
 - A second, unrelated, still-open state-leak bug (`SpriteBatch`'s blend state not restored after
   `End()`, EasyGL) was found and documented (§8) but deliberately not fixed here -- Task 956.
-- This is unrelated to `docs/xna_culling_compatibility_audit.md`'s own winding/CullMode
-  investigation on the same sample -- that one was a `cna-samples` asset data bug; this one is a
-  `cna_graphics` framework bug. Both were real, both are now fixed, independently.
+- This is unrelated to Task 954's winding/CullMode investigation on the same sample -- that one was
+  a `cna-samples` asset data bug; this one is a `cna_graphics` framework bug. Both were real, both
+  are now fixed, independently.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// XNA culling-compatibility investigation (docs/xna_culling_compatibility_audit.md): minimal,
+// RasterizerState culling conformance (docs/rasterizerstate-support.md, section 3): minimal,
 // deterministic CullMode reproducer under a REAL camera (perspective/orthographic projection +
 // Matrix::CreateLookAt), extending the existing identity-transform-only coverage in
 // examples/easygl_rasterizerstate_cullmode_test.cpp (Tasks 323-325/765). That existing test already
@@ -12,8 +12,8 @@
 // loading, FBX, textures, lighting, bones, or animation are used here -- two flat-colored triangles
 // only.
 //
-// Method (avoids hand-deriving expected screen positions, which is exactly the kind of arithmetic
-// this investigation must not rely on): for every scenario below,
+// Method (avoids hand-deriving expected screen positions, which this test must not rely on): for
+// every scenario below,
 //   1. Render each of the 2 test triangles ALONE, under CullMode::None (so it is visible if it is
 //      on screen at all, regardless of the "true" convention), and scan the ENTIRE framebuffer for
 //      its own unique color to find a real, renderer-reported sample pixel for it. This never
@@ -32,7 +32,7 @@
 // renderer's actual rasterizer cull decision for that specific View/Projection/World combination
 // -- not a guess based on enum names or native API documentation.
 //
-// Scenarios (Phase 1 of the audit):
+// Scenarios:
 //   (a) Identity World/View/Projection, NDC-range vertices -- sanity anchor, must reproduce the
 //       already-passing identity test's own result exactly.
 //   (b) Orthographic projection + a real Matrix::CreateLookAt view (SimpleAnimation's own camera
@@ -43,8 +43,8 @@
 //       rotation) -- must still match its own NDC prediction; documents that this pipeline stage
 //       preserves winding.
 //   (e) Same perspective+LookAt view, NEGATIVE-determinant World transform (a mirrored scale) --
-//       documented SEPARATELY per the audit's own requirement: a real winding flip is expected
-//       here (this is not a bug), so this scenario's own NDC prediction (computed the same way)
+//       kept separate because a real winding flip is expected here (this is not a bug), so this
+//       scenario's own NDC prediction (computed the same way)
 //       is expected to itself be flipped relative to (c)/(d) for the same 2 triangles, and the
 //       test still checks that the actual render matches ITS OWN prediction, not (c)/(d)'s.
 //
@@ -91,7 +91,7 @@ namespace
             && d(a.getBProperty(), b.getBProperty()) <= tol;
     }
 
-    // Local-space triangle patterns, hand-verified via the shoelace formula (see the audit doc):
+    // Local-space triangle patterns, hand-verified via the shoelace formula:
     // CCW: bottom-left -> bottom-right -> top has POSITIVE signed area (standard math / Y-up
     // convention). CW: the same shape with the last two vertices swapped has NEGATIVE signed area.
     struct Tri { Vector3 v0, v1, v2; };

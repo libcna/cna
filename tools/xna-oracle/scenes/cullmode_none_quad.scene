@@ -1,6 +1,6 @@
 # DX9 D9-21 scene corpus: cullmode_none_quad
 # Reuses colored3d.scene's exact triangle (NDC signed area confirmed negative -- the "CW" winding
-# per docs/xna_culling_compatibility_audit.md's own real-XNA-4.0-hardware-verified convention:
+# in docs/rasterizerstate-support.md's real-XNA-4.0-verified convention:
 # negative NDC signed area survives XNA's default CullCounterClockwiseFace, is culled by
 # CullClockwiseFace). CullMode.None must never cull regardless of winding -- expect the SAME
 # visible triangle every other scene (which never sets cullmode=, defaulting to
