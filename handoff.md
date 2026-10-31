@@ -35,6 +35,12 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- BasicEffect support-document reconciliation (2026-10-31): Tasks 885/886 are no longer
+  simultaneously described as deferred and complete, and the obsolete open-work section is now a
+  closed follow-up record. The page now includes Task 1102's real vertex/pixel lighting dispatch,
+  Task 1111 fog, D3D9-style vertex-output saturation, the current accepted vertex declarations
+  and FX-124 large-world precision. Focused private-runner validation passes all 83 API, EasyGL
+  and SDLGPU tests.
 - SkinnedEffect support-document reconciliation (2026-10-31): Tasks 893–895 are no longer
   presented as open, the pre-modular test path and `NEXT.md` references are gone, and the former
   "more accurate" per-pixel-only behavior is correctly recorded as the Task 1102b XNA mismatch.

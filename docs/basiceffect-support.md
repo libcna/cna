@@ -1,7 +1,8 @@
-# BasicEffect Exactness Support Matrix
+# BasicEffect exactness support matrix
 
 Phase 42 (graphics Tasks 361–370) audited and pixel-verified `BasicEffect` conformance
-against FNA. This document summarizes the findings and closes the phase.
+against FNA. This document records those findings and the later fixes that closed the phase's
+follow-up work. Current-state reconciliation: 2026-10-31.
 
 ---
 
@@ -13,6 +14,11 @@ defaulted wrong. Task 362 wrote exhaustive default-value tests for all 22 proper
 more: `DirectionalLight`'s `Direction` default was `Vector3::Forward` instead of `Vector3.Zero`.
 Task 363 confirmed `EnableDefaultLighting()`'s exact constants (ambient color, all 3 lights'
 direction/diffuse/specular) match FNA literal-for-literal — no fix needed.
+
+The current 40-case fixture is
+`modules/graphics/tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp`. In addition to the
+original defaults it covers the authentic parameter graph, derived values, texture ownership and
+sampler publication, clone behavior and the device/effect texture-binding contract.
 
 ## 2. No-lighting shader paths (Tasks 364–367)
 
@@ -60,18 +66,16 @@ the ambient/diffuse multiply.
 `DiffuseColor*Alpha` alone in every case, always silently dropping `EmissiveColor` in the
 no-lighting path — the exact gap Task 366 had deferred.
 
-**Deliberately not fixed**, scoped into 2 new dedicated tasks after auditing the real size of the
-remaining work (mirroring this project's precedent of not bundling large, multi-pipeline-site
-changes into a single task):
+The audit deliberately deferred two larger, multi-pipeline changes into dedicated follow-up tasks.
+Both were subsequently fixed:
 
-- **Task 885** — the *lit*-path `+EmissiveColor` term, plus `DirectionalLight1`/`DirectionalLight2`
-  forwarding (still completely unforwarded, unchanged since Task 361). EasyGL just needs a new
-  uniform.
-- **Task 886** — real specular highlights. Confirmed **zero specular infrastructure exists
-  anywhere** for `BasicEffect` (no `GpuDrawParams` fields for `SpecularColor`/`SpecularPower`/
-  per-light specular; no eye-position wiring in `BasicEffect::FillGpuDrawParams()`, though
-  `EnvironmentMapEffect`/`SkinnedEffect` already have prior art to reuse). A new feature, not a bug
-  fix.
+- **Task 885** — at phase close the *lit*-path `+EmissiveColor` term and
+  `DirectionalLight1`/`DirectionalLight2` forwarding were absent. The fix added all three and a
+  channel-discriminating multi-light regression.
+- **Task 886** — at phase close `BasicEffect` had no GPU specular infrastructure: no
+  `SpecularColor`/`SpecularPower` or per-light specular transport and no eye-position wiring. The
+  completed implementation uses the stock half-vector Blinn-Phong formula and a focused pixel
+  regression.
 
 ## 5. Integration capstone (Task 370)
 
@@ -81,8 +85,9 @@ Closed the phase with a capstone test combining everything Tasks 364–369 verif
 any `BasicEffect` pixel test, a **real 2×2 multi-texel texture** (every prior task used a 1×1
 solid color) sampled at all 4 texel centers via 4 separate draws.
 
-**Result: the pixel output matched the FNA-derived expected formula (`TextureColor × VertexColor × (DiffuseColor+EmissiveColor)`) at all 4 sample points. No
-new bugs found — this was pure integration verification, and it passed cleanly on the first attempt
+**Result: the pixel output matched the FNA-derived expected formula
+(`TextureColor × VertexColor × (DiffuseColor+EmissiveColor)`) at all 4 sample points.** No new
+bugs found — this was pure integration verification, and it passed cleanly on the first attempt
 thanks to Tasks 364–369's fixes already being in place.
 
 ## 6. `DiffuseColor` above 1 is saturated per vertex (2026-09-07)
@@ -170,6 +175,25 @@ Guarded by `EasyGL_BasicEffect_PositionNormal` (`SAMPLE-002`) and
 `PreferPerPixelLighting(false)`, so the per-pixel half is covered by the conformance program
 `basiceffect_lit_vertex_color_perpixel` (`<Renderer>_Conformance_*` on EasyGL, SDLGPU and WebGPU).
 
+## 8. Later exactness fixes
+
+- **Tasks 885/886** completed lit emissive composition, three-light forwarding and real specular
+  highlights. EasyGL owns the original discriminating programs; SDLGPU reuses both through the
+  cross-family corpus.
+- **Task 1102** implemented XNA's real `PreferPerPixelLighting` dispatch. The default `false`
+  path computes lighting per vertex and Gouraud-interpolates it; `true` evaluates it per fragment.
+  The regression's centre pixel is approximately 127 versus 155, so a decorative selector cannot
+  pass.
+- **Task 1111** replaced EasyGL's coincidentally-correct-at-Z=0 fog shortcut with FNA's view-space
+  dot-product formula. The focused gradient and the renderer-neutral stock-effect fog contract
+  exercise intermediate fog and the degenerate `FogStart == FogEnd` case.
+- **FX-124** raised the per-pixel stock fragment precision so normalizing a view vector at large
+  world-space scales cannot overflow mediump and silently erase specular highlights. Its scale-
+  invariance regression compares otherwise identical unit and 1000× scenes.
+- The renderer-neutral lighting and unlit contracts now hold material composition, vertex/pixel
+  dispatch, all three lights, specular, fog, vertex-output saturation and texture behavior
+  together rather than only in the original single-feature scenes.
+
 ## Support matrix
 
 | Feature | EasyGL |
@@ -185,17 +209,22 @@ Guarded by `EasyGL_BasicEffect_PositionNormal` (`SAMPLE-002`) and
 | `EmissiveColor` while lit | ✅ fixed Task 885 |
 | `DirectionalLight1`/`2` (multi-light) | ✅ fixed Task 885 |
 | Real specular highlights | ✅ fixed Task 886 |
+| `PreferPerPixelLighting` vertex/pixel dispatch | ✅ fixed Task 1102 |
+| Fog view-space factor | ✅ fixed Task 1111 |
+| Above-one diffuse vertex-output saturation | ✅ measured FX-123 |
+| Position+Normal and lit-color vertex declarations | ✅ SAMPLE-002 / FX-125 |
+| Large-world per-pixel specular precision | ✅ fixed FX-124 |
 | Combined integration capstone | ✅ Task 370 |
 
-Legend: ✅ verified working · ❌ confirmed not implemented (historical — see status banner at top).
+Legend: ✅ verified working.
 
-## Open, tracked follow-up work
+## Subsequent fixes
 
-Phase 42 opened 2 new tracked tasks, both since closed:
+- **Task 885** (opened by Task 369, fixed 2026-07-07) — lit-path `EmissiveColor` and
+  `DirectionalLight1`/`DirectionalLight2` now reach the renderer.
+- **Task 886** (opened by Task 369, fixed 2026-07-07) — `SpecularColor`, `SpecularPower`, each
+  light's specular color and the view-dependent half vector now form the real stock specular term.
 
-- ~~**Task 885**~~ — **fixed.** Lit-path `EmissiveColor` + `DirectionalLight1`/`DirectionalLight2`
-  forwarding now implemented.
-- ~~**Task 886**~~ — **fixed.** Real specular highlights (`SpecularColor`/`SpecularPower`) now
-  implemented.
-
-This closes Phase 42 (graphics Tasks 361–370) in full.
+Phase 42 and all follow-up work named on this page are closed. Current renderer-wide capability
+status belongs in `graphics-renderer-feature-matrix.md`; unresolved defects belong in
+`handoff.md` section 5.
