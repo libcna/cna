@@ -177,7 +177,8 @@ itself could support.
 | Texture2D `SetData`/`GetData`/`FromStream`/`SaveAsPng`/NPOT | ✅ | ✅ real `D3DPOOL_MANAGED` upload, exercised (and oracle-verified byte-exact) by every textured scene in the corpus (`texturepixel=` used 64×); `FromStream`/`SaveAsPng`/NPOT-on-`Reach` not separately tested |
 | Texture2D mip-level `SetData` (level > 0) | ✅ | ⬜ not attempted — no oracle scene exercises mip level > 0 |
 | Texture3D/TextureCube `SetData`/`GetData`, incl. mip | ✅ | ✅ Exact subregion/subvolume transfer round trips are exercised by `DirectX9_Smoke` and the cube/volume data-contract fixtures; cube sampling is also oracle-verified by `EnvironmentMapEffect`. Texture3D shader sampling has no oracle scene. |
-| Texture3D/TextureCube sampled in shaders | ❌ don't inherit `Texture` (Task 863, architectural) | 🟨 `TextureCube` sampled and oracle-verified byte-exact via `EnvironmentMapEffect` (`envmap_quad`/`envmap_fresnel_quad`); `Texture3D` has no consuming shader variant tested |
+| TextureCube sampled in shaders | ✅ stock `EnvironmentMapEffect`, exact classic-format probes and `EasyGL_ShaderEffect_TextureCube` | ✅ stock `EnvironmentMapEffect` is oracle-verified byte-exact (`envmap_quad`/`envmap_fresnel_quad`); the shared compiled-effect sampler contract also consumes a cube |
+| Texture3D sampled in shaders | ✅ `EasyGL_ShaderEffect_Texture3D` reads distinct slices and the capability profile reports `Texture3DSampling` | ✅ the shared compiled-effect cube/volume sampler contract runs under HiDef; source `ShaderEffect::SetTexture(Texture3D&)` remains unsupported and the narrower `Texture3DSampling` feature therefore stays false |
 | Non-`Color` `SurfaceFormat` for real GPU texture data | ✅ classic formats uploaded and sampled (`ClassicTextureFormat`, 14/14 on `OPENGLES3`, 2026-10-29) | 🟨 transfers are generic since `SOFTWARE-276`; no D3D9 oracle scene for a non-`Color` format (`directx9-renderer.md`) |
 
 ## GraphicsDevice state objects

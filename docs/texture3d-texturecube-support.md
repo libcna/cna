@@ -1,6 +1,10 @@
-# Texture3D / TextureCube Renderer Support — CNA
+# Texture3D / TextureCube renderer support — CNA
 
-> Source-inspected against Tasks 271–279 (Phase 33). Covers: EasyGL.
+This page records the EasyGL resource contract. The original Tasks 271–279 audit found several
+real gaps, but its two later follow-ups (Tasks 862/863) are complete: volume mip storage and
+cube/volume shader binding are not open work. Other renderers document their narrower boundaries
+on their own renderer pages; applications should query the active renderer capability profile
+instead of inferring support from this EasyGL record.
 
 ---
 
@@ -8,10 +12,9 @@
 
 | Symbol | Meaning |
 |--------|---------|
-| ✅ | Fully supported and verified with a passing test this session. |
-| ⚠️ | Works for the common case, with a real, documented caveat. |
-| ❌ | Missing or silently wrong; confirmed by reading the implementation. |
-| 🔍 | Same code pattern as a confirmed bug elsewhere, but not independently reproduced with a test — flagged as likely, not confirmed. |
+| ✅ | Implemented and covered by the named behavior test. |
+| ⚠️ | Implemented with the documented boundary. |
+| ❌ | Unsupported and refused explicitly. |
 
 ---
 
@@ -19,35 +22,40 @@
 
 | Renderer | `mipMap` respected? | `SurfaceFormat` respected? |
 |---------|:---:|:---:|
-| EasyGL  | ⚠️ `TextureCube` only (Task 276 fix) — see "Mip levels" below | ❌ always `Rgba8`, `format` parameter ignored |
+| EasyGL | ✅ complete cube and volume mip chains | ✅ every format it classifies as supported keeps its declared transfer/storage contract |
 
-EasyGL still silently reduces every format request to 32-bit RGBA.
+EasyGL no longer reduces these resources to RGBA8. `TextureCube` supports the classic packed,
+float/half and DXT families its live context can represent; `Texture3D` supports the classic
+uncompressed HiDef families and explicitly refuses DXT and the two SNORM volume layouts. The
+authoritative decision is `ClassifyTextureCubeFormatEXT` / `ClassifyTexture3DFormatEXT`, including
+the device-dependent `Rg32`/`Rgba64` answer. `ClassicTextureFormat` verifies exact normalized,
+float, half and compressed transfers and sampling rather than treating construction as proof.
 
 ---
 
 ## `SetData` — box / rect sub-region uploads
 
-Verified this session (Tasks 273–275) that CNA's public API layer (`Texture3D::SetData`,
-`TextureCube::SetData`) correctly computes arbitrary x/y/z (or x/y, for `TextureCube`) sub-region
-offsets and forwards them to the renderer — asymmetric, off-origin, single-voxel, and far-corner
-boxes all round-trip correctly through **EasyGL**.
+The CNA public API layer (`Texture3D::SetData`, `TextureCube::SetData`) validates arbitrary x/y/z
+(or x/y, for `TextureCube`) sub-regions and forwards the exact declared-format byte range. EasyGL
+keeps the corresponding exact-format readback shadow (also used to restore cube resources) and
+uploads the same region to the GL resource.
 
 | Renderer | Arbitrary sub-region upload | Verified how |
 |---------|:---:|---|
-| EasyGL  | ✅ | `glTexSubImage3D`/`glTexSubImage2D` per-face, pixel-verified (Tasks 273–275) |
+| EasyGL | ✅ | `EasyGL_Texture3D_PartialBox_RoundTrip`, `EasyGL_TextureCube_PartialRect_RoundTrip`, and `ClassicTextureFormat` |
 
 ---
 
 ## `GetData` — readback
 
-`GetData` of a `Texture3D` or `TextureCube` depends entirely on the renderer's
-`ITexture3DRenderer`/`ITextureCubeRenderer::GetData` implementation: unlike `Texture2D`'s
-`cpuPixels_`, no CPU-side copy is read back. (A `Color` `TextureCube` does keep a level-0 copy of
-each face, which only WebGPU's device-loss restore uses.)
+`GetData` of a `Texture3D` or `TextureCube` depends on the renderer's
+`ITexture3DRenderer`/`ITextureCubeRenderer` contract. EasyGL returns the exact declared bytes from
+its resource/shadow path and refuses a request it cannot complete; the shared layer never converts
+an untouched scratch buffer into fabricated output.
 
 | Renderer | `GetData` implemented? |
 |---------|:---:|
-| EasyGL  | ✅ — per-slice (`Texture3D`) or per-face (`TextureCube`) temporary FBO + `glReadPixels`. Pixel-verified round-trip (Tasks 273–275). |
+| EasyGL | ✅ — full, partial and mip-level round trips across the supported classic formats (`ClassicTextureFormat`). |
 
 ---
 
@@ -55,13 +63,12 @@ each face, which only WebGPU's device-loss restore uses.)
 
 | Renderer | `Texture3D` level>0 | `TextureCube` level>0 |
 |---------|:---:|:---:|
-| EasyGL  | 🔍 same bug class as the confirmed `TextureCube` bug below, not yet fixed — tracked as Task 862 | ✅ fixed and pixel-verified (Task 276): constructor now pre-allocates every mip level per face |
+| EasyGL | ✅ every level pre-allocated and independently round-tripped | ✅ every face/level pre-allocated and independently round-tripped |
 
-Task 276 confirmed (via a failing-then-fixed test) that this exact bug shape — "constructor never
-allocates GPU storage past level 0, so a sub-image write to `level>0` silently goes nowhere" —
-is real for `EasyGLTextureCubeRenderer`. The EasyGL `Texture3D` cell has the **identical code
-shape**, so the same failure is highly likely there, but only the one cell was actually reproduced
-with a test and fixed. Tracked as graphics Task 862.
+Task 276 fixed the original cube-only allocation. Task 862 then applied the same requirement to
+`EasyGLTexture3DRenderer`: its constructor allocates every level before `glTexSubImage3D` can write
+one. `EasyGL_Texture3D_Mip_RoundTrip`, `EasyGL_TextureCube_Mip_RoundTrip`, and the shared
+`Texture3DTest`/`TextureCubeTest` mip contracts pin both paths.
 
 ---
 
@@ -78,12 +85,17 @@ Task 279; the fix only changes silent-no-op into a clear exception.
 
 ## Sampling in shaders
 
-The Task 277 finding formerly recorded here (no Texture inheritance and no custom-effect
-texture binding) is historical, not the current API. `Texture3D` and `TextureCube` now
-derive from `Texture`; `ShaderEffect::SetTexture` has explicit 2D, cube and volume overloads.
-`EnvironmentMapEffect` continues to provide stock cube sampling. Query the selected
-renderer's capability profile for the shader dialect and volume-sampling support; API
-presence does not imply that every renderer executes custom shader source.
+The Task 277 finding (no `Texture` inheritance and no custom-effect binding) is historical.
+`Texture3D` and `TextureCube` derive from `Texture`, and `ShaderEffect::SetTexture` has explicit
+2D, cube and volume overloads.
+
+| Resource | EasyGL evidence |
+|---|---|
+| `TextureCube` | ✅ stock `EnvironmentMapEffect`, `ClassicTextureFormat` cube-sampling probes, and `EasyGL_ShaderEffect_TextureCube` |
+| `Texture3D` | ✅ `EasyGL_ShaderEffect_Texture3D` samples distinct slices; `RendererFeature::Texture3DSampling` reports supported |
+
+API presence does not imply that every renderer executes custom shader source. Query the selected
+renderer for its shader dialect, `ShaderEffectSourceExecution`, and `Texture3DSampling` answers.
 
 SDLGPU source and portable-bytecode sampler layouts are documented in
 [SDLGPU ShaderEffect layout](sdlgpu-shader-effect-layout.md). In particular a native
@@ -121,13 +133,11 @@ directions; only the location moved.
 
 ---
 
-## Future work
+## Current EasyGL limitation
 
-(`TextureCube::DDSFromStreamEXT` used to be listed here as Task 663. It is implemented; see
-the section above.)
-
-| Area | Task |
-|------|------|
-| Fix `EasyGLTexture3DRenderer`'s mip-level allocation (same bug as Task 276, `Texture3D` only) | Task 862 |
-| Wire `Texture3D`/`TextureCube` sampling into shaders (architecture change — inherit `Texture`, or a parallel binding path) | Task 863 |
+`EasyGLTextureCubeRenderer` is a recoverable resource and recreates its GL object from retained
+face/mip data after context loss. `EasyGLTexture3DRenderer` is not yet registered as an
+`easygl::RecoverableResource`; after a WebGL 2 or Android GL context loss it retains a dead native
+handle. This is the current defect recorded in `handoff.md` §5.1. It is unrelated to ordinary mip
+allocation, transfer, readback, or sampling while the context remains alive.
 
