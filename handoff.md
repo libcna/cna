@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- `GraphicsDeviceManager` support-document reconciliation (2026-10-31): the Task 230 snapshot now
+  describes the current Game-owned-device lifecycle and real `GraphicsDevice::Reset` pipeline.
+  Runtime MSAA, color/depth presentation formats, swap interval and viewport changes are no longer
+  mislabeled as stored-only preferences; applied renderer values, event forwarding, physical versus
+  logical resize behavior, CNAEXT presentation modes and the native C API boundary are explicit.
+  The audit also corrected obsolete reset/MSAA comments and the WebGPU page's former presentation-
+  mode default. Targeted runtime/EasyGL and SDLGPU C API targets build; 50 focused manager,
+  lifecycle, resize, depth, MSAA, vsync and C API tests pass across EasyGL, Software, WebGPU and
+  SDLGPU, and all six selected C API documentation/coverage gates pass after refreshing their
+  generated inventory. Two real API gaps found by the audit are now in §5.1 rather than hidden by
+  a blanket supported label.
 - `RasterizerState` support-document reconciliation (2026-10-31): the EasyGL-only Phase 38
   snapshot is now a current eight-family contract. It preserves the measured Microsoft XNA
   winding and state-freeze rules, records conditional native EasyGL wireframe, WebGPU edge
@@ -594,6 +605,18 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- `GraphicsDeviceManager::setPreferredBackBufferWidthProperty` and
+  `setPreferredBackBufferHeightProperty` accept zero and negative values. FNA rejects `value <= 0`
+  with `ArgumentOutOfRangeException("value", "BackBufferWidth and BackBufferHeight must be greater
+  than zero.")`, and no measured XNA disagreement exists. Found by the 2026-10-31
+  `docs/gdm-coverage.md` reconciliation; positive-value round trips are tested, invalid values are
+  not.
+- A direct `Dispose()` of the `GraphicsDevice` managed by `GraphicsDeviceManager` does not forward
+  `GraphicsDevice::Disposing` to `GraphicsDeviceManager::DeviceDisposing`. `CreateDevice()` installs
+  a device `Disposing` subscription only to release the renderer-context lease, whereas FNA wires
+  the same device event to `OnDeviceDisposing`; manager-initiated disposal does raise the manager
+  event once. Found by the 2026-10-31 `docs/gdm-coverage.md` reconciliation; the direct-device path
+  has no regression test.
 - `Microphone::Start` reports `MicrophoneState::Started` even when the capture device failed to
   open: `modules/audio/src/Xna/Microphone.cpp` swallows the failure (`catch (...)`, following FNA)
   and sets the state unconditionally. Microsoft XNA's `Microphone.Start` hands the native start's

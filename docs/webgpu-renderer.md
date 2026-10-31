@@ -1243,10 +1243,11 @@ in headless Chrome, not inferred.
 
 **A real window resize reconfigures the surface, and only one check can tell** (`WEBGPU-192`).
 When the platform window changes size without anyone calling `GraphicsDevice::Reset()` -- the game
-never touches `PresentationParameters` -- the viewport width follows the window while its height
-stays pinned to `PreferredBackBufferHeight` under the default `FixedHeightDynamicWidth`, and
-`BackBufferWidth`/`BackBufferHeight` deliberately do NOT follow (CNA's confirmed divergence from
-FNA, which would otherwise corrupt the virtual-resolution scaling). `webgpu_real_window_resize_test`
+never touches `PresentationParameters` -- under `FixedHeightDynamicWidth` the viewport width follows
+the window while its height stays pinned to `PreferredBackBufferHeight`; under the default
+`Letterbox` it remains the logical backbuffer. `BackBufferWidth`/`BackBufferHeight` deliberately do
+NOT follow in either mode (CNA's confirmed divergence from FNA, which would otherwise corrupt the
+virtual-resolution scaling). `webgpu_real_window_resize_test`
 drives it through `GameWindow::BeginScreenDeviceChange` / `EndScreenDeviceChange` -- public XNA API,
 no windowing-library header, the same call `GraphicsDeviceManager::ApplyChanges()` makes.
 

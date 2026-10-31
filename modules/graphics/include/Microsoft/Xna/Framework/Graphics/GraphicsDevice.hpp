@@ -1848,32 +1848,25 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Stores the given presentation parameters without triggering a full device reset.
          *
-         * Used by GraphicsDeviceManager::applyToExistingRenderer so that callers can
-         * read the current parameters back via getPresentationParametersProperty() after
-         * applying preferred settings.
+         * This CNAEXT bookkeeping path normalizes the reported formats and sample count against
+         * the current renderer and forwards the requested swap interval, but it does not resize or
+         * reconfigure renderer resources. `GraphicsDeviceManager::ApplyChanges()` uses
+         * `GraphicsDevice::Reset()` instead.
          *
          * @param pp The presentation parameters to store.
          */
         CNAEXT void SetPresentationParameters(const PresentationParameters& pp);
 
         /**
-         * @brief Test-only: tears down and rebuilds the active graphics renderer (same window)
-         * with a new PresentationParameters.MultiSampleCount, so a renderer-level property
-         * picked once at renderer-construction time can be changed after the device already
-         * exists.
+         * @brief Tears down and rebuilds the active graphics renderer with a new multisample count.
          *
-         * This exists because GraphicsDeviceManager.PreferMultiSampling/ApplyChanges() does NOT
-         * reach here: Game's own GraphicsDevice member is unconditionally default-constructed
-         * (MultiSampleCount=0) before any derived Game subclass or GraphicsDeviceManager code can
-         * run, and SetPresentationParameters() (the only thing GraphicsDeviceManager's existing
-         * apply path calls) deliberately does not trigger a full device reset either — real
-         * mid-game device reset/recreation (FNA's GraphicsDevice.Reset) is a separate, not-yet-
-         * implemented feature (see the commented-out Reset() call in
-         * GraphicsDeviceManager::applyToExistingRenderer). This method is a narrow, test-scoped
-         * substitute for that missing feature: safe only when called before any GPU resources
-         * (textures, buffers, render targets) have been created against the current renderer, since
-         * it destroys and replaces renderer_ outright rather than performing a real, resource-
-         * preserving device reset.
+         * This CNAEXT escape hatch exists for focused tests and callers that deliberately need a
+         * complete renderer replacement. Ordinary
+         * `GraphicsDeviceManager::PreferMultiSampling`/`ApplyChanges()` uses the real
+         * `GraphicsDevice::Reset()` path and reconfigures MSAA through
+         * `IGraphicsRenderer::ApplyMultiSampleCount()` without calling this method. This method
+         * destroys and replaces the renderer outright, so it is safe only before textures,
+         * buffers, render targets or other GPU resources have been created against that renderer.
          *
          * @param multiSampleCount The new preferred MultiSampleCount to request from the renderer.
          */

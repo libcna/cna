@@ -149,9 +149,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDLGPU")
         ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}"
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # SDLGPU-85: the shared fixture proves construction-time EasyGL parity. SDL GPU also supports
-    # The XNA/FNA Reset contract which EasyGL still lacks, so run the exact same source in its
-    # optional A (4x) -> B (0x) -> A (4x) mode as a second, renderer-specific invocation.
+    # SDLGPU-85: the shared fixture proves construction-time parity. Run the exact same source in
+    # its optional A (4x) -> B (0x) -> A (4x) direct-Reset mode as a second, renderer-specific
+    # invocation; EasyGL's live reset contract is covered by its focused MSAA tests.
     cna_register_renderer_test(NAME SdlGpu_Parity_backbuffer_msaa_Reset
         COMMAND cna_test_sdlgpu_parity_backbuffer_msaa --reset
         TIMEOUT 180 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -776,9 +776,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDLGPU")
 
     # SDLGPU-68: compile the exact renderer-neutral EasyGL presentation/lifecycle oracles against
     # SDLGPU. Together they cover public resize/reset events, requested VSync forwarding,
-    # PresentationParameters behavior, and a real window-system resize. The EasyGL MSAA-change
-    # source is intentionally excluded: it asserts EasyGL's known inability to change backbuffer
-    # MSAA after construction, while SDLGPU-85 implements the ordinary XNA/FNA Reset semantics.
+    # PresentationParameters behavior, and a real window-system resize. The legacy EasyGL-specific
+    # MSAA-change source is excluded because the renderer-neutral
+    # `Conformance_msaa_runtime_change` and the SDLGPU parity reset above cover that contract here.
     foreach(presentation_oracle_test IN ITEMS
             backbuffer_resize
             device_reset_events

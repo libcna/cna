@@ -159,14 +159,21 @@ correctly, because disposal does not touch the game-owned device it points at, s
 object is both safe and invisible to a caller. The retained objects are freed with the game, which
 is why the suite stays leak-clean.
 
-### The device-settings event is an observation
+### The device-settings event has observational and mutable routes
 
 In XNA, `PreparingDeviceSettings` is how an application overrides device settings before the device
-is created. **In this runtime nobody can.** The canonical event-handler collection delivers its
-argument as a `const` reference, so the argument type's mutable accessor is unreachable from any
-subscriber — C++ as much as C. This ABI hands the handler a read-only configuration and says so,
-rather than inventing a power the canonical event does not grant. Change the settings through the
-manager's own preference routes and apply them.
+is created or reset. The shared C++ event-handler collection delivers its argument as a `const`
+reference, so the ordinary C++ property accessor and
+`cna_graphics_device_manager_subscribe_preparing_device_settings` expose a read-only snapshot.
+That route is deliberately observational.
+
+CNA also provides the visibly extended mutable contract. C++ subscribers use
+`PreparingDeviceSettingsEventArgs::getGraphicsDeviceInformationEXT()`, and C subscribers use
+`cna_graphics_device_manager_subscribe_preparing_device_settings_ext`. The C adapter maps the
+candidate into a writable `CNA_GraphicsDeviceInformation`, validates the entire returned structure
+and copies valid changes back before device creation/reset continues; an invalid mutation is
+ignored instead of half-applying corrupt settings. Callers that need only ordinary manager
+preferences should keep using the preference setters followed by `apply_changes`.
 
 `IGraphicsDeviceManager` is an interface a caller could in principle implement, and this ABI does
 **not** let one: the runtime creates the manager itself and the game resolves it through the service

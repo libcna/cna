@@ -2,12 +2,11 @@
 // SDLGPU-85: ordinary PresentationParameters.MultiSampleCount must create a
 // genuinely multisampled backbuffer, not merely echo the requested integer.
 //
-// This is intentionally a standalone GraphicsDevice fixture rather than a ParityFixture Game.
-// CNA's Game owns its GraphicsDevice before GraphicsDeviceManager exists, while EasyGL cannot
-// change its construction-time MSAA mode during the manager's later Reset. Direct construction is
-// the ordinary XNA API seam that both renderers implement and lets one identical source verify the
-// actual initial request. SDL GPU additionally registers this binary with `--reset` to exercise its
-// stronger, XNA/FNA-correct in-place Reset path without asking EasyGL to imitate behavior it lacks.
+// This is intentionally a standalone GraphicsDevice fixture rather than a ParityFixture Game so it
+// verifies the direct-construction XNA API seam independently of GraphicsDeviceManager's live
+// ApplyChanges path. Every registered renderer runs the initial request. SDL GPU additionally
+// registers this binary with `--reset` to exercise the optional repeated A (4x) -> B (0x) -> A
+// (4x) direct-Reset sequence; EasyGL's equivalent runtime path has its own focused tests.
 //
 // The right triangle's diagonal crosses a fixed scanline through pixel centres. A single-sample
 // opaque draw can produce only black or white there; a real multisample resolve necessarily

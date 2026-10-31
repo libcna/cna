@@ -174,7 +174,8 @@ adapter test rather than by a HEADLESS device.
 `IGraphicsDeviceService` is an abstract C++ interface. C can neither implement nor instantiate it;
 `cna_game_get_graphics_device` is the C route to the device it exposes. Its four service-level
 events belong to the canonical `GraphicsDeviceManager` implementation in the runtime module and
-remain owned by CBIND-037.
+are exposed by the manager subscriptions documented in
+[`GAME_COMPONENTS.md`](GAME_COMPONENTS.md#the-graphics-device-manager).
 
 ## Texture sampler collections
 

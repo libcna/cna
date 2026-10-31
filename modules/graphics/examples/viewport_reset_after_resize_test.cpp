@@ -8,27 +8,21 @@
 // sub-region Viewport (e.g. split-screen). FNA's Present() itself, by contrast, never touches
 // Viewport at all.
 //
-// CNA has no FNA-style Reset() wired into GraphicsDeviceManager::ApplyChanges() yet (tracked
-// separately); instead GraphicsDevice::UpdateViewportFromWindow() re-derives the Viewport from
-// the renderer's current logical size, called both from ApplyChanges()'s renderer-sync path and
-// unconditionally every GraphicsDevice::Present() call (a stronger, event-independent guarantee
-// than FNA's — see Task 348, and Game::EndDraw() which calls Present() after every Draw()).
-// Before this task, UpdateViewportFromWindow() decided "did the size change?" by comparing the
+// CNA now reaches that Reset() through GraphicsDeviceManager::ApplyChanges(). Separately,
+// GraphicsDevice::UpdateViewportFromWindow() re-derives the Viewport from the renderer's current
+// logical size on Reset() and every GraphicsDevice::Present() call. Before this test's original
+// fix, UpdateViewportFromWindow() decided "did the size change?" by comparing the
 // renderer's computed size against viewport_'s OWN current width/height — which meant a custom
 // Viewport (deliberately sized differently than the backbuffer) got silently stomped back to
 // full-window size on the very next frame's Present(), even with no resize at all. Fixed by
 // tracking the last-seen size in dedicated lastKnownViewportWidth_/Height_ fields instead of
 // reusing viewport_'s own dimensions as the "did anything change" signal.
 //
-// A second, independent finding surfaced while writing this test: GraphicsDeviceManager::
-// ApplyChanges() calls SDL_SetWindowSize() and then immediately queries the window size (via
-// GraphicsDevice::SetVirtualResolution()'s call to UpdateViewportFromWindow()) in the same call
-// stack, with no SDL event pump in between — on X11/Xvfb this resize is asynchronous, so that
-// immediate query can observe a STALE physical window size and compute a transiently-wrong
-// viewport width. This self-heals within a few frames, since Present() re-derives the Viewport
-// every frame (see above) and will pick up the correct size once the async resize propagates —
-// so this test polls across frames (mirroring Task 348's examples/easygl_real_window_resize_test.cpp
-// precedent) rather than asserting immediately after ApplyChanges() returns.
+// A second, independent finding surfaced while writing this test: a platform window resize may
+// complete asynchronously after ApplyChanges() returns. Present() re-derives the Viewport every
+// frame and picks up the settled size, so this test polls across frames (mirroring Task 348's
+// examples/easygl_real_window_resize_test.cpp precedent) rather than assuming a native window
+// system has completed the resize immediately.
 //
 // This test proves:
 //   1. A custom sub-region Viewport survives a frame's Present() when no resize occurs (matches

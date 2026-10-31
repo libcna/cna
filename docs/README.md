@@ -172,7 +172,9 @@ scope for the 2026-07-11 Graphics documentation-accuracy pass; check each file's
   animations and the asset catalog; `avatar-demos.md` lists the avatar demos.
 - `skinned-model-ext.md` — `SkinnedModelEXT`, the generic GPU-skinned model extension, a separate
   system from `Model`/`ModelMesh` (see `model-content-pipeline-support.md`'s own note).
-- `gdm-coverage.md` — `GraphicsDeviceManager` coverage.
+- **[`gdm-coverage.md`](gdm-coverage.md)** — current `GraphicsDeviceManager` lifecycle, reset,
+  event, presentation-setting and native C API contract, including the deliberate Game-owned-device
+  and logical-resize adaptations.
 - **[`releasing.md`](releasing.md)** — where the version lives (one place: `project(CNA VERSION
   …)` plus `CNA_VERSION_PRERELEASE`), what derives from it, which numbers are deliberately *not*
   the product version (the C ABI version, XNA 4.0), and the step-by-step release checklist.

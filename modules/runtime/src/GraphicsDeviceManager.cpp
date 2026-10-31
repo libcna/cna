@@ -725,8 +725,9 @@ namespace Microsoft::Xna::Framework
         // properties like MultiSampleCount (GraphicsDeviceManager.PreferMultiSampling) via
         // IGraphicsRenderer::ApplyMultiSampleCount(), writing the real applied value back into
         // the stored PresentationParameters. Also raises GraphicsDevice's own
-        // DeviceResetting/DeviceReset events (separate from this class's own, raised by the
-        // ApplyChanges()/CreateDevice() callers of this method).
+        // DeviceResetting/DeviceReset events. After CreateDevice() installs the subscriptions
+        // above, this manager forwards those device events as its own; the initial reset occurs
+        // before subscription and is followed only by DeviceCreated, matching FNA creation.
         graphicsDevice_->Reset(pp, *gdi.getAdapterProperty());
 
         graphicsDevice_->UpdateViewportFromWindow();
