@@ -1,7 +1,8 @@
-# SkinnedEffect Exactness Support Matrix
+# SkinnedEffect exactness support matrix
 
 Phase 46 (graphics Tasks 401–410) audited and pixel-verified `SkinnedEffect` conformance
-against FNA. This document summarizes the findings and closes the phase.
+against FNA. This document records those findings and the later fixes that closed the phase's
+follow-up work. Current-state reconciliation: 2026-10-31.
 
 ---
 
@@ -29,7 +30,7 @@ stock effects (`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`Ski
 undetected here since `SkinnedEffect` had zero existing test coverage until this task. Fixed with
 the same one-line-per-field pattern used for `FogColor`.
 
-Opened 3 new backlog tasks: **Task 893** (`DirectionalLight1`/`DirectionalLight2` unforwarded,
+Opened 3 follow-up tasks: **Task 893** (`DirectionalLight1`/`DirectionalLight2` unforwarded,
 same shape as `BasicEffect`'s Task 885 and `EnvironmentMapEffect`'s Task 890 — `SkinnedEffect.fx`
 shares the same `Lighting.fxh`/`ComputeLights` mechanism), **Task 894** (`SpecularColor`/
 `SpecularPower` have zero GPU implementation — `GpuDrawParams` has no
@@ -37,28 +38,32 @@ generic specular fields at all, same shape as `BasicEffect`'s Task 886), and **T
 (`WeightsPerVertex` is a complete GPU no-op — FNA's real `Skin(vin, boneCount)`
 HLSL function only sums the first `boneCount` weight/index pairs, but CNA's skinning shader
 unconditionally sums all 4 regardless of the property's value; only visible when unused weight
-slots hold nonzero data). Also noted, **not** opened as a bug (an acceptable, strictly-more-
-accurate deviation, same class as Task 396's per-pixel-Fresnel note): `PreferPerPixelLighting=false`
-is effectively a no-op since `NdotL` is always computed in the fragment shader.
+slots hold nonzero data). Tasks 893–895 were all fixed on 2026-07-11.
+
+The audit also noted that `PreferPerPixelLighting=false` was effectively a no-op because EasyGL
+always evaluated lighting in the fragment shader. The phase originally called this an acceptable,
+more-accurate deviation. Task 1102b later corrected that classification: XNA's default `false`
+path computes lighting per vertex and Gouraud-interpolates it, which is observably different.
+EasyGL now has distinct vertex-lit and per-pixel programs selected by the property.
 
 ## 2. Default-value unit tests, `MaxBones` linker gap (Task 402)
 
 Task 401 found **zero existing test coverage** for `SkinnedEffect`. Task 402 wrote
-`tests/Microsoft/Xna/Framework/Graphics/SkinnedEffectTests.cpp` from scratch (mirroring Task
-372/382/392's precedent): 52 tests covering all property defaults, `LightingEnabled`'s
-throw-on-`false`/no-throw-on-`true` behavior, `EnableDefaultLighting()`'s effects (byte-for-byte
-identical constants to Task 363's own `BasicEffect` confirmation, since both share FNA's identical
+`modules/graphics/tests/Microsoft/Xna/Framework/Graphics/SkinnedEffectTests.cpp` from scratch
+(mirroring Task 372/382/392's precedent). The current 57-case fixture covers all property defaults,
+`LightingEnabled`'s throw-on-`false`/no-throw-on-`true` behavior,
+`EnableDefaultLighting()`'s effects (byte-for-byte identical constants to Task 363's own
+`BasicEffect` confirmation, since both share FNA's identical
 `EffectHelpers.EnableDefaultLighting()` helper), `SetBoneTransforms`/`GetBoneTransforms`'s full
-bounds-checking matrix, `WeightsPerVertex`'s accept-1/2/4/throw-otherwise validation, setter
-round-trips, and a `Clone()` test. **The `Clone()` test is the regression guard for Task 401's own
-fix** — `git stash`-confirmed (via direct edit+rebuild) it fails exactly as predicted with the fix
-reverted (`SpecularColor` read back `(0,0,0)` instead of the test's actual value, `SpecularPower`
-read back `0` instead of `64`).
+bounds-checking matrix, `WeightsPerVertex`'s accept-1/2/4/throw-otherwise validation, ownership,
+setter round-trips, `Clone()` and `GetTypeName()`. **The `Clone()` test is the regression guard for
+Task 401's own fix** — it fails with `SpecularColor=(0,0,0)` and `SpecularPower=0` if the parameter
+copy is removed.
 
 Also fixed a genuinely new, unrelated build-breaking discovery: `SkinnedEffect::MaxBones` (an
 in-class-initialized `static const int`) had no out-of-line definition, causing a linker error the
-moment any code (here, GTest's comparison machinery) took its address. Fixed per CLAUDE.md's own
-"Static Members and Named Constants" convention.
+moment any code (here, GTest's comparison machinery) took its address. It now follows the
+project's static-member definition convention.
 
 ## 3. Bone-count bounds-checking (Tasks 403–405)
 
@@ -124,6 +129,24 @@ matching the Task 406–408 single-quad values exactly (all 3 = `(174,0,0)` on E
 evidence the 3 independent bone/weight combinations apply correctly and simultaneously within one
 draw call.
 
+## 8. Later exactness fixes
+
+- **Tasks 900/1111** added the missing fog forwarding and then corrected EasyGL's initial
+  depth shortcut to FNA's real view-space dot-product formula, including the
+  `FogStart == FogEnd` case.
+- **Task 1102b** implemented XNA's real `PreferPerPixelLighting=false` vertex-lit/Gouraud path.
+  The focused test uses a scene whose centre pixel is approximately 127 on the vertex-lit path
+  and 155 on the per-pixel path, so a decorative selector cannot pass.
+- **GLTF-264** restored the classic stock-effect normal contract: bone matrices transform the
+  normal directly, then `WorldInverseTranspose` applies the outer world transform. The regression
+  includes non-identity rotation and non-uniform scale cases that the original identity-World
+  phase tests could not detect.
+- **FX-127** accepts `BLENDINDICES0` declared as either `Byte4` or `Vector4`. Its tests prove the
+  floating-point form selects the requested bone across vertex-lit, per-pixel and colored
+  variants rather than merely permitting the declaration.
+- The renderer-neutral `SkinnedEffect` contract additionally holds the measured opaque-black
+  null-texture rule, material composition, the three-light paths and 1/2/4-bone skinning together.
+
 ## Support matrix
 
 | Feature | EasyGL |
@@ -139,23 +162,25 @@ draw call.
 | `DirectionalLight1`/`DirectionalLight2` | ✅ fixed Task 893 (2026-07-11) |
 | `SpecularColor`/`SpecularPower` GPU implementation | ✅ fixed Task 894 (2026-07-11) |
 | `WeightsPerVertex` GPU enforcement | ✅ fixed Task 895 (2026-07-11) |
+| `PreferPerPixelLighting` vertex/pixel dispatch | ✅ fixed Task 1102b |
+| Fog forwarding and view-space factor | ✅ fixed Tasks 900/1111 |
+| Bone-space then inverse-transpose World normal | ✅ fixed GLTF-264 |
+| `Byte4` and `Vector4` bone-index declarations | ✅ fixed FX-127 |
+| Null texture samples measured opaque black | ✅ shared contract |
 
-Legend: ✅ verified working · ❌ confirmed not implemented.
+Legend: ✅ verified working.
 
-## Open, tracked follow-up work
+## Subsequent fixes
 
-Phase 46 opened 3 new tracked tasks (all from Task 401's opener audit):
+- **Task 893** (opened by Task 401, fixed 2026-07-11) — all three directional lights now reach
+  the renderer. The regression varies lights 1 and 2 independently.
+- **Task 894** (opened by Task 401, fixed 2026-07-11) — implemented the stock effect's
+  half-vector Blinn-Phong specular term and the required World/EyePosition transport.
+- **Task 895** (opened by Task 401, fixed 2026-07-11) — the vertex shader now limits accumulation
+  to the first 1, 2 or 4 weight/index pairs according to `WeightsPerVertex`; unused nonzero slots
+  make the regression discriminating.
 
-- ~~**Task 893**~~ — **fixed, 2026-07-11**: `DirectionalLight1`/`DirectionalLight2` now forward on
-  `SkinnedEffect`, mirroring `BasicEffect`'s (Task 885/886) and
-  `EnvironmentMapEffect`'s (Task 890) own fixes. See `NEXT.md` §3 for the full write-up.
-- ~~**Task 894**~~ — **fixed, 2026-07-11**: real GPU specular highlights (half-vector Blinn-Phong,
-  matching `BasicEffect`'s Task 886 formula exactly) now implemented for `SkinnedEffect`'s
-  `SpecularColor`/`SpecularPower`, including new World-matrix/EyePosition
-  plumbing the skinned shader previously had zero infrastructure for. See `NEXT.md` §3.
-- ~~**Task 895**~~ — **fixed, 2026-07-11**: `WeightsPerVertex` is now a real GPU-enforced constraint
-  — the skinning vertex shader gates bone-weight accumulation with
-  `>=2`/`>=4` conditionals, matching FNA's real `Skin(vin, boneCount)` behavior of only summing the
-  first `boneCount` weight/index pairs. See `NEXT.md` §3.
-
-This closes Phase 46 (graphics Tasks 401–410) in full.
+EasyGL owns the original focused programs; SDLGPU reuses the same Phase 46 and follow-up sources
+through the cross-family corpus. Phase 46 and all follow-up work named on this page are closed.
+Current renderer-wide capability status belongs in `graphics-renderer-feature-matrix.md`;
+unresolved defects belong in `handoff.md` section 5.

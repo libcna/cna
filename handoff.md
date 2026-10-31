@@ -35,6 +35,12 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- SkinnedEffect support-document reconciliation (2026-10-31): Tasks 893–895 are no longer
+  presented as open, the pre-modular test path and `NEXT.md` references are gone, and the former
+  "more accurate" per-pixel-only behavior is correctly recorded as the Task 1102b XNA mismatch.
+  The page now includes the later fog, world-normal and `Vector4` bone-index fixes and points to
+  the current EasyGL/SDLGPU cross-family corpus. Focused private-runner validation passes all
+  95 API, EasyGL and SDLGPU tests.
 - EnvironmentMapEffect support-document reconciliation (2026-10-31): Tasks 890 and 891 are no
   longer described as open, the old pre-modular test path and `NEXT.md` reference are gone, and
   the page now records the later fog, per-vertex Fresnel and amount-saturation fixes. Its matrix
