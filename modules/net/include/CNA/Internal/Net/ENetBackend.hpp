@@ -172,7 +172,7 @@ namespace CNA::Internal::Net
          * transport. sender and/or target need not already be known to ENetBackend's wire-id map:
          * if either isn't resolved yet (reachable when `SendData` is called immediately after
          * `Join()`/`ConnectToHost()`, before any `Update()` call has pumped the `ClientHello`/
-         * `ServerWelcome` round-trip - see audit_net.md remediation, 2026-07-18), the call is
+         * `ServerWelcome` round-trip), the call is
          * queued (bounded, oldest evicted first - see `GetDroppedAppDataCount()`) and delivered
          * automatically the moment both sides resolve, preserving each entry's own
          * payload/target/options exactly. Order is preserved for multiple queued calls sharing

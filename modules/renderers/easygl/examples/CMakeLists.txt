@@ -805,7 +805,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_EnvironmentMapEffect_Readback COMMAND cna_test_easygl_env_map
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # audit_net.md remediation (2026-07-18, sixth round): discriminating regression test for
+        # Discriminating regression test for
         # EmissiveColor composition (light*diffuse + emissive, NOT (emissive+light)*diffuse) across
         # all three EasyGL shader paths that had the bug. Uses a DiffuseColor strictly between 0
         # and 1 so a squared term is detectable - every pre-existing test used 0/1 components,

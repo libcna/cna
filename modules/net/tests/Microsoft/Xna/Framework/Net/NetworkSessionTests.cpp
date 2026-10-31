@@ -126,7 +126,7 @@ TEST(NetworkSessionTest, CreateDoesNotLeakNetworkSessionAction) {
     session->Dispose();
 }
 
-// audit_net.md High finding: BeginCreate/BeginFind/BeginJoin/BeginJoinInvited stored their
+// Regression: BeginCreate/BeginFind/BeginJoin/BeginJoinInvited once stored their
 // AsyncCallback in NetworkSessionAction but never invoked it, despite NetworkSession.hpp
 // documenting that AsyncCallback runs on completion. Confirms the callback now fires exactly
 // once, synchronously (matching this action already completing at construction time), with the
@@ -1417,7 +1417,7 @@ TEST(NetworkSessionTest, DisposeFreesEveryGamerTheSessionEverOwned) {
     EXPECT_EQ(session->GetOwnedGamerCountForTesting(), 0u);
 }
 
-// audit_net.md Critical finding 1 / Task 12.1: Dispose() itself was not idempotent - a second
+// Regression: Dispose() itself was not idempotent - a second
 // direct call re-entered the whole body and iterated localGamers_ over an already-freed gamer
 // object (ownedGamers_.clear() during the first call destroys it, but nothing pruned the raw
 // pointer out of localGamers_), a confirmed ASan heap-buffer-overflow/use-after-free. Confirms a
@@ -1443,9 +1443,9 @@ TEST(NetworkSessionTest, DisposeCalledTwiceDirectlyIsSafeAndIdempotent) {
     EXPECT_EQ(session->getAllGamersProperty().getCountProperty(), 0);
 }
 
-// audit_net.md Critical finding 1: "After only one disposal, callers can also obtain a collection
-// containing dangling gamer pointers, so the problem is not confined to a second call." Confirms
-// the defense-in-depth fix: PreviousGamers (populated by RemoveGamer, which moves a departing
+// Regression: after only one disposal, callers could obtain a collection containing dangling
+// gamer pointers, so the problem was not confined to a second call. This confirms the
+// defense-in-depth fix: PreviousGamers (populated by RemoveGamer, which moves a departing
 // gamer's raw pointer there rather than dropping it) is emptied by Dispose() too, not just
 // LocalGamers/AllGamers - a single Dispose() call must never leave a dangling pointer reachable
 // through *any* public collection property.
@@ -1484,7 +1484,7 @@ TEST(NetworkSessionTest, DisposeClearsPreviousGamersSoNoDanglingPointerIsObserva
     EXPECT_EQ(session->getRemoteGamersProperty().getCountProperty(), 0);
 }
 
-// audit_net.md Suggested fix: "invalidate/clear ... host_ before owned gamers are destroyed."
+// Disposing invalidates host_ before owned gamers are destroyed.
 TEST(NetworkSessionTest, DisposeClearsHostProperty) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(

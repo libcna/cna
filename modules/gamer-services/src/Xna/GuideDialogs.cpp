@@ -176,8 +176,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         // and the headless/test-only SimulateMessageBoxClickEXT. Captures the action pointer and
         // clears pendingMessageBox_ *before* invoking the callback, not after - a re-entrant
         // callback that immediately calls BeginShowMessageBox again (or EndShowMessageBox on this
-        // same result) must see consistent, already-updated state, matching the same reentrancy
-        // fix applied to NetworkSession's Begin*/audit_net.md High finding.
+        // same result) must see consistent, already-updated state, matching NetworkSession's
+        // Begin* reentrancy contract.
         void CompletePendingMessageBox(std::optional<int> buttonIndex)
         {
             GuideMessageBoxAction* action = pendingMessageBox_;
@@ -365,7 +365,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             CNA::Internal::GamerServices::syncSystemInputOwnership();
         }
 
-        // audit_net.md remediation (2026-07-18): the actual masking decision, shared by
+        // The actual masking decision is shared by
         // RenderPendingKeyboardInputEXT (the real on-screen draw) and
         // GetPendingKeyboardInputDisplayTextForTestingEXT (the test-only accessor exposing that
         // same decision without needing pixel readback) - one '*' per typed UTF-16 code unit

@@ -43,8 +43,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         }
         auto* action = new GamerAction(std::move(asyncState), std::move(callback));
         action->setIsCompletedProperty(true);
-        // audit_net.md High finding: the callback used to only be stored, never invoked, despite
-        // this action already completing synchronously right above.
+        // A synchronously completed action still invokes its callback exactly once.
         if (action->Callback)
         {
             action->Callback(*action);

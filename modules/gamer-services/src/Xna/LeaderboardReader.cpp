@@ -106,8 +106,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 
         // Shared IAsyncResult for every Begin* below - completes synchronously (a local disk read
         // is inherently instant, matching this codebase's established "fake async" convention for
-        // synchronous local work) and, per audit_net.md's High finding precedent, actually invokes
-        // its callback exactly once instead of only storing it.
+        // synchronous local work) and invokes its callback exactly once instead of only storing it.
         class LeaderboardAction final : public System::IAsyncResult
         {
         public:

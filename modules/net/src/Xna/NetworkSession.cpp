@@ -498,8 +498,8 @@ namespace Microsoft::Xna::Framework::Net
         // also unconditionally calls Dispose()) re-entered the body below and hit a use-after-free
         // in the ClearPacketQueue() loop, because ownedGamers_.clear() further down destroys the
         // locally-owned gamer objects while localGamers_/allGamers_ (raw, non-owning views) were
-        // never pruned - only RemoveGamer() prunes them, and Dispose() never called it. Confirmed
-        // under AddressSanitizer (heap-buffer-overflow) - see audit_net.md's Critical finding 1.
+        // never pruned - only RemoveGamer() prunes them, and Dispose() never called it. The former
+        // path was confirmed under AddressSanitizer as a heap use-after-free.
         if (isDisposed_)
         {
             return;

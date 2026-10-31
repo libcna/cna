@@ -382,7 +382,7 @@ TEST(GuideTest, BeginShowKeyboardInputValidatesArgumentsLikeTheReference) {
     EXPECT_EQ(std::string(255, 'y'), Guide::EndShowKeyboardInput(result.get()));
 }
 
-// audit_net.md High finding: GuideAction stored its AsyncCallback but never invoked it. Confirms
+// Regression: GuideAction once stored its AsyncCallback without invoking it. Confirms
 // the callback now fires exactly once, on Enter (not at Begin*, since this action no longer
 // completes synchronously), with the correct IAsyncResult identity and AsyncState.
 TEST(GuideTest, BeginShowKeyboardInputInvokesCallbackExactlyOnceOnEnterWithCorrectIdentity) {
@@ -545,7 +545,7 @@ TEST(GuideTest, RenderPendingKeyboardInputDoesNotAutoCompleteAndSupportsPassword
     // No real Escape press occurred - rendering alone must never cancel/resolve the pending
     // request, matching RenderPendingMessageBoxEXT's own equivalent guarantee for mouse clicks.
     EXPECT_FALSE(result->getIsCompletedProperty());
-    // audit_net.md remediation (2026-07-18): the display-text assertion this test's own name
+    // The display-text assertion this test's own name
     // ("SupportsPasswordMasking") always implied but never actually checked - EndShowKeyboardInput
     // below only ever proves the real typed text round-trips, which is correct/expected even if
     // masking were entirely broken. GetPendingKeyboardInputDisplayTextForTestingEXT reads the same
@@ -562,7 +562,7 @@ TEST(GuideTest, RenderPendingKeyboardInputDoesNotAutoCompleteAndSupportsPassword
     delete result;
 }
 
-// audit_net.md remediation (2026-07-18): the other direction of the same branch - without
+// The other direction of the same branch: without
 // usePasswordMode, the display text must be the real typed text unmasked. Together with the test
 // above, this covers both branches of ComputeDisplayText, so neither "always mask" nor "never
 // mask" could pass both tests.
@@ -1156,8 +1156,7 @@ TEST(GuideTest, SimulateMessageBoxClickThrowsForOutOfRangeIndex) {
     delete result;
 }
 
-// audit_net.md-style reentrancy check (same class of bug fixed for NetworkSession's Begin* /
-// Phase 13): a callback that reentrantly calls BeginShowMessageBox again must see
+// Reentrancy regression: a callback that calls BeginShowMessageBox again must see
 // pendingMessageBox_ already cleared, not stale.
 TEST(GuideTest, CallbackCanReentrantlyBeginANewMessageBox) {
     MessageBoxGuard guard;

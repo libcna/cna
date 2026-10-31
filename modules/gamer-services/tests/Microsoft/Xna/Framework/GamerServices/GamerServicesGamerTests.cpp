@@ -193,7 +193,7 @@ TEST(GamerTest, BeginEndGetProfile) {
     delete result;
 }
 
-// audit_net.md High finding: GamerAction stored its AsyncCallback but never invoked it, despite
+// Regression: GamerAction once stored its AsyncCallback without invoking it, despite
 // this action already completing synchronously (getIsCompletedProperty() == true) right after
 // BeginGetProfile returns. Confirms the callback now fires exactly once with the correct
 // IAsyncResult identity and AsyncState.
@@ -841,9 +841,7 @@ TEST(LeaderboardReaderTest, BeginReadOverloadsReturnRealResults) {
     delete r3;
 }
 
-// audit_net.md-style callback check: every Begin* in this codebase must actually invoke its
-// callback, not just store it (Phase 13's own High finding, applied here for a newly-implemented
-// Begin* rather than a pre-existing one).
+// Callback regression: every Begin* in this codebase must invoke its callback, not just store it.
 TEST(LeaderboardReaderTest, BeginReadInvokesCallbackExactlyOnce) {
     GamerServicesStoreGuard guard;
     auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
@@ -955,7 +953,7 @@ TEST(SignedInGamerTest, BeginEndAwardAchievement) {
     delete result;
 }
 
-// audit_net.md High finding: GamerAction stored its AsyncCallback but never invoked it, despite
+// Regression: GamerAction once stored its AsyncCallback without invoking it, despite
 // this action already completing synchronously right after BeginAwardAchievement returns.
 // Confirms the callback now fires exactly once with the correct IAsyncResult identity/AsyncState.
 TEST(SignedInGamerTest, BeginAwardAchievementInvokesCallbackExactlyOnceWithCorrectIdentity) {
@@ -1248,7 +1246,7 @@ TEST(SignedInGamerTest, BeginGetAchievementsTwiceThrows) {
     delete result2;
 }
 
-// audit_net.md High finding: same as BeginAwardAchievement above, for BeginGetAchievements.
+// The callback regression above also applies to BeginGetAchievements.
 TEST(SignedInGamerTest, BeginGetAchievementsInvokesCallbackExactlyOnceWithCorrectIdentity) {
     GamerServicesStoreGuard guard;
     auto gamer = SignedInGamer::CreateInternal("tag1");

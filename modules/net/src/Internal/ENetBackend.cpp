@@ -40,7 +40,7 @@ namespace CNA::Internal::Net
         // Voice travels unreliably on its own channel, so it never waits behind reliable traffic.
         constexpr uint8_t kVoiceChannel = 1;
 
-        // audit_net.md remediation (2026-07-18): bound on SessionState::PendingPreHandshakeAppData
+        // Bound on SessionState::PendingPreHandshakeAppData
         // below. The real handshake this queue bridges (ConnectToHost() -> ClientHello ->
         // ServerWelcome) normally completes within a single Update() call, so a healthy caller
         // queues at most a handful of sends here, briefly. 64 is generous headroom for that real
@@ -57,7 +57,7 @@ namespace CNA::Internal::Net
         constexpr uint16_t kEmscriptenHostPort = 61191;
 #endif
 
-        // audit_net.md remediation (2026-07-18): a real SendAppData call made before the
+        // A real SendAppData call made before the
         // ClientHello/ServerWelcome handshake has populated SessionState::GamerToWireId for
         // sender and/or target - see SendAppData's own comment for the confirmed-reachable
         // scenario. Held here (bounded by kMaxPendingPreHandshakeAppData, oldest evicted first)
@@ -119,7 +119,7 @@ namespace CNA::Internal::Net
             // reconnect to can't exist (see ENetBackendTests.cpp's own SystemLinkSessionFixture
             // comment on why). Not part of real XNA.
             std::string LastMigrationReconnectAttemptGamertagForTestingEXT;
-            // audit_net.md remediation (2026-07-18): see PendingPreHandshakeAppData's own comment.
+            // See PendingPreHandshakeAppData's own comment.
             std::vector<PendingPreHandshakeAppData> PendingPreHandshakeSends;
             // Snapshot last published by this transport host. NetworkSession exposes the XNA
             // get-only property as a mutable collection reference, so polling during Update() is
@@ -400,7 +400,7 @@ namespace CNA::Internal::Net
             state.LastPublishedSessionProperties = current;
         }
 
-        // audit_net.md remediation (2026-07-18): the actual wire-send + relay logic, shared by
+        // The actual wire-send + relay logic is shared by
         // SendAppData's immediate-resolve path and FlushPendingPreHandshakeAppData's later-resolve
         // path below - identical routing either way, only the timing of wire-id resolution
         // differs.
@@ -434,7 +434,7 @@ namespace CNA::Internal::Net
             }
         }
 
-        // audit_net.md remediation (2026-07-18): called whenever GamerToWireId gains new entries
+        // Called whenever GamerToWireId gains new entries
         // (end of HandleClientHello/HandleServerWelcome/HandleGamerJoinBroadcast) - delivers, in
         // original send order, every queued PendingPreHandshakeAppData entry whose sender AND
         // target have now resolved to a wire-id, and leaves everything else queued for a later
@@ -461,7 +461,7 @@ namespace CNA::Internal::Net
             state.PendingPreHandshakeSends = std::move(stillPending);
         }
 
-        // audit_net.md remediation (2026-07-18, third round): drops any PendingPreHandshakeSends
+        // Drops any PendingPreHandshakeSends
         // entries that reference gamer, called wherever GamerToWireId loses an entry for a gamer
         // that will never resolve now (HandleDisconnect, HandleGamerLeaveBroadcast, host-migration
         // reset) - without this, a queued send naming a gamer that left before the handshake ever
@@ -638,7 +638,7 @@ namespace CNA::Internal::Net
                 state.Host.Flush();
             }
 
-            // audit_net.md remediation (2026-07-18): GamerToWireId just gained entries for both
+            // GamerToWireId just gained entries for both
             // this host's own locals (EnsureLocalWireIds above, first time only) and the newly
             // joined remote gamers - either could complete a pending pre-handshake send.
             FlushPendingPreHandshakeAppData(state);
@@ -754,7 +754,7 @@ namespace CNA::Internal::Net
                 session->SendNetworkEvent(std::move(evt));
             }
 
-            // audit_net.md remediation (2026-07-18): GamerToWireId just gained entries for this
+            // GamerToWireId just gained entries for this
             // client's own locals and every already-existing roster gamer - either could complete
             // a pending pre-handshake send queued before this ServerWelcome arrived.
             FlushPendingPreHandshakeAppData(state);
@@ -794,7 +794,7 @@ namespace CNA::Internal::Net
                 session->AddRemoteGamer(gamer);
             }
 
-            // audit_net.md remediation (2026-07-18): a pending send may have been targeting a
+            // A pending send may have been targeting a
             // gamer this broadcast just introduced (a third gamer that joined after our own
             // handshake completed, still unresolved until now).
             FlushPendingPreHandshakeAppData(state);
@@ -936,7 +936,7 @@ namespace CNA::Internal::Net
                 session->RemoveGamer(gamer, NetworkSessionEndReason::Disconnected);
                 state.GamerToWireId.erase(gamer);
                 state.WireIdToGamer.erase(gamerIt);
-                // audit_net.md remediation (2026-07-18, third round): this path was missing the
+                // This path needs the
                 // same purge HandleDisconnect's own per-gamer removal already does - a pending
                 // send naming a gamer who left via this broadcast (not a direct disconnect of
                 // *our* connection) would otherwise sit unresolved in the queue until evicted by
@@ -1174,10 +1174,10 @@ namespace CNA::Internal::Net
                     session->RemoveGamer(locals[0], NetworkSessionEndReason::HostEndedSession);
                 }
                 state.HostPeer = nullptr;
-                // audit_net.md remediation (2026-07-18): this client's whole view of the session
+                // This client's whole view of the session
                 // just ended - any send still queued for a not-yet-resolved target can never be
-                // delivered into a roster that's about to be gone regardless. Counted (third-round
-                // remediation) - see the host-migration reset's own identical comment above.
+                // delivered into a roster that's about to be gone regardless. Count every discard
+                // in dropped-data telemetry; see the host-migration reset's identical rule above.
                 droppedAppDataCount_ += state.PendingPreHandshakeSends.size();
                 state.PendingPreHandshakeSends.clear();
                 return;
@@ -1211,7 +1211,7 @@ namespace CNA::Internal::Net
                 state.GamerToWireId.erase(gamer);
                 state.WireIdToGamer.erase(gamerIt);
                 state.WireIdToPeer.erase(wireId);
-                // audit_net.md remediation (2026-07-18): gamer just left and will never resolve
+                // This gamer just left and will never resolve
                 // now - any send still queued naming it as sender or target must not linger.
                 PurgePendingPreHandshakeSendsFor(state, gamer);
                 // Task 2.11: reclaim the id for reuse by a future AssignWireId call, instead of
@@ -1691,7 +1691,7 @@ namespace CNA::Internal::Net
         auto targetIt = state.GamerToWireId.find(target);
         if (senderIt == state.GamerToWireId.end() || targetIt == state.GamerToWireId.end())
         {
-            // audit_net.md remediation (2026-07-18): reachable when SendData is called
+            // Reachable when SendData is called
             // immediately after Join()/ConnectToHost(), before any Update() call has pumped the
             // ClientHello/ServerWelcome round-trip that populates GamerToWireId (confirmed
             // reachable via the real public LocalNetworkGamer::SendData path, not just internal

@@ -2,8 +2,9 @@
 
 This is the authoritative list of what CNA's GamerServices, Net, Guide and Avatar implementation
 does **not** do, does only in part, does differently from XNA on Xbox 360 by design, or has not been
-able to verify. It describes the current code (verified 2026-09-30 after the final hardening pass,
-GSH-01..GSH-22). When code changes one of these entries, change it here in the same commit.
+able to verify. It describes the current code (last automated HEADLESS review 2026-10-31; final
+hardening pass GSH-01..GSH-22). When code changes one of these entries, change it here in the same
+commit.
 
 CNA provides a **CNA-owned, XNA/Xbox-like** GamerServices implementation: CNA's own protocol,
 accounts, service, relay and original avatar assets, with backend policies of its own where XNA does
@@ -27,6 +28,16 @@ server's operating model, not XNA compatibility) · *hardware-unverified* (imple
 device loop was not closed) · *CNA backend-policy difference* (XNA shows the outcome, CNA decides
 it) · *historically unknown Xbox behaviour* (XNA does not say, and no console trace exists). Each
 entry below also keeps its own status line.
+
+## Automated HEADLESS baseline (2026-10-31)
+
+The focused module targets built successfully with at most eight parallel compile jobs.
+`CnaGamerServicesTests` ran 744 tests: 742 passed and two environment-dependent cases skipped on
+the HEADLESS platform. `CnaNetTests` passed all 565 tests, including local ENet loopback,
+host-migration and simulated-network-condition coverage. No test failed. This baseline does not
+qualify a physical display, GPU, controller, microphone, speaker, LAN/WAN/NAT deployment, Windows
+or macOS. Those cases remain explicitly **not executed** in
+[`gamer-services-manual-qualification.md`](gamer-services-manual-qualification.md).
 
 ## Not limitations: implemented and tested
 

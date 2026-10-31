@@ -652,7 +652,7 @@ TEST(ENetBackendTest, ClientLocalGamerAddedWhileJoiningIsRequestedOnceWelcomed) 
     EXPECT_FALSE(client.ReceiveAtHost(MessageTag::AddLocalGamerRequest, 10).has_value()) << "asked twice";
 }
 
-// audit_net.md remediation (2026-07-18): the bounded side of the same contract - a caller that
+// Bounded-queue regression: a caller that
 // keeps calling SendData on an unresolved sender/target faster than the queue can ever drain
 // (kMaxPendingPreHandshakeAppData reached) must not grow the queue without limit; the oldest
 // entry is evicted and counted via GetDroppedAppDataCount(), same observable meaning that counter
@@ -687,9 +687,9 @@ TEST(ENetBackendTest, PendingAppDataQueueEvictsOldestOnceBoundIsReached) {
     EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before + kSendsBeyondBound);
 }
 
-// audit_net.md remediation (2026-07-18, third round): a real gap the second round's own queue
-// missed - HandleGamerLeaveBroadcast (a client learning a *third* peer left, distinct from
-// HandleDisconnect's own direct-connection-lost path) never purged PendingPreHandshakeSends,
+// Queue-lifecycle regression: HandleGamerLeaveBroadcast (a client learning a *third* peer left,
+// distinct from HandleDisconnect's own direct-connection-lost path) never purged
+// PendingPreHandshakeSends,
 // so a pending send naming that departed gamer as its target would sit in the queue
 // indefinitely (GamerToWireId can never regain an entry for a gamer who left). Proves the fix:
 // queue a send whose sender is a still-unresolved second local gamer (a client's AddLocalGamer
@@ -908,7 +908,7 @@ TEST(ENetBackendTest, HostAdmitsAClientsAddedGamerOntoThatClientsMachine) {
     EXPECT_EQ(host.session->getAllGamersProperty().getCountProperty(), 1);
 }
 
-// audit_net.md remediation (2026-07-18, third round): the whole-queue-invalidation sibling -
+// Whole-queue-invalidation regression:
 // this peer's own connection to the host being lost (no migration configured) must discard
 // every still-pending send, counted, not just the ones naming a specific departed gamer.
 TEST(ENetBackendTest, ClientSessionEndedOnHostDisconnectDropsAndCountsEveryPendingSend) {
@@ -957,7 +957,7 @@ TEST(ENetBackendTest, ClientSessionEndedOnHostDisconnectDropsAndCountsEveryPendi
     EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before + kQueuedSends);
 }
 
-// audit_net.md remediation (2026-07-18, third round): the same whole-queue-invalidation, but via
+// The same whole-queue-invalidation regression, but via
 // the host-migration reset path instead of a plain client-side session-ended path (distinct code
 // path in ENetBackend.cpp - see AttemptHostMigration's own shared cleanup block).
 TEST(ENetBackendTest, HostMigrationResetDropsAndCountsEveryPendingSend) {
@@ -1020,7 +1020,7 @@ TEST(ENetBackendTest, HostMigrationResetDropsAndCountsEveryPendingSend) {
     EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before + 1);
 }
 
-// audit_net.md remediation (2026-07-18, third round): Dispose() itself needs no explicit purge -
+// Dispose() itself needs no explicit purge:
 // TeardownSession's Sessions().erase(session) destroys the whole SessionState (including
 // PendingPreHandshakeSends) in one step, and nothing reads it afterward - but that safety claim
 // had no test. Proves a pending, permanently-unresolved send survives to Dispose() without

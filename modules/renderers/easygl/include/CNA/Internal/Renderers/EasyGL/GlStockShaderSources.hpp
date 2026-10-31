@@ -1154,7 +1154,7 @@ CNA_GL_PUNCTUAL_DECL
 // attenuated term.
 "    float cnaShadow=cnaShadowFactor(vWorldPos);\n"
 "    vec3 lightSum=(uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2)*cnaShadow+cnaPunctualLight(vWorldPos,N);\n"
-// audit_net.md remediation (2026-07-18, fourth round): EmissiveColor is ADDED after the
+// EmissiveColor is added after the
 // diffuse multiply, never multiplied by it - matches FNA's own Lighting.fxh ComputeLights()
 // verbatim (`mul(diffuse, lightDiffuse) * DiffuseColor.rgb + EmissiveColor`), and matches what
 // EnsureLit3DProgram/EnsureLit3DVertexLitProgram in this same file already did correctly.

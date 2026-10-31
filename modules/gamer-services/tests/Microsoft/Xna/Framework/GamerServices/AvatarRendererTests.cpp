@@ -384,7 +384,7 @@ TEST(AvatarRendererTest, DrawWithWrongBoneCountThrows) {
     EXPECT_THROW(renderer.Draw(tooFew, expression), System::ArgumentException);
 }
 
-// Task 1.5 / audit_net.md Medium finding: a null animation used to dereference unconditionally
+// Regression: a null animation used to dereference unconditionally
 // (undefined behavior) instead of throwing a catchable exception.
 TEST(AvatarRendererTest, DrawWithNullAnimationThrowsArgumentNull) {
     AvatarRenderer renderer(&NoAvatar());

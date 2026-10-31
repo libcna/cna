@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// audit_net.md remediation (2026-07-18, sixth round): discriminating pixel regression test for
+// Discriminating pixel regression test for
 // how EmissiveColor composes into the lit result, across all three EasyGL shader paths that had
 // the bug.
 //
