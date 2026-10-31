@@ -330,6 +330,29 @@ namespace CNA::Internal::Renderers::DirectX9
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
 
+        /**
+         * @brief Reports HLSL as the source dialect consumed by this renderer's `ShaderEffect`.
+         *
+         * @return `ShaderDialectEXT::Hlsl`.
+         */
+        [[nodiscard]] ShaderDialectEXT GetShaderDialectEXT() const override;
+
+        /**
+         * @brief Reports the HLSL stages accepted by the runtime D3DCompile path.
+         *
+         * @param language `ShaderLanguageEXT` ordinal.
+         * @param stage `ShaderStageEXT` ordinal.
+         * @return True for HLSL vertex and fragment stages; otherwise false.
+         */
+        [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
+
+        /**
+         * @brief Reports that supplied `ShaderEffect` HLSL determines the executed shaders.
+         *
+         * @return True.
+         */
+        [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override;
+
 #if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
         /** @brief Creates a compiled XNA effect using its native D3D9 shader tokens. */
         std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(

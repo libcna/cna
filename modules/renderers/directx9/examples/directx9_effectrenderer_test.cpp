@@ -5,6 +5,9 @@
 // "compile a trivial custom vertex+pixel shader pair at runtime, draw a real triangle with it, read
 // back the exact pixel color driven by a uniform."
 //
+// Capability check -- the public dialect, stage/language, source-execution and detailed-profile
+// answers truthfully describe the HLSL path that the pixel checks below exercise.
+//
 // Check A -- CompileProgram() succeeds for a real custom vertex+pixel shader pair (vs_2_0/ps_2_0
 //   under Reach).
 // Check B -- Bind() + a real draw + a uniform-driven pixel color: SetUniformVec4("MyColor", ...)
@@ -30,6 +33,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 
+#include "CNA/RendererCapabilityProfile.hpp"
+#include "CNA/ShaderDialectEXT.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9VertexDeclarations.hpp"
@@ -114,6 +120,28 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         auto& renderer = static_cast<DirectX9Renderer&>(dev.GetRenderer());
         IDirect3DDevice9* device = renderer.GetDeviceEXT();
+
+        check(dev.ExecutesShaderEffectSourceEXT(),
+              "DirectX9 capability report: ShaderEffect source execution is supported");
+        check(dev.GetShaderDialectEXT() == CNA::ShaderDialectEXT::Hlsl,
+              "DirectX9 capability report: ShaderEffect dialect is HLSL");
+        check(dev.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                           CNA::ShaderStageEXT::Vertex)
+                  && dev.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                                   CNA::ShaderStageEXT::Fragment),
+              "DirectX9 capability report: HLSL vertex and fragment stages are supported");
+        check(!dev.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Wgsl,
+                                            CNA::ShaderStageEXT::Vertex)
+                  && !dev.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Unknown,
+                                                    CNA::ShaderStageEXT::Vertex)
+                  && !dev.SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,
+                                                    CNA::ShaderStageEXT::Unknown),
+              "DirectX9 capability report: other languages and invalid identities are refused");
+        check(dev.SupportsRendererFeatureEXT(
+                  CNA::RendererFeature::ShaderEffectSourceExecution)
+                  && dev.SupportsRendererFeatureEXT(CNA::RendererFeature::ShaderDialectHlsl)
+                  && !dev.SupportsRendererFeatureEXT(CNA::RendererFeature::ShaderDialectWgsl),
+              "DirectX9 detailed profile: source execution and only the HLSL dialect are reported");
 
         renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // default write state
         renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);

@@ -8,6 +8,7 @@
 // macro ERROR (wingdi.h) that collides with LogLevel::ERROR/LogCategory::ERROR's own enumerator
 // names if windows.h is parsed first.
 #include "CNA/Logger.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "System/NotSupportedException.hpp"
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
@@ -1693,6 +1694,24 @@ namespace CNA::Internal::Renderers::DirectX9
         if (!vertSrc.empty() && !fragSrc.empty())
             renderer->CompileProgram(vertSrc, fragSrc);
         return renderer;
+    }
+
+    ShaderDialectEXT DirectX9Renderer::GetShaderDialectEXT() const
+    {
+        return ShaderDialectEXT::Hlsl;
+    }
+
+    bool DirectX9Renderer::SupportsShaderLanguageEXT(const int language, const int stage) const
+    {
+        if (language != static_cast<int>(CNA::ShaderLanguageEXT::Hlsl)) return false;
+        const auto shaderStage = static_cast<CNA::ShaderStageEXT>(stage);
+        return shaderStage == CNA::ShaderStageEXT::Vertex
+            || shaderStage == CNA::ShaderStageEXT::Fragment;
+    }
+
+    bool DirectX9Renderer::ExecutesShaderEffectSourceEXT() const
+    {
+        return true;
     }
 
     void DirectX9Renderer::SetSwapInterval(int interval)

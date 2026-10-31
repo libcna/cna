@@ -78,6 +78,10 @@ cmake --build cmake-build-mingw --parallel 8
 - **Custom `ShaderEffect`**: HLSL compiled at run time through `D3DCompile` in the separate
   `cna_renderer_d3d9_effect` library, so the stock pipeline itself never links `d3dcompiler`;
   constants are mapped by CNA's own CTAB parser (`D9-110`..`D9-112`, `DirectX9_CompiledEffects`).
+  The public device reports `ShaderDialectEXT::Hlsl`, accepts HLSL vertex and fragment stages,
+  answers `ExecutesShaderEffectSourceEXT() == true`, and publishes
+  `ShaderEffectSourceExecution`/`ShaderDialectHlsl` in its detailed capability profile. The same
+  effect test checks those answers before proving uniform-driven pixels.
 - **Render targets sampled as textures**, single and MRT: the DXVK crash once blamed for blocking
   them was a wrong `static_cast` in `D3D9EffectDraw.cpp` (`D9-84`, fixed 2026-07-16), and
   `DirectX9_RenderTarget_SamplingOrientation`, `_ProducerConsumer` and `_EffectSource` cover them.

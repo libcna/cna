@@ -69,9 +69,9 @@ shared bytecode, reflection, pass, state and draw contract.
 `ShaderEffect` is a separate CNA extension. SDLGPU's public SPIR-V intake exists only in builds
 with `CNA_SDLGPU_SHADER_EFFECTS`; platform/compiler gates can make that option unavailable.
 Software deliberately does not execute source text, while FNA3D accepts compiled Effect bytecode
-rather than GLSL/HLSL source. DirectX9 has a verified runtime HLSL path, but its detailed
-source-execution/dialect report currently retains conservative defaults; that reporting defect is
-tracked in `handoff.md` §5.1.
+rather than GLSL/HLSL source. DirectX9's verified runtime path reports HLSL, accepts its vertex and
+fragment stages, and marks both source execution and `ShaderDialectHlsl` supported in the detailed
+profile.
 
 ## Non-raster identities
 
