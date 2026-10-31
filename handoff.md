@@ -27,7 +27,7 @@ once every row had its final disposition; `git show 9c2b3e2d4:CNA_DEMOS_REPAIR_M
 **156 historical IDs, 156 final dispositions**: 119 `FIXED_VALIDATED`, 23
 `DOCUMENTATION_CORRECTED`, 8 `ALREADY_FIXED`, 3 `FIXED_PLATFORM_VALIDATION_PENDING` (003
 SpriteBatch Textures[0], 101 video URI resolution, 152 StorageContainer FileShare: each needs a
-native Windows/XNA run this machine cannot do; §8.2 says what to run), one `DEMO_EXPECTATION_BUG`,
+  native Windows/XNA run this machine cannot do; §8.1 says what to run), one `DEMO_EXPECTATION_BUG`,
 one `DUPLICATE_ROOT_CAUSE` and one `UNSUPPORTED_CONTRACT_CORRECTED`. The three graphics findings
 outside the historical count were resolved too:
 `DC-R1` `FIXED_VALIDATED` and `DC-R2` `UNSUPPORTED_CONTRACT_CORRECTED` on the owner's decisions,
@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- `XNB-61b` compressed-manifest and container hardening (2026-10-31): typed runtime loads,
+  type-erased external references, the canonical importer and the CNAEXT content manifest now use
+  one bounded XNB container decoder for uncompressed, LZX and MonoGame LZ4 bodies. The manifest
+  inventories and aggregates readers from compressed files, type-erased references load LZ4, and
+  filesystem/custom-stream loads consistently enforce the 64 MiB file ceiling. Regressions cover
+  compressed/uncompressed body equality, both manifest codecs and usage counts, malformed scans,
+  LZ4 external-reference loading and pre-allocation refusal of oversized filesystem and virtual
+  streams. Both affected test binaries build; the broad private-GPU XNB filter passes 492/501
+  with nine renderer-capability skips and no failures. The full 2,099-test content target exposed
+  only the three unrelated PBR inventory failures now recorded in §5.2.
 - Software renderer audit reconciliation (`SW-01`…`SW-07`, 2026-10-31): the July audit's clipping,
   viewport/scissor, depth/stencil, draw-range, instancing and public blending findings were already
   closed by the current renderer and its shared contracts. The remaining renderer-boundary
@@ -105,7 +115,7 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   requirement as ISSUE-003 and ISSUE-101. No product source changed. A fresh cna-demos validation
   against this CNA tree passed all 732 enabled CTests (687 PASS, 45 declared SKIP; three manual
   tests disabled), and the complete 719-ID sweeps were SOFTWARE 671/0/45/3 and OPENGLES3
-  709/0/7/3. The only remaining campaign actions are the three native-Windows checks (§8.2) and
+  709/0/7/3. The only remaining campaign actions are the three native-Windows checks (§8.1) and
   the consumer-owned museum reruns described under "Exact next task".
 - Consumer intake, museum `docs/CNA_FINDINGS.md` Open section (2026-10-24): every entry was checked
   against HEAD; the museum reran them all on 2026-10-25 against `9d49828f4` and moved each one it
@@ -198,7 +208,7 @@ The museum Pipeline Workshop items are all answered: 1 (build-wide nested names,
 `419723275`), 9 (`bbed8c61e` on Sharp Runtime `f990d074`, measured against
 genuine XNA, demos `9598b43`) and 16 (owner: the documentation half is enough; the task sources
 stay in `modules/content-pipeline`). What remains needs a host this machine does not have: the
-three Windows/XNA platform validations (003, 101, 152; §8.2). The museum's reruns of
+three Windows/XNA platform validations (003, 101, 152; §8.1). The museum's reruns of
 2026-10-25 against `9d49828f4` are in `../museum-simulator/docs/CNA_FINDINGS.md`: every finding it
 can run here is verified fixed or documented, the ThreadSanitizer races and ENet's UBSan shift
 included (a `-fsanitize=thread,undefined` museum tree: no report), and so is the Android emulator's
@@ -228,17 +238,16 @@ the established 4 GiB high / 6 GiB max / no-swap scope. All GPU/UI tests go thro
 permanent issue history and handoff after every accepted batch.
 
 **§5 is the authoritative current defect inventory; the three fixes still awaiting a native
-Windows run are §8.2.** The repair matrix that recorded every historical cna-demos finding is in
+Windows run are §8.1.** The repair matrix that recorded every historical cna-demos finding is in
 Git history (above). Capability documents describe supported behavior, tests are executable
 evidence, and Git history preserves measurement history. Every implementation plan has been retired
 and `plans/` removed (2026-10-29); `docs/task-id-index.md` says where each one's content went. Do
 not let an issue disappear from §5 or §8.
 
-Ready to pick up next, when the owner asks: the near-future tasks of §8, starting with `XNB-61b`
-(§8.1).
+Ready to pick up next, when the owner asks: the three native-Windows validations in §8.1.
 
-Repository state last reconciled: **2026-10-30** (`next`, VSIDE-001..006), when the native Windows
-IDE, preset, runtime-deployment and automatic-CI baseline was added and §5 brought up to date. The
+Repository state last reconciled: **2026-10-31** (`next`, XNB-61b), when compressed manifest
+inventory, shared bounded container decoding and type-erased LZ4 loading were completed. The
 last plans were retired on 2026-10-29 (`225e88b09`). The campaign accounting above dates from
 2026-10-24 (`96577db26`), and the test runs in §0 and §2 carry their own dates. The last full test run is the
 checkpoint identified above; do not upgrade later focused evidence into a full claim.
@@ -443,11 +452,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   ignore the factors (not measured). Found by SDLGPU's blend-equation oracle (`SDLGPU-58`,
   formerly `EASYGL-PARITY-1`, 2026-09-10); SDLGPU evaluates the equation correctly, and EasyGL
   has no regression leg for it yet.
-- An LZ4-compressed `.xnb` reached through a type-erased external reference fails to load:
-  `ContentManager::LoadXnbAssetUntyped` (`ContentManagerUntyped.cpp`) still throws "uses MonoGame's
-  Lz4 compression, which CNA does not yet support", while the typed path decodes LZ4 since
-  `CP-047` (`XnbCanonicalAsset.cpp`). Its LZX branch also skips the typed path's truncation check
-  and decompression limits. Found by reading on 2026-10-29; not yet pinned by a test.
 - In browser fullscreen the drawable a GL renderer letterboxes into is not the rectangle the browser
   presents. Measured 2026-09-08 with SAMPLE-071 (Yacht, 480x800 back buffer) on a headless Chrome
   with an 800x600 screen: the canvas reported 800x600 while its CSS box was 800x544, and the game
@@ -609,16 +613,20 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   reproduced against the game they came from, which is not available. The audit narrowed the
   pitch report to a wrong sample rate reaching CNA before the mixer -- the class CBIND-146 fixed
   (`51d9c84cc`, 2026-10-02, an XNA-built sound's content sample rate).
+- **Three glTF PBR source-inventory tests fail in `CnaContentTests`** (reproduced independently on
+  2026-10-31): `InventoryCoversEveryRendererThatConsumesPbrMaps` and
+  `SpecularTextureInventoryClassifiesEveryPbrRenderer` observe `headless` in addition to the six
+  renderer families their pinned expected sets name;
+  `EveryStrideGatedPbrRouteAdmitsBothColourCarryingStrides` no longer finds its normalized DirectX9
+  rigid-PBR stride predicate in the source. These are stable source-contract mismatches, not GPU
+  or XNB failures; reconcile the inventories with the current renderer routes before claiming the
+  full content target green.
 - Three content-pipeline residues against genuine XNA output, none visible in the 7,726-reference
   sample sweep (`tools/xna-sample-sweep/README.md`, *What is left*): a generated `.x` normal can
   carry the opposite sign of a zero (13 of 1,291 probe normals, `XNASWEEP-231`); FBX bone
   transforms keep an ulp-level residue that grows with depth, inside the float tolerance
   (`XNASWEEP-228`..`232`); and `MeshHelper.OptimizeForCache`'s strip termination is empirical
   (9 of 20 probes exact, `XNASWEEP-149`).
-- The CNAEXT content manifest lists no reader names for a compressed `.xnb`:
-  `ContentManager::ScanXnbReaderNames` reads only an uncompressed type-reader table, so an LZX or
-  LZ4 file's `ContentManifestEntry::xnbReaderNames` is empty and `GetXnbReaderUsageSummary()` skips
-  it, although `Load` decompresses both (`XNB-61b`; the fix is planned in §8.1).
 
 ### 5.3 External and driver limitations
 
@@ -708,62 +716,7 @@ Small, fully specified pieces of work that are ready to pick up. Each one names 
 plan and the point at which it is done; take one only when the owner asks for it or the current
 campaign leaves room.
 
-### 8.1 `XNB-61b` — reader names of a compressed `.xnb` in the content manifest
-
-**The gap.** `ContentManager`'s CNAEXT content manifest (`RefreshContentManifest()`,
-`GetContentManifest()`, `GetXnbReaderUsageSummary()`; described in
-[`docs/xnb-content-pipeline-support.md`](docs/xnb-content-pipeline-support.md), *Content manifest*)
-lists the type-reader names each `.xnb` needs. For a **compressed** file it lists none:
-`ContentManager::ScanXnbReaderNames` (`modules/content/src/Xna/ContentManager.cpp`) parses the
-header and returns an empty list whenever `header.compression != XnbCompression::None`, with a
-comment saying the work was "not yet picked up". So `ContentManifestEntry::xnbReaderNames` is
-empty for every LZX or LZ4 file and `GetXnbReaderUsageSummary()` counts none of them, although
-`Load` decompresses both. It matters because real content is largely compressed: Microsoft's
-pipeline writes LZX, and 729 of the sample sweep's references differ from CNA's only inside the
-LZX stream (`tools/xna-sample-sweep/README.md`). A tool asking "which readers does this content
-need that the game has not registered" therefore misses most of a real XNA game.
-
-**The fix.**
-
-1. Pull the decompression out of `DecodeXnbCanonicalAsset` (`modules/content/src/Xnb/XnbCanonicalAsset.cpp`)
-   into a helper that takes the file bytes, its origin and `XnbReadLimits` and returns the parsed
-   header and the (possibly decompressed) body. Today that switch -- `None`, `Lzx` through
-   `DecompressXnbPayload`, `Lz4` through `DecompressXnbLz4Payload`, each with its truncation and
-   size checks -- exists only inline there. `DecodeXnbCanonicalAsset` then calls the helper.
-2. In `ScanXnbReaderNames`, replace the early `return names;` with the helper and read the
-   type-reader table from the body it returns. Keep the existing rule that a malformed file is not
-   a scan failure: a `ContentLoadException` from the helper still means an empty list for that one
-   entry.
-3. Tests in `modules/content/tests/Microsoft/Xna/Framework/Content/ContentManagerManifestTests.cpp`,
-   over fixtures already committed: the MonoGame LZX files in `tests/assets/xnb/monogame/windows/lzx/`
-   (`Explosion.xnb`, `FontCalibri14.xnb`), the LZ4 oracle `tests/assets/xnb/monogame/windows/lz4/white-1.xnb`
-   and CNA's own LZX corpus in `tests/assets/xnb/cna/windows/lzx/`. Assert the reader names of a
-   compressed entry equal those of its uncompressed twin where one exists, that
-   `GetXnbReaderUsageSummary()` counts compressed files, and that a truncated compressed file
-   yields an empty list without throwing.
-4. Remove the *Known gaps* row in `docs/xnb-content-pipeline-support.md` and the §5.2 entry here,
-   and correct the `xnbReaderNames` doxygen in `ContentManifestEntry.hpp`.
-5. Build and test in `cmake-build-multi`: `cmake --build cmake-build-multi --parallel 8 --target
-   CnaTests CnaContentTests`, then `CnaContentTests` and the XNB filter of `CnaTests` through
-   `tools/platform/run_gpu_tests_private.sh --exec`. Where ALSA cannot open a device (it could
-   not on 2026-10-29: "Host is down"), the `SoundEffect` tests need `SDL_AUDIO_DRIVER=dummy`.
-
-**Estimate.** About 1.5-2.5 hours, roughly one of them active work and the rest build and test
-time (helper 30 min, scan 15 min, tests 30-45 min, documents 10 min, build and runs 30-60 min).
-
-**Worth doing in the same change.** The helper also fixes the §5.1 defect in
-`ContentManager::LoadXnbAssetUntyped` (`ContentManagerUntyped.cpp`), the type-erased
-external-reference path, which still refuses LZ4 and skips the typed path's truncation check and
-limits on LZX. That adds about 1-1.5 hours, most of it a test fixture: an LZ4-compressed asset
-reached through a type-erased external reference, which CNA's own writer can produce with
-`--xnb-compress lz4`.
-
-**Deliberately not part of it.** A full decompression per compressed file makes the first
-`GetContentManifest()` over a large content root slower. The type-reader table sits at the start
-of the body, so decoding only the first LZX frame would be enough, but that is 1-2 more hours and
-should wait for a measurement that shows the scan is too slow.
-
-### 8.2 Three cna-demos fixes awaiting a native Windows run
+### 8.1 Three cna-demos fixes awaiting a native Windows run
 
 The CNA/cna-demos repair campaign closed every finding except these three, which are fixed and
 validated on Linux but still owe a run on native Windows -- a host this machine does not have.

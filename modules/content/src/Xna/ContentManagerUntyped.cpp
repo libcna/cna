@@ -119,44 +119,14 @@ namespace Microsoft::Xna::Framework::Content
                                                   const std::string& xnbPath,
                                                   const std::string& assetName)
     {
-        const auto header = ReadXnbHeader(bytes, xnbPath);
-
-        switch (header.compression)
-        {
-            case CNA::Internal::Xnb::XnbCompression::None:
-            {
-                System::IO::MemoryStream bodyStream(
-                    bytes.data() + 10,
-                    static_cast<int32_t>(bytes.size()) - 10);
-                ContentReader contentReader(this, &bodyStream, assetName,
-                                            header.version, header.platform);
-                return contentReader.ReadAsset();
-            }
-            case CNA::Internal::Xnb::XnbCompression::Lzx:
-            {
-                System::IO::MemoryStream sizeStream(
-                    reinterpret_cast<const uint8_t*>(bytes.data()) + 10, 4);
-                System::IO::BinaryReader sizeReader(&sizeStream, true);
-                const int32_t decompressedSize = sizeReader.ReadInt32();
-                const int32_t compressedSize = header.totalLength - 14;
-                const auto decompressed = CNA::Internal::Xnb::DecompressXnbPayload(
-                    bytes.data() + 14,
-                    compressedSize, decompressedSize, xnbPath);
-                System::IO::MemoryStream bodyStream(
-                    decompressed.data(), static_cast<int32_t>(decompressed.size()));
-                ContentReader contentReader(this, &bodyStream, assetName,
-                                            header.version, header.platform);
-                return contentReader.ReadAsset();
-            }
-            case CNA::Internal::Xnb::XnbCompression::Lz4:
-                throw ContentLoadException(
-                    "'" + xnbPath + "' uses MonoGame's Lz4 compression, which CNA does not yet "
-                    "support (XNB-30C).");
-            case CNA::Internal::Xnb::XnbCompression::Unknown:
-            default:
-                throw ContentLoadException(
-                    "'" + xnbPath + "' has an unrecognized compression flag combination.");
-        }
+        const auto container = CNA::Internal::Xnb::DecodeXnbContainerBody(
+            std::span<const std::uint8_t>(bytes.data(), bytes.size()), xnbPath);
+        const auto body = container.Bytes();
+        System::IO::MemoryStream bodyStream(
+            body.data(), static_cast<std::int32_t>(body.size()));
+        ContentReader contentReader(
+            this, &bodyStream, assetName, container.header.version, container.header.platform);
+        return contentReader.ReadAsset();
     }
 
     std::any ContentReader::ReadExternalReference()

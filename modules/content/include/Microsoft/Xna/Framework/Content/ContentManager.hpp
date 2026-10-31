@@ -20,8 +20,7 @@
 #include "CNA/Content/Cnb/CnbLoaderRegistry.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
-#include "CNA/Internal/Xnb/XnbDecompression.hpp"
-#include "CNA/Internal/Xnb/XnbHeader.hpp"
+#include "CNA/Internal/Xnb/XnbContainerBody.hpp"
 #include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManifestEntry.hpp"
@@ -140,7 +139,9 @@ namespace Microsoft::Xna::Framework::Content
         [[nodiscard]] std::string BuildAssetPath(const std::string& assetName) const;
         [[nodiscard]] std::string ResolveExistingAssetPath(const std::string& path) const;
         [[nodiscard]] bool TryReadAssetBytes(
-            const std::string& path, std::vector<std::uint8_t>& bytes) const;
+            const std::string& path,
+            std::vector<std::uint8_t>& bytes,
+            std::size_t maxBytes = std::numeric_limits<std::size_t>::max()) const;
         [[nodiscard]] std::string NormalizeKey(const std::string& assetName) const;
 
         // Calls the virtual seam. Null means only the base implementation's own missing-XNB
@@ -153,10 +154,6 @@ namespace Microsoft::Xna::Framework::Content
         /// stream shape an override may provide is turned into bytes once, here.
         [[nodiscard]] static std::vector<std::uint8_t> ReadStreamToEnd(System::IO::Stream& stream,
                                                                       const std::string& assetName);
-
-        /// Validates the complete container before either typed or erased loading reads its payload.
-        [[nodiscard]] static CNA::Internal::Xnb::XnbHeader ReadXnbHeader(
-            const std::vector<std::uint8_t>& bytes, const std::string& xnbPath);
 
         friend class ContentReader;
         void RecordDisposableObject(std::shared_ptr<System::IDisposable> disposable);
@@ -841,59 +838,15 @@ namespace Microsoft::Xna::Framework::Content
             const std::string& assetName,
             std::function<void(std::shared_ptr<System::IDisposable>)> recordDisposableObject = {})
         {
-            const auto header = ReadXnbHeader(bytes, xnbPath);
-
-            switch (header.compression)
-            {
-                case CNA::Internal::Xnb::XnbCompression::None:
-                {
-                    System::IO::MemoryStream bodyStream(
-                        bytes.data() + 10,
-                        static_cast<int32_t>(bytes.size()) - 10);
-                    ContentReader contentReader(this, &bodyStream, assetName, header.version,
-                                                header.platform, recordDisposableObject);
-                    return contentReader.ReadAsset<T>();
-                }
-                case CNA::Internal::Xnb::XnbCompression::Lzx:
-                {
-                    System::IO::MemoryStream sizeStream(
-                        reinterpret_cast<const uint8_t*>(bytes.data()) + 10, 4);
-                    System::IO::BinaryReader sizeReader(&sizeStream, true);
-                    const int32_t decompressedSize = sizeReader.ReadInt32();
-                    const int32_t compressedSize = header.totalLength - 14;
-
-                    const auto decompressed = CNA::Internal::Xnb::DecompressXnbPayload(
-                        bytes.data() + 14,
-                        compressedSize, decompressedSize, xnbPath);
-
-                    System::IO::MemoryStream bodyStream(decompressed.data(), static_cast<int32_t>(decompressed.size()));
-                    ContentReader contentReader(this, &bodyStream, assetName, header.version,
-                                                header.platform, recordDisposableObject);
-                    return contentReader.ReadAsset<T>();
-                }
-                case CNA::Internal::Xnb::XnbCompression::Lz4:
-                {
-                    System::IO::MemoryStream sizeStream(
-                        reinterpret_cast<const uint8_t*>(bytes.data()) + 10, 4);
-                    System::IO::BinaryReader sizeReader(&sizeStream, true);
-                    const int32_t decompressedSize = sizeReader.ReadInt32();
-                    const int32_t compressedSize = header.totalLength - 14;
-                    const auto decompressed = CNA::Internal::Xnb::DecompressXnbLz4Payload(
-                        bytes.data() + 14,
-                        compressedSize, decompressedSize, xnbPath);
-
-                    System::IO::MemoryStream bodyStream(
-                        decompressed.data(), static_cast<int32_t>(decompressed.size()));
-                    ContentReader contentReader(
-                        this, &bodyStream, assetName, header.version, header.platform,
-                        recordDisposableObject);
-                    return contentReader.ReadAsset<T>();
-                }
-                case CNA::Internal::Xnb::XnbCompression::Unknown:
-                default:
-                    throw ContentLoadException(
-                        "'" + xnbPath + "' has an unrecognized compression flag combination.");
-            }
+            const auto container = CNA::Internal::Xnb::DecodeXnbContainerBody(
+                std::span<const std::uint8_t>(bytes.data(), bytes.size()), xnbPath);
+            const auto body = container.Bytes();
+            System::IO::MemoryStream bodyStream(
+                body.data(), static_cast<std::int32_t>(body.size()));
+            ContentReader contentReader(
+                this, &bodyStream, assetName, container.header.version,
+                container.header.platform, recordDisposableObject);
+            return contentReader.ReadAsset<T>();
         }
 
         /**

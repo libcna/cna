@@ -2,10 +2,12 @@
 //
 // XNB-65/65A/66/67/61a: unit tests for ContentManager's content-manifest scan.
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <gtest/gtest.h>
 
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
@@ -19,6 +21,7 @@
 
 using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Content::ContentManifestEntry;
+using Microsoft::Xna::Framework::Content::ContentManifestReaderUsage;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
 
 namespace
@@ -35,6 +38,21 @@ namespace
         std::filesystem::create_directories(path.parent_path());
         std::ofstream f(path, std::ios::binary);
         f << text;
+    }
+
+    void CopyFixture(const std::filesystem::path& source, const std::filesystem::path& destination)
+    {
+        std::filesystem::create_directories(destination.parent_path());
+        std::error_code error;
+        std::filesystem::copy_file(source, destination, error);
+        ASSERT_FALSE(error) << source << ": " << error.message();
+    }
+
+    std::vector<std::uint8_t> ReadBytes(const std::filesystem::path& path)
+    {
+        std::ifstream stream(path, std::ios::binary);
+        EXPECT_TRUE(stream.is_open()) << path;
+        return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
     }
 
     class ScratchContentRoot
@@ -183,6 +201,75 @@ TEST_F(ContentManagerManifestTest, MalformedXnbDoesNotAbortTheWholeScan)
 
     const auto* good = FindEntry(manifest, "good");
     ASSERT_NE(good, nullptr);
+    EXPECT_EQ(good->xnbReaderNames.size(), 1u);
+}
+
+TEST_F(ContentManagerManifestTest, CompressedReaderInventoriesMatchUncompressedTwins)
+{
+    ScratchContentRoot root;
+    CopyFixture("tests/assets/xnb/cna/windows/uncompressed/texture2d_color_mips.xnb",
+                root.path() / "cna-uncompressed.xnb");
+    CopyFixture("tests/assets/xnb/cna/windows/lzx/texture2d_color_mips.xnb",
+                root.path() / "cna-lzx.xnb");
+    CopyFixture("tests/assets/xnb/monogame/windows/uncompressed/white-1.xnb",
+                root.path() / "mg-uncompressed.xnb");
+    CopyFixture("tests/assets/xnb/monogame/windows/lz4/white-1.xnb",
+                root.path() / "mg-lz4.xnb");
+
+    ContentManager cm(nullptr, root.path().string());
+    const auto& manifest = cm.GetContentManifest();
+    const auto* cnaUncompressed = FindEntry(manifest, "cna-uncompressed");
+    const auto* cnaLzx = FindEntry(manifest, "cna-lzx");
+    const auto* mgUncompressed = FindEntry(manifest, "mg-uncompressed");
+    const auto* mgLz4 = FindEntry(manifest, "mg-lz4");
+    ASSERT_NE(cnaUncompressed, nullptr);
+    ASSERT_NE(cnaLzx, nullptr);
+    ASSERT_NE(mgUncompressed, nullptr);
+    ASSERT_NE(mgLz4, nullptr);
+    EXPECT_FALSE(cnaLzx->xnbReaderNames.empty());
+    EXPECT_EQ(cnaLzx->xnbReaderNames, cnaUncompressed->xnbReaderNames);
+    EXPECT_FALSE(mgLz4->xnbReaderNames.empty());
+    EXPECT_EQ(mgLz4->xnbReaderNames, mgUncompressed->xnbReaderNames);
+}
+
+TEST_F(ContentManagerManifestTest, ReaderUsageSummaryCountsCompressedFiles)
+{
+    ScratchContentRoot root;
+    CopyFixture("tests/assets/xnb/cna/windows/uncompressed/texture2d_color_mips.xnb",
+                root.path() / "plain.xnb");
+    CopyFixture("tests/assets/xnb/cna/windows/lzx/texture2d_color_mips.xnb",
+                root.path() / "lzx.xnb");
+    CopyFixture("tests/assets/xnb/monogame/windows/lz4/white-1.xnb",
+                root.path() / "lz4.xnb");
+
+    ContentManager cm(nullptr, root.path().string());
+    const auto summary = cm.GetXnbReaderUsageSummary();
+    const auto usage = std::find_if(
+        summary.begin(), summary.end(), [](const ContentManifestReaderUsage& entry)
+        {
+            return entry.readerName == "Microsoft.Xna.Framework.Content.Texture2DReader";
+        });
+    ASSERT_NE(usage, summary.end());
+    EXPECT_EQ(usage->fileCount, 3);
+}
+
+TEST_F(ContentManagerManifestTest, TruncatedCompressedXnbKeepsAnEmptyInventoryWithoutAbortingScan)
+{
+    ScratchContentRoot root;
+    auto bytes = ReadBytes("tests/assets/xnb/monogame/windows/lz4/white-1.xnb");
+    ASSERT_GT(bytes.size(), 14u);
+    bytes.resize(14u);
+    WriteBytes(root.path() / "broken-lz4.xnb", bytes);
+    WriteBytes(root.path() / "good.xnb",
+               BuildXnbFile("Microsoft.Xna.Framework.Content.Texture2DReader", 1));
+
+    ContentManager cm(nullptr, root.path().string());
+    const auto& manifest = cm.GetContentManifest();
+    const auto* broken = FindEntry(manifest, "broken-lz4");
+    const auto* good = FindEntry(manifest, "good");
+    ASSERT_NE(broken, nullptr);
+    ASSERT_NE(good, nullptr);
+    EXPECT_TRUE(broken->xnbReaderNames.empty());
     EXPECT_EQ(good->xnbReaderNames.size(), 1u);
 }
 

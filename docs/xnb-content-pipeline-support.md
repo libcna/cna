@@ -287,6 +287,12 @@ allocation both methods used to make directly from an attacker-controlled length
 closing an allocation-bomb vector (a single 5-byte 7-bit-encoded prefix can declare up to ~2GB)
 without changing either method's observable behavior for any valid input.
 
+The typed runtime loader, type-erased external-reference loader, canonical importer and content
+manifest now share one container decoder. It enforces `XnbReadLimits::maxFileSize` before parsing
+or filesystem allocation where the input size is known, validates the declared container range,
+and applies the same compressed/decompressed limits to both LZX and LZ4. A custom `OpenStream()` is
+also bounded while it is read, before its bytes reach the decoder.
+
 ## Content manifest (CNAEXT)
 
 `ContentManager` can describe what its content root holds, for tools such as asset validators or an
@@ -303,8 +309,10 @@ editor's content view. None of this is XNA API.
   how many files use the reader, and whether `ContentTypeReaderManager` has it registered -- the
   quick answer to "which readers would this content need that the game has not registered".
 
-A malformed `.xnb` is not a scan failure; its entry just has no reader names. Neither, today, has a
-**compressed** one -- see *Known gaps* (`XNB-65`..`XNB-67`).
+A malformed `.xnb` is not a scan failure; its entry just has no reader names. LZX- and
+LZ4-compressed files are decompressed and inspected through the same bounded container decoder as
+runtime loading. The first manifest scan therefore pays the full decompression cost for each
+compressed `.xnb`; there is no partial-frame shortcut.
 
 ## Known gaps / limitations
 
@@ -313,7 +321,6 @@ A malformed `.xnb` is not a scan failure; its entry just has no reader names. Ne
 | Automatic reflection over an undeclared C++ type | ❌ Not supported by design; implicit `ReflectiveReader<T>` payloads are supported when the game declares their serialized members through `ReflectiveTypeReaderBuilder<T>` |
 | General `EffectReader` on a renderer without `CompiledEffects` | ❌ loading fails with an asset-specific capability diagnostic rather than a silent shader fallback. FNA3D supports it unconditionally; SDLGPU, the EasyGL family, WEBGPU, SOFTWARE and DIRECTX9 support it behind their compiled-effect build options |
 | LZ4 compression | ✅ MonoGame's raw-block XNB representation is supported; generic LZ4 frames are intentionally not an XNB format |
-| Reader names of a compressed `.xnb` in the content manifest | ❌ `xnbReaderNames` stays empty for an LZX- or LZ4-compressed file, and `GetXnbReaderUsageSummary()` does not count it: the scan reads only an uncompressed type-reader table, although loading decompresses both (`XNB-61b`) |
 | Generic collection readers for an unregistered `T` combination | ❌ Not supported — each closed combination needs its own explicit registration |
 | `SoundEffect` XMA2 and unknown codecs | ❌ Not supported — see the audio support matrix above |
 | Platform identifiers MonoGame added after FNA's fork point (`'b'`/`'5'`/`'O'`/`'S'`/`'V'`) | ❌ Not accepted, matching FNA exactly (deliberate, not an oversight) |

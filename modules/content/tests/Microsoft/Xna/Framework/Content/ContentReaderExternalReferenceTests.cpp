@@ -4,6 +4,7 @@
 // resolution against a real ContentManager/.xnb round trip, the empty-reference default(T) case,
 // and the content-root-escape hardening this task adds beyond FNA's own behavior.
 
+#include <any>
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -102,6 +103,28 @@ TEST_F(ContentReaderExternalReferenceTest, ResolvesSiblingPathAndLoadsThroughCon
     std::optional<Texture2D> texture = reader.ReadExternalReference<Texture2D>();
 
     ASSERT_TRUE(texture.has_value());
+    EXPECT_EQ(texture->getWidthProperty(), 1);
+    EXPECT_EQ(texture->getHeightProperty(), 1);
+}
+
+TEST_F(ContentReaderExternalReferenceTest, TypeErasedReferenceLoadsLz4CompressedAsset)
+{
+    ScratchContentRoot root;
+    std::error_code ec;
+    std::filesystem::copy_file(
+        "tests/assets/xnb/monogame/windows/lz4/white-1.xnb",
+        root.path() / "textures" / "white-1.xnb", ec);
+    ASSERT_FALSE(ec);
+
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+    std::string storage;
+    auto stream = MakeReferenceStream("../textures/white-1", storage);
+    ContentReader reader(&cm, stream.get(), "effects/myeffect", 5, 'w');
+
+    const std::any asset = reader.ReadExternalReference();
+    const auto* texture = std::any_cast<Texture2D>(&asset);
+    ASSERT_NE(texture, nullptr);
     EXPECT_EQ(texture->getWidthProperty(), 1);
     EXPECT_EQ(texture->getHeightProperty(), 1);
 }

@@ -33,10 +33,9 @@ namespace Microsoft::Xna::Framework::Content
 
         /**
          * @brief Canonical `.xnb` type-reader names referenced by `<relativePath>.xnb`'s
-         *        type-reader table (XNB-61a), if @ref hasXnb and the file is
-         *        uncompressed and well-formed enough to read its header/table. Empty otherwise --
-         *        a malformed or a compressed (LZX or LZ4) file is not a scan failure, just an
-         *        empty inventory for that one entry (`XNB-61b` is not implemented).
+         *        type-reader table (XNB-61a/XNB-61b), if @ref hasXnb and the file is well-formed
+         *        enough to decode its header/table. LZX- and LZ4-compressed files are decoded
+         *        during the scan. A malformed file is not a scan failure; its inventory is empty.
          */
         std::vector<std::string> xnbReaderNames;
     };

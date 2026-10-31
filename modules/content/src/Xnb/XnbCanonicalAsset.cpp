@@ -21,7 +21,7 @@
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/Xnb/XnbArithmetic.hpp"
-#include "CNA/Internal/Xnb/XnbDecompression.hpp"
+#include "CNA/Internal/Xnb/XnbContainerBody.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
@@ -48,7 +48,8 @@ namespace CNA::Internal::Xnb
                     "cannot inspect XNB source '" + ContentPathToUtf8(path) + "': " +
                     error.message() + ".");
             }
-            if (size > static_cast<std::uintmax_t>(limits.maxFileSize))
+            if (limits.maxFileSize < 0 ||
+                size > static_cast<std::uintmax_t>(limits.maxFileSize))
             {
                 throw ContentLoadException(
                     "XNB source '" + ContentPathToUtf8(path) + "' exceeds the maximum file size.");
@@ -199,78 +200,21 @@ namespace CNA::Internal::Xnb
     {
         const std::string origin = ContentPathToUtf8(path);
         const std::vector<std::uint8_t> file = ReadFile(path, limits);
-        if (file.size() < 10u)
-        {
-            throw ContentLoadException("'" + origin + "' is truncated before its XNB header.");
-        }
-
-        System::IO::MemoryStream headerStream(file.data(), static_cast<std::int32_t>(file.size()));
-        System::IO::BinaryReader headerReader(&headerStream, true);
-        const XnbHeader header = ParseXnbHeader(headerReader, origin);
-        if (header.totalLength != static_cast<std::int32_t>(file.size()))
+        const XnbContainerBody container = DecodeXnbContainerBody(
+            std::span<const std::uint8_t>(file.data(), file.size()), origin, limits);
+        if (container.header.totalLength != static_cast<std::int32_t>(file.size()))
         {
             throw ContentLoadException(
                 "'" + origin + "' declares totalLength " +
-                std::to_string(header.totalLength) + ", but the file contains " +
+                std::to_string(container.header.totalLength) + ", but the file contains " +
                 std::to_string(file.size()) + " bytes.");
         }
-
-        std::vector<std::uint8_t> ownedBody;
-        const std::uint8_t* body = nullptr;
-        std::size_t bodySize = 0u;
-        switch (header.compression)
-        {
-            case XnbCompression::None:
-                body = file.data() + 10u;
-                bodySize = file.size() - 10u;
-                break;
-            case XnbCompression::Lzx:
-            {
-                if (file.size() < 14u)
-                {
-                    throw ContentLoadException(
-                        "'" + origin + "' is truncated before its decompressed-size field.");
-                }
-                System::IO::MemoryStream sizeStream(file.data() + 10u, 4);
-                System::IO::BinaryReader sizeReader(&sizeStream, true);
-                const std::int32_t decompressedSize = sizeReader.ReadInt32();
-                ownedBody = DecompressXnbPayload(
-                    file.data() + 14u, static_cast<std::int32_t>(file.size() - 14u),
-                    decompressedSize, origin, limits);
-                body = ownedBody.data();
-                bodySize = ownedBody.size();
-                break;
-            }
-            case XnbCompression::Lz4:
-            {
-                if (file.size() < 14u)
-                {
-                    throw ContentLoadException(
-                        "'" + origin + "' is truncated before its decompressed-size field.");
-                }
-                System::IO::MemoryStream sizeStream(file.data() + 10u, 4);
-                System::IO::BinaryReader sizeReader(&sizeStream, true);
-                const std::int32_t decompressedSize = sizeReader.ReadInt32();
-                ownedBody = DecompressXnbLz4Payload(
-                    file.data() + 14u, static_cast<std::int32_t>(file.size() - 14u),
-                    decompressedSize, origin, limits);
-                body = ownedBody.data();
-                bodySize = ownedBody.size();
-                break;
-            }
-            case XnbCompression::Unknown:
-            default:
-                throw ContentLoadException(
-                    "'" + origin + "' has an unrecognized compression flag combination.");
-        }
-        if (bodySize > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
-        {
-            throw ContentLoadException("'" + origin + "' has an oversized XNB body.");
-        }
-
-        System::IO::MemoryStream bodyStream(body, static_cast<std::int32_t>(bodySize));
+        const auto body = container.Bytes();
+        System::IO::MemoryStream bodyStream(
+            body.data(), static_cast<std::int32_t>(body.size()));
         ContentReader reader(
-            nullptr, &bodyStream, origin, header.version, header.platform, nullptr, limits);
+            nullptr, &bodyStream, origin, container.header.version,
+            container.header.platform, nullptr, limits);
         XnbCanonicalReaderAccess::Initialize(reader);
         const XnbTypeReaderTableEntry& root =
             XnbCanonicalReaderAccess::ReadReference(reader);
@@ -296,9 +240,9 @@ namespace CNA::Internal::Xnb
 
         XnbCanonicalAsset result;
         result.rootReader = root.normalizedName;
-        result.platform = header.platform;
-        result.version = header.version;
-        result.compression = header.compression;
+        result.platform = container.header.platform;
+        result.version = container.header.version;
+        result.compression = container.header.compression;
         if (root.normalizedName == "Microsoft.Xna.Framework.Content.Texture2DReader")
         {
             result.value = DecodeTexture2DXnbData(reader);
@@ -412,7 +356,7 @@ namespace CNA::Internal::Xnb
         }
 
         const std::int32_t remaining =
-            static_cast<std::int32_t>(bodySize) - bodyStream.getPositionProperty();
+            static_cast<std::int32_t>(body.size()) - bodyStream.getPositionProperty();
         if (remaining > 0 && remaining <= 3)
         {
             for (std::int32_t index = 0; index < remaining; ++index)
@@ -425,7 +369,7 @@ namespace CNA::Internal::Xnb
                 }
             }
         }
-        if (bodyStream.getPositionProperty() != static_cast<std::int32_t>(bodySize))
+        if (bodyStream.getPositionProperty() != static_cast<std::int32_t>(body.size()))
         {
             throw ContentLoadException(
                 "'" + origin + "' has trailing or unconsumed bytes after its supported root "

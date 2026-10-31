@@ -7,6 +7,7 @@
 #include <thread>
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
+#include "CNA/Internal/Xnb/XnbReadLimits.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ResourceContentManager.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
@@ -69,6 +70,42 @@ namespace
     private:
         std::vector<std::uint8_t> bytes_;
     };
+
+    class OversizedLengthStream final : public System::IO::Stream
+    {
+    public:
+        explicit OversizedLengthStream(bool& readCalled) : readCalled_(readCalled) {}
+
+        System::IO::intcs Read(
+            System::IO::bytecs[], System::IO::intcs, System::IO::intcs) override
+        {
+            readCalled_ = true;
+            return 0;
+        }
+
+        void Close() override {}
+
+        [[nodiscard]] System::IO::intcs getLengthProperty() const override
+        {
+            return CNA::Internal::Xnb::DefaultXnbReadLimits().maxFileSize + 1;
+        }
+
+    private:
+        bool& readCalled_;
+    };
+
+    class OversizedStreamManager final : public ContentManager
+    {
+    public:
+        using ContentManager::ContentManager;
+        bool readCalled = false;
+
+    protected:
+        std::unique_ptr<System::IO::Stream> OpenStream(const std::string&) override
+        {
+            return std::make_unique<OversizedLengthStream>(readCalled);
+        }
+    };
     class ContentStreamRoutingTest : public ::testing::Test
     {
     protected:
@@ -115,6 +152,14 @@ TEST_F(ContentStreamRoutingTest, OrdinaryLoadPreservesTheOverrideException)
     manager.fail = true;
     EXPECT_THROW((void)manager.Load<Payload>("asset"), System::InvalidOperationException);
     EXPECT_EQ(manager.opens, 1);
+}
+
+TEST_F(ContentStreamRoutingTest, OversizedVirtualStreamIsRejectedBeforeReading)
+{
+    OversizedStreamManager manager(nullptr, "unused");
+
+    EXPECT_THROW((void)manager.Load<Payload>("asset"), ContentLoadException);
+    EXPECT_FALSE(manager.readCalled);
 }
 
 TEST_F(ContentStreamRoutingTest, ColdResourceCurveLoadsAndExplicitWithdrawalRemainsEffective)

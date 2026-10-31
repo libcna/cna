@@ -15,6 +15,7 @@
 #include <unordered_map>
 
 #include "CNA/Platform/PlatformTestDecorator.hpp"
+#include "CNA/Internal/Xnb/XnbReadLimits.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
@@ -396,6 +397,20 @@ TEST_F(ContentManagerXnbTest, MalformedXnbHeaderThrowsContentLoadException)
 
     ContentManager cm(nullptr, root.path().string());
 
+    EXPECT_THROW((void)cm.Load<TestValue>("fixture"), ContentLoadException);
+}
+
+TEST_F(ContentManagerXnbTest, OversizedFilesystemXnbIsRejectedBeforeAllocation)
+{
+    ScratchContentRoot root;
+    const auto path = root.path() / "fixture.xnb";
+    std::ofstream file(path, std::ios::binary);
+    ASSERT_TRUE(file.is_open());
+    file.seekp(CNA::Internal::Xnb::DefaultXnbReadLimits().maxFileSize);
+    file.put('\0');
+    file.close();
+
+    ContentManager cm(nullptr, root.path().string());
     EXPECT_THROW((void)cm.Load<TestValue>("fixture"), ContentLoadException);
 }
 

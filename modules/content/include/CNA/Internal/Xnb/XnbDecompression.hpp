@@ -20,7 +20,7 @@ namespace CNA::Internal::Xnb
      * fed to a single `LzxDecoder` instance in turn -- the decoder's sliding window and
      * repeated-offset state persist across blocks within one file, matching FNA/LZX's own
      * stateful, sequential-only decompression model (there is no way to "jump to an offset" in
-     * an LZX-compressed stream; see XNB-61b's own note on this).
+     * an LZX-compressed stream).
      *
      * @param compressedData Pointer to the compressed payload bytes (immediately following the
      *                       10-byte container header and the 4-byte decompressed-size field).

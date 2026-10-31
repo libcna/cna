@@ -140,40 +140,6 @@ namespace Microsoft::Xna::Framework::Content
         rootDirectory_ = std::move(v);
     }
 
-    CNA::Internal::Xnb::XnbHeader ContentManager::ReadXnbHeader(
-        const std::vector<std::uint8_t>& bytes, const std::string& xnbPath)
-    {
-        if (bytes.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max()))
-        {
-            throw ContentLoadException("ContentManager: '" + xnbPath + "' is too large to load.");
-        }
-        CNA::Internal::Xnb::XnbHeader header;
-        try
-        {
-            System::IO::MemoryStream stream(bytes.data(), static_cast<int32_t>(bytes.size()));
-            System::IO::BinaryReader reader(&stream, true);
-            header = CNA::Internal::Xnb::ParseXnbHeader(reader, xnbPath);
-        }
-        catch (const System::IO::IOException& error)
-        {
-            // The low-level parser keeps its EOF contract; XNA wraps I/O at the content-load boundary.
-            throw ContentLoadException("Error loading '" + xnbPath + "'. Invalid XNB header.", error);
-        }
-        // Validate the file's declared range before either loader performs pointer arithmetic.
-        if (header.totalLength < 10 || static_cast<std::size_t>(header.totalLength) > bytes.size())
-        {
-            throw ContentLoadException(
-                "'" + xnbPath + "' declares a totalLength (" + std::to_string(header.totalLength) +
-                ") inconsistent with its actual file size (" + std::to_string(bytes.size()) + ").");
-        }
-        if (header.compression != CNA::Internal::Xnb::XnbCompression::None && header.totalLength < 14)
-        {
-            throw ContentLoadException(
-                "'" + xnbPath + "' is truncated before its compressed-payload size field.");
-        }
-        return header;
-    }
-
     // ---------------------------------------------------------------------------
     // Constructor / lifecycle
     // ---------------------------------------------------------------------------
@@ -266,6 +232,17 @@ namespace Microsoft::Xna::Framework::Content
         try
         {
             std::vector<std::uint8_t> bytes;
+            const auto maxBytes = static_cast<std::size_t>(
+                CNA::Internal::Xnb::DefaultXnbReadLimits().maxFileSize);
+            const auto declaredLength = stream.getLengthProperty();
+            if (declaredLength > 0 &&
+                static_cast<std::size_t>(declaredLength) > maxBytes)
+            {
+                throw ContentLoadException(
+                    "ContentManager: asset '" + assetName +
+                    "' exceeds the maximum XNB file size (" +
+                    std::to_string(maxBytes) + " bytes).");
+            }
             std::array<std::uint8_t, 64 * 1024> buffer{};
             for (;;)
             {
@@ -274,6 +251,13 @@ namespace Microsoft::Xna::Framework::Content
                 if (read <= 0)
                 {
                     break;
+                }
+                if (static_cast<std::size_t>(read) > maxBytes - bytes.size())
+                {
+                    throw ContentLoadException(
+                        "ContentManager: asset '" + assetName +
+                        "' exceeds the maximum XNB file size (" +
+                        std::to_string(maxBytes) + " bytes).");
                 }
                 bytes.insert(bytes.end(), buffer.begin(),
                              buffer.begin() + static_cast<std::ptrdiff_t>(read));
@@ -319,7 +303,10 @@ namespace Microsoft::Xna::Framework::Content
             // manager uses, and it covers the platform's packaged assets and their case-insensitive
             // matching as well as the filesystem. An asset served from a package is as much an
             // asset as one on disk, and a subclass overriding this method inherits neither concern.
-            if (!TryReadAssetBytes(path, bytes))
+            if (!TryReadAssetBytes(
+                    path, bytes,
+                    static_cast<std::size_t>(
+                        CNA::Internal::Xnb::DefaultXnbReadLimits().maxFileSize)))
             {
                 const auto missing = std::make_exception_ptr(ContentLoadException(
                     "ContentManager: could not find asset '" + assetName + "' at '" + path + "'."));
@@ -401,40 +388,35 @@ namespace Microsoft::Xna::Framework::Content
         std::vector<std::string> names;
         try
         {
-            std::ifstream file(xnbPath, std::ios::binary);
+            std::ifstream file(xnbPath, std::ios::binary | std::ios::ate);
             if (!file.is_open())
             {
                 return names;
             }
-            std::ostringstream ss;
-            ss << file.rdbuf();
-            const std::string bytes = ss.str();
-            if (bytes.size() < 10)
+            const std::streamsize length = file.tellg();
+            const auto maxBytes = static_cast<std::uintmax_t>(
+                CNA::Internal::Xnb::DefaultXnbReadLimits().maxFileSize);
+            if (length < 0 || static_cast<std::uintmax_t>(length) > maxBytes)
+            {
+                return names;
+            }
+            std::vector<std::uint8_t> bytes(static_cast<std::size_t>(length));
+            file.seekg(0, std::ios::beg);
+            if (length > 0 &&
+                !file.read(reinterpret_cast<char*>(bytes.data()), length))
             {
                 return names;
             }
 
-            System::IO::MemoryStream headerStream(
-                reinterpret_cast<const uint8_t*>(bytes.data()), static_cast<int32_t>(bytes.size()));
-            System::IO::BinaryReader headerReader(&headerStream, true);
-            const auto header =
-                CNA::Internal::Xnb::ParseXnbHeader(headerReader, CNA::Internal::PathToUtf8(xnbPath));
-
-            if (header.compression != CNA::Internal::Xnb::XnbCompression::None)
-            {
-                // XNB-61b (compressed-file inventory) is unblocked now that Phase D's decompressor
-                // exists, but not yet picked up -- an empty inventory for this one entry is not a
-                // scan failure, matching the same "not implemented yet" treatment for every
-                // compression scheme (Lzx included), not just the ones CNA can't decode at all.
-                return names;
-            }
-
+            const std::string origin = CNA::Internal::PathToUtf8(xnbPath);
+            const auto container = CNA::Internal::Xnb::DecodeXnbContainerBody(
+                std::span<const std::uint8_t>(bytes.data(), bytes.size()), origin);
+            const auto body = container.Bytes();
             System::IO::MemoryStream bodyStream(
-                reinterpret_cast<const uint8_t*>(bytes.data()) + 10,
-                static_cast<int32_t>(bytes.size()) - 10);
+                body.data(), static_cast<std::int32_t>(body.size()));
             System::IO::BinaryReader bodyReader(&bodyStream, true);
             const auto table = CNA::Internal::Xnb::ParseXnbTypeReaderTable(
-                bodyReader, CNA::Internal::PathToUtf8(xnbPath));
+                bodyReader, origin);
             names.reserve(table.size());
             for (const auto& entry : table)
             {
@@ -618,7 +600,9 @@ namespace Microsoft::Xna::Framework::Content
     }
 
     bool ContentManager::TryReadAssetBytes(
-        const std::string& path, std::vector<std::uint8_t>& bytes) const
+        const std::string& path,
+        std::vector<std::uint8_t>& bytes,
+        const std::size_t maxBytes) const
     {
         namespace fs = std::filesystem;
 
@@ -630,8 +614,15 @@ namespace Microsoft::Xna::Framework::Content
 #if defined(__ANDROID__)
         if (native->is_relative())
         {
-            return CNA::Platform::GetCurrentPlatform().GetFileSystem()
+            const bool loaded = CNA::Platform::GetCurrentPlatform().GetFileSystem()
                 ->TryLoadFileIgnoringCase(path, bytes);
+            if (loaded && bytes.size() > maxBytes)
+            {
+                bytes.clear();
+                throw ContentLoadException(
+                    "ContentManager: '" + path + "' exceeds its maximum load size.");
+            }
+            return loaded;
         }
 #endif
         std::error_code ec;
@@ -655,6 +646,12 @@ namespace Microsoft::Xna::Framework::Content
                 throw ContentLoadException(
                     "ContentManager: '" + path + "' is too large to load.");
             }
+            if (static_cast<std::uintmax_t>(length) >
+                static_cast<std::uintmax_t>(maxBytes))
+            {
+                throw ContentLoadException(
+                    "ContentManager: '" + path + "' exceeds its maximum load size.");
+            }
 
             bytes.resize(static_cast<std::size_t>(length));
             file.seekg(0, std::ios::beg);
@@ -666,8 +663,15 @@ namespace Microsoft::Xna::Framework::Content
             return true;
         }
 
-        return CNA::Platform::GetCurrentPlatform().GetFileSystem()
+        const bool loaded = CNA::Platform::GetCurrentPlatform().GetFileSystem()
             ->TryLoadFileIgnoringCase(path, bytes);
+        if (loaded && bytes.size() > maxBytes)
+        {
+            bytes.clear();
+            throw ContentLoadException(
+                "ContentManager: '" + path + "' exceeds its maximum load size.");
+        }
+        return loaded;
     }
 
     std::string ContentManager::NormalizeKey(const std::string& assetName) const
