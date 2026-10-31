@@ -32,7 +32,7 @@ Select it with:
 cmake -S . -B cmake-build-webgpu \
   -DCNA_GRAPHICS_RENDERER=WEBGPU \
   -DCMAKE_BUILD_TYPE=Debug
-cmake --build cmake-build-webgpu -j
+cmake --build cmake-build-webgpu --parallel 8
 ```
 
 CNA pins the native implementation to **wgpu-native v29.0.1.1**. By default CMake downloads the
@@ -64,7 +64,7 @@ cmake -S . -B cmake-build-webgpu \
   -DCNA_BUILD_EXAMPLES=ON \
   -DCMAKE_BUILD_TYPE=Debug \
   -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
-cmake --build cmake-build-webgpu --target cna_demo_2d -j"$(nproc)"
+cmake --build cmake-build-webgpu --target cna_demo_2d --parallel 8
 cd cmake-build-webgpu
 readelf -d ./cna_demo_2d | grep -E 'NEEDED.*wgpu|RUNPATH'
 ldd ./cna_demo_2d | grep libwgpu_native.so
@@ -108,7 +108,7 @@ to the platform-neutral test; only its launcher selects a native driver. The tes
 the failure history and exact SOFTWARE clear/readback pixels.
 This documents existing fallback behavior, not a claim that WebGPU itself rendered without a surface.
 
-## Web / browser target (Emscripten) — in progress
+## Web / browser target (Emscripten)
 
 `WEBGPU` is one renderer identity with two backends, not two renderers. The browser build reuses all
 of `WebGPURenderer.cpp` and every WGSL shader; five seams differ, each behind
@@ -257,7 +257,7 @@ cmake -S . -B cmake-build-webgpu \
   -DCNA_GRAPHICS_RENDERER=WEBGPU \
   -DCNA_BUILD_TESTS=ON \
   -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
-cmake --build cmake-build-webgpu -j"$(nproc)"
+cmake --build cmake-build-webgpu --parallel 8
 tools/platform/run_gpu_tests_private.sh cmake-build-webgpu -L WebGPU --output-on-failure -j1
 ```
 
@@ -349,9 +349,9 @@ cmake -B cmake-build-debug \
   -DCNA_GRAPHICS_RENDERER=WEBGPU \
   -DCNA_WEBGPU_ROOT=/absolute/path/to/cna_graphics/vendor/wgpu-native \
   -DCNA_WEBGPU_AUTO_DOWNLOAD=OFF
-cmake --build cmake-build-debug --target WindowsPhoneSpeedyBlupi -j
+cmake --build cmake-build-debug --target WindowsPhoneSpeedyBlupi --parallel 8
 cd cmake-build-debug
-DISPLAY=:0 ./WindowsPhoneSpeedyBlupi
+../../cna/tools/platform/run_gpu_tests_private.sh --exec ./WindowsPhoneSpeedyBlupi
 ```
 
 The build links `cna_renderer_webgpu` and copies `libwgpu_native.so` beside the executable
@@ -376,7 +376,10 @@ all have since shipped — see the "Important limitations" section below for the
 the frame's own command encoder, `wgpuBufferMapAsync` polling. Because a naive implementation could
 only ever observe the *previous* frame's content on a swapchain-backed target, `Present()` was
 refactored into a shared `EnsureFrameRendered()` so `GetBackBufferData()` can force an on-demand
-render of whatever's queued so far in the current `Draw()` call. New `WebGPU_Clear_Readback` CTest.
+render of whatever is queued so far in the current `Draw()` call. A presentation that nobody reads
+does not copy the backbuffer into staging memory. The first read of a rendered generation performs
+one copy; repeated reads reuse that capture until a new draw generation invalidates it. The
+`WebGPU_Clear_Readback` and `WebGPU_ReadbackCost` CTests cover pixel correctness and this cost model.
 
 Writing that test's alpha case then found and fixed a real, previously-unknown bug (`WEBGPU-132`):
 the `SpriteBatch` pipeline's blend factors didn't match its own shader's non-premultiplied output,
@@ -1650,6 +1653,14 @@ topology -- and is no longer a deviation; see its section above.
   Buffer` returns them after submit instead of releasing, so a warmed scene stops allocating.
   Recycling is fence-free -- the single device queue orders every `wgpuQueueWriteBuffer` write after
   the prior cycle's reads. The SpriteBatch vertex buffer is a 3-slot ring (`WEBGPU-59`).
+- Adjacent stock SpriteBatch commands with identical texture, sampler, blend, viewport, scissor,
+  rasterizer and target state are emitted as one native draw. Texture sorting can therefore turn
+  interleaved compatible sprites into one run per texture. A custom effect, wireframe mode, marker,
+  clear, 3D draw, occlusion-query boundary or any relevant state change remains an explicit run
+  barrier. `WebGPU_SpriteRunCost` checks both draw counts and exact pixels.
+- Native presentation does not stage a backbuffer readback. Staging is created only when
+  `GetBackBufferData()` asks for it and is cached for repeated reads of the same rendered generation;
+  `WebGPU_ReadbackCost` guards the copy count.
 - Pipeline state is largely immutable and cached per family. All 12 3D pipeline families
   (`GetOrCreatePipeline*3D`) share ONE `WGPURenderPipelineDescriptor` assembly,
   `Build3DPipelineEXT(Pipeline3DDescEXT)` (`WEBGPU-29`): each family passes only its vertex layout,
