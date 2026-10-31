@@ -8,8 +8,8 @@
 //
 // Checks A/B are directly ported from the retired Vulkan renderer's
 // vulkan_skinnedeffect_translation_bone_test.cpp / vulkan_skinnedeffect_twobone_blend_test.cpp
-// (same geometry/bone values), using RenderTarget2D::GetData() instead of GetBackBufferData()
-// since this renderer's swapchain-download path segfaults (see SDLGPU-39).
+// (same geometry/bone values), using RenderTarget2D::GetData() so the skinning oracle is
+// independent of presentation and the proxy-backed backbuffer path.
 //
 // Check A -- a single translation bone (index 0, weight 1): a textured quad shifted right by the
 //   bone's translation -- left/right sample points show the cleared background, only the centre

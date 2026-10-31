@@ -3,8 +3,8 @@
 // REAL runtime GLSL->SPIR-V compile via libshaderc (SDL_gpu only accepts precompiled bytecode),
 // not just a "didn't throw" smoke test. Verified end-to-end through the public XNA API:
 // SpriteBatch.Begin(effect) -> Draw() -> End(), reading back the actual rendered pixel via
-// RenderTarget2D::GetData() (RenderTarget2D::GetData() is real, SDLGPU-39; this renderer's
-// swapchain-download path segfaults, see that row).
+// RenderTarget2D::GetData() so the shader oracle is independent of presentation and the
+// proxy-backed backbuffer path.
 //
 // Check A -- IsEffectValid() is true after CompileProgram() -- proves the runtime libshaderc
 //   compile + SDL_CreateGPUShader (both stages) genuinely succeeded, not silently no-op'd.

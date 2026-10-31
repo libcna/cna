@@ -42,10 +42,10 @@ defect still open is in [`../handoff.md`](../handoff.md) §5.1.
 
 | Platform and SDL driver | Evidence |
 |---|---|
-| Linux, Vulkan | The full `SdlGpu_*` registration set, with Vulkan validation errors and warnings fatal (194/194 at the 2026-09-11 sweep). |
-| Windows, Direct3D 12 | MinGW cross-builds under Wine with vkd3d-proton: headless devices and pipelines (`SDLGPU-99`…`SDLGPU-114`) and a real swapchain through a private compositor (`SDLGPU-94`), with D3D12 debug-layer errors and warnings fatal. Not run on Windows hardware. |
-| macOS, Metal | The Mac mini M4 qualification (`AM4-*`, 2026-10-07/08): full tree 10,962/10,962 ([`apple-platforms.md`](apple-platforms.md)). |
-| iOS, Metal | Never built ([`apple-platforms.md`](apple-platforms.md)). |
+| Linux, Vulkan | The full Debug `SdlGpu_*` registration set, with Vulkan validation errors and warnings fatal: 392/392 at the 2026-10-31 sweep, including five declared contract skips. |
+| Windows, Direct3D 12 | MinGW cross-builds under Wine with vkd3d-proton: headless devices and pipelines (`SDLGPU-99`…`SDLGPU-114`) and a real swapchain through a private compositor (`SDLGPU-94`), with D3D12 debug-layer errors and warnings fatal. A hosted native-MSVC smoke workflow exists, but no successful run is recorded and neither route is Windows-hardware qualification. |
+| macOS, Metal | Historical evidence: the Mac mini M4 campaign (`AM4-*`, 2026-10-07/08) passed the full tree 10,962/10,962 before the 2026-10-13 native-renderer retirement. SDLGPU has not been re-qualified on Apple hardware since ([`apple-platforms.md`](apple-platforms.md)). |
+| iOS, Metal | Never successfully built with SDLGPU; the non-gating CI leg is an attempt, not qualification ([`apple-platforms.md`](apple-platforms.md)). |
 | Android, Vulkan | Not qualified (`SDLGPU-96`, [`android-graphics-limitations.md`](android-graphics-limitations.md)). |
 
 ## Design decisions
@@ -67,6 +67,17 @@ defect still open is in [`../handoff.md`](../handoff.md) §5.1.
 - **Immutable sampler and pipeline caches are bounded** to the 256 most recently used entries
   per family; an evicted handle goes through SDL's command-buffer-aware destruction
   (`SDLGPU-126`/`127`).
+- **Backbuffer readback uses a lazy CNA-owned proxy.** SDL's swapchain texture remains write-only,
+  so the first `GetBackBufferData` request enables a readable logical-backbuffer texture. Deferred
+  draws target that texture and presentation blits it to the swapchain; games that never read the
+  backbuffer allocate no proxy and pay no per-frame proxy cost. Readback addresses the requested
+  logical backbuffer rather than a letterboxed or live-window viewport (`GFX-165`, formerly the
+  open swapchain leg of `SDLGPU-39`).
+- **CNJ and native CNB Effect assets are intentionally different contracts.** CNJ carries the
+  renderer-dialect source used by `ShaderEffect`. The CNB container reserves an Effect identifier
+  but defines no asset schema because CNA has not chosen XNA Effect Framework bytecode,
+  renderer-specific source, or a new renderer-neutral payload as that wire contract. Source-to-CNB
+  therefore refuses explicitly; this is not an SDLGPU compatibility failure.
 - **The backbuffer is what was asked for.** The requested `DepthFormat` becomes a real depth
   attachment, and the colour format reports `SurfaceFormat::Color` because SDL's swapchain is
   RGBA8/BGRA8 (`SDLGPU-132`); backbuffer MSAA honours `MultiSampleCount` (`SDLGPU-85`).
@@ -76,7 +87,10 @@ defect still open is in [`../handoff.md`](../handoff.md) §5.1.
 The integration programs are in `modules/renderers/sdl-gpu/examples/` and register as `SdlGpu_*`
 only when `SDLGPU` is the default renderer; the shared renderer-neutral parity fixtures are in
 `modules/graphics/examples/parity/`. Every registration fails on a Vulkan validation or D3D12
-debug-layer error or warning (`SDLGPU-115`).
+debug-layer error or warning when the corresponding debug layer is enabled (`SDLGPU-115`). Test
+counts in the platform table are dated evidence, not a fixed inventory; use
+`ctest -N -R '^SdlGpu_'` in the current build tree. Validation-specific assertions require a Debug
+build, while the same fixtures retain their functional pixel checks in other configurations.
 
 `CNA_SDLGPU_TEST_VIDEO_DRIVER` selects the SDL video driver: `x11` on Linux, which receives
 `CNA_TEST_DISPLAY`, and the native driver elsewhere. `offscreen` and `dummy` clear both `DISPLAY`

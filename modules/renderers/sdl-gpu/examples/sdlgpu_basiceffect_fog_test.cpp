@@ -24,7 +24,7 @@
 //
 // SdlGpu renders into a RenderTarget2D (SurfaceFormat::Color = RGBA8 UNORM, linear -- see
 // sdlgpu_environmentmapeffect_emissive_test.cpp / sdlgpu_envmap_test.cpp) whose GetData readback is
-// the linear byte value directly (the swapchain download path segfaults on this renderer, SDLGPU-39).
+// the linear byte value directly, independent of presentation and the proxy-backed backbuffer path.
 //
 // Exit code 0 = all PASS, 1 = any FAIL, 77 = SKIP (no GPU-backed display).
 

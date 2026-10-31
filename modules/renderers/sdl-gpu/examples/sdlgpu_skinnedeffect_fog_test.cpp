@@ -20,7 +20,7 @@
 //     SAME z=0.45 draw with fog OFF (identical shading, so the only variable is the fog factor).
 //
 // Pre-fix (no fog) every case renders the un-fogged shade, so the half/full checks FAIL and the
-// fog-OFF controls PASS. Linear RenderTarget2D readback (swapchain download segfaults, SDLGPU-39).
+// fog-OFF controls PASS. Linear RenderTarget2D readback keeps the oracle presentation-independent.
 // Exit code 0 = all PASS, 1 = any FAIL, 77 = SKIP.
 
 #include "Microsoft/Xna/Framework/Game.hpp"

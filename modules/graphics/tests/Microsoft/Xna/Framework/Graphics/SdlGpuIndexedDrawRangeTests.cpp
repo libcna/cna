@@ -2,9 +2,9 @@
 // SDLGPU indexed draws must propagate the public startIndex/baseVertex arguments
 // to the native indexed-draw first-index/vertex-offset parameters.
 //
-// SDLGPU implements no backbuffer readback at all, so RenderTarget2D::GetData is this renderer's
-// exact-pixel oracle (the same control the PointList topology fix established). Every test in this file renders
-// into a render target, unbinds it, and reads the target's own pixels back.
+// RenderTarget2D::GetData is this suite's exact-pixel oracle so indexed addressing is measured
+// independently of presentation and SDLGPU's proxy-backed backbuffer path. Every test in this file
+// renders into a render target, unbinds it, and reads the target's own pixels back.
 
 #include <algorithm>
 #include <array>

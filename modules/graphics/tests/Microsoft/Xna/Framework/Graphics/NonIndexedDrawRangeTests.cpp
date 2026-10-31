@@ -23,10 +23,10 @@
 // keeps its exact range therefore leaves both outer regions at the clear colour, while a draw that
 // binds a wider vertex range necessarily lights them.
 //
-// Renderer scope. EasyGL, WebGPU, D3D9 and Software raster render 3D triangles and support
+// Renderer scope. EasyGL, WebGPU, SDLGPU, D3D9 and Software raster render 3D triangles and support
 // backbuffer readback, so they carry the permanent TriangleList coverage. The full five-topology
 // sweep additionally needs PointListEXT, which D3D9 still routes through its triangle-list default
-// (the independent the PointList default fix), so that sweep runs on EasyGL, WebGPU and Software. PointListEXT
+// (the independent PointList default fix), so that sweep runs on EasyGL, WebGPU, SDLGPU and Software. PointListEXT
 // remains extension-only regression coverage; the four classic XNA topologies are required parity
 // behavior.
 
@@ -708,7 +708,7 @@ TEST_F(NonIndexedDrawRangeTest, PersistentDrawHonorsPrimitiveCountAtVertexStartZ
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, SdlGpu, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -739,7 +739,7 @@ TEST_F(NonIndexedDrawRangeTest, PersistentDrawHonorsNonzeroVertexStartToEndOfBuf
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, SdlGpu, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -771,7 +771,7 @@ TEST_F(NonIndexedDrawRangeTest, PersistentDrawHonorsFirstMiddleAndFinalRanges)
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, SdlGpu, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -822,7 +822,7 @@ TEST_F(NonIndexedDrawRangeTest, PersistentDynamicDrawHonorsRangeAndCount)
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, SdlGpu, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -853,7 +853,7 @@ TEST_F(NonIndexedDrawRangeTest, DeferredNonIndexedRangesAtoBtoAKeepTheirOwnRange
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, SdlGpu, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -909,7 +909,7 @@ TEST_F(NonIndexedDrawRangeTest, DeferredRangesSurviveBufferVersionChangesBetween
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, SdlGpu, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -962,7 +962,7 @@ TEST_F(NonIndexedDrawRangeTest, NonIndexedRangeHoldsOnRenderTargetAndBackbuffer)
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, SdlGpu, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -1031,7 +1031,7 @@ TEST_F(NonIndexedDrawRangeTest, DrawUserPrimitivesKeepsItsCopiedExactRange)
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, SdlGpu, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -1060,7 +1060,7 @@ TEST_F(NonIndexedDrawRangeTest, UntypedDrawUserPrimitivesUploadsOnlyTheRequested
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, SdlGpu, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -1091,7 +1091,7 @@ TEST_F(NonIndexedDrawRangeTest, BufferedNonIndexedRangeHandlingMatchesRendererSa
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, SdlGpu, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -1263,7 +1263,7 @@ TEST_F(NonIndexedDrawRangeTest, EverySupportedTopologyHonorsVertexStartAndExactC
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -1321,7 +1321,7 @@ TEST_F(NonIndexedDrawRangeTest, TopologySwitchesKeepTheirOwnRangesInOneFrame)
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();

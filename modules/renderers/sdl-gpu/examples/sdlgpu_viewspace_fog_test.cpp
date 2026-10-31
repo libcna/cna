@@ -5,7 +5,7 @@
 // Z. Every discriminating scene keeps the object-space Z of the sampled vertex fixed while moving the
 // camera/world so the VIEW-SPACE Z changes; the old object-space shaders collapse them all to blue,
 // the corrected view-space shaders track the camera (blue->purple->red). Reads back from a linear
-// RenderTarget2D (the SdlGpu swapchain download path segfaults, SDLGPU-39).
+// RenderTarget2D so the oracle is independent of presentation and backbuffer-proxy behavior.
 //
 // Families: BasicEffect colored3d (full battery) + SkinnedEffect pre-skin discriminator (a Z-translating
 // bone + a Z-translating view; the SdlGpu SkinnedEffect fragment lights rather than adds emissive, so a

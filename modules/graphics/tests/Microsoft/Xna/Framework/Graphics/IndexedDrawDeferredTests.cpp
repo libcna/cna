@@ -447,7 +447,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, SdlGpu, Software);
     RequireIndexedRendering();
 
     const auto center = TriangleAt(0.0f, Color::Lime);
@@ -492,7 +492,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsPositiveBaseVertexWithSixtee
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, SdlGpu, Software);
     RequireIndexedRendering();
 
     const auto red = CenterTriangle(Color::Red);
@@ -633,7 +633,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDynamicDrawCombinesStartBaseCountAndHi
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, SdlGpu, Software);
     RequireIndexedRendering();
 
     const auto ignoredWithoutBase = TriangleAt(-0.75f, Color::Lime);
@@ -690,7 +690,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawTreatsVertexRangesAsHints)
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, SdlGpu, Software);
     RequireIndexedRendering();
 
     const auto decoy = CenterTriangle(Color::Red);
@@ -744,7 +744,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, SdlGpu, Software);
     RequireIndexedRendering();
 
     const auto red = CenterTriangle(Color::Red);
@@ -838,15 +838,10 @@ TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderE
         0,
         1);
 
-    // RTR-P9-5: SDLGPU has no backbuffer readback, so it is the one
-    // renderer with nothing to compare here.
-    if (!CNA_RENDERER_IS(SdlGpu))
-    {
-        ExpectExactColor(
-            ReadCenter(device),
-            Color::Blue,
-            "public static Uint32 values above 65535");
-    }
+    ExpectExactColor(
+        ReadCenter(device),
+        Color::Blue,
+        "public static Uint32 values above 65535");
 }
 
 
@@ -897,7 +892,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, SdlGpu, Software);
     RequireIndexedRendering();
 
     const auto left = TriangleAt(-0.65f, Color::Red);
@@ -967,7 +962,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredStaticVertexAtoBtoAPreservesEveryQueuedV
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, SdlGpu, Software);
     RequireIndexedRendering();
 
     auto sourceA = CenterTriangle(Color::Red);
@@ -1032,7 +1027,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDynamicVertexAtoBtoAPreservesEveryQueued
     // so on every other renderer these tests did not exist and reported nothing.
     // D3D9 is excluded here: this deferred-queue contract was never measured on it, and an
     // unmeasured renderer must not be asserted either way.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, SdlGpu, Software);
     RequireIndexedRendering();
 
     auto sourceA = CenterTriangle(Color::Blue);
@@ -1077,7 +1072,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDistinctIdenticalVertexBuffersRemainInde
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, SdlGpu, Software);
     RequireIndexedRendering();
 
     const auto identical = CenterTriangle(Color::Blue);
@@ -1122,7 +1117,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDynamicIndexAtoBtoAPreservesEveryQueuedV
     // so on every other renderer these tests did not exist and reported nothing.
     // D3D9 is excluded here: this deferred-queue contract was never measured on it, and an
     // unmeasured renderer must not be asserted either way.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, SdlGpu, Software);
     RequireIndexedRendering();
 
     const auto red = CenterTriangle(Color::Red);
@@ -1183,7 +1178,7 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclar
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, SdlGpu, Software);
     RequireIndexedRendering();
 
     auto left = TriangleAt(-0.65f, Color::Red);
@@ -1254,7 +1249,7 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffse
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, SdlGpu, Software);
     RequireIndexedRendering();
 
     auto left = StripTriangleAt(-0.5f, Color::Red);
@@ -1315,7 +1310,7 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, SdlGpu, Software);
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
@@ -1787,7 +1782,7 @@ TEST_F(IndexedDrawDeferredTest, PublicContractSeparatesRequiredCountsFromNativeI
 
 TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedBaseVertex)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, SdlGpu, Software);
     RequireIndexedRendering();
 
     const auto selected = CenterTriangle(Color::Lime);
@@ -1821,7 +1816,7 @@ TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedB
 
 TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedBaseVertex32)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, SdlGpu, Software);
     RequireIndexedRendering();
 
     const auto selected = CenterTriangle(Color::Lime);

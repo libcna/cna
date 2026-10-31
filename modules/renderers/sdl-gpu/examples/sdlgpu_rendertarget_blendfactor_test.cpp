@@ -26,9 +26,8 @@
 // channel, so it also catches a BGRA channel swap (would read 192,128,64), an accidental white
 // constant (255,255,255), and the pre-fix default-zero constant (0,0,0).
 //
-// Readback: SdlGpu cannot download the swapchain (SDLGPU-39), so — like every other SdlGpu pixel
-// test — this renders into a RenderTarget2D and reads it back with RenderTarget2D::GetData() AFTER
-// unbind (the realistic deferred-replay case).
+// Readback deliberately uses RenderTarget2D::GetData() after unbind (the realistic deferred-replay
+// case), keeping this state oracle independent of presentation and backbuffer-proxy behavior.
 //
 //   Frame 4 — three BlendFactors in ONE pass (the per-draw-capture crux, Phase 7): within one RT
 //     pass, using ONE BlendState instance, draw three white quads into three disjoint horizontal

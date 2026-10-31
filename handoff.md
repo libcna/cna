@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- SDLGPU audit reconciliation (`SGPU-06`/`SGPU-07`/`SGPU-08`, 2026-10-31): the lazy
+  logical-backbuffer proxy already closes the old swapchain-readback gap, so SDLGPU now participates
+  in the shared point-list, indexed/non-indexed range and ordinary binding-offset backbuffer
+  matrices instead of retaining stale exclusions. The Uint32-above-65,535 regression now asserts
+  its exact backbuffer pixel on SDLGPU, while renderer-specific render-target fixtures remain as an
+  independent oracle. The renderer guide records the proxy cost model, the intentional CNJ/native
+  CNB Effect contract boundary and the exact limits of Windows/Apple/mobile qualification. A Debug
+  build of `CnaTests` and the affected standalone fixtures succeeded; the focused private-GPU run
+  passed all 80 applicable tests (11 intentional Software-only or unmeasured-instancing skips), and
+  the complete private-GPU `SdlGpu_*` registration set passed 392/392 with five declared contract
+  skips and no graphics-profile deaths.
 - Maintainer study workflow (2026-10-31): `docs/maintainer-study-guide.md` replaces two personal
   August study-plan drafts with a rolling thirteen-week method grounded in current sources of
   truth, `loc.sh`, generated-code boundaries, the current module/renderer set and the private GPU

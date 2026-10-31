@@ -136,13 +136,13 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
                             Software, SdlGpu);
 }
 
-// The renderer set: the above, minus the renderers without backbuffer readback.
+// The renderer set whose ordinary binding-offset route also has exact backbuffer readback.
 /// RTR-P9-5: the same renderer set, evaluated at runtime so this
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryBindingOffsetBackbuffer()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9,
-                            Software);
+                            Software, SdlGpu);
 }
 
 // The instanced suite set: the renderers whose instanced route renders the geometry;

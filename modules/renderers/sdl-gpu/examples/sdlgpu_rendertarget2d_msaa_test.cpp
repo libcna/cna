@@ -4,9 +4,8 @@
 // resolve-on-render-pass-end (the exact mechanism SdlGpuRenderTargetCubeRenderer's own MSAA
 // support, SDLGPU-36, already proved out; this closes the matching RenderTarget2D leg).
 //
-// This renderer has no ReadBackbuffer() yet (SDLGPU-39's swapchain leg is a documented, unresolved
-// segfault), so verification here follows the established convention: real draws with no
-// exception, MultiSampleCount property fidelity, plus sampling the MSAA target via SpriteBatch for
+// Verification deliberately stays on the render-target route: real draws with no exception,
+// MultiSampleCount property fidelity, plus sampling the MSAA target via SpriteBatch for
 // a real screenshot (not just "didn't throw"). All render targets are members (created once in
 // LoadContent(), not Draw()-local) per the real use-after-free finding documented in
 // SDLGPU-37 -- this renderer defers rendering to Present() time, so a target

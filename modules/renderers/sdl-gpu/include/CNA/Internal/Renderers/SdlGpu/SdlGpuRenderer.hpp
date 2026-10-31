@@ -778,10 +778,10 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         CNAEXT [[nodiscard]] const std::shared_ptr<SdlGpuRenderTarget2DState>& State() const { return state_; }
         /**
-         * @brief Real GPU readback of this target's pixels (`SDLGPU-39`) -- reads from the
+         * @brief Real GPU readback of this target's pixels -- reads from the
          * always-single-sample, sampleable color texture (already resolved-into if this target
-         * is MSAA), a texture this renderer fully owns, unlike the swapchain -- so it does not hit
-         * the swapchain-download segfault documented in `SDLGPU-39`.
+         * is MSAA), a texture this renderer fully owns independently of the proxy-backed
+         * backbuffer path.
          * Flushes any pending frame first so the read reflects this frame's draws.
          *
          * Returns true only once the downloaded transfer buffer has been copied into
@@ -944,16 +944,24 @@ namespace CNA::Internal::Renderers::SdlGpu
                    state_->hasStencil;
         }
         /**
-         * @brief Real GPU readback of one face's pixels (pulled forward from `SDLGPU-39` -- this
-         * targets a texture this renderer fully controls, unlike the swapchain-download path that
-         * segfaulted). Flushes any pending frame first so
-         * the read reflects this frame's draws, not stale/uninitialized GPU memory.
+         * @brief Downloads a rectangle from one cube face and mip level through a texture this
+         * renderer fully controls independently of the proxy-backed backbuffer path.
+         *
+         * Flushes pending work so the read reflects this frame's draws. Returns true only once
+         * the download fence has signalled and the whole requested face
+         * rectangle has been copied out of the transfer buffer; false for an empty request or a
+         * mip level or rectangle this target never allocated.
+         *
+         * @param face Cube-face ordinal.
+         * @param level Mip level.
+         * @param x Left edge of the requested rectangle.
+         * @param y Top edge of the requested rectangle.
+         * @param w Requested width.
+         * @param h Requested height.
+         * @param data Destination buffer.
+         * @param dataLength Destination buffer size in bytes.
+         * @return True when the complete rectangle was copied; otherwise false.
          */
-        /// True only once the download fence has signalled and the whole requested
-        /// face rectangle has been copied out of the transfer buffer; false for an empty request.
-        /// Also false for a mip level or rectangle this target never allocated --
-        /// `SDL_DownloadFromGPUTexture` accepts an out-of-range `mip_level` without complaint and
-        /// fills the transfer buffer with whatever it finds, so the guard has to be here.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
         /**

@@ -15,10 +15,10 @@
 // what separates real point topology from a triangle-list approximation covering thousands of
 // pixels.
 //
-// Renderer scope. D3D9, EasyGL, WebGPU and Software render points and support backbuffer readback,
-// so they carry the permanent pixel coverage here. SDLGPU maps PointListEXT natively but
-// implements no backbuffer readback, so it is covered by a separate practical control. The retired
-// VULKAN renderer joined this matrix with GLTF-393; the Direct3D disposition
+// Renderer scope. D3D9, EasyGL, WebGPU, SDLGPU and Software render points and support backbuffer
+// readback, so they carry the permanent pixel coverage here. SDLGPU additionally keeps a
+// render-target control so its native topology is measured through an independent readback route.
+// The retired VULKAN renderer joined this matrix with GLTF-393; the Direct3D disposition
 // closes GLTF-394. SOFTWARE-133 reconciled the oracle after the CPU renderer gained
 // a real point raster path: it now runs the same exact pixel, addressing and graphics-state
 // contract.
@@ -264,8 +264,8 @@ namespace
             device, viewport.getWidthProperty(), viewport.getHeightProperty());
     }
 
-    /// Reads a render target's own rendered pixels directly. Used where a renderer implements
-    /// render-target readback but no backbuffer readback.
+    /// Reads a render target's own rendered pixels directly, independently of presentation and
+    /// backbuffer-proxy behavior.
     FrameSnapshot CaptureRenderTarget(RenderTarget2D& target, int width, int height)
     {
         FrameSnapshot snapshot;
@@ -402,7 +402,7 @@ namespace
     };
 }
 
-#if defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_SOFTWARE)
+#if defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_SDLGPU) || defined(CNA_RENDERER_SOFTWARE)
 
 // The canonical depthless non-indexed case: four points at distinct pixel centres, four distinct
 // colours, one framebuffer snapshot. A triangle-list approximation of this draw fills the whole
@@ -1204,7 +1204,7 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount
 {
     // RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Software);
     RequirePointRendering();
 
     const int width = BackbufferWidth();
@@ -1246,15 +1246,11 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount
 
 
 // The SDL GPU renderer maps PointListEXT to its native point-list topology and consumes exactly
-// primitiveCount vertices/indices, but implements no backbuffer readback. Its practical exact-pixel
-// control therefore runs through RenderTarget2D::GetData, which this renderer does support.
-//
-// Indexed addressing is deliberately exercised only at offset zero here: SDLGPU passes literal
-// 0/0 for first_index and vertex_offset at every native indexed-draw site, so public
-// startIndex/baseVertex do not reach the native draw (the SDLGPU counterpart of
-// the specular/vertex-colour fix/060/107, recorded separately as the indexed startIndex/baseVertex fix). That is an addressing defect, not a
-// topology defect, and is not corrected here. The non-indexed case below does carry a nonzero
-// vertexStart, which this renderer honours.
+// primitiveCount vertices/indices. This renderer-specific control deliberately uses
+// RenderTarget2D::GetData so the same topology is measured independently from the proxy-backed
+// backbuffer route used by the shared matrix above. Nonzero indexed startIndex/baseVertex behavior
+// is covered by SdlGpuIndexedDrawRangeTest; this control combines indexed and non-indexed topology
+// checks in one target.
 TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)
 {
     // RTR-P9-5: was a compile-time fence around this group,

@@ -5,11 +5,10 @@
 // exception. This is the "declare a verified native 2D baseline" gate (SDLGPU-25's own bar,
 // mirroring WEBGPU-124-131's).
 //
-// No pixel-level readback exists yet on this renderer (ReadBackbuffer is not implemented --
-// Phase SDLGPU-8/39), so this test cannot assert exact pixel colors the way the
-// WebGPU smoke tests do. It proves: real texture upload, a real multi-sprite scene
-// (tint/alpha/rotation/flip/sampler variants) drawn over many frames with no crash -- the same
-// bar WEBGPU-126 met before automated GPU readback existed for that renderer.
+// SDLGPU now has proxy-backed pixel readback and dedicated exact-pixel fixtures. This original
+// vertical-slice test remains a sustained public Game/SpriteBatch lifecycle smoke: real texture
+// upload and a multi-sprite scene (tint/alpha/rotation/flip/sampler variants) drawn over many
+// frames with no crash.
 //
 // Check A -- Texture2D::CreateFromPixels() succeeds for a 4x4 per-quadrant-colored texture.
 // Check B -- a SpriteBatch scene mixing tint, alpha, rotation, both flips, and

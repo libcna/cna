@@ -7,8 +7,8 @@
 // (GFX-068 SdlGpu); the only thing under test here is whether the RasterizerState reaches it
 // THROUGH Begin.
 //
-// Everything renders into an off-screen 64x64 RenderTarget2D and is read back with GetData(), the
-// portable path that works even on renderers without GetBackBufferData (SdlGpu). Scene: bind the RT,
+// Everything renders into an off-screen 64x64 RenderTarget2D and is read back with GetData(), a
+// portable path independent of presentation and backbuffer-proxy behavior. Scene: bind the RT,
 // clear GREEN, set ScissorRectangle = top-left 32x32, then a full-target red sprite drawn via
 // SpriteBatch with the scissor RasterizerState supplied ONLY through Begin (never assigned to
 // GraphicsDevice.RasterizerState). Probe the top-left quadrant centre (16,16) and the bottom-right

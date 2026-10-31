@@ -3,11 +3,10 @@
 // COLOR_TARGET|SAMPLER texture rendered into during its own render pass and sampled during a
 // later pass within the same frame (Phase SDLGPU-8's per-target multi-pass EnsureFrameRendered).
 //
-// This renderer does not implement ReadBackbuffer() (SDLGPU-39's swapchain leg is a documented,
-// unresolved segfault), but RenderTarget2D::GetData() itself IS real
-// (SDLGPU-39's RenderTarget2D leg, closed via a real ITextureRenderer::GetData virtual +
+// RenderTarget2D::GetData() is a real target-local readback
+// (implemented through the ITextureRenderer::GetData virtual and
 // SdlGpuRenderTargetRenderer::GetData(), which reads its own self-owned colorTexture_, not the
-// swapchain) -- so Checks E/F/G below assert exact pixel values, not just "didn't throw".
+// proxy-backed backbuffer) -- so Checks E/F/G below assert exact pixel values, not just "didn't throw".
 //
 // Check A -- Clear()-only fill of a RenderTarget2D (no draw call between bind/unbind), then
 //   sampled back via SpriteBatch onto the backbuffer, draws every frame with no exception. This
@@ -229,7 +228,7 @@ protected:
             Check(rtNoMsaa.getMultiSampleCountProperty() == 0,
                   "RenderTarget2D MultiSampleCount request 0 -> applied 0");
 
-            // Check E/F/G: real GetData() pixel assertions (SDLGPU-39's RenderTarget2D leg) --
+            // Check E/F/G: real target-local GetData() pixel assertions --
             // proves the same 3 targets actually contain the expected content, not just that
             // drawing into them didn't throw.
             try

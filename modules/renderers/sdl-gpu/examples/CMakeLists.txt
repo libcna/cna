@@ -681,8 +681,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDLGPU")
 
     # SkinnedEffect world-space normal transform under non-identity World (rotation,
     # non-uniform scale, and both) -- the cases every existing skinned test, all of which use
-    # World = Identity, structurally cannot detect. RenderTarget2D readback (swapchain download
-    # segfaults on this renderer, SDLGPU-39).
+    # World = Identity, structurally cannot detect. RenderTarget2D readback keeps this oracle
+    # independent of presentation and the proxy-backed backbuffer route.
     cna_sdlgpu_test(cna_test_sdlgpu_skinnedeffect_world_normal sdlgpu_skinnedeffect_world_normal_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_SkinnedEffect_WorldNormal COMMAND cna_test_sdlgpu_skinnedeffect_world_normal
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")

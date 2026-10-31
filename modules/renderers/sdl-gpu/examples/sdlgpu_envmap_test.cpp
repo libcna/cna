@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // SDLGPU-33: EnvironmentMapEffect proof for the SDLGPU graphics renderer -- a real
-// cube-map reflection, verified via RenderTarget2D::GetData() pixel readback (SDLGPU-39's
-// RenderTarget2D leg), mirroring the retired Vulkan renderer's
+// cube-map reflection, verified via target-local RenderTarget2D::GetData() pixel readback,
+// mirroring the retired Vulkan renderer's
 // vulkan_environmentmapeffect_amount_one_test.cpp: since the test cubemap is uniformly solid-colored
 // on all 6 faces, the specific reflection direction is irrelevant to the sampled result -- only
 // whether the env-map contribution is really being sampled and blended in at all (as opposed to,

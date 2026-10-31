@@ -4,8 +4,8 @@
 //
 // Same XNA/FNA contract and defect as spritebatch_custom_viewport_test.cpp (see that file's header),
 // but every scene renders into an off-screen RenderTarget2D and reads it back with GetData(). This
-// is for renderers that do not implement GetBackBufferData (SdlGpu) but flush a deferred sprite batch
-// into a RenderTarget2D when it is read back after unbind. Assertions use the RED/BLUE bounding box,
+// remains an independent target-local control even on renderers such as SDLGPU that also implement
+// backbuffer readback. Assertions use the RED/BLUE bounding box,
 // invariant to a renderer's RT-sample Y orientation (width/height/minX and "inside the viewport rect"
 // do not depend on the Y origin; a viewport-relative Y placement stays inside the viewport either way).
 //

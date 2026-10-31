@@ -13,9 +13,9 @@
 // QueuedDrawRef) and applies SDL_SetGPUViewport per draw at replay. A per-pass read of the live
 // Viewport (mirroring the existing per-pass scissor) would be wrong here — see Frame 2.
 //
-// Readback: SdlGpu cannot download the swapchain (SDLGPU-39), so — like every other SdlGpu pixel
-// test — this renders into a RenderTarget2D and reads it back with RenderTarget2D::GetData(), which
-// reads the RT's own colorTexture_. The RT is unbound BEFORE GetData() (matching the real usage the
+// Readback deliberately uses RenderTarget2D::GetData(), which reads the RT's own colorTexture_ and
+// keeps the viewport oracle independent of presentation and backbuffer-proxy behavior. The RT is
+// unbound BEFORE GetData() (matching the real usage the
 // existing sdlgpu_rendertarget2d_test exercises), which is precisely what makes the per-draw capture
 // necessary rather than a per-pass live-state read.
 //
