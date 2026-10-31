@@ -57,7 +57,7 @@ selected internal driver.
 | Instanced drawing | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙ compiled-effect shader + driver |
 | Occlusion queries | ◇ exact or boolean by GL profile | ⚙ exact or visibility-only by adapter | ❌ | ✅ exact CPU count | ✅ | ⚙ selected driver |
 | Float and half-float render targets | ⚙ per format/context | ⚙ per format/adapter feature | ❌ | ✅ | ❌ | ⚙ per format/driver |
-| CNAEXT source `ShaderEffect` execution | ✅ GLSL / GLSL ES | ✅ WGSL | ⚙ SPIR-V intake build | ❌ | ✅ HLSL | ❌ |
+| CNAEXT `ShaderEffect` execution | ✅ GLSL / GLSL ES | ✅ WGSL | ✅ SPIR-V package; ⚙ GLSL text | ❌ | ✅ HLSL | ❌ |
 | Compiled XNA Effect bytecode | ⚙ opt-in | ⚙ opt-in | ⚙ opt-in | ⚙ opt-in | ⚙ opt-in | ✅ always on |
 
 Compiled-effect support is controlled independently for each opt-in family and is off by default:
@@ -66,12 +66,15 @@ Compiled-effect support is controlled independently for each opt-in family and i
 `CNA_DIRECTX9_COMPILED_EFFECTS`. [`fx-compiled-effects.md`](fx-compiled-effects.md) defines the
 shared bytecode, reflection, pass, state and draw contract.
 
-`ShaderEffect` is a separate CNA extension. SDLGPU's public SPIR-V intake exists only in builds
-with `CNA_SDLGPU_SHADER_EFFECTS`; platform/compiler gates can make that option unavailable.
-Software deliberately does not execute source text, while FNA3D accepts compiled Effect bytecode
-rather than GLSL/HLSL source. DirectX9's verified runtime path reports HLSL, accepts its vertex and
-fragment stages, and marks both source execution and `ShaderDialectHlsl` supported in the detailed
-profile.
+`ShaderEffect` is a separate CNA extension. With `CNA_CNAEXT=ON`, SDLGPU's explicit SPIR-V package
+intake exists on a live device without runtime `shaderc` and routes through ShaderCross when the
+selected SDL driver does not consume SPIR-V directly; only its legacy GLSL-text compilation is
+conditional on the build-derived `CNA_SDLGPU_SHADER_EFFECTS` definition. Software deliberately
+does not execute the supplied payload, while FNA3D accepts compiled Effect bytecode instead.
+DirectX9's verified runtime path reports HLSL, accepts its vertex and fragment stages, and marks
+both source execution and `ShaderDialectHlsl` supported in the detailed profile. The full
+eight-family distinction between acceptance, exact language intake and execution is
+[`shader-effect-vs-fx-bytecode.md`](shader-effect-vs-fx-bytecode.md).
 
 ## Non-raster identities
 

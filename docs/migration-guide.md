@@ -94,8 +94,10 @@ alias: change selector values from `SDL_GPU` to `SDLGPU`, `CNA_RENDERER_SDL_GPU`
   default; a build without that runtime rejects the constructor explicitly instead of substituting
   a stock shader.
 - **SDLGPU** is the modern native path (SDL's Vulkan, Direct3D 12 and Metal backends) and the
-  default on Windows, macOS and iOS; `ShaderEffect` is compiled out of it on Windows, Apple and
-  Emscripten, and it has no occlusion queries.
+  default on Windows, macOS and iOS. Its legacy `ShaderEffect` GLSL-text compiler is absent on
+  Windows, Apple and Emscripten, but with `CNA_CNAEXT=ON` an explicit `ShaderPackageEXT` can still
+  select the SPIR-V route on a live device; query `SupportsShaderLanguageEXT()` rather than
+  inferring this from the platform. SDLGPU has no occlusion queries.
 
 ## What fully works today
 
@@ -224,7 +226,7 @@ docs). Legend: ✅ ports as-is (after the property rewrite) · ⚠️ ports with
 | `Draw(Texture2D, Rectangle destination, Rectangle? source, Color, rotation, origin, SpriteEffects, layerDepth)` | ✅ **fixed, Task 922** (2026-07-09) | The real overload now takes an optional `std::optional<Rectangle> sourceRectangle`, matching FNA's `Rectangle?` exactly. Previously this was a `CNAEXT`-marked near-equivalent with a required `Rectangle` source parameter — not a drop-in signature match — found while verifying this checklist against the real header. |
 | `SpriteSortMode` (all 4 values) | ✅ | |
 | `transformMatrix` in `Begin()` | ✅ | |
-| Custom `Effect` via `Begin(effect)` | ⚠️ | Works on EasyGL; a custom `ShaderEffect` is compiled out of `SDLGPU` on Windows, Apple and Emscripten. |
+| Custom `Effect` via `Begin(effect)` | ⚠️ | Compiled `.fxb` requires FNA3D or the renderer's compiled-effect option. `ShaderEffect` is a separate CNAEXT path: SDLGPU's legacy GLSL-text compiler is absent on Windows, Apple and Emscripten, while its `CNA_CNAEXT=ON` SPIR-V package intake is queried separately. |
 | `DrawString` (6 overloads) | ✅ | |
 
 **`SpriteFont`**

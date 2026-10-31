@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- `ShaderEffect`/compiled-effect support-document reconciliation (2026-10-31): the old
+  `CNAEXT::ShaderEffect`, six-stock-effect and renderer-unspecified snapshot is now the current
+  two-contract guide. It names the real XNA-namespace `CNAEXT` type, the five public stock effects,
+  the `CNA_CNAEXT` gate for typed code/packages and all eight renderer-family boundaries for legacy
+  acceptance, exact dialect intake, actual shader execution and compiled `.fxb` support. The same
+  audit corrected SDLGPU documentation: typed SPIR-V intake does not require runtime `shaderc` and
+  can use ShaderCross, while only the legacy GLSL-text route is compiler/build-conditional. Focused
+  validation passes 33 tests across EasyGL, WebGPU, SDLGPU, Software, DirectX9, FNA3D and HEADLESS;
+  that includes a rebuilt `CNA_CNAEXT=ON` SDLGPU typed-package pixel conformance test. The renderer
+  identity consistency check also passes.
 - `OcclusionQuery` support-document reconciliation (2026-10-31): the old four-renderer snapshot is
   now a current eight-family contract. It preserves the recovered XNA lifecycle, adds the shared
   overlapping-interval coordinator and signed-`DWORD`/boolean aggregation rules, distinguishes
@@ -669,9 +679,11 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   native Windows hardware qualification, a re-run on Apple hardware, and any iOS build (`SDLGPU`
   has never been built for iOS; CI tries it
   as a non-gating leg). Known gaps against the retired native backends, each to be implemented or
-  capability-gated in that campaign: `ShaderEffect` (`CustomEffects`) is compiled out on Windows,
-  Apple and the browser because no runtime GLSL-to-SPIR-V-to-DXIL/MSL path exists; occlusion queries
-  are unavailable (SDL_gpu 3.5 has none). `RendererFeature::BaseInstanceDrawing` is implemented by
+  capability-gated in that campaign: the legacy `ShaderEffect` GLSL-text route (`CustomEffects`)
+  is compiled out on Windows, Apple and the browser because no runtime GLSL compiler is present;
+  with `CNA_CNAEXT=ON`, explicitly typed SPIR-V remains available on a live SDLGPU device and uses
+  ShaderCross for D3D12/Metal. Occlusion queries are unavailable (SDL_gpu 3.5 has none).
+  `RendererFeature::BaseInstanceDrawing` is implemented by
   `SDLGPU` since RRC-043 (its stock, instanced-matrix and compiled-effect routes expand per-instance
   streams on the host from the first instance); no other survivor claims it.
 - iOS has simulator smoke evidence only, with `SOFTWARE`.

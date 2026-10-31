@@ -17,10 +17,14 @@ rows as `SDLGPU-nnn`.
 | `CNA_SDLGPU_COMPILED_EFFECTS` | OFF | Runs compiled XNA `Effect` bytecode through MojoShader's SDL_GPU adapter (`FX-061`); with ShaderCross on, the same route reaches D3D12 and Metal (`SDLGPU-93`). |
 
 The stock shaders are GLSL under `src/shaders/`, compiled by `compile_shaders.py` (libshaderc) into
-the committed `spirv_shaders.hpp`; regenerate it after editing a `.glsl` file. The CNAEXT
-`ShaderEffect` takes raw SPIR-V and is available only where a target-native GLSL→SPIR-V compiler
-and a SPIR-V driver exist, so it is off on Windows, Apple and Emscripten (`SDLGPU-97`). Its binding
-layout is [`sdlgpu-shader-effect-layout.md`](sdlgpu-shader-effect-layout.md).
+the committed `spirv_shaders.hpp`; regenerate it after editing a `.glsl` file. CNAEXT
+`ShaderEffect` has two distinct routes. With `CNA_CNAEXT=ON`, an explicit `ShaderCodeEXT` or
+`ShaderPackageEXT` supplies SPIR-V directly in every live SDLGPU build; the renderer remaps its
+descriptors and uses ShaderCross when the selected SDL driver needs DXBC or MSL. The legacy string
+constructor accepts GLSL text only in builds with the derived `CNA_SDLGPU_SHADER_EFFECTS`
+definition and runtime `libshaderc`; that route is off on Windows, Apple and Emscripten
+(`SDLGPU-97`). Its binding layout is
+[`sdlgpu-shader-effect-layout.md`](sdlgpu-shader-effect-layout.md).
 
 ## Parity with EasyGL
 

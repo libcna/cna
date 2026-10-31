@@ -1,24 +1,105 @@
-# `ShaderEffect` vs. compiled XNA `.fx` bytecode
+# `ShaderEffect` vs. compiled XNA `.fxb` bytecode
 
-CNA has two deliberately separate custom-shader contracts. Query the matching capability; support
-for one never implies support for the other.
+Status: reconciled with the public API, all eight renderer families and live capability queries on
+**2026-10-31**.
 
-| API | Input | Capability | Current renderer support |
+CNA has two deliberately separate custom-shader contracts. Support for one never implies support
+for the other.
+
+| Contract | Public API | Input | Primary capability |
 |---|---|---|---|
-| `CNAEXT::ShaderEffect` | Caller-authored GLSL, SPIR-V, or another backend-native source pair | `CustomEffects` | Renderer-specific |
-| `Effect(GraphicsDevice&, byte[])` | XNA/FNA Direct3D 9 Effect Framework binary (`.fxb`, normally stored in XNB) | `CompiledEffects` | FNA3D; SDLGPU, EasyGL/OpenGL, WebGPU, Software and DirectX 9 behind their own `CNA_<RENDERER>_COMPILED_EFFECTS` build options |
+| Renderer-dialect shader | `Microsoft::Xna::Framework::Graphics::ShaderEffect` (a `CNAEXT` type) | An untyped vertex/fragment payload pair, or explicitly typed `ShaderCodeEXT`/`ShaderPackageEXT` variants when `CNA_CNAEXT=ON` | See the four `ShaderEffect` queries below |
+| Compiled XNA Effect | `Effect(GraphicsDevice&, byte[])` | Direct3D 9 Effect Framework bytecode (`.fxb`, normally stored in XNB) | `CompiledEffects` |
 
-The six stock effects remain portable CNA APIs and do not require either custom-effect capability.
+The five public XNA stock effects -- `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`,
+`EnvironmentMapEffect` and `SkinnedEffect` -- use renderer-owned implementations and require
+neither custom-shader capability. `SpriteEffect` is an internal compiled runtime asset, not a
+sixth public stock effect.
 
-The full porter-facing guide to the compiled path -- loading, reflection, parameters, passes, pass
-state, samplers, clone, lifetime, the renderer matrix, every error message, and XNA-to-CNA
-migration -- is [`fx-compiled-effects.md`](fx-compiled-effects.md).
+The complete porter-facing guide to the compiled path -- loading, reflection, parameters, passes,
+pass state, samplers, cloning, lifetime, error handling and migration -- is
+[`fx-compiled-effects.md`](fx-compiled-effects.md).
 
-## Compiled effects on FNA3D
+## Querying `ShaderEffect` support
 
-FNA3D already owns the MojoShader integration used by FNA. CNA uses that same device-local path to
-parse reflection, translate the embedded Shader Model 2/3 programs for the selected FNA3D driver,
-apply pass state, and bind samplers. It does not reinterpret a compiled effect as `ShaderEffect`.
+Do not infer shader support from the renderer identity, especially in a multi-renderer build. Ask
+the live `GraphicsDevice`:
+
+- `SupportsCapability(GraphicsCapability::CustomEffects)` is the legacy broad answer for accepting
+  the untyped string constructor. It does not prove that supplied text determines pixels.
+- `GetShaderDialectEXT()` is the coarse payload dialect requested by the active renderer.
+- `SupportsShaderLanguageEXT(language, stage)` is the exact query used when selecting an explicit
+  `ShaderCodeEXT` or `ShaderPackageEXT` variant.
+- `ExecutesShaderEffectSourceEXT()` distinguishes a real custom shader path from validation,
+  tracing or fixed shading. A true answer still requires a valid, supported payload.
+- `SupportsCapability(GraphicsCapability::CompiledEffects)` is independent and applies only to
+  Effect Framework bytecode.
+
+The exact language and dialect queries exist independently of the optional engine layer. The
+`ShaderCodeEXT` and `ShaderPackageEXT` types, and the corresponding `ShaderEffect` constructors,
+are compiled only with `CNA_CNAEXT=ON`.
+
+The direct execution query is intentionally separate from `CustomEffects`. Most notably, HEADLESS
+accepts legacy objects but produces no pixels, while an SDLGPU build without runtime GLSL
+compilation can still execute an explicitly typed SPIR-V package.
+
+## Current `ShaderEffect` matrix
+
+The three EasyGL identities (`OPENGLES3`, `OPENGL33` and `WEBGL2`) share one implementation, so
+the ten public renderer identities reduce to the eight implementation families below.
+
+| Renderer family | Legacy `CustomEffects` | Exact typed intake (`CNA_CNAEXT=ON`) | Executes accepted payload? | Boundary |
+|---|---:|---|---:|---|
+| EasyGL | ✅ | Desktop GLSL or GLSL ES, matching the live profile | ✅ | Compiles and executes GLSL; `GetShaderDialectEXT()` distinguishes the two profiles. |
+| WebGPU | ✅ | WGSL | ✅ | Compiles and executes WGSL on a live device. |
+| SDLGPU | ⚙ | SPIR-V | ✅ | The explicit SPIR-V package path exists on every live SDLGPU build and uses ShaderCross when the selected SDL driver cannot consume SPIR-V directly. Legacy GLSL strings additionally require the build-derived `CNA_SDLGPU_SHADER_EFFECTS` definition and runtime `libshaderc`. |
+| Software | ❌ | None (`Unknown`) | ❌ | Its resource object may retain source for compatibility, but the fixed CPU rasterizer never executes it. |
+| DirectX9 | ✅ | HLSL | ✅ | Uses `D3DCompile`; HiDef targets `vs_3_0`/`ps_3_0` and Reach targets `vs_2_0`/`ps_2_0`. |
+| FNA3D | ❌ | None (`Unknown`) | ❌ | FNA3D's shader entry point consumes compiled Effect Framework bytecode instead. |
+| Headless | ✅ | None (`Unknown`) | ❌ | Accepts nonempty legacy payloads for validation and trace recording; there are no pixels. |
+| Stub | ❌ | None (`Unknown`) | ❌ | No custom-shader renderer is created. |
+
+For the legacy string constructor, the two strings are untyped. The application must first query
+the renderer dialect and supply the expected representation. The explicit code/package
+constructors instead retain a language and stage, require vertex and fragment variants in the same
+language with the `main` entry point, and select only a pair that the live device reports through
+`SupportsShaderLanguageEXT()`.
+
+That distinction matters most on SDLGPU. With `CNA_CNAEXT=ON`, its public typed dialect is SPIR-V
+and the code/package route does not need a runtime source compiler. The optional legacy route takes
+GLSL text and compiles it to SPIR-V; it is unavailable where the build cannot provide target-native
+`libshaderc`. The descriptor and coordinate contracts for both routes are documented in
+[`sdlgpu-shader-effect-layout.md`](sdlgpu-shader-effect-layout.md).
+
+## Compiled XNA effects
+
+Compiled effects are a separate runtime with their own capability gate:
+
+| Renderer family | `CompiledEffects` |
+|---|---|
+| FNA3D | ✅ Always enabled |
+| EasyGL | ⚙ `CNA_EASYGL_COMPILED_EFFECTS` (off by default) |
+| WebGPU | ⚙ `CNA_WEBGPU_COMPILED_EFFECTS` (off by default) |
+| SDLGPU | ⚙ `CNA_SDLGPU_COMPILED_EFFECTS` (off by default) |
+| Software | ⚙ `CNA_SOFTWARE_COMPILED_EFFECTS` (off by default) |
+| DirectX9 | ⚙ `CNA_DIRECTX9_COMPILED_EFFECTS` (off by default) |
+| Headless | ❌ |
+| Stub | ❌ |
+
+FNA3D owns the MojoShader integration used by FNA. CNA uses that same device-local path to parse
+reflection, translate the embedded Shader Model 2/3 programs for the selected FNA3D driver, apply
+pass state and bind samplers. It never reinterprets a compiled effect as `ShaderEffect`.
+
+The five opt-in rasterizing families use the same public contract and quality gate. MojoShader is
+an additional dependency for the families that do not otherwise need it. With the matching option
+off, the renderer reports `CompiledEffects == false` and refuses construction rather than parsing
+only metadata or substituting a stock shader. [`fx-compiled-effects.md`](fx-compiled-effects.md)
+§10 is the detailed source of truth for each implementation and its remaining input restrictions.
+
+### Loading and use
+
+The byte-array constructor accepts XNA/FNA Direct3D 9 Effect Framework binaries, including the XNA
+4 wrapper understood by MojoShader:
 
 ```cpp
 std::vector<SharpRuntime::bytecs> bytes = ReadAllBytes("BloomExtract.fxb");
@@ -34,67 +115,43 @@ for (auto& pass : effect.getCurrentTechniqueProperty()->getPassesProperty())
 ```
 
 The reflected graph includes parameters, array elements, structure members, annotations,
-techniques, and passes. Numeric values preserve Effect Framework register padding; texture
+techniques and passes. Numeric values preserve Effect Framework register padding; texture
 parameters are connected to their sampler declarations rather than guessed by uniform name.
 `Clone()` creates independent native and public value storage and preserves the selected
-technique.
+technique. `SpriteBatch.Begin(..., &effect)` executes every pass and, as in FNA, binds its sprite
+texture to slot zero after each pass is applied.
 
-`SpriteBatch.Begin(..., &effect)` also executes every pass of a compiled effect. As in FNA,
-SpriteBatch binds its sprite texture to slot zero after each pass is applied.
-
-## Loading from XNB
-
-The canonical `Microsoft.Xna.Framework.Content.EffectReader` is registered by the built-in XNB
-reader set and returns `std::shared_ptr<Effect>`:
+The built-in `Microsoft.Xna.Framework.Content.EffectReader` loads the same payload from XNB and
+returns `std::shared_ptr<Effect>`:
 
 ```cpp
 auto effect = content.Load<std::shared_ptr<Effect>>("Effects/BloomExtract");
 ```
 
 The reader bounds the length prefix at 64 MiB, requires an exact payload read, assigns the asset
-name, and wraps construction failures in `ContentLoadException` with asset context. On a renderer
-whose `CompiledEffects` capability is false, the same asset fails explicitly; it is never replaced
-with a stock shader.
+name and wraps construction failures in `ContentLoadException` with asset context.
 
-## Accepted and rejected formats
+### Refused input
 
-The byte-array constructor accepts the XNA/FNA Direct3D 9 Effect Framework format, including the
-XNA 4 wrapper understood by MojoShader. It rejects:
+The byte-array constructor rejects:
 
 - empty or structurally truncated input;
 - input larger than 64 MiB;
 - impossible wrapper offsets or unreasonable top-level reflection counts;
-- MonoGame `MGFX`/`mgfxo`, which is a distinct container and needs a separate future runtime;
-- a valid FX binary on any backend that reports `CompiledEffects == false`.
+- MonoGame `MGFX`/`mgfxo`, which is a different container;
+- a valid FX binary when the active renderer reports `CompiledEffects == false`.
 
-Malformed content and an unsupported backend are intentionally distinguishable:
-`ArgumentException` identifies invalid FX input, while `NotSupportedException` identifies a
-format/backend mismatch. The XNB reader translates either into an asset-scoped
-`ContentLoadException`.
+Malformed content and an unsupported renderer are distinguishable: `ArgumentException` identifies
+invalid FX input, while `NotSupportedException` identifies a format/renderer mismatch. The XNB
+reader translates either into an asset-scoped `ContentLoadException`. There is no silent fallback
+from either custom-shader contract to a stock effect.
 
-## The other renderers
+## Sources of truth
 
-Besides `FNA3D`, every renderer with a `CNA_<RENDERER>_COMPILED_EFFECTS` build option has a
-compiled-effect runtime: `SDLGPU`, the EasyGL/OpenGL family, WebGPU, Software and DirectX 9.
-MojoShader is a fetched dependency those renderers do not otherwise need. With the option off they report
-`CompiledEffects == false` and refuse, exactly like any unsupported backend.
-`fx-compiled-effects.md` §10 carries the current matrix and each backend's remaining refusals.
-
-Every other renderer inherits the common `CreateCompiledEffect()` refusal and reports
-`CompiledEffects == false`. This is the correct quality gate: parsing metadata alone, translating
-only one shader stage, ignoring pass state, or falling back to pass zero is not advertised as
-support. The gate was widened in 2026-08-17's repair pass after three backends were found passing
-it while several of their draw routes still rendered with a stock shader -- the shared suite now
-reads pixels back for every draw shape it covers.
-
-Future programmable backends should implement the renderer-neutral `ICompiledEffectRuntime` and
-pass the same reflection, mutation, clone, draw, SpriteBatch, state, sampler, malformed-input, and
-lifecycle suite before enabling the capability. The rollout was tracked as `FX-nnn` tasks (Git history); the current
-per-renderer state is [`fx-compiled-effects.md`](fx-compiled-effects.md) §10.
-
-## `ShaderEffect` remains useful
-
-Use `ShaderEffect` when the port owns backend-specific shader source or bytecode and does not need
-XNA Effect Framework techniques, passes, annotations, or pass state. Its support matrix is
-independent, so code should query `CustomEffects` and supply the source dialect required by the
-selected renderer.
+- [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md) is the high-level
+  renderer comparison.
+- [`renderer-capability-profiles.md`](renderer-capability-profiles.md) documents the live query
+  model.
+- [`fx-compiled-effects.md`](fx-compiled-effects.md) owns compiled-effect runtime details.
+- Each renderer page owns its platform, driver and build restrictions; current defects live only
+  in [`handoff.md` §5](../handoff.md#5-known-bugs-and-limitations).

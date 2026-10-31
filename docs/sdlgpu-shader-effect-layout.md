@@ -1,8 +1,10 @@
 # SDLGPU ShaderEffect source and bytecode layout
 
-`ShaderEffect` is a CNA extension, not XNA compiled-effect bytecode. Its SDLGPU
-source route requires the optional target-native GLSL compiler. Query the renderer's
-capability profile; source shaders remain unavailable on builds without that compiler.
+`ShaderEffect` is a CNA extension, not XNA compiled-effect bytecode. Its SDLGPU legacy GLSL-text
+route requires the optional target-native compiler, but with `CNA_CNAEXT=ON` an explicitly typed
+`ShaderCodeEXT` or `ShaderPackageEXT` can supply SPIR-V without runtime `shaderc`. Query
+`GetShaderDialectEXT()` and `SupportsShaderLanguageEXT()` for the package route; `CustomEffects`
+describes the legacy string route and can therefore be false while SPIR-V intake remains available.
 
 GLSL 450 source and portable SPIR-V now share descriptor reflection. CNA uses the
 resources actually declared, remaps them into SDL's dense per-stage slots, and retains

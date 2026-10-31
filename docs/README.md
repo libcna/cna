@@ -126,9 +126,9 @@ original phase closed — check each file's own status banner/date.
 - `texture-stream-formats.md` — public PNG/JPEG/GIF and explicit DDS decoding contract.
 - `vertex-format-support.md` — cross-renderer vertex declaration, format and semantic mapping,
   reconciled 2026-10-31.
-- `shader-effect-vs-fx-bytecode.md` — custom GLSL `ShaderEffect` versus compiled XNA effect
-  bytecode, and which renderers execute the latter; `fx-compiled-effects.md` is the complete
-  porter-facing guide to the compiled path.
+- `shader-effect-vs-fx-bytecode.md` — reconciled 2026-10-31: renderer-dialect `ShaderEffect`
+  acceptance, exact dialect and real execution across all eight families versus compiled XNA
+  effect bytecode; `fx-compiled-effects.md` is the complete guide to the compiled path.
 
 ## Platform / renderer limitations
 
