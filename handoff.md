@@ -35,6 +35,12 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Graphics-resource documentation cleanup (2026-10-31): the obsolete Task 211 FNA audit was
+  retired after its valid metadata and lifetime contract moved into the current
+  `graphics-resource-lifetime.md`. That document now matches measured XNA disposal-event ordering,
+  exception-safe deregistration and the implemented cross-device move/tracking transfer; the
+  XNA-over-FNA decision has a permanent ledger entry. The focused private-GPU lifecycle slice
+  passes 27/27 tests.
 - DualTextureEffect support-document reconciliation (2026-10-31): Task 889 is no longer described
   as an open EasyGL `VertexColorEnabled` defect; the support matrix and migration guide now point
   to its implemented colored-shader path and discriminating EasyGL/SDLGPU/WebGPU coverage. The

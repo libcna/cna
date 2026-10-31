@@ -1,8 +1,12 @@
-# Graphics Resource Lifetime Rules
+# Graphics resource lifetime rules
 
 This document describes how GPU resources are created, tracked, and destroyed in CNA.
 It applies to `Texture2D`, `VertexBuffer`, `IndexBuffer`, `RenderTarget2D`, and any
 future class that inherits `GraphicsResource` and holds a renderer handle.
+
+This is the current source of truth, reconciled against the implementation and regressions on
+2026-10-31. The earlier per-class FNA audit was retired because its pre-tracking gap analysis and
+FNA-derived disposal ordering no longer described CNA or measured Microsoft XNA 4.0 behavior.
 
 Section 1 states the rules every renderer follows for ordering, deferred-command retention,
 synchronization and native-handle retirement. Where an older renderer note disagrees, section 1
@@ -92,6 +96,14 @@ wrapper releases it. That renderer-internal record is not a second public owner:
 a command accepted before `Dispose()` cannot dereference a dead wrapper or free a handle still in
 flight.
 
+### Public metadata and base behavior
+
+- `GraphicsDevice` is a non-owning pointer to the device that tracks the resource.
+- `Name` is an ordinary string. `ToString()` returns `Name` when non-empty and otherwise the
+  resource's type name.
+- `Tag` is a non-owning `System::Object*`; the caller retains the pointed-to object's lifetime.
+- `IsDisposed` is false initially and becomes true exactly once. A second `Dispose()` is a no-op.
+
 ---
 
 ## 3. When Public and Native Ownership End
@@ -110,6 +122,18 @@ void VertexBuffer::Dispose(bool disposing)
 Resetting the renderer object may destroy an unused native handle immediately or enqueue its native
 record for fence/completion-safe retirement. The native handle is never promised to disappear at
 the instant the public object becomes disposed.
+
+The base disposal order follows measured Microsoft XNA 4.0 behavior, which differs from FNA:
+
+1. publish `IsDisposed == true`;
+2. on explicit disposal, raise `Disposing` with the resource as sender;
+3. raise the owning device's `ResourceDestroyed` event;
+4. remove the resource from device tracking.
+
+Publishing the state first makes recursive disposal harmless. If either callback throws, CNA still
+removes the tracking entry before propagating the exception, and a later `Dispose()` does not raise
+the event again. The permanent XNA-over-FNA decision and regression are recorded in
+`xna-fna-behavior-decisions.md`.
 
 The destructor calls `Dispose(false)`, so if the user forgets to call `Dispose()` the wrapper's
 renderer-side ownership is still released eventually. The `Disposing` event is not fired on that
@@ -177,13 +201,13 @@ System::EventHandler<ResourceDestroyedEventArgs> ResourceDestroyed;
 
 - `ResourceCreated` is raised in the `GraphicsResource` constructor, **after**
   `AddResourceReference`.
-- `ResourceDestroyed` is raised in `GraphicsResource::Dispose(bool)`, **before**
-  `RemoveResourceReference`.
+- `ResourceDestroyed` is raised in `GraphicsResource::Dispose(bool)`, after the disposed state is
+  published and **before** `RemoveResourceReference`.
 
 Both events are skipped if no handlers are subscribed (`EventHandler::Empty()` check).
 
-`ResourceDestroyedEventArgs` carries the resource's `Name` string and `Tag` pointer
-at the time of disposal — captured before `isDisposed_` is set.
+`ResourceDestroyedEventArgs` carries the resource's `Name` string and `Tag` pointer at the time of
+disposal. Publishing `IsDisposed` does not erase either value.
 
 Resources constructed without a device (e.g. `BlendState` default instances) do not
 register, do not fire `ResourceCreated`, and do not fire `ResourceDestroyed`.
@@ -210,15 +234,19 @@ VertexBuffer::VertexBuffer(VertexBuffer&&) noexcept = default;
 VertexBuffer& VertexBuffer::operator=(VertexBuffer&&) noexcept = default;
 ```
 
-After a move, calling `Dispose()` on the moved-from object is safe: `renderer_.reset()`
-on a null `unique_ptr` is a no-op.
+`GraphicsResource` transfers the device's tracking entry from the source address to the destination
+address. The moved-from base is detached from its device, clears its non-owning tag and becomes an
+inert disposed wrapper, so its destructor cannot unregister or dispose the live destination.
 
-The `GraphicsResource` base's `resources_` pointer entry is **not** updated during a
-move. If you move a tracked resource, the device still holds the original address.
-Avoid moving tracked resources out of their original storage location.
+Move assignment across devices first unregisters and unbinds the overwritten destination, then
+transfers the source tracking entry and applicable buffer, sampler, texture or target bindings to
+the destination address. Overwriting a currently bound render target is refused before mutation,
+because replacing that wrapper during an active target binding cannot preserve the public contract.
+`GraphicsResourceTest.CrossDeviceMoveAssignmentTransfersTrackingAndDetachesOldBindings` and the
+shared renderer lifetime tests hold these rules.
 
-A new `GraphicsResource`-derived class should delete both move operations unless device tracking
-updates its registered address.
+A new `GraphicsResource`-derived class must implement equivalent binding transfer or delete its move
+operations; default address-based moves are unsafe.
 
 ---
 
@@ -259,6 +287,6 @@ Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
 | Is double-dispose safe? | Yes — `isDisposed_` guard makes it a no-op |
 | What happens when the device is disposed? | All tracked resources are disposed first, then the device renderer |
 | Do events fire on destructor path? | `ResourceDestroyed` does; `Disposing` does not |
-| Does move transfer the tracking pointer? | No — avoid moving tracked resources to a different address |
+| Does move transfer the tracking pointer? | Yes — tracking and applicable bindings move to the destination address |
 | Can I use a resource after `Dispose()`? | No — `isDisposed_` is set; GPU handle is null |
 | Must the caller wait for the GPU before disposal? | No — fence/completion-safe retirement is renderer-owned |

@@ -45,6 +45,7 @@ bindings are archived in `cna-lab`. See [`binding.md`](binding.md) for the curre
 | Packed float channels | Float-to-integer packing saturates and rounds ties to even; NaN becomes zero and infinities saturate. `Color.Lerp` and `Multiply` use XNA's fixed-point arithmetic. | XNAPACK-001, `tests/reference/xna40/framework/framework-packing-oracle.json`, `XnaFrameworkPackingTests`, and the ISSUE-132 oracle. |
 | Packed-vector value contracts | All 17 packed-vector types implement the measured equality, hash and exact hexadecimal/text `ToString` contracts. | `b6f127b15` and `PackedVectorValueContractTests`. |
 | Launch parameters | Direct duplicate `Add` throws `ArgumentException` and preserves the first value; parsing retains empty and colonless values. | `b086814f9`, native `LaunchParametersTests`, and strict-C `RuntimeGameSmoke.c`. |
+| `GraphicsResource` disposal ordering | `IsDisposed` becomes true before `Disposing` is raised. Recursive disposal is therefore a no-op, and an exception from a subscriber does not restore the live state or permit a second event. FNA raises the event before publishing the flag. | Microsoft XNA 4.0 `GraphicsResource.Dispose(bool)` IL, SOFTWARE-194, and `GraphicsResourceEventOrderTest` (including reentrant, throwing-callback, finalizer and device-registration cases). |
 
 ## Further measured oracle families
 

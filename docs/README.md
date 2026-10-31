@@ -112,6 +112,8 @@ original phase closed — check each file's own status banner/date.
 - `model-content-pipeline-support.md` — `Model`'s FNA-audited runtime API and its four loading
   routes (`.xnb`, `.cnb`, `.cnj`, glTF) with what each builds; refreshed 2026-10-25.
 - `occlusionquery-support.md` — per-renderer `OcclusionQuery` support.
+- `graphics-resource-lifetime.md` — current ownership, event ordering, device tracking, move and
+  native-retirement contract for `GraphicsResource`-derived types; reconciled 2026-10-31.
 - `rendertarget-support.md`, `texture3d-texturecube-support.md`, `surface-format-support.md`,
   `texture-stream-formats.md`, `vertex-format-support.md`, `spritefont-support.md`,
   `viewport-displaymode-adapter-support.md` — not re-verified in the 2026-07-11 pass.
@@ -123,8 +125,9 @@ original phase closed — check each file's own status banner/date.
 
 Kept for their investigation methodology and root-cause detail, not as current status:
 
-- `graphicsdevice-fna-audit.md`, `graphicsresource-fna-audit.md`, `graphics-resource-lifetime.md` —
-  per-class FNA-fidelity audits, not re-verified in the 2026-07-11 pass.
+- `graphicsdevice-fna-audit.md` — historical per-class FNA-fidelity audit, not re-verified in the
+  2026-07-11 pass. The retired `graphicsresource-fna-audit.md` remains available in Git history;
+  its valid current contract was consolidated into `graphics-resource-lifetime.md`.
 
 ## Platform / renderer limitations
 
