@@ -191,9 +191,11 @@ namespace CNA::Internal::Renderers::DirectX9
         // RequireVertexColourPbrSupportEXT refusal is gone. Stride 60 is the rigid PBR record with a
         // packed COLOR_0 at offset 56 and stride 80 the skinned one with its own at 76; each selects
         // the vertex program whose input struct that declaration satisfies, because a vs_3_0 input
-        // with no stream behind it reads undefined rather than zero.
+        // with no stream behind it reads undefined rather than zero. A rigid PbrEffect may also use
+        // the 68/80-byte skinned declarations: their first four elements are the same rigid PBR
+        // prefix and D3D9 ignores the unused blend semantics, matching XNA's declaration behavior.
         const bool skinned = params.skinned;
-        const bool colored = skinned ? (stride == 80) : (stride == 60);
+        const bool colored = skinned ? (stride == 80) : (stride == 60 || stride == 80);
         const bool wantsDirectionalShadow = params.shadowsEnabled && params.shadowMap != nullptr;
         const bool wantsPunctualShadow =
             (params.punctualKind == 1 && params.punctualShadowCube != nullptr) ||
@@ -208,11 +210,12 @@ namespace CNA::Internal::Renderers::DirectX9
                 "DirectX9Renderer::DrawPrimitivesEx (PbrEffect, skinned): stride " +
                 std::to_string(stride) + " has no matching CNA vertex layout (expected 68 or 80, "
                 "VertexPositionNormalTangentTextureSkinned, optionally with COLOR_0)");
-        if (!skinned && stride != 48 && stride != 60)
+        if (!skinned && stride != 48 && stride != 60 && stride != 68 && stride != 80)
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (PbrEffect): stride " +
-                std::to_string(stride) + " has no matching CNA vertex layout (expected 48 or 60, "
-                "VertexPositionNormalTangentTexture, optionally with COLOR_0)");
+                std::to_string(stride) + " has no matching CNA vertex layout (expected 48, 60, "
+                "68 or 80; VertexPositionNormalTangentTexture with optional COLOR_0 and optional "
+                "unused skinning suffix)");
 
         IDirect3DVertexShader9* vs;
         IDirect3DPixelShader9* ps;

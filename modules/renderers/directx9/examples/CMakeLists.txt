@@ -108,6 +108,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
                 --gtest_filter=PresentationLifecycle.EveryPresentIntervalRoundTripsThroughReset:PresentationLifecycle.IsFullScreenRoundTripsThroughResetBothWays
         TIMEOUT 120 LABELS "DIRECTX9")
 
+    # A rigid PbrEffect accepts a vertex declaration with an unused skinning suffix, just as the
+    # XNA shader input contract does. This pixel test exercises the 68-byte form and shadow path.
+    cna_directx9_ctest_command(_directx9_pbr_rigid_skinned_layout_cmd CnaGraphicsTests)
+    cna_register_renderer_test(NAME DirectX9_PbrRigidSkinnedLayout
+        COMMAND ${_directx9_pbr_rigid_skinned_layout_cmd}
+                --gtest_filter=ShadowTargetOrientation/2.RenderedUpperHalfOccluderShadowsOnlyUpperHalf
+        TIMEOUT 120 LABELS "DIRECTX9")
+
     if(CNA_DIRECTX9_COMPILED_EFFECTS)
         cna_directx9_ctest_command(_directx9_compiled_effects_cmd CnaRendererTests)
         cna_register_renderer_test(NAME DirectX9_CompiledEffects
