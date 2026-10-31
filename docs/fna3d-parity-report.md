@@ -1,13 +1,23 @@
 # FNA3D vs real XNA 4.0 — oracle corpus parity report
 
-**Status: 2026-08-11.** Same 39-scene corpus (`tools/xna-oracle/scenes/*.scene`), same checked-in
+**Historical measurement: 2026-08-11.** This is retained evidence, not the current renderer
+status or a live defect list. Use [`fna3d-renderer.md`](fna3d-renderer.md) for the current contract
+and [`handoff.md` §5](../handoff.md#5-known-bugs-and-limitations) for current limitations.
+
+The run used the same 39-scene corpus (`tools/xna-oracle/scenes/*.scene`), same checked-in
 real XNA 4.0 reference images (`tools/xna-oracle/reference/*.png`), same `scripts/xna-diff.py`
 tolerance-0 comparison the D3D9 (`D9-A6`), EasyGL and OpenGLES1 (retired 2026-09-17,
 `OPENGLES1-78`) measurements
 already use — now also run through the FNA3D renderer (FNA3D-26).
 
-Run: `scripts/run-oracle-corpus-diff-fna3d.sh ./cmake-build-fna3d/cna_oracle_render_fna3d`,
-Linux / Xvfb / Mesa 25.2.8 llvmpipe, `FNA3D_FORCE_DRIVER=OpenGL`.
+Historical environment: Linux, Xvfb, Mesa 25.2.8 llvmpipe,
+`FNA3D_FORCE_DRIVER=OpenGL`. A current rerun must stay off the live desktop:
+
+```bash
+tools/platform/run_gpu_tests_private.sh --exec \
+  scripts/run-oracle-corpus-diff-fna3d.sh \
+  ./cmake-build-fna3d/cna_oracle_render_fna3d
+```
 
 | renderer | tolerance 0 |
 | --- | --- |

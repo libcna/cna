@@ -36,7 +36,7 @@ served, or its result is only the code.
 | `DEVICES-CNA-000`..`012` | `plan_cna_devices.md`, 2026-10-28 | The `CNA::Devices` extensions. | [`devices-ext.md`](devices-ext.md) |
 | `DIAG-0001` | `plan_diagnostics.md`, 2026-10-28 | The diagnostics and profiler module. | [`diagnostics.md`](diagnostics.md) |
 | `EASYGL-PARITY-1`..`10` | `plan_sdlgpu.md`, 2026-10-29 | EasyGL defects SDLGPU's parity oracle found. | `-1` in handoff §5.1; the others are fixed |
-| `FNA3D-0`..`63` | `plan_fna3d.md`, 2026-10-29 | The FNA3D renderer. | [`fna3d-renderer.md`](fna3d-renderer.md), [`fna3d-parity-report.md`](fna3d-parity-report.md) |
+| `FNA3D-0`..`63` | `plan_fna3d.md`, 2026-10-29 | The FNA3D renderer. | Current contract: [`fna3d-renderer.md`](fna3d-renderer.md); dated image evidence: [`fna3d-parity-report.md`](fna3d-parity-report.md); task record: Git history |
 | `FULLSCREEN-001`, `-002` | `plan_fullscreen_regressions.md`, `plan_directx9_fullscreen_motion.md`, 2026-10-28 | Fullscreen presentation and DirectX 9 loss/reset recovery found in Mobile Eggbert. | `directx9_frame_recovery_test.cpp`, `directx9_resize_state_test.cpp`, `spritebatch_presentation_test.cpp` |
 | `FX-001`..`147` | `plan_fx.md`, 2026-10-29 | Compiled XNA effect bytecode. | [`fx-compiled-effects.md`](fx-compiled-effects.md), [`xna-fna-behavior-decisions.md`](xna-fna-behavior-decisions.md) |
 | `GFX-220`..`246`, `BUILD-017`/`018` | `plan_postaudit.md`, 2026-10-28 | Post-audit graphics remediation. | [`renderer-capability-profiles.md`](renderer-capability-profiles.md) |

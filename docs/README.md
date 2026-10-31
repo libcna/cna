@@ -70,6 +70,9 @@ on it) rather than assuming either way.
 - **[`software-renderer.md`](software-renderer.md)** — current deterministic CPU-rasterizer
   contract: build/test route, stable architecture decisions, rendering and presentation surface,
   source-versus-compiled effect boundary, resource budgets and qualification limits.
+- **[`fna3d-renderer.md`](fna3d-renderer.md)** — current Experimental FNA3D family contract:
+  pinned forks, runtime OpenGL/Direct3D 11/SDL_GPU driver selection, compiled-effect route, live
+  capabilities, resource boundaries and platform qualification.
 - **[`webgpu-renderer.md`](webgpu-renderer.md)** — current native and browser status, build
   instructions, qualification evidence and explicit limitations for the `WEBGPU` renderer.
 - **[`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md)** — current

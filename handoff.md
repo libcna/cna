@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- FNA3D renderer-document reconciliation (2026-10-31): the mixed `FNA3D-0`..`63` campaign
+  narrative is replaced by the current Experimental portable-family contract. The page now owns
+  the pinned FNA3D/MojoShader forks, offline source verification, runtime OpenGL/Direct3D 11/
+  SDL_GPU selection, mandatory pre-window preparation, real compiled XNA Effect route, live
+  driver-dependent capabilities, resource/lifecycle rules, explicit refusals and Linux/macOS/
+  Windows qualification boundary. Closed device-creation incidents and fixed validation totals
+  were removed; the 2026-08-11 image comparison is explicitly historical and its rerun now uses
+  the private GPU runner. The complete Release FNA3D configuration builds at the verified fork
+  pins. Its private OpenGL label completes 66 registered tests with no failure: 64 execute and two
+  source-`ShaderEffect` cases are declared inapplicable skips.
 - Software renderer-document reconciliation (2026-10-31): the 1,227-line `SOFTWARE-1`..`485`
   campaign diary, fixed suite totals and live-desktop/Xvfb instructions are replaced by the
   current Experimental CPU-rasterizer contract. The page preserves the six numbered architecture
