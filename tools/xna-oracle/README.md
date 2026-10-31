@@ -28,6 +28,7 @@ fully-commented examples.
 | `width`, `height` | back buffer size |
 | `profile` | `HiDef` or `Reach` |
 | `clearcolor` | `r,g,b,a` (0-255) |
+| `rendertargetsample` | `true`/`false` (default `false`) — render the normal effect/vertex scene into a `SurfaceFormat.Color` `RenderTarget2D`, unbind it, then sample it through `SpriteBatch` over the complete result using `PointClamp` and `BlendState.Opaque`. Cannot be combined with `spritebatchmode=true` |
 | `spritebatchmode` | `true`/`false` (default `false`) — when `true`, bypasses the entire effect/vertex-format draw path below and instead drives the real public `SpriteBatch`/`Texture2D` API. Uses the same `texture`/`texturewidth`/`textureheight`/`texturepixel` keys as the effect path for the sprite's own source texture, plus the `sprite*` keys below. No `effect=`/`vertexformat=`/`vertex=` lines are used in this mode |
 | `spritedestrect` | `x,y,w,h` — the destination rectangle passed to `SpriteBatch.Draw()`, only when `spritebatchmode=true` |
 | `spritecolor` | `r,g,b,a` (0-255) — tint color, defaults to opaque white, only when `spritebatchmode=true` |
@@ -190,7 +191,7 @@ as 1.0, and `Alpha8` is the one exception at `(0, 0, 0, A)`.** Vulkan parity VKP
 
 ## Status
 
-Thirty-nine scenes so far, **all pixel-perfect on the original D3D9 oracle path**, and every one of XNA's 5 Stock Effects plus
+Forty scenes so far, **all pixel-perfect on the original D3D9 oracle path**, and every one of XNA's 5 Stock Effects plus
 `IEffectFog`, ALL 8 `AlphaTestEffect.AlphaFunction` values (`AlphaTestEffect` compare-function
 coverage is COMPLETE), `EnvironmentMapEffect.FresnelFactor`, ALL 3
 `SkinnedEffect.WeightsPerVertex` values (`SkinnedEffect` weighting coverage is COMPLETE),
@@ -213,6 +214,10 @@ coverage is now COMPLETE) is now represented in the corpus:
   texture, `SamplerState.PointClamp`) — also `0/65536` pixels differ, including at the exact
   UV=(0.5,0.5) point-filter texel-boundary pixel (a genuine tie-break case: both sides independently
   pick the identical texel there, not merely "close").
+- `rendertarget_sampled_quad` — renders an asymmetric point-filtered quad into a Color
+  `RenderTarget2D`, unbinds it, and samples the target across the complete result through
+  `SpriteBatch`. Real XNA 4.0 and CNA DirectX9 match exactly: `0/65536` pixels differ with a
+  maximum per-channel delta of zero.
 - `lit_textured_quad` (`BasicEffect.LightingEnabled=true` + `TextureEnabled=true`, `VSInputNmTx`'s
   Position+Normal+TexCoord vertex shape, one dim `DirectionalLight0` — `0/65536` pixels differ.
   Deliberately dimmed (`diffuse=0.5`, no ambient) so the lit result is visibly darker than the raw

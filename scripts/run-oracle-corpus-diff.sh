@@ -33,6 +33,11 @@ REFERENCE_DIR="$REPO_ROOT/tools/xna-oracle/reference"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
+if ! python3 "$SCRIPT_DIR/check_xna_oracle_manifest.py" \
+        --scenes "$SCENES_DIR" --references "$REFERENCE_DIR"; then
+    exit 1
+fi
+
 TOTAL=0
 FAILED=0
 

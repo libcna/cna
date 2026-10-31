@@ -335,6 +335,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     # needs. See scripts/run-oracle-corpus-diff.sh's own header comment for the full contract.
     cna_register_renderer_test(NAME D3D9_XNA_Diff COMMAND ${CNA_SOURCE_DIR}/scripts/run-oracle-corpus-diff.sh $<TARGET_FILE:cna_oracle_render>
         TIMEOUT 300 LABELS "DIRECTX9")
+    cna_register_renderer_test(NAME D3D9_XNA_Manifest
+        COMMAND ${Python3_EXECUTABLE} ${CNA_SOURCE_DIR}/scripts/check_xna_oracle_manifest.py
+        TIMEOUT 30 LABELS "DIRECTX9")
 
     # D9-110 (Phase D9-11, ask-first, authorized 2026-07-15): validates the CTAB constant-table
     # parser (D3D9ConstantTable.cpp, already part of CNA via BACKEND_SOURCES) against real

@@ -332,6 +332,9 @@ and the focused live-swap-chain VSync test passed through the private GPU runner
 exclusive fullscreen falls back to a windowed D3D9 chain without losing the XNA fullscreen
 request. The focused `ShadowTargetOrientation/2` PBR pixel test also passed after rigid
 `PbrEffect` began accepting the compatible 68-byte declaration with an unused skinning suffix.
+The `D3D9_XNA_Diff` gate then passed 40/40 active scenes, including a new real-XNA-generated
+render-target-sampled-as-texture reference; its separate manifest gate reports exact pairing for
+40 active and 7 auxiliary scene/reference pairs.
 Latest full Debug runs, 2026-10-17 at the end of the handoff 5.1 stabilization pass (branch `stabilization`, worktree
 `cna-stab`), through the private runner on RADV: `cmake-build-multi` (`OPENGLES3` default with
 `OPENGL33`, `WEBGPU`, `SDLGPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`; C API) 11,433 tests, 1

@@ -125,6 +125,7 @@ public class Scene
     public int Height = 256;
     public GraphicsProfile Profile = GraphicsProfile.HiDef;
     public Color ClearColor = Color.CornflowerBlue;
+    public bool RenderTargetSample;
     public bool SpriteBatchMode;
     public Rectangle SpriteDestRect;
     public Color SpriteColor = Color.White;
@@ -207,6 +208,7 @@ public class Scene
                     scene.Profile = value == "Reach" ? GraphicsProfile.Reach : GraphicsProfile.HiDef;
                     break;
                 case "clearcolor": scene.ClearColor = ParseColor(value); break;
+                case "rendertargetsample": scene.RenderTargetSample = ParseBool(value); break;
                 case "spritebatchmode": scene.SpriteBatchMode = ParseBool(value); break;
                 case "spritedestrect": scene.SpriteDestRect = ParseRectangle(value); break;
                 case "spritecolor": scene.SpriteColor = ParseColor(value); break;
@@ -529,7 +531,17 @@ public class Oracle : Game
     {
         var dev = GraphicsDevice;
         var rt = new RenderTarget2D(dev, scene.Width, scene.Height, false, SurfaceFormat.Color, DepthFormat.Depth24);
-        dev.SetRenderTarget(rt);
+        RenderTarget2D sampledTarget = null;
+        if (scene.RenderTargetSample)
+        {
+            if (scene.SpriteBatchMode)
+                throw new InvalidOperationException("rendertargetsample cannot be combined with spritebatchmode");
+            sampledTarget = new RenderTarget2D(dev, scene.Width, scene.Height, false,
+                                               SurfaceFormat.Color, DepthFormat.None);
+            dev.SetRenderTarget(sampledTarget);
+        }
+        else
+            dev.SetRenderTarget(rt);
         dev.Clear(scene.ClearColor);
 
         if (scene.SpriteBatchMode)
@@ -782,6 +794,18 @@ public class Oracle : Game
                 dev.DrawUserPrimitives(scene.Primitive, scene.TextureVertices.ToArray(), 0, scene.PrimitiveCount());
             else
                 dev.DrawUserPrimitives(scene.Primitive, scene.ColorVertices.ToArray(), 0, scene.PrimitiveCount());
+        }
+
+        if (scene.RenderTargetSample)
+        {
+            dev.SetRenderTarget(rt);
+            dev.Clear(scene.ClearColor);
+            var sampleBatch = new SpriteBatch(dev);
+            sampleBatch.Begin(SpriteSortMode.Deferred, BlendState.Opaque, SamplerState.PointClamp,
+                              null, null);
+            sampleBatch.Draw(sampledTarget, new Rectangle(0, 0, scene.Width, scene.Height), null,
+                             Color.White, 0.0f, Vector2.Zero, SpriteEffects.None, 0.0f);
+            sampleBatch.End();
         }
 
         dev.SetRenderTarget(null);

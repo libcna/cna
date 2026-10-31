@@ -9,12 +9,9 @@
 //
 // Usage: cna_oracle_render.exe <scene-file> <output-png>
 //
-// Deliberately renders straight to the back buffer rather than mirroring Oracle.cs's own
-// RenderTarget2D indirection: RenderTarget2D::GetData()'s own CPU readback path is not proven on
-// this renderer yet (every existing render-target test reads back via GetBackBufferData() after
-// blitting, not RenderTarget2D::GetData() directly), while GetBackBufferData() is exercised by
-// every D3D9 CTest already. The back buffer is the same size as the scene and is never presented
-// before being read, so the two approaches are pixel-equivalent for what this tool needs to prove.
+// Normally renders straight to the back buffer because GetBackBufferData() is the common proven
+// capture path. A scene with rendertargetsample=true deliberately renders through an off-screen
+// RenderTarget2D and samples it back to the back buffer, providing oracle coverage for that path.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -30,6 +27,7 @@
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
@@ -182,6 +180,7 @@ namespace
         int height = 256;
         GraphicsProfile profile = GraphicsProfile::HiDef;
         Color clearColor = Color::CornflowerBlue;
+        bool renderTargetSample = false;
         // D9-90..93: a scene with spriteBatchMode=true bypasses the entire effect/vertex-format
         // draw path below and instead drives the real public SpriteBatch/Texture2D API -- a
         // genuinely different draw model (no vertex declaration, no Effect, real orthographic +
@@ -427,6 +426,7 @@ namespace
             else if (key == "height") scene.height = std::stoi(value);
             else if (key == "profile") scene.profile = value == "Reach" ? GraphicsProfile::Reach : GraphicsProfile::HiDef;
             else if (key == "clearcolor") scene.clearColor = ParseColor(value);
+            else if (key == "rendertargetsample") scene.renderTargetSample = ParseBool(value);
             else if (key == "spritebatchmode") scene.spriteBatchMode = ParseBool(value);
             else if (key == "spritedestrect") scene.spriteDestRect = ParseRectangle(value);
             else if (key == "spritecolor") scene.spriteColor = ParseColor(value);
@@ -568,6 +568,16 @@ protected:
 
         auto& dev = getGraphicsDeviceProperty();
 
+        std::unique_ptr<RenderTarget2D> sampledTarget;
+        if (scene_.renderTargetSample)
+        {
+            if (scene_.spriteBatchMode)
+                throw std::runtime_error(
+                    "Scene: rendertargetsample cannot be combined with spritebatchmode");
+            sampledTarget = std::make_unique<RenderTarget2D>(
+                dev, scene_.width, scene_.height, false, SurfaceFormat::Color, DepthFormat::None);
+            dev.SetRenderTarget(sampledTarget.get());
+        }
         dev.Clear(scene_.clearColor);
 
         if (scene_.spriteBatchMode)
@@ -845,6 +855,19 @@ protected:
             dev.DrawUserPrimitives(scene_.primitive, scene_.textureVertices.data(), 0, scene_.PrimitiveCount());
         else
             dev.DrawUserPrimitives(scene_.primitive, scene_.colorVertices.data(), 0, scene_.PrimitiveCount());
+
+        if (scene_.renderTargetSample)
+        {
+            dev.SetRenderTarget(nullptr);
+            dev.Clear(scene_.clearColor);
+            SpriteBatch sampleBatch(dev);
+            SamplerState sampler = SamplerState::PointClamp;
+            sampleBatch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &sampler, nullptr, nullptr);
+            sampleBatch.Draw(*sampledTarget, Rectangle(0, 0, scene_.width, scene_.height),
+                             std::nullopt, Color::White, 0.0f, Vector2::Zero,
+                             SpriteEffects::None, 0.0f);
+            sampleBatch.End();
+        }
 
         const int pixelCount = scene_.width * scene_.height;
         std::vector<Color> pixels(static_cast<std::size_t>(pixelCount), Color(0, 0, 0, 0));
