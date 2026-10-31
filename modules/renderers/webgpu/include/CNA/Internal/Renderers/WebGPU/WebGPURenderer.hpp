@@ -1571,6 +1571,19 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             return queueSubmitCount_;
         }
+        /**
+         * @brief Returns the number of full backbuffer-to-staging copies encoded since creation.
+         *
+         * A normal Present-only frame must not increase this counter. `ReadBackbuffer()` increases
+         * it once for each newly rendered backbuffer generation and reuses that capture for
+         * repeated reads of unchanged contents.
+         *
+         * @return The cumulative number of backbuffer readback copies.
+         */
+        [[nodiscard]] std::size_t GetBackbufferReadbackCopyCountEXT() const noexcept
+        {
+            return backbufferReadbackCopiesEXT_;
+        }
         /// Diagnostic used by the permanent regression. Neither binding's
         /// VertexOffset nor the InstanceFrequency is part of this cache's key -- the offsets select
         /// source records and the divisor is expanded into the instance staging copy, so a draw
@@ -3599,8 +3612,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // Acquires a native swapchain texture or owned browser backbuffer if none is held,
         // and renders pending work into it. Called on demand by Present() and ReadBackbuffer()
         // so that GetBackBufferData() can observe work queued earlier in the same logical frame.
+        // Only a readback caller requests the texture-to-buffer copy; Present() never pays for it.
         // Returns false if the surface isn't presentable right now (minimized, lost, etc).
-        bool EnsureFrameRendered();
+        bool EnsureFrameRendered(bool captureReadback = false);
         // Apple M4 AM4-089: an offscreen stand-in for the surface texture of an occluded
         // window, also used as the browser's retained backbuffer. Uses the surface's render format,
         // size and usage; null when the surface has no size or format yet.
@@ -4120,6 +4134,7 @@ namespace CNA::Internal::Renderers::WebGPU
         int readbackWidth_ = 0;
         int readbackHeight_ = 0;
         bool readbackValid_ = false;
+        std::size_t backbufferReadbackCopiesEXT_ = 0;
 
         bool hasAcquiredTexture_ = false;
         WGPUTexture acquiredTexture_ = nullptr;

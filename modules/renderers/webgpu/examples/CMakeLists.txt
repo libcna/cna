@@ -94,6 +94,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_Clear_Readback COMMAND cna_test_webgpu_clear_readback
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # A Present-only frame must not copy the entire backbuffer into a MAP_READ staging buffer.
+    # Readback requests capture one generation on demand, repeated reads reuse it, and the Present
+    # following that read does not encode a second copy.
+    cna_webgpu_test(cna_test_webgpu_readback_cost webgpu_readback_cost_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_ReadbackCost COMMAND cna_test_webgpu_readback_cost
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-123: the shared cross-renderer diagnostic scene built for WEBGPU,
     # exactly as EASYGL's cna_diag_easygl and SOFTWARE's cna_diag_software. Deliberately NOT a CTest
     # (mirrors those two): it writes a 64x64 RGBA8 dump for cna_diag_compare to diff against another

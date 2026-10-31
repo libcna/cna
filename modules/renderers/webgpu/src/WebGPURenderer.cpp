@@ -12959,7 +12959,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     void WebGPURenderer::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
     { Clear(r, g, b, a); ClearDepth(depth); ClearStencil(stencil); }
 
-    bool WebGPURenderer::EnsureFrameRendered()
+    bool WebGPURenderer::EnsureFrameRendered(bool captureReadback)
     {
         if (!hasAcquiredTexture_)
         {
@@ -12970,6 +12970,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 // only the sprites. A surviving 3D draw was replayed by the next bind cycle into
                 // whatever target it opened, which could be the very texture the draw samples.
                 DiscardQueuedCommands();
+                readbackValid_ = false;
                 return false;
             }
 
@@ -13015,6 +13016,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 {
                     // AM4-078: dropped whole, as above.
                     DiscardQueuedCommands();
+                    readbackValid_ = false;
                     return false;
                 }
                 acquiredOffscreenEXT_ = true;
@@ -13024,10 +13026,17 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             acquiredTexture_ = surfaceTexture.texture;
             hasAcquiredTexture_ = true;
             framePending_ = true;
+            // A staging copy from the preceding surface texture is never a valid answer for this
+            // newly acquired backbuffer, even when its dimensions happen to match.
+            readbackValid_ = false;
         }
 
         if (!framePending_)
+        {
+            if (captureReadback && !readbackValid_)
+                CaptureReadback(AcquireFrameEncoderEXT(), acquiredTexture_);
             return true;
+        }
 
         // WEBGPU-58: backBuffer (the swapchain's own single-sample texture) is always the RESOLVE
         // destination while MSAA is active -- the actual render-pass colour attachment is the
@@ -13089,8 +13098,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         destination.traceName = "backbuffer";
         ReplayOrderedSegments(encoder, destination);
 
-        CaptureReadback(encoder, acquiredTexture_);
-
         // WEBGPUPERF-0006: recorded, not submitted -- Present() and
         // ReadBackbuffer() submit, and a mid-frame switch away from the back buffer need not. The
         // view goes when the passes that write it have been submitted, with the per-draw resources.
@@ -13100,6 +13107,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         clearDepthPending_ = false;
         clearStencilPending_ = false;
         framePending_ = false;
+        // Any staging bytes captured before this replay describe an older backbuffer generation.
+        readbackValid_ = false;
+        if (captureReadback)
+            CaptureReadback(encoder, acquiredTexture_);
         return true;
     }
 
@@ -13442,6 +13453,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         const WGPUExtent3D copySize{static_cast<std::uint32_t>(physicalWidth_),
                                      static_cast<std::uint32_t>(physicalHeight_), 1};
         wgpuCommandEncoderCopyTextureToBuffer(encoder, &source, &destination, &copySize);
+        ++backbufferReadbackCopiesEXT_;
 
         readbackBytesPerRow_ = bytesPerRow;
         readbackWidth_ = physicalWidth_;
@@ -13457,7 +13469,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // Render whatever Clear()/sprite work has been queued so far this logical frame before
         // reading it back, so a Clear()+GetBackBufferData() pair observes its own frame's result
         // without needing a real Present() in between.
-        EnsureFrameRendered();
+        EnsureFrameRendered(true);
         SubmitFrameEncoderEXT();   // WEBGPUPERF-0006: the copy into readbackBuffer_ is in it.
 
         if (const char* trace = std::getenv("CNA_BACKBUFFER_READ_TRACE"); trace != nullptr && *trace != '\0')
@@ -13528,6 +13540,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         acquiredTexture_ = nullptr;
         hasAcquiredTexture_ = false;
         acquiredOffscreenEXT_ = false;
+        readbackValid_ = false;
     }
 
     void WebGPURenderer::GetViewportSize(int& width, int& height)
