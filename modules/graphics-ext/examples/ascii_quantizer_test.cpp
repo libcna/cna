@@ -13,6 +13,10 @@
 //   out-of-bounds garbage).
 // Check D (ASCII-3) -- CNA_ASCII_MODE env-var parsing: unset/unrecognized default to Color,
 //   case-insensitive BLACKWHITE/COLOR both parse correctly.
+// Check E -- source alpha is ignored: transparent, half-alpha, and opaque pixels with identical
+//   RGB produce the same glyph/colors, and emitted colors remain opaque.
+// Check F -- null source pixels and non-positive source/cell dimensions are rejected with
+//   std::invalid_argument instead of reaching division or pointer arithmetic.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -23,6 +27,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <stdexcept>
 #include <vector>
 
 using namespace CNA::Internal::Graphics::Ascii;
@@ -38,16 +43,25 @@ namespace
     }
 
     void FillBlock(std::vector<std::uint8_t>& rgba, int imgWidth, int x0, int y0, int w, int h,
-                   std::uint8_t r, std::uint8_t g, std::uint8_t b)
+                   std::uint8_t r, std::uint8_t g, std::uint8_t b, std::uint8_t a = 255)
     {
         for (int y = y0; y < y0 + h; ++y)
         {
             for (int x = x0; x < x0 + w; ++x)
             {
                 std::uint8_t* p = rgba.data() + (static_cast<std::size_t>(y) * static_cast<std::size_t>(imgWidth) + static_cast<std::size_t>(x)) * 4;
-                p[0] = r; p[1] = g; p[2] = b; p[3] = 255;
+                p[0] = r; p[1] = g; p[2] = b; p[3] = a;
             }
         }
+    }
+
+    template<typename Action>
+    bool ThrowsInvalidArgument(Action&& action)
+    {
+        try { action(); }
+        catch (const std::invalid_argument&) { return true; }
+        catch (...) { return false; }
+        return false;
     }
 }
 
@@ -112,6 +126,59 @@ int main()
         System::Environment::SetEnvironmentVariable("CNA_ASCII_MODE", "");
     }
 
-    std::printf("=== %d/%d PASS ===\n", passCount, 13);
-    return (passCount == 13) ? 0 : 1;
+    // Check E: alpha does not influence quantization or the emitted opaque colors.
+    {
+        const std::uint8_t transparent[] = {80, 120, 160, 0};
+        const std::uint8_t halfAlpha[] = {80, 120, 160, 127};
+        const std::uint8_t opaque[] = {80, 120, 160, 255};
+        const AsciiCell transparentCell =
+            QuantizeFrameToGrid(transparent, 1, 1, 1, 1, AsciiQuantizeMode::Color).At(0, 0);
+        const AsciiCell halfAlphaCell =
+            QuantizeFrameToGrid(halfAlpha, 1, 1, 1, 1, AsciiQuantizeMode::Color).At(0, 0);
+        const AsciiCell opaqueCell =
+            QuantizeFrameToGrid(opaque, 1, 1, 1, 1, AsciiQuantizeMode::Color).At(0, 0);
+
+        check(transparentCell.glyphIndex == halfAlphaCell.glyphIndex &&
+                  halfAlphaCell.glyphIndex == opaqueCell.glyphIndex,
+              "Alpha contract: transparent, half-alpha, and opaque pixels select the same glyph");
+        check(transparentCell.foreground == halfAlphaCell.foreground &&
+                  halfAlphaCell.foreground == opaqueCell.foreground &&
+                  opaqueCell.foreground.getRProperty() == 80 &&
+                  opaqueCell.foreground.getGProperty() == 120 &&
+                  opaqueCell.foreground.getBProperty() == 160,
+              "Alpha contract: source alpha does not change the averaged foreground RGB");
+        check(transparentCell.foreground.getAProperty() == 255 &&
+                  transparentCell.background.getAProperty() == 255 &&
+                  halfAlphaCell.foreground.getAProperty() == 255 &&
+                  halfAlphaCell.background.getAProperty() == 255,
+              "Alpha contract: emitted Color-mode foreground and background remain opaque");
+    }
+
+    // Check F: invalid inputs fail deterministically before quantization.
+    {
+        const std::uint8_t pixel[] = {0, 0, 0, 255};
+        check(ThrowsInvalidArgument([&] {
+                  (void)QuantizeFrameToGrid(nullptr, 1, 1, 1, 1, AsciiQuantizeMode::Color);
+              }),
+              "Validation: null source pixels throw std::invalid_argument");
+        check(ThrowsInvalidArgument([&] {
+                  (void)QuantizeFrameToGrid(pixel, 0, 1, 1, 1, AsciiQuantizeMode::Color);
+              }),
+              "Validation: non-positive source width throws std::invalid_argument");
+        check(ThrowsInvalidArgument([&] {
+                  (void)QuantizeFrameToGrid(pixel, 1, -1, 1, 1, AsciiQuantizeMode::Color);
+              }),
+              "Validation: non-positive source height throws std::invalid_argument");
+        check(ThrowsInvalidArgument([&] {
+                  (void)QuantizeFrameToGrid(pixel, 1, 1, 0, 1, AsciiQuantizeMode::Color);
+              }),
+              "Validation: non-positive cell width throws std::invalid_argument");
+        check(ThrowsInvalidArgument([&] {
+                  (void)QuantizeFrameToGrid(pixel, 1, 1, 1, -1, AsciiQuantizeMode::Color);
+              }),
+              "Validation: non-positive cell height throws std::invalid_argument");
+    }
+
+    std::printf("=== %d/%d PASS ===\n", passCount, 21);
+    return (passCount == 21) ? 0 : 1;
 }

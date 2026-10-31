@@ -378,7 +378,9 @@ CNA_C_API CNA_Result cna_ascii_post_process_effect_set_quantize_mode(
  * read-back or draw, or a documented argument/handle/thread/native failure.
  *
  * A null destination selects the canonical whole-viewport overload; a non-null one selects the
- * explicit-rectangle overload.
+ * explicit-rectangle overload. Source alpha is intentionally ignored: RGB selects glyphs and
+ * colors, and every cell in the destination rectangle is painted opaque. This is a full-area
+ * stylization pass, not alpha-preserving compositing.
  */
 CNA_C_API CNA_Result cna_ascii_post_process_effect_draw(
     CNA_AsciiPostProcessEffectHandle effect,

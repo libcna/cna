@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <stdexcept>
 #include <string>
 
 namespace CNA::Internal::Graphics::Ascii
@@ -42,19 +43,26 @@ namespace CNA::Internal::Graphics::Ascii
     AsciiGrid QuantizeFrameToGrid(const std::uint8_t* rgba, int srcWidth, int srcHeight,
                                   int cellWidth, int cellHeight, AsciiQuantizeMode mode)
     {
+        if (rgba == nullptr)
+            throw std::invalid_argument("CNA AsciiQuantizer: source pixels must not be null");
+        if (srcWidth <= 0 || srcHeight <= 0)
+            throw std::invalid_argument("CNA AsciiQuantizer: source dimensions must be positive");
+        if (cellWidth <= 0 || cellHeight <= 0)
+            throw std::invalid_argument("CNA AsciiQuantizer: cell dimensions must be positive");
+
         AsciiGrid grid;
-        grid.columns = (srcWidth + cellWidth - 1) / cellWidth;
-        grid.rows = (srcHeight + cellHeight - 1) / cellHeight;
+        grid.columns = 1 + (srcWidth - 1) / cellWidth;
+        grid.rows = 1 + (srcHeight - 1) / cellHeight;
         grid.cells.resize(static_cast<std::size_t>(grid.columns) * static_cast<std::size_t>(grid.rows));
 
         for (int row = 0; row < grid.rows; ++row)
         {
             const int y0 = row * cellHeight;
-            const int y1 = std::min(y0 + cellHeight, srcHeight);
+            const int y1 = y0 + std::min(cellHeight, srcHeight - y0);
             for (int col = 0; col < grid.columns; ++col)
             {
                 const int x0 = col * cellWidth;
-                const int x1 = std::min(x0 + cellWidth, srcWidth);
+                const int x1 = x0 + std::min(cellWidth, srcWidth - x0);
 
                 std::uint64_t sumR = 0, sumG = 0, sumB = 0;
                 int count = 0;
@@ -63,6 +71,8 @@ namespace CNA::Internal::Graphics::Ascii
                     const std::uint8_t* rowPtr = rgba + (static_cast<std::size_t>(y) * static_cast<std::size_t>(srcWidth) + static_cast<std::size_t>(x0)) * 4;
                     for (int x = x0; x < x1; ++x)
                     {
+                        // Source alpha deliberately does not participate: the public effect
+                        // stylizes the complete destination area and paints it opaque.
                         sumR += rowPtr[0];
                         sumG += rowPtr[1];
                         sumB += rowPtr[2];

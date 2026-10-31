@@ -45,14 +45,20 @@ namespace CNA::Internal::Graphics::Ascii
      * (darkest source region -> emptiest glyph, brightest -> densest). When @p srcWidth/@p
      * srcHeight are not exact multiples of @p cellWidth/@p cellHeight, the grid rounds up and the
      * edge cells average only the real remaining pixels, never out-of-bounds memory.
+     * Source alpha is intentionally ignored: RGB alone selects the glyph and colors. Foregrounds
+     * and Color-mode backgrounds are opaque; the public effect supplies opaque black behind
+     * BlackWhite glyphs. It therefore stylizes the complete destination area rather than
+     * alpha-compositing the source image.
      *
      * @param rgba       Source pixels, row-major, 4 bytes/pixel (R,G,B,A), srcWidth*srcHeight*4 bytes.
-     * @param srcWidth   Source image width in pixels.
-     * @param srcHeight  Source image height in pixels.
-     * @param cellWidth  Source pixels per grid cell, horizontally.
-     * @param cellHeight Source pixels per grid cell, vertically.
+     * @param srcWidth   Source image width in pixels. Must be positive.
+     * @param srcHeight  Source image height in pixels. Must be positive.
+     * @param cellWidth  Source pixels per grid cell, horizontally. Must be positive.
+     * @param cellHeight Source pixels per grid cell, vertically. Must be positive.
      * @param mode       BlackWhite or Color.
      * @return The quantized grid; columns = ceil(srcWidth/cellWidth), rows = ceil(srcHeight/cellHeight).
+     * @throws std::invalid_argument if @p rgba is null or any source/cell dimension is not
+     * positive.
      */
     AsciiGrid QuantizeFrameToGrid(const std::uint8_t* rgba, int srcWidth, int srcHeight,
                                   int cellWidth, int cellHeight, AsciiQuantizeMode mode);

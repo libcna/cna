@@ -44,6 +44,10 @@ namespace CNA::Graphics {
      * terminal output. A genuine terminal/TTY renderer, if ever built, would be a separate,
      * unrelated concept.
      *
+     * @note Source alpha is intentionally ignored. Cell RGB averages select glyphs and colors,
+     * and every destination cell is painted with an opaque background plus its glyph. The effect
+     * stylizes the complete destination area; it is not an alpha-preserving compositing pass.
+     *
      * @note Portable CPU implementation (v1): `Draw()` reads the source texture back to the CPU
      * (`Texture2D::GetData()`), quantizes it there, then re-uploads the result as textured quads
      * via `SpriteBatch`. This is a real GPU-to-CPU readback every call, same cost class the former
@@ -99,7 +103,8 @@ namespace CNA::Graphics {
          * target.
          *
          * @param source Already-rendered image to quantize (e.g. a `RenderTarget2D` a 2D or 3D
-         *               scene was drawn into). Read back via `Texture2D::GetData()`.
+         *               scene was drawn into). Read back via `Texture2D::GetData()`; source alpha
+         *               is ignored and the destination area is painted opaque.
          */
         void Draw(Microsoft::Xna::Framework::Graphics::Texture2D& source);
 
@@ -107,7 +112,8 @@ namespace CNA::Graphics {
          * @brief Quantizes @p source and draws the resulting glyph/color grid stretched to fill
          * @p destinationRectangle of whatever render target is currently bound.
          *
-         * @param source                Already-rendered image to quantize.
+         * @param source                Already-rendered image to quantize. Source alpha is ignored
+         *                              and the destination area is painted opaque.
          * @param destinationRectangle  Destination rectangle, in pixels of the currently-bound
          *                              render target.
          */

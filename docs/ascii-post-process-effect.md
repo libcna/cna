@@ -70,6 +70,15 @@ environment-variable-only renderer setting:
 - `GetLastGridDimensions(int& columns, int& rows)` — the glyph grid's column/row count as of the
   most recent `Draw()` call (testing/diagnostics).
 
+### Alpha contract
+
+Source alpha is intentionally ignored. Each cell averages only the source RGB channels; those
+averages select the glyph and, in `Color` mode, its foreground and background colors. Every
+destination cell is then painted with an opaque background (quarter-brightness color in `Color`
+mode, black in `BlackWhite` mode) and an opaque glyph. Consequently the complete destination
+rectangle is opaque after the pass. `AsciiPostProcessEffect` is a full-area stylization pass, not
+an alpha-preserving compositing operation.
+
 Not carried forward: the former renderer's own `gameTarget_`/`SetRenderTarget(nullptr)` redirect
 and 3D-call `ThrowNo3D` policy. Those were properties of being a whole renderer identity, not of
 the glyph-grid quantization itself — an application using the effect now manages its own
@@ -111,8 +120,8 @@ pipeline.
 ## Portable CPU implementation (v1)
 
 `Draw()` reads the source texture back to the CPU (`Texture2D::GetData()`), quantizes it there
-(the migrated `AsciiQuantizer`/`AsciiFontAtlas` logic, byte-for-byte the former renderer's own
-algorithm), then re-uploads the result as textured quads via `SpriteBatch`. This is a real
+(the migrated `AsciiQuantizer`/`AsciiFontAtlas` logic), then re-uploads the result as textured
+quads via `SpriteBatch`. This is a real
 GPU-to-CPU readback on every `Draw()` call — the same cost class the former `ASCII` renderer's own
 `Present()` already paid every frame (it read `gameTarget_` back on every present too). This
 implementation intentionally does not depend on the retired modern graphics layer, compute shaders, or any

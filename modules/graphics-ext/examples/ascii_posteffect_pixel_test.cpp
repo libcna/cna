@@ -30,6 +30,8 @@
 //   Color mode, instead reads pure black).
 // Check F -- repeated Draw() calls against the same effect/source produce identical output
 //   (deterministic, no per-call state leak).
+// Check G -- transparent source pixels retain their RGB contribution, while the complete
+//   destination cell (background and glyph) is emitted with alpha 255.
 //
 // Renderers that do not rasterize at all (HEADLESS, STUB) correctly reject
 // GraphicsDevice::GetBackBufferData() with System::NotSupportedException -- a documented capability
@@ -69,6 +71,12 @@ namespace
     {
         const Color& c = pixels[static_cast<std::size_t>(y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x)];
         return c.getRProperty() == r && c.getGProperty() == g && c.getBProperty() == b;
+    }
+
+    bool PixelAlphaEquals(const std::vector<Color>& pixels, int w, int x, int y, std::uint8_t a)
+    {
+        const Color& c = pixels[static_cast<std::size_t>(y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x)];
+        return c.getAProperty() == a;
     }
 }
 
@@ -140,6 +148,25 @@ protected:
         check(PixelEquals(pixels, kSize, 4, 4, 140, 140, 140),
               "Cell (0,0) center (glyph row4 col4, on for '+') reads the exact foreground color (140,140,140)");
 
+        // Check G: a CPU-authored fully-transparent texture retains its RGB contribution, while
+        // the effect paints both the background and glyph portions of the destination opaque.
+        Texture2D transparentSource(dev, kSize, kSize);
+        std::vector<Color> transparentPixels(
+            static_cast<std::size_t>(kSize) * static_cast<std::size_t>(kSize), Color(140, 140, 140, 0));
+        transparentSource.SetData(transparentPixels.data(), static_cast<int>(transparentPixels.size()));
+        RenderTarget2D alphaOutput(dev, kSize, kSize);
+        dev.SetRenderTarget(&alphaOutput);
+        dev.Clear(Color(0, 0, 0, 0));
+        effect.Draw(transparentSource);
+        dev.SetRenderTarget(nullptr);
+        alphaOutput.GetData(transparentPixels.data(), static_cast<int>(transparentPixels.size()));
+        check(PixelEquals(transparentPixels, kSize, 1, 1, 35, 35, 35) &&
+                  PixelEquals(transparentPixels, kSize, 4, 4, 140, 140, 140),
+              "Alpha contract: transparent source pixels contribute their RGB unchanged");
+        check(PixelAlphaEquals(transparentPixels, kSize, 1, 1, 255) &&
+                  PixelAlphaEquals(transparentPixels, kSize, 4, 4, 255),
+              "Alpha contract: background and glyph portions of the destination are opaque");
+
         // Check D: cell size is genuinely runtime-configurable.
         int defaultCellW = 0, defaultCellH = 0;
         effect.getCellSize(defaultCellW, defaultCellH);
@@ -195,8 +222,8 @@ protected:
         check(PixelEquals(pixels, kSize, 1, 1, 35, 35, 35) && PixelEquals(pixels, kSize, 4, 4, 140, 140, 140),
               "Draw(source, destinationRectangle) reproduces the same corner/center samples as Draw(source)");
 
-        std::printf("=== %d/%d PASS ===\n", passCount_, 12);
-        result_ = (passCount_ == 12) ? 0 : 1;
+        std::printf("=== %d/%d PASS ===\n", passCount_, 14);
+        result_ = (passCount_ == 14) ? 0 : 1;
         Exit();
     }
 
