@@ -281,7 +281,7 @@ unlike `SpriteBatch::Draw` (Task 922), this area checked out clean.
 |---|---|---|---|
 | `BasicEffect` | ✅ | ✅ | None (per Task 483's table). |
 | `AlphaTestEffect` | ✅ | ✅ | |
-| `DualTextureEffect` | ✅ | ✅ | `VertexColorEnabled` missing on EasyGL (Task 889). |
+| `DualTextureEffect` | ✅ | ✅ | No open EasyGL gap; `VertexColorEnabled` was fixed by Task 889. |
 | `EnvironmentMapEffect` | ✅ | ✅ | No open gaps — `DirectionalLight1`/`2` (Task 890) and base-lerp alpha scaling (Task 891) were fixed 2026-07-11. |
 | `SkinnedEffect` | ✅ | ✅ | No open gaps — `DirectionalLight1`/`2` (Task 893), `SpecularColor`/`Power` (Task 894), and `WeightsPerVertex` GPU enforcement (Task 895) all fixed 2026-07-11. |
 | Fog (all 5 effects) | — | ✅ | Implemented for every effect (Task 899, closed 2026-07-07). |

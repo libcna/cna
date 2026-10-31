@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- DualTextureEffect support-document reconciliation (2026-10-31): Task 889 is no longer described
+  as an open EasyGL `VertexColorEnabled` defect; the support matrix and migration guide now point
+  to its implemented colored-shader path and discriminating EasyGL/SDLGPU/WebGPU coverage. The
+  null-sampler section now reflects the measured opaque-black rule and its shared indexed and
+  non-indexed regression across all active rasterizing renderers, replacing the obsolete claim
+  that renderer-family reconciliation was still pending. Focused private-GPU validation passes
+  21/21 tests across EasyGL, SDLGPU and WebGPU.
 - Surface-format support-document reconciliation (2026-10-31): the EasyGL page now separates XNA
   profile/resource restrictions, renderer classification, public transfer fidelity, physical GL
   storage and renderability. It records the completed classic Texture2D/cube/volume and DXT work,
