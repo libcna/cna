@@ -42,8 +42,10 @@ on it) rather than assuming either way.
 - **[`inspector.md`](inspector.md)** — the optional authenticated out-of-process CNA Inspector,
   compact protocol, local browser UI, activation/security model, capabilities, and limitations.
   Inspector overhead measurements are in [`inspector-benchmark.md`](inspector-benchmark.md).
-- **`graphics-renderer-feature-matrix.md`** — current per-renderer Graphics feature status.
-  Start here for "does renderer X support feature Y."
+- **[`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md)** — reconciled
+  cross-renderer Graphics feature status across all six rasterizing families plus HEADLESS/STUB.
+  Start here for "does renderer X support feature Y," then use the live capability profile for the
+  selected build, device and driver.
 - **[`renderer-capability-profiles.md`](renderer-capability-profiles.md)** — the additive detailed
   feature/limit/per-format query model, its generated English limitations report and the matching
   C ABI. Start here when the legacy 64-bit capability summary is too coarse.

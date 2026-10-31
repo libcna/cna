@@ -103,6 +103,7 @@ class MyStubTest : public Game
   written.
 - **No counters, no validation, no leak detection.** If you need any of that while still avoiding a
   GPU, use `HEADLESS` instead (see above).
-- **Not a column in `docs/graphics-renderer-feature-matrix.md`** — with zero real rendering, none of
-  that matrix's pixel/behavior rows are meaningful for this renderer, the same reasoning that
-  already excludes `HEADLESS`.
+- **Not a rasterizing column in `docs/graphics-renderer-feature-matrix.md`** — with zero real
+  rendering, none of that matrix's pixel/behavior rows are meaningful for this renderer. The
+  separate non-raster table compares its no-op contract with `HEADLESS` without turning either one
+  into a pixel-capable renderer.

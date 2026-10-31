@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Graphics renderer feature-matrix reconciliation (2026-10-31): the old EasyGL/D3D9 comparison,
+  separate Software companion and historical glTF campaign tables are replaced by one current
+  entry point covering all six rasterizing families plus HEADLESS/STUB. The new matrix separates
+  baseline support from build/profile/device/driver-dependent features, preserves the special
+  `Present` boundary, links each conditional claim to its focused source of truth and no longer
+  presents closed task lists or dated test counts as current capability evidence. The audit also
+  found the DirectX9 source-`ShaderEffect` reporting defect recorded in §5.1. Focused validation
+  selected 159 capability/profile/contract tests across the multi-renderer, SDLGPU, WebGPU,
+  Software, FNA3D and Headless configurations: 147 passed and 12 inapplicable renderer branches
+  skipped as intended; the canonical renderer-identity check also passes.
 - Vertex-format support-document reconciliation (2026-10-31): the old EasyGL-only stride table is
   now a cross-renderer contract that separates declaration validity, native format mapping and
   shader semantic consumption. It records all 12 formats across the six rasterizing renderer
@@ -548,6 +558,12 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- `DIRECTX9` executes real runtime-compiled HLSL through `D3D9EffectRenderer`, but
+  `DirectX9Renderer` does not override `ExecutesShaderEffectSourceEXT()`, `GetShaderDialectEXT()` or
+  the source-language query. The coarse `CustomEffects` capability and the pixels say yes while
+  `RendererCapabilityProfile` reports `ShaderEffectSourceExecution` and `ShaderDialectHlsl` as
+  unsupported. Found 2026-10-31 while reconciling the cross-renderer feature matrix; the existing
+  DirectX9 effect tests prove execution, but the reporting fix is not yet pinned.
 - `Microphone::Start` reports `MicrophoneState::Started` even when the capture device failed to
   open: `modules/audio/src/Xna/Microphone.cpp` swallows the failure (`catch (...)`, following FNA)
   and sets the state unconditionally. Microsoft XNA's `Microphone.Start` hands the native start's

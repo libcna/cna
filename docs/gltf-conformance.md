@@ -1003,9 +1003,11 @@ corpus L7 gate, it must first produce its own two-process report and its own jus
 it has no 3D pipeline, and a golden captured from a renderer that draws nothing would be a golden
 bug of exactly the kind `docs/gltf-center-collapse-verdict.md` §5 warns about.
 
-The glTF-specific capability table in `docs/graphics-renderer-feature-matrix.md` (`GLTF-393`) keeps
-that distinction explicit for STUB, HEADLESS and OPENGLES3 across 32-bit indices, point/line
-topology, MRT and the PBR sRGB contract.
+The non-raster table in `docs/graphics-renderer-feature-matrix.md` keeps that project-wide
+distinction explicit: STUB is an import-only/no-op boundary, HEADLESS supplies trace evidence and
+OPENGLES3 supplies pixels. The glTF-specific layout and material evidence now lives with its own
+maintained scope in `docs/gltf-renderer-stride-conformance.md` and
+`docs/gltf-renderer-pbr-fallbacks.md`; the closed `GLTF-393` campaign table remains in Git history.
 
 `GLTF-386`'s Windows run (a MinGW build under Wine) exposed and fixed two host assumptions: an
 RFC `/`-absolute URI is now classified as absolute even under Windows path semantics, and ladder

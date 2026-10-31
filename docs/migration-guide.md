@@ -88,9 +88,11 @@ alias: change selector values from `SDL_GPU` to `SDLGPU`, `CNA_RENDERER_SDL_GPU`
   `SkinnedEffect`, `Model`, render targets): use **OPENGLES3** (or **WEBGL2** under Emscripten) —
   internally implemented by EasyGL, it is the most mature 3D renderer, with the fewest open gaps
   and the most complete pixel-test coverage.
-- **Your game loads custom compiled XNA/FNA effects:** choose **FNA3D**. It is currently the only
-  renderer that advertises `GraphicsCapability::CompiledEffects`; all other renderers reject the
-  same constructor explicitly instead of substituting a stock shader.
+- **Your game loads custom compiled XNA/FNA effects:** choose **FNA3D** when you want the support
+  enabled unconditionally. EasyGL, WebGPU, SDLGPU, Software and DirectX9 implement the same shared
+  contract behind their renderer-specific `CNA_*_COMPILED_EFFECTS` build option, which is off by
+  default; a build without that runtime rejects the constructor explicitly instead of substituting
+  a stock shader.
 - **SDLGPU** is the modern native path (SDL's Vulkan, Direct3D 12 and Metal backends) and the
   default on Windows, macOS and iOS; `ShaderEffect` is compiled out of it on Windows, Apple and
   Emscripten, and it has no occlusion queries.
