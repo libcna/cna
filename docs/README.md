@@ -9,6 +9,10 @@ on it) rather than assuming either way.
 
 ## Start here
 
+- **[`maintainer-study-guide.md`](maintainer-study-guide.md)** — a rolling, evidence-driven route
+  through the current module and renderer set: sources of truth, generated-code boundaries,
+  study/change workflow, dependency-ordered phases and a first thirteen-week cycle. It replaces
+  fixed multi-year calendars tied to retired renderers and deleted plans.
 - **[`windows-visual-studio.md`](windows-visual-studio.md)** — the native Windows Visual Studio,
   VS Code and command-line workflow: shared presets, explicit MSVC CRT selection, vendored SDL
   cache rules, runtime deployment and the boundary of the automatic Windows CI evidence.

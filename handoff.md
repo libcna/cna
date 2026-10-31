@@ -35,6 +35,12 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Maintainer study workflow (2026-10-31): `docs/maintainer-study-guide.md` replaces two personal
+  August study-plan drafts with a rolling thirteen-week method grounded in current sources of
+  truth, `loc.sh`, generated-code boundaries, the current module/renderer set and the private GPU
+  runner. It keeps a ten-hour core study track with an optional ten-hour production track, leaves
+  personal notes outside the product repository, and deliberately introduces no new backlog,
+  release calendar or AI line/file quota. `docs/README.md` now routes maintainers to it.
 - Emscripten `Game` loop parity (2026-10-30): native `Tick()`, application-style Asyncify
   `Run()` and host-driven `RunFrameEXT()` now use one timing/update/draw state machine. Browser
   scheduling disables only native fixed-step waiting; it retains the high-resolution clock,
