@@ -13,6 +13,7 @@
 #include "CNA/Internal/Renderers/Software/SoftwareFramebufferAllocation.hpp"
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 #include "CNA/Internal/Renderers/Software/SoftwareTextureAllocation.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
@@ -267,6 +268,47 @@ TEST(SoftwareRendererAllocation, ATextureUploadHonoursTheCallersRowPitch)
               std::string::npos);
     EXPECT_EQ(software->ColorPixels(), expected)
         << "a refused short row pitch must leave the previous pixels in place";
+}
+
+TEST(SoftwareRendererAllocation, CubeTransfersRejectUnsafeRangesWithoutChangingStorage)
+{
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+    constexpr int size = 4;
+    constexpr int byteCount = size * size * 4;
+    SoftwareTextureCubeRenderer cube(size, false, static_cast<int>(SurfaceFormat::Color));
+
+    std::array<std::uint8_t, byteCount> baseline{};
+    for (std::size_t index = 0; index < baseline.size(); ++index)
+        baseline[index] = static_cast<std::uint8_t>(index + 1u);
+    ASSERT_TRUE(cube.SetData(0, 0, 0, 0, size, size, baseline.data(), byteCount));
+
+    EXPECT_FALSE(cube.SetData(0, 0, 0, 0, size, size, baseline.data(), byteCount - 1));
+    EXPECT_FALSE(cube.SetDataBytesEXT(
+        0, 0, std::numeric_limits<int>::max() - 1, 0, size, 1,
+        baseline.data(), size * 4));
+    EXPECT_FALSE(cube.SetDataBytesEXT(
+        0, 0, 1, 0, std::numeric_limits<int>::max(), 1,
+        baseline.data(), byteCount));
+    EXPECT_FALSE(cube.SetDataBytesEXT(
+        0, 0, 0, 0, size, size, baseline.data(), -1));
+
+    std::array<std::uint8_t, byteCount> after{};
+    ASSERT_TRUE(cube.GetDataBytesEXT(0, 0, 0, 0, size, size, after.data(), byteCount));
+    EXPECT_EQ(after, baseline)
+        << "a rejected cube upload must leave the previous face content in place";
+
+    std::array<std::uint8_t, byteCount> rejectedRead{};
+    rejectedRead.fill(0xA5u);
+    const auto sentinel = rejectedRead;
+    EXPECT_FALSE(cube.GetData(
+        0, 0, std::numeric_limits<int>::max() - 1, 0, size, 1,
+        rejectedRead.data(), size * 4));
+    EXPECT_EQ(rejectedRead, sentinel);
+    EXPECT_FALSE(cube.GetDataBytesEXT(
+        0, 0, 0, 0, size, size, rejectedRead.data(), byteCount - 1));
+    EXPECT_EQ(rejectedRead, sentinel)
+        << "a rejected cube read must leave the destination buffer untouched";
 }
 
 TEST(SoftwareRendererAllocation, ASourceBufferIsHeldToExactlyItsLevel)

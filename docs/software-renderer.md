@@ -2,7 +2,7 @@
 
 ## Status
 
-The Software renderer is a **CPU-only rasterizer graphics renderer**, verified 2026-09-13. Select it
+The Software renderer is a **CPU-only rasterizer graphics renderer**, re-verified 2026-10-31. Select it
 with:
 
 ```bash
@@ -24,11 +24,12 @@ SDL3/SDL3_mixer and
 `../sharp-runtime` checkout every other renderer already requires.
 
 The completed parity-plan verdict is **B — parity with documented language/platform boundaries**.
-Final reconciliation passes all 160 Software-labeled CTests and 2,640 of 2,688 Software graphics
-tests; the remaining 48 are exact negative controls, foreign-renderer selectors, platform-only
-tests or CNAEXT exclusions. The comparison desktop EasyGL build passes 2,635 of 2,688 with 53
-equally classified skips. No task of the campaign (`SOFTWARE-1`…`SOFTWARE-485`, plan in Git history)
-remains open.
+A complete 2026-10-31 rebuild and Software-label run covers 196 registered CTests: 175 pass, 21
+are declared capability/profile skips and none fail. The campaign's aggregate graphics
+reconciliation passes 2,640 of 2,688 Software graphics tests; the remaining 48 are exact negative
+controls, foreign-renderer selectors, platform-only tests or CNAEXT exclusions. The comparison
+desktop EasyGL build passes 2,635 of 2,688 with 53 equally classified skips. No task of the campaign
+(`SOFTWARE-1`…`SOFTWARE-485`, plan in Git history) remains open.
 
 Software executes classic Direct3D 9 Effect Framework bytecode when built with the same opt-in
 MojoShader dependency model as EasyGL. `SOFTWARE-162..165` and the focused `SOFTWARE-355..484`
@@ -822,6 +823,12 @@ can execute an opcode and still accept invalid classic bytecode.
   Multiple narrower elements may compose one wide texel without semantic conversion. DXT accepts
   byte elements only, matching Microsoft's one-byte compressed-format element oracle; exact block
   readback remains available through `GetData<byte>`.
+- **TextureCube renderer-boundary validation is overflow-safe** (`SW-07` audit reconciliation).
+  Uncompressed uploads and readbacks validate face, mip, positive dimensions, subtraction-based
+  rectangle bounds and checked `size_t` byte counts before pointer arithmetic. A refused extreme
+  coordinate, width or short buffer leaves both the cube face and a readback destination unchanged;
+  the renderer-level allocation regression exercises these guarantees independently of the public
+  `TextureCube` validation layer.
 - **NPOT textures use the ordinary complete texture path** (`SOFTWARE-144`). Exact public transfer
   coverage includes 3x5 full and partial-row updates plus the 1x2/1x1 mip tail. The unchanged 3x5
   sampled-row scene passes on Software and EasyGL, while the shared sampler contracts cover NPOT

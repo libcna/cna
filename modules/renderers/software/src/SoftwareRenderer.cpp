@@ -27,6 +27,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <new>
 #include <set>
@@ -41,6 +42,27 @@ namespace CNA::Internal::Renderers::Software
     {
         using Vector3 = Microsoft::Xna::Framework::Vector3;
         using Vector4 = Microsoft::Xna::Framework::Vector4;
+
+        [[nodiscard]] bool TryPlanCubeTransfer(
+            int dimension, int x, int y, int width, int height, int bytesPerTexel,
+            int dataLength, std::size_t& rowBytes) noexcept
+        {
+            if (dimension <= 0 || width <= 0 || height <= 0 || bytesPerTexel <= 0 ||
+                dataLength < 0 || x < 0 || y < 0 || width > dimension || height > dimension ||
+                x > dimension - width || y > dimension - height)
+                return false;
+
+            const std::size_t widthValue = static_cast<std::size_t>(width);
+            const std::size_t heightValue = static_cast<std::size_t>(height);
+            const std::size_t bytesPerTexelValue = static_cast<std::size_t>(bytesPerTexel);
+            if (widthValue > std::numeric_limits<std::size_t>::max() / bytesPerTexelValue)
+                return false;
+            rowBytes = widthValue * bytesPerTexelValue;
+            if (heightValue > std::numeric_limits<std::size_t>::max() / rowBytes)
+                return false;
+            const std::size_t requiredBytes = rowBytes * heightValue;
+            return static_cast<std::size_t>(dataLength) >= requiredBytes;
+        }
 
         struct MultiSamplePosition
         {
@@ -6344,15 +6366,15 @@ namespace CNA::Internal::Renderers::Software
         if (data == nullptr || face < 0 || face > 5) return false;
         if (level < 0 || level >= levelCount_) return false;
         const int dim = LevelDim(level);
-        if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > dim || y + h > dim) return false;
         const int bytesPerTexel = SoftwareTextureFormat::BytesPerTexel(surfaceFormat_);
-        if (dataLength < w * h * bytesPerTexel) return false;
+        std::size_t rowBytes = 0;
+        if (!TryPlanCubeTransfer(
+                dim, x, y, w, h, bytesPerTexel, dataLength, rowBytes))
+            return false;
 
         const auto* src = static_cast<const std::uint8_t*>(data);
         std::vector<std::uint8_t>& raw =
             rawLevels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)];
-        const std::size_t rowBytes =
-            static_cast<std::size_t>(w) * static_cast<std::size_t>(bytesPerTexel);
         for (int row = 0; row < h; ++row)
         {
             const std::size_t dstOffset = (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(dim) +
@@ -6520,14 +6542,12 @@ namespace CNA::Internal::Renderers::Software
             format != SurfaceFormat::Dxt5)
             return false;
         const int dim = LevelDim(level);
-        if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > dim || y + h > dim)
-            return false;
-        if (dataLength < w * h * 4)
+        std::size_t rowBytes = 0;
+        if (!TryPlanCubeTransfer(dim, x, y, w, h, 4, dataLength, rowBytes))
             return false;
         auto* dst = static_cast<std::uint8_t*>(data);
         const std::vector<std::uint8_t>& pixels =
             levels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)];
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
         for (int row = 0; row < h; ++row)
         {
             const std::size_t srcOffset = (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(dim) +
@@ -6547,17 +6567,15 @@ namespace CNA::Internal::Renderers::Software
             face < 0 || face > 5 || level < 0 || level >= levelCount_)
             return false;
         const int dim = LevelDim(level);
-        if (w <= 0 || h <= 0 || x < 0 || y < 0 || w > dim || h > dim ||
-            x > dim - w || y > dim - h)
-            return false;
         const int bytesPerTexel = SoftwareTextureFormat::BytesPerTexel(surfaceFormat_);
-        if (dataLength < w * h * bytesPerTexel) return false;
+        std::size_t rowBytes = 0;
+        if (!TryPlanCubeTransfer(
+                dim, x, y, w, h, bytesPerTexel, dataLength, rowBytes))
+            return false;
 
         auto* destination = static_cast<std::uint8_t*>(data);
         const auto& raw = rawLevels_[static_cast<std::size_t>(level)]
                                    [static_cast<std::size_t>(face)];
-        const std::size_t rowBytes =
-            static_cast<std::size_t>(w) * static_cast<std::size_t>(bytesPerTexel);
         for (int row = 0; row < h; ++row)
         {
             const std::size_t sourceOffset =

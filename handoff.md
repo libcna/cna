@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Software renderer audit reconciliation (`SW-01`…`SW-07`, 2026-10-31): the July audit's clipping,
+  viewport/scissor, depth/stencil, draw-range, instancing and public blending findings were already
+  closed by the current renderer and its shared contracts. The remaining renderer-boundary
+  hardening replaces overflow-prone `x + width` and signed byte-count arithmetic for uncompressed
+  cube uploads/readbacks with subtraction bounds and checked `size_t` plans. A direct regression
+  proves extreme coordinates, widths and short buffers are refused atomically. The complete
+  `cmake-build-software` tree builds, and all 196 Software-labeled CTests complete with 175 PASS,
+  21 declared capability/profile SKIP and 0 FAIL without a display server.
 - SDLGPU audit reconciliation (`SGPU-06`/`SGPU-07`/`SGPU-08`, 2026-10-31): the lazy
   logical-backbuffer proxy already closes the old swapchain-readback gap, so SDLGPU now participates
   in the shared point-list, indexed/non-indexed range and ordinary binding-offset backbuffer
