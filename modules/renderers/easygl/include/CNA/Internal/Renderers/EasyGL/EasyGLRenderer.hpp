@@ -1045,6 +1045,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void recreate_gl_resource() override;
 
     private:
+        void Upload(const void* data, int indexCount, std::size_t elementSize,
+                    bool applyOptions, SetDataOptions options);
         std::weak_ptr<::easygl::ResourceRegistry> registry_;
         std::vector<uint8_t> cpu_data_;
     };

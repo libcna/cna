@@ -8672,55 +8672,20 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLIndexBufferRenderer::SetData16(const void* data, int count)
     {
-        index_count = count;
-        const std::size_t byte_count = static_cast<std::size_t>(count) * sizeof(std::uint16_t);
-        if (!registry_.expired())
-        {
-            const auto* bytes = static_cast<const uint8_t*>(data);
-            cpu_data_.assign(bytes, bytes + byte_count);
-        }
-        ibo.bind(::easygl::BufferTarget::ElementArray);
-        ibo.set_data(::easygl::BufferTarget::ElementArray, data, byte_count);
+        Upload(data, count, sizeof(std::uint16_t), false, SetDataOptions::None);
         CNA_RENDER_LOG("IndexBuffer SetData16: count=" << count);
     }
 
     void EasyGLIndexBufferRenderer::SetData32(const void* data, int count)
     {
-        index_count = count;
-        const std::size_t byte_count = static_cast<std::size_t>(count) * sizeof(std::uint32_t);
-        if (!registry_.expired())
-        {
-            const auto* bytes = static_cast<const uint8_t*>(data);
-            cpu_data_.assign(bytes, bytes + byte_count);
-        }
-        ibo.bind(::easygl::BufferTarget::ElementArray);
-        ibo.set_data(::easygl::BufferTarget::ElementArray, data, byte_count);
+        Upload(data, count, sizeof(std::uint32_t), false, SetDataOptions::None);
         CNA_RENDER_LOG("IndexBuffer SetData32: count=" << count);
     }
 
     void EasyGLIndexBufferRenderer::SetData16WithOptions(const void* data, int count,
                                                         SetDataOptions options)
     {
-        index_count = count;
-        const std::size_t byte_count = static_cast<std::size_t>(count) * sizeof(std::uint16_t);
-        if (!registry_.expired())
-        {
-            const auto* bytes = static_cast<const uint8_t*>(data);
-            cpu_data_.assign(bytes, bytes + byte_count);
-        }
-        ibo.bind(::easygl::BufferTarget::ElementArray);
-        if (options == SetDataOptions::Discard) {
-            const std::size_t total = static_cast<std::size_t>(capacity) * sizeof(std::uint16_t);
-            ibo.set_data(::easygl::BufferTarget::ElementArray, nullptr,
-                         total > 0 ? total : byte_count,
-                         ::easygl::BufferUsage::DynamicDraw);
-            ibo.set_sub_data(::easygl::BufferTarget::ElementArray, data, byte_count, 0);
-        } else if (options == SetDataOptions::NoOverwrite && !cpu_data_.empty()) {
-            ibo.set_sub_data(::easygl::BufferTarget::ElementArray, data, byte_count, 0);
-        } else {
-            ibo.set_data(::easygl::BufferTarget::ElementArray, data, byte_count,
-                         ::easygl::BufferUsage::DynamicDraw);
-        }
+        Upload(data, count, sizeof(std::uint16_t), true, options);
         CNA_RENDER_LOG("IndexBuffer SetData16WithOptions: count=" << count
             << " options=" << static_cast<int>(options));
     }
@@ -8728,16 +8693,28 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLIndexBufferRenderer::SetData32WithOptions(const void* data, int count,
                                                         SetDataOptions options)
     {
+        Upload(data, count, sizeof(std::uint32_t), true, options);
+        CNA_RENDER_LOG("IndexBuffer SetData32WithOptions: count=" << count
+            << " options=" << static_cast<int>(options));
+    }
+
+    void EasyGLIndexBufferRenderer::Upload(const void* data, int count,
+                                           std::size_t elementSize,
+                                           bool applyOptions,
+                                           SetDataOptions options)
+    {
         index_count = count;
-        const std::size_t byte_count = static_cast<std::size_t>(count) * sizeof(std::uint32_t);
+        const std::size_t byte_count = static_cast<std::size_t>(count) * elementSize;
         if (!registry_.expired())
         {
             const auto* bytes = static_cast<const uint8_t*>(data);
             cpu_data_.assign(bytes, bytes + byte_count);
         }
         ibo.bind(::easygl::BufferTarget::ElementArray);
-        if (options == SetDataOptions::Discard) {
-            const std::size_t total = static_cast<std::size_t>(capacity) * sizeof(std::uint32_t);
+        if (!applyOptions) {
+            ibo.set_data(::easygl::BufferTarget::ElementArray, data, byte_count);
+        } else if (options == SetDataOptions::Discard) {
+            const std::size_t total = static_cast<std::size_t>(capacity) * elementSize;
             ibo.set_data(::easygl::BufferTarget::ElementArray, nullptr,
                          total > 0 ? total : byte_count,
                          ::easygl::BufferUsage::DynamicDraw);
@@ -8748,8 +8725,6 @@ namespace CNA::Internal::Renderers::EasyGL
             ibo.set_data(::easygl::BufferTarget::ElementArray, data, byte_count,
                          ::easygl::BufferUsage::DynamicDraw);
         }
-        CNA_RENDER_LOG("IndexBuffer SetData32WithOptions: count=" << count
-            << " options=" << static_cast<int>(options));
     }
 
     namespace
