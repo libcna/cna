@@ -35,6 +35,21 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- glTF PBR inventory and retained-record reconciliation (2026-10-31): source inventories now
+  distinguish HEADLESS's ownership-only validation from the six renderers that consume PBR maps,
+  and track DirectX9's current rigid/colour stride gate. This closes the three source-contract
+  failures exposed by the XNB-61b full content run without recasting that focused repair as a new
+  full-suite checkpoint (`85b1d0c26`). The retained center-collapse verdict and API-change review
+  now reflect the completed topology, rigid-animation, material-state, L6/L7, specular-map and
+  sampler work; the reusable campaign retrospective remains unchanged (`b8e05abf8`).
+- Cube/volume documentation reconciliation (2026-10-31): the feature matrix and EasyGL resource
+  guide now describe the implemented mip, exact-format transfer and shader-sampling contracts
+  instead of the completed Tasks 862/863 as future work. EasyGL Texture3D context-loss recovery
+  remains the separate §5.1 defect (`07bf17725`).
+- Compiled-effect documentation cleanup (2026-10-31): the obsolete pre-implementation FX bytecode
+  plan was removed after its still-current architecture, format, dependency and renderer material
+  was verified in `docs/shader-effect-vs-fx-bytecode.md` and `docs/fx-compiled-effects.md`
+  (`7c2a0a317`).
 - Graphics capability fail-closed hardening (2026-10-31): unknown legacy capability identities
   now return unsupported instead of inheriting permissive renderer defaults, and partially known
   format-usage masks cannot pass a support query. EasyGL, FNA3D, HEADLESS and SOFTWARE explicitly
@@ -54,7 +69,8 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   LZ4 external-reference loading and pre-allocation refusal of oversized filesystem and virtual
   streams. Both affected test binaries build; the broad private-GPU XNB filter passes 492/501
   with nine renderer-capability skips and no failures. The full 2,099-test content target exposed
-  only the three unrelated PBR inventory failures now recorded in §5.2.
+  only three unrelated PBR source-inventory failures; `85b1d0c26` subsequently closed those
+  focused failures, but the complete content target was not re-run as part of that repair.
 - Software renderer audit reconciliation (`SW-01`…`SW-07`, 2026-10-31): the July audit's clipping,
   viewport/scissor, depth/stencil, draw-range, instancing and public blending findings were already
   closed by the current renderer and its shared contracts. The remaining renderer-boundary
@@ -256,10 +272,11 @@ not let an issue disappear from §5 or §8.
 
 Ready to pick up next, when the owner asks: the three native-Windows validations in §8.1.
 
-Repository state last reconciled: **2026-10-31** (`next`, `ab11ea1e4`), when unknown graphics
-capabilities were made fail-closed. The immediately preceding content checkpoint completed
-compressed manifest inventory, shared bounded container decoding and type-erased LZ4 loading. The
-last plans were retired on 2026-10-29 (`225e88b09`). The campaign accounting above dates from
+Repository state last reconciled: **2026-10-31** (`next`, `b8e05abf8`), after the graphics
+capability, PBR inventory, cube/volume documentation and retained glTF record reconciliations. The
+preceding content checkpoint completed compressed manifest inventory, shared bounded container
+decoding and type-erased LZ4 loading. The last plans were retired on 2026-10-29 (`225e88b09`). The
+campaign accounting above dates from
 2026-10-24 (`96577db26`), and the test runs in §0 and §2 carry their own dates. The last full test run is the
 checkpoint identified above; do not upgrade later focused evidence into a full claim.
 
