@@ -35,6 +35,11 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Render-target support-document reconciliation (2026-10-31): the Phase 39 page now reflects the
+  implemented closure of Tasks 877, 880 and 881, recorded cube-face binding/disposal, exact EasyGL
+  depth formats, real viewport state and the shared one/four-target profile ceilings. The old
+  `EasyGL_MRT_TwoAttachments` failure is correctly classified as a discarded test premise; its
+  multi-output replacement and the measured `SOFTWARE-220/221/222` validation rules are current.
 - Graphics-state support-document reconciliation (2026-10-31): the depth/stencil, sampler and
   rasterizer support pages now agree with the implemented closure of Tasks 866, 871 and 872.
   Named presets, stencil clears (including ordering/write-mask restoration), and independent

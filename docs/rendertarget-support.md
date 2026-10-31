@@ -17,13 +17,13 @@ against FNA's C# source. Both classes' constructor overloads, `DepthStencilForma
 - `RenderTargetCube::GetTypeName()` was never overridden, so it incorrectly inherited
   `TextureCube`'s `"...TextureCube"` string instead of reporting its own type — fixed.
 
-One architecture-blocked finding, **not fixed** (out of scope for a design-pass-free task):
-`RenderTarget2D::Dispose(bool)` has a "still bound" guard (throws if disposed while bound);
-`RenderTargetCube` cannot have the same guard added without an architecture change, because
-`RenderTargetBinding` only stores `Texture*`, and `RenderTargetCube` inherits `GraphicsResource`
-directly, not `Texture` (Task 863's already-tracked gap). Confirmed `GraphicsDevice::SetRenderTarget
-(RenderTargetCube*, CubeMapFace)` never records the binding at all for the same reason — a direct
-downstream consequence of Task 863, not a new independent bug.
+The architecture-blocked cube-binding finding from this phase was subsequently closed.
+`RenderTargetCube` now inherits `TextureCube`/`Texture`, implements the common
+`IRenderTargetBindingSource`, and the singular cube-face overload delegates to the same recorded
+`SetRenderTargets` path as 2D and plural bindings. Explicit disposal while a face is bound throws
+`InvalidOperationException`, matching `RenderTarget2D`; destruction while bound safely detaches the
+native destination before releasing it. `EasyGL_BoundResourceDispose`, `EasyGL_HandleRelease` and
+the shared bound-target lifetime contract keep these cases active.
 
 ## 2. Sampling after unbinding (Tasks 333–334)
 
@@ -63,9 +63,12 @@ behavior with a real pixel test: draws a near quad then a far quad into a `Rende
 `DepthFormat::Depth24Stencil8` and `DepthStencilState::Default`, and confirms the depth test
 genuinely gates the draws on EasyGL — not just a property.
 
-Found (not fixed, tracked as **Task 877**) a real, scoped format-fidelity gap distinct from "does
-it work at all": EasyGL does not honor the *exact* requested `DepthStencilFormat` — it always
-allocates depth-only `DepthComponent24` (zero stencil bits, ever).
+Task 877 subsequently fixed the exact-format gap. EasyGL maps `DepthFormat::None` to no attachment,
+`Depth16` to `DepthComponent16`, `Depth24` to `DepthComponent24`, and `Depth24Stencil8` to the
+combined depth/stencil attachment for both `RenderTarget2D` and `RenderTargetCube`, including their
+multisample storage. `EasyGL_RenderTargetCube_DepthFormat` checks the cube path directly;
+`EasyGL_RenderTarget_DepthStencilUsage` exercises real depth and stencil behavior across target
+usage and rebind cycles.
 
 ## 4. Mipmap support (Task 336) — real fix on EasyGL
 
@@ -114,37 +117,41 @@ the backbuffer's size when unbinding) — CNA never touched either property at a
 `SetRenderTarget*`/`SetRenderTargets` overloads. Pixel-verified on EasyGL with a real GPU-level
 proof (`ScissorRectangle` is wired to the renderer's scissor test).
 
-Found and deliberately deferred a much larger, separate gap discovered along the way:
-`GraphicsDevice.Viewport` had **zero GPU wiring** on EasyGL, which hardcoded the full
-render-target/window size (Task 880).
+Task 880 subsequently connected `GraphicsDevice.Viewport` to the renderer. EasyGL converts XNA's
+top-left rectangle against the active target's own height, programs the GL viewport and depth
+range, and preserves the selected viewport until an actual target transition resets it. The
+subregion, SpriteBatch target and deferred-viewport regressions distinguish this from the former
+full-target hardcoding. `SOFTWARE-222` later pinned the complementary XNA rule: rebinding the
+identical target set is a no-op and therefore does not reset a custom viewport or scissor.
 
-## 7. Multiple render targets with mixed formats (Task 339) — audit only, no bug
+## 7. Multiple render targets and compatibility validation (Task 339)
 
-Read FNA's actual `SetRenderTargets` source: it performs **zero explicit validation** of
-format/size/count mismatches between bound targets — it computes dimensions from the first target
-only and delegates everything to the native driver. "Reject invalid combinations" is not an
-XNA-level behavior. Confirmed EasyGL behaves the same way (no CNA-level validation), consistent
-with FNA — no bug.
+The phase's FNA-only conclusion that target compatibility had no public validation was superseded
+by measured Microsoft XNA behavior in `SOFTWARE-220/221`. CNA now rejects duplicate target
+resources (including two faces of the same cube), foreign-device resources, mismatched dimensions,
+mismatched applied sample counts and different pixel sizes before changing the active set. Exact
+`SurfaceFormat` equality is not required: formats with the same pixel size are compatible.
+`SOFTWARE-222` makes an identical ordered resource/face set a true no-op.
 
-Found one real, minor divergence: FNA's actual MRT cap is `MAX_RENDERTARGET_BINDINGS = 4`
-(implicitly enforced via a fixed-size array that would throw past 4) — see §8 for EasyGL's own
-cap. Tracked as **Task 881**.
+The old `EasyGL_MRT_TwoAttachments` failure was a test-premise defect, not evidence that the second
+attachment was inactive. It used `BasicEffect`, whose fragment shader writes only output location
+0, while expecting attachment 1's pre-bind contents to survive even though its default
+`RenderTargetUsage::DiscardContents` permits them to be discarded. The replacement uses an
+explicit multi-output `ShaderEffect` and verifies ordered one-through-four-target writes,
+per-attachment color masks, slot-zero depth ownership, MSAA resolve, transitions, usage, readback
+and immediate sampling. That complete EasyGL regression passes.
 
-Deliberately did not touch the already-tracked, off-limits `EasyGL_MRT_TwoAttachments` bug
-(Task 145) — even the basic same-size 2-target MRT case is already known-broken on EasyGL, which
-blocks any meaningful deeper mismatched-format verification.
+## 8. MRT limits per renderer (Task 340 / Task 881)
 
-## 8. MRT limits per renderer (Task 340)
-
-| Renderer | Simultaneous color attachments | Enforcement |
+| Layer | Simultaneous color attachments | Enforcement |
 |---|---|---|
-| EasyGL | 8 (hardcoded `constexpr int kMaxMRT = 8`) | Silently truncates anything beyond 8 — no error. |
-| **Real FNA/XNA** | **4** (`MAX_RENDERTARGET_BINDINGS`) | Implicit — a fixed-size internal array throws if a game passes more than 4. |
+| XNA/CNA `Reach` profile | 1 | Shared profile validation rejects a larger set before renderer work. |
+| XNA/CNA `HiDef` profile | 4 (`MAX_RENDERTARGET_BINDINGS`) | Shared `GraphicsDevice::SetRenderTargets` throws above four. |
+| EasyGL hardware boundary | `min(4, GL_MAX_DRAW_BUFFERS, GL_MAX_COLOR_ATTACHMENTS)` | The renderer reports and enforces a lower native limit if the context supplies one. |
 
-EasyGL's own cap does not match FNA's real 4-target limit (Task 881); shared
-`GraphicsDevice::SetRenderTargets` enforces 4. EasyGL additionally assumes every bound target
-shares the first target's dimensions/format, with zero CNA-level cross-target validation — matching
-FNA's own delegate-to-native-driver behavior (§7), not a divergence.
+Task 881 added the shared four-target ceiling, so a renderer's larger native allowance can never
+expand the XNA API. EasyGL no longer hardcodes eight or silently truncates a set. Its binding path
+uses four explicit slots and validates the native limit before replacing the active destinations.
 
 ---
 
@@ -156,28 +163,27 @@ FNA's own delegate-to-native-driver behavior (§7), not a divergence.
 | `RenderTarget2D` sampling after unbind (`SpriteBatch`) | ✅ |
 | `RenderTargetCube` sampling after unbind (`EnvironmentMapEffect`, PBR IBL, opt-in source `ShaderEffect`) | ✅ |
 | Depth buffer functionality (does depth testing work inside an RT) | ✅ |
-| Depth/stencil format fidelity (exact `DepthFormat` honored) | ❌ always `DepthComponent24`, no stencil (Task 877) |
+| Depth/stencil format fidelity (exact `DepthFormat` honored) | ✅ (fixed, Task 877) |
 | Mipmap generation (`LevelCount`, real GPU mips) | ✅ (fixed, Task 336) |
 | MSAA (`MultiSampleCount`, real resolve) | ✅ (fixed, Task 337) |
 | `SetRenderTarget`/`SetRenderTargets` Viewport/ScissorRectangle reset on a real binding change; identical sets are no-ops | ✅ (fixed, Task 338 / SOFTWARE-222) |
-| `Viewport`'s actual GPU effect (any sub-region viewport) | ❌ zero wiring (Task 880) |
-| MRT (2+ same-size/format targets) | ❌ `EasyGL_MRT_TwoAttachments`, attachment 1 stays black (Task 145) |
-| MRT count cap matches FNA's `MAX_RENDERTARGET_BINDINGS=4` | ❌ caps at 8 instead (Task 881) |
+| `Viewport`'s actual GPU effect (subregion, target switch and depth range) | ✅ (fixed, Task 880) |
+| MRT (ordered 2–4 targets, 2D/cube faces, MSAA and per-slot masks) | ✅ |
+| MRT compatibility and device-ownership validation | ✅ (`SOFTWARE-220/221/222`) |
+| MRT count cap matches XNA's `MAX_RENDERTARGET_BINDINGS=4` | ✅ (fixed, Task 881) |
 
 Legend: ✅ verified working · ❌ confirmed broken/gap.
 
-## Open, tracked follow-up work
+## Follow-up status
 
-Phase 39 opened several new tracked tasks while auditing/fixing `RenderTarget2D`/`RenderTargetCube`:
-
-- **Task 877** — EasyGL does not honor the exact requested `DepthStencilFormat`.
-- **Task 880** — `GraphicsDevice.Viewport` still has zero GPU wiring on EasyGL (large,
-  pre-existing, broader than render targets specifically).
-- **Task 881** — `SetRenderTargets`'s per-renderer MRT cap doesn't match FNA's real limit of 4.
-
-Pre-existing, not opened this phase, still blocking deeper MRT work: `EasyGL_MRT_TwoAttachments`
-(Task 145) — even a basic same-size 2-target MRT setup doesn't render correctly on EasyGL. Needs
-its own dedicated root-cause investigation before Task 881 or any other MRT-adjacent work can be
-meaningfully extended.
+- Tasks 877, 880 and 881 are closed by the exact depth-format mapping, real viewport wiring and
+  shared XNA MRT ceiling described above.
+- Task 145's failing test premise was replaced by the discriminating multi-output MRT contract;
+  there is no surviving EasyGL two-attachment defect.
+- The former Task 863 downstream gap is closed: cube faces participate in recorded singular and
+  plural bindings, explicit bound disposal is rejected, and destruction cannot leave a dangling
+  native target.
+- Current repository-wide renderer defects and intentional capability limits live in
+  `handoff.md` §5; none of the historical open items on this page remains one of them.
 
 This closes Phase 39 (graphics Tasks 331–340) in full.
