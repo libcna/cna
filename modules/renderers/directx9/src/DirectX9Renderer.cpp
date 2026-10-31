@@ -373,7 +373,7 @@ namespace CNA::Internal::Renderers::DirectX9
     D3DPRESENT_PARAMETERS DirectX9Renderer::BuildPresentParameters() const
     {
         D3DPRESENT_PARAMETERS pp{};
-        pp.Windowed = !isFullScreen_;
+        pp.Windowed = !isFullScreen_ || fullscreenUsesWindowedSwapChain_;
         pp.SwapEffect = D3DSWAPEFFECT_DISCARD;
 
         const D3DFORMAT requestedBackBufferFormat = SurfaceFormatToD3D9(backBufferFormatOrdinal_);
@@ -406,11 +406,40 @@ namespace CNA::Internal::Renderers::DirectX9
         switch (swapInterval_)
         {
             case 0:  pp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE; break;
-            case 2:  pp.PresentationInterval = D3DPRESENT_INTERVAL_TWO; break;
+            case 2:
+                // D3DPRESENT_INTERVAL_TWO is optional and is invalid for a windowed swap chain.
+                // XNA still retains the requested PresentInterval in PresentationParameters,
+                // while the native presentation mode falls back to the universally available
+                // one-vblank interval instead of making Reset fail with D3DERR_INVALIDCALL.
+                pp.PresentationInterval =
+                    !pp.Windowed &&
+                            (caps_.PresentationIntervals & D3DPRESENT_INTERVAL_TWO) != 0
+                        ? D3DPRESENT_INTERVAL_TWO
+                        : D3DPRESENT_INTERVAL_ONE;
+                break;
             default: pp.PresentationInterval = D3DPRESENT_INTERVAL_ONE; break;
         }
 
         return pp;
+    }
+
+    HRESULT DirectX9Renderer::ResetDeviceWithPresentationFallbackEXT(
+        D3DPRESENT_PARAMETERS& parameters)
+    {
+        HRESULT hr = device_->Reset(&parameters);
+        if (SUCCEEDED(hr) || parameters.Windowed || !isFullScreen_)
+            return hr;
+
+        // GraphicsDevice has already asked the platform window for exclusive fullscreen. On a
+        // nested/virtual display SDL may truthfully fall back to desktop fullscreen while D3D9's
+        // independent display-mode switch is unavailable. Keep the public XNA request intact and
+        // retry only the native swap chain in windowed mode; real Windows hardware still takes the
+        // exclusive path whenever its first Reset succeeds.
+        parameters.Windowed = TRUE;
+        hr = device_->Reset(&parameters);
+        if (SUCCEEDED(hr))
+            fullscreenUsesWindowedSwapChain_ = true;
+        return hr;
     }
 
     void DirectX9Renderer::CreateDeviceResources(const GraphicsRendererCreateArgs&)
@@ -433,6 +462,9 @@ namespace CNA::Internal::Renderers::DirectX9
             ? D3DCREATE_HARDWARE_VERTEXPROCESSING
             : D3DCREATE_SOFTWARE_VERTEXPROCESSING;
 
+        // BuildPresentParameters needs PresentationIntervals even before the device exists so an
+        // initial PresentInterval::Two request can be normalized to a supported native interval.
+        caps_ = preCreateCaps;
         D3DPRESENT_PARAMETERS pp = BuildPresentParameters();
 
         hr = d3d9_->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hwnd_, vertexProcessingFlags,
@@ -505,7 +537,7 @@ namespace CNA::Internal::Renderers::DirectX9
         defaultDepthStencilSurface_.Reset();
 
         D3DPRESENT_PARAMETERS pp = BuildPresentParameters();
-        HRESULT hr = device_->Reset(&pp);
+        HRESULT hr = ResetDeviceWithPresentationFallbackEXT(pp);
         if (FAILED(hr))
         {
             // Even INVALIDCALL leaves D3D9 unusable after Reset: only Reset,
@@ -554,6 +586,8 @@ namespace CNA::Internal::Renderers::DirectX9
 
         backBufferFormatOrdinal_ = backBufferFormat;
         depthStencilFormatOrdinal_ = depthStencilFormat;
+        if (isFullScreen != isFullScreen_)
+            fullscreenUsesWindowedSwapChain_ = false;
         isFullScreen_ = isFullScreen;
         presentationDirty_ = true;
         // D9-64 fix: apply immediately rather than deferring to the next Present(). A game (or
@@ -606,7 +640,7 @@ namespace CNA::Internal::Renderers::DirectX9
             height_ = drawableSize.height;
         }
         D3DPRESENT_PARAMETERS pp = BuildPresentParameters();
-        HRESULT hr = device_->Reset(&pp);
+        HRESULT hr = ResetDeviceWithPresentationFallbackEXT(pp);
         if (FAILED(hr))
         {
             // Reset() can itself fail (genuinely still lost, or a real error) -- stay in the lost

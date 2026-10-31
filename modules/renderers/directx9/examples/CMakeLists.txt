@@ -92,6 +92,22 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_Smoke COMMAND ${_directx9_smoke_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
+    # DX9 audit regression: public GraphicsDeviceManager::ApplyChanges() must forward both VSync
+    # values and D3D9 must apply them to the live swap chain rather than merely storing them.
+    cna_directx9_test(cna_test_directx9_swap_interval directx9_swap_interval_test.cpp)
+    cna_directx9_ctest_command(_directx9_swap_interval_cmd cna_test_directx9_swap_interval)
+    cna_register_renderer_test(NAME DirectX9_SwapInterval
+        COMMAND ${_directx9_swap_interval_cmd} TIMEOUT 60 LABELS "DIRECTX9")
+
+    # The shared public Reset contract includes the optional two-vblank interval and a fullscreen
+    # request on displays that may decline exclusive mode. Keep these in the focused renderer suite
+    # as well as in CnaGraphicsTests' normal GoogleTest discovery.
+    cna_directx9_ctest_command(_directx9_presentation_lifecycle_cmd CnaGraphicsTests)
+    cna_register_renderer_test(NAME DirectX9_PresentationLifecycle
+        COMMAND ${_directx9_presentation_lifecycle_cmd}
+                --gtest_filter=PresentationLifecycle.EveryPresentIntervalRoundTripsThroughReset:PresentationLifecycle.IsFullScreenRoundTripsThroughResetBothWays
+        TIMEOUT 120 LABELS "DIRECTX9")
+
     if(CNA_DIRECTX9_COMPILED_EFFECTS)
         cna_directx9_ctest_command(_directx9_compiled_effects_cmd CnaRendererTests)
         cna_register_renderer_test(NAME DirectX9_CompiledEffects

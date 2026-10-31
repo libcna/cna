@@ -326,7 +326,11 @@ ran `DirectX9CompiledEffect*` 31/32 (one declared skip) and `XnaMultisamplePixel
 `RenderTargetReadbackLayout*` 5/6 (one declared skip) on `DIRECTX9`; the Emscripten
 `cna_webgpu_compiled_effect_page` passed 21/21 in headless Chrome; Android was not rebuilt at this
 pin (at `aa3139087e69` Android x86_64, NDK 29, built SDL with its patches and `cna_platform`, not
-run). Latest full Debug runs, 2026-10-17 at the end of the handoff 5.1 stabilization pass (branch `stabilization`, worktree
+run). On 2026-10-31 under Wine with DXVK 2.6.0, the two DirectX9 presentation-reset regressions
+and the focused live-swap-chain VSync test passed through the private GPU runner; optional
+`PresentInterval::Two` now falls back to one retrace for a windowed chain, and unavailable
+exclusive fullscreen falls back to a windowed D3D9 chain without losing the XNA fullscreen
+request. Latest full Debug runs, 2026-10-17 at the end of the handoff 5.1 stabilization pass (branch `stabilization`, worktree
 `cna-stab`), through the private runner on RADV: `cmake-build-multi` (`OPENGLES3` default with
 `OPENGL33`, `WEBGPU`, `SDLGPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`; C API) 11,433 tests, 1
 failed (`EasyGL_Conformance_render_target_own_msaa`, §5.3), 195 skipped;
@@ -383,12 +387,8 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   wins. Found 2026-10-28 by reading XNA's decompiled source (former AUD-13-001); not yet pinned by
   a test.
 - `CnaGraphicsTests.exe` on `DIRECTX9` (`cmake-build-mingw`, Wine with DXVK 3.1.1, eight shards,
-  2026-10-28) fails three cases that also fail on `ed724c017` without that day's null-texture
-  change: `PresentationLifecycle.EveryPresentIntervalRoundTripsThroughReset` and
-  `.IsFullScreenRoundTripsThroughResetBothWays` -- `GraphicsDevice::Clear` after a presentation
-  `Reset` throws `DeviceLostException` ("The graphics device was lost.",
-  `PresentationLifecycleTests.cpp:223`/`246`) -- and
-  `ShadowTargetOrientation/2.RenderedUpperHalfOccluderShadowsOnlyUpperHalf` (`PbrEffect`), where
+  2026-10-28) fails `ShadowTargetOrientation/2.RenderedUpperHalfOccluderShadowsOnlyUpperHalf`
+  (`PbrEffect`), where
   DirectX9 refuses the 68-byte PBR vertex layout ("stride 68 has no matching CNA vertex layout,
   expected 48 or 60"). The shards last passed 2,688/2,688 under DXVK 2.6.0 (see §2); not bisected.
 - `WEBGPU` fails two shared presentation programs it is not registered for, which EasyGL and

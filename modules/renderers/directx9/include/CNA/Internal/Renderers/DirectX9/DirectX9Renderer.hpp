@@ -411,7 +411,19 @@ namespace CNA::Internal::Renderers::DirectX9
         // 'virtual.*{}$'` (D9-11's own suggested method) does not find them. All 4 are real above now
         // (the first 3 forced in early by GraphicsDevice's own constructor; ApplySamplerState by
         // D9-63, once D9-50's real textures existed to make it meaningful).
+        /**
+         * @brief Applies a requested XNA presentation interval through a D3D9 device reset.
+         *
+         * @param interval Requested interval: zero for immediate, one for one vertical retrace,
+         *                 or two for two vertical retraces.
+         */
         void SetSwapInterval(int interval) override;
+        /**
+         * @brief Returns the presentation interval most recently requested by the XNA layer.
+         *
+         * @return The requested interval, before any device-capability fallback.
+         */
+        CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
         void SetContextRecoveryEnabled(bool enabled) override;
         void SetStringMarkerEXT(const char* marker) override;
         void DebugSimulateContextLoss() override;
@@ -530,6 +542,14 @@ namespace CNA::Internal::Renderers::DirectX9
         /// fullscreen/swap-interval fields -- shared by construction, resize, and device-lost
         /// recovery, all of which need the identical D3DPRESENT_PARAMETERS shape.
         D3DPRESENT_PARAMETERS BuildPresentParameters() const;
+        /**
+         * @brief Resets the D3D9 device with a fallback from unavailable exclusive fullscreen.
+         *
+         * @param parameters Requested presentation parameters; updated to the applied windowed
+         *                   fallback when exclusive mode is refused.
+         * @return The final IDirect3DDevice9::Reset result.
+         */
+        HRESULT ResetDeviceWithPresentationFallbackEXT(D3DPRESENT_PARAMETERS& parameters);
         /// D9-33: D3D9 has no ResizeBuffers -- a window resize (or a presentation-format change
         /// reported via UpdatePresentationFormatEXT()) is a device Reset() with updated
         /// width_/height_/format fields. Called lazily from Present() (checked every Present()
@@ -746,6 +766,10 @@ namespace CNA::Internal::Renderers::DirectX9
         bool requestedStencilEnable_ = false;
         void PushDepthStencilEnablesEXT(const char* context);
         bool isFullScreen_ = false;
+        // A requested exclusive D3D9 reset may be unavailable on a nested/virtual display even
+        // though the platform window successfully entered its own fullscreen fallback. Retain the
+        // usable windowed swap-chain choice until the fullscreen request changes.
+        bool fullscreenUsesWindowedSwapChain_ = false;
         int swapInterval_ = 1;
         /// D9-32: the game's requested Microsoft::Xna::Framework::Graphics::GraphicsProfile
         /// ordinal (Reach=0, HiDef=1), checked against the real device's D3DCAPS9 at construction.
