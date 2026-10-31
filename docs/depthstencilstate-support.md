@@ -19,13 +19,23 @@ One real, fixed finding: FNA's private preset constructor sets `Name` on every p
 (Task 291) and `BlendState` (Task 301). Fixed, closing `DepthStencilState`'s portion of Task 866;
 `RasterizerState`'s portion remains open for its own Phase 38 audit task.
 
-## 2. Default depth/stencil state on `GraphicsDevice` (Task 312)
+## 2. Default graphics states on `GraphicsDevice` (Tasks 312/896/955)
 
-FNA's `GraphicsDevice` constructor sets `DepthStencilState = DepthStencilState.Default` and
-`RasterizerState = RasterizerState.CullCounterClockwise`. CNA's `depthStencilState_`/
-`rasterizerState_` members were plain default-constructed, never actually copied from those
-presets — the same bug shape as Task 302's `BlendState` finding (values coincided, invisible until
-`Name` existed to distinguish them). Fixed via the constructor's member-init list.
+FNA's `GraphicsDevice` constructor assigns all three named presets: `BlendState.Opaque`,
+`DepthStencilState.Default`, and `RasterizerState.CullCounterClockwise`. Tasks 302/312 corrected
+CNA's public member initialization, but that alone did not apply the values to the renderer.
+Tasks 896/955 completed the contract: after resolving the renderer, CNA applies all three presets
+through their ordinary property setters. A renderer without 3D support retains the same public
+`DepthStencilState.Default` value without attempting a native depth-state call.
+
+Before Task 955, EasyGL therefore exposed `DepthStencilState.Default` through the property while
+OpenGL's real depth test remained disabled until a game explicitly assigned the state. The shared
+`graphicsdevice_default_state_occlusion_test.cpp` deliberately calls none of the three state
+setters: it draws a near quad before a fully overlapping far quad, then reverses draw order as a
+positive control. This proves the constructed default reaches actual rendering before the first
+draw rather than merely appearing in getters. The regression remains registered for EasyGL and
+SDLGPU. The original cross-repository investigation and screenshots remain in Git history at
+`3de312870`.
 
 ## 3. Depth testing (Tasks 313–314)
 
@@ -106,7 +116,7 @@ Two distinct findings:
 | Feature | EasyGL |
 |---|---|
 | `DepthStencilState` API/presets/`Name` | ✅ |
-| Default `DepthStencilState`/`RasterizerState` on `GraphicsDevice` | ✅ (fixed) |
+| Default `BlendState`/`DepthStencilState`/`RasterizerState` applied on `GraphicsDevice` construction | ✅ (fixed, Tasks 302/312/896/955) |
 | `DepthBufferWriteEnable` | ✅ |
 | `DepthBufferFunction` (all `CompareFunction` values) | ✅ |
 | `StencilEnable` | ✅ (fixed, Task 315) |

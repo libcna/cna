@@ -35,6 +35,12 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Depth-occlusion audit documentation cleanup (2026-10-31): the resolved Task 955 investigation
+  was retired after the `GraphicsDevice` constructor-default contract and its active EasyGL/SDLGPU
+  regression moved to `docs/depthstencilstate-support.md`. Task 956's separate SpriteBatch blend
+  leak remains fixed and independently documented/tested. The old SimpleAnimation conversion and
+  retired-renderer comparisons are historical only; the full investigation and screenshots remain
+  in Git history.
 - Culling-audit documentation cleanup (2026-10-31): the resolved Task 954 investigation was
   retired after its measured real-XNA winding contract and active regression inventory moved to
   `docs/rasterizerstate-support.md`. All oracle, test and follow-up references now point to the

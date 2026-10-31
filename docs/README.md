@@ -125,9 +125,6 @@ Kept for their investigation methodology and root-cause detail, not as current s
 
 - `graphicsdevice-fna-audit.md`, `graphicsresource-fna-audit.md`, `graphics-resource-lifetime.md` —
   per-class FNA-fidelity audits, not re-verified in the 2026-07-11 pass.
-- `xna_depth_occlusion_compatibility_audit.md` — Task 955's 2026-07-11 cross-repo
-  `../cna-samples` investigation write-up, current as of its own date. Its screenshots were removed
-  on 2026-10-11 and remain in Git history.
 
 ## Platform / renderer limitations
 

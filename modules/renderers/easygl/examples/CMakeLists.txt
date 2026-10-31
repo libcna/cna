@@ -1950,9 +1950,9 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_GraphicsDevice_ClearDepth COMMAND cna_test_easygl_graphicsdevice_clear_depth
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # Task 955: a freshly-constructed GraphicsDevice's own default state (no game code ever
-        # explicitly setting BlendState/DepthStencilState/RasterizerState, exactly like
-        # ../cna-samples SimpleAnimation's Tank.hpp) must produce correct opaque depth occlusion.
+        # Task 955 (docs/depthstencilstate-support.md, section 2): a freshly-constructed
+        # GraphicsDevice's own default state, with no game code explicitly setting
+        # BlendState/DepthStencilState/RasterizerState, must produce correct opaque depth occlusion.
         cna_easygl_test(cna_test_easygl_graphicsdevice_default_state_occlusion
                         ${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_default_state_occlusion_test.cpp)
         cna_register_renderer_test(NAME EasyGL_GraphicsDevice_DefaultStateOcclusion COMMAND cna_test_easygl_graphicsdevice_default_state_occlusion

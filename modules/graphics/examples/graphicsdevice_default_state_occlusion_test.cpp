@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// Task 955: verify that a freshly-constructed GraphicsDevice's own DEFAULT state -- with NO game
-// code ever explicitly calling setDepthStencilStateProperty()/setBlendStateProperty() itself,
-// exactly like ../cna-samples/samples/SimpleAnimation/src/Tank.hpp's own Draw() (mirroring real
-// XNA's Tank.cs) -- actually produces correct opaque depth occlusion.
+// Task 955: verify that a freshly-constructed GraphicsDevice's own DEFAULT state -- with no game
+// code explicitly calling any state setter -- produces correct opaque depth occlusion. The live
+// contract is documented in docs/depthstencilstate-support.md, section 2.
 //
 // Root cause this guards against: GraphicsDevice's constructor only ever pushed its
 // RasterizerState default to the renderer (Task 896). BlendState/DepthStencilState were left as
@@ -10,8 +9,7 @@
 // renderer's OWN internal hardcoded default silently won instead of XNA's real
 // DepthStencilState.Default (depth test+write ON, LessEqual). On EasyGL this meant depth testing
 // was plain OpenGL's raw default: DISABLED -- any two overlapping opaque draws simply painted in
-// draw order regardless of Z, which is exactly the "background parts visible through foreground
-// parts" symptom reported against SimpleAnimation. Real FNA's own GraphicsDevice constructor
+// draw order regardless of Z. Real FNA's own GraphicsDevice constructor
 // (GraphicsDevice.cs) sets all 3 of BlendState/DepthStencilState/RasterizerState unconditionally;
 // Task 896 ported only the RasterizerState line. Task 955 ports the other two.
 //
@@ -19,8 +17,8 @@
 // which a broken/disabled depth test would pass by accident): draw a NEAR quad (green, z=0.2)
 // FIRST, then a FAR quad (red, z=0.8) fully overlapping it SECOND. Neither draw call -- nor
 // anything else in this file -- ever calls setDepthStencilStateProperty()/setBlendStateProperty()/
-// setRasterizerStateProperty(). Only BasicEffect.Apply() runs, exactly matching Tank.hpp's own
-// draw loop. Correct default behaviour (depth test+write genuinely ON) rejects the far quad's
+// setRasterizerStateProperty(). Only BasicEffect.Apply() runs. Correct default behaviour (depth
+// test+write genuinely ON) rejects the far quad's
 // later z=0.8 fragment against the near quad's already-written z=0.2 -- pixel stays GREEN. If the
 // default depth state is not actually reaching the renderer (the bug), the far quad is drawn with
 // no depth test at all and simply overpaints the near quad in draw order -- pixel goes RED.
@@ -33,9 +31,8 @@
 //   state and not some unrelated rendering failure.
 //
 // Each check is its own real frame/Draw() call with its own Clear()+2 draws+1 GetBackBufferData()
-// read, matching graphicsdevice_clear_depth_test.cpp's own established multi-frame-state-machine
-// shape -- required for Bgfx, whose GetBackBufferData() only reliably reflects the FIRST read of
-// a given rendered frame (Task 406).
+// read, matching graphicsdevice_clear_depth_test.cpp's established multi-frame state machine and
+// avoiding cross-check coupling through presentation/readback state.
 //
 // Exit code 0 = both checks PASS, 1 = either FAILs.
 
@@ -92,11 +89,10 @@ namespace
 
     // Returns the sampled centre-pixel colour after clearing and drawing the near/far quads in
     // the given order. NEVER touches BlendState/DepthStencilState/RasterizerState -- the entire
-    // point is to exercise GraphicsDevice's own untouched defaults, exactly like Tank.hpp's Draw().
+    // point is to exercise GraphicsDevice's own untouched defaults.
     Color ClearAndDrawOverlappingQuads(GraphicsDevice& dev, bool nearFirst)
     {
-        // Single-Color overload, matching SimpleAnimationGame::Draw()'s own
-        // device.Clear(Color(...)) call exactly (defaults to Target|DepthBuffer).
+        // The single-Color overload defaults to Target|DepthBuffer.
         dev.Clear(kBackground);
         ApplyBasicEffect(dev);
 
@@ -185,9 +181,8 @@ public:
         gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
-        // Deliberately NOT overriding PreferredDepthStencilFormat -- GraphicsDeviceManager's own
-        // default (DepthFormat::Depth24) is exactly what SimpleAnimation itself gets, and is part
-        // of what this test is verifying end-to-end.
+        // Deliberately NOT overriding PreferredDepthStencilFormat: XNA's manager default
+        // (DepthFormat::Depth24) is part of the end-to-end constructor contract.
     }
 
     int getResult() const { return result_; }
