@@ -115,8 +115,8 @@ original phase closed — check each file's own status banner/date.
   `texture-stream-formats.md`, `vertex-format-support.md`, `spritefont-support.md`,
   `viewport-displaymode-adapter-support.md` — not re-verified in the 2026-07-11 pass.
 - `shader-effect-vs-fx-bytecode.md` — custom GLSL `ShaderEffect` versus compiled XNA effect
-  bytecode, and which renderers execute the latter; `fx-bytecode-support-plan.md` is the original
-  (historical) plan for that work.
+  bytecode, and which renderers execute the latter; `fx-compiled-effects.md` is the complete
+  porter-facing guide to the compiled path.
 
 ## Graphics — historical audits and dated snapshots
 
