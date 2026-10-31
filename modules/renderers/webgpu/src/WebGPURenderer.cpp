@@ -8737,6 +8737,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     void WebGPURenderer::IssueSprite(WGPURenderPassEncoder pass,
                                             const SpriteCommand& command,
                                             std::uint32_t spriteIndex,
+                                            std::uint32_t spriteCount,
                                             WGPUTextureFormat targetFormat,
                                             std::uint32_t targetSampleCount,
                                             ReplayState& state)
@@ -8852,7 +8853,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         }
         else
         {
-            wgpuRenderPassEncoderDraw(pass, 6, 1, spriteIndex * 6u, 0);
+            wgpuRenderPassEncoderDraw(pass, 6u * spriteCount, 1, spriteIndex * 6u, 0);
         }
     }
 
@@ -10778,7 +10779,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
 
         for (WGPUBuffer buffer : transient) pendingBufferReleases_.push_back(buffer);
-        ++nativeDrawIssueCount_;
     }
 
 
@@ -10945,7 +10945,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         state.boundPipeline = nullptr;
         for (WGPUBuffer buffer : transient) pendingBufferReleases_.push_back(buffer);
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
-        ++nativeDrawIssueCount_;
     }
 
     // WMG-0024: the compiled-effect block starts HERE, not
@@ -11980,6 +11979,43 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         replayMrtColorFormats_ = destination.mrtColorFormats;
         const bool trace = TraceDrawOrder();
 
+        const auto sameBlend = [](const WebGPUSpriteBlendSnapshot& a,
+                                  const WebGPUSpriteBlendSnapshot& b) {
+            return a.blendEnabled == b.blendEnabled &&
+                   a.colorSrc == b.colorSrc && a.colorDst == b.colorDst &&
+                   a.alphaSrc == b.alphaSrc && a.alphaDst == b.alphaDst &&
+                   a.colorFunc == b.colorFunc && a.alphaFunc == b.alphaFunc &&
+                   a.colorWriteMask == b.colorWriteMask &&
+                   a.multiSampleMask == b.multiSampleMask &&
+                   a.blendFactorR == b.blendFactorR &&
+                   a.blendFactorG == b.blendFactorG &&
+                   a.blendFactorB == b.blendFactorB &&
+                   a.blendFactorA == b.blendFactorA &&
+                   a.targetFormat == b.targetFormat && a.sampleCount == b.sampleCount;
+        };
+        const auto sameViewport = [](const WebGPUViewportSnapshot& a,
+                                     const WebGPUViewportSnapshot& b) {
+            return a.set == b.set && a.x == b.x && a.y == b.y &&
+                   a.width == b.width && a.height == b.height &&
+                   a.minDepth == b.minDepth && a.maxDepth == b.maxDepth;
+        };
+        const auto sameScissor = [](const WebGPUScissorSnapshot& a,
+                                    const WebGPUScissorSnapshot& b) {
+            return a.enabled == b.enabled && a.x == b.x && a.y == b.y &&
+                   a.width == b.width && a.height == b.height;
+        };
+        const auto sameStockSpriteState = [&](const SpriteCommand& a, const SpriteCommand& b) {
+            return a.customEffect == nullptr && b.customEffect == nullptr &&
+                   !a.wireframe && !b.wireframe &&
+                   a.texture.View() == b.texture.View() &&
+                   a.textureFilter == b.textureFilter &&
+                   a.addressU == b.addressU && a.addressV == b.addressV &&
+                   a.addressW == b.addressW && a.maxMipLevel == b.maxMipLevel &&
+                   a.maxAnisotropy == b.maxAnisotropy && a.lodBias == b.lodBias &&
+                   a.surfaceFormat == b.surfaceFormat && sameBlend(a.blend, b.blend) &&
+                   sameViewport(a.viewport, b.viewport) && sameScissor(a.scissor, b.scissor);
+        };
+
         ReplayState state{};
         // The pass opened with the renderer's current factor as its constant (see where the segment begins).
         state.passBlend[0] = blendFactorR_;
@@ -12053,20 +12089,44 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 continue;
             }
 
+            // Stock SpriteBatch vertices already occupy one contiguous shared buffer. Collapse only
+            // a truly adjacent run whose complete native state is identical. The ordered stream,
+            // an unreferenced sample-mask-zero command, an occlusion-query boundary, custom WGSL,
+            // and wireframe all remain hard barriers.
+            std::size_t spriteRunLength = 1;
+            if (entry.family == DrawFamily::Sprite &&
+                spriteCommands_[i].customEffect == nullptr && !spriteCommands_[i].wireframe)
+            {
+                while (e + spriteRunLength < firstEntry + entryCount)
+                {
+                    const DrawOrderEntry& next = drawOrder_[e + spriteRunLength];
+                    if (next.kind != OrderedKind::Draw || next.family != DrawFamily::Sprite ||
+                        next.index != entry.index + spriteRunLength ||
+                        next.occlusionQuery != entry.occlusionQuery ||
+                        next.occlusionRun != entry.occlusionRun ||
+                        !sameStockSpriteState(spriteCommands_[i], spriteCommands_[next.index]))
+                        break;
+                    ++spriteRunLength;
+                }
+            }
+
             for (int c = 0; c < 4; ++c) state.drawBlend[c] = entry.blendFactor[c];
             // Trace only: both positions the multi-texture sampler trace reports.
             state.publicOrder = entry.order;
             state.replayPosition = issued;
             ++issued;
-            // WEBGPU-115: one increment per command actually handed to the pass encoder. This is
-            // the single point every family's native draw passes through, so a refused draw's
-            // "nothing reached the GPU" is a measured zero here, not an inference from pixels.
+            // One increment per native draw handed to the pass encoder. A stock sprite run is one
+            // issue even though it consumes several logical commands; every other family remains
+            // one command per issue.
             ++nativeDrawIssueCount_;
             switch (entry.family)
             {
             case DrawFamily::Sprite:
-                IssueSprite(pass, spriteCommands_[i], entry.index, destination.colorFormat,
+                IssueSprite(pass, spriteCommands_[i], entry.index,
+                            static_cast<std::uint32_t>(spriteRunLength), destination.colorFormat,
                             destination.sampleCount, state);
+                issued += spriteRunLength - 1;
+                e += spriteRunLength - 1;
                 break;
             case DrawFamily::Colored:     IssueColoredDraw(pass, coloredDrawCommands_[i], state); break;
             case DrawFamily::Textured:    IssueTexturedDraw(pass, texturedDrawCommands_[i], state); break;

@@ -1600,9 +1600,9 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             return queuedDrawCommandCount_;
         }
-        /// WEBGPU-115: queued draw commands actually replayed into a native render pass since
-        /// device creation. It is the count of native wgpuRenderPassEncoderDraw*/sprite issues, so
-        /// "nothing was submitted for the refused draw" is measured rather than inferred.
+        /// WEBGPU-115: native wgpuRenderPassEncoderDraw* issues since device creation. Consecutive
+        /// compatible stock sprites share one issue, while every other accepted command issues
+        /// once, so both refusal and SpriteBatch run cardinality are measured rather than inferred.
         [[nodiscard]] std::size_t GetNativeDrawIssueCountEXT() const noexcept
         {
             return nativeDrawIssueCount_;
@@ -2984,7 +2984,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // viewport; that clamp now lives in ApplyDrawViewport(), against the pass state
         // BeginPassViewport() recorded, so every family clamps identically.
         void IssueSprite(WGPURenderPassEncoder pass, const SpriteCommand& command,
-                         std::uint32_t spriteIndex, WGPUTextureFormat targetFormat,
+                         std::uint32_t spriteIndex, std::uint32_t spriteCount,
+                         WGPUTextureFormat targetFormat,
                          std::uint32_t targetSampleCount, ReplayState& state);
         /// WEBGPU-142: replays one sprite whose `SpriteBatch.Begin` bound a custom WGSL ShaderEffect
         /// -- builds/fetches a pipeline from the effect's modules with the fixed SpriteVertex layout

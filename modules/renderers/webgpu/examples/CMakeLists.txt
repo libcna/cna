@@ -408,6 +408,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_BindingCost COMMAND cna_test_webgpu_binding_cost
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Stock SpriteBatch run cardinality: same-state consecutive sprites issue one native draw,
+    # Deferred texture alternation stays ordered, Texture sort collapses it to two runs, and a
+    # sampler change remains a barrier. Pixel readback protects the merged vertex ranges.
+    cna_webgpu_test(cna_test_webgpu_sprite_run_cost webgpu_sprite_run_cost_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_SpriteRunCost COMMAND cna_test_webgpu_sprite_run_cost
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # STREETW-0001: the same family when the draw is INSTANCED, which
     # until then fell through to instanced3d.wgsl -- position-only, unlit, untextured.
     cna_webgpu_test(cna_test_webgpu_instanced_pbr3d webgpu_instanced_pbr3d_test.cpp)
