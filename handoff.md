@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Viewport/display/adapter support-document reconciliation (2026-10-31): the Phase 40 page no
+  longer says Emscripten and Android have never run CNA. It records the real Chrome WEBGL2/WEBGPU
+  and Android-emulator OPENGLES3 boundary without claiming dedicated adapter-value coverage, and
+  incorporates the later adapter video pin/rebinding/thread-safety work, XNA's strict 1.6
+  widescreen threshold, `XNA-MISSING-010` device-selection flags and renderer-aware capability
+  probes. Focused validation passes 112 API, subsystem-lifecycle, platform and resize tests across
+  the default and WebGPU builds; two renderer/environment-specific branches are expected-skipped.
 - Sampler-state support-document follow-up reconciliation (2026-10-31): the Phase 35 page no
   longer calls mip-aware `Point`/`Linear` a deliberate level-zero deviation, and now records
   REMED-GFX-175's corrected nine-value filter table. The renderer inventory includes Software and

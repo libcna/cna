@@ -1,10 +1,15 @@
-# Viewport / DisplayMode / GraphicsAdapter Support Matrix
+# Viewport / DisplayMode / GraphicsAdapter support matrix
+
+> **Current-state reconciliation, 2026-10-31:** this page preserves the Phase 40 findings and now
+> includes the later adapter-lifecycle, XNA widescreen and device-selection corrections. Its former
+> claim that Android and Web had never executed CNA is obsolete: `OPENGLES3` has run on an Android
+> emulator, and both `WEBGL2` and browser `WEBGPU` have run in Chrome. The exact browser/Android
+> `GraphicsAdapter` value surface is still not covered by a dedicated platform oracle (§6).
 
 Phase 40 (graphics Tasks 341–350) audited `Viewport`, `DisplayMode`,
 `DisplayModeCollection`, and `GraphicsAdapter` against FNA, verified the real window-resize and
-render-target-switch chains end-to-end, and fixed several real bugs along the way. This document
-summarizes those findings and closes the phase with a look at non-desktop (Android/Web) platform
-limitations.
+render-target-switch chains end-to-end, and fixed several real bugs. This document records those
+findings together with the current cross-platform boundary.
 
 ---
 
@@ -26,7 +31,7 @@ Task 345's `GraphicsAdapter` audit found FNA has a real `this[SurfaceFormat form
 retroactively wrapped CNA's own `getCountProperty()`/integer indexer in `CNAEXT` (neither exists in
 FNA's real API).
 
-## 3. `GraphicsAdapter` audit (Tasks 345–346) — real bugs fixed
+## 3. `GraphicsAdapter` enumeration and lifetime (Tasks 345–346 and later fixes)
 
 Four real, fixed findings from a line-by-line audit against FNA's `GraphicsAdapter.cs` and
 `SDL3_FNAPlatform.cs`:
@@ -44,13 +49,63 @@ Four real, fixed findings from a line-by-line audit against FNA's `GraphicsAdapt
 - Stale doc comments claimed `DeviceId`/`VendorId` were "not implemented" when they're actually
   backed by a real Linux `/sys/class/drm` PCI query. Corrected.
 
-Task 346 verified the existing headless-CI fallback chain (`AdaptersChanged()` degrading to a
-single synthetic 800×480 "Default Display" adapter when `SDL_GetDisplays()` fails) is structurally
-complete, fixed one small `SDL_free` leak on that path, and added a genuine (non-mocked)
-regression test for the "SDL video subsystem not initialized" case — see §5 below, this fallback
-is directly relevant to non-desktop platforms.
+Task 346 verified the no-display fallback: when the platform exposes no display service or no
+display, `AdaptersChanged()` creates one synthetic 800×480 `Default Display` adapter. Its original
+interpretation of an uninitialized video subsystem as a normal reason to take that fallback is no
+longer current.
 
-## 4. Real window-resize and backbuffer-resize verification (Tasks 348–349) — one real bug fixed
+`BINDFIX-001` later established the actual lifecycle contract. `AdaptersChanged()` raises and pins
+the active platform's video subsystem **before** enumeration, so ordinary call ordering cannot
+silently cache the fallback on a host with a real display. The pin stays alive with the cache;
+after a platform/video-session transition, an adapter whose native display ID expired rebinds by
+display name instead of reporting a fictional 800×480 mode. `SOFTWARE-157` made the pin follow the
+ambient platform lifecycle, and `RUST-UPSTREAM-023` serialized cache refresh/use so concurrent
+device construction cannot free another thread's adapter.
+
+The current deterministic platform tests cover names and native IDs, reverse-order mode
+enumeration, refresh-rate deduplication, current-mode fallback, absent display services and empty
+enumerations. `getDefaultAdapterProperty()` is deliberately re-evaluated after every
+`AdaptersChanged()`; callers must not retain an adapter reference across a refresh.
+
+## 4. Post-Phase 40 XNA corrections
+
+### 4.1 Widescreen threshold (`BINDFIX-033`)
+
+The Phase 40 FNA comparison did not catch a real XNA/FNA disagreement. FNA guesses that a mode is
+widescreen above 4:3; recovered XNA 4.0 code compares strictly greater than **1.6**. CNA now follows
+XNA: 3:2 and exactly 16:10 are not widescreen, while a value just above 1.6 is. The decision is
+recorded in `xna-fna-behavior-decisions.md` and pinned independently of the host display by
+`GraphicsAdapterTest.IsWideScreenUsesXnasLimitOfOnePointSixExclusive`.
+
+### 4.2 `UseNullDevice` / `UseReferenceDevice` (`XNA-MISSING-010`)
+
+The two documented static XNA properties are implemented as process-wide state. A new device
+captures their resolution at construction; changing them does not mutate an existing device.
+
+| Flags | Resolved CNA intent | Required renderer |
+|---|---|---|
+| both clear | hardware/default | the renderer already selected by the build/runtime |
+| `UseReferenceDevice=true` | software reference intent | `SOFTWARE` |
+| `UseNullDevice=true` | no drawing/presentation; wins when both flags are set | `HEADLESS` |
+
+This preserves the intent rather than pretending CNA's software rasterizer is Direct3D 9 REF.
+When the required renderer is not compiled into the process, device construction throws
+`NoSuitableGraphicsDeviceException`; it never claims to honor a flag while silently using the
+selected hardware renderer. `GetCurrentDeviceTypeEXT()` and `GetRequiredRendererEXT()` expose that
+resolution explicitly, and the nine `GraphicsAdapterDeviceSelectionTest` cases cover precedence,
+process scope, refusal, successful matching, default construction and live-device stability.
+
+### 4.3 Renderer-aware capability queries
+
+`IsProfileSupported`, `QueryRenderTargetFormat` and `QueryBackBufferFormat` now use the selected
+renderer registry's static adapter-query hooks. DirectX9 answers profile, target/backbuffer format
+and MSAA questions from real D3D9 caps; the GLES/WebGL EasyGL profiles publish only their guaranteed
+pre-context render-target set, and several families publish their honest MSAA clamp. A missing hook
+uses the explicitly documented framework/profile fallback instead of inventing a hardware
+capability table. The current per-renderer results belong in
+`graphics-renderer-feature-matrix.md`, not in this platform-history page.
+
+## 5. Real window-resize and backbuffer-resize verification (Tasks 348–349)
 
 Task 348 traced the actual OS-level resize chain (`SDL_EVENT_WINDOW_RESIZED` → `GameWindow` →
 `GraphicsDeviceManager` → `GraphicsDevice::UpdateViewportFromWindow()`) end-to-end with a real
@@ -66,85 +121,34 @@ full-window size on the very next frame (`Present()` calls this every frame), ev
 resize. Fixed by tracking the last-known renderer-derived size in dedicated fields instead of
 diffing against `Viewport` itself.
 
----
-
-## 5. Non-desktop platform (Android/Web) limitations — anticipated, not verified
-
-**Current reality: CNA has never actually run its display/adapter code on a non-desktop
-platform.** This section is scoped strictly to what has and hasn't actually been checked, per this
-project's verify-over-assume standard everywhere else in the graphics plan.
-
-### What actually exists today
-
-- **Android**: the `CNA` static library **cross-compiles** for `arm64-v8a` via the Android NDK
-  (confirmed compile-only, re-verified across multiple Devices-phase tasks — see
-  `docs/devices-build.md` §4). No `GraphicsAdapter`/`Viewport`/`DisplayMode` code has ever
-  **executed** on Android: no APK packaging integration exists in this project's build system, and
-  the one attempted emulator run failed with a hard KVM-acceleration error before any CNA code
-  could run (`docs/devices-build.md` §4.1, Task P9-4). The Android-specific `#ifdef __ANDROID__`
-  branches that do exist and are confirmed compiled-in are all in `Microsoft::Devices::Sensors`
-  (accelerometer/gyroscope) — nothing in `GraphicsAdapter.cpp`/`DisplayMode.cpp`/
-  `DisplayModeCollection.cpp`/`Viewport.cpp` has any Android-specific code path at all; they call
-  plain cross-platform SDL3 display APIs.
-- **Web (Emscripten/WASM)**: `CMakeLists.txt` has real, working Emscripten-aware build logic
-  (EasyGL/WebGL 2 is the default renderer on Emscripten, a prebuilt-SDL3 hint path exists,
-  exception-handling flags are set), but this is all forward-looking scaffolding — no actual
-  `emcc` build of `CNA` has ever been performed in this project's history (no
-  `.sdl-prebuilt-emscripten` directory exists, and a full Emscripten/WebGPU target is tracked as
-  wholly unstarted future work in Phase 69, Tasks 10155–10161, all `⬜`). Nothing has been verified
-  running in a browser.
-
-### FNA's own precedent: zero platform branching in this exact area
-
-Auditing FNA's `GraphicsAdapter.cs`/`DisplayMode.cs`/`DisplayModeCollection.cs`/`Viewport.cs` and
-`FNAPlatform/SDL3_FNAPlatform.cs`'s `GetGraphicsAdapters()`/`GetCurrentDisplayMode()`/
-`GetMonitorHandle()` found **zero `#if`/platform-conditional code** anywhere in this area — FNA
-relies entirely on plain `SDL_GetDisplays`/`SDL_GetFullscreenDisplayModes`/
-`SDL_GetCurrentDisplayMode` calls with no Android/mobile-specific branching in the C# layer at all
-(the handful of Android mentions found elsewhere in `SDL3_FNAPlatform.cs` are about window
-creation quirks and save-path resolution, unrelated to adapter/display enumeration). CNA's
-`GraphicsAdapter.cpp` mirrors this: it is a thin, unconditional wrapper over the same SDL3 calls,
-with no platform guards of its own.
-
-### Anticipated SDL3-level behavior differences (per SDL3's own public documentation, not locally verified)
-
-These are documented characteristics of SDL3 itself on these platforms, not CNA-specific findings
-— included here because they would directly shape what a game sees through `GraphicsAdapter`/
-`DisplayModeCollection` if CNA were actually run on these platforms:
-
-- **Android**: SDL3 typically reports exactly **one** display, with a display-mode list tied to
-  the physical screen's native resolution and refresh rate — there is no real multi-monitor
-  concept and no OS-level fullscreen mode-switching (Android apps run in a fixed, compositor-owned
-  surface). `SDL_GetFullscreenDisplayModes()` would likely return only the single native mode (or a
-  very short list), not the rich desktop-style mode list CNA's tests currently exercise on Linux.
-- **Web/Emscripten**: the browser sandbox constrains SDL3's display APIs severely — there is no
-  real display-mode enumeration or switching at all; "the display" is effectively the `<canvas>`
-  element, sized by CSS/JS, not a hardware display mode list.
-
-### What in CNA's existing logic would (or wouldn't) need to change
-
-- `GraphicsAdapter::AdaptersChanged()`'s existing headless-CI fallback (Task 346: degrade to one
-  synthetic 800×480 "Default Display" adapter when `SDL_GetDisplays()` returns nothing) is a
-  reasonable **degradation** path for a total-failure case, but it is **not** the path Android
-  would actually take — Android is expected to report a real, valid single display through
-  `SDL_GetDisplays()`, so the normal per-display loop (not the empty-fallback branch) would run
-  unmodified. No code change is anticipated to be *necessary* here, but this has never been
-  confirmed against a real device.
-  `queryDisplayModes()`'s reverse-iteration + `(width,height)` dedup (Task 345) would likely be a
-  no-op on Android's short single-resolution mode list, but is harmless either way.
-- No code in `DisplayMode`/`DisplayModeCollection` makes any assumption about *how many* modes or
-  displays exist — both are already plain, size-agnostic containers, so a single-display,
-  single-mode Android result would work through the existing API without modification.
-- Nothing in this project has attempted to reason about Web/Emscripten's canvas-as-display model
-  against `GraphicsAdapter`'s API surface at all; this is unstarted, tracked-elsewhere work (Phase
-  69).
-
-**This section documents anticipated behavior only. No non-desktop `GraphicsAdapter`/
-`DisplayMode`/`Viewport` execution has been verified in this project, and no code changes are made
-by this task** — a real Android device/emulator run (blocked today by the KVM failure documented
-in `docs/devices-build.md` §4.1) or a real Emscripten build (unstarted, Phase 69) would be required
-before any of the above could move from "anticipated" to "confirmed."
+The current native regressions are `EasyGL_RealWindowResize`,
+`EasyGL_ViewportResetAfterResize` and `WebGPU_RealWindowResize`. The pure `ViewportTest` suite
+separately covers offsets, bounds, depth-range arithmetic, perspective and orthographic
+`Project`/`Unproject`, round trips and XNA string formatting.
 
 ---
 
-This closes Phase 40 (graphics Tasks 341–350) in full.
+## 6. Non-desktop status: execution is real, adapter-value qualification is narrower
+
+The display enumeration itself is platform-neutral and goes through CNA's current platform display
+service. The only host-specific code in `GraphicsAdapter.cpp` is the optional Linux sysfs PCI-ID
+query. That shared implementation has now executed on both non-desktop targets, but an application
+launch is not the same evidence as a dedicated oracle for every returned adapter value.
+
+| Target | What is verified | What is not yet qualified |
+|---|---|---|
+| Web / Emscripten | Real `emcmake`/`emcc` builds; EasyGL `WEBGL2` applications in Chrome (including threaded content loading and context loss); browser `WEBGPU` 2D, 3D, stock/compiled effects, canvas resize and readback; one `WEBGL2;WEBGPU` bundle selected both at runtime. These application paths create the SDL window and CNA graphics device rather than stopping at link time. | No browser-specific test asserts the exact `GraphicsAdapter` count/name, `DisplayModeCollection`, monitor handle or `IsWideScreen` result. A browser surface is a canvas, not an OS display-mode switcher, so those values remain SDL/browser-shaped rather than desktop-qualified. |
+| Android | CNA builds into an installable APK and runs through the default `OPENGLES3` renderer on an x86_64 emulator. The devices demo and cna-cs samples launched and rendered real frames; the old missing-Gradle and missing-KVM blockers are closed. | No physical Android device has run CNA, `SDLGPU` is unqualified on Android, and no Android-specific oracle records exact adapter/mode/viewport values. Emulator execution proves the shared window/device path, not a multi-device display matrix. |
+
+The authoritative browser details are `web-emscripten-graphics-limitations.md`,
+`webgl2-renderer.md`, `webgpu-renderer.md` and `runtime-renderer-selection.md`. Android evidence and
+its remaining boundary are in `android-graphics-limitations.md` and `devices-build.md` §4.1.
+
+There is no open Phase 40 implementation item in this section. The remaining entries are platform
+validation coverage: exact browser/Android adapter-value assertions, physical Android hardware,
+and the Android `SDLGPU` route.
+
+---
+
+Phase 40 (graphics Tasks 341–350) remains closed; this reconciliation removes the later-invalidated
+platform status from its historical record.
