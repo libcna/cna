@@ -78,7 +78,7 @@ public value is retained and frozen but has no renderer effect.
 
 | Renderer family | Cull mode | Wireframe | Depth bias | Scissor | `MultiSampleAntiAlias` |
 |---|---|---|---|---|---|
-| EasyGL (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | native GL culling | conditional native polygon mode; see below | polygon offset, scaled to the active depth format | native | `OPENGL33` toggles `GL_MULTISAMPLE`; GLES/WebGL no-op |
+| EasyGL (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | native GL culling | conditional native polygon mode; see below | polygon offset, scaled to the active depth format | native | a single/default-`OPENGL33` build toggles `GL_MULTISAMPLE`; GLES/WebGL no-op; multi-profile defect in `handoff.md` §5.1 |
 | `WEBGPU` | pipeline state | triangle-edge expansion | pipeline state for polygons; dropped for expanded wireframe lines | dynamic per draw | no-op |
 | `SDLGPU` | pipeline state | native `SDL_GPU_FILLMODE_LINE` | normalized and baked into the pipeline | dynamic per draw | no-op |
 | `SOFTWARE` | CPU rasterizer | CPU edge rasterization | CPU constant/slope offset, including wireframe | CPU clip rectangle | implemented for triangles, lines and wireframe |
@@ -122,7 +122,9 @@ Software is the complete reference implementation: on a four-sample target, `tru
 coverage and depth at the standard D3D 4x sample positions; `false` evaluates one pixel-center
 decision and replicates it to the stored samples. The shared contract covers triangles,
 `LineList` and wireframe and verifies `true`/`false`/`true` restoration. Desktop EasyGL expresses
-the same state with `GL_MULTISAMPLE`. OpenGL ES and WebGL have no equivalent switch.
+the same state with `GL_MULTISAMPLE` in a single/default-`OPENGL33` build. OpenGL ES and WebGL have
+no equivalent switch. A multi-renderer EasyGL build still selects this branch from its compile-time
+default rather than the active runtime profile; that defect is recorded in `handoff.md` §5.1.
 
 WebGPU, SDLGPU, DirectX9 and FNA3D currently inherit the no-op renderer method. This is a real
 fidelity limitation, not proof that the XNA property is inert. It does not invalidate their

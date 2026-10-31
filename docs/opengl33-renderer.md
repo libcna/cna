@@ -1,103 +1,115 @@
-# OPENGL33 (desktop OpenGL 3.3 core profile) Renderer — Status
+# OPENGL33 renderer
 
-`OPENGL33` is one of the three public GL-family `CNA_GRAPHICS_RENDERER` values (introduced by the GL
-renderer plan, `GLB-1`..`GLB-43`, Git history) — it shares its entire implementation with
-`OPENGLES3`/`WEBGL2` (`modules/renderers/easygl/`, on top of the sibling `easy-gl` library),
-distinguished by its GL profile -- a runtime `GlProfile` (`GlProfile.hpp`) since
-RTR-P11, with the `CNA_GL_PROFILE_OPENGL33` definition supplying only a
-single-renderer build's default. Unlike the other profiles (all OpenGL ES / WebGL, GLSL ES syntax),
-`OPENGL33` requests a real desktop `SDL_GL_CONTEXT_PROFILE_CORE` context, GL 3.3.
+Status: current profile contract, reconciled with the renderer registry, live capability queries,
+EasyGL implementation and platform qualification on **2026-10-31**.
 
-**Status legend:** ✅ implemented and verified; 🟨 code exists but not fully verified; ⬜ not done.
+`OPENGL33` is CNA's production-class desktop OpenGL identity. It requests an OpenGL 3.3 core
+context and is implemented by the shared EasyGL family in `modules/renderers/easygl/`. The same
+family also serves `OPENGLES3` and `WEBGL2`; they are separate public renderer identities, not
+aliases. [`renderer-registry.md`](renderer-registry.md) is the canonical identity and selection
+table, while [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md) is the
+cross-renderer capability summary.
 
-## What's real today
+## Selection and validation
 
-- ✅ **Context creation** — `EasyGLRenderer`'s constructor requests
-  `SDL_GL_CONTEXT_PROFILE_CORE`, major 3 / minor 3 when compiled with `CNA_GL_PROFILE_OPENGL33`
-  (GLB-8).
-- ✅ **Shader compilation** — every embedded shader in `EasyGLRenderer.cpp` is authored once
-  against GLSL ES 3.00 syntax; `AdaptGlslEs300ForActiveProfile()` rewrites the
-  `#version 300 es` / `precision ... float;` header pair to `#version 330 core` (dropping the
-  precision line) for this profile at first-use time — no shader is duplicated
-  (GLB-10/GLB-11).
-- ✅ **Real driver verification** — built and ran, against a real desktop Mesa 4.5 core-profile GL
-  context (not a mock/headless stub), 7 examples covering `BasicEffect` (default lighting),
-  `DualTextureEffect`, `SkinnedEffect`, `SkinnedPbrEffect`, `AlphaTestEffect`,
-  `EnvironmentMapEffect`, and `SpriteBatch` — all exit 0 with zero shader/link compile errors, and
-  every golden pixel-comparison check `[PASS]`es, byte-identical to the same scenes' `OPENGLES3`
-  (GLES 3.0) reference images. This also confirms Mesa's desktop core-profile compiler accepts the
-  handful of inline `highp`/`mediump` qualifiers some shader bodies use (e.g.
-  `uniform highp vec4 uDiffuseColor;`) as no-ops, with no extra stripping needed beyond the
-  top-of-file `precision` line.
-- ✅ **Full `CnaTests` regression run** — built and ran the complete `CnaTests` GTest binary under
-  `-DCNA_GRAPHICS_RENDERER=OPENGL33`: same 117 pre-existing failures as the `OPENGLES3` baseline
-  (all in unrelated Media/Content/XNB/Audio/Video subsystems — no ffmpeg-decodable fixtures/real
-  media devices in this sandbox), zero new failures, zero Graphics/EasyGL/shader-related failures.
-- ✅ **Full example/pixel-test suite — all 241 `cna_easygl_test`-registered binaries, not a
-  sample** (GLB-22, upgraded from an earlier 7-binary sample). Built all 241
-  (`cmake --build --target <all 241 names>`, exit 0) and ran every one of them
-  (`DISPLAY=:99` Xvfb, from the repo root so relative-path golden-image/fixture lookups resolve
-  correctly): **236/241 pass, 0 crash, 5 fail** (updated after the `GLB-40` fix below — was
-  235/241, 6 fail, before it).
-  - **The remaining 5 failures (of the original 6) are all pre-existing, confirmed by building and
-    running the exact same 6 binaries under `OPENGLES3` for direct comparison — they fail
-    identically there too**:
-    `cna_oracle_render_easygl`, `cna_test_avatar_tint_routing` (documented pre-existing bug,
-    graphics Task 1115 — a real `AvatarRenderer` tint-doubling defect, unrelated to GL
-    profile), `cna_test_easygl_graphicsdevicemanager_vsync`,
-    `cna_test_easygl_graphicsdevice_reference_stencil` (also a documented pre-existing gap,
-    graphics Task 872), `cna_test_easygl_mrt`.
-  - **1 failure was real and `OPENGL33`-specific — root-caused and fixed as `GLB-40`** (not the
-    shader-compile-failure explanation first guessed, which turned out wrong — see below).
-    `cna_test_easygl_shipgame_particle_shader` uses a `GL_POINTS`/`gl_PointSize`/`gl_PointCoord`
-    particle-sprite shader. GLES/WebGL always honor a vertex shader's `gl_PointSize` output
-    automatically; desktop GL requires an explicit `glEnable(GL_VERTEX_PROGRAM_POINT_SIZE)`, which
-    `EasyGLRenderer` never called — every point silently rendered at the fixed 1.0-pixel
-    default instead of the shader's requested size, invisible at the test's sampled pixel.
-    (The initial guess — that the shader's hardcoded `#version 300 es` fails to compile under a
-    desktop core-profile driver — was verified wrong with a standalone test program: Mesa accepts
-    that version pragma leniently even under a core-profile context.) Fixed with a
-    `#ifdef CNA_GL_PROFILE_OPENGL33`-gated `glEnable` call, loaded via a runtime function pointer
-    (matching this project's "no static `libGL` linkage" convention). All 4 of the test's checks
-    now `[PASS]` under `OPENGL33`; re-verified no regression under `OPENGLES3`. See
-    `GLB-40`'s plan entry (Git history) for full detail.
+A single-renderer build selects the profile with:
 
-## What's not yet done
-- ⬜ **CI/CTest identity** — `cmake/Tests/EasyGLTests.cmake`'s guard was widened to cover both
-  `OPENGLES3` and `OPENGL33` (GLB-6), but there is no dedicated
-  `OPENGL33`-only CTest label distinguishing it from an `OPENGLES3` run.
-- ⬜ **Non-Linux desktop verification** — only verified on Linux (Mesa). Windows/macOS desktop GL
-  3.3 core-profile drivers (especially older/proprietary NVIDIA/AMD Windows drivers, which are
-  historically stricter about GLSL core-profile syntax than Mesa) have not been checked.
+```bash
+cmake -S . -B cmake-build-opengl33 -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCNA_GRAPHICS_RENDERER=OPENGL33 \
+  -DCNA_BUILD_TESTS=ON \
+  -DCNA_BUILD_EXAMPLES=ON
+cmake --build cmake-build-opengl33 --parallel 8
+```
 
-## Relationship to the other GL-family renderers
+EasyGL consumes the sibling `easy-gl` and `meta-gl` checkouts described in
+[`development-environment.md`](development-environment.md). On Linux, run every window/GPU test
+through the private display runner, never on the owner's desktop:
 
-See `docs/renderer-registry.md`'s identity table. In short: `OPENGLES3` is today's original `EasyGL` public
-renderer renamed (GLES 3.0, unchanged behavior); `WEBGL2` is the same GLES 3.0 path under
-Emscripten.
+```bash
+tools/platform/run_gpu_tests_private.sh cmake-build-opengl33 \
+  -R '^EasyGL_' --output-on-failure -j6
+```
 
-## Graphics resources on other threads (all GL profiles)
+The registered suite keeps the `EasyGL_` prefix because it tests the shared implementation. There
+is no separate `OPENGL33` CTest label: the build's default renderer identity determines whether the
+native EasyGL suite uses the desktop or ES profile. In a multi-renderer build, `OPENGL33` can be
+selected before device creation through `GraphicsRendererSelection` or the
+`CNA_GRAPHICS_RENDERER=OPENGL33` environment variable; see
+[`runtime-renderer-selection.md`](runtime-renderer-selection.md).
 
-One GL context serves the device, and it can be current on one thread at a time. The game thread
-holds it for the whole of `Initialize`, `BeginRun`, every `Tick` (Update and Draw) and `EndRun`,
-and lets go of it between frames. Constructing a texture, buffer or render target, `SetData`,
-`GetData` and `Dispose` take the same lease on whatever thread they run on (`ContentReader` holds it
-for a whole asset), so a loading thread works in the gaps between frames while the game keeps
-drawing — XNA's loading-screen pattern.
+## Profile-specific contract
 
-The one thing that does not work is the game thread waiting, inside `LoadContent`, `Update` or
-`Draw`, for another thread that is creating graphics resources: it still holds the context, so the
-two wait for each other. XNA 4.0 allows that, and FNA and MonoGame deadlock on it the same way.
-Start the work, keep running frames, and pick the results up once the thread says it is done.
+| Area | `OPENGL33` behavior | Difference from the other EasyGL profiles |
+|---|---|---|
+| Context | SDL platform service requests OpenGL 3.3 core | `OPENGLES3` requests ES 3.0; `WEBGL2` uses the browser context |
+| Stock shaders | One GLSL ES 3.00 corpus is rewritten to `#version 330 core`; the ES precision declaration is removed | ES/Web use the stored source directly |
+| CNAEXT `ShaderEffect` | Reports desktop GLSL and accepts desktop-GLSL vertex/fragment packages | ES/Web report and accept GLSL ES; see [`shader-effect-vs-fx-bytecode.md`](shader-effect-vs-fx-bytecode.md) |
+| Compiled XNA effects | Optional `CNA_EASYGL_COMPILED_EFFECTS`; MojoShader uses its `glsl120` adapter profile | ES/Web use `glsles3`; the option is off by default |
+| Base-vertex indexed draws | Uses desktop `glDrawElementsBaseVertex` | ES 3.0/WebGL use the EasyGL rebase fallback |
+| Texture channel swizzle | Available in core GL 3.3 | WebGL forbids it; native ES 3 exposes it |
+| Point sprites | Enables `GL_PROGRAM_POINT_SIZE`, so shader `gl_PointSize` drives rasterization | ES/Web honor shader point size without that desktop switch |
+| Wireframe | Uses desktop `glPolygonMode` when the live context exposes it | ES/Web require a native polygon-mode extension; otherwise general wireframe is refused |
+| Occlusion count | Uses `GL_SAMPLES_PASSED` and reports a precise count | ES/Web may expose only a zero/non-zero result |
+| `RasterizerState.MultiSampleAntiAlias` | A single/default-`OPENGL33` build toggles `GL_MULTISAMPLE` | ES/Web have no equivalent switch; the multi-profile defect below is still open |
 
-The back buffer is an offscreen framebuffer of the drawable size CNA reports, not the window's
-surface: everything drawn to the back buffer, `Clear` and `GetBackBufferData` use it, and `Present`
-blits it to the window. XNA's back buffer is an image of its own in the same way, and the window
-surface is not a dependable one -- on Wayland (SDL's Wayland driver, Mesa's EGL) it lags the size CNA
-reports for a frame after a resize, a minimize or a fullscreen change, or when a loading thread
-binds it between frames (cna-killer KF-6). With multisampling on the offscreen buffer is
-multisampled and the blit resolves it. `GetBackBufferData` reads it at the back buffer's own size:
-when the presentation rectangle is not the logical size (Letterbox bars, Stretch, a display scale
-of 2), `GraphicsDevice` reads each back-buffer pixel from the drawable pixel it is presented on, the
-same for every renderer. The web keeps drawing into the window's surface, whose canvas CNA sizes
-itself.
+The requested version is a minimum contract, not a promise that `GL_VERSION` will equal 3.3. Mesa
+may supply a later core context and qualified Apple hardware supplies OpenGL 4.1; EasyGL continues
+to use the `OPENGL33` feature boundary.
+
+## Shared EasyGL surface
+
+`OPENGL33` uses the complete EasyGL 2D and 3D routes: `SpriteBatch`/`SpriteFont`, the five classic
+stock effects, `PbrEffect`/`SkinnedPbrEffect`, indexed and instanced drawing, multiple vertex
+streams, `Texture2D`/`TextureCube`/`Texture3D`, render-target cubes, MRT, MSAA and occlusion
+queries. This statement does not promise every format or every combination on every driver.
+Before choosing a non-`Color` format, sample count, anisotropy level or numeric limit, query
+`GraphicsDevice::GetRendererCapabilityProfileEXT()` and the per-format support functions.
+
+The focused sources of truth are:
+
+- [`surface-format-support.md`](surface-format-support.md),
+  [`rendertarget-support.md`](rendertarget-support.md) and
+  [`texture3d-texturecube-support.md`](texture3d-texturecube-support.md) for storage, transfer and
+  target boundaries;
+- [`vertex-format-support.md`](vertex-format-support.md) for declarations, formats and base
+  vertex behavior;
+- [`rasterizerstate-support.md`](rasterizerstate-support.md),
+  [`sampler-state-support.md`](sampler-state-support.md) and
+  [`occlusionquery-support.md`](occlusionquery-support.md) for live state and query semantics;
+- [`fx-compiled-effects.md`](fx-compiled-effects.md) for the optional compiled-effect runtime.
+
+One device owns one GL context, and that context can be current on only one thread at a time.
+EasyGL's renderer-context lease lets resource construction, transfer and disposal run on another
+thread between frames. Waiting inside `LoadContent`, `Update` or `Draw` for a worker that itself
+needs the context can deadlock because the game thread still owns the lease.
+
+The native profiles render the logical back buffer into an offscreen framebuffer and present by
+blitting it to the window surface. Clear, readback, resizing, presentation modes and MSAA resolve
+therefore use CNA's back-buffer image rather than relying on transient window-surface contents.
+
+## Qualification and current boundaries
+
+- Linux x86_64 is the routine qualification environment. Current tests run against a real Mesa
+  core context through the private Weston/Xwayland runner.
+- macOS arm64 was qualified on the Mac mini M4 campaign, including the full tree, samples and the
+  optional compiled-effect path. Apple's depth storage and anisotropy behavior have the exact
+  qualifications recorded in [`apple-platforms.md`](apple-platforms.md).
+- No current real-Windows `OPENGL33` qualification is recorded. Configuration support is not a
+  substitute for observed pixels on Windows drivers.
+- `OPENGL33` is native-only. Use `WEBGL2` for an Emscripten/browser build.
+- MSAA availability, render-target formats, native wireframe and numeric limits are properties of
+  the live context. The adapter-level promise made before context creation is deliberately
+  conservative.
+- In a multi-renderer binary, `ApplyRasterizerMultiSampleState` still uses the build default's
+  `CNA_GL_PROFILE_OPENGL33` definition instead of the active runtime `GlProfile`. Consequently an
+  `OPENGLES3`-default binary that selects `OPENGL33` does not toggle `GL_MULTISAMPLE`; the inverse
+  default/profile combination attempts the desktop state on ES. This is a current defect recorded
+  in [`handoff.md` section 5.1](../handoff.md#51-defects), not a general limitation of desktop GL.
+
+Active evidence includes the stock-effect golden/contract tests, profile-aware
+`ShaderEffect` tests, `EasyGL_ShipGame_Particle_Shader`, `EasyGL_MsaaFragmentContract`, the
+rasterizer and wireframe contracts, render-target/MSAA/MRT/cube/volume tests, exact desktop
+occlusion queries, presentation/reset tests and the optional compiled-effect suite. Historical
+campaign counts and closed failures belong in Git history, not in this current contract.

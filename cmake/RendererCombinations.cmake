@@ -10,9 +10,9 @@
 # Kept in lockstep with docs/runtime-renderer-selection.md by
 # scripts/check_renderer_combinations.py.
 
-# Identities served by one implementation family. Two of them in one binary would mean compiling
-# that family twice with different profile defines -- an ODR violation, not merely a name clash.
-# Lifting this is RTR-P11 (EasyGL's profile becomes a runtime choice).
+# Identities served by one implementation family. RTR-P11 made EasyGL's profile a runtime value,
+# so native OPENGLES3 and OPENGL33 may coexist; the list remains useful for family-aware checks and
+# documentation. WEBGL2 is still separated from both native identities by the platform partition.
 set(CNA_RENDERER_SHARED_EASYGL OPENGLES3 OPENGL33 WEBGL2)
 
 # Platform partitions. A combination spanning two of these can never build: the toolchain targets

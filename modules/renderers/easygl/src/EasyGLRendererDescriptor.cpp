@@ -1,12 +1,9 @@
 // RTR-P1-D02: the EasyGL family's pre-construction contract.
 //
-// EasyGL is the one family serving MORE than one public identity: OPENGLES3, OPENGL33
-// (desktop/mobile) and WEBGL2 (Emscripten) all compile into this same archive, told apart
-// by the CNA_GL_PROFILE_* compile definition (docs/renderer-registry.md). getCurrentGraphicsRendererType()
-// already resolves that to the right one of the three, so the descriptor's identity follows it
-// rather than being hardcoded here. Making the profile itself a RUNTIME choice -- which is what
-// would let two GL profiles coexist in one binary -- is RTR-P11, not
-// this task.
+// EasyGL is the one family serving more than one public identity: OPENGLES3, OPENGL33
+// (desktop/mobile) and WEBGL2 (Emscripten) all compile into this same archive. RTR-P11 made the GL
+// profile a runtime value, so each public identity has its own descriptor and factory closure while
+// CNA_GL_PROFILE_* supplies only the build default (docs/renderer-registry.md).
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"

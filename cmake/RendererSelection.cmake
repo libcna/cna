@@ -215,9 +215,9 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL 
     # which of the 3 public GL profiles below was selected (GLB-3).
     list(APPEND _cna_identity_defines CNA_RENDERER_EASYGL)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_EASYGL")
-    # CNA_GL_PROFILE_* selects the GL context/shader profile within the shared EasyGL
-    # implementation -- see GLB-8 for how EasyGLRenderer.cpp
-    # uses this to choose context-creation attributes and shader headers.
+    # CNA_GL_PROFILE_* supplies the build's default GL profile. Each EasyGL descriptor passes its
+    # public identity as a runtime GlProfile, which is what lets OPENGLES3 and OPENGL33 coexist;
+    # see GlProfile.hpp and docs/runtime-renderer-selection.md.
     list(APPEND _cna_identity_defines "CNA_GL_PROFILE_${CNA_GRAPHICS_RENDERER}")
     # FX-062: compiled XNA effects on this renderer go through MojoShader's own OpenGL
     # adapter, which emits GLSL/GLSLES/GLSLES3 source text for whichever profile it is asked for --

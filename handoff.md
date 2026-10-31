@@ -35,6 +35,18 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- `OPENGL33` renderer-document reconciliation (2026-10-31): the old GLB campaign snapshot and its
+  fixed suite counts, closed failures and Xvfb instructions are replaced by the current production-
+  class desktop-core profile contract. The page now distinguishes runtime `GlProfile` selection
+  from the build default, desktop GLSL/stock-shader/compiled-effect dialects, native base-vertex,
+  point-size, wireframe and exact-query behavior, live capability boundaries, Linux/macOS evidence
+  and the missing current real-Windows qualification. Stale RTR-P11 comments in the descriptor and
+  CMake profile/combination rules were corrected. The audit also found the multi-profile
+  `RasterizerState.MultiSampleAntiAlias` defect now recorded in §5.1 and qualified in the
+  RasterizerState page instead of hiding it behind the single-renderer claim. A new dedicated
+  `cmake-build-opengl33` Debug configuration builds its focused graphics/renderer and nine live
+  EasyGL targets; 100 selected checks on a real Mesa 4.6 core context produce 87 passes and 13
+  intentional profile/fallback skips, with no failure.
 - `GraphicsDeviceManager` support-document reconciliation (2026-10-31): the Task 230 snapshot now
   describes the current Game-owned-device lifecycle and real `GraphicsDevice::Reset` pipeline.
   Runtime MSAA, color/depth presentation formats, swap interval and viewport changes are no longer
@@ -651,6 +663,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   ignore the factors (not measured). Found by SDLGPU's blend-equation oracle (`SDLGPU-58`,
   formerly `EASYGL-PARITY-1`, 2026-09-10); SDLGPU evaluates the equation correctly, and EasyGL
   has no regression leg for it yet.
+- EasyGL's `ApplyRasterizerMultiSampleState` is still selected by the build default's
+  `CNA_GL_PROFILE_OPENGL33` definition instead of the active runtime `GlProfile`. A normal
+  single-renderer `OPENGL33` build toggles `GL_MULTISAMPLE` correctly, but the current
+  `OPENGLES3`-default `cmake-build-multi` silently leaves it unchanged when `OPENGL33` is selected;
+  a default-`OPENGL33` native multi-profile build would issue that desktop-only state change for a
+  selected `OPENGLES3` device. Found by the 2026-10-31 `docs/opengl33-renderer.md` reconciliation;
+  no runtime-profile regression covers it yet.
 - In browser fullscreen the drawable a GL renderer letterboxes into is not the rectangle the browser
   presents. Measured 2026-09-08 with SAMPLE-071 (Yacht, 480x800 back buffer) on a headless Chrome
   with an 800x600 screen: the canvas reported 800x600 while its CSS box was 800x544, and the game
@@ -668,7 +687,8 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
-- `RasterizerState.MultiSampleAntiAlias` is honored by `SOFTWARE` and desktop `OPENGL33` only.
+- `RasterizerState.MultiSampleAntiAlias` is honored by `SOFTWARE` and by a single/default-profile
+  desktop `OPENGL33` build only; the multi-profile selection defect is in §5.1.
   `OPENGLES3`/`WEBGL2` have no equivalent native switch, while `WEBGPU`, `SDLGPU`, `DIRECTX9` and
   `FNA3D` currently inherit the renderer seam's no-op. This is separate from multisampled target
   storage: those families may still allocate and resolve MSAA targets. Microsoft XNA demonstrably

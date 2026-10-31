@@ -61,6 +61,9 @@ on it) rather than assuming either way.
   gate). Start here for "which renderers does CNA have."
 - **[`cnaext-engine-layer.md`](cnaext-engine-layer.md)** — current standalone ASCII, CRT,
   colour-depth and DebugDraw extensions; the previous modern engine layer has been retired.
+- **[`opengl33-renderer.md`](opengl33-renderer.md)** — current desktop OpenGL 3.3 core profile
+  contract: EasyGL sharing, profile-specific behavior, build/test route, platform qualification and
+  live-context boundaries.
 - **[`webgpu-renderer.md`](webgpu-renderer.md)** — current status, build instructions and explicit
   limitations for the `WEBGPU` renderer, including the one open item (`WEBGPU-1`).
 - **[`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md)** — current
