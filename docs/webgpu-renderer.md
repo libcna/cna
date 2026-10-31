@@ -1485,8 +1485,12 @@ guarantees only zero versus non-zero for an occlusion result, and the count is t
 Vulkan backend counts samples (a fully occluded draw reads back 0 and a visible one a full target of
 samples, `WebGPU_OcclusionQuery`), while its Metal backend records Metal's boolean visibility, so a
 visible draw reads 1 there -- `PixelCountIsPreciseEXT()` reports false on a Metal adapter
-(Apple M4 `AM4-091`). Other backends (DX12, GLES, a browser) are not measured. A query
-whose draws span more than one render-pass segment records only its first segment.
+(Apple M4 `AM4-091`). Other backends (DX12, GLES, a browser) are not measured. Every contiguous
+query run receives a query-set slot; later runs, including a run after `Clear` opens a new render
+pass, receive additional slots and readback aggregates them into the logical result. Exact adapters
+sum samples, while visibility-only adapters promise only zero versus non-zero. The shared logical
+interval coordinator separately partitions overlapping XNA query objects and combines their
+segments without replaying draws.
 
 **`BlendState.MultiSampleMask`** is pipeline state (`WGPUMultisampleState.mask`), and wgpu-native's
 Metal backend does not apply it -- Metal has no pipeline sample mask. So the renderer judges the mask

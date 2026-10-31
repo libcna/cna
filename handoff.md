@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- `OcclusionQuery` support-document reconciliation (2026-10-31): the old four-renderer snapshot is
+  now a current eight-family contract. It preserves the recovered XNA lifecycle, adds the shared
+  overlapping-interval coordinator and signed-`DWORD`/boolean aggregation rules, distinguishes
+  exact counts, visibility-only results, HEADLESS validation and explicit refusal, and records the
+  present DirectX9/FNA3D evidence boundaries. The stale WebGPU first-render-pass limitation is
+  removed from all three capability pages: later contiguous runs, including a run after `Clear`,
+  use additional query-set slots and contribute to the logical result. Focused validation passes
+  all 152 selected tests across EasyGL, WebGPU, SDLGPU, Software, DirectX9, FNA3D and HEADLESS.
 - DirectX9 source-`ShaderEffect` capability reporting (2026-10-31): the renderer's existing real
   HLSL path now reports `ShaderDialectEXT::Hlsl`, accepts HLSL vertex and fragment payloads and
   answers that source execution is real. Consequently `RendererCapabilityProfile` publishes

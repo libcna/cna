@@ -941,10 +941,10 @@ protected:
 
         // Check W (D9-55) -- a real D3D9OcclusionQueryRenderer: Begin()/End() genuinely issue real
         // D3DISSUE_BEGIN/D3DISSUE_END query commands, IsComplete() eventually reports true (polled,
-        // bounded), and PixelCount() reads back a real GetData() result. No draw path exists yet
-        // (D9-82), so this Begin/End wraps a Clear() rather than actual geometry -- Clear() does not
-        // count as occlusion-testable rendering, so PixelCount()==0 is the correct, real result
-        // here, not a stand-in for "draws 100 pixels" (that proof is D9-82's own job).
+        // bounded), and PixelCount() reads back a real GetData() result. This remains the focused
+        // zero-result control: Clear() is not occlusion-testable rendering. The shared
+        // OcclusionQueryPixelCountPrecision/Lifecycle/Overlap suites separately exercise the
+        // renderer's now-complete draw path and positive exact counts.
         {
             auto query = renderer.CreateOcclusionQuery();
             check(query != nullptr, "D9-55: D3D9OcclusionQueryRenderer created (device supports D3DQUERYTYPE_OCCLUSION)");

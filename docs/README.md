@@ -113,7 +113,8 @@ original phase closed — check each file's own status banner/date.
   `DepthBias` status.
 - `model-content-pipeline-support.md` — `Model`'s FNA-audited runtime API and its four loading
   routes (`.xnb`, `.cnb`, `.cnj`, glTF) with what each builds; refreshed 2026-10-25.
-- `occlusionquery-support.md` — per-renderer `OcclusionQuery` support.
+- `occlusionquery-support.md` — reconciled 2026-10-31: recovered XNA lifecycle, overlapping logical
+  intervals, exact-versus-visibility results and current boundaries across all renderer families.
 - `graphics-resource-lifetime.md` — current ownership, event ordering, device tracking, move and
   native-retirement contract for `GraphicsResource`-derived types; reconciled 2026-10-31.
 - `spritefont-support.md` — `SpriteFont`/`DrawString` behavior, UTF-8/BMP adaptation and the closed

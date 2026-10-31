@@ -55,7 +55,7 @@ selected internal driver.
 | Wireframe | ⚙ native polygon mode | ◇ triangle-edge expansion | ✅ | ✅ | ✅ | ✅ |
 | Multiple vertex streams | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
 | Instanced drawing | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙ compiled-effect shader + driver |
-| Occlusion queries | ◇ exact or boolean by GL profile | ◇ one contiguous render-pass segment | ❌ | ✅ exact CPU count | ✅ | ⚙ selected driver |
+| Occlusion queries | ◇ exact or boolean by GL profile | ⚙ exact or visibility-only by adapter | ❌ | ✅ exact CPU count | ✅ | ⚙ selected driver |
 | Float and half-float render targets | ⚙ per format/context | ⚙ per format/adapter feature | ❌ | ✅ | ❌ | ⚙ per format/driver |
 | CNAEXT source `ShaderEffect` execution | ✅ GLSL / GLSL ES | ✅ WGSL | ⚙ SPIR-V intake build | ❌ | ✅ HLSL | ❌ |
 | Compiled XNA Effect bytecode | ⚙ opt-in | ⚙ opt-in | ⚙ opt-in | ⚙ opt-in | ⚙ opt-in | ✅ always on |
@@ -113,8 +113,9 @@ HEADLESS's acceptance remains non-rasterizing and therefore makes no presentatio
   [`webgl2-renderer.md`](webgl2-renderer.md) and
   [`surface-format-support.md`](surface-format-support.md).
 - **WebGPU** — supported on native Linux x86_64 and in headless Chrome. Windows, macOS and
-  linux-aarch64 native packages remain unverified (`WEBGPU-1`). Wireframe is edge expansion, and an
-  occlusion query spanning render-pass segments records only its first segment. See
+  linux-aarch64 native packages remain unverified (`WEBGPU-1`). Wireframe is edge expansion;
+  occlusion-query runs spanning render-pass segments are aggregated, with exact counts or only
+  zero/non-zero visibility according to the adapter. See
   [`webgpu-renderer.md`](webgpu-renderer.md).
 - **SDLGPU** — CNA's modern native route, verified on Linux/Vulkan and under Wine with SDL's D3D12
   path. Native Windows, macOS and iOS qualification remains open. SDL_gpu exposes no occlusion-query
