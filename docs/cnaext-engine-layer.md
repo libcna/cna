@@ -19,5 +19,7 @@ render-target plus SpriteBatch/effect pattern; no post-process chain is required
 The former HDR render pipeline, pass framework, shadow engine, clustered rendering, probes,
 compute-driven engine helpers and PBR material abstraction were removed in the alpha-stage scope
 reduction. `PbrEffect`, `SkinnedPbrEffect`, glTF and CNB/CNJ remain in core graphics/content.
-See [the scope audit](graphics-ext-scope-reduction.md) for the dependency classification and the
-future DebugGizmos design intent.
+
+`DebugGizmos` was removed with that engine layer because its API depended on engine-specific light,
+probe and shadow types. Any future lightweight replacement should build on `DebugDraw` and accept
+generic geometric data such as positions, directions, ranges, angles, matrices, frusta and colours.

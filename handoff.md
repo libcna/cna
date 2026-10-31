@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Graphics-extension documentation cleanup (2026-10-31): the closed `MOD-RETIRE-1` pre-deletion
+  scope audit was removed after its surviving API inventory was checked against
+  `modules/graphics-ext`, its ABI consequence against the 0.30.0 record, and its historical
+  measurements against Git. The only still-useful future constraint is now kept in
+  `docs/cnaext-engine-layer.md`: any lightweight `DebugGizmos` replacement should build on
+  `DebugDraw` and use generic geometry instead of restoring dependencies on the retired engine
+  layer.
 - glTF PBR inventory and retained-record reconciliation (2026-10-31): source inventories now
   distinguish HEADLESS's ownership-only validation from the six renderers that consume PBR maps,
   and track DirectX9's current rigid/colour stride gate. This closes the three source-contract
