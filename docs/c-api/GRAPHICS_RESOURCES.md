@@ -83,11 +83,14 @@ dimension and applied sample count passes validation and CNA accepts the native 
 and copy return the C binding snapshot; zero bindings restore the backbuffer. A bound target cannot
 be destroyed. Every target must be unbound and destroyed before its game.
 
-Creation may succeed when the selected backend constructs the CNA object but has no actual target
+Creation may succeed when the selected renderer constructs the CNA object but has no actual target
 storage. `CNA_RenderTargetInfo.renderer_available` then returns false and binding reports
-`CNA_RESULT_NOT_SUPPORTED`. Native `ContentLost` is currently never raised, so
-`is_content_lost` is the explicit false invariant. Renderer-pointer extensions are represented
-only by `renderer_available`; no native pointer is disclosed.
+`CNA_RESULT_NOT_SUPPORTED`. A renderer whose API can really lose and recreate its device raises a
+render target's `ContentLost` event and sets `is_content_lost`; renderer families without that
+failure mode leave subscriptions valid but silent. A caller-initiated device reset is not a
+content-loss notification. Successfully binding the target again clears its loss flag because the
+application is about to repopulate it. Renderer-pointer extensions are represented only by
+`renderer_available`; no native pointer is disclosed.
 
 ## Sprite fonts
 

@@ -84,11 +84,13 @@ profile or renderer capability refusal surfaced as `System::NotSupportedExceptio
 `CNA_RESULT_NOT_SUPPORTED`. Argument, UTF-8, handle and thread failures retain their standard C API
 results. No native exception crosses the ABI.
 
-Songs, video, models and 3D textures still have no typed C load route. Each needs its own
+Songs, models and 3D textures still have no typed C load route. Each needs its own
 load function and ownership contract, because C cannot name the C++ type the generic `Load<T>` is
 instantiated with. Fonts are no longer on that list -- see `cna_content_manager_load_sprite_font`
-below -- and an asset of a type CNA does not know at all is reachable through
-`cna_content_manager_load_foreign_ext`, described under *Readers a caller supplies*.
+below. Video is no longer on it either: `cna_content_manager_load_video` is documented with the
+rest of the video surface in [`MEDIA.md`](MEDIA.md). An asset of a type CNA does not know at all is
+reachable through `cna_content_manager_load_foreign_ext`, described under *Readers a caller
+supplies*.
 
 ## Typed loads beyond Texture2D
 

@@ -78,20 +78,26 @@ not assumed.
 ## Device lifetime, state and events
 
 CBIND-035F2 adds the device's own contract on top of the borrowed handle that `graphics.h`
-already provides.
+already provides. CABI-10/13 later added an independently owned form of the same device.
 
-### Lifetime is the game's, not the caller's
+### Borrowed and caller-owned lifetimes
 
-There is no `cna_graphics_device_create` or `cna_graphics_device_destroy`. The canonical
-`GraphicsDevice` is created by the running `Game` from its adapter, profile and presentation state,
-and destroyed when `cna_game_destroy` runs. `cna_game_get_graphics_device` borrows it for the
-duration of one lifecycle callback; the handle is generation-invalidated the moment that callback
-returns.
+`cna_game_get_graphics_device` borrows the running `Game`'s device for the duration of one
+lifecycle callback; the handle is generation-invalidated the moment that callback returns. The
+game creates that device from its adapter, profile and presentation state, and
+`cna_game_destroy` disposes it.
 
-`cna_graphics_device_dispose` exists so the rule is callable rather than merely documented: given a
-valid device handle it returns `CNA_RESULT_NOT_SUPPORTED` and explains that the active game owns
-the device. Disposal is observed, not performed, through
-`cna_graphics_device_get_is_disposed`.
+`cna_graphics_device_create` instead constructs an independent device outside any `Game` from an
+adapter index, graphics profile and presentation parameters. Its handle is owned until
+`cna_graphics_device_destroy`; several independently owned devices may coexist, and the ordinary
+device operations and resource-creation routes accept either handle form. Resources retain their
+creating-device identity, so cross-device use is refused even between two caller-owned devices.
+
+`cna_graphics_device_dispose` does not transfer or release either kind of handle. It returns
+`CNA_RESULT_NOT_SUPPORTED` for a valid device: a borrowed device belongs to its game, while a
+caller-owned device must be disposed and released atomically through
+`cna_graphics_device_destroy`. `cna_graphics_device_get_is_disposed` observes the native disposal
+state.
 
 ### State
 
