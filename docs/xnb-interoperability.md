@@ -428,10 +428,13 @@ this change, so every incremental build that used the old default rebuilds inste
 as unchanged.
 
 Neither `.fxb` nor `.fx` has a `.cnb` route, deliberately: the CNB container reserves an `Effect`
-identifier and has no schema for it, because CNA has many renderers and a `.cnb` carrying one API's
-shader bytecode would be useless on the others. A `.fx` build with no compiler configured fails at
-the first effect with one complete explanation — naming the discovery order it tried — rather than
-once per asset or with a misleading shader error.
+identifier and has no schema for it, because CNA has not chosen whether native CNB `Effect` means
+XNA Effect Framework bytecode, `ShaderEffect` dialect payloads, or a new renderer-neutral
+contract. XNA bytecode already has this XNB route and optional compiled-effect runtimes across
+several renderer families; the CNB route refuses instead of silently freezing that compatibility
+payload as CNB's native contract. A `.fx` build with no compiler configured fails at the first
+effect with one complete explanation — naming the discovery order it tried — rather than once per
+asset or with a misleading shader error.
 
 Audio sources may be 8-bit unsigned, 16-bit, 24-bit or 32-bit PCM, or 32-bit IEEE float. Everything
 wider than 16 bits is narrowed to the Pcm16 both containers store, deterministically, **with a

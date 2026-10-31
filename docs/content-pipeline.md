@@ -424,9 +424,11 @@ converge on one processed type and one writer, so nothing downstream can tell th
   into an `.xnb` claiming to be an XNA `Effect`.
 
 Both produce `Effect` **only for `--format xnb`**. The CNB container reserves an `Effect`
-identifier and deliberately has no schema for one: a `.cnb` carrying Direct3D 9 shader bytecode
-would be unloadable on every CNA renderer that is not Direct3D 9. Asking for `--format cnb` says
-so.
+identifier and deliberately has no schema for one: CNA has not chosen whether native CNB `Effect`
+means XNA Effect Framework bytecode, `ShaderEffect` dialect payloads, or a new renderer-neutral
+contract. The XNA bytecode already has the XNB route and optional compiled-effect runtimes across
+several renderer families; asking for `--format cnb` refuses instead of silently freezing that
+compatibility payload as CNB's native contract.
 
 #### Selecting the compiler
 

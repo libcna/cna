@@ -179,8 +179,9 @@ namespace CNA::Content::Pipeline
      * @brief Registers the `.fx` source route.
      *
      * Only the XNB writer consumes the result, and deliberately: the CNB container reserves an
-     * `Effect` identifier and has no schema for it, because a `.cnb` carrying one API's shader
-     * bytecode would be useless on CNA's other renderers.
+     * `Effect` identifier and has no schema for it. CNA has not chosen whether that native schema
+     * would mean XNA Effect Framework bytecode, `ShaderEffect` dialect payloads, or a new
+     * renderer-neutral contract.
      *
      * The route is registered even when no compiler is available, so that a build tree containing
      * a `.fx` reports *why* it cannot be compiled -- with the discovery order and the exact

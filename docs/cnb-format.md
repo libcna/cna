@@ -1187,10 +1187,12 @@ loader, a writer API, and a command-line producer — and this document has prev
 A type can be fully readable at runtime and still have no supported way to *produce* one.
 
 * The `Effect` schema. Its identifier is frozen; its layout is not designed, and deliberately so:
-  CNA has many renderers, and a `.cnb` carrying one API's shader bytecode would be useless on the
-  others. Its eventual shape is metadata, parameters and per-profile shader payloads (GLSL, SPIR-V,
-  DXIL, MSL …) or a CNA intermediate form, and it waits for the shader pipeline and renderer
-  abstraction to settle (`CNBF-104`).
+  the reserved identifier does not decide whether native CNB `Effect` means XNA Effect Framework
+  bytecode, `ShaderEffect` dialect payloads, or a new renderer-neutral contract. XNA bytecode
+  already has the XNB route and optional compiled-effect runtimes across several renderer
+  families, but silently assigning that compatibility payload to CNB would freeze the choice for
+  every future reader. A native schema waits for that semantic and wire-format decision
+  (`CNBF-104`).
 * **Embedded** audio or video streams. §19 stores a reference, by design.
 * Block-compressed texture **payloads**. §16 defines the identifiers and the multi-representation
   structure that carries them, and the reader accepts a file that uses them, but no writer in this

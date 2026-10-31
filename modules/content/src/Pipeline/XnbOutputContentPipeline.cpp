@@ -374,8 +374,9 @@ namespace CNA::Content::Pipeline
          * XNAP-84. This writer serializes bytecode; it never compiles
          * HLSL and never embeds source text pretending to be bytecode. There is no matching CNB
          * writer, and that is deliberate: the CNB container reserves an `Effect` identifier but
-         * has no schema for it, because CNA has many renderers and a `.cnb` carrying one API's
-         * shader bytecode would be useless on the others.
+         * has no schema for it. CNA has not chosen whether that native schema would mean XNA
+         * Effect Framework bytecode, `ShaderEffect` dialect payloads, or a new renderer-neutral
+         * contract.
          */
         class XnbEffectWriter final : public XnbPipelineWriter
         {

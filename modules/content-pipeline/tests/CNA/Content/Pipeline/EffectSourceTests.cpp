@@ -441,8 +441,8 @@ TEST(EffectSourceRouteTest, AnFxSourceBuildsToAnEffectXnbCarryingTheCompilerByte
 TEST(EffectSourceRouteTest, AnFxSourceHasNoCnbRouteAndSaysWhy)
 {
     // Deliberate: the CNB container reserves an Effect identifier and has no schema for it,
-    // because CNA has many renderers and a .cnb carrying one API's bytecode is useless on the
-    // others. The build must refuse rather than write something unusable.
+    // because CNA has not chosen which of its two existing effect contracts a native CNB Effect
+    // would mean. The build must refuse rather than freeze that undecided wire contract.
     ScratchDirectory scratch("nocnb");
     WriteText(scratch.Path() / "shader.fx", "technique T {}\n");
 

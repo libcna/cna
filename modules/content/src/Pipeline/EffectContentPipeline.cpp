@@ -136,10 +136,10 @@ namespace CNA::Content::Pipeline
     const char* CompiledEffectHasNoCnbSchemaReason()
     {
         return "The CNB container reserves an Effect identifier and deliberately has no schema "
-               "for one: a .cnb carrying Direct3D 9 shader bytecode would be unloadable on every "
-               "CNA renderer that is not Direct3D 9, which is the opposite of what a native "
-               "container is for. Build effects with --format xnb, where the bytecode has a "
-               "runtime that consumes it.";
+               "for one: CNA has not chosen whether native CNB Effect means XNA Effect Framework "
+               "bytecode, ShaderEffect dialect payloads, or a new renderer-neutral contract. "
+               "Build XNA compiled effects with --format xnb, whose bytecode has the established "
+               "runtime path.";
     }
 
     void RegisterCompiledEffectContentPipeline(ContentPipelineRegistry& registry)
