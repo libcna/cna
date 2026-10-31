@@ -121,7 +121,8 @@ original phase closed — check each file's own status banner/date.
 - `viewport-displaymode-adapter-support.md` — reconciled 2026-10-31: current adapter lifetime,
   XNA widescreen/device-selection rules, resize coverage and measured browser/Android boundary.
 - `texture-stream-formats.md` — public PNG/JPEG/GIF and explicit DDS decoding contract.
-- `vertex-format-support.md` — EasyGL declaration/format mapping, revised 2026-09-30.
+- `vertex-format-support.md` — cross-renderer vertex declaration, format and semantic mapping,
+  reconciled 2026-10-31.
 - `shader-effect-vs-fx-bytecode.md` — custom GLSL `ShaderEffect` versus compiled XNA effect
   bytecode, and which renderers execute the latter; `fx-compiled-effects.md` is the complete
   porter-facing guide to the compiled path.

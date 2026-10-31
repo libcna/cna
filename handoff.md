@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Vertex-format support-document reconciliation (2026-10-31): the old EasyGL-only stride table is
+  now a cross-renderer contract that separates declaration validity, native format mapping and
+  shader semantic consumption. It records all 12 formats across the six rasterizing renderer
+  families, all 13 usage semantics, Reach/HiDef and device limits, multi-stream collision remapping
+  and the compiled-effect boundary; the false `Depth`/`Fog`/`PointSize` backlog is gone. Focused
+  validation passes 196 shared, EasyGL, Software, SDLGPU and FNA3D tests; the SDLGPU, FNA3D and
+  multi-renderer focused test targets build successfully.
 - Viewport/display/adapter support-document reconciliation (2026-10-31): the Phase 40 page no
   longer says Emscripten and Android have never run CNA. It records the real Chrome WEBGL2/WEBGPU
   and Android-emulator OPENGLES3 boundary without claiming dedicated adapter-value coverage, and
