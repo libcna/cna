@@ -19,8 +19,8 @@ default-constructor values (`Filter=Linear`, `AddressU=AddressV=AddressW=Wrap`,
 values already matched FNA exactly.
 
 One real, fixed finding: FNA's private preset constructor sets `Name` on every preset (e.g.
-`"SamplerState.PointClamp"`); CNA's didn't. Fixed. The identical gap exists in
-`BlendState`/`DepthStencilState`/`RasterizerState` — tracked separately as Task 866, not yet fixed.
+`"SamplerState.PointClamp"`); CNA's didn't. Fixed. Tasks 301, 311 and 321 subsequently fixed the
+identical gap in `BlendState`, `DepthStencilState` and `RasterizerState`, closing Task 866.
 
 ## 2. Default sampler states (Task 292)
 
@@ -352,8 +352,8 @@ Legend: ✅ verified working · ❌ confirmed broken/absent · ⚠️ partial/in
 
 ## Open, tracked follow-up work
 
-- **Task 866** — `BlendState`/`DepthStencilState`/`RasterizerState` static presets don't set
-  `Name` (same gap `SamplerState` had before Task 291).
+- ~~**Task 866**~~ — **fixed**: `BlendState`/`DepthStencilState`/`RasterizerState` static presets
+  now set `Name`, closing the same gap `SamplerState` had before Task 291.
 - ~~**Task 867**~~ — **fixed** as Task 924 (2026-07-09): `Texture2D::SetData(level>0,...)` now
   does a real GPU upload on EasyGL, and EasyGL's `GL_TEXTURE_MAX_LEVEL` mipmap-incompleteness
   black-screen bug is fixed.

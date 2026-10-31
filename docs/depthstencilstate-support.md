@@ -17,7 +17,8 @@ already matched FNA exactly.
 One real, fixed finding: FNA's private preset constructor sets `Name` on every preset (e.g.
 `"DepthStencilState.Default"`); CNA's didn't — the same gap already fixed in `SamplerState`
 (Task 291) and `BlendState` (Task 301). Fixed, closing `DepthStencilState`'s portion of Task 866;
-`RasterizerState`'s portion remains open for its own Phase 38 audit task.
+Task 321 subsequently fixed `RasterizerState` and closed Task 866 entirely. All four XNA graphics
+state classes now give every named preset its FNA/XNA name.
 
 ## 2. Default graphics states on `GraphicsDevice` (Tasks 312/896/955)
 
@@ -102,12 +103,25 @@ Two distinct findings:
 1. **Fixed** (same shape as Task 309): `GraphicsDevice::setDepthStencilStateProperty` never
    propagated an assigned state's own `ReferenceStencil` into `GraphicsDevice`'s own field, so
    `getReferenceStencilProperty()` could return stale data. Fixed.
-2. **Confirmed broken, tracked as new Task 872, not fixed**:
-   `GraphicsDevice::setReferenceStencilProperty` is a pure local no-op with **zero renderer
-   connection** — `IGraphicsRenderer` has no `SetReferenceStencil` method at all; confirmed via a
-   dedicated pixel test. Unlike `BlendFactor`'s case (Task 309), where the renderer-side method
-   already existed and just wasn't being invoked, here there is no existing code path to wire up;
-   fixing this needs new interface surface.
+2. **Fixed** (Task 872, completed on EasyGL by `REMED-GFX-236`): the independent device property
+   originally had no renderer connection. `IGraphicsRenderer::SetReferenceStencil` now carries it
+   and `GraphicsDevice` forwards both whole-state assignment and direct property changes. EasyGL
+   records the active stencil functions, read mask and two-sided mode so it can reissue the GL
+   function with the new reference for both faces. Its pixel regression checks the ordinary and
+   two-sided paths with both windings; the same public test source also runs on SDLGPU and Software.
+
+## 6. Stencil clearing (Task 871)
+
+`GraphicsDevice::Clear` now recognizes `ClearOptions::Stencil`, validates that the active surface
+has the requested attachment, and dispatches every stencil-only and combined clear shape with the
+requested value. EasyGL temporarily opens the stencil write mask and disables scissoring for the
+clear, then restores the active state, because native `glClear` otherwise obeys both pieces of GL
+state while XNA `Clear` does not.
+
+`easygl_graphicsdevice_clear_stencil_test.cpp` proves four independent cases: stencil-only clear,
+combined target/depth/stencil clear with a nonzero value, exact same-frame ordering after a stencil
+stamp, and restoration of a restrictive stencil write mask. The shared regression remains
+registered for EasyGL and SDLGPU.
 
 ---
 
@@ -124,21 +138,17 @@ Two distinct findings:
 | Front-face `StencilFail`/`StencilDepthBufferFail`/`StencilPass` | ✅ |
 | `TwoSidedStencilMode` / back-face (CCW) ops | ✅ |
 | `ReferenceStencil` via `DepthStencilState` assignment | ✅ (fixed, Task 319) |
-| `ReferenceStencil` independent override (no state reassignment) | ❌ (Task 872) |
-| `GraphicsDevice::Clear(ClearOptions::Stencil, ...)` actually clears stencil | ❌ (Task 871) |
+| `ReferenceStencil` independent override (no state reassignment) | ✅ (fixed, Task 872 / `REMED-GFX-236`) |
+| `GraphicsDevice::Clear(ClearOptions::Stencil, ...)` actually clears stencil | ✅ (fixed, Task 871) |
 | Physical stencil buffer exists on the default window | ✅ (fixed, Task 315) |
 
 Legend: ✅ verified working · ❌ confirmed broken/absent · ⚠️ partial/inconsistent ·
 ❓ not investigated at all.
 
-## Open, tracked follow-up work
+## Follow-up status
 
-- **Task 866** — `RasterizerState` static presets still don't set `Name` (the last remaining
-  portion of this gap; `SamplerState`/`BlendState`/`DepthStencilState` are all fixed).
-- **Task 869** — `GraphicsDevice` stores `BlendState`/`DepthStencilState`/`RasterizerState` by
-  value, unlike FNA's reference-type aliasing (architectural, deliberate, not fixed).
-- **Task 871** — `GraphicsDevice::Clear` ignores `ClearOptions::Stencil` (and the stencil clear
-  value) on every renderer.
-- **Task 872** — `GraphicsDevice.ReferenceStencil`'s independent-override behavior has no renderer
-  connection on EasyGL; needs a new `IGraphicsRenderer::SetReferenceStencil` method and
-  plumbing there.
+- Task 866 is closed: all four state classes set the names of their static presets.
+- Task 869's original value-only divergence was superseded by shared state/resource identities;
+  CNA now preserves the portable observable reference semantics. Literal CLR wrapper identity is
+  the accepted C++ mapping deviation recorded as `SOFTWARE-198` in `CHECKLIST.md`.
+- Tasks 871 and 872 are closed by the implementations and regressions described above.

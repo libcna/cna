@@ -35,6 +35,11 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Graphics-state support-document reconciliation (2026-10-31): the depth/stencil, sampler and
+  rasterizer support pages now agree with the implemented closure of Tasks 866, 871 and 872.
+  Named presets, stencil clears (including ordering/write-mask restoration), and independent
+  `ReferenceStencil` updates point to their current implementation and discriminating regressions;
+  Task 869's surviving literal-identity difference points to the accepted `SOFTWARE-198` mapping.
 - Depth-occlusion audit documentation cleanup (2026-10-31): the resolved Task 955 investigation
   was retired after the `GraphicsDevice` constructor-default contract and its active EasyGL/SDLGPU
   regression moved to `docs/depthstencilstate-support.md`. Task 956's separate SpriteBatch blend

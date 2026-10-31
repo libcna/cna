@@ -90,18 +90,20 @@ phase's audit tasks. No new findings in Phase 38.
 
 ## 7. State object immutability/freeze behavior (Task 330)
 
-Confirmed via direct FNA source read (`Graphics/States/RasterizerState.cs`) that FNA has **no**
-freeze/immutability enforcement for `RasterizerState` either — no "throws if mutated after first
-use" behavior anywhere in the file. This is the same finding Task 310 (Phase 36) already
-established generically for `BlendState`/`DepthStencilState`/`RasterizerState`. CNA correctly
-matches (also none) — no bug, no implementation needed.
+Phase 38's FNA-only conclusion was superseded by direct Microsoft XNA evidence during
+`SOFTWARE-232`: XNA's state objects become bound on first application and every later property
+setter throws `InvalidOperationException`. FNA's mutable records are a compatibility divergence,
+not the authority for this contract.
 
-Added `GraphicsDeviceDefaultStateTest.MutatingRasterizerStateAfterAssignmentDoesNotAffectDevice`,
-mirroring the existing `BlendState` test exactly: CNA's `GraphicsDevice` stores `RasterizerState`
-**by value** (a deliberate, project-wide pattern — see Task 869, not fixed), so mutating a
-`RasterizerState` object *after* assigning it to a `GraphicsDevice` does not affect the device's
-already-applied copy, unlike FNA's reference-type aliasing (where the same C# object is stored, so
-post-assignment mutation would be visible). This closes Phase 38's last open task.
+CNA now shares the internal state payload when a state is assigned to a device. Binding freezes
+that payload, so both the caller's wrapper and the device-owned wrapper reject later mutation.
+`GraphicsDeviceDefaultStateTest.BoundRasterizerStateRejectsMutationThroughSourceAndDevice` checks
+both aliases, while `BoundRasterizerStateRejectsEveryPropertySetter` covers all six public
+properties. `SOFTWARE-349` subsequently extended the shared identity to portable
+`GraphicsResource` observations (`Name`, `Tag`, disposal/events and parent-device rebinding),
+covered by the assigned/default-state alias tests in the same suite. Only literal C++ wrapper
+address and cross-wrapper event-token identity remain the accepted `SOFTWARE-198` language-mapping
+deviation recorded in `CHECKLIST.md`.
 
 ---
 
@@ -147,17 +149,18 @@ disagree.
 | `FillMode::WireFrame` | ✅ (GL_LINES emulation) |
 | `DepthBias` / `SlopeScaleDepthBias` | 🔍 not pixel-verified in this phase; `EasyGL_DepthBias` registered later (Task 767) |
 | `ScissorTestEnable` + `GraphicsDevice.ScissorRectangle` | ✅ |
-| State object freeze/immutability | N/A — FNA has none either, confirmed no bug |
+| State object freeze/immutability | ✅ (Microsoft XNA behavior restored, `SOFTWARE-232`) |
 
 Legend: ✅ verified working · ❌ confirmed broken/absent · 🔍 not empirically verified this phase.
 
-## Open, tracked follow-up work
+## Follow-up status
 
 - No new tracked bugs were opened in Phase 38 — `RasterizerState` conformance was already solid
   going in (unlike Phases 36/37's `BlendState`/`DepthStencilState` findings). The only gaps found
   were test-coverage/registration gaps (`Name` on presets, missing EasyGL `FillMode`
   registration), both closed within this phase.
-- Tasks 866/869 (closed/tracked in earlier phases) and Tasks 871/872 (`Clear` stencil gap,
-  `ReferenceStencil` renderer gap) remain as documented in
-  `docs/sampler-state-support.md` and `docs/depthstencilstate-support.md` — none are
-  `RasterizerState`-specific and none were touched in this phase.
+- Task 866 is closed. Task 869's portable observable semantics were later restored through shared
+  state/resource identities; only literal CLR wrapper identity remains an accepted C++ mapping
+  deviation (`SOFTWARE-198` in `CHECKLIST.md`). Tasks 871/872 are also closed; their stencil-clear
+  and independent-reference implementations and regressions are documented in
+  `docs/depthstencilstate-support.md`.
