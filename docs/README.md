@@ -64,8 +64,11 @@ on it) rather than assuming either way.
 - **[`opengl33-renderer.md`](opengl33-renderer.md)** — current desktop OpenGL 3.3 core profile
   contract: EasyGL sharing, profile-specific behavior, build/test route, platform qualification and
   live-context boundaries.
-- **[`webgpu-renderer.md`](webgpu-renderer.md)** — current status, build instructions and explicit
-  limitations for the `WEBGPU` renderer, including the one open item (`WEBGPU-1`).
+- **[`webgl2-renderer.md`](webgl2-renderer.md)** — current browser WebGL 2 profile contract:
+  EasyGL sharing, exact context/dialect rules, browser validation route, live capabilities and
+  qualification boundary.
+- **[`webgpu-renderer.md`](webgpu-renderer.md)** — current native and browser status, build
+  instructions, qualification evidence and explicit limitations for the `WEBGPU` renderer.
 - **[`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md)** — current
   Microsoft-reference runtime type and member census, with every missing declaration listed;
   the separate [Content Pipeline parity report](xna-content-pipeline-parity-report.md) covers build-time APIs.
@@ -135,8 +138,10 @@ original phase closed — check each file's own status banner/date.
 
 ## Platform / renderer limitations
 
-- `android-graphics-limitations.md`, `web-emscripten-graphics-limitations.md` — per-platform
-  Graphics constraints (Emscripten, Android NDK).
+- `android-graphics-limitations.md` — Android NDK graphics constraints.
+- **[`web-emscripten-graphics-limitations.md`](web-emscripten-graphics-limitations.md)** — current
+  browser platform contract shared by WEBGL2/WEBGPU: final-link policy, canvas/display model,
+  game-loop ownership, optional pthread ABI, persistence, context loss and evidence boundary.
 - **[`apple-platforms.md`](apple-platforms.md)** — macOS and iOS: build instructions, the iOS
   renderer allow-list, bundle/lifecycle/storage behavior, and an explicit per-claim evidence
   boundary (macOS has a native CI gate; iOS final-links for device and runs a one-frame smoke app

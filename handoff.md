@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- `WEBGL2` renderer and Emscripten platform-document reconciliation (2026-10-31): the GLB/Task 459
+  snapshots are replaced by two current, non-overlapping contracts. The renderer page now owns the
+  supported-class identity, runtime EasyGL profile, exact WebGL 2/GLSL ES contract, profile-specific
+  swizzle/base-vertex/wireframe/occlusion/MSAA behavior, live format/capability queries and browser
+  qualification. The platform page owns final-link policy, canvas/display behavior, blocking versus
+  host-driven game loops, pthread/OFFSCREEN_FRAMEBUFFER and renderer-lease interaction,
+  WasmFS/IDBFS persistence, asynchronous context recovery and the measured Chrome-centric evidence
+  boundary. It removes the obsolete `SurfaceFormat::Color`-only claim and no longer presents the
+  build/link-only multi-renderer CI job as the whole browser evidence. The stable
+  `cmake-build-wasm-webgl2` C API artifact rebuilds and links; its contract reports exact WebGL 2
+  with Asyncify off, the Node module smoke finds all 3,215 exports, and the real Chrome browser
+  probe passes all 14 ABI, Game lifecycle, WEBGL2 context, clear/present and stock-effect MRT
+  readback checks. Renderer identity and combination consistency gates also pass.
 - `OPENGL33` renderer-document reconciliation (2026-10-31): the old GLB campaign snapshot and its
   fixed suite counts, closed failures and Xvfb instructions are replaced by the current production-
   class desktop-core profile contract. The page now distinguishes runtime `GlProfile` selection

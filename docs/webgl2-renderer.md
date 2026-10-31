@@ -1,69 +1,111 @@
-# WEBGL2 (Emscripten, GLES 3.0 → WebGL 2.0) Renderer — Status
+# WEBGL2 renderer
 
-`WEBGL2` is one of the three public GL-family `CNA_GRAPHICS_RENDERER` values (introduced by the GL
-renderer plan, `GLB-1`..`GLB-43`, Git history) — it shares its entire implementation with
-`OPENGLES3`/`OPENGL33` (`modules/renderers/easygl/`, on top of the sibling `easy-gl` library),
-distinguished by its GL profile -- a runtime `GlProfile` (`GlProfile.hpp`) since
-RTR-P11, with the `CNA_GL_PROFILE_WEBGL2` definition supplying only a
-single-renderer build's default. Unlike `OPENGLES3`/`OPENGL33` (native desktop/mobile), `WEBGL2`
-only builds for Emscripten and requests the same GLES 3.0 context `OPENGLES3` does —
-Emscripten/browsers map a GLES-3.0-shaped SDL3 GL context request to a real WebGL 2.0 context. This
-is functionally what used to be "`EASYGL` under Emscripten" before the GL renderer plan gave it its
-own public name.
+Status: current profile contract, reconciled with the renderer registry, live capability queries,
+EasyGL implementation and browser qualification on **2026-10-31**.
 
-**Status legend:** ✅ implemented and verified; 🟨 code exists but not fully verified; ⬜ not done.
+`WEBGL2` is CNA's supported-class browser WebGL 2 identity. It is Emscripten-only and is the
+default renderer under that toolchain. The implementation is the shared EasyGL family in
+`modules/renderers/easygl/`, which also serves the native `OPENGLES3` and `OPENGL33` identities;
+the three are separate public renderer identities, not aliases. [`renderer-registry.md`](renderer-registry.md)
+is the canonical identity and selection table, while
+[`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md) is the cross-renderer
+capability summary.
 
-## What's real today
+## Selection and validation
 
-- ✅ **Context creation** — unchanged from `OPENGLES3`'s GLES 3.0 request
-  (GLB-8); confirmed by reading the vendored SDL3 Emscripten renderer
-  (`third_party/SDL/src/video/emscripten/SDL_emscriptenopengles.c:87-98`) — it derives WebGL-1-vs-2
-  purely from whether the requested GL major version is 3, which `EasyGLRenderer`'s
-  constructor already sets correctly for this profile. No `-s USE_WEBGL2`/`FULL_ES3` emcc flags
-  are needed for SDL3's own context creation (GLB-9 — that whole class of
-  flag only matters for a GLES-emulation-shim code path SDL3 doesn't use here). **Correction found
-  later the same night**: `cna_house3d_demo`'s own Emscripten *link* options (a separate, per-target
-  CMake setting, not SDL3's context creation) did hardcode `-sMIN_WEBGL_VERSION`/
-  `-sMAX_WEBGL_VERSION` — happened to already be the correct value (`2`/`2`) for this profile.
-  The policy now lives in one renderer-aware helper shared by the examples, benchmark and
-  `cna_c_api_wasm`: WEBGL2 is exact 2/2, and non-WebGL renderers receive neither flag.
-- ✅ **Real `emcmake`/`emcc` build** — this sandbox has a working Emscripten SDK at `~/emsdk` (not
-  on `PATH` by default — source `~/emsdk/emsdk_env.sh` and additionally add
-  `~/emsdk/upstream/emscripten` and `~/emsdk/node/*/bin` to `PATH`). `emcmake cmake
-  -DCNA_GRAPHICS_RENDERER=WEBGL2` configures cleanly and the core `CNA` library compiles cleanly.
-- ✅ **Real full-binary link** — building the actual `cna_house3d_demo` example target (enabled for
-  the GL-family renderers among others, `modules/graphics/examples/CMakeLists.txt`) initially
-  failed with `wasm-ld: undefined symbol: __cpp_exception`, a genuine exception-handling ABI mismatch between
-  CNA's own top-level Emscripten flags and the sibling `easy-gl`/`meta-gl` chain's. Root-caused and
-  fixed entirely within `cnagl` (GLB-39, `CMakeLists.txt`) — no sibling-repo
-  change needed. After the fix, `cna_house3d_demo` links cleanly, producing a real
-  `.wasm`/`.js`/`.html`.
-- ✅ **Real execution, as far as this environment can go** — running the built `.js` under Node
-  (`node cna_house3d_demo.js`) executes real compiled C++ through `SDL_Init`/window-creation before
-  hitting `ReferenceError: window is not defined` — a genuine, expected browser-only DOM API gap
-  (Node has no `window`/`document`; SDL3's Emscripten renderer touches `window.matchMedia` for
-  system dark-mode detection during init). This is Node having no DOM, not something specific to
-  `WEBGL2` or a regression.
+A single-renderer C ABI build can be configured with:
 
-## What's not yet done
+```bash
+emcmake cmake -S . -B cmake-build-wasm-webgl2 -G Ninja \
+  -DCNA_GRAPHICS_RENDERER=WEBGL2 \
+  -DCNA_BUILD_C_API=ON \
+  -DCNA_BUILD_TESTS=OFF \
+  -DCNA_BUILD_EXAMPLES=OFF
+cmake --build cmake-build-wasm-webgl2 --parallel 8 \
+  --target cna_c_api_browser_probe
+```
 
-- ✅ **Real browser verification for the C-API path** — a clean `cna_c_api_wasm` build obtains a
-  real WebGL 2.0 context in Chrome and completes 5-, 60- and 600-frame externally driven runs with
-  exact Update/Draw counts, CNA clear/present work, BigInt handles, no page errors and clean teardown.
-- ⬜ **`CnaTests` under Emscripten** — attempted and fails with `'SDL3/SDL.h' file not found`
-  regardless of GL-family renderer. Not a regression from the GL renderer plan: the project's own `web` CMake
-  preset already sets `CNA_BUILD_TESTS=OFF`, so a GTest build under Emscripten was never a
-  supported/exercised configuration to begin with.
-- ⬜ **CI/CTest identity** (GLB-25) — no dedicated `WEBGL2`-only CTest
-  registration distinguishing it from `OPENGLES3`/`OPENGL33` runs. The Emscripten multi-renderer CI
-  job builds and links `WEBGL2` (with `WEBGPU`) but runs nothing.
-- ⬜ **Pixel-level golden-image verification** — unlike `OPENGL33` (verified pixel-identical to
-  `OPENGLES3` via a real desktop GL context), no pixel-comparison test has run against a real WebGL
-  2 context (browser or otherwise) for `WEBGL2`.
+The final-target helper in `cmake/RendererSelection.cmake` pins both
+`MIN_WEBGL_VERSION` and `MAX_WEBGL_VERSION` to 2. There is no WebGL 1 fallback: accepting a WebGL
+1 context would contradict the profile's GLSL ES 3.00 contract. CNA's browser application targets
+and the `cna_c_api_wasm` library use the same helper; non-WebGL renderer targets do not inherit
+these flags. An external final executable must apply the same exact WebGL 2 requirement.
 
-## Relationship to the other GL-family renderers
+The built probe is a real browser gate, not a Node substitute:
 
-See `docs/renderer-registry.md`'s identity table and `docs/opengl33-renderer.md`'s own version of this section.
-In short: `OPENGLES3` is today's original `EasyGL` public renderer renamed (GLES 3.0, unchanged
-behavior, native/desktop); `WEBGL2` is the same GLES 3.0 path, but under Emscripten instead of
-native; `OPENGL33` is a new desktop GL 3.3 core-profile variant.
+```bash
+PLAYWRIGHT_CHROMIUM=/usr/bin/google-chrome \
+  node scripts/run_browser_tests.mjs \
+  cmake-build-wasm-webgl2/modules/c-api browser_probe.html
+```
+
+When `CNA_BUILD_TESTS=ON` and Playwright is resolvable, CMake registers that route as
+`CApi_WasmBrowserProbe`, together with the structural link contract and Node module smoke. Node
+can validate the ES-module/Wasm artifact, but it has no canvas or browser WebGL implementation and
+therefore is not graphics qualification.
+
+## Profile-specific contract
+
+| Area | `WEBGL2` behavior | Difference from the native EasyGL profiles |
+|---|---|---|
+| Context | Exact browser WebGL 2 context through SDL3/Emscripten | `OPENGLES3` requests native ES 3.0; `OPENGL33` requests desktop GL 3.3 core |
+| Stock shaders | Uses the shared GLSL ES 3.00 corpus directly | Desktop GL rewrites it to GLSL 3.30 core |
+| CNAEXT `ShaderEffect` | Reports GLSL ES and accepts GLSL ES vertex/fragment packages | Desktop GL reports and accepts desktop GLSL; see [`shader-effect-vs-fx-bytecode.md`](shader-effect-vs-fx-bytecode.md) |
+| Compiled XNA effects | Optional `CNA_EASYGL_COMPILED_EFFECTS`; MojoShader uses `glsles3` | Desktop GL uses its `glsl120` adapter profile; the option is off by default |
+| Base-vertex indexed draws | Rebases the index pointer/vertex layout in EasyGL | Desktop GL uses `glDrawElementsBaseVertex` |
+| Texture channel swizzle | Unavailable; WebGL rejects `GL_TEXTURE_SWIZZLE_*` | Both native profiles expose it |
+| Point sprites | Shader `gl_PointSize` works without a desktop enable | Desktop GL enables `GL_PROGRAM_POINT_SIZE` |
+| Wireframe | Uses `WEBGL_polygon_mode` only when the browser exposes it; otherwise general wireframe is refused | Desktop GL has core polygon mode; native ES also requires an extension |
+| Occlusion count | Core WebGL queries provide a zero/non-zero visibility answer | Desktop GL reports a precise sample count |
+| `RasterizerState.MultiSampleAntiAlias` | No equivalent native switch; the state is accepted without changing rasterization | Desktop GL toggles `GL_MULTISAMPLE`; this is separate from allocating and resolving MSAA targets |
+
+WebGL 2 also has no geometry or tessellation shader stage. CNA's public XNA effect path does not
+require either stage, so their absence is a profile boundary rather than a missing stock-effect
+feature.
+
+## Shared EasyGL surface and live capabilities
+
+`WEBGL2` uses EasyGL's complete 2D and 3D routes: `SpriteBatch`/`SpriteFont`, the five classic
+stock effects, `PbrEffect`/`SkinnedPbrEffect`, indexed and instanced drawing, multiple vertex
+streams, `Texture2D`/`TextureCube`/`Texture3D`, render-target cubes, MRT, MSAA and occlusion
+queries. This statement does not promise every storage format, sample count or extension on every
+browser/GPU pair.
+
+Format support is not limited to `SurfaceFormat::Color`. The renderer classifies the live WebGL
+implementation and its extensions, including floating-point targets, normalized 16-bit textures,
+compressed formats and anisotropic filtering. Before choosing a non-`Color` format, sample count,
+anisotropy level or numeric limit, query `GraphicsDevice::GetRendererCapabilityProfileEXT()` and
+the per-format support functions. The focused sources of truth are
+[`surface-format-support.md`](surface-format-support.md),
+[`rendertarget-support.md`](rendertarget-support.md),
+[`texture3d-texturecube-support.md`](texture3d-texturecube-support.md),
+[`rasterizerstate-support.md`](rasterizerstate-support.md),
+[`sampler-state-support.md`](sampler-state-support.md) and
+[`occlusionquery-support.md`](occlusionquery-support.md).
+
+Browser canvas sizing, the application loop, optional pthread ABI, storage and WebGL context loss
+belong to the Emscripten platform rather than this renderer identity. Their current contract is in
+[`web-emscripten-graphics-limitations.md`](web-emscripten-graphics-limitations.md); the separate
+browser `WEBGPU` route is in [`webgpu-renderer.md`](webgpu-renderer.md).
+
+## Qualification and current boundaries
+
+- The current reproducible browser gate uses headless Chrome. The C ABI probe fetches and instantiates
+  the module over HTTP, verifies the `WEBGL2` identity and a real `WebGL2RenderingContext`, drives
+  the shared Game tick through animation frames, clears/presents, exercises a stock-effect MRT
+  draw with readback, and checks clean lifecycle and teardown.
+- Real sample runs additionally cover touch input, compiled XNB model loading, resource creation
+  on a loading pthread and foreground WebGL context loss/restoration. These are integration
+  evidence, not an exhaustive browser/GPU/device matrix.
+- The Emscripten multi-renderer workflow proves that a `WEBGL2;WEBGPU` bundle builds, links and
+  publishes the correct registry. That workflow does not itself run the bundle in a browser;
+  browser runtime evidence comes from the dedicated harnesses.
+- WebGL format, compression, anisotropy, polygon-mode and numeric-limit availability remains
+  browser/GPU dependent and must follow the live profile rather than a hard-coded browser name.
+- The current browser fullscreen drawable mismatch, EasyGL blend-equation shortcut and
+  non-recoverable `Texture3D` context-loss path are defects recorded in
+  [`handoff.md` section 5.1](../handoff.md#51-defects). They are not hidden behind the renderer's
+  supported maturity.
+
+Historical campaign IDs, fixed exception/link failures and one-off suite counts belong in Git
+history. This page describes the current renderer contract.
