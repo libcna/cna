@@ -44,15 +44,14 @@ namespace CNA::Internal::Audio
 
     /// Destroys the shared mixer and selected playback device.
     ///
-    /// P9-AUDIT-003/AUDIO-002: still no production caller anywhere in this codebase today; native
-    /// mixer state and the selected audio device are otherwise only reclaimed by the OS on
-    /// process exit. A future caller wiring real shutdown (e.g. into Game's dispose path) must
-    /// first ensure no live SoundEffectInstance, DynamicSoundEffectInstance, Microphone, or
-    /// AudioEngine/Cue/SoundBank/WaveBank is actively using audio. This function only
-    /// serializes the mixer pointer itself against a concurrent GetMixer() call, it has no way to
-    /// know about (or wait on) those higher-level objects' own lifetimes. A GetMixer() call after
-    /// this one simply recreates the mixer from scratch, the same as the very first call ever
-    /// made.
+    /// P9-AUDIT-003/AUDIO-002/MUSEUM-AUDIO-002: first successful mixer creation registers this
+    /// function with `std::atexit`, so the selected device is stopped and joined before earlier
+    /// audio-related statics are destroyed. Internal tests may also call it earlier to exercise a
+    /// controlled destroy/recreate cycle. Such an explicit early call must not race higher-level
+    /// audio operations: this function serializes the mixer pointer against GetMixer(), but it
+    /// cannot discover or wait on every SoundEffectInstance, DynamicSoundEffectInstance,
+    /// Microphone, AudioEngine, Cue, SoundBank, or WaveBank using it. A later GetMixer() call
+    /// recreates the mixer from scratch.
     ///
     /// AUD-04-008/009: every native track is freed as part of this call, so any live instance's
     /// borrowed track handle becomes stale. This function bumps the counter returned by

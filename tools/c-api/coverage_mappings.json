@@ -12180,8 +12180,8 @@
       "kinds": [
         "method"
       ],
-      "mapping": "`cna_sound_effect_instance_apply_3d` for the single listener and `cna_sound_effect_instance_apply_3d_multi_ext` for the array overload. The array route is `_ext` because it reports a canonical limit C callers otherwise could not see: this runtime accepts exactly one listener and refuses every other count as unsupported rather than approximating one",
-      "tests": "`Audio3DSmoke.c` positions a playing instance from both sides with the process-wide distance and Doppler scales moved off their defaults, asserts the instance's own volume/pitch/pan still read back what the caller set after positioning latches the spatial values, and pins the multi-listener refusals for counts of zero and two, a null array and a released handle",
+      "mapping": "`cna_sound_effect_instance_apply_3d` for the single listener and `cna_sound_effect_instance_apply_3d_multi_ext` for the array overload. The array route accepts any positive listener count, matching XNA; CNA evaluates every listener and uses the nearest one for its stereo attenuation, pan and Doppler approximation",
+      "tests": "`Audio3DSmoke.c` positions a playing instance from both sides with the process-wide distance and Doppler scales moved off their defaults, asserts the instance's own volume/pitch/pan still read back what the caller set after positioning latches the spatial values, accepts counts of one and two, exercises a two-listener arrangement where the nearest listener is not first, and refuses zero, a null array, a null emitter and a released handle",
       "status": "implemented",
       "task": "CBIND-037F3",
       "approved_symbols": [

@@ -191,7 +191,7 @@ static int validate_positioning(const CNA_Handle game, const CNA_Handle sound_ef
         cna_sound_effect_instance_stop(instance, CNA_TRUE) == CNA_RESULT_SUCCESS;
 }
 
-/* This runtime supports exactly one listener; every other count is refused, not approximated. */
+/* Every positive count is accepted; the nearest listener supplies the stereo approximation. */
 static int validate_multi_listener(const CNA_Handle instance)
 {
     CNA_AudioEmitter emitter;

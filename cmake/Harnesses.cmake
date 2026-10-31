@@ -39,7 +39,7 @@ endif()
 # name before any audio call in this fresh process, then proves SDL3 reports no hardware while
 # NULL succeeds without consulting it. Spawned by AudioMixerTests.cpp -- see that file and
 # tools/audio/audio_no_hardware_harness.cpp for why this needs its own process (AudioMixer.cpp's
-# g_mixer is a process-wide, once-ever-initialized cache).
+# g_mixer is a process-wide lazy cache, and this path must run before any successful creation).
 if(CNA_BUILD_TESTS)
     add_executable(cna_audio_no_hardware_harness
         tools/audio/audio_no_hardware_harness.cpp

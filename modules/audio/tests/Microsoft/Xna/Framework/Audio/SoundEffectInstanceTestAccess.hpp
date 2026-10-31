@@ -28,6 +28,11 @@ namespace Microsoft::Xna::Framework::Audio
         {
             return static_cast<MIX_Track*>(instance.track_);
         }
+
+        static float TrackFrequencyRatio(const SoundEffectInstance& instance)
+        {
+            return MIX_GetTrackFrequencyRatio(GetTrack(instance));
+        }
 #endif
 
         // CP-17: read back the loop region cached from the originating SoundEffect at
@@ -51,6 +56,11 @@ namespace Microsoft::Xna::Framework::Audio
         static bool Is3D(const SoundEffectInstance& instance)
         {
             return instance.is3D_;
+        }
+
+        static float DopplerFactor(const SoundEffectInstance& instance)
+        {
+            return instance.dopplerFactor_;
         }
 
         // T-4C: wrappers for the private INTERNAL_apply* DSP methods, and a hook that drives the

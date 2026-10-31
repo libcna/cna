@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "CNA/Internal/Audio/AudioMixer.hpp"
@@ -21,6 +22,7 @@
 #include "System/ObjectDisposedException.hpp"
 
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -41,6 +43,7 @@ using Microsoft::Xna::Framework::Audio::AudioListener;
 using Microsoft::Xna::Framework::Audio::AudioStopOptions;
 using Microsoft::Xna::Framework::Audio::Cue;
 using Microsoft::Xna::Framework::Audio::SoundBank;
+using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess;
 using Microsoft::Xna::Framework::Audio::WaveBank;
@@ -48,6 +51,12 @@ using Microsoft::Xna::Framework::Audio::WaveBank;
 namespace
 {
     using Microsoft::Xna::Framework::Audio::CueTestAccess;
+
+    struct DopplerScaleGuard
+    {
+        float saved = SoundEffect::getDopplerScaleProperty();
+        ~DopplerScaleGuard() { SoundEffect::setDopplerScaleProperty(saved); }
+    };
 
     void AppendU8(std::vector<uint8_t>& buf, uint8_t v) { buf.push_back(v); }
 
@@ -2797,6 +2806,44 @@ TEST(CueTest, Apply3DBeforePlaySeedsSpatialStateOntoNewlyCreatedInstance)
     }
 }
 
+// AUDIO-001 integration regression: AudioCategory::SetVolume reaches active cues through
+// Cue::ApplyCategoryVolume(), which updates each instance's logical Volume. That update must
+// remain composed with Apply3D's retained distance attenuation instead of replacing track gain.
+TEST(CueTest, CategoryVolumeUpdateAfterApply3DPreservesDistanceAttenuation)
+{
+    try
+    {
+        std::unique_ptr<Cue> cue(SharedApply3DBank().GetCue("Apply3DCue"));
+        AudioListener listener;
+        AudioEmitter emitter;
+        emitter.setPositionProperty(
+            {SoundEffect::getDistanceScaleProperty() * 2.0f, 0.0f, 0.0f});
+        cue->Apply3D(listener, emitter); // inverse-distance attenuation = 0.5
+        cue->Play();
+
+        SoundEffectInstance* inst = CueTestAccess::ActiveInstance(*cue, 0);
+        if (!inst)
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+        MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(*inst);
+        ASSERT_NE(track, nullptr);
+        ASSERT_NEAR(MIX_GetTrackGain(track), inst->getVolumeProperty() * 0.5f, 1e-4f);
+
+        CueTestAccess::ApplyCategoryVolume(*cue, 0.25f);
+
+        ASSERT_LT(inst->getVolumeProperty(), 1.0f); // proves the category path changed Volume
+        EXPECT_NEAR(MIX_GetTrackGain(track), inst->getVolumeProperty() * 0.5f, 1e-4f);
+        cue->Stop(AudioStopOptions::Immediate);
+    }
+    catch (const std::exception& error)
+    {
+        GTEST_SKIP() << "could not exercise real playback (expected: no audio device): "
+                     << error.what();
+    }
+}
+
 // XA-6: Stop(AsAuthored) must let the track keep playing (SoundEffectInstance::Stop(false) just
 // exits any loop) instead of hard-stopping it -- the old code called active_.clear() right after
 // pi.instance->Stop(immediate) unconditionally, destroying every instance (and thus hard-stopping
@@ -4073,6 +4120,34 @@ TEST(CueTest, ChangingBoundVariableAfterPlayContinuouslyUpdatesVolume)
     cue->Stop(AudioStopOptions::Immediate);
 }
 
+// AUDIO-001 integration regression: Cue::ReconcileState's continuous volume RPC calls the same
+// Volume setter as category/fade updates. Both the quiet and loud RPC results must retain the
+// distance attenuation established before Play().
+TEST(CueTest, ContinuousVolumeRpcAfterApply3DPreservesDistanceAttenuation)
+{
+    auto cue = std::unique_ptr<Cue>(SharedRpcBank().GetCue("VolumeRpcCue"));
+    cue->SetVariable("Volume", 0.0f);
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty(
+        {SoundEffect::getDistanceScaleProperty() * 2.0f, 0.0f, 0.0f});
+    cue->Apply3D(listener, emitter); // inverse-distance attenuation = 0.5
+    cue->Play();
+
+    SoundEffectInstance* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(*inst);
+    ASSERT_NE(track, nullptr);
+    ASSERT_NEAR(MIX_GetTrackGain(track), inst->getVolumeProperty() * 0.5f, 1e-4f);
+
+    cue->SetVariable("Volume", 1.0f);
+    ASSERT_TRUE(cue->getIsPlayingProperty()); // ticks the continuous RPC update
+
+    EXPECT_NEAR(MIX_GetTrackGain(track), inst->getVolumeProperty() * 0.5f, 1e-4f);
+    cue->Stop(AudioStopOptions::Immediate);
+}
+
 TEST(CueTest, ChangingBoundVariableAfterPlayContinuouslyUpdatesPitch)
 {
     auto cue = std::unique_ptr<Cue>(SharedRpcBank().GetCue("PitchRpcCue"));
@@ -4087,6 +4162,41 @@ TEST(CueTest, ChangingBoundVariableAfterPlayContinuouslyUpdatesPitch)
 
     EXPECT_NEAR(inst->getPitchProperty(), 0.5f, 0.001f); // +600/1200
 
+    cue->Stop(AudioStopOptions::Immediate);
+}
+
+// AUDIO-001 integration regression: a continuous pitch RPC must recompose logical pitch with
+// Apply3D's retained Doppler factor rather than overwriting the track ratio with pitch alone.
+TEST(CueTest, ContinuousPitchRpcAfterApply3DPreservesDopplerFactor)
+{
+    DopplerScaleGuard guard;
+    SoundEffect::setDopplerScaleProperty(1.0f);
+
+    auto cue = std::unique_ptr<Cue>(SharedRpcBank().GetCue("PitchRpcCue"));
+    cue->SetVariable("Volume", 0.0f); // -600 cents -> Pitch == -0.5
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+    emitter.setVelocityProperty(
+        {SoundEffect::getSpeedOfSoundProperty() * 0.5f, 0.0f, 0.0f}); // receding
+    cue->Apply3D(listener, emitter);
+    cue->Play();
+
+    SoundEffectInstance* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+    const float retainedDoppler = SoundEffectInstanceTestAccess::DopplerFactor(*inst);
+    ASSERT_NEAR(retainedDoppler, 2.0f / 3.0f, 1e-4f);
+    ASSERT_NEAR(SoundEffectInstanceTestAccess::TrackFrequencyRatio(*inst),
+                std::pow(2.0f, inst->getPitchProperty()) * retainedDoppler, 1e-4f);
+
+    cue->SetVariable("Volume", 1.0f); // +600 cents -> Pitch == +0.5
+    ASSERT_TRUE(cue->getIsPlayingProperty()); // ticks the continuous RPC update
+
+    EXPECT_NEAR(inst->getPitchProperty(), 0.5f, 0.001f);
+    EXPECT_FLOAT_EQ(SoundEffectInstanceTestAccess::DopplerFactor(*inst), retainedDoppler);
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::TrackFrequencyRatio(*inst),
+                std::pow(2.0f, inst->getPitchProperty()) * retainedDoppler, 1e-4f);
     cue->Stop(AudioStopOptions::Immediate);
 }
 

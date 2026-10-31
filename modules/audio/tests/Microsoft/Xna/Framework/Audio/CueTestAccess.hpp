@@ -33,6 +33,14 @@ namespace Microsoft::Xna::Framework::Audio
             return cue.active_[index].instance.get();
         }
 
+        // Drives the exact path AudioCategory::SetVolume uses after AudioEngine has selected the
+        // active cues in that category, without mutating SharedEngine's process-wide category
+        // state for every later test in the same binary.
+        static void ApplyCategoryVolume(Cue& cue, float volume)
+        {
+            cue.ApplyCategoryVolume(volume);
+        }
+
         // P10-VAR-004: reseeds the RNG non-interactive weighted variation selection draws from,
         // so a test can deterministically predict (by independently replicating the same
         // std::mt19937 + std::uniform_int_distribution draw) which entry Cue::Play() will pick.

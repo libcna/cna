@@ -136,7 +136,7 @@ belongs to the type rather than to a device.
 `NoMicrophoneConnectedException` joins the other two audio exceptions in the firewall: no microphone
 connected is `CNA_RESULT_NOT_SUPPORTED`.
 
-## Positioning: two values and one supported listener
+## Positioning: two values and multiple listeners
 
 An emitter and a listener are **fixed values, not handles**. The canonical types carry settings and
 no behavior — no identity, no lifetime, nothing to observe between calls — so `CNA_AudioEmitter` and
@@ -157,11 +157,11 @@ reaching the output. The instance's properties keep reading back whatever the ca
 to; the output is driven by the position from then on. That is the canonical behavior, reported here
 rather than hidden.
 
-`cna_sound_effect_instance_apply_3d_multi_ext` covers the array overload, and it is `_ext` because it
-reports a limit a C caller could not otherwise see: **this runtime supports exactly one listener**.
-The canonical overload accepts the array XNA's split-screen API needs and then refuses every count
-but one, so a count of zero or two is `CNA_RESULT_NOT_SUPPORTED` rather than a silent fallback to the
-first listener. A null array is an argument failure, which is a different answer from an empty one.
+`cna_sound_effect_instance_apply_3d_multi_ext` covers the array overload. Any positive listener
+count is accepted, matching XNA's unrestricted listener array. CNA's stereo mixer has no separate
+output matrix for every listener, so it evaluates them all and uses the listener nearest to the
+emitter for attenuation, pan and Doppler; this is not a silent fallback to the first listener. A
+zero count or null array is `CNA_RESULT_INVALID_ARGUMENT`.
 
 `RendererDetail` is not mapped here. Its constructor is private and its only source is
 `AudioEngine::getRendererDetailsProperty`, so it cannot be reached without an engine — it belongs

@@ -3,12 +3,12 @@
 // Task P9-HARDWARE-005 / PLAT-99: SDL3 playback requires a real or mocked audio subsystem, and
 // this environment only ever runs the SDL "dummy" driver (IN-12). NULL playback deliberately
 // requires neither. For the SDL3 failure path, g_mixer (AudioMixer.cpp) is a process-wide,
-// once-ever-initialized cache -- once any earlier
-// test in this shared CnaTests binary succeeds even once, every later attempt sees the already
-// -cached mixer and can never exercise GetMixer()'s failure branch again (see the audio plan
-// P9-HARDWARE-002's verification caveat). A real regression test for the no-audio-hardware path
+// lazily initialized cache -- once any earlier test in this shared CnaTests binary succeeds, every
+// later attempt sees the cached mixer unless it is explicitly destroyed and cannot exercise
+// GetMixer()'s failure branch first (see the audio plan P9-HARDWARE-002's verification caveat). A
+// real regression test for the no-audio-hardware path
 // therefore needs a fresh, isolated OS process with an invalid SDL_AUDIODRIVER set before
-// anything else in that process ever calls SDL_Init(SDL_INIT_AUDIO) -- provided here by spawning
+// anything else in that process successfully creates the mixer -- provided here by spawning
 // tools/audio/audio_no_hardware_harness.cpp, mirroring the precedent set by
 // tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp for the same "needs a fresh process" problem.
 #include <gtest/gtest.h>
