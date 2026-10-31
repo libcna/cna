@@ -60,6 +60,23 @@ XNA/Core campaign rather than a Software parity gap.
 | Custom ShaderEffect and standalone stylization effects | OUTSIDE-SCOPE | These CNA additions are outside this classic XNA/Core Software campaign; capability depends on the selected renderer. The former modern engine pipeline has been removed. |
 | Physical window, GPU context, swap chain and driver state | N/A | Software owns no native window or graphics context; `Present()` completes synchronously while preserving the CPU framebuffer. |
 
+## `GraphicsDevice.Present` region/window capability
+
+The classic three-argument overload is present in CNA (`XNA-MISSING-011`). With no rectangles and
+a zero override handle it takes the ordinary `Present()` path on every renderer. Any non-default
+request is validated and clipped in shared `GraphicsDevice` code, then offered to the active
+renderer; an unsupported part throws `NotSupportedException` instead of silently presenting the
+whole frame.
+
+| Renderer | Source rectangle | Destination rectangle | Foreign window | Evidence / boundary |
+|---|---:|---:|---:|---|
+| HEADLESS | ◇ | ◇ | ◇ | Accepts and traces every request, but produces no pixels and owns no window. |
+| SOFTWARE | ✅ | ❌ | ❌ | Presents the clipped source sub-rectangle through its surface presenter without copying; the presenter has no destination-placement or foreign-window operation. |
+| OPENGLES3 / OPENGL33 / WEBGL2 / WEBGPU / STUB / DIRECTX9 / SDLGPU / FNA3D | ❌ | ❌ | ❌ | The common renderer default refuses every non-default request; no identity claims support it merely because an underlying API might. |
+
+Legend: ✅ observable implementation · ◇ accepted only at a non-rasterizing boundary · ❌ explicit
+`NotSupportedException`.
+
 The **Stub** renderer (`CNA_GRAPHICS_RENDERER=STUB`) is, like Headless, **not** a column in this
 matrix and for the same reason: it never renders a single pixel. Unlike
 Headless, it also keeps no bookkeeping at all (no counters, no validation modes, no trace log) — it

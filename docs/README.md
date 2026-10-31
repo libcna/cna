@@ -121,14 +121,6 @@ original phase closed — check each file's own status banner/date.
   bytecode, and which renderers execute the latter; `fx-compiled-effects.md` is the complete
   porter-facing guide to the compiled path.
 
-## Graphics — historical audits and dated snapshots
-
-Kept for their investigation methodology and root-cause detail, not as current status:
-
-- `graphicsdevice-fna-audit.md` — historical per-class FNA-fidelity audit, not re-verified in the
-  2026-07-11 pass. The retired `graphicsresource-fna-audit.md` remains available in Git history;
-  its valid current contract was consolidated into `graphics-resource-lifetime.md`.
-
 ## Platform / renderer limitations
 
 - `android-graphics-limitations.md`, `web-emscripten-graphics-limitations.md` — per-platform

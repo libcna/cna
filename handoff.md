@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- GraphicsDevice support-document cleanup (2026-10-31): the obsolete manual FNA surface audit was
+  retired after its enduring `Clear` behavior decisions moved into the XNA-over-FNA ledger and its
+  `Present` capability boundary moved into the current renderer matrix. Stale Software and parity
+  text now reflects `XNA-MISSING-011`: the overload exists, shared validation/clipping is active,
+  Software honors source regions, HEADLESS accepts non-observable requests, and other non-default
+  combinations fail explicitly. The generated runtime census was rerun unchanged at 3,627/3,627;
+  focused HEADLESS/Software/EasyGL private-runner validation passes all 35 executed tests with 7
+  expected renderer-gated skips.
 - Graphics-resource documentation cleanup (2026-10-31): the obsolete Task 211 FNA audit was
   retired after its valid metadata and lifetime contract moved into the current
   `graphics-resource-lifetime.md`. That document now matches measured XNA disposal-event ordering,

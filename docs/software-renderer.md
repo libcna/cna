@@ -602,9 +602,12 @@ can execute an opcode and still accept invalid classic bytecode.
 - **The current `GraphicsDevice` surface was re-audited against FNA** (`SOFTWARE-329`). Explicit
   `VertexDeclaration` user-draw shapes are present; the contrary older audit entries were stale.
   CNA's headless constructor, pointer Reset and index/vertex convenience aliases are now visibly
-  `CNAEXT`. The remaining rectangle/foreign-window `Present` overload is a physical window/swapchain
-  API unsupported by EasyGL too and explicitly outside the Software renderer target; no no-op stub
-  is counted as parity.
+  `CNAEXT`. `XNA-MISSING-011` subsequently added the classic three-argument `Present` overload:
+  the all-default request is exactly ordinary `Present()`, and Software presents a clipped source
+  sub-rectangle from its CPU backbuffer without copying. A destination rectangle or foreign window
+  is explicitly refused because the Software surface-presenter contract cannot honor either; no
+  request is silently degraded to a whole-frame present. The generated runtime census now reports
+  3,627/3,627 documented members represented.
 - **`Texture2D.SetData<T>` includes the classic source-window shape** (`SOFTWARE-330`). The
   three-argument pointer/count mapping dispatches Color and packed XNA value objects through their
   logical packers and arbitrary trivially-copyable values through the exact raw path. Nonzero
