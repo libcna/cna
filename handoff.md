@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Graphics capability fail-closed hardening (2026-10-31): unknown legacy capability identities
+  now return unsupported instead of inheriting permissive renderer defaults, and partially known
+  format-usage masks cannot pass a support query. EasyGL, FNA3D, HEADLESS and SOFTWARE explicitly
+  answer only their recognized legacy capabilities. Direct and cross-renderer regressions cover
+  unknown identities, unknown format bits and stable answers across renderer reconstruction
+  (`ab11ea1e4`).
+- WebGPU binding-cost audit follow-up (2026-10-31): the fixture now unbinds its sampled texture
+  before rewriting it, as XNA requires, without dropping the renderer-owned keep-alive for queued
+  deferred draws. This closes the former `WebGPU_BindingCost` entry in §5.1; the renderer correctly
+  refused the test's bound-resource `SetData` (`366819a1f`).
 - `XNB-61b` compressed-manifest and container hardening (2026-10-31): typed runtime loads,
   type-erased external references, the canonical importer and the CNAEXT content manifest now use
   one bounded XNB container decoder for uncompressed, LZX and MonoGame LZ4 bodies. The manifest
@@ -246,8 +256,9 @@ not let an issue disappear from §5 or §8.
 
 Ready to pick up next, when the owner asks: the three native-Windows validations in §8.1.
 
-Repository state last reconciled: **2026-10-31** (`next`, XNB-61b), when compressed manifest
-inventory, shared bounded container decoding and type-erased LZ4 loading were completed. The
+Repository state last reconciled: **2026-10-31** (`next`, `ab11ea1e4`), when unknown graphics
+capabilities were made fail-closed. The immediately preceding content checkpoint completed
+compressed manifest inventory, shared bounded container decoding and type-erased LZ4 loading. The
 last plans were retired on 2026-10-29 (`225e88b09`). The campaign accounting above dates from
 2026-10-24 (`96577db26`), and the test runs in §0 and §2 carry their own dates. The last full test run is the
 checkpoint identified above; do not upgrade later focused evidence into a full claim.
@@ -425,11 +436,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   40x40 logical canvas after a mid-frame `SetPresentationMode` lands unscaled (40x40 at the
   letterbox origin instead of filling 96x96), and `spritebatch_presentation_test.cpp`'s two
   Deferred batches under different custom viewports, which both read black. Not investigated.
-- `WebGPU_BindingCost` aborts with "The texture resource is in use." (`cmake-build-webgpu`,
-  2026-10-28): `webgpu_binding_cost_test.cpp`'s `DrawRenderTargets` calls `SetData` on a texture
-  the previous SpriteBatch left in `Textures[0]`, which `Texture.cpp` refuses as XNA does
-  (SOFTWARE-246). The test needs to unbind the slot first; the other 187 `WebGPU` tests pass. When
-  it began to fail is not bisected.
 - On Android, the landscape remap `Accelerometer`, `Gyroscope` and `Motion` apply by default
   (`Detail::ConvertAndroidPortraitToXnaLandscape`, a CNAEXT convenience that
   `SetAndroidLandscapeRemapEnabled(false)` turns off) is, for both landscape rotations, a
