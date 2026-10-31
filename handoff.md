@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Software renderer-document reconciliation (2026-10-31): the 1,227-line `SOFTWARE-1`..`485`
+  campaign diary, fixed suite totals and live-desktop/Xvfb instructions are replaced by the
+  current Experimental CPU-rasterizer contract. The page preserves the six numbered architecture
+  decisions cited by source, records the live rendering/resource/MSAA/query surface and bounded
+  allocation policy, and distinguishes a retained-but-unexecuted `ShaderEffect` placeholder from
+  opt-in executed compiled XNA effects. It also documents the optional platform surface presenter
+  instead of calling every `Present()` a no-op, routes GPU comparison through the private runner,
+  and delegates task evidence to the parity ledger and Git history.
+  The focused Software and diagnostics targets build. After relinking six stale shared-library
+  model-test executables, the full Software label completes with 175 passes, 21 declared
+  capability/profile skips and no failure.
 - `WEBGL2` renderer and Emscripten platform-document reconciliation (2026-10-31): the GLB/Task 459
   snapshots are replaced by two current, non-overlapping contracts. The renderer page now owns the
   supported-class identity, runtime EasyGL profile, exact WebGL 2/GLSL ES contract, profile-specific

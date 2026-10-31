@@ -67,6 +67,9 @@ on it) rather than assuming either way.
 - **[`webgl2-renderer.md`](webgl2-renderer.md)** — current browser WebGL 2 profile contract:
   EasyGL sharing, exact context/dialect rules, browser validation route, live capabilities and
   qualification boundary.
+- **[`software-renderer.md`](software-renderer.md)** — current deterministic CPU-rasterizer
+  contract: build/test route, stable architecture decisions, rendering and presentation surface,
+  source-versus-compiled effect boundary, resource budgets and qualification limits.
 - **[`webgpu-renderer.md`](webgpu-renderer.md)** — current native and browser status, build
   instructions, qualification evidence and explicit limitations for the `WEBGPU` renderer.
 - **[`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md)** — current
