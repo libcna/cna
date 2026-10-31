@@ -1,5 +1,9 @@
 # glTF center-collapse verdict (`GLTF-011`)
 
+**Status:** forensic record written during the 2026-08 campaign and reconciled with the completed
+campaign on 2026-10-31. The measurements and root-cause analysis below are retained; current corpus
+counts, conformance layers and milestone state live in [`gltf-conformance.md`](gltf-conformance.md).
+
 **Task:** `GLTF-011` — the terminus of the P0 center-collapse track (the campaign plan's §28).
 **Note:** section numbers from §10 up refer to the glTF campaign plan, deleted on 2026-10-29 and kept
 in Git history.
@@ -29,12 +33,12 @@ Mechanism A superimposes every part at the origin. Mechanism B multiplies the ch
 reciprocal of the armature transform — for the very common centimetre-authored rig or Blender
 axis-conversion node carrying a uniform scale, that is literally a division by that scale.
 
-Three further proven defects corrupt geometry without collapsing it: a sparse index accessor
-decoding to all zeros (**D4**, fixed), non-`TRIANGLES` topology silently reinterpreted (**D5**,
-fixed for the triangle topologies; the point and line modes are now an explicit refusal to import,
-pending a draw path), and rigid node animation being dropped (**D6**, now imported and reported —
-serialisation pending). One more (**D7**, factor-only PBR material) is a shading defect, not a
-geometric one; its factors now survive and only the alpha and sidedness state is still lost.
+Three further proven defects corrupted geometry without collapsing it: a sparse index accessor
+decoding to all zeros (**D4**), non-`TRIANGLES` topology silently reinterpreted (**D5**) and rigid
+node animation being dropped (**D6**). All three are fixed: every primitive mode reaches a real
+topology-aware draw path, and rigid clips survive direct and offline loading and playback. One more
+(**D7**, factor-only PBR material) was a shading defect, not a geometric one; its factors and alpha
+state now survive, with blend ordering and double-sided culling deliberately applied by the caller.
 
 **Both collapse mechanisms are closed.** Neither is suppressed by a known-defect test any more:
 each is asserted by an ordinary green test through the real loader, so a regression fails as a
@@ -56,8 +60,8 @@ per defect, because it names the layer that owns the bug and exonerates every la
 | L3 | the semantic mesh (`MeshOut`) — positions, indices, material |
 | L4 | **world-space** vertex positions, including node composition and the skin equation |
 | L5 | the exact vertex/index **bytes** handed to `VertexBuffer::SetData` |
-| L6 | effect parameters bound per draw (not yet built — `GLTF-008`) |
-| L7 | rendered image (not yet built — `GLTF-009`) |
+| L6 | effect parameters bound per draw (`GLTF-008`, implemented) |
+| L7 | rendered image (`GLTF-009`, 148 explicit EasyGL dispositions) |
 
 Two structural facts fall straight out of the table below and are worth stating up front:
 
@@ -175,18 +179,19 @@ vertex 3  pos (0,1,0)  nrm (0,0,1)  uv (0,0)     ← only reachable once D4 was 
 
 ### 3.5 D5 — non-`TRIANGLES` modes reinterpreted · the seven `mode-*` fixtures · first divergent layer **L3**
 
-**Owning tasks:** `GLTF-071` + `GLTF-072` (both landed). Status: `partially-remediated` — see the
-scope boundary below.
+**Owning tasks:** `GLTF-071`/`GLTF-072` (classification and triangle conversion), `GLTF-073`/
+`GLTF-078` (part topology and primitive count), `GLTF-076` (loop closing segment) and `GLTF-077`
+(point-list decision). Status: `fixed`.
 
 | Fixture | Expected | Before | Today |
 |---|---|---|---|
 | `mode-triangle-strip` (mode 5) | two triangles `[0,1,2]`, `[2,1,3]` | ❌ read as a triangle list: **one** triangle, vertex 3 unreachable | ✅ **converted at import** to `[0,1,2,2,1,3]`, byte-exact at L5 |
 | `mode-triangle-fan` (mode 6) | two triangles `[0,1,2]`, `[0,2,3]` | ❌ read as a triangle list | ✅ **converted at import** to `[0,1,2,0,2,3]` |
 | `mode-triangles` (mode 4) | two triangles | ✅ correct | ✅ unchanged, byte for byte |
-| `mode-points` (mode 0, non-indexed) | four points, **zero** triangles | ❌ one triangle from the implicit index range | ⚠️ import **rejected** naming `POINTS` / `mode 0` |
-| `mode-lines` (mode 1) | two segments | ❌ one triangle | ⚠️ import **rejected** naming `LINES` / `mode 1` |
-| `mode-line-strip` (mode 3) | two segments | ❌ one triangle | ⚠️ import **rejected** naming `LINE_STRIP` / `mode 3` |
-| `mode-line-loop` (mode 2) | three segments, the last closing | ❌ one triangle | ⚠️ import **rejected** naming `LINE_LOOP` / `mode 2` |
+| `mode-points` (mode 0, non-indexed) | four points, **zero** triangles | ❌ one triangle from the implicit index range | ✅ `PointListEXT`, count 4 |
+| `mode-lines` (mode 1) | two segments | ❌ one triangle | ✅ `LineList`, count 2 |
+| `mode-line-strip` (mode 3) | two segments | ❌ one triangle | ✅ `LineStrip`, count 2 |
+| `mode-line-loop` (mode 2) | three segments, the last closing | ❌ one triangle | ✅ closing index appended, then `LineStrip`, count 3 |
 
 `prim.type` was never read. `GLTF-071` reads it and classifies all seven modes. `GLTF-072` then
 converts the two topologies that have an **exact triangle-list equivalent**, preserving winding —
@@ -198,20 +203,13 @@ The equivalence is asserted at the byte level, which is what makes the conversio
 **byte-identical index buffers**, while `mode-triangle-fan` — the same four indices under the other
 rule — must not match. A conversion that ignored the mode could not satisfy both.
 
-`MeshOut` now carries `sourceTopology` beside `topology`, so a conversion is visible rather than
-lossy: `topology` is always `Triangles` on anything the importer returns, while `sourceTopology`
-still names what the file declared.
+`MeshOut` carries `sourceTopology` beside `topology`, so a conversion is visible rather than lossy.
+The four non-triangle modes retain their topology through `ModelMeshPart::PrimitiveTypeEXT`, and
+primitive counts are computed per topology instead of as `numIndices / 3`. `LINE_LOOP` is the one
+necessary conversion: its closing index is appended before the part is exposed as `LineStrip`.
 
-**Scope boundary — why D5 is not yet `fixed`.** The four topologies that describe no triangles stay
-rejected, and that is a deliberate decision rather than unfinished work. They **decode correctly**;
-what they lack is a *draw path*, because every loader still computes `numIndices / 3`. Importing
-them now would move the original defect from the import layer to the draw layer rather than fix it.
-`GLTF-073` (a real `PrimitiveType` on `ModelMeshPart`), `GLTF-078` (a topology-aware primitive
-count), `GLTF-076` (`LINE_LOOP`'s closing segment) and `GLTF-077` (the points decision) own them,
-and each rejection message names the task that would lift it.
-
-**No geometric defect from the original P0 audit remains.** What is left is a *refusal to import*,
-not a wrong import: tracked, loud, and unable to corrupt an asset.
+**No geometric defect from the original P0 audit remains.** `GltfDrawTopology` pins the final
+primitive type and count for all seven modes through the real model-building path.
 
 ### 3.6 D8 (part 1) — skin ancestry dropped · `skin-armature-ancestor` · first divergent layer **L4**
 
@@ -294,9 +292,9 @@ its own local transform, exactly like any other bone — `AnimationPlayer` compo
 `world(root) = local · prefix`, and an absent prefix array reads as all-identity, so a skeleton built
 without that context is unaffected.
 
-### 3.8 D6 — rigid node animation dropped · `anim-rigid-node` · first divergent layer **L4** · **PARTLY OPEN**
+### 3.8 D6 — rigid node animation dropped · `anim-rigid-node` · first divergent layer **L4** · **FIXED**
 
-**Owning tasks:** `GLTF-293` (landed) + **`GLTF-294` (open)**. The audit ledger originally named
+**Owning tasks:** `GLTF-293` + `GLTF-294` (both landed). The audit ledger originally named
 `GLTF-284` here, which is the morph weight-vector validation task and has nothing to do with rigid
 animation; corrected when `GLTF-293` landed.
 
@@ -307,7 +305,7 @@ is no skin anywhere in the file.
 |---|---|
 | Expected | 1 clip, 1 track, the node poses through a quarter turn about +Z |
 | Before | **0 clips**, no `animations` key in the `.cnj`, **no warning** |
-| After | **1 clip** `Spin`, **1 track** on the `SpinningMesh` node's own bone: identity at `t=0`, `(0,0,√2/2,√2/2)` at `t=1`, scale filled from the node's bind pose. Reported by the converter; **not yet written to the `.cnj`** |
+| After | **1 clip** `Spin`, **1 track** on the `SpinningMesh` node's own bone: identity at `t=0`, `(0,0,√2/2,√2/2)` at `t=1`, scale filled from the node's bind pose. The clip survives `.cnj`, reads back and poses the node. |
 
 Two separate gates caused the loss: the converter called `ExtractClips` only for a *skinned* group,
 and `ExtractClips` resolved every channel target against the skin's joint set, so a channel
@@ -315,18 +313,17 @@ targeting an ordinary node was discarded. Even if called it would have emitted a
 tracks. `ExtractSceneNodeClips` removes both — it resolves against the scene graph instead, which is
 only possible because `GLTF-103`/`GLTF-114` gave rigid nodes real `ModelBone`s to drive.
 
-**Why it is not yet `fixed`.** A scene-node track's `boneIndex` is a `sceneNodeIndex`; the `.cnj`
-clip schema has no field distinguishing that from a joint-palette slot (§15.1.2). Writing one anyway
-would let a reader apply a scene index as a palette slot — a fresh silent corruption in place of the
-old one. `GLTF-294` adds the field and the playback path; until then the converter *reports* the
-clip by name and track count rather than dropping it, which is the property D6 was really about.
+**How the final fix avoids a second corruption.** A scene-node track's `boneIndex` is a
+`sceneNodeIndex`, while a skinned track's index is a joint-palette slot. `GLTF-294` added the
+distinguishing schema field, the offline round-trip and the playback path rather than writing one
+index space as the other. `GltfRigidAnimation` pins import, serialisation, readback and posing.
 
-**Not a collapse mechanism** — the asset imports in the right place, it just does not move yet.
+**Not a collapse mechanism** — the asset imported in the right place and failed only to move.
 
-### 3.9 D7 — factor-only PBR material lost · `mat-factor-only-gold` · first divergent layer **L3** · **PARTLY OPEN**
+### 3.9 D7 — factor-only PBR material lost · `mat-factor-only-gold` · first divergent layer **L3** · **FIXED**
 
 **Owning tasks:** `GLTF-215`/`GLTF-216`/`GLTF-217`/`GLTF-219`/`GLTF-221` (landed) +
-**`GLTF-228`/`GLTF-229`/`GLTF-231` (open)**.
+`GLTF-228`/`GLTF-229`/`GLTF-231` (landed).
 
 A metallic-roughness material with **no texture maps**: gold `baseColorFactor [1,0.72,0.315,0.5]`,
 non-default metallic/roughness/emissive factors, `alphaMode BLEND`, `doubleSided`.
@@ -335,8 +332,7 @@ non-default metallic/roughness/emissive factors, `alphaMode BLEND`, `doubleSided
 |---|---|
 | Expected | a PBR material carrying every authored factor and alpha state |
 | Before | `usePbr = false` → **`BasicEffect`**, stride 32, **zero** material fields emitted; rendered opaque white |
-| After | `usePbr = true` → **`PbrEffect`**, stride 48; `baseColorFactor` reaches `DiffuseColor` `(1, 0.72, 0.315)` with `Alpha` `0.5`, and metallic `0.9` / roughness `0.35` / emissive `(0.25, 0.1, 0)` all survive |
-| Still lost | `alphaMode`, `alphaCutoff`, `doubleSided` |
+| After | `usePbr = true` → **`PbrEffect`**, stride 48; `baseColorFactor` reaches `DiffuseColor` `(1, 0.72, 0.315)` with `Alpha` `0.5`, metallic `0.9` / roughness `0.35` / emissive `(0.25, 0.1, 0)` survive, and `alphaMode`, `alphaCutoff` and `doubleSided` are carried through direct and offline loads |
 
 The old rule was `usePbr = !colored && (normalImage || metallicRoughnessImage)` — presence of a
 *map*, not of a *material model*. Because the factor assignments sat behind that same guard, even
@@ -357,10 +353,11 @@ instead of the halved occlusion-as-lightmap approximation, which existed only be
 left PBR unavailable to it. `DualTextureEffect` itself is untouched and still reachable through
 every other content path.
 
-**Why it is not yet `fixed`.** `MeshOut` has no field for `alphaMode`, `alphaCutoff` or
-`doubleSided`, and `PbrEffect` has no parameter to put them in. Adding both is
-`GLTF-228`/`GLTF-229`/`GLTF-231`, which sit behind `GLTF-025` — the API-change gate whose own
-acceptance requires the design recorded *before* implementation.
+**Where application state begins.** `GLTF-228`/`GLTF-229`/`GLTF-231` added the importer and effect
+surface approved by the `GLTF-025` API gate. `MASK` cutoff is fragment-program state and is applied
+by the PBR effects. BLEND ordering/blend state and `doubleSided` culling remain caller-applied XNA
+device state by design; `GLTF-230` proves the public property-derived path without making
+`Model::Draw` mutate global state.
 
 **A gap this change exposed, and the policy that closes it.** Every untextured primitive now goes
 through `PbrEffect`, whose `AmbientLightColor` defaults to `(0,0,0)` with all three directional slots
@@ -389,7 +386,7 @@ inverted known-defect test. A regression is a normal build break naming the fixt
 | — | `xf-identity` | `GltfSceneGraphBones.UntransformedControlCase` | the zero point: catches a "fix" that transforms things that should not move |
 | D4 | `sparse-indices` | `GltfConformanceL3`, `GltfConformanceL5`, `GltfIndexDecode` | indices revert to all-zero; `.ib.bin` mismatch at byte 0 |
 | D5 (conversion) | `mode-triangle-strip`, `mode-triangle-fan`, `mode-triangles` | `GltfConformanceL3`, `GltfConformanceL5.AConvertedTopologyProducesTheSameBufferAsAnExplicitTriangleList`, `GltfPrimitiveTopology` | a strip converts with the fan's rule, or loses the odd triangle's winding swap |
-| D5 (rejection) | `mode-points`, `mode-lines`, `mode-line-strip`, `mode-line-loop` | `GltfPrimitiveTopology`, `GltfKnownDefect` | a mode with no draw path imports silently instead of being named and rejected |
+| D5 (draw path) | `mode-points`, `mode-lines`, `mode-line-strip`, `mode-line-loop` | `GltfPrimitiveTopology`, `GltfDrawTopology`, `GltfConformanceL3`, `GltfConformanceL5` | a point/line mode is reinterpreted as triangles, receives the wrong primitive count, or loses the loop's closing segment |
 | D8 (ancestry) | `skin-armature-ancestor` | `GltfSkinSpaces.RootJointCarriesTheSceneAncestryAboveTheJointSet`, `…SkinnedVertexLandsWhereTheSpecificationSaysItDoes` | joint matrix drifts from identity to `T(0,-100,0)` |
 | D8 (mesh node) | `skin-mesh-node-transform` | `GltfSkinSpaces.MeshNodeTransformIsIgnored` | `M43` becomes `-50` (inverse applied alone) or `+50` (node applied) |
 | D8 (structure) | `skin-armature-ancestor` | `GltfSceneGraphBones.SkinnedMeshKeepsItsNodeBoneButIsNotTransformedByIt`, `…AncestryIsPreservedInTheSceneModelButDoesNotTransformIt` | the mesh node's bone is deleted rather than merely not applied |
@@ -443,19 +440,14 @@ node transform was authored should read this section rather than "correcting" it
 
 ## 6. What the P0 track did **not** cover
 
-The center-collapse track is closed. It is deliberately narrow, and these remain open:
+The center-collapse track is closed. Every item this section originally left for later also landed:
+point/line draw topology, rigid-clip serialisation and playback, material alpha/sidedness transport,
+L6 capture, the deterministic whole-corpus EasyGL L7 oracle, the conformance registration and
+container validation. Their current evidence is in `docs/gltf-conformance.md` §§3, 5.3 and 8.2.
 
-| Item | Owning task | Why it is not a collapse defect |
-|---|---|---|
-| A draw path for the point and line topologies | **`GLTF-073`**, **`GLTF-076`**, **`GLTF-077`**, **`GLTF-078`** | a named rejection, not a wrong import; the decoding is correct and the gap is at the draw layer |
-| Serialising and playing a rigid node clip | **`GLTF-294`** | the clip is now imported and reported (`GLTF-293`); the `.cnj` schema cannot yet say which index space a track targets |
-| The alpha and sidedness state of a material | **`GLTF-228`**/**`229`**/**`231`**, behind the `GLTF-025` API gate | shading, not geometry; the factors themselves now survive (`GLTF-215`/`216`) |
-| L6 draw-parameter capture | `GLTF-008` | harness not yet built |
-| L7 image oracle | `GLTF-009` | renderer is now available; the fixed-rig corpus matrix and determinism harness remain open — `docs/gltf-conformance.md` §5.3 |
-| `ctest -L gltf-conformance` single label | `GLTF-010` | landed for L0–L6 plus the ledger and the `.cnj` tool; gains an L7 entry when `GLTF-009` lands |
-| `cgltf_validate()` / `extensionsRequired` | `GLTF-021`, `GLTF-023` | Track B Phase 1 |
-
-Per §28, Track B's Phases 8–23 were gated on this report and are now unblocked.
+The remaining glTF milestone residue is outside this P0 track: `GLTF ROBUST` rows 6 (real point and
+spot light falloff/cones) and 12 (Gate C on four surviving renderers including Direct3D). See
+`docs/gltf-conformance.md` §8.3.
 
 ---
 
@@ -464,9 +456,8 @@ Per §28, Track B's Phases 8–23 were gated on this report and are now unblocke
 | Quantity | Value |
 |---|---|
 | Generated fixtures **when this report was written** | **21** distinct assets (`manifest.json` → `distinctAssetCount`), each with a `.glb` twin |
-| Generated fixtures today | **27** — `GLTF-021`/`GLTF-023` added the first container and robustness fixtures, `GLTF-267` added §11.4's `xf-scale-nonuniform`, `GLTF-137` added `skin-plus-static-mesh`, `GLTF-222` added `mat-emissive-strength`, `GLTF-299` added `anim-nonzero-start`, `GLTF-249` added `skin-skeleton-hint`, `GLTF-317` added the three `camera-*` fixtures, `GLTF-241` added `mat-vertex-color-pbr`, and `GLTF-224`/`GLTF-225` added `mat-normal-occlusion-scale`, and `GLTF-060` added `accessor-count-mismatch`, and `GLTF-296` added `camera-animated-node`, and `GLTF-281`/`GLTF-282` added `morph-node-weights-override`, and `GLTF-256`/`GLTF-261` added `skin-unnormalized` and `skin-73-joints` |
-| Planned corpus (§24.2) | **135** when this report was written; **136** today — `GLTF-137` added a row to §15.4's ladder for a file shape no ladder foresaw, which is a deliberate plan change and not the count error below returning. Completed by `GLTF-399` |
-| L5 goldens | 17 of 21 at the time of writing; **34 of 38 today** — the four point/line topologies gained theirs with `GLTF-073`/`GLTF-078`, and the two remaining assets are the rejection fixtures, which have no L5 by construction |
+| Current canonical corpus | **148** assets on 2026-10-31; `tests/assets/gltf/manifest.json` is the machine-checked count |
+| Current L5/L7 accounting | Not duplicated here; `docs/gltf-conformance.md` §§3.1 and 5.3 own the generated-buffer and 140-PNG/8-safe-rejection dispositions |
 
 `skin-mesh-node-transform` was the corpus's 16th asset, added by `GLTF-260`; `GLTF-072` then
 completed the topology group's seven, taking the generated corpus to 21. It was **new to the
@@ -520,14 +511,12 @@ For the assets the owner reported as deformed:
 * if the asset uses a **triangle strip or fan** — **D5**, first divergent at **L3**, owned by
   `GLTF-071` + `GLTF-072`, locked by `mode-triangle-strip` / `mode-triangle-fan` / `mode-triangles`.
   **Fixed:** converted to an equivalent triangle list at import, winding preserved.
-* if the asset uses a **point or line mode** — still **D5**, but a draw-path gap rather than a
-  decoding one, owned by `GLTF-073`/`GLTF-076`/`GLTF-077`/`GLTF-078`. The asset fails to import
-  with the mode named, instead of importing wrongly.
-* if the asset is **in the right place but does not move** — **D6**, owned by `GLTF-293` (landed:
-  the clip is imported onto the node's own bone) and **`GLTF-294` (open:** carrying it through the
-  `.cnj` and playing it).
-* if the asset is **in the right place but renders white** — **D7**, owned by `GLTF-215` (landed:
-  the material model selects the effect, and every authored factor survives to `PbrEffect`) and
-  **`GLTF-228`/`229`/`231` (open:** `alphaMode`, `alphaCutoff`, `doubleSided`).
+* if the asset uses a **point or line mode** — **D5**, closed by
+  `GLTF-073`/`GLTF-076`/`GLTF-077`/`GLTF-078`: the mode reaches a real topology-aware draw path.
+* if the asset is **in the right place but does not move** — **D6**, closed by `GLTF-293` and
+  `GLTF-294`: the rigid clip is imported onto the node's own bone, survives `.cnj` and is playable.
+* if the asset is **in the right place but renders white** — **D7**, closed by `GLTF-215` and
+  `GLTF-228`/`229`/`231`: the material selects PBR, every authored factor and alpha property
+  survives, and application-owned blend/cull state is exposed rather than silently overridden.
 
 The P0 center-collapse track (§28) is **complete**.

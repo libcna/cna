@@ -5,6 +5,9 @@
 > `PbrEffect` and `SkinnedPbrEffect` directly. Its OpenGL4, DirectX11 and Vulkan evidence predates
 > those renderers' retirement (2026-09-28 and 2026-10-13). Section numbers from §12 up refer to the
 > glTF campaign plan, deleted on 2026-10-29 and kept in Git history.
+> Reconciled 2026-10-31: each `Problem` paragraph records the pre-change state; implemented-state
+> paragraphs and dispositions below reflect the completed campaign. Current conformance and
+> renderer coverage live in `gltf-conformance.md` and `gltf-limitations.md`.
 
 The campaign plan's §25 gate: **every proposed public or CNAEXT member is reviewed here, with its
 problem, shape, compatibility, migration and test recorded, before it is implemented.** A row that
@@ -83,10 +86,9 @@ numIndices` would be wrong for a line part — documented on the property.
 
 ### 1.3 `PbrEffect` alpha state — `GLTF-228`, `GLTF-229`
 
-**Problem.** `alphaMode`, `alphaCutoff` and `doubleSided` are first-class glTF material properties
-with no home anywhere in CNA: `MeshOut` has no field and `PbrEffect` has no parameter. They are the
-remaining half of defect **D7**, and the only part of a factor-only material that still does not
-survive import.
+**Problem at review time.** `alphaMode`, `alphaCutoff` and `doubleSided` are first-class glTF
+material properties that had no home anywhere in CNA: `MeshOut` had no field and `PbrEffect` had no
+parameter. They were the remaining half of defect **D7**.
 
 **Why not internal.** They are *runtime shading state*, not import state. A mask threshold has to
 reach the shader on every draw, so it must live on the effect.
@@ -150,7 +152,7 @@ well above the cutoff so the sign convention is asserted as behaviour.
 
 ### 1.4 `PbrEffect` double-sidedness — `GLTF-231`
 
-**Problem.** Same as above — `doubleSided` has no home.
+**Problem at review time.** Same as above — `doubleSided` had no home.
 
 **Shape.**
 
@@ -184,11 +186,11 @@ draw; CNA does not apply it as a hidden `Model::Draw` side effect.
 
 ### 1.4a Dielectric Fresnel factors on the PBR effects — `GLTF-343`, `GLTF-344`
 
-**Problem.** Core glTF fixes a dielectric's normal-incidence reflectance at 4%, corresponding to
+**Problem at review time.** Core glTF fixes a dielectric's normal-incidence reflectance at 4%, corresponding to
 an IOR of 1.5. `KHR_materials_ior` replaces that constant with `((ior-1)/(ior+1))²`, while
 `KHR_materials_specular` scales and colours the dielectric Fresnel term. cgltf parses all three
-factor values, but CNA currently drops them before `MeshOut`; an application cannot inspect them
-and a renderer cannot honour them later.
+factor values, but CNA dropped them before `MeshOut`; an application could not inspect them and a
+renderer could not honour them later.
 
 **Why not internal.** These are runtime shading inputs. Like metallic and roughness, they must live
 on the effect so a non-glTF caller can set them and so cloning, offline content and the draw
@@ -224,14 +226,16 @@ validation. The only clamp is the one the extension specification requires in th
 
 **Migration.** None.
 
-**Implemented boundary.** Factor consumption exists on the rigid and skinned programs of all 15
-PBR renderers. Each native ABI carries RGB F0 plus scalar F90; the dielectric endpoint is mixed
+**Implemented boundary.** Factor consumption landed on the rigid and skinned programs of all 15
+PBR renderers that existed during the campaign and remains present on all six surviving renderer
+families. Each native ABI carries RGB F0 plus scalar F90; the dielectric endpoint is mixed
 with albedo for metals, and Schlick uses `F90 - F0` rather than assuming the grazing endpoint is
 always one. The core defaults are algebraically identical to the former constants. The repository-
 wide renderer audit pins every CPU upload and shader expression, while the shared six-check pixel
 test exercises the runnable backends. `KHR_materials_ior` is therefore implemented and claimed.
-`KHR_materials_specular` is implemented with a named limit and remains unclaimed because four PBR
-renderers still need bindings for its two optional textures.
+`KHR_materials_specular` is implemented with a named limit and remains unclaimed as fully supported
+because required use is refused by name. The former texture-binding gap is closed: every surviving
+PBR renderer samples both optional maps.
 
 **Test.** Effect default/setter/clone tests cover both classes. `mat-factor-only-gold` authors IOR
 2, specular factor 0.3 and colour `(0.25,1,12)`, making the derived F0
@@ -241,18 +245,19 @@ multiply. L3, direct L6 and `.cnj` parity compare those values against the fixtu
 output is exactly `F0/(4π)`: both PBR programs produce `(11,11,11)` for core and `(2,9,43)` for the
 fixture factors. A grazing pair holds F0 at `.04` while changing only F90 from 1 to `.3`, producing
 `(33,33,33)` versus `(15,15,15)`. The same test now runs across backend harnesses; platform-only
-shader paths are compiler-verified. Section 1.4b now transports both texture inputs; EasyGL,
-OpenGL4, DirectX9/11, SDL GPU and Vulkan sample them, and the remaining
-renderer bindings stay explicitly open.
+shader paths are compiler-verified. Section 1.4b transports both texture inputs; the current
+machine-checked inventory names DirectX9, EasyGL, FNA3D, SDLGPU, Software and WebGPU as sampling
+both. OpenGL4, DirectX11 and Vulkan evidence below is retained as historical pre-retirement
+evidence, not as the current renderer set.
 
 ---
 
 ### 1.4b `KHR_materials_specular` texture inputs — `GLTF-344`
 
-**Problem.** Section 1.4a carries the extension's factors, but the optional `specularTexture`
-(linear alpha) and `specularColorTexture` (sRGB RGB) are still discarded. They may select different
-UV sets, transforms and samplers from each other and from every core PBR map. Folding either sample
-into a factor at import time would lose that per-fragment and per-map state.
+**Problem at review time.** Section 1.4a carried the extension's factors, but the optional
+`specularTexture` (linear alpha) and `specularColorTexture` (sRGB RGB) were discarded. They may
+select different UV sets, transforms and samplers from each other and from every core PBR map.
+Folding either sample into a factor at import time would lose that per-fragment and per-map state.
 
 **Why not internal.** These are runtime shading inputs and non-glTF callers can construct both PBR
 effect classes directly. As with the five existing maps, the effect must own/clone the textures and
@@ -480,10 +485,10 @@ GLSL is that macro, and the C++ functions beside it are the same arithmetic. Two
 of a piecewise curve with a `0.0031308` knee and a `1/2.4` exponent would drift, and the drift would
 be a subtle brightness error rather than a crash.
 
-**Compatibility.** Additive on every renderer: the fields are new, so a renderer that does not read
-them behaves exactly as it did before — the established accepted-and-ignored pattern. Adoption is
-therefore per renderer rather than a flag day. `EasyGLRenderer` implements it (and with it the
-GL profiles it backs); the other renderers are unchanged and still show the old behaviour.
+**Compatibility.** Additive on every renderer: the fields were new, so a renderer that did not read
+them behaved exactly as it did before — the established accepted-and-ignored pattern. Adoption was
+therefore per renderer rather than a flag day. All six surviving PBR renderer families now consume
+the flags; their current inventory is machine-checked by `GltfRendererPbrFallbackPolicy`.
 
 **A boundary this review names rather than hides.** The output encode is applied *by the PBR
 shader*, so in a scene mixing `PbrEffect` with the stock XNA effects the two write differently
@@ -505,9 +510,10 @@ would not have compiled.
 mid-grey, both knees evaluated branch-against-branch, a 256-level round trip, and the no-clamp
 property — and checks the GLSL declares both functions with the same constants. `GltfConformanceL6`
 asserts every PBR draw in the corpus declares both maps sRGB and the encode on, and that the three
-flags move independently. Focused EasyGL framebuffer tests now prove the shader executes, both
-texture decodes move independently and the output encode is applied exactly once. The
-cross-renderer/corpus-wide L7 matrix remains open (§5.3 of `docs/gltf-conformance.md`).
+flags move independently. Focused EasyGL framebuffer tests prove the shader executes, both texture
+decodes move independently and the output encode is applied exactly once. The deterministic
+148-asset OPENGLES3 L7 corpus gate has landed; `GLTF ROBUST` still withholds its broader
+four-renderer Gate C claim (`docs/gltf-conformance.md` §8.3 row 12).
 
 ---
 
@@ -581,8 +587,8 @@ whose compatible default carries no origin flag. `EasyGL_Gltf_SamplerWrap` exerc
 that public boundary on the three generated `uv-out-of-range-*` fixtures. At one shared authored UV,
 CLAMP, REPEAT and MIRRORED_REPEAT produce the reference image's yellow, blue and green quadrants
 respectively on OPENGLES3. Thus the raw-enum table, real-file import, per-part
-transport and GPU addressing are all distinct assertions; only corpus-wide L7 orchestration remains
-under `GLTF-009`.
+transport and GPU addressing are all distinct assertions. The corpus-wide OPENGLES3 L7
+orchestration subsequently landed under `GLTF-009`.
 
 ---
 
@@ -927,13 +933,16 @@ the undeclared 1.0 defaults reach L6. This is more than a setter test: registere
 framebuffer from both programs. Occlusion produces bytes 137/207/255 for strengths 1/.5/0, while a
 normal sample `(255,128,191)` produces 104/138/151 for scales 1/.35/0. Those results discriminate
 the red occlusion channel, the specification's strength formula, `rgb*2-1` decoding, and XY-only
-normal scaling. The corpus-wide L7 rung remains `GLTF-009`; the API and EasyGL behavior no longer
-remain deferred.
+normal scaling. The corpus-wide OPENGLES3 L7 rung subsequently landed under `GLTF-009`; the API and
+EasyGL behavior are no longer deferred.
 
 ### 2.2 Per-part sampler state — `GLTF-207`
 
-Deferred untouched. A CNAEXT `SamplerStateArrayEXT` on the part is a larger surface than anything
-else in this file and has no consumer until texture work begins.
+**Original deferral superseded and landed.** The final surface is the five-entry
+`ModelMeshPart::getSamplerStatesEXTProperty()` plus the per-slot setter described in §1.8, with the
+two `KHR_materials_specular` samplers exposed separately to preserve the established five-slot ABI.
+Direct/offline transport and the public caller-applied device-state boundary have focused tests;
+`Model::Draw` deliberately does not overwrite global sampler state.
 
 ### 2.3 Import diagnostics — `GLTF-034`
 
