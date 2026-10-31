@@ -3,7 +3,7 @@
 """
 INPUT-AUDIT-002 - detect orphaned / untested Input types.
 
-Cross-checks every Input type (the 26 public XNA headers + the internal CNA::Internal::Input sources)
+Cross-checks every Input type (the public XNA headers + the internal CNA::Internal::Input sources)
 against the test tree, reporting for each type whether it has a *dedicated* GoogleTest suite
 (`TEST(<Type>Test, …)` or `TEST_F(<Type>…Test, …)`) and whether it is referenced by any test at all.
 A type with no dedicated suite is a candidate gap (each becomes an INPUT-TEST-* task).
@@ -14,6 +14,7 @@ Read the flagged rows before filing a task.
 
 Usage:
     python3 tools/input_parity/check_input_test_coverage.py [--out docs/input-test-coverage.md]
+    python3 tools/input_parity/check_input_test_coverage.py --check
 Run from the repo root. With no --out the report prints to stdout.
 """
 
@@ -29,6 +30,7 @@ INPUT_MODULE = os.path.join(REPO_ROOT, "modules", "input")
 PUBLIC_DIR = os.path.join(INPUT_MODULE, "include", "Microsoft", "Xna", "Framework", "Input")
 INTERNAL_DIR = os.path.join(INPUT_MODULE, "include", "CNA", "Internal", "Input")
 TESTS_DIR = os.path.join(INPUT_MODULE, "tests")
+DEFAULT_OUT = os.path.join(REPO_ROOT, "docs", "input-test-coverage.md")
 
 # Types that are deliberately exercised through a sibling suite rather than a same-named one, so a
 # missing dedicated suite is expected, not a gap. Keyed by type -> covering suite/file (for the note).
@@ -37,6 +39,7 @@ KNOWN_COVERED_ELSEWHERE = {
     "TouchCollection": "TouchInputTests.cpp (TouchInputTest)",
     "TouchPanelCapabilities": "TouchInputTests.cpp (TouchPanelCapabilitiesTest)",
     "GestureSample": "TouchInputTests.cpp (GestureSampleTest)",
+    "Enumerator": "Touch/TouchCollectionEnumeratorTests.cpp (TouchCollectionEnumeratorTest)",
     # 'Keys' has no KeysTest suite by design — it is the enum exercised by the exhaustive 160-entry
     # value table + reflection tests in KeyboardInputTests.cpp (INPUT-KBD-001) and driven through the
     # state machine in PlatformInputBridgeKeyboardTest.
@@ -74,7 +77,9 @@ def strip_comments(text: str) -> str:
 def types_in_header(path: str) -> list:
     text = strip_comments(open(path, encoding="utf-8").read())
     names = []
-    for m in re.finditer(r"\b(?:enum\s+class|class|struct)\s+([A-Za-z_]\w*)", text):
+    definition_re = (r"\b(?:enum\s+class|class|struct)\s+(?:CNAEXT\s+)?"
+                     r"([A-Za-z_]\w*)\s*(?:final\s*)?(?::[^\{;]+)?\{")
+    for m in re.finditer(definition_re, text):
         name = m.group(1)
         # skip obvious detail/impl helpers and forward-declared SDL handles
         if name.startswith("SDL") or name in names:
@@ -111,7 +116,7 @@ def load_tests() -> list:
 def analyse(types: dict, tests: list):
     rows = []
     for name in sorted(types):
-        suite_re = re.compile(r"\bTEST(?:_F)?\(\s*" + re.escape(name) + r"\w*Test\b")
+        suite_re = re.compile(r"\bTEST(?:_F|_P)?\(\s*" + re.escape(name) + r"\w*Test\b")
         dedicated = None
         ref_files = 0
         for relpath, text in tests:
@@ -124,7 +129,7 @@ def analyse(types: dict, tests: list):
     return rows
 
 
-def render(rows_public, rows_internal) -> str:
+def render(rows_public, rows_internal) -> tuple[str, list]:
     out = []
     out.append("# Input source → test coverage (INPUT-AUDIT-002)")
     out.append("")
@@ -180,12 +185,27 @@ def render(rows_public, rows_internal) -> str:
             summary.append(f"- `{name}` (`{header}`) — {kind}")
     summary.append("")
     out[9:9] = summary
-    return "\n".join(out).rstrip() + "\n"
+    return "\n".join(out).rstrip() + "\n", gaps
+
+
+def check_report(path: str, expected: str) -> bool:
+    if not os.path.isfile(path):
+        print(f"error: generated report is missing: {path}", file=sys.stderr)
+        return False
+    with open(path, encoding="utf-8") as fh:
+        actual = fh.read()
+    if actual != expected:
+        print(f"error: generated report is stale: {path}", file=sys.stderr)
+        print("       regenerate it with --out, then review and commit the diff", file=sys.stderr)
+        return False
+    return True
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--check", action="store_true",
+                    help="compare generated output with --out (or the committed default) and fail on drift/gaps")
     args = ap.parse_args(argv)
 
     public = collect_types(PUBLIC_DIR)
@@ -197,17 +217,27 @@ def main(argv=None) -> int:
     tests = load_tests()
     rows_public = analyse(public, tests)
     rows_internal = analyse(internal, tests)
-    md = render(rows_public, rows_internal)
+    md, gaps = render(rows_public, rows_internal)
+
+    if args.check:
+        target = os.path.abspath(args.out or DEFAULT_OUT)
+        report_matches = check_report(target, md)
+        if gaps:
+            print(f"error: coverage report has {len(gaps)} candidate gap(s)", file=sys.stderr)
+            return 1
+        if not report_matches:
+            return 1
+        print(f"checked {target}: current, 0 candidate gaps", file=sys.stderr)
+        return 0
 
     if args.out:
         with open(args.out, "w", encoding="utf-8") as fh:
             fh.write(md)
-        n_gap = md.count("**NO TEST REFERENCE**") + md.count("no same-named suite")
         print(f"wrote {args.out}: {len(public)} public + {len(internal)} internal types",
               file=sys.stderr)
     else:
         sys.stdout.write(md)
-    return 0
+    return 1 if gaps else 0
 
 
 if __name__ == "__main__":

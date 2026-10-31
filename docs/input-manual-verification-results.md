@@ -9,6 +9,33 @@ environment/session.
 
 ---
 
+## Entry — 2026-10-31
+
+| | |
+|---|---|
+| **Date** | 2026-10-31 |
+| **OS** | Debian 13, Linux x86_64 |
+| **Platform / renderer** | `HEADLESS` / `HEADLESS` |
+| **Toolchain** | g++ 14.2.0 · CMake 3.31.6 · Ninja 1.12.1 |
+| **Controller / touchscreen / IME** | **None exercised** |
+
+### Automated audit-remediation baseline
+
+- `cna_input_test_gate` built successfully with at most eight compile jobs.
+- `CnaInputTests` runs all 563 module-owned tests without a name filter: 560 pass and three
+  environment-dependent tests skip under HEADLESS (two clipboard cases and one SDL3 relative-mouse
+  real-window case).
+- `CnaInputCrossModuleTests` runs 70 explicitly selected platform/runtime/Guide integration tests;
+  all 70 pass. Both lanes pass five shuffled repetitions.
+- The member-parity and source-to-test reports reproduce from their generators with zero gaps.
+- Desktop focus loss/gain now has a direct regression that verifies `IsActive`, `Activated`,
+  `Deactivated`, idempotent duplicate events, and two real transitions in one event batch.
+
+This entry changes **no** hardware-matrix cell. It is evidence only for the headless/software gate;
+the controller, touchscreen, IME, physical keyboard/mouse and high-DPI checks below remain open.
+
+---
+
 ## Entry — 2026-07-04
 
 | | |
@@ -16,7 +43,7 @@ environment/session.
 | **Date** | 2026-07-04 |
 | **OS** | Linux 6.12.90+deb13-amd64 (Debian 13) |
 | **Display server** | Wayland (`XDG_SESSION_TYPE=wayland`, `WAYLAND_DISPLAY=wayland-0`); XWayland available (`DISPLAY=:0`, usable via `SDL_VIDEODRIVER=x11`) |
-| **Graphics backend** | EasyGL (OpenGL ES 3.2, Mesa 25.0.7) |
+| **Graphics renderer** | OPENGLES3 (EasyGL, OpenGL ES 3.2, Mesa 25.0.7) |
 | **Controller** | **None available** |
 | **IME / keyboard layout** | No IME configured; no interactive human at the keyboard |
 | **Screenshot tool** | None working (`import -window root` fails under Wayland) |
@@ -24,11 +51,11 @@ environment/session.
 ### Automated (headless) baseline
 - `CnaTests` full suite (clean builds, task 862, incl. the task-858 offset test): **1964/1964**
   (EasyGL, Vulkan (retired 2026-10-13)); **1968/1968** (bgfx (retired 2026-09-17), +4 bgfx-specific).
-- Input filter: **217** tests, identical on all three backends.
+- Input filter: **217** tests, identical on all three renderers then built.
 
-> **Superseded (2026-07-05):** the counts above are the historical record for **2026-07-04** (pre-Phase-I15).
-> The current authoritative baseline — full suite **3269 / 2 skipped**, canonical input filter **280** — is
-> in `docs/input-build-and-test.md` (§Test counts). This entry is retained as-is for that date, not rewritten.
+> **Superseded (2026-07-05, and again by the 2026-10-31 entry):** the counts above are the historical
+> record for **2026-07-04** (pre-Phase-I15). The current authoritative input-gate baseline is in
+> `docs/input-build-and-test.md` (§Test counts). This entry is retained as-is for that date, not rewritten.
 
 ### Verified in this environment
 
@@ -76,7 +103,7 @@ available). They are **not** claimed as fully verified:
   (key highlighting, live gamepad panels) — no touch device / controllers / human present.
 
 **Summary:** everything reachable headlessly or via an automated real-window check passed on all
-three backends. The unverified items are strictly hardware- or human-gated, not gaps in the
+three renderers then built. The unverified items are strictly hardware- or human-gated, not gaps in the
 implementation. Re-run this checklist on a machine with a controller, an IME, and (ideally) an X11
 session to close the hardware/platform gaps.
 
@@ -89,7 +116,7 @@ session to close the hardware/platform gaps.
 | **Date** | 2026-07-06 |
 | **OS** | Linux 6.12.90+deb13-amd64 (Debian 13) |
 | **Display server** | Xvfb + `SDL_VIDEODRIVER=x11` (headless CI-equivalent) |
-| **Graphics backend** | EasyGL (OpenGL ES, Mesa) |
+| **Graphics renderer** | OPENGLES3 (EasyGL, OpenGL ES, Mesa) |
 | **Toolchain / SDL** | g++ 14.2.0 · CMake 3.31.6 · Ninja 1.12.1 · `third_party/SDL` @ `cbe3fbe9f367…` |
 | **Controller / touchscreen / IME** | **None available** (headless) |
 
@@ -134,7 +161,7 @@ add the dated row to the log. All cells are currently ⬜ (no hardware available
 ## Recording a result (template — INP-0222)
 
 Copy a new `## Entry — YYYY-MM-DD` block and fill it. Required fields per entry:
-**Date · OS (kernel/distro) · Display server · Graphics backend · Toolchain + SDL rev · Hardware present.**
+**Date · OS (kernel/distro) · Display server · Graphics renderer · Toolchain + SDL rev · Hardware present.**
 For each hardware check, record **Check · Method · Result (Pass/Fail + notes)**, and update the matrix
 cell(s). Never mark a cell ✅ without a dated row backing it.
 

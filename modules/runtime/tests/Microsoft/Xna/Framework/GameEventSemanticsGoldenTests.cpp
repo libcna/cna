@@ -254,6 +254,73 @@ TEST(GameEventSemanticsTest, WindowSystemFullscreenTransitionsResyncTheManager)
     EXPECT_FALSE(manager.getIsFullScreenProperty());
 }
 
+TEST(GameEventSemanticsTest, DesktopFocusTransitionsRaiseActivityEventsExactlyOnce)
+{
+#if defined(__ANDROID__)
+    GTEST_SKIP() << "Android activity follows application lifecycle events, not window focus.";
+#else
+    auto platform = std::make_unique<TranscriptPlatform>(Platform::PlatformFactory::Create("Headless"));
+    TranscriptPlatform* scriptedPlatform = platform.get();
+    std::unique_ptr<TranscriptGame> gameOwner;
+    try
+    {
+        gameOwner = std::make_unique<TranscriptGame>(std::move(platform));
+    }
+    catch (const Graphics::NoSuitableGraphicsDeviceException& refusal)
+    {
+        if (!CNA::Runtime::Testing::IsPlatformRefusal(refusal))
+            throw;
+        GTEST_SKIP() << "the Headless platform cannot back this build's renderer: "
+                     << refusal.what();
+    }
+
+    TranscriptGame& game = *gameOwner;
+    GraphicsDeviceManager manager(&game);
+    ASSERT_NO_THROW(game.RunOneFrame());
+
+    constexpr Platform::WindowId ownWindow = 1;
+    RunFrameWith(game, *scriptedPlatform,
+                 {WindowEvent(Platform::WindowEventKind::FocusGained, ownWindow)});
+    ASSERT_TRUE(game.getIsActiveProperty());
+
+    int activated = 0;
+    int deactivated = 0;
+    game.Activated += [&activated](System::Object*, const System::EventArgs&) { ++activated; };
+    game.Deactivated += [&deactivated](System::Object*, const System::EventArgs&) { ++deactivated; };
+
+    RunFrameWith(game, *scriptedPlatform,
+                 {WindowEvent(Platform::WindowEventKind::FocusLost, ownWindow)});
+    EXPECT_FALSE(game.getIsActiveProperty());
+    EXPECT_EQ(deactivated, 1);
+    EXPECT_EQ(activated, 0);
+
+    // Repeating the same state is idempotent and must not raise a duplicate event.
+    RunFrameWith(game, *scriptedPlatform,
+                 {WindowEvent(Platform::WindowEventKind::FocusLost, ownWindow)});
+    EXPECT_EQ(deactivated, 1);
+    EXPECT_EQ(activated, 0);
+
+    RunFrameWith(game, *scriptedPlatform,
+                 {WindowEvent(Platform::WindowEventKind::FocusGained, ownWindow)});
+    EXPECT_TRUE(game.getIsActiveProperty());
+    EXPECT_EQ(deactivated, 1);
+    EXPECT_EQ(activated, 1);
+
+    RunFrameWith(game, *scriptedPlatform,
+                 {WindowEvent(Platform::WindowEventKind::FocusGained, ownWindow)});
+    EXPECT_EQ(deactivated, 1);
+    EXPECT_EQ(activated, 1);
+
+    // Both real transitions in one event batch remain observable, in order.
+    RunFrameWith(game, *scriptedPlatform,
+                 {WindowEvent(Platform::WindowEventKind::FocusLost, ownWindow),
+                  WindowEvent(Platform::WindowEventKind::FocusGained, ownWindow)});
+    EXPECT_TRUE(game.getIsActiveProperty());
+    EXPECT_EQ(deactivated, 2);
+    EXPECT_EQ(activated, 2);
+#endif
+}
+
 TEST_P(GameEventSemanticsGoldenTest, ObservableEventSemanticsMatchTheCapturedBaseline)
 {
     auto platform = std::make_unique<TranscriptPlatform>(

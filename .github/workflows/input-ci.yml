@@ -1,6 +1,6 @@
 # INPUT-CI-001 / INPUT-CI-002 / INPUT-CI-005 — CI for the Input track.
 #
-# Matrix of build configurations, each running the (backend-agnostic) input test suite headless:
+# Matrix of build configurations, each running the renderer-independent input test suite headless:
 #   - OPENGLES3 / SDLGPU                      : two renderer identities.
 #   - ASan+UBSan (on OPENGLES3)                : built with -DCNA_SANITIZE=address,undefined; any UB /
 #                                             memory error fails the job (halt_on_error=1).
@@ -71,6 +71,16 @@ jobs:
           cd "${GITHUB_WORKSPACE}/.."
           bash "${GITHUB_WORKSPACE}/scripts/ci/clone_siblings.sh" "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime easy-gl meta-gl
 
+      - name: Clone FNA reference for generated-report checks
+        if: matrix.name == 'OPENGLES3'
+        run: git clone --depth 1 https://github.com/FNA-XNA/FNA.git "${RUNNER_TEMP}/FNA"
+
+      - name: Check generated input reports
+        if: matrix.name == 'OPENGLES3'
+        run: |
+          python3 tools/input_parity/check_input_test_coverage.py --check
+          python3 tools/input_parity/gen_input_parity_matrix.py --fna "${RUNNER_TEMP}/FNA" --check
+
       - name: Install system dependencies
         run: |
           set -euo pipefail
@@ -102,15 +112,14 @@ jobs:
             -DCNA_BUILD_TESTS=ON \
             -DCNA_SANITIZE=${{ matrix.sanitize }}
 
-      - name: Build CnaTests
-        run: cmake --build build --target CnaTests
+      - name: Build input test gate
+        run: cmake --build build --target cna_input_test_gate --parallel 8
 
       # A virtual X server (Xvfb) provides real windows/cursors headlessly (the SDL "dummy" driver has
       # null cursors, which fails the MouseCursor tests). For the ASan+UBSan entry, halt_on_error=1 turns
       # any UB / memory error into a job failure.
-      # Selects the input subset via the `input` CTest label (INPUT-BUILD-003) — the canonical filter
-      # lives in exactly one place, CMakeLists.txt (CNA_INPUT_TEST_FILTER); the CnaInputTests entry runs
-      # it shuffled x3 for order-independence.
+      # The `input` label runs the complete module-owned focused binary plus an explicit
+      # cross-module lifecycle/platform lane. Both run shuffled x5 for order-independence.
       - name: Run input tests (ctest -L input, headless via Xvfb, shuffled)
         env:
           SDL_VIDEODRIVER: x11

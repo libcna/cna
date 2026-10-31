@@ -1366,26 +1366,29 @@ if(CNA_BUILD_TESTS)
         TEST_FILTER "${_cna_unit_tests_network_filter}"
         PROPERTIES RESOURCE_LOCK cna-network ${_cna_unit_tests_audio_environment})
 
-    # INPUT-BUILD-003: canonical Input-test selector — SINGLE SOURCE OF TRUTH.
-    # The input subset used to be selected by a long --gtest_filter string copy-pasted across the docs
-    # and CI, which silently drifted whenever a new suite name fell outside its tokens (e.g. the
-    # ButtonState/KeyState/Buttons suites from INPUT-TEST-001). Keep the token list HERE only; docs and
-    # CI select the subset via `ctest -L input` (see docs/input-build-and-test.md). When you add an input
-    # test suite whose name matches none of these tokens, extend this one string.
-    # The tokens match test names too, so `*Touch*` also selected
-    # MediaPlayerTest.PlayRefusesADisposedSongWithoutTouchingTheQueue (CNA-DEMOS-ISSUE-098), a media
-    # test that reads its assets relative to the source directory; the negative pattern keeps media
-    # out of the input gate.
-    set(CNA_INPUT_TEST_FILTER
-        "*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*PlatformInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*:*CnaInput*:*Joystick*:*Haptic*-MediaPlayerTest.*")
-    # INPUT-BUILD-009: `--gtest_shuffle --gtest_repeat=5` is the standardized order-independence gate.
-    # The input state is a process-wide singleton (InputManager / GestureDetector / MouseCursor stock
-    # cursors persist for the whole binary), so a static-state leak would reintroduce order dependence;
-    # running the filtered subset 5x under a fresh shuffle each iteration is the required check that
-    # catches it. `ctest -L input` runs exactly this on every renderer/CI job.
-    # Headless-safe audio everywhere; the video driver is left to the runner (Xvfb+x11 in CI, real
-    # display or `xvfb-run` locally) because the MouseCursor tests need real cursors (the SDL dummy
-    # driver has null cursors).
+    # INPUT-BUILD-003: canonical Input gate. The owned lane runs the input module's focused test
+    # executable with no name filter, so every new modules/input/tests suite joins automatically.
+    # The earlier broad `*Touch*:*Keyboard*:...` filter matched the whole gtest name, including test
+    # methods in unrelated glTF, video, networking and renderer suites. Cross-module contracts are
+    # therefore a second, explicit lane: each entry below names a suite (or a deliberately selected
+    # method), never an arbitrary substring in a method name.
+    string(CONCAT CNA_INPUT_CROSS_MODULE_TEST_FILTER
+        "GameEventSemanticsTest.*:EveryImplementation/GameEventSemanticsGoldenTest.*:"
+        "GamePlatformTimingTest.MouseVisibility*:KeyboardGamepadPumpTest.*:KeyboardOrientationTest.*:"
+        "PlatformEventTests.*:ScancodeTests.*:InputSnapshotTests.*:HapticContractTests.*:"
+        "TerminalKeyboardTest.*:TerminalMouseTest.*:GuideInputTest.*:"
+        "GuideAvatarEditorDeviceTest.AKeyboard*:GuideAvatarEditorDeviceTest.AController*:"
+        "GuideAvatarEditorDeviceTest.AMouse*:"
+        "GuideTest.AVisibleKeyboardPromptWithholdsTouchInputFromTheGame:"
+        "GuideTest.AVisibleMessageBoxWithholdsTouchInputFromTheGame:"
+        "GuideTest.ARaisedOverlayDiscardsGesturesAlreadyQueued")
+
+    # INPUT-BUILD-009: both processes run shuffled five times. InputManager, GestureDetector and
+    # MouseCursor keep process-wide state, while the cross-module lane verifies the Game/platform
+    # lifecycle boundary that makes the preserved-on-focus-loss policy safe.
+    # Headless-safe audio everywhere; the video driver is left to the runner. CI uses Xvfb+x11 so
+    # SDL3 real-window clipboard/relative-mouse cases run rather than taking their documented
+    # platform-service skips; a HEADLESS platform build remains a valid software-only baseline.
     # VULKAN-153 (its finding F-22): this test carried NO timeout,
     # and it can deadlock -- observed twice on 2026-09-05, single-threaded in futex_wait with 2
     # seconds of CPU after 45 minutes of wall clock, both times while a second copy of this same
@@ -1393,8 +1396,15 @@ if(CNA_BUILD_TESTS)
     # run stops there; the only way to finish was to kill the process by hand. Bounding it turns an
     # unbounded stall into one reported failure. 1200s is generous against the measured range: 221s
     # alone, 628s as the slowest healthy run seen under -j6. The deadlock itself was a separate row.
-    cna_register_renderer_test(NAME CnaInputTests COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5
-        TIMEOUT 1200 LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+    add_custom_target(cna_input_test_gate DEPENDS CnaInputModuleTests CnaTests)
+    cna_register_renderer_test(NAME CnaInputTests
+        COMMAND CnaInputModuleTests --gtest_shuffle --gtest_repeat=5
+        TIMEOUT 1200 LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    cna_register_renderer_test(NAME CnaInputCrossModuleTests
+        COMMAND CnaTests --gtest_filter=${CNA_INPUT_CROSS_MODULE_TEST_FILTER} --gtest_shuffle --gtest_repeat=5
+        TIMEOUT 1200 LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
     # GLTF-010: the glTF conformance ladder as one runnable label.
     #

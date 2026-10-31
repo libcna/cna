@@ -35,8 +35,8 @@ namespace Microsoft::Xna::Framework::Input::Touch
              */
             bool MoveNext() override;
 
-            /** @brief Returns to the position before the first element. */
-            void Reset() override;
+            /** @brief Returns to the position before the first element through the IEnumerator contract. */
+            CNAEXT void Reset() override;
 
             /** @brief Releases enumerator resources. */
             void Dispose() override;

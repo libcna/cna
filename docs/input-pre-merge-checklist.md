@@ -14,10 +14,13 @@ manual/hardware verification is tracked separately (see the "Input stable" gate,
 - [ ] **No SDL / `CNA::Internal` leak** — `PublicApiInputCompileTests` compiles (its `#error` guard + the
       namespace-placement + Object-exemption `static_assert`s hold).
 - [ ] **Enum values frozen** — the 8 exhaustive enum value-drift tests pass (renumbering fails).
-- [ ] **Member parity** — `python3 tools/input_parity/gen_input_parity_matrix.py` reports **0 STRICT/EXT
-      gaps**; regenerated `docs/input-member-parity-matrix.md` committed if it changed.
-- [ ] **Test coverage** — `python3 tools/input_parity/check_input_test_coverage.py` reports **0 orphans**.
-- [ ] **Input subset green on every backend** — `ctest -L input` (baked `--gtest_shuffle --gtest_repeat=5`)
+- [ ] **Member parity** — `python3 tools/input_parity/gen_input_parity_matrix.py --check` reports
+      **0 STRICT/EXT gaps**, **0 FNA-only members**, and no generated-report drift. Use `--fna` or
+      `CNA_FNA_TREE` if the FNA checkout is not in a nearby sibling directory.
+- [ ] **Test coverage** — `python3 tools/input_parity/check_input_test_coverage.py --check` reports
+      **0 candidate gaps** and no generated-report drift.
+- [ ] **Input gate green on the CI renderer matrix** — build `cna_input_test_gate`, then run
+      `ctest -L input` (both lanes bake in `--gtest_shuffle --gtest_repeat=5`); it
       passes on every renderer of the `input-ci.yml` matrix, under `xvfb-run` + `SDL_VIDEODRIVER=x11`.
 - [ ] **Sanitizers clean** — the ASan+UBSan config runs the input subset green with
       `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1` (0 ASan/UBSan errors).
@@ -33,8 +36,9 @@ manual/hardware verification is tracked separately (see the "Input stable" gate,
 
 ## Release gate — "Input stable" (INP-0199)
 
-"Input stable" additionally requires: 4-backend green **and** sanitizer green **and** determinism (shuffle
-×5) green **and** a **current dated hardware-verification entry** in
+"Input stable" additionally requires: the current `input-ci.yml` renderer matrix green **and** its
+ASan+UBSan job green **and** determinism (shuffle ×5) green **and** a **current dated
+hardware-verification entry** in
 `docs/input-manual-verification-results.md` that includes at least one real controller family, a real
 touchscreen, and a real IME. Until that manual entry exists, the input subsystem is "code-complete +
 headless-verified", **not** "Input stable".

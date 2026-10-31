@@ -473,7 +473,10 @@ else in this section is FNA-required behavior, not CNA scope creep.
   handler for these two events also toggles the X11 "fullscreen desktop" window flag and
   enables/disables the SDL screensaver; CNA does not replicate either. Neither affects input
   semantics (the subject of this audit); revisit only if X11 fullscreen-on-Alt-Tab behavior or
-  screensaver suppression is reported as a real-world gap. The two neighbouring window behaviours
+  screensaver suppression is reported as a real-world gap. Pinned directly by
+  `GameEventSemanticsTest.DesktopFocusTransitionsRaiseActivityEventsExactlyOnce`, including
+  `Activated`/`Deactivated`, duplicate-event idempotence and two transitions in one batch, and by the
+  cross-platform event-semantics golden transcript. The two neighbouring window behaviours
   are replicated since 2026-10-14: `GameWindow::EndScreenDeviceChange` re-centres a windowed game on
   its display (`IPlatformWindow::CenterOnDisplay`), and a fullscreen toggle performed by the window
   system reaches the game as `WindowEventKind::FullscreenEntered`/`FullscreenLeft` and resynchronises

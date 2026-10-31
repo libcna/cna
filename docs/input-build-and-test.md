@@ -15,10 +15,10 @@ CNA input depends on three kinds of external code:
 |---|---|---|
 | `third_party/SDL`, `third_party/SDL_mixer` | **git submodules** of this repo | `git submodule update --init`. Alternative: `-DCNA_USE_SYSTEM_SDL=ON` builds against installed system SDL3/SDL3_mixer packages instead (`find_package(SDL3 REQUIRED)` etc., `cmake/ThirdPartySDL.cmake`) — no Input behavior differs either way, it is purely a build-time source-of-headers/libs choice (P9-025). |
 | `vendor/googletest` | **git submodule** | test framework |
-| `../sharp-runtime` | **sibling repository** (NOT a submodule) | CNA's C++ `System.*` runtime; must sit next to `cna_input` |
-| `../easy-gl` | **sibling repository** (NOT a submodule) | only for the `OPENGLES3` backend |
+| `../sharp-runtime` | **sibling repository** (NOT a submodule) | CNA's C++ `System.*` runtime; must sit next to `cna` |
+| `../easy-gl` | **sibling repository** (NOT a submodule) | only for the EasyGL renderer family (`OPENGLES3`, `OPENGL33`, `WEBGL2`) |
 
-> A source-only `.zip` of just `cna_input` is **not** buildable: it is missing the submodules and the
+> A source-only `.zip` of just `cna` is **not** buildable: it is missing the submodules and the
 > two sibling repositories. The CMake configure step now fails early with an actionable message
 > naming exactly what is missing (see `CMakeLists.txt` — the `sharp-runtime`/`easy-gl` guards and
 > `cmake/ThirdPartySDL.cmake`'s per-submodule check). Do not report "tests pass" from such an
@@ -30,51 +30,49 @@ CNA input depends on three kinds of external code:
 # 1. The vendored SDL family + googletest (submodules of this repo):
 git submodule update --init
 
-# 2. The sibling runtime + (for EasyGL) the GL helper, checked out NEXT TO cna_input:
-#    <parent>/cna_input, <parent>/sharp-runtime, <parent>/easy-gl
+# 2. The sibling runtime + (for EasyGL) the GL helper, checked out NEXT TO cna:
+#    <parent>/cna, <parent>/sharp-runtime, <parent>/easy-gl
 git -C .. clone <sharp-runtime-url> sharp-runtime
 git -C .. clone <easy-gl-url> easy-gl        # only needed for -DCNA_GRAPHICS_RENDERER=OPENGLES3
 
-# 3. Optional VideoPlayer backend (unrelated to input); omit this and use
+# 3. Optional VideoPlayer decoder backend (unrelated to input); omit this and use
 #    -DCNA_ENABLE_VIDEO=OFF when the input build does not need video:
 sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
 ```
 
 ## Configure, build, run
 
-The backend does not change input behavior (input is backend-agnostic), so any backend works for
-running the input tests. EasyGL is the default.
+The graphics renderer does not change input behavior, so any compatible renderer can run these
+tests. The dedicated input CI uses `OPENGLES3` and `SDLGPU` plus an `OPENGLES3` sanitizer job.
 
 ```bash
-# Configure with tests enabled (pick ONE backend):
+# Configure with tests enabled (pick one renderer):
 cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON
 # or SDLGPU / SOFTWARE
 
-# Build the test binary:
-cmake --build cmake-build-input-easygl --target CnaTests
+# Build both canonical input lanes (maximum eight compile jobs):
+cmake --build cmake-build-input-easygl --target cna_input_test_gate --parallel 8
 
 # Run everything:
 ./cmake-build-input-easygl/CnaTests
 
-# Run ONLY the input tests — the canonical way (INPUT-BUILD-003).
-# `ctest -L input` runs the CnaInputTests entry, which invokes the single-source-of-truth filter
-# (CNA_INPUT_TEST_FILTER in CMakeLists.txt) shuffled x5 for order-independence. This is what CI runs.
+# Run only the input gate — the canonical way (INPUT-BUILD-003).
+# The label contains the complete module-owned executable and one explicit cross-module lane.
 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 ```
 
 > **Determinism gate (INPUT-BUILD-009).** `ctest -L input` is not just the way to run the subset — it
-> **is** the required order-independence check. Its `CnaInputTests` entry bakes in
-> `--gtest_shuffle --gtest_repeat=5`, so every invocation runs the filtered subset five times, each under
+> **is** the required order-independence check. Both entries bake in
+> `--gtest_shuffle --gtest_repeat=5`, so every invocation runs each lane five times, each under
 > a fresh shuffle seed. The input state is a process-wide singleton (`InputManager`, `GestureDetector`,
 > the `MouseCursor` stock cursors), so a future static-state leak would resurface as an order-dependent
-> failure here. This gate must stay **green on every built backend** (the command is identical and
-> backend-agnostic). For a deeper sweep, invoke the binary
-> directly with a higher `--gtest_repeat` and the `CNA_INPUT_TEST_FILTER` value.
+> failure here. This gate must stay green on every renderer in `.github/workflows/input-ci.yml`.
 
-> Do **not** hand-copy a `--gtest_filter` string to select the input subset — it drifts (a new suite
-> whose name matches none of the tokens is silently skipped). The one authoritative token list lives in
-> `CMakeLists.txt` as `CNA_INPUT_TEST_FILTER`; `ctest -L input` is the stable command. If you must invoke
-> the binary directly (e.g. to pass extra gtest flags), read the current filter from that variable.
+> `CnaInputModuleTests` needs no filter: every translation unit under `modules/input/tests` belongs to
+> it automatically. The second entry uses the suite-level `CNA_INPUT_CROSS_MODULE_TEST_FILTER` in
+> `cmake/UnitTests.cmake`. Do not replace it with broad substrings such as `*Touch*`; GoogleTest matches
+> the whole `Suite.Method` name and would again pull unrelated rendering, video and network methods into
+> the input gate.
 
 > **Headless note:** the `MouseCursor` tests need real cursors, which the SDL `dummy` video driver
 > cannot create. In CI they run under `xvfb-run` with `SDL_VIDEODRIVER=x11`; do the same locally on a
@@ -82,11 +80,9 @@ ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 
 ## Test counts (authoritative baseline)
 
-Recorded **2026-07-16** (updated from the 2026-07-06 baseline as part of P13-006, the
-Input subsystem grew substantially in between — including the `feature/xnb` merge and the
-`audit_input.md` Phase 13 defect-remediation pass) in this checkout: Debian 13, g++ 14.2.0, CMake
-3.31.6, Ninja 1.12.1. Input is backend-agnostic — the input-filter count was identical on every
-backend then built.
+Recorded **2026-10-31** in `cmake-build-headless`: Debian 13, g++ 14.2.0, CMake 3.31.6 and
+Ninja 1.12.1. This is a current local headless baseline, not a claim that physical hardware or every
+renderer was exercised.
 
 **Pinned versions (INPUT-DOC-014 / INP-0196).** Reference toolchain as above (g++ 14.2.0 / CMake 3.31.6 /
 Ninja 1.12.1, Debian 13).
@@ -106,9 +102,9 @@ everything the input layer uses.
 
 > **Before bumping to the tag:** the build does **not** compile SDL from the submodule directly —
 > `CNA_SDL_PREBUILT_ROOT` points at a shared **`.sdl-prebuilt`** cache (currently SDL 3.5.0-dev, built from
-> the commit above and shared by every `cmake-build-*` dir + all backends). Moving the submodule to
+> the commit above and shared by every `cmake-build-*` dir + all renderers). Moving the submodule to
 > `release-3.4.8` is a *deliberate* infra step: it also needs the shared prebuilt rebuilt
-> (`rm -rf .sdl-prebuilt* && reconfigure`) and `ctest -L input` re-run on all four backends to confirm the
+> and `ctest -L input` re-run on the current CI renderer matrix to confirm the
 > main→release-branch change is behavior-neutral. It is intentionally **not** done as a blind checkout
 > (that would silently downgrade the shared prebuilt under other build dirs). The submodule move is tracked
 > by INPUT-BUILD-004; INP-0196 records the tag/version/min-API findings above.
@@ -125,42 +121,39 @@ still require `xvfb-run` + `SDL_VIDEODRIVER=x11` in CI; the dummy driver may ski
 The **continuous** fresh-clone proof is the CI workflow `.github/workflows/input-ci.yml`: every run
 starts from a clean `ubuntu-24.04` runner with **no** warm build dir and **no** `.sdl-prebuilt` cache,
 does `git submodule update --init` + clones the `sharp-runtime`/`easy-gl` siblings, configures,
-builds `CnaTests`, and runs `xvfb-run -a ctest -L input` — green across the 5-backend matrix. That is the
-recorded transcript of a clean environment building and passing with no manual patching.
+builds `cna_input_test_gate`, checks both generated input reports, and runs
+`xvfb-run -a ctest -L input`. Its matrix has two renderer identities (`OPENGLES3`, `SDLGPU`) plus an
+ASan+UBSan `OPENGLES3` job.
 
 To reproduce locally in a throwaway clone (siblings present next to it):
 
 ```bash
-git clone <cna_input-url> /tmp/cna-fresh && cd /tmp/cna-fresh
+git clone <cna-url> /tmp/cna-fresh && cd /tmp/cna-fresh
 git submodule update --init
 cmake -S . -B build -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON
-cmake --build build --target CnaTests
+cmake --build build --target cna_input_test_gate --parallel 8
 xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir build -L input --output-on-failure
 ```
 
 If a dependency is missing, the configure step fails fast with a copy-pasteable remedy (INPUT-BUILD-005):
 a missing `third_party/SDL*` submodule prints `Run: git submodule update --init`; a missing
 `sharp-runtime`/`easy-gl` sibling prints the exact `git clone … <path>` command (and, for `easy-gl`, the
-option to pick another backend). Verified in `cmake/ThirdPartySDL.cmake` and `CMakeLists.txt`.
+option to pick another renderer). Verified in `cmake/ThirdPartySDL.cmake` and `CMakeLists.txt`.
 
 | Metric | Count |
 |--------|-------|
-| Canonical input filter (the filter above) | **524 passed**, 0 failed, 5x `--gtest_shuffle --gtest_repeat` clean (updated 2026-07-17, input plan Phases 1-9) |
-| Full `CnaTests` suite (unfiltered) | did not complete on 2026-07-17 (P9-031, since fixed) — see below |
+| `CnaInputTests` / `CnaInputModuleTests` | **563 tests**: 560 passed, 3 environment skips; shuffle ×5 clean |
+| `CnaInputCrossModuleTests` | **70 passed**, 0 skipped/failed; shuffle ×5 clean |
+| Canonical input label total | **633 distinct tests per iteration**, 630 passed + 3 environment skips; both lanes green |
+| Full `CnaTests` suite (unfiltered) | not rerun for this input-only update; the historical P9-031 crash is fixed — see below |
 
 Notes:
-- **Updated 2026-07-17 (P9-027):** the input-filter count grew from the 2026-07-16
-  baseline of 496 to **524** across the `feature/input` audit. The Phase 1-9 sessions covered by this
-  update added 7 tests directly (`KeyboardStateTest.GetPressedKeysHasNoDuplicateWhenSameKeyGivenTwice`
-  P2-011; the former P2-056 modifier combination is now covered by
-  `PlatformInputBridgeKeyboardTest.ModifierAndLockKeysStayDistinct`;
-  `PlatformInputBridgeMouseTest.MotionEventUpdatesAbsolutePosition`,
-  `.MotionEventRelativeDeltaReachesInputManagerThroughBridge`, and
-  `.MotionEventConvertsWindowCoordinatesToLogicalForLetterboxedRenderer` P3-013/P3-039;
-  `GestureDetectorTest.GestureTimestampIsNonNegativeAndAdvancesWithTheClock` P6-012;
-  `SdlGamepadSubsystemInit.ShutdownQuitsSubsystemAndIsSafeToCallRepeatedly` P8-002); the remaining
-  21 were added by earlier session work (the Phase 1 per-type audits) between the 496 baseline and
-  this update — each task's Result in the input plan (Git history) names its exact test.
+- The former **524-test** figure was a dated 2026-07-17 count from one broad name filter. By
+  2026-10-31 that filter selected 624 tests, including unrelated methods merely containing words such
+  as `Touching`. The module-focused executable plus explicit cross-module lane replace that unstable
+  count; no input-owned suite is selected by name anymore.
+- The three HEADLESS skips are two clipboard round trips (no clipboard service) and the SDL3 relative
+  mouse-mode real-window case. The X11 CI lanes provide the corresponding services.
 - **The full-suite crash P9-031 recorded on 2026-07-17 is fixed.** Running the whole unfiltered
   `CnaTests` binary in one process aborted with `double free or corruption (fasttop)` inside
   `ENetBackendTest`, unrelated to Input. AddressSanitizer later named the cause: four ENet backend
@@ -171,10 +164,7 @@ Notes:
 - The 20 pre-2026-07-17 full-suite failures (before the crash was discovered) were pre-existing and
   unrelated to Input: all 20 were in the XNB/Content/Model/Effect/Texture3D pipeline
   (`"SDL_Renderer does not support 3D: CreateVertexBuffer"`, a documented limitation of the
-  since-retired `SDL_RENDERER` backend), not an input regression.
-- The canonical filter's last four tokens (`*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*`) were
-  added 2026-07-05 to catch the pure-enum value suites and the public-API header-hygiene suite that the
-  older filter missed.
+  since-retired `SDL_RENDERER` renderer), not an input regression.
 - **This table is the single source of truth for input test counts.** Other docs reference it rather than
   restating numbers. Re-run and update it whenever input tests are added.
 
@@ -183,9 +173,9 @@ Notes:
 1. `git submodule update --init` completes clean.
 2. `../sharp-runtime` and (for EasyGL) `../easy-gl` exist.
 3. Configure succeeds with `-DCNA_BUILD_TESTS=ON`.
-4. `CnaTests` builds with no errors.
+4. `cna_input_test_gate` builds with no errors.
 5. Full `CnaTests` run is green.
-6. Input filter run is green.
+6. Both input-label lanes are green.
 7. Shuffle + repeat run is green (order-independence).
 8. Record the exact counts and any failures (see the **Test counts** table above — the authoritative baseline).
 
@@ -219,8 +209,8 @@ deviations.
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | CMake configure fails: `Missing vendored 'SDL' …` | submodules not initialized | `git submodule update --init` |
-| CMake configure fails: `required sibling repository 'sharp-runtime' … not found` | sibling repo not checked out next to `cna_input` | `git -C .. clone <sharp-runtime-url> sharp-runtime` |
-| CMake configure fails: `the OPENGLES3 backend requires … 'easy-gl'` | `easy-gl` sibling missing | clone it next to `cna_input`, or use `-DCNA_GRAPHICS_RENDERER=SDLGPU` (or `SOFTWARE`) |
+| CMake configure fails: `required sibling repository 'sharp-runtime' … not found` | sibling repo not checked out next to `cna` | `git -C .. clone <sharp-runtime-url> sharp-runtime` |
+| CMake configure fails: `the OPENGLES3 renderer requires … 'easy-gl'` | `easy-gl` sibling missing | clone it next to `cna`, or use `-DCNA_GRAPHICS_RENDERER=SDLGPU` (or `SOFTWARE`) |
 | `ctest -L input` fails on 3 `MouseCursor` cases | headless `SDL_VIDEODRIVER=dummy` (null cursors) | run under a display: `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest -L input` |
 | ASan reports leaks in `libGLX_mesa` | third-party Mesa GLX at process exit (not CNA) | run with `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1` (what CI uses) |
 | Gamepad panels stay "disconnected" in `demo_input` | no controller / SDL can't map the device | attach a controller SDL knows (see `gamecontrollerdb`); Steam Input presents a virtual pad |

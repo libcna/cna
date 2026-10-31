@@ -15,33 +15,32 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 
 | Type | Header | Dedicated suite | Test files | Note |
 |------|--------|-----------------|-----------|------|
-| `ButtonState` | `modules/input/include/Microsoft/Xna/Framework/Input/ButtonState.hpp` | yes | 11 |  |
-| `Buttons` | `modules/input/include/Microsoft/Xna/Framework/Input/Buttons.hpp` | yes | 9 |  |
-| `GamePad` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePad.hpp` | yes | 10 |  |
-| `GamePadButtons` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp` | yes | 4 |  |
+| `ButtonState` | `modules/input/include/Microsoft/Xna/Framework/Input/ButtonState.hpp` | yes | 12 |  |
+| `Buttons` | `modules/input/include/Microsoft/Xna/Framework/Input/Buttons.hpp` | yes | 12 |  |
+| `Enumerator` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp` | no | 2 | covered via Touch/TouchCollectionEnumeratorTests.cpp (TouchCollectionEnumeratorTest) |
+| `GamePad` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePad.hpp` | yes | 13 |  |
+| `GamePadButtons` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp` | yes | 5 |  |
 | `GamePadCapabilities` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp` | yes | 4 |  |
-| `GamePadDPad` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadDPad.hpp` | yes | 4 |  |
-| `GamePadDeadZone` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp` | yes | 8 |  |
-| `GamePadState` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp` | yes | 6 |  |
-| `GamePadThumbSticks` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp` | yes | 4 |  |
-| `GamePadTriggers` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadTriggers.hpp` | yes | 4 |  |
-| `GamePadType` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadType.hpp` | yes | 5 |  |
-| `GestureSample` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp` | yes | 6 |  |
-| `GestureType` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp` | yes | 9 |  |
-| `KeyModifiersEXT` | `modules/input/include/Microsoft/Xna/Framework/Input/Keyboard.hpp` | no | 2 | covered via KeyboardModStateTests.cpp (KeyboardModStateEXTTest) — every flag tested individually + combined |
+| `GamePadDPad` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadDPad.hpp` | yes | 5 |  |
+| `GamePadDeadZone` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp` | yes | 9 |  |
+| `GamePadState` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadState.hpp` | yes | 8 |  |
+| `GamePadThumbSticks` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp` | yes | 5 |  |
+| `GamePadTriggers` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadTriggers.hpp` | yes | 5 |  |
+| `GamePadType` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadType.hpp` | yes | 6 |  |
+| `GestureSample` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp` | yes | 7 |  |
+| `GestureType` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp` | yes | 10 |  |
 | `KeyState` | `modules/input/include/Microsoft/Xna/Framework/Input/KeyState.hpp` | yes | 4 |  |
-| `Keyboard` | `modules/input/include/Microsoft/Xna/Framework/Input/Keyboard.hpp` | yes | 12 |  |
-| `KeyboardState` | `modules/input/include/Microsoft/Xna/Framework/Input/KeyboardState.hpp` | yes | 3 |  |
-| `Keys` | `modules/input/include/Microsoft/Xna/Framework/Input/Keys.hpp` | no | 12 | covered via KeyboardInputTests.cpp (exhaustive Keys value table, INPUT-KBD-001) |
+| `Keyboard` | `modules/input/include/Microsoft/Xna/Framework/Input/Keyboard.hpp` | yes | 13 |  |
+| `KeyboardState` | `modules/input/include/Microsoft/Xna/Framework/Input/KeyboardState.hpp` | yes | 4 |  |
+| `Keys` | `modules/input/include/Microsoft/Xna/Framework/Input/Keys.hpp` | no | 14 | covered via KeyboardInputTests.cpp (exhaustive Keys value table, INPUT-KBD-001) |
 | `Mouse` | `modules/input/include/Microsoft/Xna/Framework/Input/Mouse.hpp` | yes | 9 |  |
-| `MouseCursor` | `modules/input/include/Microsoft/Xna/Framework/Input/MouseCursor.hpp` | yes | 5 |  |
-| `MouseState` | `modules/input/include/Microsoft/Xna/Framework/Input/MouseState.hpp` | yes | 6 |  |
+| `MouseCursor` | `modules/input/include/Microsoft/Xna/Framework/Input/MouseCursor.hpp` | yes | 4 |  |
+| `MouseState` | `modules/input/include/Microsoft/Xna/Framework/Input/MouseState.hpp` | yes | 7 |  |
 | `TextInputEXT` | `modules/input/include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp` | yes | 8 |  |
-| `TextInputTypeEXT` | `modules/input/include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp` | no | 2 | covered via TextInputEXTTests.cpp (TextInputEXTTest) — all 9 values iterated in StartTextInputWithTypeWithoutWindowIsSafeNoOpForEveryType and StartTextInputWithTypeRoundTripsThroughRealWindowForEveryType |
-| `TouchCollection` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp` | yes | 7 |  |
-| `TouchLocation` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp` | yes | 5 |  |
-| `TouchLocationState` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp` | yes | 9 |  |
-| `TouchPanel` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp` | yes | 9 |  |
+| `TouchCollection` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp` | yes | 9 |  |
+| `TouchLocation` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp` | yes | 7 |  |
+| `TouchLocationState` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp` | yes | 12 |  |
+| `TouchPanel` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp` | yes | 10 |  |
 | `TouchPanelCapabilities` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchPanelCapabilities.hpp` | yes | 4 |  |
 
 ## Internal (`CNA::Internal::Input`) types
@@ -51,5 +50,5 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 | `GestureDetector` | `modules/input/include/CNA/Internal/Input/GestureDetector.hpp` | yes | 4 |  |
 | `InputManager` | `modules/input/include/CNA/Internal/Input/InputManager.hpp` | no | 10 | covered via InputResetTests / PlatformInputBridge* (no same-named suite by design) |
 | `MouseButton` | `modules/input/include/CNA/Internal/Input/InputManager.hpp` | no | 2 | covered via PlatformInputBridgeMouse* / InputManager (internal enum) |
-| `PlatformInputBridge` | `modules/input/include/CNA/Internal/Input/PlatformInputBridge.hpp` | yes | 10 |  |
-| `SdlInputBridge` | `modules/input/include/CNA/Internal/Input/SdlInputBridge.hpp` | yes | 7 |  |
+| `PlatformInputBridge` | `modules/input/include/CNA/Internal/Input/PlatformInputBridge.hpp` | yes | 11 |  |
+| `SdlInputBridge` | `modules/input/include/CNA/Internal/Input/SdlInputBridge.hpp` | yes | 6 |  |

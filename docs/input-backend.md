@@ -4,7 +4,8 @@
 
 Describes how CNA wires SDL3 input events to the `Microsoft::Xna::Framework::Input` (and
 `Input::Touch`) public API. Reference implementation: the `feature/input` branch, merged on 2026-07-18
-(Phases I1–I6, legacy tasks 700–777). FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
+(Phases I1–I6, legacy tasks 700–777). The FNA reference can live anywhere; the report generator
+accepts `--fna <checkout>` or `CNA_FNA_TREE=<checkout>`.
 
 > **Task-number scheme (INPUT-AUDIT-004, updated 2026-07-16).** This doc-set accumulated three
 > generations of task numbering as the input plan was revised: bare 3-digit numbers (e.g. "task 734",
@@ -122,7 +123,7 @@ general platform event contract for consumers that do want the native stream.
 Touch coordinates: SDL delivers finger position/delta normalized to `[0, 1]` relative to the
 window. There are two independent scaling paths from that same normalized event, feeding two
 different consumers: `to_touch_pixel_position` (file-local to `SdlInputBridge.cpp`) scales by
-the SDL window's point size (`SDL_GetWindowSize`) then maps through the graphics backend's
+the SDL window's point size (`SDL_GetWindowSize`) then maps through the graphics renderer's
 logical-coordinate transform, feeding `TouchPanel::INTERNAL_setTouchState` and its event snapshot;
 `TouchPanel::INTERNAL_onTouchEvent` instead
 scales by `TouchPanel::DisplayWidth`/`DisplayHeight` (set from the real back-buffer size by
@@ -282,30 +283,29 @@ is `docs/input-fna-fidelity.md`. Summary of what's real vs. what deviates:
 
 ## 5. Running the input tests
 
-All input coverage lives in the single `CnaTests` binary. To build and run just the input
-suites (Keyboard, Mouse, MouseCursor, GamePad, Touch, Gesture, TextInputEXT, and the internal
-`SdlInputBridge` bridge tests) on the default EasyGL backend:
+The canonical gate has two lanes: `CnaInputModuleTests` contains every test owned by
+`modules/input/tests`, while `CnaInputCrossModuleTests` selects an explicit set of platform,
+runtime and Guide integration suites from `CnaTests`. To build and run both lanes with OPENGLES3:
 
 ```bash
 git submodule update --init   # first time only (see README)
 cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-input-easygl --target CnaTests -j"$(nproc)"
+cmake --build cmake-build-input-easygl --target cna_input_test_gate --parallel 8
 
-# Canonical input-test selector (INPUT-BUILD-003): runs the single-source-of-truth filter
-# (CNA_INPUT_TEST_FILTER in CMakeLists.txt), shuffled x3 for order-independence.
+# Both lanes run shuffled five times for order-independence.
 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 ```
 
-`ctest -L input` is the one authoritative way to run the input subset; the token list lives only in
-`CMakeLists.txt` (`CNA_INPUT_TEST_FILTER`) and the **authoritative counts** live in
-`docs/input-build-and-test.md` (§Test counts). Order-dependence in the process-wide static input state
-(`InputManager`, `TouchPanel`, `GestureDetector`, and the `MouseCursor` stock-cursor singletons persist for the
-process lifetime) is shaken out by the baked-in `--gtest_shuffle --gtest_repeat=5` — the standardized
-determinism gate (INPUT-BUILD-009); bump the repeat higher via a direct binary invocation with the same
-filter variable if you want more iterations.
+`ctest -L input` is authoritative. The module lane needs no filter, so a new input-owned suite joins
+automatically. The small cross-module allowlist lives in `cmake/UnitTests.cmake`; its suite-level
+patterns prevent unrelated test methods containing words such as "touch" or "keyboard" from entering
+the gate. The exact current counts live in `docs/input-build-and-test.md`.
+
+Order-dependence in process-wide input state (`InputManager`, `TouchPanel`, `GestureDetector`, and the
+`MouseCursor` stock cursors) is shaken out by `--gtest_shuffle --gtest_repeat=5` in both lanes.
 
 Swap `-DCNA_GRAPHICS_RENDERER=OPENGLES3` for `SDLGPU` to verify the same input tests on the
-other backends. The full suite is just
+other renderer used by input CI. The full suite is just
 `./cmake-build-input-easygl/CnaTests` with no filter.
 
 ---

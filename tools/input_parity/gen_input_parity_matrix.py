@@ -20,10 +20,13 @@ parser is regex-based and tuned to this project's regular header style; treat fl
 Usage
 -----
     python3 tools/input_parity/gen_input_parity_matrix.py \
-        [--fna /rv/data/library/github.com/FNA-XNA/FNA/src/Input] \
+        [--fna /path/to/FNA-or-its-src/Input] \
         [--out docs/input-member-parity-matrix.md]
 
+    python3 tools/input_parity/gen_input_parity_matrix.py --check
+
 With no --out the matrix is printed to stdout. Run from the repo root.
+The FNA checkout is resolved from --fna, CNA_FNA_TREE, or a nearby sibling checkout.
 """
 
 from __future__ import annotations
@@ -35,13 +38,24 @@ import sys
 from dataclasses import dataclass, field
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-DEFAULT_HEADERS = os.path.join(REPO_ROOT, "include", "Microsoft", "Xna", "Framework", "Input")
-DEFAULT_FNA = "/rv/data/library/github.com/FNA-XNA/FNA/src/Input"
+DEFAULT_HEADERS = os.path.join(
+    REPO_ROOT, "modules", "input", "include", "Microsoft", "Xna", "Framework", "Input")
 DEFAULT_OUT = os.path.join(REPO_ROOT, "docs", "input-member-parity-matrix.md")
 
 # CNA header basename (no .hpp) -> FNA .cs basename. MouseCursor has no FNA equivalent (CNAEXT class).
 FNA_FILE_FOR = {
     "MouseCursor": None,  # CNAEXT: CNA-only cursor handle, no FNA source
+}
+
+FNA_SOURCE_LABEL_FOR = {
+    "Enumerator": "Touch/TouchCollection.cs",
+    "GestureSample": "Touch/GestureSample.cs",
+    "GestureType": "Touch/GestureType.cs",
+    "TouchCollection": "Touch/TouchCollection.cs",
+    "TouchLocation": "Touch/TouchLocation.cs",
+    "TouchLocationState": "Touch/TouchLocationState.cs",
+    "TouchPanel": "Touch/TouchPanel.cs",
+    "TouchPanelCapabilities": "Touch/TouchPanelCapabilities.cs",
 }
 
 
@@ -94,8 +108,10 @@ def parse_enum(name: str, body: str) -> CppType:
 
 def parse_class(name: str, kind: str, body: str, header_text: str) -> CppType:
     # A whole class is CNAEXT when the CNAEXT marker sits on the class declaration itself.
-    is_cnaext_class = bool(re.search(r"\bCNAEXT\b[^;{]*\b(class|struct)\b\s+" + re.escape(name),
-                                    header_text))
+    is_cnaext_class = bool(re.search(
+        r"\b(?:CNAEXT\s+(?:class|struct)|(?:class|struct)\s+CNAEXT)\s+"
+        + re.escape(name) + r"\b",
+        header_text))
     t = CppType(name=name, kind=kind, is_cnaext_class=is_cnaext_class)
 
     # Track access: struct defaults public, class defaults private.
@@ -194,7 +210,7 @@ def parse_header(path: str) -> list:
     # block), misparsing that unrelated brace as the enum's own body and, as a side effect, hiding
     # the real class from the class-boundary scan below (which skips anything inside a "consumed"
     # enum span).
-    ENUM_CLASS_RE = r"enum\s+class\s+([A-Za-z_]\w*)\s*(?::[^\{;]+)?\{(.*?)\}"
+    ENUM_CLASS_RE = r"enum\s+class\s+(?:CNAEXT\s+)?([A-Za-z_]\w*)\s*(?::[^\{;]+)?\{(.*?)\}"
     for m in re.finditer(ENUM_CLASS_RE, text, flags=re.S):
         types.append(parse_enum(m.group(1), m.group(2)))
     consumed_enum_spans = [(m.start(), m.end()) for m in re.finditer(ENUM_CLASS_RE, text, flags=re.S)]
@@ -203,7 +219,9 @@ def parse_header(path: str) -> list:
     # codebase's consistent single-space "enum class" style — see ENUM_CLASS_RE's own note above for
     # why a *bodyless* enum-class forward declaration must not be misread as starting a same-named
     # ordinary class here too; [^\{;]+ carries the same `;`-stops-the-search fix as ENUM_CLASS_RE).
-    for m in re.finditer(r"(?<!enum )\b(class|struct)\s+([A-Za-z_]\w*)\s*(?:final)?\s*(?::[^\{;]+)?\{", text):
+    for m in re.finditer(
+            r"(?<!enum )\b(class|struct)\s+(?:CNAEXT\s+)?([A-Za-z_]\w*)\s*"
+            r"(?:final)?\s*(?::[^\{;]+)?\{", text):
         kind, name = m.group(1), m.group(2)
         if any(a <= m.start() < b for a, b in consumed_enum_spans):
             continue
@@ -255,13 +273,32 @@ def parse_cs(path: str) -> dict:
                 vals.append(CsMember(mm.group(1), "enum", "public"))
         out[m.group(1)] = vals
 
-    for m in re.finditer(r"\b(?:public|internal)\s+(?:sealed\s+|static\s+|partial\s+)*"
-                         r"(class|struct)\s+([A-Za-z_]\w*)", text):
+    type_re = (r"\b(?:public|internal)\s+(?:sealed\s+|static\s+|partial\s+)*"
+               r"(class|struct)\s+([A-Za-z_]\w*)[^\{;]*\{")
+    for m in re.finditer(type_re, text):
         tname = m.group(2)
         if tname in out:
             continue
-        out[tname] = extract_cs_members(text, tname)
+        body = extract_brace_body(text, m.end() - 1)
+        if body is None:
+            continue
+        out[tname] = extract_cs_members(mask_nested_cs_types(body), tname)
     return out
+
+
+def mask_nested_cs_types(body: str) -> str:
+    """Hide nested type bodies while retaining the enclosing type's own declarations."""
+    nested_re = (r"\b(?:public|internal|protected|private)\s+"
+                 r"(?:sealed\s+|static\s+|partial\s+)*"
+                 r"(?:class|struct|enum)\s+[A-Za-z_]\w*[^\{;]*\{")
+    chars = list(body)
+    for match in list(re.finditer(nested_re, body)):
+        nested_body = extract_brace_body(body, match.end() - 1)
+        if nested_body is None:
+            continue
+        close = match.end() + len(nested_body) + 1
+        chars[match.start():close] = " " * (close - match.start())
+    return "".join(chars)
 
 
 def extract_cs_members(text: str, type_name: str) -> list:
@@ -409,7 +446,7 @@ def cross_check(cna_types: dict, fna: dict):
 # Rendering
 # --------------------------------------------------------------------------------------------------
 
-def render(per_type: dict, gap_strict: list, gap_fna: list, gap_interface: list, fna_root: str) -> str:
+def render(per_type: dict, gap_strict: list, gap_fna: list, gap_interface: list) -> str:
     out = []
     out.append("# Input member-level parity matrix (INPUT-API-027)")
     out.append("")
@@ -424,7 +461,7 @@ def render(per_type: dict, gap_strict: list, gap_fna: list, gap_interface: list,
     out.append("")
     out.append("> **Generated** by `tools/input_parity/gen_input_parity_matrix.py` from the public")
     out.append("> `Microsoft::Xna::Framework::Input` (+ `::Touch`) headers and the FNA reference")
-    out.append(f"> at `{fna_root}`. Do not hand-edit — re-run the generator. This is a review aid;")
+    out.append("> in a local `FNA/src/Input` checkout. Do not hand-edit — re-run the generator. This is a review aid;")
     out.append("> exact signatures stay pinned by `PublicApiInputSignatureFreezeTests.cpp`")
     out.append("> (INPUT-API-031) and enum values by INPUT-API-034.")
     out.append("")
@@ -463,7 +500,8 @@ def render(per_type: dict, gap_strict: list, gap_fna: list, gap_interface: list,
 
     for tname in sorted(per_type):
         ctype, rows, missing, fna_name = per_type[tname]
-        src = f"FNA `{fna_name}.cs`" if fna_name else "no FNA source (CNA-only)"
+        source_label = FNA_SOURCE_LABEL_FOR.get(tname, f"{fna_name}.cs" if fna_name else None)
+        src = f"FNA `{source_label}`" if source_label else "no FNA source (CNA-only)"
         out.append(f"## `{tname}` — {ctype.kind} ({src})")
         out.append("")
         if not rows:
@@ -485,11 +523,48 @@ def render(per_type: dict, gap_strict: list, gap_fna: list, gap_interface: list,
 
 # --------------------------------------------------------------------------------------------------
 
+def resolve_fna_input(explicit: str | None) -> str | None:
+    candidates = []
+    if explicit:
+        candidates.append(explicit)
+    elif os.environ.get("CNA_FNA_TREE"):
+        candidates.append(os.environ["CNA_FNA_TREE"])
+    else:
+        candidates.extend([
+            os.path.join(REPO_ROOT, "..", "FNA"),
+            os.path.join(REPO_ROOT, "..", "..", "FNA-XNA", "FNA"),
+        ])
+
+    for candidate in candidates:
+        candidate = os.path.abspath(candidate)
+        input_dir = candidate if os.path.isfile(os.path.join(candidate, "ButtonState.cs")) \
+            else os.path.join(candidate, "src", "Input")
+        if os.path.isfile(os.path.join(input_dir, "ButtonState.cs")):
+            return input_dir
+    return None
+
+
+def check_report(path: str, expected: str) -> bool:
+    if not os.path.isfile(path):
+        print(f"error: generated report is missing: {path}", file=sys.stderr)
+        return False
+    with open(path, encoding="utf-8") as fh:
+        actual = fh.read()
+    if actual != expected:
+        print(f"error: generated report is stale: {path}", file=sys.stderr)
+        print("       regenerate it with --out, then review and commit the diff", file=sys.stderr)
+        return False
+    return True
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--headers", default=DEFAULT_HEADERS)
-    ap.add_argument("--fna", default=DEFAULT_FNA)
+    ap.add_argument("--fna", default=None,
+                    help="FNA checkout root or its src/Input directory; defaults to CNA_FNA_TREE or a nearby checkout")
     ap.add_argument("--out", default=None, help="output path (default: stdout)")
+    ap.add_argument("--check", action="store_true",
+                    help="compare generated output with --out (or the committed default) and fail on drift/gaps")
     args = ap.parse_args(argv)
 
     if not os.path.isdir(args.headers):
@@ -509,18 +584,34 @@ def main(argv=None) -> int:
         for t in parse_header(p):
             cna_types[t.name] = t
 
-    fna = {}
-    if os.path.isdir(args.fna):
-        for root, _dirs, files in os.walk(args.fna):
-            for f in files:
-                if f.endswith(".cs"):
-                    fna.update(parse_cs(os.path.join(root, f)))
-    else:
-        print(f"warning: FNA dir not found ({args.fna}); FNA columns will be empty.",
+    fna_input = resolve_fna_input(args.fna)
+    if fna_input is None:
+        print("error: FNA src/Input checkout not found; pass --fna or set CNA_FNA_TREE",
               file=sys.stderr)
+        return 2
+    print(f"using FNA reference: {fna_input}", file=sys.stderr)
+
+    fna = {}
+    for root, _dirs, files in os.walk(fna_input):
+        for f in files:
+            if f.endswith(".cs"):
+                fna.update(parse_cs(os.path.join(root, f)))
 
     per_type, gap_strict, gap_fna, gap_interface = cross_check(cna_types, fna)
-    md = render(per_type, gap_strict, gap_fna, gap_interface, args.fna)
+    md = render(per_type, gap_strict, gap_fna, gap_interface)
+
+    if args.check:
+        target = os.path.abspath(args.out or DEFAULT_OUT)
+        report_matches = check_report(target, md)
+        if gap_strict or gap_fna:
+            print(f"error: parity report has {len(gap_strict)} STRICT/EXT gaps and "
+                  f"{len(gap_fna)} FNA-only members", file=sys.stderr)
+            return 1
+        if not report_matches:
+            return 1
+        print(f"checked {target}: current, 0 STRICT/EXT gaps, 0 FNA-only members",
+              file=sys.stderr)
+        return 0
 
     if args.out:
         with open(args.out, "w", encoding="utf-8") as fh:
@@ -530,7 +621,7 @@ def main(argv=None) -> int:
               file=sys.stderr)
     else:
         sys.stdout.write(md)
-    return 0
+    return 1 if gap_strict or gap_fna else 0
 
 
 if __name__ == "__main__":
