@@ -7,10 +7,8 @@
 // = position + accumulated kerning/cropping offset, sized by the glyph's own bounds, sampling the
 // glyph's source rect from the font's atlas texture).
 //
-// Since CNA has no XNB content pipeline, SpriteFont exposes its raw glyph/cropping/kerning tables
-// directly (see SpriteFont.hpp) -- this test hand-builds a minimal, single-character font,
-// matching this project's established "hand-build a minimal fixture when no real asset is
-// available" convention: an 8x8 solid-white atlas texture representing the single glyph 'A', with
+// This renderer-local pixel test hand-builds a minimal, single-character font so it isolates
+// drawing from asset loading: an 8x8 solid-white atlas texture representing the single glyph 'A', with
 // zero cropping offset and zero left/right kerning bearing, so the destination rect maps directly
 // and exactly:
 //   glyphBounds = cropping = (0, 0, 8, 8);  kerning = (leftBearing=0, width=8, rightBearing=0)

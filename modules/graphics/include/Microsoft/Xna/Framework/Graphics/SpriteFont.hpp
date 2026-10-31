@@ -26,9 +26,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Constructs a SpriteFont from its glyph atlas and layout tables.
          *
-         * In XNA this constructor is internal and only invoked by the content
-         * pipeline's SpriteFontReader. CNA has no XNB pipeline, so it is exposed
-         * for content readers (or applications) that build the atlas themselves.
+         * In XNA this constructor is internal and invoked by SpriteFontReader. CNA exposes it as
+         * an extension for native content readers and applications that build an atlas directly.
          * The four list parameters must all have the same length, one entry per
          * glyph in @p characters.
          *
