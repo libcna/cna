@@ -155,12 +155,17 @@ Notes:
 - The three HEADLESS skips are two clipboard round trips (no clipboard service) and the SDL3 relative
   mouse-mode real-window case. The X11 CI lanes provide the corresponding services.
 - **The full-suite crash P9-031 recorded on 2026-07-17 is fixed.** Running the whole unfiltered
-  `CnaTests` binary in one process aborted with `double free or corruption (fasttop)` inside
-  `ENetBackendTest`, unrelated to Input. AddressSanitizer later named the cause: four ENet backend
-  tests handed `AddLocalGamer` a stack `SignedInGamer` destroyed before the session that used it.
-  `e140c3531` (AM4-322, 2026-10-09) declares each gamer first, and all 357 net tests are clean under
-  ASan. The 2026-07-16 full-suite figure (4623 passed / 20 failed / 2 skipped) is a dated record, not
-  today's count.
+  `CnaTests` binary in one process aborted with `double free or corruption (fasttop)` beside two
+  `ENetBackendTest` cases that explicitly disposed their session. Their fixture disposed it again
+  during destruction; the tested `feature/input` lineage did not contain sibling-branch commit
+  `dd4f8a3cc` (2026-07-16), whose AddressSanitizer-confirmed fix makes `NetworkSession::Dispose()`
+  idempotent and clears its non-owning gamer views. The isolated cases could pass because the second
+  disposal was undefined behavior whose manifestation depended on the preceding allocation history.
+  Current verification on 2026-10-31 passed all 565 `CnaNetTests`, plus 100 shuffled repetitions of
+  both original cases and the direct double-dispose regression (300/300). `e140c3531` (AM4-322) and
+  `b80f5bb0a` (AM4-323) fixed two separate, later lifetime defects found on 2026-10-09; neither caused
+  the July report. The 2026-07-16 full-suite figure (4623 passed / 20 failed / 2 skipped) is a dated
+  record, not today's count.
 - The 20 pre-2026-07-17 full-suite failures (before the crash was discovered) were pre-existing and
   unrelated to Input: all 20 were in the XNB/Content/Model/Effect/Texture3D pipeline
   (`"SDL_Renderer does not support 3D: CreateVertexBuffer"`, a documented limitation of the
