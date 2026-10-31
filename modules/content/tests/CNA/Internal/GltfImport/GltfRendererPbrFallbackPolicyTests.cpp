@@ -78,6 +78,43 @@ namespace
         return Normalize(std::move(result));
     }
 
+    // HEADLESS names every texture field only to reject a resource created by another renderer;
+    // it never samples a map or substitutes a semantic fallback. Keep that third disposition
+    // explicit instead of teaching the PBR inventories that ownership validation is rendering.
+    constexpr std::array<const char*, 1> kPbrMapValidationOnlyRenderers{{"headless"}};
+
+    std::set<std::string> RendererNamesMentioningPbrMaps(
+        const std::filesystem::path& renderers)
+    {
+        std::set<std::string> observed;
+        for (const std::filesystem::directory_entry& entry :
+             std::filesystem::directory_iterator(renderers))
+        {
+            if (!entry.is_directory()) { continue; }
+            const std::filesystem::path src = entry.path() / "src";
+            if (!std::filesystem::is_directory(src)) { continue; }
+            for (const std::filesystem::directory_entry& source :
+                 std::filesystem::recursive_directory_iterator(src))
+            {
+                if (!source.is_regular_file() || !IsPolicySource(source.path())) { continue; }
+                if (ReadFile(source.path()).find("pbrNormalMap") != std::string::npos)
+                {
+                    observed.insert(entry.path().filename().string());
+                    break;
+                }
+            }
+        }
+        return observed;
+    }
+
+    std::set<std::string> RendererNamesConsumingPbrMaps(
+        const std::filesystem::path& renderers)
+    {
+        std::set<std::string> observed = RendererNamesMentioningPbrMaps(renderers);
+        for (const char* name : kPbrMapValidationOnlyRenderers) { observed.erase(name); }
+        return observed;
+    }
+
     /// How a renderer answers "this PBR map is absent".
     ///
     /// Two strategies, both correct, and the distinction is why this is a field rather than an
@@ -753,31 +790,29 @@ TEST(GltfRendererPbrFallbackPolicy, InventoryCoversEveryRendererThatConsumesPbrM
     const std::filesystem::path renderers = RepositoryRoot() / "modules" / "renderers";
     ASSERT_TRUE(std::filesystem::is_directory(renderers)) << "cannot find " << renderers;
 
-    std::set<std::string> observed;
-    for (const std::filesystem::directory_entry& entry :
-         std::filesystem::directory_iterator(renderers))
-    {
-        if (!entry.is_directory()) { continue; }
-        const std::filesystem::path src = entry.path() / "src";
-        if (!std::filesystem::is_directory(src)) { continue; }
-        bool consumesPbrMaps = false;
-        for (const std::filesystem::directory_entry& source :
-             std::filesystem::recursive_directory_iterator(src))
-        {
-            if (!source.is_regular_file() || !IsPolicySource(source.path())) { continue; }
-            if (ReadFile(source.path()).find("pbrNormalMap") != std::string::npos)
-            {
-                consumesPbrMaps = true;
-                break;
-            }
-        }
-        if (consumesPbrMaps) { observed.insert(entry.path().filename().string()); }
-    }
+    const std::set<std::string> observed = RendererNamesConsumingPbrMaps(renderers);
 
     std::set<std::string> expected;
     for (const RendererAudit& audit : kAudits) { expected.insert(audit.name); }
     EXPECT_EQ(expected, observed)
         << "a PBR renderer was added/removed without updating GLTF-374's fallback contract";
+}
+
+TEST(GltfRendererPbrFallbackPolicy, HeadlessPbrMapReferencesValidateOwnershipOnly)
+{
+    const std::filesystem::path renderers = RepositoryRoot() / "modules" / "renderers";
+    ASSERT_TRUE(std::filesystem::is_directory(renderers));
+
+    const std::set<std::string> mentions = RendererNamesMentioningPbrMaps(renderers);
+    ASSERT_EQ(1u, kPbrMapValidationOnlyRenderers.size());
+    EXPECT_TRUE(mentions.contains(kPbrMapValidationOnlyRenderers[0]));
+
+    const std::string source = RendererText(renderers / kPbrMapValidationOnlyRenderers[0]);
+    ASSERT_FALSE(source.empty());
+    EXPECT_NE(std::string::npos, source.find(Normalize("DrawResourcesBelongToHeadless(params)")));
+    EXPECT_NE(std::string::npos, source.find(Normalize("IsHeadlessTextureResource(texture)")));
+    EXPECT_EQ(std::string::npos, source.find("pbrNormalScale"))
+        << "HEADLESS started consuming PBR material state; move it into the renderer audits";
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrMapHasItsSemanticNeutralFallback)
@@ -1120,25 +1155,9 @@ TEST(GltfRendererPbrFallbackPolicy, SpecularTextureInventoryClassifiesEveryPbrRe
     ASSERT_TRUE(std::filesystem::is_directory(renderers));
 
     // Same discriminator as InventoryCoversEveryRendererThatConsumesPbrMaps, so a new PBR renderer
-    // cannot appear to one audit and not the other.
-    std::set<std::string> observed;
-    for (const std::filesystem::directory_entry& entry :
-         std::filesystem::directory_iterator(renderers))
-    {
-        if (!entry.is_directory()) { continue; }
-        const std::filesystem::path src = entry.path() / "src";
-        if (!std::filesystem::is_directory(src)) { continue; }
-        for (const std::filesystem::directory_entry& source :
-             std::filesystem::recursive_directory_iterator(src))
-        {
-            if (!source.is_regular_file() || !IsPolicySource(source.path())) { continue; }
-            if (ReadFile(source.path()).find("pbrNormalMap") != std::string::npos)
-            {
-                observed.insert(entry.path().filename().string());
-                break;
-            }
-        }
-    }
+    // cannot appear to one audit and not the other. HEADLESS's ownership-only validation is a
+    // separately pinned disposition above, not a renderer that samples these maps.
+    const std::set<std::string> observed = RendererNamesConsumingPbrMaps(renderers);
     EXPECT_EQ(expected, observed)
         << "a PBR renderer was added or removed without a GLTF-344 specular-texture disposition";
 
@@ -2111,7 +2130,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
         {"webgpu", "the skinned PBR stride check",
          "if (skinnedPbrStride != 68 && skinnedPbrStride != 80)"},
         {"directx9", "the rigid PBR stride check",
-         "if (!skinned && stride != 48 && stride != 60)"},
+         "if (!skinned && stride != 48 && stride != 60 && stride != 68 && stride != 80)"},
         {"directx9", "the skinned PBR stride check",
          "if (skinned && stride != 68 && stride != 80)"},
         {"sdl-gpu", "the remaining stride-derived draw-entry dispatch",

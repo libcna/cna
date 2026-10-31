@@ -5,8 +5,8 @@
 // "skeleton"/"animations" fields, Task 941's existing shape) plus vertex/index/skeleton binary
 // sidecars, one standalone, shareable .cnj AnimationClip file per animation clip (CNB-48), and any
 // referenced base-color textures. Targets CNA's general-purpose Model/AnimationClip path, not the
-// separate Avatar-specific SkinnedModelEXT/.skinnedmodel.json system (see ../../gltf.md, which
-// analyzes that different target).
+// separate Avatar-specific SkinnedModelEXT/.skinnedmodel.json system (see
+// docs/skinned-model-ext.md for that different target).
 //
 // CNJ CNB-70 (Phase 13D): the actual glTF parsing/skeleton/animation/mesh-extraction core
 // (topological bone reorder, sparse-accessor-safe reads, CUBICSPLINE Hermite evaluation, texture
@@ -1438,7 +1438,7 @@ namespace
         std::string baseName;
         // glTF mandates meters; a source file that doesn't follow that convention (some exporters
         // don't) can be corrected with an explicit multiplier applied uniformly to every position
-        // and bone translation (see gltf.md's own quality checklist, "Unit/coordinate convention").
+        // and bone translation (see docs/gltf-conventions.md, "Where this leaves unitScale").
         float unitScale = 1.0f;
         bool emitMessages = true;
     };
