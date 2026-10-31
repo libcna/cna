@@ -319,12 +319,21 @@ class WebGpuBindingCostTest : public Game
         const Color red(255, 0, 0, 255);
         const Color green(0, 255, 0, 255);
         const Rectangle whole(0, 0, 1, 1);
+        // XNA refuses SetData while the texture is still bound. The previous frame ends by
+        // sampling mutable_ on SpriteBatch slot 0, so release that public binding without
+        // disturbing the deferred command's renderer-owned keep-alive.
+        dev.getTexturesProperty()(0, nullptr);
         mutable_.SetData(0, &whole, &red, 0, 1);
         for (int i = 0; i < kRenderTargets; ++i)
         {
             dev.SetRenderTarget(targets_[static_cast<std::size_t>(i)].get());
             if (rewrite && i == 1)
+            {
+                // The first target sampled mutable_ and left it in slot 0. Unbinding is the XNA
+                // prerequisite for SetData; the queued first draw must still retain the old bytes.
+                dev.getTexturesProperty()(0, nullptr);
                 mutable_.SetData(0, &whole, &green, 0, 1);
+            }
             dev.Clear(Color::Black);
             sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
             sprites_->Draw(i == 0 ? mutable_ : whiteA_, Rectangle(0, 0, kTargetSize / 2, kTargetSize),
