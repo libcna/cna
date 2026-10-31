@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Surface-format support-document reconciliation (2026-10-31): the EasyGL page now separates XNA
+  profile/resource restrictions, renderer classification, public transfer fidelity, physical GL
+  storage and renderability. It records the completed classic Texture2D/cube/volume and DXT work,
+  the runtime-probed normalized/float render-target matrix, honest refusal of FNA extension
+  formats, and the surviving `Alpha8`, texture-norm16 and WebGL swizzle limitations; the obsolete
+  T176 implementation backlog was removed. The focused private-GPU validation passes all 54
+  format, sampling, render-target and refusal regressions.
 - Render-target support-document reconciliation (2026-10-31): the Phase 39 page now reflects the
   implemented closure of Tasks 877, 880 and 881, recorded cube-face binding/disposal, exact EasyGL
   depth formats, real viewport state and the shared one/four-target profile ceilings. The old

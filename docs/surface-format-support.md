@@ -1,7 +1,8 @@
-# SurfaceFormat Renderer Support — CNA
+# SurfaceFormat support — EasyGL
 
-> Generated from source inspection against Tasks 174, 281.
-> Covers: EasyGL.
+> Current source audit: 2026-10-31. This page covers the EasyGL renderer family
+> (`OPENGLES3`, `OPENGL33`, and `WEBGL2`). Other renderers publish their capability boundary in
+> their own renderer documentation and in `graphics-renderer-feature-matrix.md`.
 
 ---
 
@@ -64,7 +65,7 @@ not CNA inventions.
 
 Ported directly from FNA's `Texture.cs` ("Static SurfaceFormat Size Methods" region) as two public
 static methods on CNA's `Texture` class — real FNA API, so no `SurfaceFormatHelper` class was
-invented; both throw `std::out_of_range` for an unrecognized enum value.
+invented; both throw `System::ArgumentOutOfRangeException` for an unrecognized enum value.
 
 | Format | `GetBlockSizeSquaredEXT` | `GetFormatSizeEXT` (bytes) |
 |---|:---:|:---:|
@@ -80,13 +81,14 @@ invented; both throw `std::out_of_range` for an unrecognized enum value.
 
 - `Texture::GetPixelStoreAlignment(format)` — `min(8, GetFormatSizeEXT(format))`, the OpenGL 2.1
   `GL_PACK_ALIGNMENT`/`GL_UNPACK_ALIGNMENT` cap.
-- `Texture::ValidateGetDataFormat(format, elementSizeInBytes)` — throws `std::invalid_argument`
-  unless `elementSizeInBytes` evenly divides `GetFormatSizeEXT(format)`; throws `std::out_of_range`
-  for an unrecognized format, same as `GetFormatSizeEXT` itself.
+- `Texture::ValidateGetDataFormat(format, elementSizeInBytes)` — throws
+  `System::ArgumentException` unless `elementSizeInBytes` evenly divides
+  `GetFormatSizeEXT(format)`; an unrecognized format propagates
+  `System::ArgumentOutOfRangeException` from `GetFormatSizeEXT`.
 
 Both are `internal` in FNA; they are `public static` on CNA's `Texture` because the C API exports
 them (`modules/c-api/spec/Texture.toml`).
-Wired `ValidateGetDataFormat` into all 4 of FNA's real call sites: `Texture2D::GetData`,
+`ValidateGetDataFormat` is wired into all 4 of FNA's real call sites: `Texture2D::GetData`,
 `Texture3D::GetData`, `TextureCube::GetData`, `GraphicsDevice::GetBackBufferData` — all using
 `elementSizeInBytes = 4` (this project's `Color`/RGBA-raw-bytes convention). Renderer-specific
 promotion gates now use it for supported non-Color formats, including EasyGL's ES 3-class
@@ -94,128 +96,123 @@ promotion gates now use it for supported non-Color formats, including EasyGL's E
 
 ---
 
-## Color format mapping (Task 284)
+## Current EasyGL contract
 
-Channel order is correct, confirmed by the exact-color pixel-readback tests. Those use saturated
-0/255 values, which cannot reveal a **linear-vs-sRGB** bug (both are fixed points of the sRGB
-curve), so Task 284 tested a mid-range 128. FNA's `SurfaceFormat.Color` is linear
-(`ColorSrgbEXT` is the gamma-encoded variant); EasyGL has no `SRGB`/`Srgb` format reference in its
-renderer source.
+Format support is selected in three layers, in this order:
 
----
+1. XNA profile and resource-kind rules reject combinations that XNA does not permit. In
+   particular, volume textures are HiDef-only, volumes cannot use DXT or signed-normalized formats,
+   and cubes cannot use `NormalizedByte2` or `NormalizedByte4`.
+2. The active renderer classifies the exact resource kind. Texture2D, TextureCube, Texture3D, and
+   render-target capabilities are deliberately separate questions.
+3. A `Defer` verdict reaches the framework's conservative default, which accepts only `Color`.
+   Unknown formats therefore do not silently become RGBA8 textures.
 
-## How format selection works (current state)
+Render targets follow XNA/FNA preferred-format selection: if the preferred format is not allowed or
+not renderable, the public resource is created as `Color` and reports that substitution. Texture
+resources do not substitute an unsupported requested format; construction throws a named
+`System` exception.
 
-Historically `Texture2D` stored the requested `SurfaceFormat` in `format_` but did not forward it
-to the renderers covered by this document. `ImageData` now carries the format ordinal. EasyGL uses
-it for `NormalizedByte4` on OpenGL ES 3/OpenGL 3.3/WebGL 2 profiles, storing exact signed bytes as
-`GL_RGBA8_SNORM`.
+### Classic XNA formats (ordinals 0–19)
 
-`Texture3D` and `TextureCube` receive `surfaceFormat` as an `int` argument in
-`CreateTexture3D` / `CreateTextureCube`, but every renderer ignores it (`/* surfaceFormat */`).
+`Exact` below means that full, partial, mip-level, and generic typed `SetData`/`GetData` transfers
+preserve the format's declared bytes. It does not require the GL allocation to have the identical
+channel count: EasyGL may widen one- and two-channel data while retaining exact public transfers
+and format-correct shader values. `Probed` means support is decided on the live GL context before
+the renderer advertises it.
 
-Other accepted textures remain RGBA8 unorm.
+| Format group | Texture2D | TextureCube | Texture3D | Color render target |
+|---|---|---|---|---|
+| `Color` | Exact, RGBA8 | Exact, RGBA8 | Exact, RGBA8 | RGBA8 |
+| `Bgr565`, `Bgra5551`, `Bgra4444` | Exact packed storage and sampling | Exact | Exact | Preferred format falls back to `Color` |
+| `Dxt1`, `Dxt3`, `Dxt5` | Exact block transfers; native S3TC or exact decode fallback | Exact block transfers and sampling | Rejected by XNA volume rules | Rejected by XNA render-target rules; preferred format falls back to `Color` |
+| `NormalizedByte2`, `NormalizedByte4` | Exact signed-normalized storage and sampling | Rejected by XNA cube rules | Rejected by XNA volume rules | Preferred format falls back to `Color` |
+| `Rgba1010102` | Exact packed storage and sampling | Exact | Exact | Probed RGB10_A2 |
+| `Rg32`, `Rgba64` | Exact when texture-norm16 is available | Exact when texture-norm16 is available | Exact when texture-norm16 is available | Probed RG16/RGBA16; otherwise `Color` fallback |
+| `Alpha8` | Exact alpha semantics using format-correct widening | Exact | Exact | Not renderable; preferred format falls back to `Color` |
+| `Single`, `Vector2`, `Vector4` | Exact float storage/sampling, with widening where needed | Exact | Exact | Probed R32F/RG32F/RGBA32F |
+| `HalfSingle`, `HalfVector2`, `HalfVector4`, `HdrBlendable` | Exact half-float storage/sampling, with widening where needed | Exact | Exact | Probed R16F/RG16F/RGBA16F; `HdrBlendable` uses RGBA16F |
 
----
+The Reach profile still rejects its eleven HiDef-only classic Texture2D formats before EasyGL is
+asked. The renderer's broader storage support does not bypass that public XNA restriction.
 
-## Legend
+### FNA extension formats (ordinals 20–26)
 
-| Symbol | Meaning |
-|--------|---------|
-| ✅ | Correct GPU format; SetData / GetData round-trip works |
-| ⚠️ | Partially works with caveats documented below |
-| ❌ | Not implemented; silently wrong or rejected |
-| — | Not applicable (renderer has no support for this texture type) |
+`ColorBgraEXT`, `ColorSrgbEXT`, `Dxt5SrgbEXT`, `Bc7EXT`, `Bc7SrgbEXT`, `ByteEXT`, and
+`UShortEXT` have correct enum values and CPU size calculations, but they are not promoted by
+EasyGL's resource classifiers. Texture construction is refused with a named `System` exception; a
+preferred render-target request follows the normal `Color` substitution rule. In particular,
+`ColorSrgbEXT` must not be described as linear RGBA8 storage: it is refused rather than silently
+losing its transfer function.
 
----
+This is separate from CNA's sRGB math used by PBR and content processing. Those shader/CPU transfer
+functions do not imply support for the `ColorSrgbEXT`, `Dxt5SrgbEXT`, or `Bc7SrgbEXT` resource
+formats.
 
-## Format table
+## Storage, transfer, and sampling details
 
-| SurfaceFormat | Bytes/px | EasyGL | Notes |
-|---|---|---|---|
-| **Color** | 4 | ✅ GL_RGBA8 | RGBA byte order; only fully supported format |
-| Bgr565 | 2 | ❌ | Format not forwarded; RGBA8 used instead |
-| Bgra5551 | 2 | ❌ | Same |
-| Bgra4444 | 2 | ❌ | Same |
-| **Dxt1** | 0.5 | ⚠️ | `DDSFromStreamEXT` (.DDS): CPU-decompressed to RGBA8 before upload — works, but 8× VRAM overhead. Direct `SetData` with compressed blocks: ❌ misinterpreted as RGBA8. No native GPU DXT path. |
-| **Dxt3** | 1 | ⚠️ | Same as Dxt1 |
-| **Dxt5** | 1 | ⚠️ | Same as Dxt1 |
-| NormalizedByte2 | 2 | ❌ | Signed 8-bit per channel; no signed GL format used |
-| NormalizedByte4 | 4 | ✅ GL_RGBA8_SNORM (ES 3-class profiles) | Signed bytes upload and sample in [-1,1] |
-| Rgba1010102 | 4 | ❌ | 10-bit per channel; requires GL_RGB10_A2 |
-| Rg32 | 4 | ❌ | 16-bit per channel RG; requires GL_RG16 |
-| Rgba64 | 8 | ❌ | 16-bit per channel RGBA; requires GL_RGBA16 |
-| Alpha8 | 1 | ❌ | Single alpha channel; requires GL_R8 + swizzle or GL_ALPHA |
-| Single | 4 | ❌ | 32-bit float R; requires GL_R32F |
-| Vector2 | 8 | ❌ | 32-bit float RG; requires GL_RG32F |
-| Vector4 | 16 | ❌ | 32-bit float RGBA; requires GL_RGBA32F |
-| HalfSingle | 2 | ❌ | 16-bit half float R; requires GL_R16F |
-| HalfVector2 | 4 | ❌ | 16-bit half float RG; requires GL_RG16F |
-| HalfVector4 | 8 | ❌ | 16-bit half float RGBA; requires GL_RGBA16F — key format for HDR (CNAEXT N11) |
-| HdrBlendable | 8 | ❌ | Alias for RGBA16F in FNA; same as HalfVector4 |
-| ColorBgraEXT | 4 | ❌ | XNA3 legacy ABGR byte order; stored as RGBA8, byte order not respected |
-| **ColorSrgbEXT** | 4 | ❌ | Stored as linear RGBA8; sRGB flag silently ignored; requires GL_SRGB8_ALPHA8 |
-| Dxt5SrgbEXT | 1 | ❌ | CPU decompression path (see Dxt5 above) drops the sRGB flag |
-| Bc7EXT | 1 | ❌ | No BC7 decode/upload path at all (unlike Dxt1/3/5's CPU-decompress fallback) |
-| Bc7SrgbEXT | 1 | ❌ | Same as Bc7EXT, plus sRGB |
-| ByteEXT | 1 | ❌ | Single unsigned byte channel; requires GL_R8 |
-| UShortEXT | 2 | ❌ | Single unsigned short channel; requires GL_R16 |
+- `ImageData::surfaceFormat`, `CreateTextureCube`, and `CreateTexture3D` all carry the requested
+  format to EasyGL. Every accepted classic format has an explicit mapping; there is no generic
+  non-Color-to-RGBA8 fallback.
+- Public DXT transfers remain DXT blocks. EasyGL keeps native compressed storage when S3TC is
+  available and otherwise decodes renderer-side into RGBA8 for sampling. The public block bytes,
+  partial-block updates, faces, and mip levels remain exact in either route.
+- Single- and two-channel classic formats may use four-channel physical storage on ordinary
+  textures. Missing sampled channels are supplied with XNA-compatible defaults; readback returns
+  only the declared format bytes.
+- `ClassifyColorTransferFormatEXT` keeps `Color`-element convenience transfers distinct from raw
+  typed transfers. A non-Color texture is not reinterpreted through `Color` merely because both
+  element types happen to occupy four bytes.
+- Point sampling is covered across every promoted Texture2D classic format. Cube coverage includes
+  EnvironmentMap sampling for normalized, float/half, and DXT data; Texture3D coverage includes
+  shader sampling as well as slice, mip, and partial-box transfers.
 
----
+## Render-target boundary
 
-## Renderer GPU format summary
+EasyGL's exact color-attachment mappings are:
 
-| Renderer | Texture2D | Texture3D | TextureCube | RenderTarget (color) | RenderTarget (depth) |
-|---------|-----------|-----------|-------------|----------------------|----------------------|
-| EasyGL | GL_RGBA8; GL_RGBA8_SNORM for NormalizedByte4 on ES 3-class profiles | GL_RGBA8 | GL_RGBA8 | GL_RGBA8 | GL_DEPTH_COMPONENT24 |
+| Requested format | GL storage |
+|---|---|
+| `Color` | RGBA8 |
+| `Rgba1010102` | RGB10_A2 |
+| `Rg32` | RG16 |
+| `Rgba64` | RGBA16 |
+| `Single`, `Vector2`, `Vector4` | R32F, RG32F, RGBA32F |
+| `HalfSingle`, `HalfVector2`, `HalfVector4`, `HdrBlendable` | R16F, RG16F, RGBA16F |
 
----
+Every non-Color attachment above is runtime-probed for framebuffer completeness and, where
+relevant, multisample resolve support. `Rg32` and `Rgba64` additionally require texture-norm16.
+Capability queries, preferred-format selection, 2D/cube construction, binding, clearing, typed
+readback, mip generation, MSAA resolve, MRT, and sampling are tested against the same classifier.
 
-## What needs to be fixed (priority order)
+Depth/stencil support is documented separately in `depthstencilstate-support.md`; it is not fixed
+to a single GL depth format as the former version of this page claimed.
 
-### High priority
+## Remaining limitations
 
-| # | Format(s) | Required GL format | Work needed |
-|---|-----------|--------------------------|------------|
-| T176a | ColorSrgbEXT | GL_SRGB8_ALPHA8 | Forward `surfaceFormat` to renderers; add sRGB branch |
-| T176b | HalfVector4 / HdrBlendable | GL_RGBA16F | Required for CNAEXT HDR render targets (N11 EasyGL, N12 other renderers) |
-| T176c | Dxt1/3/5 via SetData | GL_COMPRESSED_RGBA_S3TC_DXT1/3/5_EXT | Native GPU compressed upload path |
+- EasyGL does not currently promote any of the seven FNA extension resource formats (20–26).
+- Native `Alpha8` render-target storage is unavailable; preferred `Alpha8` targets become `Color`.
+- `Rg32` and `Rgba64` ordinary textures and render targets depend on the live context's normalized
+  16-bit texture support. A context that cannot prove it rejects the format or selects the defined
+  render-target fallback.
+- WebGL cannot apply the texture swizzle used to make absent channels of one- and two-channel render
+  targets sample as one. On that profile those absent channels read as GL zero; this is a recorded
+  platform divergence, not a claim of full D3D channel-default parity.
 
-### Medium priority
+## Verification and sources of truth
 
-| # | Format(s) | Required GL format |
-|---|-----------|--------------------------|
-| — | Alpha8 | GL_R8 + `GL_TEXTURE_SWIZZLE_RGBA = {0,0,0,R}` |
-| — | Single / HalfSingle | GL_R32F / GL_R16F |
-| — | Vector2 / HalfVector2 | GL_RG32F / GL_RG16F |
-| — | Vector4 / HalfVector4 | GL_RGBA32F / GL_RGBA16F |
-| — | Rg32 / Rgba64 | GL_RG16 / GL_RGBA16 |
-| — | Rgba1010102 | GL_RGB10_A2 |
+The implementation boundary is defined by the four EasyGL classifier methods and their matching
+allocation paths in `EasyGLRenderer.cpp`, plus the XNA gates in `Texture.cpp`. The focused regression
+suites are:
 
-### Low priority / unlikely needed
+- `ClassicTextureFormat.*` — classic Texture2D/cube/volume transfers and sampling;
+- `NormalizedRenderTargetRoundTrip.*` and `HdrRenderTargetRoundTripTest.*` — normalized and float
+  render targets;
+- `RenderTargetFormatAgreement.*` — query/construction/use agreement for every enum value;
+- `SurfaceFormatRefusalSurface.*` — every resource kind either succeeds honestly or throws a named
+  exception;
+- `EasyGL_DxtFormat`, `EasyGL_DxtTextureCube`, `EasyGL_ShaderEffect_Texture3D`, and
+  `EasyGL_Pbr_SrgbTransfer` — standalone renderer integration coverage.
 
-- `Bgr565`, `Bgra5551`, `Bgra4444`, `ColorBgraEXT` — uncommon in modern use.
-- `NormalizedByte2` and `NormalizedByte4` outside EasyGL's ES 3-class Texture2D path — bump-map
-  formats.
-- `Dxt5SrgbEXT` — follows from fixing DXT native upload + sRGB.
-- `Bc7EXT`/`Bc7SrgbEXT` — no existing CPU-decompress fallback (unlike Dxt1/3/5), so this needs a
-  real BC7 decoder before it can work at all, even via the CPU-decompress path.
-- `ByteEXT`/`UShortEXT` — single-channel formats; rarely used outside custom shaders.
-
----
-
-## Implementation notes
-
-To properly support non-Color formats, the following refactors are needed:
-
-1. **Pass `SurfaceFormat` through `IGraphicsRenderer::CreateTexture`** — done through
-   `ImageData::surfaceFormat`; each renderer must still opt a format into its verified mapping.
-
-2. **Add a format dispatch function in each renderer** — map `SurfaceFormat` enum to
-   the native `metagl::InternalFormat`.
-
-3. **Keep the RGBA8 path as the default fallback** — unknown or unsupported formats
-   should throw `std::runtime_error` rather than silently using RGBA8.
-
-4. **DXT native upload (EasyGL)** — requires `GL_EXT_texture_compression_s3tc` to be present;
-   must query caps at init.
+For a cross-renderer view, use `graphics-renderer-feature-matrix.md`. Current unresolved defects,
+rather than completed implementation history, belong in `handoff.md` section 5.
