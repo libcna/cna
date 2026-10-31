@@ -35,6 +35,12 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- EnvironmentMapEffect support-document reconciliation (2026-10-31): Tasks 890 and 891 are no
+  longer described as open, the old pre-modular test path and `NEXT.md` reference are gone, and
+  the page now records the later fog, per-vertex Fresnel and amount-saturation fixes. Its matrix
+  points to the current EasyGL/SDLGPU regressions, including Task 1112's correction of the former
+  per-fragment Fresnel deviation. Focused private-runner validation passes all 57 property,
+  EasyGL and SDLGPU tests.
 - SpriteFont support-document reconciliation (2026-10-31): the obsolete combined-`SpriteEffects`
   limitation is closed. The page now reflects `REMED-GFX-003`'s composable flag operators,
   four-entry `DrawString` mirror tables, defensive low-bit mask and focused combined-flip/operator

@@ -12,8 +12,8 @@
 // a flat additive term that never reads the cube map's alpha channel at all.
 //
 // EnvironmentMapAmount is deliberately set to 0 here so the cube map's RGB contribution
-// (still an open, deliberately-deferred nuance -- see Task 891) cannot confound this test;
-// only EnvironmentMapSpecular's own alpha-scaling is exercised.
+// (the separate Task 891 rule, now fixed and covered by its own regression) cannot confound
+// this test; only EnvironmentMapSpecular's own alpha-scaling is exercised.
 //
 // (a) Opaque cubemap (alpha=255): NOT discriminating -- flat-add and alpha-scaled formulas
 //     agree here (scaling by 1.0 changes nothing). Included only as a sanity check that

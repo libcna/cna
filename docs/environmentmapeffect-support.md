@@ -1,7 +1,8 @@
-# EnvironmentMapEffect Exactness Support Matrix
+# EnvironmentMapEffect exactness support matrix
 
 Phase 45 (graphics Tasks 391–400) audited and pixel-verified `EnvironmentMapEffect`
-conformance against FNA. This document summarizes the findings and closes the phase.
+conformance against FNA. This document records those findings and the later fixes that closed
+the phase's follow-up work. Current-state reconciliation: 2026-10-31.
 
 ---
 
@@ -19,14 +20,16 @@ encoded despite FNA's own class-field default being `false`). `IEffectLights.Lig
 always-true getter and throw-on-`false` setter matched FNA's `NotSupportedException` semantics
 (mapped to `std::runtime_error`). The audit found `FillGpuDrawParams()` only forwards
 `DirectionalLight0` — the same shape as `BasicEffect`'s already-tracked Task 885 gap — opened as
-new Task 890 rather than folded into Task 885, since it's a distinct effect with its own dispatch.
+new Task 890 rather than folded into Task 885, since it is a distinct effect with its own
+dispatch. Task 890 subsequently added all three lights and a discriminating regression.
 
 Task 391 found **zero existing test coverage** for `EnvironmentMapEffect`. Task 392 wrote
-`tests/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffectTests.cpp` from scratch (mirroring
-Task 372/382's precedent): 42 tests covering all 14 property defaults, `LightingEnabled`'s
-throw-on-`false`/no-throw-on-`true` behavior, `EnableDefaultLighting()`'s ambient/light-enable
-effects, setter round-trips, and `Clone()`. **The `Clone()` test caught a real, previously-
-undiscovered bug affecting 4 stock effects**: `Clone()` never preserved `FogColor` on
+`modules/graphics/tests/Microsoft/Xna/Framework/Graphics/EnvironmentMapEffectTests.cpp` from
+scratch (mirroring Task 372/382's precedent). The current suite covers all 14 property defaults,
+`LightingEnabled`'s throw-on-`false`/no-throw-on-`true` behavior, `EnableDefaultLighting()`'s
+ambient/light-enable effects, setter round-trips, ownership, `Clone()` and `GetTypeName()`.
+**The original `Clone()` test caught a real, previously-undiscovered bug affecting 4 stock
+effects**: `Clone()` never preserved `FogColor` on
 `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` —
 `CacheEffectParameters()` re-links `fogColorParam_` to a fresh, zero-valued parameter in the
 clone, and nothing copied the source's actual value across. Fixed all 4 with a one-line
@@ -66,11 +69,12 @@ to the cube map's own alpha channel): an opaque cube map (`alpha=255`) is not di
 (scaling by 1.0 changes nothing); a translucent cube map (`alpha=128`) is — FNA predicts
 `(151,101,76)`, CNA's flat-additive formula predicts `(202,152,127)`, empirically confirmed as the
 exact pre-fix output. **Fixed** by sampling the cube map's full `vec4` (not just
-`.rgb`/`.xyz`) and scaling the specular term by `envSample.a × combinedAlpha`. Deliberately left
-unfixed and opened as **Task 891**: the base lerp's `envColor` term is still unscaled by combined
-texture×diffuse alpha (FNA's `envmap = SAMPLE_CUBEMAP(...) * color.a` scales both `envmap.rgb` and
-`envmap.a`; this task only fixed the `.a` half used by the specular term) — only visible when
-texture/diffuse alpha is strictly less than 1, unexercised by any test to date.
+`.rgb`/`.xyz`) and scaling the specular term by `envSample.a × combinedAlpha`. Task 395
+deliberately deferred the other half of the same formula to **Task 891**: the base lerp's
+`envColor` target also needs scaling by combined texture×diffuse alpha because FNA's
+`envmap = SAMPLE_CUBEMAP(...) * color.a` scales both `envmap.rgb` and `envmap.a`. Task 891 later
+fixed that half too. The shared EasyGL/SDLGPU regression uses `Alpha=0.5`, where an unscaled cube
+sample produces twice the expected RGB and cannot pass accidentally.
 
 ## 4. Fresnel edge-weighting (Task 396)
 
@@ -87,9 +91,10 @@ formula would instead still fully apply the cube map here: FNA predicts `(100,50
 CNA's pre-fix formula predicted `(128,128,128)` (fully applied), empirically confirmed. **Fixed**
 by adding `fresnelEnabled`/`fresnelFactor` to `GpuDrawParams` (forwarded from
 `FillGpuDrawParams()`) and threading a per-pixel `viewAngle`/`pow()` term into the
-fragment shaders. Computed per-pixel rather than FNA's per-vertex (then rasterizer-interpolated)
-computation — an acceptable, strictly-more-accurate CNA-vs-FNA deviation on coarse tessellation,
-not a regression.
+fragment shaders. That initial per-fragment placement was not exact: XNA/FNA computes the scalar
+per vertex and the rasterizer interpolates the result. Task 1112 subsequently moved the Fresnel
+calculation to the vertex stage. Its varying-normal gradient regression distinguishes the two
+orders and runs on both EasyGL and SDLGPU.
 
 ## 5. `EyePosition` and reflection-vector correctness (Task 397)
 
@@ -151,7 +156,8 @@ interpolation** — the same `oD0`/`oD1` rule FX-123 measured for the lit progra
 The 0.5 column is the positive control: without it, "2.0 renders as 1.0" cannot be told apart from
 "the amount does nothing on this stack".
 
-EasyGL clamps (`EasyGLRenderer.cpp:8423`). The clamp belongs in the **vertex** stage, where D3D9 applies it —
+EasyGL clamps the Fresnel/amount varying in the vertex program in
+`GlStockShaderSources.hpp`. The clamp belongs in the **vertex** stage, where D3D9 applies it —
 clamping after interpolation would interpolate the raw value first and give a different gradient.
 
 Guarded by `modules/graphics/examples/environmentmapeffect_amount_clamp_test.cpp`, registered as
@@ -171,23 +177,31 @@ levels apart. Both clamp programs also run on EasyGL (`EasyGL_CrossFamily_*`) an
 | Cube-map blend: `lerp` not additive | ✅ fixed Task 394 |
 | `EnvironmentMapSpecular × envmap.a` | ✅ fixed Task 395 |
 | Base lerp `envColor × combinedAlpha` | ✅ fixed Task 891 |
-| Fresnel edge-weighting | ✅ fixed Task 396 |
+| Fresnel edge-weighting and per-vertex interpolation | ✅ fixed Tasks 396/1112 |
 | `EyePosition` → reflection vector | ✅ Task 397 |
 | `World` non-uniform-scale normal transform | ✅ fixed Task 398 |
 | `DirectionalLight1`/`DirectionalLight2` | ✅ fixed Task 890 (2026-07-11) |
+| Fog forwarding and view-space factor | ✅ fixed Tasks 900/1111 |
+| `EnvironmentMapAmount > 1` vertex saturation | ✅ measured and regressed |
 | Combined integration capstone | ✅ Task 399 |
 
-Legend: ✅ verified working · ❌ confirmed not implemented.
+Legend: ✅ verified working.
 
-## Open, tracked follow-up work
+## Subsequent fixes
 
-Phase 45 opened 2 new tracked tasks:
+- **Task 890** (opened by Task 391, fixed 2026-07-11) — `DirectionalLight1` and
+  `DirectionalLight2` now reach the renderer alongside light 0. The EasyGL regression varies
+  each light independently; SDLGPU reuses the same program through the cross-family corpus.
+- **Task 891** (opened by Task 395, fixed 2026-07-11) — the base cube-map lerp target is now
+  `envSample.rgb × combinedAlpha`, completing the other half of FNA's
+  `envmap = SAMPLE_CUBEMAP(...) * color.a` rule. The shared regression is
+  `modules/graphics/examples/environmentmapeffect_alphascaledlerp_test.cpp`.
+- **Tasks 900/1111** — fog fields now reach the renderer and use FNA's view-space dot-product
+  factor, including the `FogStart == FogEnd` case. EasyGL and SDLGPU run the same focused fog
+  program; the renderer-wide fog contract has separate shared coverage.
+- **Task 1112** — replaced the original per-fragment Fresnel calculation with XNA/FNA's
+  per-vertex calculation and interpolated scalar. The gradient test fails on the old ordering.
 
-- ~~**Task 890**~~ (opened by Task 391) — **fixed, 2026-07-11**: `DirectionalLight1`/
-  `DirectionalLight2` now forward on `EnvironmentMapEffect`, mirroring
-  `BasicEffect`'s own fix (Task 885/886). See `NEXT.md` §3 for the full write-up.
-- ~~**Task 891**~~ (opened by Task 395) — **fixed**: the base cube-map lerp target (`envColor`) is
-  now scaled by combined texture×diffuse alpha, the other half of the
-  `envmap = ... * color.a` formula Task 395's specular-only fix didn't cover.
-
-This closes Phase 45 (graphics Tasks 391–400) in full.
+Phase 45 and all follow-up work named on this page are closed. Current renderer-wide capability
+status belongs in `graphics-renderer-feature-matrix.md`; unresolved defects belong in
+`handoff.md` section 5.
