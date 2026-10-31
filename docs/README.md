@@ -114,9 +114,11 @@ original phase closed — check each file's own status banner/date.
 - `occlusionquery-support.md` — per-renderer `OcclusionQuery` support.
 - `graphics-resource-lifetime.md` — current ownership, event ordering, device tracking, move and
   native-retirement contract for `GraphicsResource`-derived types; reconciled 2026-10-31.
+- `spritefont-support.md` — `SpriteFont`/`DrawString` behavior, UTF-8/BMP adaptation and the closed
+  combined-`SpriteEffects` follow-up; reconciled 2026-10-31.
 - `rendertarget-support.md`, `texture3d-texturecube-support.md`, `surface-format-support.md`,
-  `texture-stream-formats.md`, `vertex-format-support.md`, `spritefont-support.md`,
-  `viewport-displaymode-adapter-support.md` — not re-verified in the 2026-07-11 pass.
+  `texture-stream-formats.md`, `vertex-format-support.md`, `viewport-displaymode-adapter-support.md`
+  — not re-verified in the 2026-07-11 pass.
 - `shader-effect-vs-fx-bytecode.md` — custom GLSL `ShaderEffect` versus compiled XNA effect
   bytecode, and which renderers execute the latter; `fx-compiled-effects.md` is the complete
   porter-facing guide to the compiled path.

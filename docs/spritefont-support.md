@@ -2,7 +2,8 @@
 
 Phase 48 (graphics Tasks 421–430) audited `SpriteFont` against FNA's own `SpriteFont.cs`
 and pixel-verified `SpriteBatch::DrawString` rendering on EasyGL (Tasks 424–429). This document
-summarizes the findings, the content-loading model, and known limitations, and closes the phase.
+summarizes the findings, the content-loading model, and the later fix that closed its remaining
+follow-up. Current-state reconciliation: 2026-10-31.
 
 ---
 
@@ -94,19 +95,20 @@ lookup, advancing a byte index in place. This is a CNA-specific architectural ad
   skipping, and the byte index always advances by at least one byte, so malformed input can never
   cause an infinite loop.
 
-## 7. Known limitation: no combined `SpriteEffects` flip
+## 7. Combined `SpriteEffects` flip (REMED-GFX-003)
 
 FNA's `SpriteEffects` is a `[Flags]` enum — `FlipHorizontally | FlipVertically` is a valid runtime
 value (3) even without a named member for it, and FNA's own `axisDirectionX/Y` tables have a 4th
-entry to handle it. **CNA's `SpriteEffects` is a plain `enum class` with no bitwise operators
-defined** (`include/Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp`), so a combined value can
-only be constructed via an explicit `static_cast<SpriteEffects>(3)` — there is no ergonomic way for
-calling code to request "flip both axes" the way FNA callers can. `SpriteBatch::DrawString`'s own
-`axisDirX`/`axisDirY`/`axisIsMirroredX`/`axisIsMirroredY` tables (added by Task 694) deliberately
-only have 3 entries (indices 0–2) for exactly this reason — index 3 is unreachable through any
-normal calling convention and was not worth including speculatively. This is a genuine, minor API
-gap versus FNA, not something this phase's tasks were scoped to fix; flagged here for visibility
-rather than silently left undocumented.
+entry to handle it. CNA originally stopped at three entries and exposed no flag operators, leaving
+the combined value awkward to construct and unsafe to index.
+
+`REMED-GFX-003` fixed both sides of the contract. `SpriteEffects.hpp` now defines `|`, `&`, `|=` and
+`&=`, so callers can compose the two named flags directly. `SpriteBatch::DrawString` masks to the
+two meaningful low bits and uses four-entry X/Y direction and mirror tables; value 3 therefore
+mirrors the complete text block on both axes without an out-of-bounds lookup. The
+`SpriteBatchDrawStringSpriteEffectsTest` cases independently require the combined value to match
+the horizontal X result, match the vertical Y result and differ from `None`; the
+`SpriteEffectsOperatorsTest` cases cover all four operators.
 
 ## Support matrix
 
@@ -120,15 +122,14 @@ rather than silently left undocumented.
 | Newline (`LineSpacing`) | ✅ Task 426 |
 | Default-character fallback | ✅ Task 427 |
 | `SpriteEffects` flip (single-axis) | ✅ Task 428 |
-| `SpriteEffects` flip (combined, both axes) | ❌ not representable |
+| `SpriteEffects` flip (combined, both axes) | ✅ fixed REMED-GFX-003 |
 | Rotation / origin / scale | ✅ Task 429 |
 
-Legend: ✅ verified working · ❌ confirmed not implemented/not representable.
+Legend: ✅ verified working.
 
-## Open, tracked follow-up work
+## Follow-up status
 
-- **Combined `SpriteEffects` flip** (§7): a genuine, minor API-completeness gap versus FNA's
-  `[Flags]` enum. Not scoped to this phase; would need `SpriteEffects` operator overloads plus a
-  4th `axisDir`/`axisIsMirrored` table entry in `SpriteBatch.cpp` if ever prioritized.
+- ~~Combined `SpriteEffects` flip~~ — fixed by `REMED-GFX-003` (`d9f739508`): flag operators,
+  four-entry lookup tables and focused regressions are all present.
 
-This closes Phase 48 (graphics Tasks 421–430) in full.
+Phase 48 and all follow-up work named on this page are closed.

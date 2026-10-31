@@ -35,6 +35,11 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- SpriteFont support-document reconciliation (2026-10-31): the obsolete combined-`SpriteEffects`
+  limitation is closed. The page now reflects `REMED-GFX-003`'s composable flag operators,
+  four-entry `DrawString` mirror tables, defensive low-bit mask and focused combined-flip/operator
+  regressions; the support matrix no longer reports value 3 as unrepresentable. Focused validation
+  passes 7/7 tests.
 - GraphicsDevice support-document cleanup (2026-10-31): the obsolete manual FNA surface audit was
   retired after its enduring `Clear` behavior decisions moved into the XNA-over-FNA ledger and its
   `Present` capability boundary moved into the current renderer matrix. Stale Software and parity
