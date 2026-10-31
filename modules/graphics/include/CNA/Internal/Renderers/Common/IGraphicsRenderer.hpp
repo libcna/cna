@@ -3141,37 +3141,52 @@ namespace CNA::Internal::Renderers
             return unsupported3DGraphicsCallBehavior_;
         }
 
-        /// Returns whether this renderer (and, for device-dependent entries, the current runtime
-        /// device/driver) supports the given CNA::GraphicsCapability. Default implementation
-        /// returns true except for multi-stream input, compiled effects and the float
-        /// render-target entries, each of which requires explicit renderer opt-in. Every renderer
-        /// with a narrower contract -- including no-renderer, fixed-function,
-        /// experimental, or device-dependent capability gaps -- must override the applicable
-        /// entries truthfully.
+        /**
+         * @brief Returns whether this renderer supports the requested graphics capability.
+         *
+         * Device-dependent entries describe the active runtime device and driver. The default
+         * enumerates the established baseline explicitly, delegates capabilities with their own
+         * opt-in query, and returns false for every unknown identity. Renderers with a narrower
+         * contract must override the applicable entries truthfully.
+         *
+         * @param capability Capability to query.
+         * @return True when the complete documented capability is available; otherwise false.
+         */
         [[nodiscard]] virtual bool SupportsCapability(CNA::GraphicsCapability capability) const
         {
-            if (capability == CNA::GraphicsCapability::StencilBuffer)
-                return SupportsStencilBuffer();
-            // MultiStreamVertexInput is the one entry whose default is FALSE. A
-            // renderer derives its native input elements from a single byte stride, so binding a
-            // second per-vertex stream is real work it must opt into by name; defaulting to true
-            // would make a renderer that silently renders from stream 0 alone claim otherwise.
-            if (capability == CNA::GraphicsCapability::MultiStreamVertexInput)
-                return false;
-            // A bytecode parser alone is insufficient: the backend must own the native shaders,
-            // reflection/value lifecycle, exact passes and state/sampler application before it
-            // can opt in. The corresponding creation default above returns nullptr.
-            if (capability == CNA::GraphicsCapability::CompiledEffects)
-                return SupportsCompiledEffects();
-            // MOD-100/MOD-101: float colour render targets are opt-in for the same
-            // reason. CreateRenderTarget2DEXT's own shared default drops the requested
-            // SurfaceFormat and produces an 8-bit Color target, so a renderer that has not been
-            // taught float formats would, under a true default, promise that values above 1.0
-            // survive a render-to-target -- the exact promise the HDR pipeline is built on.
-            if (capability == CNA::GraphicsCapability::FloatRenderTargets ||
-                capability == CNA::GraphicsCapability::HalfFloatRenderTargets)
-                return false;
-            return true;
+            switch (capability)
+            {
+                case CNA::GraphicsCapability::ThreeD:
+                case CNA::GraphicsCapability::DepthStencilBuffer:
+                case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+                case CNA::GraphicsCapability::MultipleRenderTargets:
+                case CNA::GraphicsCapability::AnisotropicFiltering:
+                case CNA::GraphicsCapability::WireFrame:
+                case CNA::GraphicsCapability::OcclusionQuery:
+                case CNA::GraphicsCapability::CustomEffects:
+                case CNA::GraphicsCapability::Texture3D:
+                case CNA::GraphicsCapability::Instancing:
+                case CNA::GraphicsCapability::AdditiveBlending:
+                    return true;
+                case CNA::GraphicsCapability::StencilBuffer:
+                    return SupportsStencilBuffer();
+                // A renderer derives its native input elements from a single byte stride, so a
+                // second stream is real work it must opt into by name.
+                case CNA::GraphicsCapability::MultiStreamVertexInput:
+                    return false;
+                // A bytecode parser alone is insufficient: the renderer must own the native
+                // shaders, reflection/value lifecycle, exact passes and state application.
+                case CNA::GraphicsCapability::CompiledEffects:
+                    return SupportsCompiledEffects();
+                // The shared render-target factory drops the requested format, so float targets
+                // require an explicit format-aware renderer implementation.
+                case CNA::GraphicsCapability::FloatRenderTargets:
+                case CNA::GraphicsCapability::HalfFloatRenderTargets:
+                    return false;
+                case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
+                    return SupportsHalfFloatTextureLinearFilteringEXT();
+            }
+            return false;
         }
 
         /**

@@ -1117,9 +1117,19 @@ namespace CNA::Internal::Renderers::Fna3d
             case CNA::GraphicsCapability::StencilBuffer:
                 return SupportsStencilBuffer();
 
-            default:
+            case CNA::GraphicsCapability::ThreeD:
+            case CNA::GraphicsCapability::DepthStencilBuffer:
+            case CNA::GraphicsCapability::MultipleRenderTargets:
+            case CNA::GraphicsCapability::AnisotropicFiltering:
+            case CNA::GraphicsCapability::WireFrame:
+            case CNA::GraphicsCapability::Texture3D:
+            case CNA::GraphicsCapability::AdditiveBlending:
+            case CNA::GraphicsCapability::FloatRenderTargets:
+            case CNA::GraphicsCapability::HalfFloatRenderTargets:
+            case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
                 return true;
         }
+        return false;
     }
 
     bool Fna3dRenderer::SamplerLodBiasReachesTheGpuEXT() const noexcept

@@ -1139,9 +1139,22 @@ namespace CNA::Internal::Renderers::Headless
                 // Nothing is sampled, so no request is multisampled: the back buffer and every
                 // render target apply 0, and the adapter query selects 0, consistently.
                 return false;
-            default:
+            case CNA::GraphicsCapability::ThreeD:
+            case CNA::GraphicsCapability::DepthStencilBuffer:
+            case CNA::GraphicsCapability::MultipleRenderTargets:
+            case CNA::GraphicsCapability::AnisotropicFiltering:
+            case CNA::GraphicsCapability::WireFrame:
+            case CNA::GraphicsCapability::OcclusionQuery:
+            case CNA::GraphicsCapability::CustomEffects:
+            case CNA::GraphicsCapability::Instancing:
+            case CNA::GraphicsCapability::StencilBuffer:
+            case CNA::GraphicsCapability::CompiledEffects:
+            case CNA::GraphicsCapability::FloatRenderTargets:
+            case CNA::GraphicsCapability::HalfFloatRenderTargets:
+            case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
                 return true;
         }
+        return false;
     }
 
     void HeadlessRenderer::ApplyBlendState(int, int, int, int, int, int,

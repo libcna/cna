@@ -5466,9 +5466,22 @@ namespace CNA::Internal::Renderers::EasyGL
                 // into the VAO at locations continuing after the previous stream's, each with its
                 // own VBO, stride and byte offset, and restores the single-stream layout after.
                 return true;
-            default:
+            case CNA::GraphicsCapability::ThreeD:
+            case CNA::GraphicsCapability::DepthStencilBuffer:
+            case CNA::GraphicsCapability::MultipleRenderTargets:
+            case CNA::GraphicsCapability::OcclusionQuery:
+            case CNA::GraphicsCapability::CustomEffects:
+            case CNA::GraphicsCapability::Texture3D:
+            case CNA::GraphicsCapability::Instancing:
+            case CNA::GraphicsCapability::StencilBuffer:
+            case CNA::GraphicsCapability::AdditiveBlending:
+            case CNA::GraphicsCapability::CompiledEffects:
+            case CNA::GraphicsCapability::FloatRenderTargets:
+            case CNA::GraphicsCapability::HalfFloatRenderTargets:
+            case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
                 return true;
         }
+        return false;
     }
 
     void EasyGLRenderer::DebugSimulateContextLoss()

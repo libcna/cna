@@ -468,9 +468,17 @@ namespace CNA::Internal::Renderers::Software
                 // frequency-stepped matrix record, through the same declaration/effect path as an
                 // ordinary indexed draw.
                 return true;
-            default:
+            case CNA::GraphicsCapability::ThreeD:
+            case CNA::GraphicsCapability::DepthStencilBuffer:
+            case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+            case CNA::GraphicsCapability::WireFrame:
+            case CNA::GraphicsCapability::StencilBuffer:
+            case CNA::GraphicsCapability::AdditiveBlending:
+            case CNA::GraphicsCapability::CompiledEffects:
+            case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
                 return true;
         }
+        return false;
     }
 
     std::unique_ptr<ISpriteBatchRenderer> SoftwareRenderer::CreateSpriteBatch()

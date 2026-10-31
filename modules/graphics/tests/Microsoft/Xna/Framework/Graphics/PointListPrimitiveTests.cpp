@@ -74,12 +74,6 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
-// RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
-// BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
-// condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
-// multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
-// checks at runtime that bgfx is the ACTIVE renderer.
-
 using CNA::GraphicsCapability;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
@@ -558,8 +552,8 @@ TEST_F(PointListPrimitiveTest, IndexedPointListHonorsStartIndexBaseVertexAndExac
         pixels, Color::Black, 3, "indexed point range with base and start");
 }
 
-// The same addressing contract through a public 32-bit index buffer. On Bgfx this also proves that
-// The native BGFX_BUFFER_INDEX32 creation still applies to point topology.
+// The same addressing contract through a public 32-bit index buffer proves that point topology
+// preserves the declared index width as well as the selected range.
 TEST_F(PointListPrimitiveTest, IndexedPointListHonorsThirtyTwoBitIndexElements)
 {
     RequirePointRendering();
@@ -1194,12 +1188,9 @@ TEST_F(PointListPrimitiveTest, PointListRespectsViewportScissorAndBlendState)
 
 // Non-indexed point addressing: vertexStart selects the first consumed vertex and primitiveCount
 // limits the consumed range to exactly that many points.
-//
-// Bgfx joined this guard with the non-indexed range fix, which replaced its whole-buffer
-// bgfx::setVertexBuffer(0, handle) binding with the exact [vertexStart, vertexStart + consumed)
-// range. The general non-indexed range contract for every topology lives in
+// The general non-indexed range contract for every topology lives in
 // NonIndexedDrawRangeTests.cpp; this case keeps the point-specific coverage alongside the rest of
-// The topology contract.
+// the topology contract.
 TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount)
 {
     // RTR-P9-5: was a compile-time fence around this group,

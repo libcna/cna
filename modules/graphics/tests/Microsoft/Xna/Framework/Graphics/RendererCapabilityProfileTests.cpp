@@ -59,6 +59,15 @@ TEST(RendererCapabilityProfileTest, EmptyProfileKeepsInvalidAndUnauditedAnswersU
     EXPECT_TRUE(profile.GetEnglishReport().empty());
 }
 
+TEST(RendererCapabilityProfileTest, LegacyCapabilityQueriesFailClosedForUnknownIdentity)
+{
+    GraphicsDevice device;
+    const auto unknown = static_cast<CNA::GraphicsCapability>(999);
+
+    EXPECT_FALSE(device.GetRenderer().SupportsCapability(unknown));
+    EXPECT_FALSE(device.SupportsCapability(unknown));
+}
+
 TEST(RendererCapabilityProfileTest, CatalogsAreCompleteStableAndSelfDescribing)
 {
     // The ordinals of the retired modern GPU layer stay reserved: the catalogs skip them, and

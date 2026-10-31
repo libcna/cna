@@ -165,6 +165,16 @@ TEST_F(CrossRendererContractTest, CapabilityAnswersAreStableWithinARendererAndSu
     });
 }
 
+TEST_F(CrossRendererContractTest, EveryRendererFailsClosedForUnknownCapabilityIdentity)
+{
+    const auto unknown = static_cast<CNA::GraphicsCapability>(999);
+
+    ForEachRenderer([&](GraphicsDevice& device, GraphicsRendererType) {
+        EXPECT_FALSE(device.GetRenderer().SupportsCapability(unknown));
+        EXPECT_FALSE(device.SupportsCapability(unknown));
+    });
+}
+
 TEST_F(CrossRendererContractTest, ClearIsAcceptedByEveryRenderer)
 {
     // The narrowest thing every CNA renderer must do, including the ones that render nothing.

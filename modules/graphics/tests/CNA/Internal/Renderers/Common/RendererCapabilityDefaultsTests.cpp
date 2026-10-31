@@ -206,6 +206,12 @@ TEST(RendererCapabilityDefaultsTest, AdditionalLimitationsDefaultToNoRendererSpe
     EXPECT_TRUE(renderer.GetAdditionalLimitationsTextEXT().empty());
 }
 
+TEST(RendererCapabilityDefaultsTest, UnknownLegacyCapabilityDefaultsToUnsupported)
+{
+    DefaultsOnlyRenderer renderer;
+    EXPECT_FALSE(renderer.SupportsCapability(static_cast<CNA::GraphicsCapability>(999)));
+}
+
 TEST(RendererCapabilityDefaultsTest, NumericLimitsDefaultToExplicitlyUnavailable)
 {
     DefaultsOnlyRenderer renderer;

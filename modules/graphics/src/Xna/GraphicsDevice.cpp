@@ -3446,23 +3446,20 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool GraphicsDevice::SupportsCapability(CNA::GraphicsCapability capability) const
     {
-        // CompiledEffects was appended after many renderer-specific capability switches were
-        // written. Their historical catch-all may return true for unknown enum values, so this
-        // security/compatibility boundary requires a separate explicit renderer opt-in.
+        // CompiledEffects has a dedicated opt-in because accepting Effect Framework bytecode
+        // requires the complete shader, reflection, pass and state lifecycle rather than a broad
+        // renderer capability answer.
         if (capability == CNA::GraphicsCapability::CompiledEffects)
             return GetRenderer().SupportsCompiledEffects();
-        // MOD-100/MOD-101: the float render-target entries are derived, for the same
-        // reason CompiledEffects is -- a renderer whose capability switch ends in
-        // `default: return true` would otherwise claim that values above 1.0 survive a
-        // render-to-target purely because it has never heard of the enumerator. Each is answered by
-        // the corresponding resource format: RGBA32F for
-        // the 32-bit entry, and HdrBlendable (CNA's RGBA16F) for the half-float one.
+        // MOD-100/MOD-101: float render-target entries are derived from the corresponding resource
+        // format rather than a broad renderer-level answer: RGBA32F for the 32-bit entry, and
+        // HdrBlendable (CNA's RGBA16F) for the half-float one.
         if (capability == CNA::GraphicsCapability::FloatRenderTargets)
             return SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4);
         if (capability == CNA::GraphicsCapability::HalfFloatRenderTargets)
             return SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable);
-        // Derived for the same reason (MOD-123): answered by a renderer virtual whose default is
-        // false, never by a capability switch whose default is true.
+        // MOD-123: sampling support is independent from render-target creation and therefore uses
+        // its dedicated renderer query, whose default is false.
         if (capability == CNA::GraphicsCapability::HalfFloatTextureLinearFiltering)
             return GetRenderer().SupportsHalfFloatTextureLinearFilteringEXT();
         // RLGL-040: MRT availability is both a renderer capability and an XNA profile limit.
