@@ -403,9 +403,11 @@ namespace CNA::Internal::Renderers::Headless
         ~HeadlessTexture3DRenderer() override;
 
         /**
-         * @brief Validates and traces a volume upload, then reports that nothing was stored.
+         * @brief Validates and traces a volume upload, then reports the unsupported operation.
          *
-         * Same reviewed reasoning as `HeadlessTextureCubeRenderer::SetData`.
+         * Plain cube textures have CPU validation storage; volume textures do not. This class is
+         * unreachable through the normal public path because Headless reports no Texture3D
+         * capability, but the direct renderer boundary still refuses rather than discarding data.
          *
          * @return Always false.
          */
@@ -414,8 +416,7 @@ namespace CNA::Internal::Renderers::Headless
         /**
          * @brief Reports that this renderer cannot read a volume texture back.
          *
-         * Same reviewed reasoning as `HeadlessTextureCubeRenderer::GetData`. This
-         * class is additionally unreachable through the public API: the content reader fix made
+         * This class is unreachable through the public API: the content reader fix made
          * `Texture3D`'s constructor fail on a device that reports no
          * `GraphicsCapability::Texture3D`, which this renderer does not, and under
          * `WarnAndStub` -- the one policy that lets the constructor ask -- the factory returns

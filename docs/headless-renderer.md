@@ -2,44 +2,50 @@
 
 ## Status
 
-The Headless renderer is a **CI/testing-only graphics renderer**, verified 2026-07-13. Select it
+The Headless renderer is a **CI/testing-only graphics renderer**, verified 2026-10-31. Select it
 with:
 
 ```bash
-cmake -S . -B cmake-build-headless \
+cmake -S . -B cmake-build-headless -G Ninja \
+  -DCNA_PLATFORM=HEADLESS \
+  -DCNA_AUDIO_PLATFORM=NULL \
   -DCNA_GRAPHICS_RENDERER=HEADLESS \
   -DCMAKE_BUILD_TYPE=Debug \
   -DCNA_BUILD_TESTS=ON
 cmake --build cmake-build-headless --parallel 8
+ctest --test-dir cmake-build-headless -L Headless --output-on-failure -j8
 ```
 
-No extra dependencies are needed — the Headless renderer never links against SDL's graphics
-functions, OpenGL, Vulkan, or any GPU library. It only needs the same SDL3/SDL3_mixer
-and `../sharp-runtime` checkout every other renderer already requires.
+No native graphics dependency or display server is needed. With the Headless platform and Null
+audio selections above, the tests create no window and initialize no video subsystem. The normal
+repository prerequisites still apply, including initialized third-party sources and the sibling
+`../sharp-runtime` checkout.
 
 ## What this renderer is for (and isn't)
 
-CNA's GPU renderers (`OPENGLES3`/`SDLGPU`/`WEBGPU` and the rest) need a real window and a real
+CNA's GPU renderers (`OPENGLES3`/`SDL_GPU`/`WEBGPU` and the rest) need a real window and a real
 GPU context to run at all. That makes them unsuitable for fast, CI-friendly testing of game
 *logic* — a CI container with no display server can't run them, and even where a virtual display
 (Xvfb) is available, spinning one up per test run is slow compared to what a logic test actually
 needs to prove.
 
-The Headless renderer implements CNA's entire `IGraphicsRenderer` interface without touching a GPU or
+The Headless renderer covers the supported `IGraphicsRenderer` surface without touching a GPU or
 a window at all: `SDL_InitSubSystem(SDL_INIT_VIDEO)` is never called, no `SDL_Window` is ever
-created, and every draw/resource call does real bookkeeping (argument validation, resource
-lifecycle tracking, draw-call/state-change counters) instead of talking to a GPU.
+created, and supported draw/resource calls perform argument validation, resource-lifecycle
+tracking, counters or trace bookkeeping instead of talking to a GPU. Unsupported capabilities are
+reported and rejected explicitly; they are not represented by fabricated resources or pixels.
 
 **What it proves:** "this code path ran, with these arguments, this many times, and nothing leaked
 or misused an API." **What it does *not* prove:** anything about pixel correctness. If you need to
 know whether something actually *looks* right, use one of the real GPU renderers' pixel-asserted
 tests (see `docs/graphics-renderer-feature-matrix.md`) — Headless renders nothing, by design.
 
-**The one rule it lives by:** Headless never silently accepts something a real renderer would
-reject, because its value is being a trustworthy stand-in. Where a real renderer's answer to some
-misuse is ambiguous or undocumented, settle that answer first rather than guessing one here, and
-keep Headless-only needs out of the shared `IGraphicsRenderer`/`GpuDrawParams` interface unless a
-genuine common need justifies them.
+**The one rule it lives by:** `Validation` and `Trace` never silently accept something a real
+renderer would reject, because their value is being a trustworthy stand-in. `Fast` deliberately
+skips those checks while retaining structurally safe bookkeeping. Where a real renderer's answer to
+some misuse is ambiguous or undocumented, settle that answer first rather than guessing one here,
+and keep Headless-only needs out of the shared `IGraphicsRenderer`/`GpuDrawParams` interface unless
+a genuine common need justifies them.
 
 ## Runtime modes
 
@@ -94,14 +100,15 @@ class MyHeadlessTest : public Game
 Key APIs on `HeadlessRenderer` (all `CNAEXT`, not part of the XNA surface):
 
 - `GetStatistics()` / `GetLastFrameStatistics()` — cumulative and per-frame draw-call, primitive,
-  clear, present, state-change, and resource-creation counters.
+  clear, present, state-change, and resource-creation counters. Instanced work uses logical-work
+  semantics: `P` primitives across `N` instances adds `N` draw calls and `P * N` primitives.
 - `AliveResources()` / `AssertNoLeaks()` — walks the shared resource registry; `AssertNoLeaks()`
   throws `HeadlessValidationException` listing every still-alive resource, or returns normally if
   none remain. Callable at any point during a test, not just at teardown.
 - `TraceLog()` — the structured call log accumulated in `Trace` mode (empty otherwise).
 - `SetMode(HeadlessMode)` / `GetMode()` — the runtime strictness dial.
 
-## Known limitations (2026-07-13)
+## Known limitations (2026-10-31)
 
 - "Disposed state object" validation (`BlendState`/`DepthStencilState`/etc.) is not implemented —
   `IGraphicsRenderer`'s `ApplyBlendState()`/etc. take raw `int`/`bool`/`float` parameters, not object
@@ -116,37 +123,29 @@ Key APIs on `HeadlessRenderer` (all `CNAEXT`, not part of the XNA surface):
   still alive, destroyed in no fixed order relative to the renderer, so an automatic check would
   report false leaks. Call it where a test wants the answer, mid-run included, and compare against a
   baseline when long-lived resources are legitimately alive.
-- `SpriteBatch`'s captured `LastBatch()` draw-call data (texture/rects/color/rotation/effects per
-  `Draw()` call) is implemented but not yet separately asserted on by any test — only the aggregate
-  `drawCallCount` is checked.
-- `TextureCube` and `Texture3D` store no pixels on this renderer: `SetData` throws
-  `System::NotSupportedException` and `GetData` refuses rather than fabricating texels, so a content
-  pipeline load of a cube or volume texture under HEADLESS throws instead of silently succeeding.
-  `Texture2D` and `RenderTarget2D` do keep their bytes.
+- Plain `TextureCube` has real per-face/per-mip CPU storage and exact format-native round trips for
+  every format Headless advertises. `Texture3D` remains unsupported: the device reports no
+  `GraphicsCapability::Texture3D`, and public construction rejects instead of accepting and
+  discarding volume data.
+- Render targets track binding, dimensions and lifecycle, but Headless never rasterizes their
+  colour content. Render-target and backbuffer readback therefore reject instead of returning
+  invented black pixels.
+- Trace covers supported state-mutating, resource, upload, clear, presentation and draw calls,
+  including target changes and instancing. Pure queries do not add trace entries.
 
-Resolved since the first commit: viewport/scissor validation now cross-references the actual
-bound-target size (not just non-negative dimensions); creation-site tracking is implemented via an
-explicit `PushDebugLabel()`/`PopDebugLabel()` API (see below) rather than left as an unused field;
-(2026-07-13) `CNA_HEADLESS_MODE` environment-variable parsing, the 32-bit `IndexBuffer` path,
-`GetLastFrameStatistics()`'s per-frame diff math, and `AliveResources()`'s per-type breakdown are
-all now verified by a fourth CTest, `Headless_CoverageGaps`; and `AlphaTestEffect`/
-`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/`Model.Draw()` are individually verified
-end-to-end by a fifth CTest, `Headless_Effects` — which also surfaced a real behavioral finding:
-`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` unconditionally set `TextureEnabled` in
-their `FillGpuDrawParams()` regardless of whether a texture was actually assigned, so they genuinely
-throw under `HeadlessValidation` if a game forgets to set one, while `AlphaTestEffect` degrades
-gracefully either way (its texture is truly optional). Worth knowing when writing a real game
-against these effects, not just a Headless test-coverage note; (2026-07-13) every
-`HEADLESS-20`/`22`/`23`/`24` validation rule is now confirmed both ways — throws under
-`HeadlessValidation`, does not throw under `HeadlessFast` — in one dedicated sixth CTest,
-`Headless_ModeDial`, not just the one representative draw-call-bounds case shown elsewhere; and
-(2026-07-13) `HeadlessTrace`'s call log now covers every draw/clear/resource-creation/`SetData`/
-`Present`/state-change call site (`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/
-`SetDepthTestEnabled`/`SetDepthWriteEnabled`/`CreateSpriteBatch`/
-`CreateOcclusionQuery` were the last untraced ones), verified by a seventh CTest,
-`Headless_TraceDiff`, which also introduces `CompareTraceLogs()`/`FormatTraceLogDiff()` (see
-below) and, while closing it, caught and fixed a real bug: `SetViewport` had never actually been
-wired into `RecordTrace()` despite an earlier commit message claiming it was.
+## Verified coverage
+
+The module-owned tests plus the shared renderer-contract/conformance registrations are listed by
+`ctest --test-dir cmake-build-headless -N -L Headless`; do not rely on an old fixed test count.
+Focused regressions include:
+
+- cube target dimensions, 2D-to-cube transitions and return to the backbuffer;
+- cumulative/per-frame instanced statistics and a distinct structured instanced trace entry;
+- target, virtual-resolution, presentation, blend-factor and reference-stencil trace entries;
+- format-aware Texture2D stride, mip-index/dimension/null validation and retained mip bytes;
+- exact TextureCube face/format round trips and explicit Texture3D refusal;
+- every `LastBatch()` field, raw invalid `PrimitiveType` values and foreign-renderer resources;
+- debug labels, leak reports, trace formatting/diffing, stock effects and the runtime mode dial.
 
 ## Debug labels and trace log export
 

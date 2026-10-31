@@ -4,9 +4,8 @@
 // TextureCube, Texture3D, RenderTarget2D, RenderTargetCube, custom ShaderEffect, and HeadlessTrace
 // mode were all implemented and reachable, but only exercised by code inspection, not a real test.
 //
-// Check A -- TextureCube construction + SetData()/GetData() on 2 different faces: what this
-//   renderer really produces (a transparent-black overwrite of the caller's destination) is pinned,
-//   not blessed -- see the check's own comment (the honest Texture2D::GetData contract false-positive audit).
+// Check A -- TextureCube construction + SetData()/GetData() preserve independent faces and exact
+//   format-native bytes for every format this renderer advertises.
 // Check B -- Texture3D construction is REJECTED (this renderer reports no
 // GraphicsCapability::Texture3D).
 // Check C -- RenderTarget2D: SetRenderTarget()/SetRenderTarget(nullptr) doesn't throw, and

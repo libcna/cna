@@ -71,6 +71,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
         COMMAND cna_test_headless_texture_validation
         TIMEOUT 30 LABELS "Headless")
 
+    cna_headless_test(cna_test_headless_boundary_contract headless_boundary_contract_test.cpp)
+    cna_register_renderer_test(NAME Headless_BoundaryContract
+        COMMAND cna_test_headless_boundary_contract
+        TIMEOUT 30 LABELS "Headless")
+
     # Every public Texture2D::GetData call must return the resource's real content or
     # reject the request deterministically -- never fabricate one. This renderer executes no
     # rasterization at all, so it is the one that must REJECT render-target colour readback: pre-fix

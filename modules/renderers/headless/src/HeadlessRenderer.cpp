@@ -34,6 +34,20 @@ namespace CNA::Internal::Renderers::Headless
             return PrimitiveVertexCount(primitive, primitiveCount);
         }
 
+        bool IsValidPrimitiveType(PrimitiveType primitive)
+        {
+            switch (primitive)
+            {
+                case PrimitiveType::TriangleList:
+                case PrimitiveType::TriangleStrip:
+                case PrimitiveType::LineList:
+                case PrimitiveType::LineStrip:
+                case PrimitiveType::PointListEXT:
+                    return true;
+            }
+            return false;
+        }
+
         void Require(const std::shared_ptr<HeadlessSharedState>& state, bool condition, const std::string& message)
         {
             if (state->ValidationEnabled() && !condition)
@@ -47,6 +61,56 @@ namespace CNA::Internal::Renderers::Headless
             // the same public contract instead of requiring a resource the effect API makes
             // optional. Ordinary BasicEffect draws remain strict.
             return params.alphaTestEffect || params.skinned || params.pbr;
+        }
+
+        bool IsHeadlessTextureResource(const ITextureRenderer* texture)
+        {
+            return texture == nullptr ||
+                dynamic_cast<const HeadlessTextureRenderer*>(texture) != nullptr ||
+                dynamic_cast<const HeadlessRenderTargetRenderer*>(texture) != nullptr;
+        }
+
+        bool IsHeadlessCubeResource(const ITextureCubeRenderer* texture)
+        {
+            return texture == nullptr ||
+                dynamic_cast<const HeadlessTextureCubeRenderer*>(texture) != nullptr ||
+                dynamic_cast<const HeadlessRenderTargetCubeRenderer*>(texture) != nullptr;
+        }
+
+        bool DrawResourcesBelongToHeadless(const GpuDrawParams& params)
+        {
+            const ITextureRenderer* textures[] = {
+                params.texture0,
+                params.texture1,
+                params.shadowMap,
+                params.punctualShadowMap,
+                params.compiledSpriteTexture0,
+                params.pbrNormalMap,
+                params.pbrMetallicRoughnessMap,
+                params.pbrEmissiveMap,
+                params.pbrOcclusionMap,
+                params.pbrSpecularMap,
+                params.pbrSpecularColorMap,
+                params.iblBrdfLut,
+            };
+            for (const ITextureRenderer* texture : textures)
+            {
+                if (!IsHeadlessTextureResource(texture))
+                    return false;
+            }
+
+            const ITextureCubeRenderer* cubes[] = {
+                params.envMap,
+                params.punctualShadowCube,
+                params.iblIrradiance,
+                params.iblPrefilteredSpecular,
+            };
+            for (const ITextureCubeRenderer* cube : cubes)
+            {
+                if (!IsHeadlessCubeResource(cube))
+                    return false;
+            }
+            return true;
         }
 
         int CubeMipLevels(int size, bool mipMap)
@@ -558,8 +622,8 @@ namespace CNA::Internal::Renderers::Headless
     {
         resourceId_ = state_->registry.Register("Texture3D", state_->CurrentDebugLabel());
         state_->stats.textures3DCreated++;
-        // Same as the cube renderer above -- the zero-filled voxel buffer was never
-        // written by SetData and existed only for GetData to return, so it is gone with it.
+        // Volume storage is deliberately unsupported. The public constructor refuses before this
+        // class is reached; the direct boundary exists only to make that refusal explicit.
         state_->RecordTrace("CreateTexture3D", "size=" + std::to_string(w) + "x" + std::to_string(h) +
                             "x" + std::to_string(depth));
     }
@@ -577,7 +641,7 @@ namespace CNA::Internal::Renderers::Headless
                "HeadlessTexture3DRenderer::SetData: negative sub-volume");
         Require(state_, dataLength >= 0, "HeadlessTexture3DRenderer::SetData: negative dataLength");
         state_->RecordTrace("Texture3D::SetData", "");
-        // See HeadlessTextureCubeRenderer::SetData -- trace only, never a store.
+        // Trace the attempted direct-boundary call, then refuse rather than discard its bytes.
         (void)data;
         return false;
     }
@@ -624,7 +688,12 @@ namespace CNA::Internal::Renderers::Headless
     { uniformValues_[name].assign(values, values + std::max(0, count)); }
     void HeadlessEffectRenderer::SetUniformVec2Array(const char* name, const float* values, int count)
     { uniformValues_[name].assign(values, values + std::max(0, count) * 2); }
-    void HeadlessEffectRenderer::BindTexture(int unit, ITextureRenderer* texture) { boundTextures_[unit] = texture; }
+    void HeadlessEffectRenderer::BindTexture(int unit, ITextureRenderer* texture)
+    {
+        Require(state_, IsHeadlessTextureResource(texture),
+                "HeadlessEffectRenderer::BindTexture: texture belongs to another renderer");
+        boundTextures_[unit] = texture;
+    }
 
     // ---- HeadlessSpriteBatchRenderer ----
 
@@ -655,6 +724,8 @@ namespace CNA::Internal::Renderers::Headless
 
     void HeadlessSpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {
+        Require(state_, IsHeadlessTextureResource(&texture),
+                "HeadlessSpriteBatchRenderer::Draw: texture belongs to another renderer");
         HeadlessSpriteDrawRecord record;
         record.texture = &texture;
         record.destinationRectangle = Rectangle(static_cast<int>(x), static_cast<int>(y),
@@ -667,6 +738,8 @@ namespace CNA::Internal::Renderers::Headless
     void HeadlessSpriteBatchRenderer::Draw(const ITextureRenderer& texture, const Rectangle& destinationRectangle,
                                       const Rectangle& sourceRectangle, const Color& color)
     {
+        Require(state_, IsHeadlessTextureResource(&texture),
+                "HeadlessSpriteBatchRenderer::Draw: texture belongs to another renderer");
         HeadlessSpriteDrawRecord record;
         record.texture = &texture;
         record.destinationRectangle = destinationRectangle;
@@ -680,6 +753,8 @@ namespace CNA::Internal::Renderers::Headless
                                       const Rectangle& sourceRectangle, const Color& color, float rotation,
                                       const Vector2& origin, SpriteEffects effects, float layerDepth)
     {
+        Require(state_, IsHeadlessTextureResource(&texture),
+                "HeadlessSpriteBatchRenderer::Draw: texture belongs to another renderer");
         HeadlessSpriteDrawRecord record;
         record.texture = &texture;
         record.destinationRectangle = destinationRectangle;
@@ -1222,6 +1297,10 @@ namespace CNA::Internal::Renderers::Headless
     void HeadlessRenderer::DrawColoredPrimitives(const IVertexBufferRenderer& vb, const Matrix&, const Matrix&,
                                                      const Matrix&, PrimitiveType primitive, int primitiveCount)
     {
+        Require(state_, dynamic_cast<const HeadlessVertexBufferRenderer*>(&vb) != nullptr,
+                "HeadlessRenderer::DrawColoredPrimitives: vertex buffer belongs to another renderer");
+        Require(state_, IsValidPrimitiveType(primitive),
+                "HeadlessRenderer::DrawColoredPrimitives: invalid PrimitiveType value");
         Require(state_, primitiveCount > 0,
                "HeadlessRenderer::DrawColoredPrimitives: primitiveCount must be > 0, got " +
                std::to_string(primitiveCount));
@@ -1235,10 +1314,16 @@ namespace CNA::Internal::Renderers::Headless
         state_->RecordTrace("DrawColoredPrimitives", "primitiveCount=" + std::to_string(primitiveCount));
     }
 
-    void HeadlessRenderer::DrawIndexedColoredPrimitives(const IVertexBufferRenderer&, const IIndexBufferRenderer& ib,
+    void HeadlessRenderer::DrawIndexedColoredPrimitives(const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
                                                             const Matrix&, const Matrix&, const Matrix&,
                                                             PrimitiveType primitive, int primitiveCount)
     {
+        Require(state_, dynamic_cast<const HeadlessVertexBufferRenderer*>(&vb) != nullptr,
+                "HeadlessRenderer::DrawIndexedColoredPrimitives: vertex buffer belongs to another renderer");
+        Require(state_, dynamic_cast<const HeadlessIndexBufferRenderer*>(&ib) != nullptr,
+                "HeadlessRenderer::DrawIndexedColoredPrimitives: index buffer belongs to another renderer");
+        Require(state_, IsValidPrimitiveType(primitive),
+                "HeadlessRenderer::DrawIndexedColoredPrimitives: invalid PrimitiveType value");
         Require(state_, primitiveCount > 0,
                "HeadlessRenderer::DrawIndexedColoredPrimitives: primitiveCount must be > 0, got " +
                std::to_string(primitiveCount));
@@ -1257,6 +1342,8 @@ namespace CNA::Internal::Renderers::Headless
                                                PrimitiveType primitive, int primitiveCount,
                                                const GpuDrawParams& params)
     {
+        Require(state_, DrawResourcesBelongToHeadless(params),
+                "HeadlessRenderer::DrawPrimitivesEx: texture resource belongs to another renderer");
         Require(state_, !(params.textureEnabled && params.texture0 == nullptr &&
                           !AllowsImplicitPrimaryTexture(params)),
                "HeadlessRenderer::DrawPrimitivesEx: TextureEnabled=true but texture0 is null");
@@ -1274,6 +1361,8 @@ namespace CNA::Internal::Renderers::Headless
                                                        const Matrix& projection, PrimitiveType primitive,
                                                        int primitiveCount, const GpuDrawParams& params)
     {
+        Require(state_, DrawResourcesBelongToHeadless(params),
+                "HeadlessRenderer::DrawIndexedPrimitivesEx: texture resource belongs to another renderer");
         Require(state_, !(params.textureEnabled && params.texture0 == nullptr &&
                           !AllowsImplicitPrimaryTexture(params)),
                "HeadlessRenderer::DrawIndexedPrimitivesEx: TextureEnabled=true but texture0 is null");
@@ -1286,12 +1375,20 @@ namespace CNA::Internal::Renderers::Headless
         DrawIndexedColoredPrimitives(vb, ib, world, view, projection, primitive, primitiveCount);
     }
 
-    void HeadlessRenderer::DrawInstancedPrimitivesEx(const IVertexBufferRenderer&, const IIndexBufferRenderer& ib,
+    void HeadlessRenderer::DrawInstancedPrimitivesEx(const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
                                                         const Matrix&, const Matrix&,
                                                         const Matrix&, PrimitiveType primitive,
                                                         int primitiveCount, int instanceCount,
                                                         const GpuDrawParams& params)
     {
+        Require(state_, DrawResourcesBelongToHeadless(params),
+                "HeadlessRenderer::DrawInstancedPrimitivesEx: texture resource belongs to another renderer");
+        Require(state_, dynamic_cast<const HeadlessVertexBufferRenderer*>(&vb) != nullptr,
+                "HeadlessRenderer::DrawInstancedPrimitivesEx: vertex buffer belongs to another renderer");
+        Require(state_, dynamic_cast<const HeadlessIndexBufferRenderer*>(&ib) != nullptr,
+                "HeadlessRenderer::DrawInstancedPrimitivesEx: index buffer belongs to another renderer");
+        Require(state_, IsValidPrimitiveType(primitive),
+                "HeadlessRenderer::DrawInstancedPrimitivesEx: invalid PrimitiveType value");
         Require(state_, instanceCount > 0,
                "HeadlessRenderer::DrawInstancedPrimitivesEx: instanceCount must be > 0, got " +
                std::to_string(instanceCount));

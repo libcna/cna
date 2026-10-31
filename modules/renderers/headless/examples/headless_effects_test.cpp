@@ -54,6 +54,10 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
@@ -70,6 +74,25 @@
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using namespace CNA::Internal::Renderers::Headless;
+
+namespace
+{
+    struct DualTextureVertex
+    {
+        Vector3 position;
+        Vector2 texture0;
+        Vector2 texture1;
+    };
+
+    VertexDeclaration DualTextureDeclaration()
+    {
+        return VertexDeclaration(sizeof(DualTextureVertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(20, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+        });
+    }
+}
 
 class HeadlessEffectsTest : public Game
 {
@@ -128,12 +151,12 @@ protected:
 
         // Checks C/D: DualTextureEffect -- both textures are effectively mandatory.
         {
-            const VertexPositionTexture verts[3] = {
-                { Vector3(0.0f, 1.0f, 0.0f), Vector2(0.5f, 0.0f) },
-                { Vector3(-1.0f, -1.0f, 0.0f), Vector2(0.0f, 1.0f) },
-                { Vector3(1.0f, -1.0f, 0.0f), Vector2(1.0f, 1.0f) },
+            const DualTextureVertex verts[3] = {
+                { Vector3(0.0f, 1.0f, 0.0f), Vector2(0.5f, 0.0f), Vector2(0.5f, 0.0f) },
+                { Vector3(-1.0f, -1.0f, 0.0f), Vector2(0.0f, 1.0f), Vector2(0.0f, 1.0f) },
+                { Vector3(1.0f, -1.0f, 0.0f), Vector2(1.0f, 1.0f), Vector2(1.0f, 1.0f) },
             };
-            VertexBuffer vbMissing(dev, VertexPositionTexture::getVertexDeclarationStatic(), 3, BufferUsage::None);
+            VertexBuffer vbMissing(dev, DualTextureDeclaration(), 3, BufferUsage::None);
             vbMissing.SetData(verts, 3);
             DualTextureEffect fxMissing(dev);
             fxMissing.setTextureProperty(&tex);
@@ -142,7 +165,7 @@ protected:
             check(ThrowsOnDraw(dev, vbMissing),
                   "DualTextureEffect draws without Texture2 set throws under HeadlessValidation");
 
-            VertexBuffer vbBoth(dev, VertexPositionTexture::getVertexDeclarationStatic(), 3, BufferUsage::None);
+            VertexBuffer vbBoth(dev, DualTextureDeclaration(), 3, BufferUsage::None);
             vbBoth.SetData(verts, 3);
             DualTextureEffect fxBoth(dev);
             fxBoth.setTextureProperty(&tex);

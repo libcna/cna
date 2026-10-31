@@ -32,7 +32,10 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
-#include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 
 #include "CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp"
 
@@ -45,6 +48,25 @@
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using namespace CNA::Internal::Renderers::Headless;
+
+namespace
+{
+    struct DualTextureVertex
+    {
+        Vector3 position;
+        Vector2 texture0;
+        Vector2 texture1;
+    };
+
+    VertexDeclaration DualTextureDeclaration()
+    {
+        return VertexDeclaration(sizeof(DualTextureVertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(20, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+        });
+    }
+}
 
 class HeadlessModeDialTest : public Game
 {
@@ -108,14 +130,14 @@ protected:
         // Checks E/F: HEADLESS-22, via a DualTextureEffect draw missing its second texture.
         {
             Texture2D tex = Texture2D::CreateFromPixels(dev, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255});
-            const VertexPositionTexture verts[3] = {
-                { Vector3(0.0f, 1.0f, 0.0f), Vector2(0.5f, 0.0f) },
-                { Vector3(-1.0f, -1.0f, 0.0f), Vector2(0.0f, 1.0f) },
-                { Vector3(1.0f, -1.0f, 0.0f), Vector2(1.0f, 1.0f) },
+            const DualTextureVertex verts[3] = {
+                { Vector3(0.0f, 1.0f, 0.0f), Vector2(0.5f, 0.0f), Vector2(0.5f, 0.0f) },
+                { Vector3(-1.0f, -1.0f, 0.0f), Vector2(0.0f, 1.0f), Vector2(0.0f, 1.0f) },
+                { Vector3(1.0f, -1.0f, 0.0f), Vector2(1.0f, 1.0f), Vector2(1.0f, 1.0f) },
             };
 
             auto drawWithMissingTexture2 = [&]() {
-                VertexBuffer vb(dev, VertexPositionTexture::getVertexDeclarationStatic(), 3, BufferUsage::None);
+                VertexBuffer vb(dev, DualTextureDeclaration(), 3, BufferUsage::None);
                 vb.SetData(verts, 3);
                 DualTextureEffect fx(dev);
                 fx.setTextureProperty(&tex);
