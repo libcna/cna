@@ -54,9 +54,9 @@ namespace CNA::Internal::Renderers::DirectX9
             case SurfaceFormat::ColorBgraEXT:       return D3DFMT_A8R8G8B8;
             // D3D9 has no distinct sRGB format constants at all -- sRGB decoding is a per-sampler
             // render state (D3DSAMP_SRGBTEXTURE), not a format bit, unlike D3D11's dedicated
-            // _SRGB DXGI_FORMAT values. These two therefore intentionally return the SAME
-            // D3DFORMAT as their non-sRGB counterpart; D9-63 (ApplySamplerState) is responsible
-            // for setting D3DSAMP_SRGBTEXTURE when sampling a texture created with one of these.
+            // _SRGB DXGI_FORMAT values. The mapping remains useful as the native storage spelling,
+            // but DirectX9Renderer::ClassifySurfaceFormatEXT currently rejects these public
+            // formats because the renderer does not track the per-texture sRGB sampling state.
             case SurfaceFormat::ColorSrgbEXT:       return D3DFMT_A8B8G8R8;
             case SurfaceFormat::Dxt5SrgbEXT:        return D3DFMT_DXT5;
             // BC7 postdates D3D9 entirely (introduced with D3D11) -- genuinely no equivalent,

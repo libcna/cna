@@ -21,8 +21,9 @@ DXVK Direct3D-9-over-Vulkan implementation on this dev machine, which is what ma
 meaningful — without that, it would silently measure a driver difference and misattribute it to
 CNA.
 
-**Current result: all 39 scenes with a reference image match real XNA 4.0 exactly**
-(`D3D9_XNA_Diff`, rerun 2026-10-28; the corpus holds 40 scenes). See
+**Current result: all 40 active scenes match real XNA 4.0 exactly**
+(`D3D9_XNA_Diff`, rerun 2026-10-31). `D3D9_XNA_Manifest` additionally checks exact pairing for
+7 auxiliary scene/reference fixtures. See
 `docs/d3d9-divergence-report.md` for the measurement — what's covered, what isn't yet, and the
 honest DXVK-authenticity caveat every result here inherits (below).
 
@@ -71,24 +72,27 @@ cmake --build cmake-build-mingw --parallel 8
   attenuation. The classic effects select CNA-owned SM3 variants only while the extension is
   active, leaving Microsoft's stock bytecode untouched for ordinary XNA draws. Focused public
   BasicEffect and SkinnedEffect regressions cover disabled, point, out-of-range and aimed/away
-  spot cases; PBR also covers a skinned draw.
+  spot cases; PBR also covers a skinned draw. The CNA shadow extension samples directional and
+  cascaded maps, point-light cubes and spot-light maps in these paths; the focused PBR shadow
+  orientation regression passes under DXVK.
 - **Custom `ShaderEffect`**: HLSL compiled at run time through `D3DCompile` in the separate
   `cna_renderer_d3d9_effect` library, so the stock pipeline itself never links `d3dcompiler`;
   constants are mapped by CNA's own CTAB parser (`D9-110`..`D9-112`, `DirectX9_CompiledEffects`).
 - **Render targets sampled as textures**, single and MRT: the DXVK crash once blamed for blocking
   them was a wrong `static_cast` in `D3D9EffectDraw.cpp` (`D9-84`, fixed 2026-07-16), and
   `DirectX9_RenderTarget_SamplingOrientation`, `_ProducerConsumer` and `_EffectSource` cover them.
+  The `rendertarget_sampled_quad` oracle scene also matches the real XNA 4.0 render exactly.
 
 ## What's not (yet)
 
-- **An oracle scene for a render target sampled as a texture**: covered by CTests (above), not
-  yet by a scene diffed against real XNA.
-- **Every `SurfaceFormat` besides `Color`**: the former shared API blocker is closed by
-  `SOFTWARE-276`, which restores generic, byte-width-compatible Texture2D transfers. Dedicated
-  D3D9 oracle scenes for the remaining formats have still not been run, so this is an evidence gap
-  in that renderer's corpus rather than a missing CNA submission API.
-- **Direct shadow-map sampling** is not implemented in the D3D9 Basic/Skinned/PBR paths; their
-  point and spot lights are currently unshadowed.
+- **Every non-`Color` texture format in the XNA oracle**: ordinary D3D9 textures have a real,
+  device-qualified classic/float format table and byte-exact transfer checks, but dedicated
+  real-XNA oracle scenes have not swept those formats. Native sRGB and BC7 formats remain rejected.
+  D3D9 `RenderTarget2D`/`RenderTargetCube` storage is currently `Color` only.
+- **Cube-target MSAA**: deliberately unsupported by this renderer. Two-dimensional render targets
+  use the device-qualified D3D9 multisample/resolve path.
+- **Depth bias differential proof**: the states are forwarded as D3D9 float bit patterns, but the
+  DXVK experiment did not produce a discriminating oracle result.
 - **`SpriteSortMode.Immediate`/`.Texture`**: `Immediate`'s only real behavioral difference from
   `Deferred` isn't pixel-observable by a raster-diff methodology at all; `Texture` sorts by
   `Texture.GetHashCode()` in real FNA, an implementation-defined identity hash with no
@@ -101,7 +105,7 @@ cmake --build cmake-build-mingw --parallel 8
 
 ## The one caveat every result above inherits
 
-Every check in this renderer — the oracle's own `39/39` result included — ran under Wine+DXVK, on
+Every check in this renderer — the oracle's own `40/40` result included — ran under Wine+DXVK, on
 this dev machine's own GPU (AMD Radeon 780M, RADV). `D3DCAPS9` in this loop is **synthesized by
 DXVK**, not reported by an authentic XNA-era (~2006–2013) Direct3D 9 driver.
 `IsProfileSupported(HiDef)` returning `true` here proves the comparison *logic* is correct, not
@@ -200,7 +204,9 @@ them need the separate XNA prefix to run.
 - `tools/xna-oracle/CnaOracleRender.cpp` — the CNA side, through the real public
   `Game`/`GraphicsDeviceManager`/`GraphicsDevice`/effect/`SpriteBatch`/`Texture2D` API, never the
   raw renderer interface.
-- `tools/xna-oracle/reference/*.png` — the real-XNA-4.0 renders (39), captured once and checked in.
+- `tools/xna-oracle/reference/*.png` — the real-XNA-4.0 renders (40 active plus 7 auxiliary),
+  captured once and checked in. `D3D9_XNA_Manifest` refuses any missing or extra scene/reference
+  stem.
   `D3D9_XNA_Diff` (a real CTest, `D9-120`) diffs every scene against these on every run — it needs
   only the D3D9 Wine prefix, never the XNA one, to keep validating against them.
 - `scripts/xna-diff.py` — the pixel-diff tool itself (`--tolerance` defaults to `0`; **never**
@@ -229,11 +235,16 @@ only the checks that should be affected) goes red, then revert and reconfirm gre
 this discipline catching genuine false-positive traps (a check that stays green even with its own
 target feature disabled is worse than no check at all).
 
-## Known limitations (2026-10-28)
+## Known limitations (2026-10-31)
 
 - **Not verified on real Windows hardware** (`D9-140`, `needs_human`) — see the DXVK-authenticity
-  caveat above. `handoff.md` §5 lists the `CnaGraphicsTests.exe` cases that currently fail under
-  Wine.
+  caveat above. This includes authentic driver caps, exclusive fullscreen and naturally induced
+  device loss; the automated reset and fullscreen-fallback checks use Wine+DXVK.
+- **The oracle is not an exhaustive resource-format suite** — non-`Color` texture formats,
+  render-target mip generation, cube targets and MSAA are covered by focused CNA tests rather than
+  all being represented in the real-XNA scene corpus. Render-target storage is `Color` only, cube
+  MSAA is unsupported, and native sRGB/BC7 textures are rejected.
+- **Depth bias has no discriminating differential result** under the current DXVK setup.
 - **`DirectX9_Common`'s lookup-table checks are mostly not individually mutation-verified** — `D9-122`
   closed the highest-value gaps (blend state, device-lost recovery, MRT, render-target bind,
   vertex-buffer upload, cube-texture upload) but explicitly left most of `DirectX9_Common`'s ~30

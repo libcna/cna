@@ -1,15 +1,18 @@
 # D3D9 renderer — divergence report (DX9 D9-121)
 
-**Status: 2026-07-15. Corpus: 31 scenes, `D9-A5`. Result: 0 measured pixel divergences from real
-XNA 4.0, at `--tolerance 0` (exact match), across the entire current corpus.**
+**Original status: 2026-07-15. Corpus: 31 scenes, `D9-A5`. Result: 0 measured pixel divergences
+from real XNA 4.0, at `--tolerance 0` (exact match), across the entire corpus at that date.**
 
-> **Rerun 2026-10-28.** The corpus has since grown to 40 scenes, 39 with a checked-in XNA
-> reference image, and `D3D9_XNA_Diff` reports **39/39 matching real XNA 4.0 exactly**. The
+> **Rerun 2026-10-31.** The active corpus has since grown to 40 exactly paired scenes and XNA
+> reference images, and `D3D9_XNA_Diff` reports **40/40 matching real XNA 4.0 exactly**.
+> `D3D9_XNA_Manifest` separately proves exact pairing for those 40 active pairs and 7 auxiliary
+> pairs. The
 > additions closed four rows of "Not yet measured" below: per-pixel lighting
 > (`lit_textured_quad_pixellighting`, `skinned_pixellighting_*`), `EnvironmentMapEffect`'s specular
 > bucket (`envmap_specular_quad`), `D3DCULL` winding (`cullmode_*`), and the lighting part of
 > divergence 1. Render targets sampled as textures stopped being blocked: the crash was CNA's own
-> (`D9-84`). The sections below keep the 2026-07-15 wording and mark what changed.
+> (`D9-84`), and `rendertarget_sampled_quad` now proves the public render-to-texture path against
+> real XNA. The sections below keep the 2026-07-15 wording and mark what changed.
 
 This is the deliverable the DX9 plan's Phase D9-12 asked for: not a feature checklist, but a
 measurement. "Indistinguishable from XNA 4.0" is a claim this renderer makes; this document is the
@@ -32,13 +35,14 @@ difference and misattribute it to CNA. `scripts/xna-diff.py --tolerance 0` (the 
 every one of the 65,536 pixels per scene; `0/65536` is required for a PASS, not "close enough."
 
 `D3D9_XNA_Diff` (`D9-120`, this same commit) promotes this into a real, checked-in CTest —
-`tools/xna-oracle/reference/*.png` holds the 31 real-XNA renders, captured once by hand and
+`tools/xna-oracle/reference/*.png` held the original 31 real-XNA renders, captured once by hand and
 committed, so the CTest itself needs only the D3D9 Wine prefix (not the XNA one) to keep
-validating against them on every future run.
+validating against them on every future run. It now holds 40 active references plus 7 auxiliary
+references, all mechanically paired with their scenes by `D3D9_XNA_Manifest`.
 
-## Result: 0/31 scenes diverge
+## Original result: 0/31 scenes diverged
 
-Every scene in the current corpus passes at `tolerance=0`. Represented, at least once, all
+Every scene in that original corpus passed at `tolerance=0`. Represented, at least once, all
 pixel-perfect:
 
 - **All 5 XNA Stock Effects** (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`,
@@ -85,14 +89,14 @@ testing through the real public API against a real oracle rather than trusting t
 
 ## Not yet measured — explicit, not silently assumed covered
 
-The corpus is 31 scenes deep, not exhaustive. These are real gaps, each with a concrete reason it
+The original corpus was 31 scenes deep, not exhaustive. These are real gaps, each with a concrete reason it
 isn't closed yet, not just "not gotten to":
 
 | Area | Why it's not in the corpus |
 |---|---|
-| Render targets (`RenderTarget2D`/`RenderTargetCube` as a sampled texture) | **No longer blocked.** The crash was a wrong `static_cast` in `D3D9EffectDraw.cpp`, fixed by `D9-84` (2026-07-16); `DirectX9_RenderTarget_SamplingOrientation`, `_ProducerConsumer` and `_EffectSource` cover the path. No oracle scene diffs it against XNA yet. |
-| Every `SurfaceFormat` besides `Color` | The former shared-API blocker is closed by `SOFTWARE-276`: CNA now exposes generic, byte-width-compatible `Texture2D::SetData<T>`/`GetData<T>`. These formats still have no dedicated D3D9 oracle scenes in this corpus, so they remain unmeasured here rather than being described as impossible to submit. |
-| `EnvironmentMapEffect`'s specular variants, `PreferPerPixelLighting` (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) | **Measured since** (2026-10-28 rerun): `GpuDrawParams` carries `preferPerPixelLighting` (graphics Phase 80, 2026-07-16), and `lit_textured_quad_pixellighting`, `skinned_pixellighting_*` and `envmap_specular_quad` pass. |
+| Render targets (`RenderTarget2D`/`RenderTargetCube` as a sampled texture) | **Measured since** (2026-10-31) for `RenderTarget2D`: the crash was a wrong `static_cast` in `D3D9EffectDraw.cpp`, fixed by `D9-84`; focused CTests cover orientation, producer/consumer ordering and effect sources, and `rendertarget_sampled_quad` matches real XNA exactly. Cube targets, target mip generation and MSAA remain focused-test evidence rather than oracle scenes. |
+| Every `SurfaceFormat` besides `Color` | The former shared-API blocker is closed by `SOFTWARE-276`: CNA now exposes generic, byte-width-compatible `Texture2D::SetData<T>`/`GetData<T>`, and ordinary D3D9 textures have a device-qualified classic/float mapping plus transfer checks. These formats still have no dedicated D3D9 oracle scenes; render targets remain `Color` only, and native sRGB/BC7 textures are rejected. |
+| `EnvironmentMapEffect`'s specular variants, `PreferPerPixelLighting` (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) | **Measured since** (2026-10-31 rerun): `GpuDrawParams` carries `preferPerPixelLighting` (graphics Phase 80, 2026-07-16), and `lit_textured_quad_pixellighting`, `skinned_pixellighting_*` and `envmap_specular_quad` pass. |
 | `SpriteSortMode.Immediate` | Its only real behavioral difference from `Deferred` (per-`Draw()` GPU submission instead of batching until `End()`) is not pixel-observable by a raster-diff methodology at all — a batched multi-quad draw call and N individual draw calls in the same order produce the identical final image. No scene for it would add verification value. |
 | `SpriteSortMode.Texture` | Confirmed **not viable** as a deterministic oracle scene, not merely deferred: real FNA's own `SpriteBatch.cs` `TextureComparer.Compare` sorts by `texture.GetHashCode()` — `Texture`'s inherited default `Object.GetHashCode()`, an implementation-defined identity hash with no documented, predictable ordering between two arbitrary textures. |
 | NPOT-wrap-on-`Reach` | Real XNA's own enforcement timing/behavior here is undocumented, and FNA implements none of it either (confirmed via `D9-100`'s own research into `ProfileCapabilities.cs`) — inventing an enforcement point without a reference to verify against would be asserting behavior this project cannot actually check. |
@@ -111,7 +115,7 @@ fix them:
 1. **`PreferPerPixelLighting` ignored; CNA always renders per-pixel, XNA defaults per-vertex.**
    *(2026-07-15 wording.)* **Resolved on D3D9 since**: `GpuDrawParams` carries the flag (graphics
    Phase 80), and both the vertex-lit default (`lit_textured_quad`) and the per-pixel scenes match
-   XNA exactly in the 2026-10-28 rerun.
+   XNA exactly in the 2026-10-31 rerun.
 2. **`oneLight` inferred, not carried in `GpuDrawParams`.** Resolved for D3D9's own *dispatch*
    specifically (`D9-82b`'s own finding: a provably-lossless derivation from existing
    `GpuDrawParams` fields, not a `GpuDrawParams` change) — but this is a shader-selection
@@ -131,11 +135,11 @@ fix them:
    *closed*, not just measured, for this renderer specifically — it was never a gap on modern-API
    renderers in the first place (design decision 10).
 5. **Runtime uniform branching vs. XNA's compile-time shader permutations.** Unmeasured pixel-wise
-   beyond what the 31-scene corpus already implicitly exercises (every passing scene is evidence
+   beyond what the original 31-scene corpus already implicitly exercises (every passing scene is evidence
    this divergence is benign for the paths it covers, but no dedicated sweep has targeted it).
 6. **Self-declared "numerically equivalent" shader-math deviations** (e.g. `GpuDrawParams`'
    `AmbientLightColor`-folded-into-`DiffuseColor` claim). Not specifically swept for by `D9-A6`
-   (still open, `⬜`) — the 31-scene corpus's lit scenes (`lit_textured_quad`,
+   (still open, `⬜`) — the original 31-scene corpus's lit scenes (`lit_textured_quad`,
    `multilight_textured_quad`, `envmap_quad`, `skinned_quad`, ...) all pass at `tolerance=0`, which
    is evidence *for* the specific ambient-folding claim in the scenes that exercise ambient light,
    but not a dedicated, deliberate sweep for every such self-declared claim in the codebase.
@@ -151,7 +155,8 @@ reproducible on this machine, through this DXVK version — it is not yet valida
 Windows box with a real XNA-era (or modern) GPU and a real Direct3D 9 driver. That is `D9-140`,
 `needs_human`, still open. Until then, this report's claim is precisely: **CNA/D3D9 is
 indistinguishable from real XNA 4.0 running through the same DXVK Direct3D-9-over-Vulkan path, on
-this machine, for the 31 scenes measured** — a real, strong, reproducible result, and a narrower
+this machine, for the current 40 active scenes measured** — a real, strong, reproducible result,
+and a narrower
 one than "authentically indistinguishable from XNA on real hardware."
 
 ## Verdict
@@ -163,8 +168,8 @@ forced fixes for two real implementation bugs along the way (proof the methodolo
 find real problems, not just rubber-stamp passing results). The honest boundary is the corpus's
 own size and the six project-wide divergences above (four of them unmeasured or only partially
 measured on this renderer, one now closed here specifically, one resolved for dispatch purposes
-only) — not a claim that D3D9 is finished. `D9-84`/`D9-A5` (grow the corpus further) and `D9-140`
-(real hardware) are what would narrow that boundary next.
+only) — not a claim that D3D9 is finished. Further non-`Color`/resource-path oracle coverage and
+`D9-140` (real hardware) are what would narrow that boundary next.
 
 ## Cross-renderer measurement (D9-A6)
 

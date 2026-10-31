@@ -205,10 +205,21 @@ namespace CNA::Internal::Renderers::DirectX9
         /// plan note on D3D9Texture3DRenderer's own class doc comment) -- returns nullptr when the
         /// device reports no volume-texture support.
         std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
-        /// D9-53: real D3D9RenderTargetRenderer (D3DUSAGE_RENDERTARGET, D3DPOOL_DEFAULT). `mipMap`
-        /// is accepted but not yet honored (see D3D9RenderTargets.hpp's own header comment) --
-        /// `preserveContents` is likewise accepted (matches the interface) but not yet implemented
-        /// on any CNA renderer, D3D9 included.
+        /**
+         * @brief Creates a Color render target backed by D3DPOOL_DEFAULT resources.
+         *
+         * A mipmapped target allocates and regenerates its full chain. D3D9 preserves native
+         * target contents across ordinary target switches; the shared GraphicsDevice layer clears
+         * `DiscardContents` targets when they are bound. No target content survives device Reset.
+         *
+         * @param w Width in pixels.
+         * @param h Height in pixels.
+         * @param depthFormat XNA depth-stencil format ordinal.
+         * @param preserveContents Whether ordinary target switches must retain prior contents.
+         * @param mipMap Whether to allocate and regenerate a complete mip chain.
+         * @param multiSampleCount Requested sample count, clamped to native support.
+         * @return The native Direct3D 9 render-target renderer.
+         */
         std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2D(int w, int h, int depthFormat,
                                                                     bool preserveContents = false, bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
@@ -233,8 +244,8 @@ namespace CNA::Internal::Renderers::DirectX9
         /// against the real D3DCAPS9::NumSimultaneousRTs (design decision 13: an over-request
         /// THROWS a named error rather than silently degrading to fewer targets -- the exact
         /// invisible-capability trap the retired D3D11 renderer accepted but this
-        /// authenticity-focused renderer deliberately does not). All CNA render targets are
-        /// D3DFMT_A8B8G8R8 (RGBA8-storage-only, D9-50's own simplification), so design decision
+        /// authenticity-focused renderer deliberately does not). DirectX 9 render targets are
+        /// D3DFMT_A8B8G8R8 (the current Color-only render-target contract), so design decision
         /// 13's "same bit depth" requirement is always trivially satisfied -- nothing to actively
         /// enforce. No independent per-target blending exists either (ApplyBlendState() is a
         /// single global SetRenderState() sequence) -- also trivially satisfied.

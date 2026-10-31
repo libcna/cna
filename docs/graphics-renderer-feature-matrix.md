@@ -9,11 +9,12 @@ GPU-facing pixel/behavior check actually exercised it; anything implemented but 
 pixel-tested is marked 🟨, and anything not attempted/not built at all is marked ⬜ (distinct from
 this doc's own ❌, which means "tested and found to genuinely not work").
 
-**The `DIRECTX9` column measures something narrower and stricter than the EasyGL column: pixel-for-pixel
-indistinguishability from the real XNA 4.0 runtime**, not just "feature works." A `DIRECTX9` ✅ means the
-feature is exercised by `tools/xna-oracle/`'s checked-in scene corpus (`D9-120`, `D3D9_XNA_Diff`
-CTest) and its render is byte-identical (`--tolerance 0`) to the real XNA 4.0 runtime's own render of
-the same scene — a strictly stronger bar than the EasyGL column's ✅. This is
+**The `DIRECTX9` renderer's primary goal is narrower and stricter than the EasyGL column:
+pixel-for-pixel indistinguishability from the real XNA 4.0 runtime**, not just "feature works."
+The evidence text in each D3D9 cell distinguishes a real-XNA oracle match from a focused CNA
+GPU/behavior regression; a ✅ never means that focused evidence has silently been promoted to an
+XNA differential result. The active oracle corpus is byte-identical (`--tolerance 0`) for 40/40
+scenes. This is
 "verified through Wine+DXVK on this dev machine's real GPU," not real Windows hardware (`D9-140`,
 open). See `docs/directx9-renderer.md` and `docs/d3d9-divergence-report.md` for the full detail this
 column's cells summarize.
@@ -156,10 +157,10 @@ only).
 
 | Feature | EasyGL | D3D9 |
 |---|---|---|
-| `RenderTarget2D`/`RenderTargetCube`/MRT construction | ✅ | ✅ **row corrected 2026-07-16 — the crash below is fixed.** `MaxRenderTargets` `GraphicsProfile` ceiling (Reach=1/HiDef=4) real and mutation-verified (`D9-103`); full construction/bind/clear/readback pixel-verified (`DirectX9_Smoke` Checks S/T/U). The reproducible, uncaught DXVK crash this cell used to describe (sampling a `RenderTarget2D` as an ordinary effect texture) was root-caused and fixed 2026-07-16 — a real CNA-side type-confusion bug (`static_cast` between the unrelated sibling classes `D3D9TextureRenderer`/`D3D9RenderTargetRenderer`), not a DXVK/environment limitation (see `NEXT.md` §4). No `D9-A5` oracle scene exercises this path yet, though — that remains open, separately from the crash |
-| MSAA (both RT types) | ✅ | ⬜ not attempted — the render-target-as-texture crash that used to block this is fixed (2026-07-16, see the row above), but no oracle scene exercises `RenderTarget2D`/`RenderTargetCube` MSAA yet |
-| Mip chains (both RT types) | ✅ | ⬜ not attempted — same as MSAA above: no longer crash-blocked (2026-07-16), just not yet oracle-covered |
-| Per-instance `DepthStencilFormat` fidelity | ✅ | ⬜ not attempted — same as MSAA/mip above: no longer crash-blocked (2026-07-16), just not yet oracle-covered |
+| `RenderTarget2D`/`RenderTargetCube`/MRT construction | ✅ | ✅ `MaxRenderTargets` is capped by the real profile/device limits; construction, bind, clear, readback, MRT and sampling have focused pixel tests. `rendertarget_sampled_quad` additionally matches the real XNA render exactly; cube and MRT behavior remain focused-test evidence rather than separate oracle scenes. |
+| MSAA (both RT types) | ✅ | ⚠️ `RenderTarget2D` uses a device-qualified multisample surface and `StretchRect` resolve, covered by exact-color and shared pixel-center/readback tests. Cube-target MSAA is deliberately unsupported. No MSAA oracle scene exists. |
+| Mip chains (both RT types) | ✅ | ✅ Full chains are allocated and regenerated for 2D targets and the rendered cube face; focused readback/invalid-level fixtures cover them. No target-mip oracle scene exists. |
+| Per-instance `DepthStencilFormat` fidelity | ✅ | ✅ Real per-target D3D9 depth/stencil surfaces; focused usage tests cover preservation/discard and depth/stencil behavior. No dedicated XNA oracle scene exists. |
 
 ### Shared MRT attachment limit (Task 775)
 
@@ -175,7 +176,7 @@ itself could support.
 |---|---|---|
 | Texture2D `SetData`/`GetData`/`FromStream`/`SaveAsPng`/NPOT | ✅ | ✅ real `D3DPOOL_MANAGED` upload, exercised (and oracle-verified byte-exact) by every textured scene in the corpus (`texturepixel=` used 64×); `FromStream`/`SaveAsPng`/NPOT-on-`Reach` not separately tested |
 | Texture2D mip-level `SetData` (level > 0) | ✅ | ⬜ not attempted — no oracle scene exercises mip level > 0 |
-| Texture3D/TextureCube `SetData`/`GetData`, incl. mip | ✅ | 🟨 split: `TextureCube` `SetData` real, oracle-verified byte-exact via `envmap_quad`/`envmap_fresnel_quad`; `Texture3D` has only its `GraphicsProfile` size-ceiling mutation-verified (`D9-103`) — no oracle scene or GPU round-trip test exists for `Texture3D` at all |
+| Texture3D/TextureCube `SetData`/`GetData`, incl. mip | ✅ | ✅ Exact subregion/subvolume transfer round trips are exercised by `DirectX9_Smoke` and the cube/volume data-contract fixtures; cube sampling is also oracle-verified by `EnvironmentMapEffect`. Texture3D shader sampling has no oracle scene. |
 | Texture3D/TextureCube sampled in shaders | ❌ don't inherit `Texture` (Task 863, architectural) | 🟨 `TextureCube` sampled and oracle-verified byte-exact via `EnvironmentMapEffect` (`envmap_quad`/`envmap_fresnel_quad`); `Texture3D` has no consuming shader variant tested |
 | Non-`Color` `SurfaceFormat` for real GPU texture data | ✅ classic formats uploaded and sampled (`ClassicTextureFormat`, 14/14 on `OPENGLES3`, 2026-10-29) | 🟨 transfers are generic since `SOFTWARE-276`; no D3D9 oracle scene for a non-`Color` format (`directx9-renderer.md`) |
 
@@ -187,15 +188,15 @@ itself could support.
 | `DepthStencilState` (compare func + full stencil ops) | ✅ | ✅ real `D3DRS_STENCILENABLE`/compare-func dispatch, pixel-verified (`DirectX9_DepthStencilState_StencilEnable`) and mutation-verified (forced-false caught, `D9-122`) |
 | `RasterizerState` | ✅ | ✅ real `D3DRS_CULLMODE` winding-order dispatch, pixel-verified (`DirectX9_RasterizerState_CullMode`) and mutation-verified (forced-none caught, `D9-122`); depth-bias not separately tested — see this doc's own "Remaining genuine D3D9 limitations" section for `D9-62`'s own outstanding depth-bias oracle-proof attempt (investigated 2026-07-16, not closed: no observable effect at any tested magnitude, suspected environment/driver limitation) |
 | Per-slot `SamplerState` (16 slots) | ✅ | 🟨 real `D3DSAMP_ADDRESSU`/`V`/`MAGFILTER`/`MINFILTER` wiring, Wrap/Mirror pixel-behavior oracle-verified via SpriteBatch (`D9-92`); not tested across all 16 slots simultaneously |
-| `GraphicsDevice.ReferenceStencil` | ✅ shared stamp/test fixture passes on EasyGL (`GraphicsDevice_ReferenceStencil`, remeasured 2026-09-09) | ⬜ not attempted — no D3D9 test exercises `SetReferenceStencil()` |
-| `Clear` honors `ClearOptions::Stencil` | ✅ `GraphicsDevice_ClearStencil` and `ClearOverloads` pass on EasyGL (remeasured 2026-09-09) | ⬜ not attempted — `DirectX9_Smoke` covers plain `Clear(r,g,b,a)` only, not the `ClearOptions` combo variants |
+| `GraphicsDevice.ReferenceStencil` | ✅ shared stamp/test fixture passes on EasyGL (`GraphicsDevice_ReferenceStencil`, remeasured 2026-09-09) | 🟨 real `D3DRS_STENCILREF` update, but no D3D9-specific pixel fixture isolates only the runtime setter |
+| `Clear` honors `ClearOptions::Stencil` | ✅ `GraphicsDevice_ClearStencil` and `ClearOverloads` pass on EasyGL (remeasured 2026-09-09) | ✅ `DirectX9_Smoke` separately exercises Target, DepthBuffer and Stencil alone and in every two-/three-aspect combination, including unchanged-color controls |
 
 ## OcclusionQuery (Phase 50, closed this session — see `docs/occlusionquery-support.md` for full detail)
 
 | Feature | EasyGL | D3D9 |
 |---|---|---|
-| Wired to real GPU work (`Begin`/`End`) | ✅ | ⬜ **not built at all** — the DX9 plan's task list has no `IDirect3DQuery9`-based occlusion-query task; `CreateOcclusionQuery()` falls through to `IGraphicsRenderer`'s own silent `nullptr` default |
-| Pixel/query correctness (visible vs. occluded) | ✅ verified both directions (Tasks 445/446) | N/A — no query support exists |
+| Wired to real GPU work (`Begin`/`End`) | ✅ | ✅ real `IDirect3DQuery9(D3DQUERYTYPE_OCCLUSION)` with `D3DISSUE_BEGIN`/`END`, bounded `GetData` polling and capability probing; `DirectX9_Smoke` covers creation and completion |
+| Pixel/query correctness (visible vs. occluded) | ✅ verified both directions (Tasks 445/446) | ⚠️ the current D3D9-specific proof wraps a Clear and correctly returns zero; a discriminating visible-vs.-occluded draw count is not separately established |
 
 ## Model (Phase 49, closed this session — see `docs/model-content-pipeline-support.md` for full detail)
 
@@ -224,16 +225,22 @@ contention false failures):
 
 ## Remaining genuine D3D9 limitations (`D9-130`, 2026-07-15)
 
-Unlike the EasyGL column, `DIRECTX9`'s ✅ cells above are not "implemented and plausible" — they are
-each backed by a byte-identical (`--tolerance 0`) match against the real XNA 4.0 runtime for a
-checked-in oracle scene (`D9-120`, `D3D9_XNA_Diff`). The corpus has grown to 36/36 scenes (0
-diverge) as of Task 1101 (2026-07-16), up from 31 at `D9-130`'s original 2026-07-15 writing.
-**Three of this section's original six gaps are now fixed, corrected below rather than silently
-removed** — the genuine, currently-open gaps are:
+Unlike the EasyGL column, `DIRECTX9`'s ✅ cells above are not merely "implemented and plausible":
+each names its evidence. Where a cell names the real-XNA oracle, that is a byte-identical
+(`--tolerance 0`) checked-in scene (`D9-120`, `D3D9_XNA_Diff`); other cells name their focused CNA
+GPU/behavior test instead. The active corpus has grown to 40/40 scenes (0 diverge) as of
+2026-10-31, up from 31 at `D9-130`'s original 2026-07-15 writing. The
+genuine, currently-open gaps are:
 
-- **`Texture3D` has no GPU round-trip or oracle coverage at all** — only its `GraphicsProfile`
-  size-ceiling is tested; no scene in the corpus samples a `Texture3D` in a shader.
-- **`OcclusionQuery` is not built** for this renderer.
+- **The oracle does not sweep non-`Color` formats or every resource path.** Ordinary textures have
+  device-qualified format/transfer tests, but D3D9 render targets remain `Color` only; native sRGB
+  and BC7 textures are rejected. Target mips, cube targets and 2D MSAA use focused CNA tests rather
+  than real-XNA scene diffs, and cube-target MSAA is unsupported.
+- **`Texture3D` has exact CPU/GPU storage round-trip coverage but no sampled-in-shader oracle
+  scene.**
+- **`OcclusionQuery` has a real zero-pixel control but no D3D9-specific visible-vs.-occluded draw
+  proof.**
+- **Depth bias remains forwarded but not differentially proven** under DXVK.
 - **Not verified on real Windows hardware** (`D9-140`) — every result here is Wine+DXVK-on-this-
   machine.
 
@@ -242,8 +249,9 @@ Fixed since this section was originally written (2026-07-15):
 - ~~Render targets cannot be sampled as textures at all — a reproducible, uncaught DXVK crash~~ —
   **fixed 2026-07-16**: a real type-confusion bug (`static_cast` between the unrelated sibling
   classes `D3D9TextureRenderer`/`D3D9RenderTargetRenderer`, both implementing `ITextureRenderer`),
-  not a DXVK/environment limitation. See `NEXT.md` §4 and `src/Graphics/Renderers/D3D9/
-  D3D9EffectDraw.cpp`'s `ResolveD3D9TextureEXT`/`ResolveD3D9TextureCubeEXT`.
+  not a DXVK/environment limitation. See
+  `modules/renderers/directx9/src/D3D9EffectDraw.cpp`'s texture-resolution helpers and the
+  `rendertarget_sampled_quad` oracle scene.
 - ~~`PreferPerPixelLighting` and real specular highlights are structurally unreachable~~ — **fixed
   2026-07-16** (graphics Phase 80, Task 1101): `GpuDrawParams::preferPerPixelLighting`/
   `specularEnabled` are now real fields (Task 1100), read by this renderer's dispatch instead of

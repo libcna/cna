@@ -12,10 +12,12 @@
 // use" is the caller's own SetData()), a render target's natural "next use" is
 // BindAsRenderTarget()/BindAsRenderTargetFace() -- both lazily recreate the underlying D3D9
 // resources there if a prior device-lost recovery released them (ReleaseDefaultPoolResourceEXT()).
-// Real XNA/D3D9 behavior either way: RenderTarget2D content does not survive a device Reset unless
-// RenderTargetUsage.PreserveContents (not implemented by this project on any renderer yet).
+// No render-target content survives device Reset. PreserveContents governs ordinary target
+// transitions instead: D3D9 naturally retains the native surfaces, while the shared GraphicsDevice
+// layer explicitly clears DiscardContents targets on bind.
 //
-// RGBA8 storage only (D3DFMT_A8B8G8R8) -- same simplification D3D9Textures.hpp already uses. MSAA
+// Render-target storage is Color/RGBA8 only (D3DFMT_A8B8G8R8); ordinary D3D9 textures have a
+// broader device-qualified format table. MSAA
 // (2D only, D9-53's own note) is clamped to what the device's real
 // IDirect3D9::CheckDeviceMultiSampleType() reports (DirectX9Renderer::ClampMultiSampleCountEXT()),
 // never assumed -- an unsupported sample count silently falls back to 0 (no MSAA), an
@@ -215,11 +217,11 @@ namespace CNA::Internal::Renderers::DirectX9
          * Not `LockRect` on the cube texture itself, which is what the plain
          * `D3D9TextureCubeRenderer` -- a `D3DPOOL_MANAGED` resource -- can do.
          *
-         * This target allocates exactly one mip level and no multisampling (see `Recreate` and
-         * `GetMultiSampleCount`), so there is no resolve step and level > 0 is refused.
+         * This target does not support multisampling, so there is no resolve step. A mipmapped
+         * target allocates its complete chain and regenerates the rendered face when unbound.
          *
          * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
-         * @param level      Mip level to read; only 0 exists on this target.
+         * @param level      Mip level to read within the allocated chain.
          * @param x          Left edge of the requested region, in texels.
          * @param y          Top edge of the requested region, in texels.
          * @param w          Width of the requested region, in texels.
