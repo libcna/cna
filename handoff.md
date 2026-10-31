@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Sampler-state support-document follow-up reconciliation (2026-10-31): the Phase 35 page no
+  longer calls mip-aware `Point`/`Linear` a deliberate level-zero deviation, and now records
+  REMED-GFX-175's corrected nine-value filter table. The renderer inventory includes Software and
+  DirectX9 instead of a stale catch-all no-op row, the EasyGL summary covers later LOD/W, lifetime
+  and `SpriteBatch` work, and the closed historical list is separated from the two genuine current
+  limitations. All 14 focused EasyGL sampler, mip, anisotropy, AddressW and publication regressions
+  pass in the private GPU runner.
 - AlphaTestEffect support-document reconciliation (2026-10-31): the last unreconciled classic
   stock-effect page now uses the modular test path and current 46-case API inventory, separates
   Task 378 fog forwarding from Task 1111's corrected view-space formula, and replaces Task 379's

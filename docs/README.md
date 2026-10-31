@@ -103,8 +103,9 @@ original phase closed — check each file's own status banner/date.
   `environmentmapeffect-support.md`, `skinnedeffect-support.md` — stock-effect conformance.
   All five pages were reconciled with current source and tests on 2026-10-31.
 - `depthstencilstate-support.md` — refreshed 2026-07-11.
-- `sampler-state-support.md` — **refreshed 2026-07-11**: mip-level `SetData` (Tasks 924-926) and
-  EasyGL anisotropic filtering (Task 918) corrected from stale ❌ to ✅/fixed.
+- `sampler-state-support.md` — reconciled 2026-10-31: current nine-value filter mapping,
+  renderer-wide LOD/W propagation, sampler lifetime, and measured `SpriteBatch` publication;
+  historical Phase 35 findings are separated from the two remaining EasyGL limitations.
 - `rasterizerstate-support.md` — Phase 38 audit plus the real-XNA Task 954 culling contract and
   current regressions; see `graphics-renderer-feature-matrix.md` for the current per-renderer
   `DepthBias` status.

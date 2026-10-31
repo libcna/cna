@@ -1,9 +1,10 @@
-# SamplerState / Texture Sampling Support Matrix
+# SamplerState / texture-sampling support matrix
 
-> **Status update, 2026-07-11:** Task 867 (mip-level `SetData` and mipmap incompleteness, §6;
-> fixed on EasyGL as Task 924) and Task 918 (EasyGL `TextureFilter::Anisotropic` falling back to
-> trilinear, §7) are fixed (2026-07-09); §6/§7 describe them as found. See `handoff.md` §5 for
-> current status.
+> **Current-state reconciliation, 2026-10-31:** this Phase 35 audit now incorporates the later
+> mip-upload/completeness fixes (Tasks 924–926), EasyGL anisotropy (Task 918), the corrected
+> nine-value `TextureFilter` mapping (REMED-GFX-175), complete sampler-state propagation
+> (FX-083/091/092), and the measured `SpriteBatch` publication contract. Historical findings are
+> labelled as such; the remaining profile- and route-specific limitations are stated in §6b and §8.
 
 Phase 35 (graphics Tasks 291–300) audited and pixel-verified `SamplerState` and texture
 sampling conformance against FNA. This document summarizes the findings.
@@ -77,35 +78,39 @@ flat enum, which has no separate min/mag control), and generates no mipmaps by d
 magnification and minification exercise *identical* underlying sampler math in this project — the
 two scales in this test confirm robustness at scale, not a functionally distinct GPU code path.
 
-## 6. Mipmap filter behavior (Task 298)
+## 6. Mipmap filter behavior (Task 298; corrected by REMED-GFX-175)
 
-**EasyGL: verified correct for explicit `Mip*` filters.** A test with a real 8-level mipmapped
-`Texture2D` (level colours: 0–2 Red, 3–7 Green) drawn at an 8×8px on-screen size (forcing GPU
-automatic LOD ≈4) confirmed `TextureFilter::LinearMipPoint` correctly selects a high mip level
-(Green). `TextureFilter::Point`/`Linear` always sample level 0 (Red) regardless of minification —
-a **real, confirmed, deliberate deviation from FNA semantics** (XNA's `Point`/`Linear` are supposed
-to be mip-aware too): CNA doesn't set `GL_TEXTURE_MAX_LEVEL` to match each texture's real level
-count, so using a mip-aware GL filter unconditionally for the common non-mipmapped (single-level)
-texture case would render it GL-incomplete (typically solid black). Documented as an accepted
-tradeoff, tracked as part of Task 867's scope.
+The original Phase 35 test proved that `LinearMipPoint` selected an authored high mip, but it drew
+the wrong conclusion from `Point` and `Linear` selecting level zero. XNA/FNA's flat nine-value
+`TextureFilter` table defines a minification, magnification **and mip** component for every value:
+`Point` maps to point/point/point and `Linear` to linear/linear/linear. They are full mip-aware
+filters, not aliases for “disable mipmapping”.
+
+Task 924 subsequently made EasyGL upload nonzero mip levels and clamp `GL_TEXTURE_MAX_LEVEL` to a
+texture's real level count, fixing incomplete single-level textures. REMED-GFX-175 then removed the
+remaining false exception on 2026-07-30: all nine EasyGL ordinals now use their FNA min/mag/mip
+triples, including mipmap terms for `Point` and `Linear`. The shared `TextureFilterMipContract`
+guards every ordinal, full and partial mip chains, and the single-level case across the rasterizing
+renderer families. There is no accepted `Point`/`Linear` deviation today.
 
 ## 6b. `MaxMipLevel` and `MipMapLevelOfDetailBias` (FX-083, 2026-08-17)
 
 `IGraphicsRenderer::ApplySamplerMipState(slot, maxMipLevel, lodBias)` carries XNA's two LOD states
-across the renderer-neutral boundary. It has a default no-op body, so a renderer that has not
-adopted it accepts the state, publishes it on `GraphicsDevice.SamplerStates[slot]`, and does not
-change what the GPU samples. That was true of **every** renderer except FNA3D until FX-083.
+across the renderer-neutral boundary. Its default no-op body originally hid missing renderer
+adoption; every current rasterizing renderer now overrides it. `ApplySamplerAddressW` has likewise
+reached every rasterizing renderer. `HEADLESS` and `STUB` deliberately have no sampling result on
+which these states could be observed.
 
-| Renderer | `MaxMipLevel` | `MipMapLevelOfDetailBias` |
-|---|---|---|
-| FNA3D | `GL_TEXTURE_BASE_LEVEL` / SDLGPU `min_lod`, whichever driver is active | desktop GL only; FNA3D's own GL driver skips it under ES |
-| SDLGPU | **implemented** — `SDL_GPUSamplerCreateInfo::min_lod`, and part of the sampler cache key | **implemented on every ordinary stock/SpriteBatch and compiled-XNA-effect route** — SDLGPU-121/122 use SPIR-V's Bias operand because SDL documents native `mip_lod_bias` as a Metal no-op; Vulkan and D3D12 run the same shader emulation so the proof cannot pass through their working descriptor field |
-| EasyGL, ES 3 profiles (`OPENGLES3`, `WEBGL2`) | **implemented** — sampler-object `GL_TEXTURE_MIN_LOD` | **not representable as sampler state**: OpenGL ES has no `GL_TEXTURE_LOD_BIAS`; compiled vertex `TEXLDL` is nevertheless implemented by shader emulation (`FX-146`) |
-| EasyGL, `OPENGL33` | **implemented** — `GL_TEXTURE_MIN_LOD` | **implemented** — `GL_TEXTURE_LOD_BIAS` |
-| EasyGL `AddressW` | **implemented** since FX-092 — sampler-object `GL_TEXTURE_WRAP_R` | — |
-| WebGPU | **implemented** (`WEBGPU-161`) — `WGPUSamplerDescriptor::lodMinClamp`, and part of the 64-bit sampler cache key | **implemented** — by WGSL `textureSampleBias` on every stock 3D route (`WEBGPU-205`) and, by rewriting the compiled shader's SPIR-V, on compiled XNA Effects too (`WEBGPU-208`); `WGPUSamplerDescriptor` has no `lodBias` field at all, so both are shader emulations |
-| WebGPU `AddressW` | **implemented** (`WEBGPU-160`) — `WGPUSamplerDescriptor::addressModeW`, through the same ordinal table U and V use | — |
-| every other renderer | default no-op | default no-op |
+| Renderer | `MaxMipLevel` | `MipMapLevelOfDetailBias` | `AddressW` |
+|---|---|---|---|
+| FNA3D | `GL_TEXTURE_BASE_LEVEL` / SDLGPU `min_lod`, whichever driver is active | desktop GL only; FNA3D's own GL driver skips it under ES | implemented |
+| SDLGPU | **implemented** — `SDL_GPUSamplerCreateInfo::min_lod`, and part of the sampler cache key | **implemented on every ordinary stock/SpriteBatch and compiled-XNA-effect route** — SDLGPU-121/122 use SPIR-V's Bias operand because SDL documents native `mip_lod_bias` as a Metal no-op; Vulkan and D3D12 run the same shader emulation so the proof cannot pass through their working descriptor field | `SDL_GPUSamplerCreateInfo::address_mode_w` |
+| EasyGL, ES 3 profiles (`OPENGLES3`, `WEBGL2`) | **implemented** — sampler-object `GL_TEXTURE_MIN_LOD` | **not representable for implicit sampling**: OpenGL ES has no `GL_TEXTURE_LOD_BIAS`; compiled vertex `TEXLDL` is nevertheless implemented by shader emulation (`FX-146`) | sampler-object `GL_TEXTURE_WRAP_R` |
+| EasyGL, `OPENGL33` | **implemented** — `GL_TEXTURE_MIN_LOD` | **implemented** — `GL_TEXTURE_LOD_BIAS` | sampler-object `GL_TEXTURE_WRAP_R` |
+| WebGPU | **implemented** (`WEBGPU-161`) — `WGPUSamplerDescriptor::lodMinClamp`, and part of the sampler cache key | **implemented** — by WGSL `textureSampleBias` on every stock 3D route (`WEBGPU-205`) and, by rewriting the compiled shader's SPIR-V, on compiled XNA Effects too (`WEBGPU-208`); `WGPUSamplerDescriptor` has no `lodBias` field, so both are shader emulations | `WGPUSamplerDescriptor::addressModeW` (`WEBGPU-160`) |
+| Software | **implemented** in the CPU sampler state | **implemented** in the CPU sampler state | implemented in the CPU sampler state |
+| DirectX9 | native `D3DSAMP_MAXMIPLEVEL` | native `D3DSAMP_MIPMAPLODBIAS` | native `D3DSAMP_ADDRESSW` |
+| `HEADLESS`, `STUB` | no raster sampling | no raster sampling | no raster sampling |
 
 **EasyGL compiled vertex sampling is the narrow ES exception since FX-146 (2026-10-04).** A
 `vs_3_0 TEXLDL` already supplies an explicit level in the coordinate's W component, so the GLSL
@@ -329,34 +334,38 @@ exactly what addresses the volume.
 Asserted by `modules/renderers/easygl/examples/easygl_texture3d_addressw_test.cpp`
 (`EasyGL_Texture3DAddressW`).
 
-## Summary: what actually works today, per renderer
+## Summary: EasyGL contract today
 
-**Updated 2026-07-11** — the mip `SetData` and anisotropic filtering rows reflect Tasks 924 and
-918 (see the status banner at the top of this document).
+**Reconciled 2026-10-31.** The detailed cross-renderer LOD and W-addressing boundary is in §6b;
+the broad current renderer comparison remains in `graphics-renderer-feature-matrix.md`.
 
-| Feature | EasyGL |
+| Feature | EasyGL status |
 |---|---|
-| `SamplerState` API/presets/`Name` | ✅ |
-| Default `SamplerStates`/`VertexSamplerStates` (`LinearWrap`) | ✅ |
-| Per-slot sampler actually applied on 3D stock-effect draws | ✅ (fixed) |
-| `TextureAddressMode::Clamp`/`Wrap`/`Mirror` | ✅ |
-| `TextureFilter::Point` vs `Linear` | ✅ |
-| Mip-level `SetData(level>0)` uploads real GPU data | ✅ (fixed, Task 924) |
-| Mip-aware filters (`LinearMipPoint` etc.) select the correct mip | ✅ (mipmapped textures only) |
-| `Point`/`Linear`/`Mip*` filters on a **non-mipmapped** texture | ✅ (fixed, Task 924 — `GL_TEXTURE_MAX_LEVEL` now clamped to the real level count, so a single-level texture no longer reads as GL-incomplete under a mip-aware filter) |
-| `TextureFilter::Anisotropic` — level respected | ✅ (fixed, Task 918 — real `GL_EXT_texture_filter_anisotropic`, clamped to driver cap) |
-| Extreme/over-cap `MaxAnisotropy` doesn't crash | ✅ |
+| `SamplerState` API, presets, preset `Name` and collection defaults | ✅ |
+| Per-slot sampler application on 3D stock-effect draws | ✅ |
+| `TextureAddressMode::Clamp`/`Wrap`/`Mirror`, including independent W | ✅ |
+| All nine `TextureFilter` ordinals, including mip-aware `Point`/`Linear` | ✅ |
+| Mip-level `SetData(level>0)` and full/partial/single-level completeness | ✅ |
+| `TextureFilter::Anisotropic` and over-cap `MaxAnisotropy` clamping | ✅ |
+| `MaxMipLevel` | ✅ |
+| `MipMapLevelOfDetailBias` | ✅ `OPENGL33`; ⚠️ ES implicit sampling has no equivalent state, while compiled vertex `TEXLDL` is emulated (§6b) |
+| `SpriteBatch` publication of slots 1–15 and measured slot-0 state | ✅ |
+| Sampler mutation/reset and cache identity | ✅ |
+| Mid-batch `SamplerStates[u]` mutation in `SpriteSortMode::Immediate` | ⚠️ not republished before each draw (§8) |
 
-Legend: ✅ verified working · ❌ confirmed broken/absent · ⚠️ partial/inconsistent ·
-🔍 not empirically verified this phase.
+Legend: ✅ verified working · ⚠️ explicit limitation described in the cited section.
 
-## Open, tracked follow-up work
+## Closed Phase 35 follow-up work
 
-- ~~**Task 866**~~ — **fixed**: `BlendState`/`DepthStencilState`/`RasterizerState` static presets
-  now set `Name`, closing the same gap `SamplerState` had before Task 291.
-- ~~**Task 867**~~ — **fixed** as Task 924 (2026-07-09): `Texture2D::SetData(level>0,...)` now
-  does a real GPU upload on EasyGL, and EasyGL's `GL_TEXTURE_MAX_LEVEL` mipmap-incompleteness
-  black-screen bug is fixed.
-- ~~EasyGL's anisotropic filtering gap~~ — **fixed, Task 918** (2026-07-09): real
-  `GL_EXT_texture_filter_anisotropic` support added, gated on the extension genuinely being
-  available and clamped to the live driver's `MaxTextureMaxAnisotropy` cap.
+- **Task 866:** fixed — the other static state presets now set `Name`, closing the same gap found
+  for `SamplerState` in Task 291.
+- **Task 867 / Task 924:** fixed on 2026-07-09 — nonzero mip uploads are real and EasyGL clamps
+  `GL_TEXTURE_MAX_LEVEL` to the texture's actual chain.
+- **Task 918:** fixed on 2026-07-09 — EasyGL uses the live anisotropy extension/capability and
+  clamps `MaxAnisotropy` to the driver limit.
+- **REMED-GFX-175:** fixed on 2026-07-30 — all nine EasyGL filter ordinals carry their correct mip
+  component; the former claim that `Point`/`Linear` deliberately selected only level zero was false.
+
+No item in this historical list remains open. The two current EasyGL/XNA differences are the ES
+implicit-LOD-bias boundary (§6b) and `SpriteSortMode::Immediate` not republishing a sampler changed
+between `Begin()` and `Draw()` (§8).
