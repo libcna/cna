@@ -241,13 +241,26 @@ namespace CNA::Internal::Renderers::Headless
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
         [[nodiscard]] const std::vector<std::uint8_t>& Pixels() const { return pixels_; }
+        /**
+         * @brief Returns the format-native bytes retained for one mip level.
+         *
+         * @param level Zero-based mip level.
+         * @return Stored bytes for the requested level.
+         */
+        [[nodiscard]] const std::vector<std::uint8_t>& MipPixels(int level) const
+        {
+            return mipPixels_.at(static_cast<std::size_t>(level));
+        }
 
     protected:
         std::shared_ptr<HeadlessSharedState> state_;
         std::uint64_t resourceId_;
         int width_ = 0;
         int height_ = 0;
+        int mipLevelCount_ = 1;
+        int surfaceFormat_ = 0;
         std::vector<std::uint8_t> pixels_;
+        std::vector<std::vector<std::uint8_t>> mipPixels_;
     };
 
     class HeadlessRenderTargetRenderer final : public IRenderTargetRenderer

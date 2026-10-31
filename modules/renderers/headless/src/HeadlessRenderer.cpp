@@ -245,11 +245,46 @@ namespace CNA::Internal::Renderers::Headless
     // ---- HeadlessTextureRenderer ----
 
     HeadlessTextureRenderer::HeadlessTextureRenderer(std::shared_ptr<HeadlessSharedState> state, const ImageData& data)
-        : state_(std::move(state)), width_(data.width), height_(data.height)
+        : state_(std::move(state)), width_(data.width), height_(data.height),
+          mipLevelCount_(std::max(1, data.mipLevels)), surfaceFormat_(data.surfaceFormat)
     {
+        Require(state_, width_ > 0 && height_ > 0,
+                "HeadlessTextureRenderer: dimensions must be positive");
+        if (width_ <= 0 || height_ <= 0)
+        {
+            width_ = std::max(1, width_);
+            height_ = std::max(1, height_);
+        }
+        int maximumMipLevels = 1;
+        for (int w = width_, h = height_; w > 1 || h > 1; ++maximumMipLevels)
+        {
+            w = std::max(1, w / 2);
+            h = std::max(1, h / 2);
+        }
+        Require(state_, data.mipLevels >= 1 && data.mipLevels <= maximumMipLevels,
+                "HeadlessTextureRenderer: mip level count is invalid for the texture dimensions");
+        mipLevelCount_ = std::clamp(data.mipLevels, 1, maximumMipLevels);
+        mipPixels_.resize(static_cast<std::size_t>(mipLevelCount_));
+        int levelWidth = width_;
+        int levelHeight = height_;
+        for (int level = 0; level < mipLevelCount_; ++level)
+        {
+            mipPixels_[static_cast<std::size_t>(level)].assign(
+                CNA::Internal::Graphics::SurfaceFormatDecoder::RawByteCount(
+                    surfaceFormat_, levelWidth, levelHeight),
+                0u);
+            levelWidth = std::max(1, levelWidth / 2);
+            levelHeight = std::max(1, levelHeight / 2);
+        }
+        const std::size_t expectedLevelZeroBytes = mipPixels_.front().size();
+        Require(state_, data.pixels.size() == expectedLevelZeroBytes,
+                "HeadlessTextureRenderer: level-zero byte count does not match texture format and dimensions");
+        const std::size_t copyBytes = std::min(data.pixels.size(), expectedLevelZeroBytes);
+        std::copy_n(data.pixels.begin(), static_cast<std::ptrdiff_t>(copyBytes),
+                    mipPixels_.front().begin());
+        pixels_ = mipPixels_.front();
         resourceId_ = state_->registry.Register("Texture2D", state_->CurrentDebugLabel());
         state_->stats.texturesCreated++;
-        pixels_.assign(data.pixels.begin(), data.pixels.end());
         state_->RecordTrace("CreateTexture", "size=" + std::to_string(width_) + "x" + std::to_string(height_));
     }
 
@@ -257,8 +292,16 @@ namespace CNA::Internal::Renderers::Headless
                                            std::string typeNameOverride)
         : state_(std::move(state)), width_(width), height_(height)
     {
+        Require(state_, width_ > 0 && height_ > 0,
+                "HeadlessTextureRenderer: dimensions must be positive");
+        if (width_ <= 0 || height_ <= 0)
+        {
+            width_ = std::max(1, width_);
+            height_ = std::max(1, height_);
+        }
         resourceId_ = state_->registry.Register(typeNameOverride, state_->CurrentDebugLabel());
-        pixels_.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u, 0u);
+        pixels_.assign(static_cast<std::size_t>(width_) * static_cast<std::size_t>(height_) * 4u, 0u);
+        mipPixels_.push_back(pixels_);
     }
 
     HeadlessTextureRenderer::~HeadlessTextureRenderer()
@@ -269,23 +312,59 @@ namespace CNA::Internal::Renderers::Headless
     void HeadlessTextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
     {
         Require(state_, rgba != nullptr, "HeadlessTextureRenderer::UpdatePixels: rgba must not be null");
-        const std::size_t rowBytes = static_cast<std::size_t>(width_) * 4u;
+        if (rgba == nullptr)
+            return;
+
+        const std::size_t rowBytes = CubeRegionRowBytes(surfaceFormat_, width_);
+        const int rowCount = CubeRegionRows(surfaceFormat_, height_);
+        Require(state_, stride <= 0 || static_cast<std::size_t>(stride) >= rowBytes,
+                "HeadlessTextureRenderer::UpdatePixels: positive stride is shorter than one format-native row");
+        if (stride > 0 && static_cast<std::size_t>(stride) < rowBytes)
+            return;
+
         const std::size_t effectiveStride = stride > 0 ? static_cast<std::size_t>(stride) : rowBytes;
-        pixels_.resize(rowBytes * static_cast<std::size_t>(height_));
-        for (int y = 0; y < height_; ++y)
+        pixels_.resize(rowBytes * static_cast<std::size_t>(rowCount));
+        for (int y = 0; y < rowCount; ++y)
         {
             std::copy(rgba + static_cast<std::size_t>(y) * effectiveStride,
                      rgba + static_cast<std::size_t>(y) * effectiveStride + rowBytes,
                      pixels_.begin() + static_cast<std::ptrdiff_t>(y) * static_cast<std::ptrdiff_t>(rowBytes));
         }
-        state_->RecordTrace("Texture2D::UpdatePixels", "");
+        mipPixels_.front() = pixels_;
+        state_->RecordTrace("Texture2D::UpdatePixels", "level=0 size=" +
+                            std::to_string(width_) + "x" + std::to_string(height_));
     }
 
-    void HeadlessTextureRenderer::UpdatePixelsLevel(int /*level*/, const uint8_t* rgba, int levelW, int levelH)
+    void HeadlessTextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
     {
         Require(state_, rgba != nullptr, "HeadlessTextureRenderer::UpdatePixelsLevel: rgba must not be null");
-        Require(state_, levelW >= 0 && levelH >= 0, "HeadlessTextureRenderer::UpdatePixelsLevel: negative dimensions");
-        state_->RecordTrace("Texture2D::UpdatePixelsLevel", "");
+        Require(state_, level >= 0 && level < mipLevelCount_,
+                "HeadlessTextureRenderer::UpdatePixelsLevel: level is outside the allocated mip chain");
+        if (rgba == nullptr || level < 0 || level >= mipLevelCount_)
+            return;
+
+        int expectedWidth = width_;
+        int expectedHeight = height_;
+        for (int currentLevel = 0; currentLevel < level; ++currentLevel)
+        {
+            expectedWidth = std::max(1, expectedWidth / 2);
+            expectedHeight = std::max(1, expectedHeight / 2);
+        }
+        Require(state_, levelW == expectedWidth && levelH == expectedHeight,
+                "HeadlessTextureRenderer::UpdatePixelsLevel: dimensions do not match the requested mip level");
+        if (levelW != expectedWidth || levelH != expectedHeight)
+            return;
+
+        const std::size_t byteCount =
+            CNA::Internal::Graphics::SurfaceFormatDecoder::RawByteCount(
+                surfaceFormat_, expectedWidth, expectedHeight);
+        auto& levelPixels = mipPixels_[static_cast<std::size_t>(level)];
+        levelPixels.assign(rgba, rgba + byteCount);
+        if (level == 0)
+            pixels_ = levelPixels;
+        state_->RecordTrace("Texture2D::UpdatePixelsLevel",
+                            "level=" + std::to_string(level) + " size=" +
+                                std::to_string(levelW) + "x" + std::to_string(levelH));
     }
 
     // ---- HeadlessRenderTargetRenderer ----
