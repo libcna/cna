@@ -26,6 +26,10 @@
 //   other (same calls, but one run stopped early) -- divergence index is the length of the
 //   shorter log.
 // Check 7 -- FormatTraceLogDiff() renders a one-line "identical" summary for a matching pair.
+// Check 8 -- virtual-resolution, presentation-mode, blend-factor and reference-stencil changes
+//   have structured trace entries.
+// Check 9 -- direct 2D/cube/MRT binds and an unbind have type, face, size and count details.
+// Check 10 -- an instanced draw is identified as such and records primitive/instance counts.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -33,7 +37,9 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstdint>
 
+using namespace CNA::Internal::Renderers;
 using namespace CNA::Internal::Renderers::Headless;
 
 namespace
@@ -44,6 +50,16 @@ namespace
     {
         std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
         if (ok) ++g_passCount;
+    }
+
+    bool HasTrace(const HeadlessRenderer& renderer, const char* method, const char* args)
+    {
+        for (const HeadlessTraceEntry& entry : renderer.TraceLog())
+        {
+            if (entry.method == method && entry.argsSummary == args)
+                return true;
+        }
+        return false;
     }
 
     // A small, deterministic sequence exercising the newly-traced methods plus a couple of
@@ -142,6 +158,66 @@ int main()
               "FormatTraceLogDiff() renders a one-line 'identical' summary for matching logs");
     }
 
-    std::printf("=== %d/%d PASS ===\n", g_passCount, 7);
-    return (g_passCount == 7) ? 0 : 1;
+
+    // Check G: independently mutable device properties are no longer invisible in Trace mode.
+    {
+        HeadlessRenderer renderer(64, 64);
+        renderer.SetMode(HeadlessMode::Trace);
+        renderer.SetVirtualResolution(80, 60);
+        renderer.SetPresentationMode(2);
+        renderer.SetBlendFactor(0.25f, 0.5f, 0.75f, 1.0f);
+        renderer.SetReferenceStencil(7);
+        Check(HasTrace(renderer, "SetVirtualResolution", "size=80x60") &&
+                  HasTrace(renderer, "SetPresentationMode", "mode=2") &&
+                  HasTrace(renderer, "SetBlendFactor", "rgba=0.25,0.5,0.75,1") &&
+                  HasTrace(renderer, "SetReferenceStencil", "value=7"),
+              "HeadlessTrace records virtual resolution, presentation, blend factor and stencil reference");
+    }
+
+    // Check H: target changes preserve enough information to diagnose attachment-order bugs.
+    {
+        HeadlessRenderer renderer(64, 64);
+        renderer.SetMode(HeadlessMode::Trace);
+        auto target2D = renderer.CreateRenderTarget2D(16, 16, 0);
+        auto targetCube = renderer.CreateRenderTargetCube(16, 0);
+        renderer.SetRenderTarget2D(target2D.get());
+        renderer.SetRenderTargetCubeFace(targetCube.get(), 4);
+        const CNA::Internal::Renderers::RenderTargetBindingDescriptor bindings[] = {
+            CNA::Internal::Renderers::RenderTargetBindingDescriptor::ForRenderTarget2D(
+                target2D.get(), 0, 16, 16, 0),
+            CNA::Internal::Renderers::RenderTargetBindingDescriptor::ForRenderTargetCubeFace(
+                targetCube.get(), 2, 16, 0),
+        };
+        renderer.SetRenderTargets(bindings, 2);
+        renderer.SetRenderTargets(nullptr, 0);
+        Check(HasTrace(renderer, "SetRenderTarget2D", "target=2D size=16x16") &&
+                  HasTrace(renderer, "SetRenderTargetCubeFace", "target=cube face=4 size=16x16") &&
+                  HasTrace(renderer, "SetRenderTargets",
+                           "count=2 [0:2D 16x16] [1:cube face=2 16x16]") &&
+                  HasTrace(renderer, "SetRenderTargets", "count=0"),
+              "HeadlessTrace records 2D, cube-face, MRT and backbuffer target transitions");
+    }
+
+    // Check I: instanced work has its own trace identity rather than masquerading as an indexed draw.
+    {
+        HeadlessRenderer renderer(64, 64);
+        renderer.SetMode(HeadlessMode::Trace);
+        auto vertices = renderer.CreateVertexBuffer(3);
+        auto indices = renderer.CreateIndexBuffer16(3);
+        const float vertexData[9] = {};
+        const std::uint16_t indexData[3] = {0, 1, 2};
+        vertices->SetData(vertexData, 3, sizeof(float) * 3);
+        indices->SetData16(indexData, 3);
+        const CNA::Internal::Renderers::GpuDrawParams params{};
+        renderer.DrawInstancedPrimitivesEx(
+            *vertices, *indices, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, 3, params);
+        Check(HasTrace(renderer, "DrawInstancedPrimitivesEx",
+                       "primitiveCount=1 instanceCount=3") &&
+                  !HasTrace(renderer, "DrawIndexedColoredPrimitives", "primitiveCount=1"),
+              "HeadlessTrace identifies instanced draws and records both logical counts");
+    }
+
+    std::printf("=== %d/%d PASS ===\n", g_passCount, 10);
+    return (g_passCount == 10) ? 0 : 1;
 }

@@ -702,9 +702,14 @@ namespace CNA::Internal::Renderers::Headless
     {
         virtualWidth_ = width;
         virtualHeight_ = height;
+        state_->RecordTrace("SetVirtualResolution",
+                            "size=" + std::to_string(width) + "x" + std::to_string(height));
     }
 
-    void HeadlessRenderer::SetPresentationMode(int /*mode*/) {}
+    void HeadlessRenderer::SetPresentationMode(int mode)
+    {
+        state_->RecordTrace("SetPresentationMode", "mode=" + std::to_string(mode));
+    }
 
     void HeadlessRenderer::ReadBackbuffer(int /*x*/, int /*y*/, int /*w*/, int /*h*/, uint8_t* /*pixels*/)
     {
@@ -830,7 +835,13 @@ namespace CNA::Internal::Renderers::Headless
             target->BindAsRenderTarget();
             boundRenderTargets_.push_back(
                 BoundRenderTarget{target, nullptr, -1, target->GetWidth(), target->GetHeight()});
+            state_->RecordTrace(
+                "SetRenderTarget2D",
+                "target=2D size=" + std::to_string(target->GetWidth()) + "x" +
+                    std::to_string(target->GetHeight()));
+            return;
         }
+        state_->RecordTrace("SetRenderTarget2D", "target=backbuffer");
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> HeadlessRenderer::CreateRenderTargetCube(
@@ -861,7 +872,13 @@ namespace CNA::Internal::Renderers::Headless
             target->BindAsRenderTargetFace(face);
             boundRenderTargets_.push_back(
                 BoundRenderTarget{nullptr, target, face, target->GetSize(), target->GetSize()});
+            state_->RecordTrace(
+                "SetRenderTargetCubeFace",
+                "target=cube face=" + std::to_string(face) + " size=" +
+                    std::to_string(target->GetSize()) + "x" + std::to_string(target->GetSize()));
+            return;
         }
+        state_->RecordTrace("SetRenderTargetCubeFace", "target=backbuffer");
     }
 
     void HeadlessRenderer::SetRenderTargets(
@@ -869,7 +886,8 @@ namespace CNA::Internal::Renderers::Headless
     {
         if (count <= 0)
         {
-            SetRenderTarget2D(nullptr);
+            UnbindAllRenderTargets();
+            state_->RecordTrace("SetRenderTargets", "count=0");
             return;
         }
 
@@ -923,6 +941,20 @@ namespace CNA::Internal::Renderers::Headless
                 binding.targetCube->BindAsRenderTargetFace(binding.cubeFace);
         }
         boundRenderTargets_ = std::move(nextBindings);
+
+        std::ostringstream trace;
+        trace << "count=" << count;
+        for (int i = 0; i < count; ++i)
+        {
+            const BoundRenderTarget& binding = boundRenderTargets_[static_cast<std::size_t>(i)];
+            trace << " [" << i << ':';
+            if (binding.target2D != nullptr)
+                trace << "2D ";
+            else
+                trace << "cube face=" << binding.cubeFace << ' ';
+            trace << binding.width << 'x' << binding.height << ']';
+        }
+        state_->RecordTrace("SetRenderTargets", trace.str());
     }
 
     std::unique_ptr<IEffectRenderer> HeadlessRenderer::CreateEffectRenderer(const std::string& vertSrc,
@@ -992,6 +1024,18 @@ namespace CNA::Internal::Renderers::Headless
                "HeadlessRenderer::ApplySamplerState: slot must be 0..15, got " + std::to_string(slot));
         state_->stats.samplerStateChangeCount++;
         state_->RecordTrace("ApplySamplerState", "slot=" + std::to_string(slot));
+    }
+
+    void HeadlessRenderer::SetBlendFactor(float r, float g, float b, float a)
+    {
+        std::ostringstream summary;
+        summary << "rgba=" << r << ',' << g << ',' << b << ',' << a;
+        state_->RecordTrace("SetBlendFactor", summary.str());
+    }
+
+    void HeadlessRenderer::SetReferenceStencil(int value)
+    {
+        state_->RecordTrace("SetReferenceStencil", "value=" + std::to_string(value));
     }
 
     void HeadlessRenderer::SetScissorRect(int x, int y, int w, int h)
@@ -1163,21 +1207,44 @@ namespace CNA::Internal::Renderers::Headless
         DrawIndexedColoredPrimitives(vb, ib, world, view, projection, primitive, primitiveCount);
     }
 
-    void HeadlessRenderer::DrawInstancedPrimitivesEx(const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
-                                                        const Matrix& world, const Matrix& view,
-                                                        const Matrix& projection, PrimitiveType primitive,
+    void HeadlessRenderer::DrawInstancedPrimitivesEx(const IVertexBufferRenderer&, const IIndexBufferRenderer& ib,
+                                                        const Matrix&, const Matrix&,
+                                                        const Matrix&, PrimitiveType primitive,
                                                         int primitiveCount, int instanceCount,
                                                         const GpuDrawParams& params)
     {
         Require(state_, instanceCount > 0,
                "HeadlessRenderer::DrawInstancedPrimitivesEx: instanceCount must be > 0, got " +
                std::to_string(instanceCount));
-        DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
-        // One instanced draw is accounted as `instanceCount` draws of `primitiveCount` primitives
-        // each; the forwarded call above has already booked the first instance on both counters.
-        state_->stats.drawCallCount += static_cast<std::uint64_t>(instanceCount - 1);
+        Require(state_, !(params.textureEnabled && params.texture0 == nullptr &&
+                          !AllowsImplicitPrimaryTexture(params)),
+               "HeadlessRenderer::DrawInstancedPrimitivesEx: TextureEnabled=true but texture0 is null");
+        Require(state_, !(params.dualTexture && params.texture1 == nullptr),
+               "HeadlessRenderer::DrawInstancedPrimitivesEx: DualTexture=true but texture1 is null");
+        Require(state_, !(params.envMapping && params.envMap == nullptr),
+               "HeadlessRenderer::DrawInstancedPrimitivesEx: EnvMapping=true but envMap is null");
+        Require(state_, !(params.skinned && params.boneCount <= 0),
+               "HeadlessRenderer::DrawInstancedPrimitivesEx: Skinned=true but boneCount <= 0");
+        Require(state_, primitiveCount > 0,
+               "HeadlessRenderer::DrawInstancedPrimitivesEx: primitiveCount must be > 0, got " +
+                   std::to_string(primitiveCount));
+        const int neededIndices = PrimitiveIndexCount(primitive, primitiveCount);
+        Require(state_, neededIndices <= ib.GetIndexCount(),
+               "HeadlessRenderer::DrawInstancedPrimitivesEx: primitiveCount " +
+                   std::to_string(primitiveCount) + " needs " + std::to_string(neededIndices) +
+                   " indices but the bound buffer only has " + std::to_string(ib.GetIndexCount()));
+        if (instanceCount <= 0 || primitiveCount <= 0 || neededIndices > ib.GetIndexCount())
+            return;
+
+        // Headless statistics describe the logical work represented by an instanced request:
+        // one draw and one primitive contribution per instance, not one API dispatch.
+        state_->stats.drawCallCount += static_cast<std::uint64_t>(instanceCount);
         state_->stats.primitiveCount +=
-            static_cast<std::uint64_t>(primitiveCount) * static_cast<std::uint64_t>(instanceCount - 1);
+            static_cast<std::uint64_t>(primitiveCount) * static_cast<std::uint64_t>(instanceCount);
+        state_->RecordTrace(
+            "DrawInstancedPrimitivesEx",
+            "primitiveCount=" + std::to_string(primitiveCount) +
+                " instanceCount=" + std::to_string(instanceCount));
     }
 
     HeadlessStatistics HeadlessRenderer::GetLastFrameStatistics() const

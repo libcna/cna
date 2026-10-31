@@ -587,7 +587,18 @@ namespace CNA::Internal::Renderers::Headless
          */
         bool PresentRegionEXT(const RendererPresentRegionEXT& region) override;
         void GetViewportSize(int& width, int& height) override;
+        /**
+         * @brief Changes the virtual back-buffer dimensions and records the resolved size.
+         *
+         * @param width New virtual width in pixels.
+         * @param height New virtual height in pixels.
+         */
         void SetVirtualResolution(int width, int height) override;
+        /**
+         * @brief Records a presentation-mode change without creating a real presentation surface.
+         *
+         * @param mode Renderer-neutral presentation-mode value.
+         */
         void SetPresentationMode(int mode) override;
 
         /**
@@ -668,6 +679,21 @@ namespace CNA::Internal::Renderers::Headless
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        /**
+         * @brief Records the constant blend colour used by BlendFactor blend modes.
+         *
+         * @param r Red component.
+         * @param g Green component.
+         * @param b Blue component.
+         * @param a Alpha component.
+         */
+        void SetBlendFactor(float r, float g, float b, float a) override;
+        /**
+         * @brief Records the independently mutable stencil reference value.
+         *
+         * @param value New stencil reference value.
+         */
+        void SetReferenceStencil(int value) override;
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
 
