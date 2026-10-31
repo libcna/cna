@@ -193,9 +193,9 @@ TEST(CnjContentPipelineTest, Texture2DConvergesOnTheExistingTextureProcessorAndW
 
     const Pipeline::ContentBuildResult result = Build(scratch.Path(), "wall.cnj", "Textures/wall");
     EXPECT_EQ(result.importer, (Pipeline::ContentComponentIdentity{"CNA.CnjImporter", "1"}));
-    EXPECT_EQ(result.processor, (Pipeline::ContentComponentIdentity{"CNA.TextureProcessor", "3"}));
+    EXPECT_EQ(result.processor, (Pipeline::ContentComponentIdentity{"CNA.TextureProcessor", "4"}));
     EXPECT_EQ(result.writer,
-              (Pipeline::ContentComponentIdentity{"CNA.Texture2DContentWriter", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.Texture2DContentWriter", "2"}));
     ASSERT_EQ(result.dependencies.size(), 2u);
     EXPECT_EQ(std::filesystem::path(result.dependencies[1].identity).filename(), "source.png");
 

@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/RendererTestGate.hpp"
 #include "CNA/Content/Cnb/CnbByteWriter.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
@@ -29,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
@@ -44,6 +46,7 @@ using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::PresentationParameters;
+using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
 namespace
 {
@@ -152,6 +155,49 @@ TEST(CnbTextureContentManagerTest, AMippedTexture2DCnbProducesEveryDeclaredLevel
     EXPECT_EQ(smallest[0].getRProperty(), 30u);
 }
 
+TEST(CnbTextureContentManagerTest, AClassicBlockRepresentationIsUsedOnlyWhenTheRendererPreservesIt)
+{
+    ScratchRoot root;
+    CnbTextureData source = CNA::Content::Cnb::MakeRgba8Texture2DData(
+        4u, 4u, std::vector<std::uint8_t>(4u * 4u * 4u, 0x5Au));
+    CnbTextureRepresentation compressed;
+    compressed.format = CnbTextureFormat::Bc1;
+    compressed.levels.push_back(
+        {0x00u, 0xF8u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u});
+    source.representations.insert(source.representations.begin(), compressed);
+    WriteBytes(root.path() / "preferred.cnb",
+               CNA::Content::Cnb::EncodeTexture2DToCnb(source, "preferred"));
+
+    GraphicsDevice device;
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(device);
+    auto texture = cm.Load<Microsoft::Xna::Framework::Graphics::Texture2D>("preferred");
+
+    const bool preservesBc1 = device.GetRenderer().LoadsCompressedContentNativelyEXT() &&
+        device.GetRenderer().IsCompressedTransferFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt1));
+    if (preservesBc1)
+    {
+        EXPECT_EQ(texture.getFormatProperty(), SurfaceFormat::Dxt1);
+        std::vector<std::uint8_t> blocks(compressed.levels[0].size(), 0u);
+        texture.GetData(blocks.data(), static_cast<int>(blocks.size()));
+        EXPECT_EQ(blocks, compressed.levels[0]);
+    }
+    else
+    {
+        EXPECT_EQ(texture.getFormatProperty(), SurfaceFormat::Color);
+        std::vector<Color> pixels(16u);
+        texture.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        for (const Color& pixel : pixels)
+        {
+            EXPECT_EQ(pixel.getRProperty(), 0x5Au);
+            EXPECT_EQ(pixel.getGProperty(), 0x5Au);
+            EXPECT_EQ(pixel.getBProperty(), 0x5Au);
+            EXPECT_EQ(pixel.getAProperty(), 0x5Au);
+        }
+    }
+}
+
 TEST(CnbTextureContentManagerTest, ATextureCubeCnbLoadsAllSixFacesDistinctly)
 {
     ScratchRoot root;
@@ -237,9 +283,9 @@ TEST(CnbTextureContentManagerTest, AFormatThisBuildCannotUploadIsRefusedByName)
     // match the dimensions -- so a Bc7 file is a perfectly valid container that this build simply
     // cannot upload. That refusal has to name the format, not fail somewhere inside SetData.
     //
-    // The file is written with CnbWriter directly because the encoder deliberately refuses to
-    // produce one (schema 1 writes Rgba8 alone); going through the writer keeps every checksum
-    // and offset correct, which patching bytes in a finished file would not.
+    // The file is written with CnbWriter directly because BC7 remains read-only; going through
+    // the writer keeps every checksum and offset correct, which patching bytes in a finished file
+    // would not.
     ScratchRoot root;
 
     CNA::Content::Cnb::CnbByteWriter header;
@@ -290,8 +336,8 @@ TEST(CnbTextureContentManagerTest, AFormatThisBuildCannotUploadIsRefusedByName)
 TEST(CnbTextureContentManagerTest, ARepresentationThisBuildCanUploadIsPreferredOverOneItCannot)
 {
     // The selection is the point of the multi-representation layout, and this is the case that
-    // proves it works before there is a second writer: a file offering Bc7 FIRST and Rgba8 second
-    // loads on a build that can only upload Rgba8.
+    // proves the fallback rule for a reserved format too: a file offering Bc7 FIRST and Rgba8
+    // second loads through its portable representation.
     ScratchRoot root;
 
     CNA::Content::Cnb::CnbByteWriter header;

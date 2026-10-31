@@ -132,14 +132,17 @@ namespace CNA::Content::Pipeline
             return false;
         }
 
-        /** @brief Replaces a texture's Rgba8 representation with a block-compressed one. */
-        void CompressTextureLevels(Cnb::CnbTextureData& texture,
-                                   const Cnb::CnbTextureFormat target,
-                                   const TextureBlockEncoder& encoder)
+        /** @brief Builds a block-compressed copy of a texture's Rgba8 representation. */
+        [[nodiscard]] Cnb::CnbTextureRepresentation CompressTextureLevels(
+            const Cnb::CnbTextureData& texture, const Cnb::CnbTextureFormat target,
+            const TextureBlockEncoder& encoder)
         {
-            for (Cnb::CnbTextureRepresentation& representation : texture.representations)
+            for (const Cnb::CnbTextureRepresentation& representation : texture.representations)
             {
                 if (representation.format != Cnb::CnbTextureFormat::Rgba8) { continue; }
+                Cnb::CnbTextureRepresentation compressed;
+                compressed.format = target;
+                compressed.levels.reserve(representation.levels.size());
                 for (std::size_t index = 0; index < representation.levels.size(); ++index)
                 {
                     std::uint32_t width = 0;
@@ -150,12 +153,13 @@ namespace CNA::Content::Pipeline
                     const std::uint32_t mip = static_cast<std::uint32_t>(
                         texture.mipCount == 0u ? 0u : index % texture.mipCount);
                     Cnb::CnbTextureLevelDimensions(texture, mip, width, height, depth);
-                    representation.levels[index] =
-                        encoder(target, representation.levels[index], width, height);
+                    compressed.levels.push_back(
+                        encoder(target, representation.levels[index], width, height));
                 }
-                representation.format = target;
-                return;
+                return compressed;
             }
+            throw std::invalid_argument(
+                "TextureProcessor cannot block-compress a value with no Rgba8 representation.");
         }
 
         /**
@@ -311,9 +315,9 @@ namespace CNA::Content::Pipeline
          * @brief The level-0 surface of a DDS, as RGBA8.
          *
          * A DDS is the one source here whose payload can already be compressed, and this route's
-         * output is `Rgba8`, so the blocks are decompressed on the way through. That is not a
-         * shortcut: CNB texture schema 1 stores `Rgba8`, and the XNA façade -- which does keep DXT
-         * blocks, because an `.xnb` can carry them -- reads the same file through the same reader.
+         * decoded surface is `Rgba8`, so the blocks are decompressed on the way through. The
+         * original blocks are retained separately for pass-through builds; ordinary processing
+         * works on these pixels and may encode a new preferred block representation afterward.
          */
         [[nodiscard]] CNA::Internal::Graphics::ImageData DecodeDdsLevelZero(
             const std::vector<std::uint8_t>& bytes, const std::string& origin)
@@ -1101,12 +1105,14 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity TextureProcessor::Identity() const
     {
-        // Build version 3: premultiplyAlpha now defaults to true, matching XNA 4.0's own
+        // Build version 4: a compressed CNB Texture2D now carries the requested block format first
+        // and an Rgba8 fallback second instead of warning and discarding the compressed result.
+        // Version 3 made premultiplyAlpha default to true, matching XNA 4.0's own
         // TextureProcessor (XNAP-96). That changes the bytes of every
         // alpha-bearing texture, so the version must move or an incremental build would skip
         // artifacts that are no longer current. (Version 2 was the textureFormat/generateMipmaps/
         // premultiplyAlpha/resizeToPowerOfTwo parameter set arriving.)
-        return {kTextureProcessorName, "3"};
+        return {kTextureProcessorName, "4"};
     }
 
     std::string TextureProcessor::InputType() const
@@ -1377,8 +1383,16 @@ namespace CNA::Content::Pipeline
             verbatim.mipCount = static_cast<std::uint32_t>(image.sourceCompressedLevels.size());
             Cnb::CnbTextureRepresentation representation;
             representation.format = *image.sourceCompressedFormat;
-            representation.levels = image.sourceCompressedLevels;
+            representation.levels = std::move(image.sourceCompressedLevels);
             verbatim.representations.push_back(std::move(representation));
+            if (context.OutputFormat() == ContentOutputFormat::Cnb)
+            {
+                Cnb::CnbTextureData fallback = BuildCnbTexture2DData(std::move(image));
+                verbatim.representations.push_back(
+                    std::move(fallback.representations.front()));
+                context.LogInfo(
+                    "kept the source's block-compressed representation with an Rgba8 fallback.");
+            }
             return ContentValue::Create(ProcessedTexture2DType, std::move(verbatim));
         }
         const std::optional<Cnb::CnbTextureFormat> sourceFormat = image.sourceCompressedFormat;
@@ -1403,19 +1417,7 @@ namespace CNA::Content::Pipeline
         }
         if (target != Cnb::CnbTextureFormat::Rgba8)
         {
-            if (context.OutputFormat() != ContentOutputFormat::Xnb)
-            {
-                // CNB texture schema 1 is frozen to Rgba8 (CNBF-101A), so the
-                // compressed representation has nowhere to go in a .cnb. Building the asset
-                // uncompressed and saying so beats failing a whole build over a format the
-                // other container would have accepted.
-                context.LogWarning(
-                    "textureFormat " + TextureBuildFormatName(resolved) +
-                    " has no representation in CNB texture schema 1, which stores Rgba8 only; "
-                    "this .cnb keeps the uncompressed pixels. Build with --format xnb to get "
-                    "the compressed texture.");
-            }
-            else if (!encoder_)
+            if (!encoder_)
             {
                 throw std::invalid_argument(
                     "textureFormat " + TextureBuildFormatName(resolved) +
@@ -1431,8 +1433,6 @@ namespace CNA::Content::Pipeline
                 // that asks for DXT on such a texture fails its build under XNA and quietly ships
                 // a padded one from CNA (XNAPP-265).
                 //
-                // Only on the path that actually compresses: a `.cnb` keeps the uncompressed
-                // pixels and says so above, so XNA's rule has nothing to refuse there.
                 if (texture.width % 4u != 0u || texture.height % 4u != 0u)
                 {
                     throw ContentLoadException(
@@ -1440,10 +1440,24 @@ namespace CNA::Content::Pipeline
                         std::to_string(texture.height) +
                         ", but textures using DXT compressed formats must be multiples of four.");
                 }
-                CompressTextureLevels(texture, target, encoder_);
-                context.LogInfo("compressed " + std::to_string(texture.mipCount) +
-                                " mip level(s) to " + Cnb::CnbTextureFormatToString(target) +
-                                ".");
+                Cnb::CnbTextureRepresentation compressed =
+                    CompressTextureLevels(texture, target, encoder_);
+                if (context.OutputFormat() == ContentOutputFormat::Cnb)
+                {
+                    texture.representations.insert(texture.representations.begin(),
+                                                   std::move(compressed));
+                    context.LogInfo(
+                        "compressed " + std::to_string(texture.mipCount) + " mip level(s) to " +
+                        Cnb::CnbTextureFormatToString(target) + " with an Rgba8 fallback.");
+                }
+                else
+                {
+                    texture.representations.clear();
+                    texture.representations.push_back(std::move(compressed));
+                    context.LogInfo("compressed " + std::to_string(texture.mipCount) +
+                                    " mip level(s) to " +
+                                    Cnb::CnbTextureFormatToString(target) + ".");
+                }
             }
         }
 
@@ -1453,7 +1467,7 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity Texture2DContentWriter::Identity() const
     {
-        return {kTextureWriterName, "1"};
+        return {kTextureWriterName, "2"};
     }
 
     std::vector<ContentWriterSchemaIdentity>
@@ -1461,7 +1475,7 @@ namespace CNA::Content::Pipeline
     {
         return {{Cnb::CnbAssetTypeId::Texture2D, Cnb::CnbTextureSchemaVersion,
                  "Microsoft.Xna.Framework.Graphics.Texture2D",
-                 {"CNA.Cnb.EncodeTexture2DToCnb", "1"}}};
+                 {"CNA.Cnb.EncodeTexture2DToCnb", "2"}}};
     }
 
     std::string Texture2DContentWriter::InputType() const

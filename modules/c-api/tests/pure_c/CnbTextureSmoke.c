@@ -448,16 +448,30 @@ static int validate_schemas(void)
     return 1;
 }
 
-static int validate_schema1_format_restriction(void)
+static int validate_texture2d_format_restriction(void)
 {
     uint8_t image[4096];
     uint64_t value = 0U;
     CNA_CnbTextureDataHandle texture = CNA_INVALID_HANDLE;
     unsigned char block[16];
 
-    /* Every identifier can be *decoded*; schema 1 only ever *encodes* Rgba8. Refusing here rather
-       than writing a file no reader of this schema would accept is the contract, and it is the one
-       asymmetry in the family worth pinning. */
+    /* The standalone Texture2D writer accepts the three classic XNA block formats. */
+    REQUIRE(cna_cnb_texture_data_create(4U, 4U, 1U, 1U, 1U, &texture) == CNA_RESULT_SUCCESS);
+    REQUIRE(cna_cnb_texture_data_add_representation(texture, CNA_CNB_TEXTURE_FORMAT_BC1, &value) ==
+            CNA_RESULT_SUCCESS);
+    REQUIRE(cna_cnb_get_texture_level_byte_size(CNA_CNB_TEXTURE_FORMAT_BC1, 4U, 4U, 1U, &value) ==
+            CNA_RESULT_SUCCESS);
+    REQUIRE(value == 8U);
+    memset(block, 0x22, 8U);
+    REQUIRE(cna_cnb_texture_data_set_level(texture, 0U, 0U, block, 8U) ==
+            CNA_RESULT_SUCCESS);
+    REQUIRE(cna_cnb_encode_texture2d(texture, view(""), image, sizeof(image), &value) ==
+            CNA_RESULT_SUCCESS);
+    REQUIRE(cna_cnb_texture_data_destroy(texture) == CNA_RESULT_SUCCESS);
+    texture = CNA_INVALID_HANDLE;
+
+    /* Every known identifier can be decoded, but BC7 remains reserved for reading. Refuse it at
+       the writer boundary instead of producing an asset no current built-in loader can upload. */
     REQUIRE(cna_cnb_texture_data_create(4U, 4U, 1U, 1U, 1U, &texture) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_cnb_texture_data_add_representation(texture, CNA_CNB_TEXTURE_FORMAT_BC7, &value) ==
             CNA_RESULT_SUCCESS);
@@ -528,7 +542,7 @@ int main(void)
     if (!validate_surface_format_mapping()) { return 2; }
     if (!validate_texture_data()) { return 3; }
     if (!validate_schemas()) { return 4; }
-    if (!validate_schema1_format_restriction()) { return 5; }
+    if (!validate_texture2d_format_restriction()) { return 5; }
     if (!validate_embedded_atlas()) { return 6; }
     return 0;
 }

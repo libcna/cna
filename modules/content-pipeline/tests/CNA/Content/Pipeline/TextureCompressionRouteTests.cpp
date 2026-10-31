@@ -73,6 +73,36 @@ namespace
                                                                width, height);
     }
 
+    void Word32(std::vector<std::uint8_t>& bytes, const std::uint32_t value)
+    {
+        for (int shift = 0; shift < 32; shift += 8)
+        {
+            bytes.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFFu));
+        }
+    }
+
+    std::vector<std::uint8_t> MakeDxt1Dds(const std::vector<std::uint8_t>& block)
+    {
+        EXPECT_EQ(block.size(), 8u);
+        std::vector<std::uint8_t> bytes{'D', 'D', 'S', ' '};
+        Word32(bytes, 124u);       // DDS_HEADER size
+        Word32(bytes, 0x81007u);   // caps | height | width | pixel format | linear size
+        Word32(bytes, 4u);
+        Word32(bytes, 4u);
+        Word32(bytes, 8u);
+        Word32(bytes, 0u);         // depth
+        Word32(bytes, 1u);         // mip count
+        for (int reserved = 0; reserved < 11; ++reserved) { Word32(bytes, 0u); }
+        Word32(bytes, 32u);        // DDS_PIXELFORMAT size
+        Word32(bytes, 0x4u);       // DDPF_FOURCC
+        Word32(bytes, 0x31545844u); // DXT1
+        for (int mask = 0; mask < 5; ++mask) { Word32(bytes, 0u); }
+        Word32(bytes, 0x1000u);    // DDSCAPS_TEXTURE
+        for (int cap = 0; cap < 4; ++cap) { Word32(bytes, 0u); }
+        bytes.insert(bytes.end(), block.begin(), block.end());
+        return bytes;
+    }
+
     /** @brief A deterministic image with two strongly separated colours and a chosen alpha. */
     std::vector<std::uint8_t> MakeStripes(const std::uint32_t width, const std::uint32_t height,
                                           const std::uint8_t alphaA, const std::uint8_t alphaB)
@@ -105,18 +135,24 @@ namespace
     Pipeline::ContentBuildResult Build(const ScratchDirectory& scratch,
                                        const Pipeline::ContentOutputFormat format,
                                        const std::string& textureFormat,
-                                       const bool generateMipmaps = false)
+                                       const bool generateMipmaps = false,
+                                       const std::string& source = "wall.png",
+                                       const bool passThrough = false)
     {
         const Pipeline::ContentPipeline pipeline(MakeRegistry());
         Pipeline::ContentBuildRequest request;
         request.sourceRoot = scratch.Path();
-        request.source = "wall.png";
+        request.source = source;
         request.logicalName = "Textures/wall";
         request.outputFormat = format;
         request.parameters.Set(Pipeline::TextureFormatParameter, textureFormat);
         if (generateMipmaps)
         {
             request.parameters.Set(Pipeline::TextureGenerateMipmapsParameter, true);
+        }
+        if (passThrough)
+        {
+            request.parameters.Set(Pipeline::TexturePassThroughParameter, true);
         }
         return pipeline.Build(request);
     }
@@ -204,28 +240,53 @@ TEST(TextureCompressionRouteTest, EveryMipLevelIsCompressedAtItsOwnSize)
     EXPECT_EQ(texture.levels[4].size(), 16u);
 }
 
-TEST(TextureCompressionRouteTest, ACnbBuildKeepsRgba8AndSaysWhy)
+TEST(TextureCompressionRouteTest, ACnbBuildWritesPreferredBlocksAndAnRgba8Fallback)
 {
     ScratchDirectory scratch("cnb");
-    WriteBytes(scratch.Path() / "wall.png", MakePng(MakeStripes(8u, 8u, 255u, 255u), 8, 8));
+    const std::vector<std::uint8_t> pixels = MakeStripes(8u, 8u, 255u, 255u);
+    WriteBytes(scratch.Path() / "wall.png", MakePng(pixels, 8, 8));
 
     const Pipeline::ContentBuildResult result =
         Build(scratch, Pipeline::ContentOutputFormat::Cnb, "Dxt1");
     const Cnb::CnbTextureData texture = Cnb::DecodeTexture2DFromCnb(
         Cnb::CnbDocument::Parse(result.output.bytes, "wall.cnb"));
-    ASSERT_EQ(texture.representations.size(), 1u);
-    EXPECT_EQ(texture.representations[0].format, Cnb::CnbTextureFormat::Rgba8);
+    ASSERT_EQ(texture.representations.size(), 2u);
+    EXPECT_EQ(texture.representations[0].format, Cnb::CnbTextureFormat::Bc1);
+    EXPECT_EQ(texture.representations[1].format, Cnb::CnbTextureFormat::Rgba8);
+    ASSERT_EQ(texture.representations[0].levels.size(), 1u);
+    ASSERT_EQ(texture.representations[1].levels.size(), 1u);
+    EXPECT_EQ(texture.representations[0].levels[0].size(), 32u);
+    EXPECT_EQ(texture.representations[1].levels[0], pixels);
 
-    bool warned = false;
+    bool describedFallback = false;
     for (const Pipeline::ContentLogMessage& message : result.messages)
     {
-        if (message.level == Pipeline::ContentLogLevel::Warning &&
-            message.text.find("CNB texture schema 1") != std::string::npos)
+        EXPECT_NE(message.level, Pipeline::ContentLogLevel::Warning) << message.text;
+        if (message.text.find("Rgba8 fallback") != std::string::npos)
         {
-            warned = true;
+            describedFallback = true;
         }
     }
-    EXPECT_TRUE(warned) << "a documented loss has to be reported, not applied silently";
+    EXPECT_TRUE(describedFallback);
+}
+
+TEST(TextureCompressionRouteTest, APassThroughDdsKeepsItsExactBlocksAndAddsAFallbackForCnb)
+{
+    ScratchDirectory scratch("cnb_dds_passthrough");
+    const std::vector<std::uint8_t> block{0x00u, 0xF8u, 0x00u, 0x00u,
+                                          0x00u, 0x00u, 0x00u, 0x00u};
+    WriteBytes(scratch.Path() / "wall.dds", MakeDxt1Dds(block));
+
+    const Pipeline::ContentBuildResult result =
+        Build(scratch, Pipeline::ContentOutputFormat::Cnb, "NoChange", false,
+              "wall.dds", true);
+    const Cnb::CnbTextureData texture = Cnb::DecodeTexture2DFromCnb(
+        Cnb::CnbDocument::Parse(result.output.bytes, "wall.cnb"));
+    ASSERT_EQ(texture.representations.size(), 2u);
+    EXPECT_EQ(texture.representations[0].format, Cnb::CnbTextureFormat::Bc1);
+    EXPECT_EQ(texture.representations[0].levels.at(0), block);
+    EXPECT_EQ(texture.representations[1].format, Cnb::CnbTextureFormat::Rgba8);
+    EXPECT_EQ(texture.representations[1].levels.at(0).size(), 4u * 4u * 4u);
 }
 
 TEST(TextureCompressionRouteTest, CompressionIsDeterministicAcrossBuilds)
@@ -234,4 +295,6 @@ TEST(TextureCompressionRouteTest, CompressionIsDeterministicAcrossBuilds)
     WriteBytes(scratch.Path() / "wall.png", MakePng(MakeStripes(16u, 12u, 255u, 90u), 16, 12));
     EXPECT_EQ(Build(scratch, Pipeline::ContentOutputFormat::Xnb, "Dxt5").output.bytes,
               Build(scratch, Pipeline::ContentOutputFormat::Xnb, "Dxt5").output.bytes);
+    EXPECT_EQ(Build(scratch, Pipeline::ContentOutputFormat::Cnb, "Dxt5").output.bytes,
+              Build(scratch, Pipeline::ContentOutputFormat::Cnb, "Dxt5").output.bytes);
 }

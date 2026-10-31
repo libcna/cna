@@ -77,7 +77,7 @@ namespace CNA::Content::Cnb
         /// The chunk-producing half of EncodeTexture(), factored out so a SpriteFont can embed a
         /// texture with byte-identical layout instead of growing its own copy of it.
         void AppendTextureChunks(const TextureShape& shape, const CnbTextureData& data,
-                                 CnbWriter& writer)
+                                 CnbWriter& writer, const bool allowClassicBlockCompression)
         {
             ValidateShape(shape, data);
 
@@ -103,15 +103,21 @@ namespace CNA::Content::Cnb
                     Fail(shape, "a representation names " +
                                     CnbTextureFormatToString(representation.format) + ".");
                 }
-                // CNBF-101A: schema 1 encodes the portable baseline only. The descriptor table and
-                // the format numbering are complete, so adding a block format later is a writer
-                // change rather than a schema break -- which is the whole reason the layout is
-                // multi-representation before there is a second representation to write.
-                if (representation.format != CnbTextureFormat::Rgba8)
+                // The schema and reader have understood every frozen format identifier from the
+                // start. Texture2D now writes the three classic XNA block formats as well as the
+                // portable baseline; cube, volume and embedded-atlas writers remain Rgba8-only
+                // until their runtime upload paths have the matching contract.
+                const bool classicBlockFormat =
+                    representation.format == CnbTextureFormat::Bc1 ||
+                    representation.format == CnbTextureFormat::Bc2 ||
+                    representation.format == CnbTextureFormat::Bc3;
+                if (representation.format != CnbTextureFormat::Rgba8 &&
+                    !(allowClassicBlockCompression && classicBlockFormat))
                 {
-                    Fail(shape, "CNB texture schema 1 encodes Rgba8 only; " +
+                    Fail(shape, "this CNB texture writer does not encode " +
                                     CnbTextureFormatToString(representation.format) +
-                                    " is a reserved identifier with no writer yet.");
+                                    "; Texture2D accepts Rgba8, Bc1, Bc2 and Bc3, while "
+                                    "TextureCube, Texture3D and embedded atlases accept Rgba8.");
                 }
                 if (representation.levels.size() != levelsPerRepresentation)
                 {
@@ -172,7 +178,8 @@ namespace CNA::Content::Cnb
         {
             CnbWriter writer(shape.assetTypeId, CnbTextureSchemaVersion);
             writer.SetMetadata(shape.canonicalTypeName, contentName);
-            AppendTextureChunks(shape, data, writer);
+            AppendTextureChunks(shape, data, writer,
+                                shape.assetTypeId == CnbAssetTypeId::Texture2D);
             return writer.Build();
         }
     }
@@ -182,7 +189,7 @@ namespace CNA::Content::Cnb
     {
         TextureShape shape = kTexture2D;
         shape.label = label;
-        AppendTextureChunks(shape, data, writer);
+        AppendTextureChunks(shape, data, writer, false);
     }
 
     std::vector<std::uint8_t> EncodeTexture2DToCnb(const CnbTextureData& data,

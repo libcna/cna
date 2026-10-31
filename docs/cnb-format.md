@@ -1194,9 +1194,10 @@ A type can be fully readable at runtime and still have no supported way to *prod
   every future reader. A native schema waits for that semantic and wire-format decision
   (`CNBF-104`).
 * **Embedded** audio or video streams. §19 stores a reference, by design.
-* Block-compressed texture **payloads**. §16 defines the identifiers and the multi-representation
-  structure that carries them, and the reader accepts a file that uses them, but no writer in this
-  build produces one and this build cannot upload one.
+* Block-compressed formats beyond the classic Texture2D set. Standalone `Texture2D` assets can
+  write and load `Bc1`, `Bc2` and `Bc3`, with `Rgba8` carried as a portable fallback. `Bc3Srgb`,
+  `Bc7` and `Bc7Srgb` remain read-only reserved identifiers, while `TextureCube`, `Texture3D` and
+  embedded SpriteFont atlases remain `Rgba8`-only.
 * ~~Chunk compression (§8).~~ **Implemented** — Zstandard, codec 2, opt-in per chunk and off by
   default, available when CNA is built with libzstd. See §8.
 * Memory-mapped, zero-copy chunk access. **Measured and rejected**, not pending: mmap would save
@@ -1218,7 +1219,7 @@ A type can be fully readable at runtime and still have no supported way to *prod
 
 | asset type | wire schema | runtime loader | writer API | CLI producer |
 |---|---|---|---|---|
-| `Texture2D` | §16 | yes | `EncodeTexture2DToCnb` | **yes** — image source, and `.cnj` |
+| `Texture2D` | §16 | yes | `EncodeTexture2DToCnb` | **yes** — image source and `.cnj`; requested DXT writes preferred `Bc1`/`Bc2`/`Bc3` plus `Rgba8` fallback |
 | `TextureCube` | §16 | yes | `EncodeTextureCubeToCnb` | **yes** — DDS source, and `.cnj` |
 | `Texture3D` | §16 | yes | `EncodeTexture3DToCnb` | **yes** — `.cnj` (raw RGBA sidecar) |
 | `SpriteFont` | §17 | yes | `EncodeSpriteFontToCnb` | **yes** — `.cnj`, atlas absorbed |
@@ -1333,10 +1334,12 @@ The same image may appear more than once in one file, in different formats, so a
 whichever encoding its GPU actually supports rather than shipping one asset per platform. The
 writer records them in preference order and a reader takes the first one it can upload.
 
-Schema 1 **writes exactly one representation, always `Rgba8`**. The structure is nevertheless part
-of the frozen layout from the start, because adding it later would be a schema break while adding a
-second *writer* is not. A file that offers `Bc7` first and `Rgba8` second already loads correctly on
-this build, by falling through to the second representation.
+For a standalone `Texture2D`, schema 1 writes `Bc1`, `Bc2` or `Bc3` first when DXT compression is
+requested and writes the exact processed `Rgba8` pixels second. A renderer that preserves that
+classic block format uploads the first representation; another renderer takes the fallback.
+Uncompressed Texture2D assets, cube maps, volume textures and embedded SpriteFont atlases write one
+`Rgba8` representation. The structure was frozen before the second writer existed, so this changed
+producer capability without changing the schema version.
 
 ### 16.4 `CnbTextureFormat`
 

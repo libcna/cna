@@ -527,7 +527,7 @@ namespace CNA::Content::Pipeline
     {
         return {{Cnb::CnbAssetTypeId::Texture2D, Cnb::CnbTextureSchemaVersion,
                  "Microsoft.Xna.Framework.Graphics.Texture2D",
-                 {"CNA.Cnb.EncodeTexture2DToCnb", "1"}},
+                 {"CNA.Cnb.EncodeTexture2DToCnb", "2"}},
                 {Cnb::CnbAssetTypeId::Model, Cnb::CnbModelSchemaVersion,
                  "Microsoft.Xna.Framework.Graphics.Model",
                  {"CNA.Cnb.EncodeModelToCnb", "1"}},

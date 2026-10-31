@@ -210,6 +210,36 @@ TEST(CnbTextureCodecTest, AFullMipChainRoundTripsWithEveryLevelDistinct)
     ExpectSameTexture(source, DecodeTexture2DFromCnb(CnbDocument::Parse(bytes, "mips.cnb")));
 }
 
+TEST(CnbTextureCodecTest, ClassicBlockFormatsRoundTripBeforeTheirRgba8Fallback)
+{
+    for (const CnbTextureFormat format :
+         {CnbTextureFormat::Bc1, CnbTextureFormat::Bc2, CnbTextureFormat::Bc3})
+    {
+        SCOPED_TRACE(CNA::Content::Cnb::CnbTextureFormatToString(format));
+        CnbTextureData source = MakeMipped2D(8u, 8u, 4u);
+        CnbTextureRepresentation compressed;
+        compressed.format = format;
+        for (std::uint32_t mip = 0u; mip < source.mipCount; ++mip)
+        {
+            std::uint32_t width = 0u;
+            std::uint32_t height = 0u;
+            std::uint32_t depth = 0u;
+            CNA::Content::Cnb::CnbTextureLevelDimensions(
+                source, mip, width, height, depth);
+            compressed.levels.push_back(PatternLevel(
+                CNA::Content::Cnb::CnbTextureLevelByteSize(
+                    format, width, height, depth),
+                static_cast<std::uint8_t>(mip + 17u)));
+        }
+        source.representations.insert(source.representations.begin(), std::move(compressed));
+
+        const std::vector<std::uint8_t> bytes =
+            EncodeTexture2DToCnb(source, "Textures/compressed");
+        ExpectSameTexture(
+            source, DecodeTexture2DFromCnb(CnbDocument::Parse(bytes, "compressed.cnb")));
+    }
+}
+
 TEST(CnbTextureCodecTest, ACubeMapRoundTripsWithItsSixFacesInOrder)
 {
     const CnbTextureData source = MakeCube(4u);
@@ -308,6 +338,22 @@ TEST(CnbTextureCodecTest, EachAssetTypeRefusesTheOtherTwoShapes)
                  ContentLoadException);
 }
 
+TEST(CnbTextureCodecTest, CubeAndVolumeWritersRemainRgba8Only)
+{
+    CnbTextureData cube = MakeCube(4u);
+    cube.representations[0].format = CnbTextureFormat::Bc1;
+    for (std::vector<std::uint8_t>& face : cube.representations[0].levels)
+    {
+        face.assign(8u, 0x2Au);
+    }
+    EXPECT_THROW((void)EncodeTextureCubeToCnb(cube), ContentLoadException);
+
+    CnbTextureData volume = MakeVolume(4u, 4u, 1u);
+    volume.representations[0].format = CnbTextureFormat::Bc1;
+    volume.representations[0].levels[0].assign(8u, 0x3Bu);
+    EXPECT_THROW((void)EncodeTexture3DToCnb(volume), ContentLoadException);
+}
+
 TEST(CnbTextureCodecTest, TheRepresentationTableMustAccountForEveryPayloadChunk)
 {
     // A TEXD chunk owned by no representation would be silently ignored, which is how a file
@@ -352,9 +398,8 @@ TEST(CnbTextureCodecTest, TheRepresentationTableMustAccountForEveryPayloadChunk)
 TEST(CnbTextureCodecTest, RepresentationSelectionPrefersTheEarliestSupportedFormat)
 {
     CnbTextureData data = MakeRgba8Texture2DData(1u, 1u, {1, 2, 3, 4});
-    // Two more representations, added directly rather than through the encoder, because schema 1
-    // deliberately has no writer for a second format yet. Selection is implemented now so that a
-    // file with several is not a future format change.
+    // Bc7 and Bgra8 remain read-only reserved formats. Adding them directly also proves selection
+    // is independent of the narrower set the current Texture2D writer can produce.
     CnbTextureRepresentation bc7;
     bc7.format = CnbTextureFormat::Bc7;
     bc7.levels.push_back(std::vector<std::uint8_t>(16u));

@@ -11,8 +11,8 @@
  *   - **The importers are measured, not merely called.** A 1x1 BMP is imported and its pixel
  *     compared; the same image is imported again *with* a colour key and the alpha checked, which
  *     is the only way to tell a colour key that was applied from one that was ignored. A DXT1 cube
- *     is imported and its six faces checked as `RGBA8`, because the contract is that the compiler
- *     decompresses rather than storing blocks a runtime could not upload.
+ *     is imported and its six faces checked as `RGBA8`, because the current TextureCube contract
+ *     decompresses instead of retaining the source blocks.
  *   - **The compiler and the codec are checked against each other.** A `.cnj` curve is compiled,
  *     the produced bytes are parsed as a document, and the curve is decoded back out through
  *     `CBIND-110`'s route -- so the two halves agree rather than each agreeing with itself.
@@ -261,7 +261,7 @@ static int validate_dds_import(void)
         CNA_CnbTextureFormat format = CNA_CNB_TEXTURE_FORMAT_UNKNOWN;
         REQUIRE(cna_cnb_texture_data_get_representation_format(cube, 0U, &format) ==
                 CNA_RESULT_SUCCESS);
-        /* Not BC1: storing the blocks would produce a file this build could not upload. */
+        /* Not BC1: the current TextureCube producer remains RGBA8-only. */
         REQUIRE(format == CNA_CNB_TEXTURE_FORMAT_RGBA8);
         REQUIRE(format != CNA_CNB_TEXTURE_FORMAT_BC1);
     }

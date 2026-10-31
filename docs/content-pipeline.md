@@ -305,6 +305,9 @@ with dark fringes under the default state. Two importers override that default b
 defines its own answer -- a `.cnj` document (CNJ v1 compiles to straight alpha) and an already-built
 `.xnb` being transcoded (its pixels have already had one alpha policy applied, and applying a second
 would corrupt them). An explicit parameter beats both.
+For `Texture2D`, requested DXT compression writes the chosen DXT representation alone to XNB and
+writes the matching `Bc1`, `Bc2` or `Bc3` representation followed by the processed `Rgba8` fallback
+to CNB. A pass-through compressed DDS preserves its source blocks in the same preferred position.
 `SongProcessor` accepts `streamReference` and `name` strings plus a `durationMs` u64. `ModelProcessor`
 accepts the opt-in boolean `generateChildAssets` for glTF only. Texture2D CNJ
 can also author its existing color-key field. `VideoProcessor` requires u64 `width`/`height` and
@@ -386,7 +389,7 @@ canonical type name, and loader through `ContentManager::RegisterCnbLoaderEXT<T>
 
 | Source | Importer | Imported type | Processor | Writer/output |
 |---|---|---|---|---|
-| `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tga`, `.gif`, `.psd`, `.hdr`, `.pic`, `.pnm` | `CNA.ImageImporter/1` | `ImportedImage` | `CNA.TextureProcessor/1` | `CNA.Texture2DContentWriter/1` |
+| `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tga`, `.gif`, `.psd`, `.hdr`, `.pic`, `.pnm` | `CNA.ImageImporter/1` | `ImportedImage` | `CNA.TextureProcessor/4` | `CNA.Texture2DContentWriter/2` |
 | `.wav` | `CNA.WavImporter/1` | `ImportedSound` | `CNA.SoundEffectProcessor/1` | `CNA.SoundEffectContentWriter/1` |
 | `.mp3`, `.ogg`, `.oga`, `.qoa`, `.flac`, `.opus`, `.aac`, `.wma` | `CNA.SongImporter/2` | `ImportedSongSource` | `CNA.SongProcessor/2` | `CNA.SongContentWriter/1` |
 | `.mp4`, `.ogv`, `.webm`, `.mkv`, `.avi`, `.mov` | `CNA.VideoImporter/2` | `ImportedVideoSource` | `CNA.VideoProcessor/2` | `CNA.VideoContentWriter/1` |

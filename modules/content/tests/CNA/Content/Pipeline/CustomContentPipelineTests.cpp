@@ -328,7 +328,9 @@ TEST(CustomContentPipelineTest, BuiltInWritersDeclareStableSchemaAndCodecIdentit
             << item.inputType;
         EXPECT_EQ(schemas[0].assetTypeName, item.assetTypeName) << item.inputType;
         EXPECT_EQ(schemas[0].codec.name, item.codecName) << item.inputType;
-        EXPECT_EQ(schemas[0].codec.version, "1") << item.inputType;
+        EXPECT_EQ(schemas[0].codec.version,
+                  item.assetTypeId == Cnb::CnbAssetTypeId::Texture2D ? "2" : "1")
+            << item.inputType;
     }
 
     const auto modelSchemas =
@@ -343,9 +345,9 @@ TEST(CustomContentPipelineTest, BuiltInWritersDeclareStableSchemaAndCodecIdentit
     EXPECT_EQ(modelSchemas[2].codec.name, "CNA.Cnb.EncodeModelV2ToCnb");
     EXPECT_EQ(modelSchemas[3].assetTypeId, Cnb::CnbAssetTypeId::AnimationClip);
     EXPECT_EQ(modelSchemas[3].codec.name, "CNA.Cnb.EncodeAnimationClipToCnb");
-    for (const Pipeline::ContentWriterSchemaIdentity& schema : modelSchemas)
+    for (std::size_t index = 0u; index < modelSchemas.size(); ++index)
     {
-        EXPECT_EQ(schema.codec.version, "1");
+        EXPECT_EQ(modelSchemas[index].codec.version, index == 0u ? "2" : "1");
     }
     EXPECT_EQ(modelSchemas[0].assetSchemaVersion, 1u);
     EXPECT_EQ(modelSchemas[1].assetSchemaVersion, 1u);

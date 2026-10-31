@@ -236,9 +236,9 @@ TEST(Texture2DContentPipelineTest, BuildsHeadlesslyThroughDistinctImporterProces
     const Pipeline::ContentBuildResult result = BuildTexture(scratch.Path());
     EXPECT_EQ(result.importer, (Pipeline::ContentComponentIdentity{"CNA.ImageImporter", "1"}));
     EXPECT_EQ(result.processor,
-              (Pipeline::ContentComponentIdentity{"CNA.TextureProcessor", "3"}));
+              (Pipeline::ContentComponentIdentity{"CNA.TextureProcessor", "4"}));
     EXPECT_EQ(result.writer,
-              (Pipeline::ContentComponentIdentity{"CNA.Texture2DContentWriter", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.Texture2DContentWriter", "2"}));
     EXPECT_EQ(result.output.assetTypeId, Cnb::CnbAssetTypeId::Texture2D);
     EXPECT_EQ(result.output.assetTypeName, "Microsoft.Xna.Framework.Graphics.Texture2D");
     ASSERT_EQ(result.dependencies.size(), 1u);

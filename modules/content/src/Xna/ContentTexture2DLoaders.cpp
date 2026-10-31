@@ -156,19 +156,91 @@ namespace Microsoft::Xna::Framework::Content
         //
         // The representation SELECTION is what makes this more than a decoder. A texture .cnb may
         // carry the same image several times over, so the runtime asks for the first encoding it
-        // can actually upload rather than assuming the file holds the one it wants. Schema 1
-        // writes Rgba8 alone, so today the predicate has exactly one true case -- but the
-        // selection is real, and a file carrying Bc7 first and Rgba8 second already loads
-        // correctly on this build by falling through to the second representation.
+        // can actually upload rather than assuming the file holds the one it wants. The content
+        // pipeline writes Bc1/Bc2/Bc3 first and Rgba8 second when compression is requested. A
+        // renderer that keeps compressed content takes the blocks; every other renderer falls
+        // through to the portable pixels.
         // ---------------------------------------------------------------------------
 
+        [[nodiscard]] bool IsClassicCnbBlockFormat(
+            const CNA::Content::Cnb::CnbTextureFormat format) noexcept
+        {
+            using CNA::Content::Cnb::CnbTextureFormat;
+            return format == CnbTextureFormat::Bc1 || format == CnbTextureFormat::Bc2 ||
+                   format == CnbTextureFormat::Bc3;
+        }
+
+        [[nodiscard]] bool CanUploadTexture2DRepresentation(
+            const CNA::Content::Cnb::CnbTextureData& data, Graphics::GraphicsDevice& device,
+            const CNA::Content::Cnb::CnbTextureFormat format)
+        {
+            using Graphics::GraphicsProfile;
+            if (format == CNA::Content::Cnb::CnbTextureFormat::Rgba8) { return true; }
+            if (!IsClassicCnbBlockFormat(format)) { return false; }
+
+            // The public Texture2D construction contract requires the level-zero dimensions of a
+            // classic DXT texture to be whole blocks. Reach additionally refuses compressed NPOT
+            // resources. The file can still carry either shape: its Rgba8 fallback is selected.
+            if (data.width % 4u != 0u || data.height % 4u != 0u) { return false; }
+            if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach &&
+                (!std::has_single_bit(data.width) || !std::has_single_bit(data.height)))
+            {
+                return false;
+            }
+
+            const Graphics::SurfaceFormat surface =
+                CNA::Content::Cnb::CnbTextureFormatToSurfaceFormat(format);
+            return device.GetRenderer().LoadsCompressedContentNativelyEXT() &&
+                   device.GetRenderer().IsCompressedTransferFormatEXT(
+                       static_cast<int>(surface));
+        }
+
+        const CNA::Content::Cnb::CnbTextureRepresentation&
+        RequireUploadableTexture2DRepresentation(
+            const CNA::Content::Cnb::CnbTextureData& data, Graphics::GraphicsDevice& device,
+            const std::string& assetName)
+        {
+            const std::size_t index = CNA::Content::Cnb::SelectCnbTextureRepresentation(
+                data, [&data, &device](const CNA::Content::Cnb::CnbTextureFormat format)
+                { return CanUploadTexture2DRepresentation(data, device, format); });
+            if (index < data.representations.size()) { return data.representations[index]; }
+
+            std::string offered;
+            for (const auto& representation : data.representations)
+            {
+                if (!offered.empty()) { offered += ", "; }
+                offered += CNA::Content::Cnb::CnbTextureFormatToString(representation.format);
+            }
+            throw ContentLoadException(
+                "The .cnb Texture2D '" + assetName + "' offers only " + offered +
+                ", and this renderer can upload none of them. Supply an Rgba8 fallback or one "
+                "of Bc1, Bc2 and Bc3 supported by the active renderer.");
+        }
 
         Graphics::Texture2D BuildTexture2DFromCnbEXT(const CNA::Content::Cnb::CnbTextureData& data,
                                                       ContentManager& cm,
                                                       const std::string& assetName)
         {
-            const auto& representation = RequireUploadableRepresentationEXT(data, assetName);
-            Graphics::Texture2D texture(cm.getGraphicsDeviceInternal(),
+            Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
+            const auto& representation =
+                RequireUploadableTexture2DRepresentation(data, device, assetName);
+            if (representation.format != CNA::Content::Cnb::CnbTextureFormat::Rgba8)
+            {
+                const Graphics::SurfaceFormat surface =
+                    CNA::Content::Cnb::CnbTextureFormatToSurfaceFormat(representation.format);
+                Graphics::Texture2D texture(device, static_cast<int>(data.width),
+                                            static_cast<int>(data.height), data.mipCount > 1u,
+                                            surface);
+                for (std::uint32_t mip = 0u; mip < data.mipCount; ++mip)
+                {
+                    const std::vector<std::uint8_t>& blocks = representation.levels[mip];
+                    texture.SetData(static_cast<int>(mip), nullptr, blocks.data(), 0,
+                                    static_cast<int>(blocks.size()));
+                }
+                return texture;
+            }
+
+            Graphics::Texture2D texture(device,
                                         static_cast<int>(data.width),
                                         static_cast<int>(data.height), data.mipCount > 1u,
                                         Graphics::SurfaceFormat::Color);

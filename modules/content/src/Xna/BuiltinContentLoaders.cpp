@@ -311,8 +311,9 @@ namespace Microsoft::Xna::Framework::Content
                 }
                 throw ContentLoadException(
                     "The .cnb texture '" + assetName + "' offers only " + offered +
-                    ", and this build can upload none of them. CNB texture schema 1 encodes Rgba8; "
-                    "see docs/cnb-format.md §16.");
+                    ", and this build can upload none of them. TextureCube, Texture3D and "
+                    "embedded SpriteFont atlases require an Rgba8 representation; see "
+                    "docs/cnb-format.md §16.");
             }
             return data.representations[index];
         }

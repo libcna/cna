@@ -121,7 +121,8 @@ namespace CNA::Content::Cnb
     /**
      * @brief Builds a single-representation, single-mip `Rgba8` 2D texture description.
      *
-     * A convenience for the common case of a decoded PNG, which is what CNB schema 1 encodes.
+     * A convenience for the common case of a decoded PNG and the portable fallback carried beside
+     * a block-compressed Texture2D representation.
      *
      * @param width  Texture width in texels; must be at least 1.
      * @param height Texture height in texels; must be at least 1.
@@ -179,7 +180,7 @@ namespace CNA::Content::Cnb
      * @return The complete `.cnb` file bytes.
      * @throws Microsoft::Xna::Framework::Content::ContentLoadException if @p data is inconsistent,
      *         declares a level whose byte count disagrees with its dimensions, or uses a format
-     *         CNB schema 1 does not encode.
+     *         other than `Rgba8`, `Bc1`, `Bc2` or `Bc3`.
      */
     [[nodiscard]] std::vector<std::uint8_t> EncodeTexture2DToCnb(const CnbTextureData& data,
                                                                  const std::string& contentName = {});
@@ -191,8 +192,8 @@ namespace CNA::Content::Cnb
      *                    equal height, because a cube face is square.
      * @param contentName Logical content name recorded in the `CMET` chunk; may be empty.
      * @return The complete `.cnb` file bytes.
-     * @throws Microsoft::Xna::Framework::Content::ContentLoadException on the same conditions as
-     *         EncodeTexture2DToCnb(), plus a non-square or non-six-faced description.
+     * @throws Microsoft::Xna::Framework::Content::ContentLoadException if @p data is inconsistent,
+     *         uses a representation other than `Rgba8`, or is non-square or non-six-faced.
      */
     [[nodiscard]] std::vector<std::uint8_t> EncodeTextureCubeToCnb(const CnbTextureData& data,
                                                                    const std::string& contentName = {});
@@ -204,8 +205,8 @@ namespace CNA::Content::Cnb
      *                    value and halves per mip level like the other two dimensions.
      * @param contentName Logical content name recorded in the `CMET` chunk; may be empty.
      * @return The complete `.cnb` file bytes.
-     * @throws Microsoft::Xna::Framework::Content::ContentLoadException on the same conditions as
-     *         EncodeTexture2DToCnb().
+     * @throws Microsoft::Xna::Framework::Content::ContentLoadException if @p data is inconsistent
+     *         or uses a representation other than `Rgba8`.
      */
     [[nodiscard]] std::vector<std::uint8_t> EncodeTexture3DToCnb(const CnbTextureData& data,
                                                                  const std::string& contentName = {});

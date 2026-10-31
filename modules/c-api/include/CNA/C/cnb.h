@@ -2287,8 +2287,9 @@ typedef CNA_Bool (*CNA_CnbTextureFormatSupportedFn)(CNA_CnbTextureFormat format,
  * @brief Picks the representation a caller should upload, preferring the earliest supported one.
  *
  * The writer records representations in preference order, so a runtime that takes the first format
- * it can upload gets the author's intended choice. CNB schema 1 writes exactly one representation,
- * but the selection exists from the start so a file with several is not a future format change.
+ * it can upload gets the author's intended choice. A Texture2D can carry a preferred BC1/BC2/BC3
+ * representation followed by an `Rgba8` fallback; other current built-in texture writers emit the
+ * portable representation only.
  *
  * Absence is an ordinary answer, not a failure: a texture whose formats this caller cannot upload
  * reports `out_found` false rather than refusing.
@@ -2316,7 +2317,7 @@ CNA_C_API CNA_Result cna_cnb_texture_data_select_representation(
  * @param capacity Destination capacity in bytes.
  * @param out_byte_count Receives the required byte count; always written on a valid output.
  * @return A CNA result code; insufficient capacity performs no partial write, and an inconsistent
- *         description or a format CNB schema 1 does not encode is `CNA_RESULT_IO`.
+ *         description or a format other than RGBA8, BC1, BC2 or BC3 is `CNA_RESULT_IO`.
  */
 CNA_C_API CNA_Result cna_cnb_encode_texture2d(
     CNA_CnbTextureDataHandle texture,
@@ -2334,7 +2335,8 @@ CNA_C_API CNA_Result cna_cnb_encode_texture2d(
  * @param destination Destination bytes, or null only for zero capacity.
  * @param capacity Destination capacity in bytes.
  * @param out_byte_count Receives the required byte count; always written on a valid output.
- * @return A CNA result code; insufficient capacity performs no partial write.
+ * @return A CNA result code; insufficient capacity performs no partial write, and a representation
+ *         other than RGBA8 is `CNA_RESULT_IO`.
  */
 CNA_C_API CNA_Result cna_cnb_encode_texture_cube(
     CNA_CnbTextureDataHandle texture,
@@ -2352,7 +2354,8 @@ CNA_C_API CNA_Result cna_cnb_encode_texture_cube(
  * @param destination Destination bytes, or null only for zero capacity.
  * @param capacity Destination capacity in bytes.
  * @param out_byte_count Receives the required byte count; always written on a valid output.
- * @return A CNA result code; insufficient capacity performs no partial write.
+ * @return A CNA result code; insufficient capacity performs no partial write, and a representation
+ *         other than RGBA8 is `CNA_RESULT_IO`.
  */
 CNA_C_API CNA_Result cna_cnb_encode_texture3d(
     CNA_CnbTextureDataHandle texture,
@@ -5113,9 +5116,9 @@ CNA_C_API CNA_Result cna_cnb_import_image_as_texture2d(
  * Goes through the **same** decoder the runtime's DDS path uses, so a compiled cube map holds the
  * pixels the runtime would have produced from the same file.
  *
- * The result is `RGBA8`, not the original DXT blocks. That is not a shortcut: the runtime DDS path
- * already decompresses on the CPU, and texture schema 1's contract is the portable `RGBA8`
- * baseline -- storing the blocks would produce a file this build could not upload.
+ * The result is `RGBA8`, not the original DXT blocks. The runtime DDS cube path already
+ * decompresses on the CPU, and the current TextureCube writer and loader deliberately retain that
+ * portable representation. Standalone Texture2D assets have a separate multi-representation path.
  *
  * @param dds_path Filesystem path to the `.dds`.
  * @param out_texture Receives a new texture handle the caller releases.

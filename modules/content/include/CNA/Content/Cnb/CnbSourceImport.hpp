@@ -90,10 +90,10 @@ namespace CNA::Content::Cnb
      * headless compiler could reach it. There is no second DDS parser, and a compiled cube map
      * therefore holds the pixels the runtime would have produced from the same file.
      *
-     * The result is `Rgba8`, not the original DXT blocks. That is not a shortcut: the runtime DDS
-     * path already decompresses to RGBA8 on the CPU because CNA implements no compressed GPU
-     * format end-to-end on any renderer, and texture schema 1's contract is the portable `Rgba8`
-     * baseline. Storing the blocks would produce a file this build could not upload.
+     * The result is `Rgba8`, not the original DXT blocks. The runtime DDS cube path already
+     * decompresses to RGBA8 on the CPU, and the current TextureCube writer and loader deliberately
+     * retain that portable representation. Standalone Texture2D assets have a separate
+     * multi-representation path for classic block formats.
      *
      * @param ddsPath Filesystem path to the `.dds`.
      * @return The cube description, ready for EncodeTextureCubeToCnb().
