@@ -101,8 +101,7 @@ original phase closed — check each file's own status banner/date.
 
 - `basiceffect-support.md`, `alphatesteffect-support.md`, `dualtextureeffect-support.md`,
   `environmentmapeffect-support.md`, `skinnedeffect-support.md` — stock-effect conformance.
-  `BasicEffect`, `DualTextureEffect`, `EnvironmentMapEffect` and `SkinnedEffect` were reconciled
-  with current source and tests on 2026-10-31; check each remaining page's own status banner/date.
+  All five pages were reconciled with current source and tests on 2026-10-31.
 - `depthstencilstate-support.md` — refreshed 2026-07-11.
 - `sampler-state-support.md` — **refreshed 2026-07-11**: mip-level `SetData` (Tasks 924-926) and
   EasyGL anisotropic filtering (Task 918) corrected from stale ❌ to ✅/fixed.

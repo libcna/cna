@@ -35,6 +35,12 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- AlphaTestEffect support-document reconciliation (2026-10-31): the last unreconciled classic
+  stock-effect page now uses the modular test path and current 46-case API inventory, separates
+  Task 378 fog forwarding from Task 1111's corrected view-space formula, and replaces Task 379's
+  invented white null sample with the measured SOFTWARE-303 opaque-black renderer contract. All
+  five stock-effect support pages now carry current reconciliation dates. Focused private-runner
+  validation passes all 66 API, null-texture, EasyGL and SDLGPU tests.
 - BasicEffect support-document reconciliation (2026-10-31): Tasks 885/886 are no longer
   simultaneously described as deferred and complete, and the obsolete open-work section is now a
   closed follow-up record. The page now includes Task 1102's real vertex/pixel lighting dispatch,
