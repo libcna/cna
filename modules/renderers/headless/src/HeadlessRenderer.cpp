@@ -690,8 +690,8 @@ namespace CNA::Internal::Renderers::Headless
         // size, and the viewport follows the first exactly as it does on a real renderer.
         if (!boundRenderTargets_.empty())
         {
-            width = boundRenderTargets_.front()->GetWidth();
-            height = boundRenderTargets_.front()->GetHeight();
+            width = boundRenderTargets_.front().width;
+            height = boundRenderTargets_.front().height;
             return;
         }
         width = virtualWidth_ > 0 ? virtualWidth_ : 1024;
@@ -806,25 +806,30 @@ namespace CNA::Internal::Renderers::Headless
 
     void HeadlessRenderer::UnbindAllRenderTargets()
     {
-        for (HeadlessRenderTargetRenderer* target : boundRenderTargets_)
+        for (const BoundRenderTarget& binding : boundRenderTargets_)
         {
-            target->UnbindAsRenderTarget();
+            if (binding.target2D != nullptr)
+                binding.target2D->UnbindAsRenderTarget();
+            else if (binding.targetCube != nullptr)
+                binding.targetCube->UnbindAsRenderTarget();
         }
         boundRenderTargets_.clear();
-        for (HeadlessRenderTargetCubeRenderer* cube : boundCubeTargets_)
-        {
-            cube->UnbindAsRenderTarget();
-        }
-        boundCubeTargets_.clear();
     }
 
     void HeadlessRenderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
     {
+        auto* target = dynamic_cast<HeadlessRenderTargetRenderer*>(rt);
+        Require(state_, rt == nullptr || target != nullptr,
+                "HeadlessRenderer::SetRenderTarget2D: target belongs to another renderer");
+        if (rt != nullptr && target == nullptr)
+            return;
+
         UnbindAllRenderTargets();
-        if (auto* target = static_cast<HeadlessRenderTargetRenderer*>(rt); target != nullptr)
+        if (target != nullptr)
         {
             target->BindAsRenderTarget();
-            boundRenderTargets_.push_back(target);
+            boundRenderTargets_.push_back(
+                BoundRenderTarget{target, nullptr, -1, target->GetWidth(), target->GetHeight()});
         }
     }
 
@@ -839,48 +844,85 @@ namespace CNA::Internal::Renderers::Headless
         return std::make_unique<HeadlessRenderTargetCubeRenderer>(state_, size, depthFormat, mipMap, multiSampleCount);
     }
 
+    void HeadlessRenderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)
+    {
+        auto* target = dynamic_cast<HeadlessRenderTargetCubeRenderer*>(rt);
+        Require(state_, rt == nullptr || target != nullptr,
+                "HeadlessRenderer::SetRenderTargetCubeFace: target belongs to another renderer");
+        Require(state_, rt == nullptr || (face >= 0 && face <= 5),
+                "HeadlessRenderer::SetRenderTargetCubeFace: face must be 0..5, got " +
+                    std::to_string(face));
+        if ((rt != nullptr && target == nullptr) || (rt != nullptr && (face < 0 || face > 5)))
+            return;
+
+        UnbindAllRenderTargets();
+        if (target != nullptr)
+        {
+            target->BindAsRenderTargetFace(face);
+            boundRenderTargets_.push_back(
+                BoundRenderTarget{nullptr, target, face, target->GetSize(), target->GetSize()});
+        }
+    }
+
     void HeadlessRenderer::SetRenderTargets(
         const RenderTargetBindingDescriptor* renderTargets, int count)
     {
-        if (!renderTargets || count <= 0)
+        if (count <= 0)
         {
             SetRenderTarget2D(nullptr);
             return;
         }
-        if (count == 1 && renderTargets[0].IsRenderTargetCubeFace())
-        {
-            SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),
-                                    renderTargets[0].GetCubeFace());
-            return;
-        }
 
-        // Bound as a set rather than one at a time: SetRenderTarget2D unbinds everything first,
-        // so calling it in a loop would leave only the last target bound -- which is exactly the
-        // "silently rendered to one of them" failure a refusal was previously guarding against.
-        // A cube face takes a slot like any 2D target: nothing is rasterized here, so the face
-        // only has to be accounted as bound.
-        UnbindAllRenderTargets();
+        Require(state_, renderTargets != nullptr,
+                "HeadlessRenderer::SetRenderTargets: bindings must not be null when count is positive");
+        if (renderTargets == nullptr)
+            return;
+
+        std::vector<BoundRenderTarget> nextBindings;
+        nextBindings.reserve(static_cast<std::size_t>(count));
         for (int i = 0; i < count; ++i)
         {
-            if (renderTargets[i].IsRenderTargetCubeFace())
+            const RenderTargetBindingDescriptor& descriptor = renderTargets[i];
+            Require(state_, descriptor.GetWidth() > 0 && descriptor.GetHeight() > 0,
+                    "HeadlessRenderer::SetRenderTargets: target dimensions must be positive");
+            if (descriptor.GetWidth() <= 0 || descriptor.GetHeight() <= 0)
+                return;
+
+            if (descriptor.IsRenderTargetCubeFace())
             {
-                auto* cube = static_cast<HeadlessRenderTargetCubeRenderer*>(
-                    renderTargets[i].GetRenderTargetCube());
-                if (cube == nullptr) continue;
-                cube->BindAsRenderTargetFace(renderTargets[i].GetCubeFace());
-                boundCubeTargets_.push_back(cube);
+                auto* cube = dynamic_cast<HeadlessRenderTargetCubeRenderer*>(
+                    descriptor.GetRenderTargetCube());
+                Require(state_, cube != nullptr,
+                        "HeadlessRenderer::SetRenderTargets: cube target belongs to another renderer");
+                Require(state_, descriptor.GetCubeFace() >= 0 && descriptor.GetCubeFace() <= 5,
+                        "HeadlessRenderer::SetRenderTargets: cube face must be 0..5");
+                if (cube == nullptr || descriptor.GetCubeFace() < 0 || descriptor.GetCubeFace() > 5)
+                    return;
+                nextBindings.push_back(BoundRenderTarget{
+                    nullptr, cube, descriptor.GetCubeFace(), descriptor.GetWidth(),
+                    descriptor.GetHeight()});
                 continue;
             }
 
-            auto* target = static_cast<HeadlessRenderTargetRenderer*>(
-                renderTargets[i].GetRenderTarget2D());
+            auto* target = dynamic_cast<HeadlessRenderTargetRenderer*>(
+                descriptor.GetRenderTarget2D());
+            Require(state_, target != nullptr,
+                    "HeadlessRenderer::SetRenderTargets: 2D target belongs to another renderer");
             if (target == nullptr)
-            {
-                continue;
-            }
-            target->BindAsRenderTarget();
-            boundRenderTargets_.push_back(target);
+                return;
+            nextBindings.push_back(BoundRenderTarget{
+                target, nullptr, -1, descriptor.GetWidth(), descriptor.GetHeight()});
         }
+
+        UnbindAllRenderTargets();
+        for (const BoundRenderTarget& binding : nextBindings)
+        {
+            if (binding.target2D != nullptr)
+                binding.target2D->BindAsRenderTarget();
+            else
+                binding.targetCube->BindAsRenderTargetFace(binding.cubeFace);
+        }
+        boundRenderTargets_ = std::move(nextBindings);
     }
 
     std::unique_ptr<IEffectRenderer> HeadlessRenderer::CreateEffectRenderer(const std::string& vertSrc,

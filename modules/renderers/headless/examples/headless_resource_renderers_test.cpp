@@ -11,7 +11,8 @@
 // GraphicsCapability::Texture3D).
 // Check C -- RenderTarget2D: SetRenderTarget()/SetRenderTarget(nullptr) doesn't throw, and
 //   GetViewportSize() genuinely reflects the bound target's own size while it's active.
-// Check D -- RenderTargetCube: SetRenderTarget() for 2 different faces doesn't throw.
+// Check D -- RenderTargetCube: a cube larger than the backbuffer becomes the active viewport
+//   extent, including after a differently-sized 2D target, and unbinding restores the backbuffer.
 // Check E -- Custom ShaderEffect: compiles (IsEffectValid()), SetUniformFloat() is retrievable via
 //   UniformValues() on the renderer, and SpriteBatch::Begin(..., &effect) doesn't throw.
 // Check F -- HeadlessTrace mode: TraceLog() is empty under the default HeadlessValidation mode;
@@ -163,19 +164,34 @@ protected:
             dev.SetRenderTarget(nullptr);
         }
 
-        // Check D: RenderTargetCube, two different faces bound in turn.
+        // Check D: RenderTargetCube tracking. The cube is deliberately larger than the 64x64
+        // backbuffer, and the preceding 2D target has a third size. The old implementation kept
+        // either of those stale extents and rejected GraphicsDevice's automatic 128x128 viewport.
         {
-            RenderTargetCube rtCube(dev, 16, false, SurfaceFormat::Color, DepthFormat::None, 0,
+            RenderTarget2D transitionTarget(
+                dev, 24, 20, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                RenderTargetUsage::DiscardContents);
+            RenderTargetCube rtCube(dev, 128, false, SurfaceFormat::Color, DepthFormat::None, 0,
                                     RenderTargetUsage::DiscardContents);
             bool threw = false;
+            bool dimensionsCorrect = false;
             try
             {
+                dev.SetRenderTarget(&transitionTarget);
                 dev.SetRenderTarget(&rtCube, CubeMapFace::PositiveY);
+                int cubeW = 0, cubeH = 0;
+                renderer.GetViewportSize(cubeW, cubeH);
                 dev.SetRenderTarget(&rtCube, CubeMapFace::NegativeZ);
                 dev.SetRenderTarget(static_cast<RenderTargetCube*>(nullptr), CubeMapFace::PositiveY);
+                int backbufferW = 0, backbufferH = 0;
+                renderer.GetViewportSize(backbufferW, backbufferH);
+                dimensionsCorrect = cubeW == 128 && cubeH == 128 &&
+                                    backbufferW == 64 && backbufferH == 64;
             }
             catch (...) { threw = true; }
-            check(!threw, "RenderTargetCube: binding two different faces in turn does not throw");
+            check(!threw && dimensionsCorrect,
+                  "RenderTargetCube: 2D-to-large-cube transitions use cube dimensions and unbind "
+                  "restores the backbuffer");
         }
 
         // Check E: custom ShaderEffect compiles, uniform values are introspectable, and SpriteBatch
@@ -222,7 +238,7 @@ protected:
                 // Check B's Texture3D is now rejected before any renderer resource is created
                 //, so this counter must NOT move.
                 stats.textures3DCreated == baseline.textures3DCreated &&
-                stats.renderTargetsCreated == baseline.renderTargetsCreated + 1 &&
+                stats.renderTargetsCreated == baseline.renderTargetsCreated + 2 &&
                 stats.renderTargetCubesCreated == baseline.renderTargetCubesCreated + 1 &&
                 stats.effectsCreated == baseline.effectsCreated + 1;
             check(countsOk,

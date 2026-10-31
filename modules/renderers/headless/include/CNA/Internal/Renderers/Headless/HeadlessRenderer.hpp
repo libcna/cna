@@ -626,6 +626,16 @@ namespace CNA::Internal::Renderers::Headless
                                                                           bool preserveContents = false,
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
+        /**
+         * @brief Binds one Headless cube-target face or restores the virtual back buffer.
+         *
+         * Replaces every prior 2D, cube or MRT binding so viewport/scissor validation observes
+         * the selected cube's dimensions rather than stale target or back-buffer dimensions.
+         *
+         * @param rt Cube render target, or null to restore the virtual back buffer.
+         * @param face Cube face index in the range 0..5.
+         */
+        void SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
@@ -737,15 +747,21 @@ namespace CNA::Internal::Renderers::Headless
         /// Unbinds every currently bound render target and forgets them.
         void UnbindAllRenderTargets();
 
+        struct BoundRenderTarget
+        {
+            HeadlessRenderTargetRenderer* target2D = nullptr;
+            HeadlessRenderTargetCubeRenderer* targetCube = nullptr;
+            int cubeFace = -1;
+            int width = 0;
+            int height = 0;
+        };
+
         std::shared_ptr<HeadlessSharedState> state_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         float clearColor_[4] = {0, 0, 0, 1};
-        // Every currently bound 2D render target, in binding order. A single pointer here is what
-        // made SetRenderTargets refuse more than one -- while SupportsCapability kept reporting
-        // MultipleRenderTargets as available, because Headless answers true by default.
-        std::vector<HeadlessRenderTargetRenderer*> boundRenderTargets_;
-        /// Every cube face bound as part of a multi-target set, in binding order.
-        std::vector<HeadlessRenderTargetCubeRenderer*> boundCubeTargets_;
+        /// Every active target in slot order. Keeping type, face and dimensions together prevents
+        /// a cube binding from inheriting a prior 2D target's viewport bounds.
+        std::vector<BoundRenderTarget> boundRenderTargets_;
     };
 }
