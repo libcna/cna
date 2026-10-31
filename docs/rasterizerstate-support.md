@@ -1,166 +1,152 @@
-# RasterizerState Support Matrix
+# `RasterizerState` support
 
-Phase 38 (graphics Tasks 321–330) audited and pixel-verified `RasterizerState`
-conformance against FNA. This document summarizes the findings.
+**Status:** reconciled with current source and focused regressions on 2026-10-31. This page is the
+current contract for the XNA `RasterizerState` object and its renderer consumption. The original
+Phase 38 task-by-task audit remains available in Git history.
 
----
+## Public object contract
 
-## 1. `RasterizerState` API surface (Task 321)
+The complete XNA surface is present. A default-constructed state has these values:
 
-The full 6-property surface (`CullMode`/`DepthBias`/`FillMode`/`MultiSampleAntiAlias`/
-`ScissorTestEnable`/`SlopeScaleDepthBias`), all 3 static presets (`CullClockwise`/
-`CullCounterClockwise`/`CullNone`), and the default-constructor values
-(`CullMode=CullCounterClockwiseFace`, `FillMode=Solid`, `DepthBias=0`,
-`MultiSampleAntiAlias=true`, `ScissorTestEnable=false`, `SlopeScaleDepthBias=0`) already matched
-FNA exactly.
-
-One real, fixed finding: FNA's private preset constructor sets `Name` on every preset (e.g.
-`"RasterizerState.CullCounterClockwise"`); CNA's didn't — the last remaining portion of the gap
-already fixed in `SamplerState` (Task 291), `BlendState` (Task 301), and `DepthStencilState`
-(Task 311). Fixed by threading a `name` parameter through the private preset constructor. **This
-closes Task 866 entirely** — all 4 XNA state classes now correctly set `Name` on every preset.
-
-## 2. Default rasterizer state on `GraphicsDevice` (Task 322)
-
-FNA's `GraphicsDevice` constructor sets `RasterizerState = RasterizerState.CullCounterClockwise`
-(fixed for CNA back in Task 312, alongside the `DepthStencilState` default). Task 322 extended
-verification to the full 6-property surface (not just `CullMode`/`FillMode`, which Task 312's
-original test checked) — passed trivially, since `CullCounterClockwise` only ever diverges from a
-plain default-constructed `RasterizerState` in `CullMode` and `Name`. No bug found; closes any
-doubt with a full-surface regression pin, mirroring `DepthStencilState`'s own Task 312 test rigor.
-
-## 3. `CullMode` (Tasks 323–325)
-
-One comprehensive pixel test (`modules/renderers/easygl/examples/easygl_rasterizerstate_cullmode_test.cpp`,
-`EasyGL_RasterizerState_CullMode`) draws two quads of opposite, empirically-verified winding order (via signed area, not assumed)
-side by side, redrawn under all 3 `CullMode` values:
-
-| `CullMode` | Column 0 (CW winding) | Column 1 (CCW winding) |
-|---|---|---|
-| `None` | visible (RED) | visible (GREEN) |
-| `CullCounterClockwiseFace` (XNA default) | visible (RED) | culled (background) |
-| `CullClockwiseFace` | culled (background) | visible (GREEN) |
-
-Task 954 independently verified this mapping against real XNA 4.0 on a Windows 7 VM with a
-dedicated two-winding C# reproducer. `None` kept both triangles, `CullClockwiseFace` kept only the
-counter-clockwise triangle, and both `CullCounterClockwiseFace` and the untouched default kept only
-the clockwise triangle. The table is therefore a measured XNA contract, not only an interpretation
-of FNA. The complete investigation and its removed screenshots remain in Git history at
-`be7707579` and `76a305efd`.
-
-The shared `rasterizerstate_cullmode_camera_test.cpp` extends the contract through orthographic and
-perspective `CreateLookAt` transforms and positive- and negative-determinant world matrices.
-`rasterizerstate_cullmode_indexed_basiceffect_test.cpp` covers the bound vertex/index-buffer,
-`BasicEffect` and `DrawIndexedPrimitives` path. Both remain registered for EasyGL and SDLGPU.
-
-All 6 checks pass. This directly satisfies Task 323's own goal (`CullNone`
-disables culling for both windings) and, because each quad's visibility is checked under all 3
-modes rather than just one, also fully satisfies Tasks 324 (`CullClockwiseFace`) and 325
-(`CullCounterClockwiseFace`) — no separate test files were needed for them, mirroring the Task 295
-precedent (one well-designed test covering multiple planned verification tasks).
-
-**Real, minor finding (not a bug, noted for the record, not fixed)**: while designing this test,
-direct pixel evidence showed that an earlier test (`modules/renderers/easygl/examples/easygl_depthstencilstate_stencil_twosided_test.cpp`,
-Task 318)'s `DrawQuadFront`/`DrawQuadBack` naming and accompanying comment ("front-facing... survives
-the default state") is backwards. That test only ever draws with `CullMode::None`, so the claim was
-never actually exercised under a real cull mode — Task 323's direct empirical measurement (signed
-area plus pixel readback under all 3 `CullMode` values) shows the *opposite* winding is the one that
-survives XNA's default `CullCounterClockwiseFace` state. This is harmless to Task 318's own
-correctness (it never depended on the absolute label, only on the two quads having opposite
-windings, which they still do) and was left unfixed there as out of scope.
-
-## 4. `FillMode` (Tasks 326–327)
-
-`modules/graphics/examples/fill_mode_test.cpp` (Task 327) covers both `FillMode::Solid` (baseline,
-checked before and after the `WireFrame` sub-test) and `FillMode::WireFrame`. Task 326 found the
-source is fully renderer-agnostic (`VertexBuffer`+`BasicEffect`) and registered it as an EasyGL
-test (`EasyGL_FillMode_Solid`). All 3 sub-tests pass, confirming both the `Solid` baseline and `EasyGLRenderer`'s `GL_LINES`
-re-expansion emulation for `WireFrame` (OpenGL ES has no `glPolygonMode`) work correctly. No bug
-found — closed a real test-registration gap.
-
-## 5. Depth bias / slope-scale depth bias (Task 328)
-
-Not re-investigated in Phase 38. EasyGL's coverage is `EasyGL_DepthBias` (Task 767,
-`glPolygonOffset`) and `EasyGL_DepthBias_Magnitude`.
-
-## 6. Scissor test (Task 329)
-
-Already verified via `modules/renderers/easygl/examples/easygl_scissor_test.cpp` prior to this
-phase's audit tasks. No new findings in Phase 38.
-
-## 7. State object immutability/freeze behavior (Task 330)
-
-Phase 38's FNA-only conclusion was superseded by direct Microsoft XNA evidence during
-`SOFTWARE-232`: XNA's state objects become bound on first application and every later property
-setter throws `InvalidOperationException`. FNA's mutable records are a compatibility divergence,
-not the authority for this contract.
-
-CNA now shares the internal state payload when a state is assigned to a device. Binding freezes
-that payload, so both the caller's wrapper and the device-owned wrapper reject later mutation.
-`GraphicsDeviceDefaultStateTest.BoundRasterizerStateRejectsMutationThroughSourceAndDevice` checks
-both aliases, while `BoundRasterizerStateRejectsEveryPropertySetter` covers all six public
-properties. `SOFTWARE-349` subsequently extended the shared identity to portable
-`GraphicsResource` observations (`Name`, `Tag`, disposal/events and parent-device rebinding),
-covered by the assigned/default-state alias tests in the same suite. Only literal C++ wrapper
-address and cross-wrapper event-token identity remain the accepted `SOFTWARE-198` language-mapping
-deviation recorded in `CHECKLIST.md`.
-
----
-
-## 8. `MultiSampleAntiAlias` reaches no renderer, by decision (2026-09-07)
-
-`IGraphicsRenderer::ApplyRasterizerState` takes `(cullMode, fillMode, scissorTestEnable,
-depthBias, slopeScaleDepthBias)` — five parameters, none of them this flag — so the value stops at the shared interface for **every** renderer family.
-
-**What XNA actually does with it, measured rather than read.**
-`spikes/xna-multisample-antialias-spike/` runs the property on the real XNA 4.0 runtime in
-`~/.wine-cna-xna40` (D3D9 through DXVK, RADV PHOENIX). Setting
-`RasterizerState.MultiSampleAntiAlias = false` makes the D3D9 layer report
-
-```
-warn:  D3D9DeviceEx::SetRenderState: Unhandled render state 161
-```
-
-and **161 is `D3DRS_MULTISAMPLEANTIALIAS`** (`d3d9types.h:1008`). The attribution is measured, not
-inferred: re-running with `PROBE_SKIP_FALSE=1`, so that no leg ever sets the flag to `false`,
-produces the warning **zero** times. So XNA does carry the property down to the D3D9 render state,
-and writes it only when the value is not D3D9's default — the field is live upstream, not inert.
-
-**What it does to pixels could not be measured here**, and the probe says so rather than guessing:
-DXVK reports the state as unhandled, so the edge-pixel counts are identical either way
-(4× multisampled triangle: 151 blended pixels with the flag true, 151 with it false, against 0 on
-an unmultisampled target — multisampling itself demonstrably worked, which is what rules out the
-"MSAA never happened" reading). Answering the behavioural half needs a native D3D9 stack, which
-this machine does not have.
-
-**Why CNA leaves it dropped.** Adding a sixth parameter to an interface every renderer family
-implements, so that every one of them can refuse it, buys nothing that the current silence does
-not — and it is not a parity gap, because no renderer receives the field, so no two renderers
-disagree.
-
-## Summary: what actually works today, per renderer
-
-| Feature | EasyGL |
+| Property | Default |
 |---|---|
-| `RasterizerState` API/presets/`Name` | ✅ (fixed, Task 321) |
-| Default `RasterizerState` on `GraphicsDevice` (values + `Name`) | ✅ (fixed, Tasks 312/321/322) |
-| `CullMode::None`/`CullClockwiseFace`/`CullCounterClockwiseFace` | ✅ |
-| `FillMode::Solid` | ✅ |
-| `FillMode::WireFrame` | ✅ (GL_LINES emulation) |
-| `DepthBias` / `SlopeScaleDepthBias` | 🔍 not pixel-verified in this phase; `EasyGL_DepthBias` registered later (Task 767) |
-| `ScissorTestEnable` + `GraphicsDevice.ScissorRectangle` | ✅ |
-| State object freeze/immutability | ✅ (Microsoft XNA behavior restored, `SOFTWARE-232`) |
+| `CullMode` | `CullCounterClockwiseFace` |
+| `DepthBias` | `0.0f` |
+| `FillMode` | `Solid` |
+| `MultiSampleAntiAlias` | `true` |
+| `ScissorTestEnable` | `false` |
+| `SlopeScaleDepthBias` | `0.0f` |
 
-Legend: ✅ verified working · ❌ confirmed broken/absent · 🔍 not empirically verified this phase.
+The three static presets are `CullClockwise`, `CullCounterClockwise` and `CullNone`. Their `Name`
+values are respectively `"RasterizerState.CullClockwise"`,
+`"RasterizerState.CullCounterClockwise"` and `"RasterizerState.CullNone"`; an ordinary new state
+has an empty name. `GraphicsDevice` starts with the `CullCounterClockwise` preset.
 
-## Follow-up status
+Assigning a state to a device binds and freezes its shared payload, matching measured Microsoft
+XNA behavior. Mutating any of the six properties afterward throws through both the caller's
+wrapper and the device-owned wrapper. The same shared identity carries the portable
+`GraphicsResource` observations (`Name`, `Tag`, disposal/events and parent-device rebinding).
+Literal C++ wrapper-address and cross-wrapper event-token identity remain the accepted
+`SOFTWARE-198` language-mapping difference recorded in `CHECKLIST.md`.
 
-- No new tracked bugs were opened in Phase 38 — `RasterizerState` conformance was already solid
-  going in (unlike Phases 36/37's `BlendState`/`DepthStencilState` findings). The only gaps found
-  were test-coverage/registration gaps (`Name` on presets, missing EasyGL `FillMode`
-  registration), both closed within this phase.
-- Task 866 is closed. Task 869's portable observable semantics were later restored through shared
-  state/resource identities; only literal CLR wrapper identity remains an accepted C++ mapping
-  deviation (`SOFTWARE-198` in `CHECKLIST.md`). Tasks 871/872 are also closed; their stencil-clear
-  and independent-reference implementations and regressions are documented in
-  `docs/depthstencilstate-support.md`.
+`GraphicsDevice` applies the state when it is assigned and reapplies it before each draw. The
+common renderer seam is deliberately split:
+
+- `ApplyRasterizerState(...)` carries culling, fill, scissor enablement and both depth-bias values;
+- `ApplyRasterizerMultiSampleState(...)` carries `MultiSampleAntiAlias` separately.
+
+The second call is important: the property is no longer dropped by `GraphicsDevice`, but its
+default renderer implementation is a no-op. The per-family table below says which renderers
+actually consume it.
+
+## Measured Microsoft XNA behavior
+
+### Culling and winding
+
+Task 954 measured the following contract on Microsoft XNA 4.0 with two opposite-winding
+triangles. The complete investigation and screenshots remain in Git history at `be7707579` and
+`76a305efd`.
+
+| `CullMode` | Clockwise triangle | Counter-clockwise triangle |
+|---|---|---|
+| `None` | visible | visible |
+| `CullCounterClockwiseFace` (default) | visible | culled |
+| `CullClockwiseFace` | culled | visible |
+
+The shared camera and indexed-`BasicEffect` regressions extend this through orthographic and
+perspective transforms, positive- and negative-determinant world matrices, bound vertex/index
+buffers and `DrawIndexedPrimitives`.
+
+### `MultiSampleAntiAlias`
+
+The retained oracle in `spikes/xna-multisample-antialias-spike/` proves that Microsoft XNA sends
+`false` to D3D9 render state 161 (`D3DRS_MULTISAMPLEANTIALIAS`). A control run that never assigns
+`false` produces no such write. DXVK reports that state as unhandled, so the probe cannot establish
+its pixel effect on native D3D9; it establishes that the property is live and reaches the native
+rasterizer.
+
+This property is not the same question as whether a back buffer or render target owns multisample
+storage. `GraphicsCapability::MultiSampleAntiAliasing`, presentation sample-count selection and
+the MSAA rows in `graphics-renderer-feature-matrix.md` describe target storage. The property selects
+independent per-sample rasterization on an already multisampled destination; setting it to `false`
+must not silently turn a four-sample target into a one-sample target.
+
+## Current renderer matrix
+
+The cells describe current implementation routes, not merely API acceptance. “No-op” means the
+public value is retained and frozen but has no renderer effect.
+
+| Renderer family | Cull mode | Wireframe | Depth bias | Scissor | `MultiSampleAntiAlias` |
+|---|---|---|---|---|---|
+| EasyGL (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | native GL culling | conditional native polygon mode; see below | polygon offset, scaled to the active depth format | native | `OPENGL33` toggles `GL_MULTISAMPLE`; GLES/WebGL no-op |
+| `WEBGPU` | pipeline state | triangle-edge expansion | pipeline state for polygons; dropped for expanded wireframe lines | dynamic per draw | no-op |
+| `SDLGPU` | pipeline state | native `SDL_GPU_FILLMODE_LINE` | normalized and baked into the pipeline | dynamic per draw | no-op |
+| `SOFTWARE` | CPU rasterizer | CPU edge rasterization | CPU constant/slope offset, including wireframe | CPU clip rectangle | implemented for triangles, lines and wireframe |
+| `DIRECTX9` | `D3DRS_CULLMODE` | `D3DRS_FILLMODE` | `D3DRS_DEPTHBIAS` / `D3DRS_SLOPESCALEDEPTHBIAS` | native | no-op in CNA |
+| `FNA3D` | forwarded in `FNA3D_RasterizerState` | forwarded | forwarded | forwarded | no-op in CNA; retained native state stays at its initial `true` |
+| `HEADLESS` | trace only; no pixels | advertised for validation, no pixels | trace only | trace only | no-op |
+| `STUB` | no rasterization | unsupported | no rasterization | no rasterization | no-op |
+
+### Wireframe boundaries
+
+- EasyGL reports `GraphicsCapability::WireFrame` only when the live context exposes desktop
+  `glPolygonMode`, `GL_NV_polygon_mode` or `WEBGL_polygon_mode`. That native path preserves
+  clipping, culling, depth bias, multisampling and stencil for every triangle route. A narrowly
+  bounded stock line-loop fallback remains for simple contexts, but it deliberately does not make
+  the capability answer true; general triangle routes fail explicitly when native polygon mode is
+  unavailable.
+- WebGPU rewrites each queued `TriangleList`/`TriangleStrip` draw to a 32-bit indexed line list.
+  Every public 3D route and `SpriteBatch` participates. Line and point primitives are unchanged,
+  because a fill mode only selects how a polygon interior is rasterized. WebGPU forbids depth bias
+  on line topology, so an expanded wireframe draw drops both bias terms; ordinary polygon draws
+  keep them.
+- SDLGPU, Software, DirectX9 and FNA3D consume wireframe through their native or CPU rasterizer
+  state. HEADLESS makes no pixel claim and STUB reports the capability unsupported.
+
+### Depth bias and scissor
+
+`DepthBias` is a normalized XNA depth offset, while `SlopeScaleDepthBias` multiplies the maximum
+polygon depth slope. EasyGL converts the constant term to the active Depth16/Depth24 resolution;
+WebGPU and SDLGPU bake the normalized pair into their pipeline descriptors; Software evaluates the
+same formula before depth comparison; DirectX9 and FNA3D forward their native float fields.
+
+`ScissorTestEnable` gates `GraphicsDevice.ScissorRectangle`; the rectangle remains stored when the
+test is disabled. The effective raster region is the target bounds intersected with the viewport
+and, when enabled, the scissor rectangle. Render-target changes reset viewport and scissor to the
+new target as described in `rendertarget-support.md`. `Clear` temporarily neutralizes rasterizer
+scissor state and covers the requested full target, matching XNA.
+
+### Multisample-rasterization boundary
+
+Software is the complete reference implementation: on a four-sample target, `true` evaluates
+coverage and depth at the standard D3D 4x sample positions; `false` evaluates one pixel-center
+decision and replicates it to the stored samples. The shared contract covers triangles,
+`LineList` and wireframe and verifies `true`/`false`/`true` restoration. Desktop EasyGL expresses
+the same state with `GL_MULTISAMPLE`. OpenGL ES and WebGL have no equivalent switch.
+
+WebGPU, SDLGPU, DirectX9 and FNA3D currently inherit the no-op renderer method. This is a real
+fidelity limitation, not proof that the XNA property is inert. It does not invalidate their
+separate MSAA-target support: those renderers may still allocate, rasterize and resolve
+multisampled targets while ignoring this per-state toggle.
+
+## Active evidence
+
+The current contract is pinned at several layers:
+
+- `RasterizerStateTest`, `GraphicsDeviceDefaultStateTest` and the assigned/default-state alias
+  tests cover defaults, preset names, all setters, device defaults and bound-state freezing;
+- the shared cull-mode camera/indexed programs and renderer-specific EasyGL, SDLGPU and DirectX9
+  scenes cover the measured winding contract;
+- `GraphicsDeviceCapabilityTest` provides the capability-versus-pixels wireframe oracle, while
+  `WebGpuWireFrameContract`, `SdlGpu_RenderState`, `Software_Wireframe` and `Fna3d_3D` cover their
+  renderer-specific routes;
+- `RasterizerDepthBiasContractTest`, `EasyGL_DepthBias`, `SdlGpu_DepthBias` and
+  `Software_DepthBias` discriminate constant/slope bias and depth-format scaling;
+- EasyGL, WebGPU, SDLGPU, Software, DirectX9 and FNA3D scissor scenes cover state transitions and
+  target/viewport intersection;
+- `Software_MsaaFragmentContract` and `EasyGL_MsaaFragmentContract` cover the representable
+  multisample toggle behavior and the GLES no-equivalent boundary.
+
+The broader renderer capability overview remains
+`graphics-renderer-feature-matrix.md`; renderer-specific device/build restrictions remain in each
+renderer page and in `handoff.md` section 5.

@@ -25,8 +25,8 @@
 //   still inside the backbuffer) shows the untouched clear colour.
 // Check G -- FillMode.WireFrame renders a WIREFRAME (WEBGPU-153). It asserted WEBGPU-115's
 //   refusal contract until WEBGPU-153 implemented the state by expanding each triangle's edges
-//   into a line list -- the reference renderer's own mechanism, which needs no polygon-mode API on
-//   any target. The check now asserts that the draw is served rather than refused, that the quad's
+//   into a line list, which needs no polygon-mode API on any target. The check now asserts that the
+//   draw is served rather than refused, that the quad's
 //   interior is EMPTY under WireFrame and filled under Solid through the identical route, and that
 //   an ordinary Solid draw works immediately afterwards.
 //
@@ -297,8 +297,8 @@ protected:
 
         // ---- Check G: FillMode.WireFrame renders a WIREFRAME (WEBGPU-153). ----
         // This arm asserted WEBGPU-115's refusal contract until WEBGPU-153 implemented the state by
-        // expanding each triangle's edges into a line list -- the reference renderer's own
-        // mechanism, needing no polygon mode on any target. The backbuffer route is checked here;
+        // expanding each triangle's edges into a line list, needing no polygon mode on any target.
+        // The backbuffer route is checked here;
         // the render-target routes and the full native cardinality live in the CnaTests
         // WebGpuWireFrameContract suite.
         {

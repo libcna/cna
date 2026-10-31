@@ -108,9 +108,9 @@ original phase closed — check each file's own status banner/date.
 - `sampler-state-support.md` — reconciled 2026-10-31: current nine-value filter mapping,
   renderer-wide LOD/W propagation, sampler lifetime, and measured `SpriteBatch` publication;
   historical Phase 35 findings are separated from the two remaining EasyGL limitations.
-- `rasterizerstate-support.md` — Phase 38 audit plus the real-XNA Task 954 culling contract and
-  current regressions; see `graphics-renderer-feature-matrix.md` for the current per-renderer
-  `DepthBias` status.
+- `rasterizerstate-support.md` — reconciled 2026-10-31: measured XNA culling, state freezing,
+  conditional wireframe, depth bias, scissor and the distinct target-MSAA versus
+  `MultiSampleAntiAlias` boundary across all renderer families.
 - `model-content-pipeline-support.md` — `Model`'s FNA-audited runtime API and its four loading
   routes (`.xnb`, `.cnb`, `.cnj`, glTF) with what each builds; refreshed 2026-10-25.
 - `occlusionquery-support.md` — reconciled 2026-10-31: recovered XNA lifecycle, overlapping logical

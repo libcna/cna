@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- `RasterizerState` support-document reconciliation (2026-10-31): the EasyGL-only Phase 38
+  snapshot is now a current eight-family contract. It preserves the measured Microsoft XNA
+  winding and state-freeze rules, records conditional native EasyGL wireframe, WebGPU edge
+  expansion and the per-family cull/bias/scissor routes, and separates multisampled target storage
+  from `RasterizerState.MultiSampleAntiAlias`. The old claim that the property reaches no renderer
+  was false: the shared seam now forwards it, Software implements the complete triangle/line/
+  wireframe behavior and desktop OpenGL toggles `GL_MULTISAMPLE`; the remaining no-op families are
+  recorded in section 5.2. Stale WebGPU comments that still described wireframe refusal and
+  EasyGL line expansion were corrected without changing behavior. The WebGPU target rebuilds; 133
+  focused tests across OPENGLES3, WebGPU, SDLGPU, Software, DirectX9, FNA3D and HEADLESS select 116
+  executed passes plus 17 intentional capability/profile skips.
 - `ShaderEffect`/compiled-effect support-document reconciliation (2026-10-31): the old
   `CNAEXT::ShaderEffect`, six-stock-effect and renderer-unspecified snapshot is now the current
   two-contract guide. It names the real XNA-namespace `CNAEXT` type, the five public stock effects,
@@ -634,6 +645,12 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- `RasterizerState.MultiSampleAntiAlias` is honored by `SOFTWARE` and desktop `OPENGL33` only.
+  `OPENGLES3`/`WEBGL2` have no equivalent native switch, while `WEBGPU`, `SDLGPU`, `DIRECTX9` and
+  `FNA3D` currently inherit the renderer seam's no-op. This is separate from multisampled target
+  storage: those families may still allocate and resolve MSAA targets. Microsoft XNA demonstrably
+  writes D3D9 render state 161 for `false`; its native-D3D9 pixel effect has not been measured here
+  because DXVK reports the state unhandled (`docs/rasterizerstate-support.md`).
 - `SDLGPU` applies `BlendState.MultiSampleMask` on a multisampled target only when it keeps every
   sample or none: the pinned SDL reserves `SDL_GPUMultisampleState::sample_mask`/`enable_mask`, so
   a mask of none drops the draw and any partial mask throws `System::NotSupportedException`

@@ -1694,12 +1694,11 @@ namespace CNA::Internal::Renderers::WebGPU
         /**
          * @brief Reports whether @p capability is genuinely available on this renderer.
          *
-         * WEBGPU-115: `GraphicsCapability::WireFrame` answers **false** here. wgpu-native exposes
-         * no polygon mode at all -- `WGPUPrimitiveState` has no field a wireframe fill could reach
-         * -- so the shared permissive default (which this renderer used to inherit) was an
-         * affirmative false claim: it promised a mode the renderer then silently replaced with a
-         * solid fill. Everything else falls through to `IGraphicsRenderer`'s own answer, including
-         * `MultiStreamVertexInput`, whose shared default is already false.
+         * WEBGPU-153 made `GraphicsCapability::WireFrame` a true answer by expanding queued
+         * triangle edges into line lists on every public draw route. Device-dependent capabilities
+         * such as multisample target storage are probed here; other explicit answers either use
+         * renderer-owned implementation evidence or fall through to the common defaults.
+         *
          * @param capability The capability to query.
          * @return True when this renderer can genuinely honour @p capability.
          */
@@ -1910,14 +1909,10 @@ namespace CNA::Internal::Renderers::WebGPU
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc,
                              const BlendWriteState& writeState) override;
-        // WEBGPU-41/79: CullMode/FillMode -> WGPUPrimitiveState (storage-only; also baked into the
-        // pipeline object). WEBGPU-115: FillMode::WireFrame is still STORED here and this call
-        // still succeeds -- selecting a RasterizerState is a state operation in XNA's lifecycle and
-        // a state setter cannot know whether a draw will follow, exactly as the fill-mode boundary
-        // found for SetVertexDeclaration. The refusal happens at the first draw that would consume
-        // it (RequireSupportedFillModeEXT below). DepthBias/SlopeScaleDepthBias ARE genuinely
-        // supported by WGPUDepthStencilState (unlike a dynamic vkCmdSetDepthBias-style override)
-        // and are baked in too.
+        // WEBGPU-41/79/153: CullMode and polygon DepthBias are pipeline state. FillMode is captured
+        // per draw; WireFrame triangles are expanded into line lists before replay. Scissor is
+        // captured and applied dynamically. WebGPU forbids depth bias on line topology, so the
+        // expanded wireframe route deliberately omits both bias terms.
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
         // WEBGPU-82: per-slot SamplerState -> a genuine WGPUSampler cache (GetOrCreateSlotSampler()
@@ -2845,27 +2840,17 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] static const char* DrawFamilyName(DrawFamily family) noexcept;
 
         /**
-         * @brief WEBGPU-115: refuses a draw that would consume the unsupported WireFrame fill.
+         * @brief Runs the public-draw validation kept at the former fill-mode boundary.
          *
-         * Called once at the top of each of this renderer's five public 3D draw entry points, which
-         * is the narrowest boundary every one of the eleven Queue*Draw() command families passes
-         * through. That placement is what makes the refusal safe: it runs before any command is
-         * built or appended to @ref drawOrder_, before any pipeline key is computed, before any
-         * WGPURenderPipeline is created, before a render pass is encoded and before anything is
-         * submitted -- so a refused draw creates nothing, queues nothing, mutates no target and
-         * leaves no partial native object behind. The next Solid draw is unaffected.
-         *
-         * ONLY POLYGON TOPOLOGIES ARE REFUSED. A fill mode selects how a POLYGON's interior is
-         * rasterized; a line or point list has no interior, so `Solid` and `WireFrame` mean the
-         * identical thing for them on every renderer and this renderer substitutes nothing. Refusing
-         * those would delete a draw that is already correct -- the failure mode of an over-wide
-         * guard, not a safety property. The refusal is scoped to exactly the case where the output
-         * would otherwise be a solid fill standing in for a wireframe.
+         * WEBGPU-153 made wireframe legal by expanding polygon edges after this check, so this
+         * legacy-named choke point no longer refuses a fill mode. It remains at the top of every
+         * public 3D route so unsupported float32 blending fails before a command or native object
+         * is created. Line and point topologies remain unchanged under either fill mode.
          *
          * @param primitive The topology the draw will rasterize.
          * @param route The route's name (for example `ordinary-indexed`), for the diagnostic.
-         * @throws System::NotSupportedException When FillMode::WireFrame is the active fill mode
-         *         and @p primitive is a polygon topology.
+         * @throws System::NotSupportedException When the active target needs unsupported
+         *         float32 blending.
          */
         void RequireSupportedFillModeEXT(PrimitiveType primitive, const char* route) const;
 
@@ -4006,9 +3991,8 @@ namespace CNA::Internal::Renderers::WebGPU
         /// EQUATION for all targets, so only the write mask is per-slot.
         std::array<int, 4> colorWriteChannels_ = {15, 15, 15, 15};
         int cullMode_ = 0;                ///< XNA CullMode::None
-        /// XNA FillMode::WireFrame, as last selected through ApplyRasterizerState. WEBGPU-115: this
-        /// is the state the draw-time guard reads; no pipeline ever consumes it, because no draw
-        /// that would reach one gets past RequireSupportedFillModeEXT().
+        /// XNA FillMode::WireFrame, as last selected through ApplyRasterizerState. Each queue path
+        /// captures it into its command; triangle commands are then expanded into line lists.
         bool fillModeWireframe_ = false;
         bool scissorEnabled_ = false;
         float depthBias_ = 0.0f;

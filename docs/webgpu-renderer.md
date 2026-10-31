@@ -1523,9 +1523,10 @@ default behavior (mostly silent no-ops, by `IGraphicsRenderer`'s own design for 
 
 ### `FillMode::WireFrame`, by triangle-edge expansion (`WEBGPU-153`)
 
-A wireframe does not need a polygon mode. The reference renderer (EasyGL) has never used one:
-`EasyGLRenderer::DrawWireframe` re-expands a triangle index sequence into a 32-bit `GL_LINES` index
-buffer and draws that. `WEBGPU-153` gives WebGPU the same mechanism.
+A wireframe does not need a polygon mode. `WEBGPU-153` implements WebGPU's portable route by
+re-expanding a triangle index sequence into a 32-bit line-list index buffer. This is deliberately
+different from current EasyGL, which reports general wireframe support only when its live context
+exposes a native polygon mode.
 
 **How.** At **queue** time, a draw whose captured `FillMode` is `WireFrame` and whose primitive is
 `TriangleList` or `TriangleStrip` has its command rewritten in place: each triangle's three edges
@@ -1539,7 +1540,7 @@ already knows how to draw, and the topology is already part of every pipeline ca
 | `GraphicsDevice::SupportsCapability(GraphicsCapability::WireFrame)` | **`true`**, backed by pixels: the shared `WireFrameTriangleOracle` measures interior `0/1089` with all three edges present, against Solid's `1089/1089` |
 | A wireframe polygon draw | **Accepted.** Exactly one queued command, one native draw, one extra pipeline (the line-list variant is a sibling of the solid one, not a new key per draw), no extra pass, retry or frame |
 | `RasterizerState.DepthBias` on that draw | **Dropped for it.** WebGPU forbids a depth bias on a line topology, and a depth bias is defined as an offset along a *polygon's* depth slope -- a line has none |
-| An interior edge shared by two triangles | Drawn **twice**. Shared vertices stay shared, matching the reference renderer exactly |
+| An interior edge shared by two triangles | Drawn **twice**. Shared vertices stay shared |
 | A `LineList`, `LineStrip` or `PointListEXT` draw under `WireFrame` | **Untouched.** A fill mode selects how a *polygon's interior* is rasterized; a line or point has no interior, so `Solid` and `WireFrame` are the same request. Measured byte-identical under both modes |
 
 **Coverage.** Every public 3D draw route performs the expansion -- ordinary non-indexed and indexed
@@ -1549,13 +1550,13 @@ WGSL `ShaderEffect` route and the instanced route. `WebGpuWireFrameContract.Ever
 asserts it per route, because "some routes wireframe and the rest quietly fill" is exactly the defect
 worth catching and a whole-suite total would hide it.
 
-**`SpriteBatch` wireframes too, and that is a deliberate divergence from the reference renderer**
-(`WEBGPU-154`, 2026-09-06). A sprite is two triangles, XNA's `FillMode` is a `RasterizerState` field
+**`SpriteBatch` wireframes too** (`WEBGPU-154`, 2026-09-06). A sprite is two triangles, XNA's
+`FillMode` is a `RasterizerState` field
 that applies to every primitive the device rasterizes, and `SpriteBatch.Begin` assigns the device's
 `RasterizerState` -- so a batch begun with a `WireFrame` state must draw outlines. EasyGL filled
-instead when this was written (measured 576/576 pixels, four ways, graphics row 1115; EasyGL's
-wireframe has since moved to native polygon mode, SOFTWARE-178), and this renderer does not copy
-that: where FNA and XNA disagree, XNA wins, and this row's acceptance is that
+instead when this row was first written (measured 576/576 pixels, four ways, graphics row 1115),
+but EasyGL's general wireframe path has since moved to native polygon mode (`SOFTWARE-178`). The
+current cross-renderer acceptance is that
 no route accepts a wireframe request and draws a filled polygon.
 
 Mechanically it costs nothing per sprite. One shared 12-entry `uint16` line list is created on the

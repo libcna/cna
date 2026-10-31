@@ -206,9 +206,8 @@ namespace CNA::Internal::Renderers::WebGPU
         /// WEBGPU-153: rewrites one queued triangle draw into a line-list draw
         /// over the same vertices -- `FillMode::WireFrame`, produced without any polygon-mode state.
         ///
-        /// This is the reference renderer's own mechanism (`EasyGLRenderer::DrawWireframe`,
-        /// Its wireframe emulation): each triangle's three edges become three two-index lines in a 32-bit
-        /// index buffer, and the draw is submitted as a line list. It is chosen over
+        /// Each triangle's three edges become three two-index lines in a 32-bit index buffer, and
+        /// the draw is submitted as a line list. It is chosen over
         /// `WGPUPrimitiveStateExtras::polygonMode` -- which the pinned wgpu-native does expose,
         /// behind the native-only `WGPUNativeFeature_PolygonModeLine` -- because index expansion is
         /// the one route that works natively AND in the browser, where WebGPU has no polygon mode.
@@ -216,7 +215,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /// It runs at QUEUE time, so the replay needs no wireframe branch anywhere: what the
         /// Issue*Draw path receives is an ordinary 32-bit indexed line-list command, which every
         /// family already knows how to draw. Shared vertices stay shared, so an interior edge is
-        /// drawn twice and the result matches the reference renderer's exactly.
+        /// drawn twice.
         ///
         /// @param command The queued draw, rewritten in place.
         /// @param primitive The public primitive type of the draw.
@@ -12213,11 +12212,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     bool WebGPURenderer::SupportsCapability(CNA::GraphicsCapability capability) const
     {
-        // WEBGPU-115 reported false here, and WEBGPU-153 made that answer obsolete rather than
-        // wrong: `FillMode::WireFrame` is now implemented by expanding each triangle's edges into a
-        // 32-bit line-list index buffer at queue time, which is the reference renderer's own
-        // mechanism and needs no polygon-mode state on any target. The capability therefore falls
-        // through to the shared permissive default, which reports true. Every 3D route performs the
+        // WEBGPU-115 reported false here, and WEBGPU-153 superseded that boundary:
+        // `FillMode::WireFrame` is now implemented by expanding each triangle's edges into a
+        // 32-bit line-list index buffer at queue time and needs no polygon-mode state on any
+        // target. The capability therefore falls through to the shared permissive default, which
+        // reports true. Every 3D route performs the
         // expansion -- see ExpandTriangleEdgesForWireframeEXT's eleven call sites -- so the answer
         // is not narrower than it sounds.
         // WEBGPU-85/86/87: multiple simultaneous render targets are now real. SetRenderTargets()
@@ -12490,13 +12489,12 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // reach any native pipeline state". BOTH halves of that were wrong: the pin does carry
         // `WGPUPrimitiveStateExtras::polygonMode` behind the native-only
         // `WGPUNativeFeature_PolygonModeLine`, and -- more to the point -- a wireframe never needed
-        // a polygon mode in the first place. The reference renderer has always produced one by
-        // expanding triangle edges into a line list, which is what this renderer now does, on every
-        // 3D route and in the browser as well as natively.
+        // a polygon mode in the first place. This renderer now expands triangle edges into a line
+        // list on every 3D route, in the browser as well as natively.
         //
-        // The function is kept, empty of refusal, because it is the one narrow place a route that
-        // ever stops being covered must announce itself: WEBGPU-154 owns that boundary, and a
-        // silent solid fill is the outcome neither row will accept.
+        // The fill-mode branch is kept empty because a silent solid fill is not acceptable. The
+        // function remains the narrow route-wide validation point and can still refuse a draw for
+        // another independently unsupported state, such as float32 blending below.
         (void) primitive;
         (void) route;
 
@@ -14297,10 +14295,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount);
     }
 
-    // Lives at the top of each of the three routes below; see the anonymous
-    // namespace helper of the same name. WEBGPU-115's fill-mode guard sits beside it, on these
-    // three plus the two DrawColoredPrimitives routes above -- the five public 3D draw entry
-    // points, which together are the narrowest boundary every Queue*Draw() family passes through.
+    // Lives at the top of each of the three routes below; see the anonymous namespace helper of
+    // the same name. The legacy-named RequireSupportedFillModeEXT route validator sits beside it,
+    // on these three plus the two DrawColoredPrimitives routes above -- the five public 3D draw
+    // entry points, which together are the narrowest boundary every Queue*Draw() family passes
+    // through.
     void WebGPURenderer::DispatchStockDrawEXT(const IVertexBufferRenderer& vb,
                                               const IIndexBufferRenderer* ib,
                                               const Matrix& world, const Matrix& view,
@@ -14477,8 +14476,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         PrimitiveType primitive, int primitiveCount, int instanceCount,
         const GpuDrawParams& params)
     {
-        // WEBGPU-115: before the no-instance-stream fallback below, so a refused instanced draw
-        // names its own route rather than re-entering DrawIndexedPrimitivesEx and reporting the
+        // Keep route validation before the no-instance-stream fallback so any refusal names the
+        // instanced route rather than re-entering DrawIndexedPrimitivesEx and reporting the
         // ordinary one.
         RequireSupportedFillModeEXT(primitive, "instanced");
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
