@@ -5,11 +5,60 @@
 #include <algorithm>
 #include <cmath>
 
+#include "Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 
 namespace Microsoft::Devices::Sensors::Detail
 {
+    /** @brief Motion vector field whose Android sample is being converted. */
+    enum class AndroidMotionVectorKind
+    {
+        /** @brief Gravity in metres per second squared, published in gravitational units. */
+        Gravity,
+        /** @brief Linear acceleration in metres per second squared, published in gravitational units. */
+        DeviceAcceleration,
+        /** @brief Angular velocity already expressed in radians per second. */
+        DeviceRotationRate,
+    };
+
+    /** @brief Standard gravity used to convert Android acceleration samples to gravitational units. */
+    inline constexpr float AndroidStandardGravity = 9.80665f;
+
+    /**
+     * @brief Converts an Android Motion vector field to CNA's published XNA vector.
+     *
+     * @param rawX Raw Android X component.
+     * @param rawY Raw Android Y component.
+     * @param rawZ Raw Android Z component.
+     * @param kind Motion field whose unit convention is required.
+     * @param landscapeRemapEnabled Whether CNA's optional landscape remap is enabled.
+     * @param orientation Landscape orientation to use when remapping is enabled.
+     * @return Unit-converted vector, optionally remapped to CNA's landscape convention.
+     */
+    [[nodiscard]] inline Microsoft::Xna::Framework::Vector3 ConvertAndroidMotionVectorToXna(
+        const float rawX,
+        const float rawY,
+        const float rawZ,
+        const AndroidMotionVectorKind kind,
+        const bool landscapeRemapEnabled,
+        const AndroidSensorLandscapeOrientation orientation)
+    {
+        const float scale = kind == AndroidMotionVectorKind::DeviceRotationRate
+            ? 1.0f
+            : 1.0f / AndroidStandardGravity;
+        const Microsoft::Xna::Framework::Vector3 converted(rawX * scale, rawY * scale, rawZ * scale);
+
+        if (!landscapeRemapEnabled)
+        {
+            return converted;
+        }
+
+        return ConvertAndroidPortraitToXnaLandscape(
+            converted.X, converted.Y, converted.Z, orientation);
+    }
+
     /**
      * @brief Minimum squared length a quaternion must have before this file
      * will normalize and use it (Task MOT2-002).

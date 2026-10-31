@@ -833,7 +833,7 @@ TEST(CompassTests, ConcurrentStartStopFromMultipleThreadsDoesNotCrash)
     }
 }
 
-// Task DEV-AUD-006 (2026-07-16, external audit `audit_devices.md`):
+// Task DEV-AUD-006 (2026-07-16, resolved by commit 965bd9998):
 // TimeBetweenUpdatesChanged's handler previously read backend_ without
 // mutex_, while SetBackendForTesting() replaces the same unique_ptr under
 // mutex_ -- a real data race even with nothing ever Start()ed (so

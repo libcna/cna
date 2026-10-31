@@ -230,7 +230,7 @@
     {
       "name": "devices-asan",
       "displayName": "AddressSanitizer (Microsoft::Devices hardening, OPENGLES3)",
-      "description": "Debug + OPENGLES3 + tests, instrumented with AddressSanitizer. Verified working in devices phase-8 plan Task P8-4 \u2014 detects use-after-free/heap-corruption bugs (e.g. the Task P8-1 self-destroy-during-callback fix). Does not detect data races; use devices-tsan for that. CNA_DEVICES=ON is required here \u2014 without it, the entire CNA::Devices surface (FileDialog/MessageBox/Clipboard/SystemTray/...) this preset's own name and description promise compiles out silently.",
+      "description": "Debug + OPENGLES3 + focused Devices tests under AddressSanitizer. Detects lifetime and memory-corruption bugs; use devices-tsan for data races. CNA_DEVICES=ON keeps the CNA::Devices extension surface in the same verification configuration.",
       "binaryDir": "${sourceDir}/cmake-build-devices-asan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -244,7 +244,7 @@
     {
       "name": "devices-tsan",
       "displayName": "ThreadSanitizer (Microsoft::Devices hardening, OPENGLES3)",
-      "description": "Debug + OPENGLES3 + tests, instrumented with ThreadSanitizer. Verified working in devices phase-8 plan Task P8-4 \u2014 the tool that actually detects data races (ASan does not). As of Task P8-2, running the Devices-only test suite under this preset reports exactly one pre-existing, unrelated race in sharp-runtime's TimeSpan copy constructor (a debug copy_count counter) \u2014 out of scope for Microsoft::Devices work; any *new* race reported here is worth investigating. CNA_DEVICES=ON is required here \u2014 without it, the entire CNA::Devices surface (FileDialog/MessageBox/Clipboard/SystemTray/...) this preset's own name and description promise compiles out silently.",
+      "description": "Debug + OPENGLES3 + focused Devices tests under ThreadSanitizer. Use it to investigate data races and assess every reported stack against the current tree. CNA_DEVICES=ON keeps the CNA::Devices extension surface in the same verification configuration.",
       "binaryDir": "${sourceDir}/cmake-build-devices-tsan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -258,7 +258,7 @@
     {
       "name": "devices-ubsan",
       "displayName": "UndefinedBehaviorSanitizer (Microsoft::Devices hardening, OPENGLES3)",
-      "description": "Debug + OPENGLES3 + tests, instrumented with UndefinedBehaviorSanitizer. Verified working in devices phase-8 plan Task P8-4 \u2014 the full Devices-only suite reports zero issues under this preset. CNA_DEVICES=ON is required here \u2014 without it, the entire CNA::Devices surface (FileDialog/MessageBox/Clipboard/SystemTray/...) this preset's own name and description promise compiles out silently.",
+      "description": "Debug + OPENGLES3 + focused Devices tests under UndefinedBehaviorSanitizer. CNA_DEVICES=ON keeps the CNA::Devices extension surface in the same verification configuration.",
       "binaryDir": "${sourceDir}/cmake-build-devices-ubsan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -526,26 +526,32 @@
     },
     {
       "name": "devices-asan",
-      "displayName": "Build CnaTests under AddressSanitizer",
+      "displayName": "Build focused Devices tests under AddressSanitizer",
       "configurePreset": "devices-asan",
       "targets": [
-        "CnaTests"
+        "CnaDevicesTests",
+        "CnaDevicesExtTests",
+        "cna_strict_xna_api_check"
       ]
     },
     {
       "name": "devices-tsan",
-      "displayName": "Build CnaTests under ThreadSanitizer",
+      "displayName": "Build focused Devices tests under ThreadSanitizer",
       "configurePreset": "devices-tsan",
       "targets": [
-        "CnaTests"
+        "CnaDevicesTests",
+        "CnaDevicesExtTests",
+        "cna_strict_xna_api_check"
       ]
     },
     {
       "name": "devices-ubsan",
-      "displayName": "Build CnaTests under UndefinedBehaviorSanitizer",
+      "displayName": "Build focused Devices tests under UndefinedBehaviorSanitizer",
       "configurePreset": "devices-ubsan",
       "targets": [
-        "CnaTests"
+        "CnaDevicesTests",
+        "CnaDevicesExtTests",
+        "cna_strict_xna_api_check"
       ]
     },
     {

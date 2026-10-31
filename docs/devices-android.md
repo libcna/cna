@@ -139,8 +139,8 @@ container's resource constraints.
 
 - Real declination-based `Compass.TrueHeading` (needs `System.Device.Location`, a
   separate, unstarted plan — see `docs/location-future-plan.md`).
-- **Corrected 2026-07-18 (independent re-verification of `audit_devices.md` finding
-  `DEV-AUD-003`) — this line previously claimed no remap existed at all for any of
+- **Corrected 2026-07-18 (`DEV-AUD-003`, resolved by commit `603ecdb4b`) — this
+  line previously claimed no remap existed at all for any of
   `Motion`'s vector fields, which was stale/false:** `Task MOTION-012` (2026-07-16)
   applies the same landscape remap `Accelerometer`/`Gyroscope` already use to
   `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` (`AndroidMotionBackend.cpp`'s

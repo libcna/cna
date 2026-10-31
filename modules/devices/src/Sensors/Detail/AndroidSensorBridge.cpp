@@ -2,6 +2,7 @@
 
 #include "Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp"
 
+#include "Microsoft/Devices/Sensors/Detail/AndroidSensorWorkerLifecycle.hpp"
 #include "Microsoft/Devices/Sensors/Detail/NativeDiagnostic.hpp"
 
 #ifdef __ANDROID__
@@ -43,7 +44,7 @@ namespace Microsoft::Devices::Sensors::Detail
         // ScopeExit's own already-fixed reasoning (Task P7-5) exactly, just
         // never applied here when this class was defined locally for
         // AndroidSensorBridge. Run()'s own exit guard is the one thing that
-        // *must* still publish runState_ = NotRunning and notify
+        // *must* still publish the NotRunning lifecycle state and notify
         // runExitedCv_ even if some earlier part of its own body somehow
         // threw -- an unswallowed exception here would strand every
         // Stop()/destructor caller waiting on that notification forever, in
@@ -107,7 +108,7 @@ namespace Microsoft::Devices::Sensors::Detail
         // looper state).
         std::atomic<ALooper*> looper_{nullptr};
 
-        // Guards worker_, workerThreadId_, runState_, reclaimClaimed_,
+        // Guards worker_, lifecycle_,
         // callback_, timeBetweenUpdates_, and startOutcome_'s reset -- i.e.
         // everything Start()/Stop() touch before handing off to (or waiting
         // on) the worker thread. Deliberately never held across either
@@ -125,7 +126,7 @@ namespace Microsoft::Devices::Sensors::Detail
         // *after* this mutex is released) and both would then call
         // worker_.join() on the same std::thread object concurrently, a
         // real data race (join() is a non-const member function). Fixed by
-        // reclaimClaimed_/runExitedCv_ below, the same "one winner claims
+        // lifecycle_/runExitedCv_ below, the same "one winner claims
         // the teardown, everyone else waits for it to finish" pattern
         // SensorBase<T>::ClaimDisposalOnce()/WaitForDisposalToComplete()
         // already established for the analogous concurrent-Dispose() race.
@@ -140,50 +141,20 @@ namespace Microsoft::Devices::Sensors::Detail
         // the just-detached old worker was still alive, corrupting shared
         // state, and let a concurrent external Stop() race a reentrant
         // self-stop's detach() on the same std::thread object (join() on an
-        // already-detached thread throws std::system_error). runState_ is
+        // already-detached thread throws std::system_error). lifecycle_'s
+        // run state is
         // the authoritative signal instead: it becomes NotRunning only from
         // inside Run() itself, in the same exit guard that resets looper_
         // (see Run()'s own comment), the one place that knows Run() has
         // truly finished, independent of whether/when the std::thread
         // object itself has been reclaimed.
-        enum class RunState
-        {
-            NotRunning,
-            Running,
-            Stopping,
-        };
+        AndroidSensorWorkerLifecycle lifecycle_;
 
-        RunState runState_ = RunState::NotRunning;
-
-        // Task ANDROID-BRIDGE-005: stable for the lifetime of one Start()
-        // cycle, captured once right after the worker thread is spawned --
-        // unlike worker_.get_id() (which becomes the default "no thread" id
-        // the instant *anyone* calls detach() or join() on worker_), this
-        // never changes underneath a Stop() call trying to determine
-        // whether it is running on the worker's own thread (a reentrant
-        // self-stop) or an external one, even if a second, nested reentrant
-        // Stop() call runs after the first one already reclaimed worker_.
-        std::thread::id workerThreadId_;
-
-        // Task ANDROID-BRIDGE-005: true once nobody still needs to call
-        // join()/detach() on worker_ for the current Start() cycle --
-        // starts true (nothing to reclaim before the first Start()), reset
-        // to false when Start() spawns a fresh worker, and flipped back to
-        // true by whichever Stop() call is first to claim it (checked and
-        // set atomically under stateMutex_). Every other, concurrent Stop()
-        // caller that finds this already true never calls joinable()/
-        // join()/detach() on worker_ at all for that cycle -- the object may
-        // be concurrently touched by the winner's own unlocked join()/
-        // detach() call at that exact moment, and std::thread is not safe
-        // for concurrent access from two threads even when one side is only
-        // reading.
-        bool reclaimClaimed_ = true;
-
-        // Signaled from Run()'s own exit guard once runState_ becomes
+        // Signaled from Run()'s own exit guard once the lifecycle becomes
         // NotRunning, so every external Stop() caller waiting below wakes
         // up once the worker has genuinely finished -- not merely once its
-        // std::thread object has been reclaimed (see reclaimClaimed_'s own
-        // comment for why those are different events).
+        // std::thread object has been reclaimed (the lifecycle tracks those
+        // as separate events).
         std::condition_variable runExitedCv_;
 
         std::thread worker_;
@@ -203,7 +174,7 @@ namespace Microsoft::Devices::Sensors::Detail
         // thread blocked inside a native call, so once this is set, this
         // AndroidSensorBridge instance is permanently unable to Start()
         // again (a deliberate "fatal backend-health state", not a bug) --
-        // even though runState_ may *later* still transition back to
+        // even though the lifecycle may *later* still transition back to
         // NotRunning on its own, if the abandoned worker's blocked call
         // eventually does return. Never reset back to false once set.
         std::atomic<bool> abandoned_{false};
@@ -374,7 +345,7 @@ namespace Microsoft::Devices::Sensors::Detail
             // thread) can never observe a stale, already-destroyed pointer.
             //
             // Task ANDROID-BRIDGE-005 (2026-07-16): also the single,
-            // authoritative place that transitions runState_ back to
+            // authoritative place that transitions the lifecycle back to
             // NotRunning and wakes runExitedCv_ -- this is what lets
             // Start()/Stop() tell "Run() has truly finished" apart from
             // "the std::thread object has been reclaimed" (a reentrant
@@ -388,7 +359,7 @@ namespace Microsoft::Devices::Sensors::Detail
                     looper_.store(nullptr, std::memory_order_release);
                     {
                         std::lock_guard<std::mutex> lock(stateMutex_);
-                        runState_ = RunState::NotRunning;
+                        lifecycle_.MarkExited();
                     }
                     runExitedCv_.notify_all();
                 });
@@ -787,7 +758,7 @@ namespace Microsoft::Devices::Sensors::Detail
 #ifdef __ANDROID__
         {
             // Task: AndroidSensorBridge::Start()/Stop() thread safety.
-            // Guards runState_, Probe(), and every field written below
+            // Guards lifecycle_, Probe(), and every field written below
             // against a second, concurrent Start() call (two threads
             // racing to reassign impl_->worker_ itself would be a data race
             // independent of the gating logic) and against Stop()'s own
@@ -806,17 +777,17 @@ namespace Microsoft::Devices::Sensors::Detail
             // worker at all. Callers that want a restart must call Stop()
             // first.
             //
-            // Task ANDROID-BRIDGE-005 (2026-07-16): gated on runState_, not
+            // Task ANDROID-BRIDGE-005 (2026-07-16): gated on lifecycle state, not
             // worker_.joinable() -- a reentrant self-stop's detach() (see
             // Stop()) clears joinable() immediately even though the old
             // worker's Run() is still executing, which previously let a
             // too-soon Start() reuse this Impl while the old worker was
-            // still alive. runState_ only returns to NotRunning once Run()
+            // still alive. The lifecycle only returns to NotRunning once Run()
             // itself confirms it has actually finished, closing that gap.
             //
             // Task ANDR2-003 (2026-07-17): also gated on abandoned_ -- once
             // a prior Stop() call gave up waiting for a genuinely wedged
-            // worker (see Stop()'s own comment) and set this, runState_ may
+            // worker (see Stop()'s own comment) and set this, the lifecycle may
             // *still* eventually flip back to NotRunning on its own later,
             // if the abandoned worker's blocked native call ever does
             // return -- abandoned_ is never reset, so this check keeps
@@ -824,7 +795,8 @@ namespace Microsoft::Devices::Sensors::Detail
             // bridge as permanently unusable rather than risking a new
             // worker racing whatever the abandoned one is still doing.
             if (impl_->abandoned_.load(std::memory_order_acquire)
-                || impl_->runState_ != Impl::RunState::NotRunning)
+                || impl_->lifecycle_.GetRunState()
+                    != AndroidSensorWorkerLifecycle::RunState::NotRunning)
             {
                 return false;
             }
@@ -834,12 +806,15 @@ namespace Microsoft::Devices::Sensors::Detail
                 return false;
             }
 
+            if (!impl_->lifecycle_.TryBeginStart())
+            {
+                return false;
+            }
+
             impl_->timeBetweenUpdates_ = timeBetweenUpdates;
             impl_->callback_ = std::move(callback);
             impl_->stopRequested_.store(false, std::memory_order_release);
             impl_->startOutcome_ = Impl::StartOutcome::Pending;
-            impl_->reclaimClaimed_ = false;
-            impl_->runState_ = Impl::RunState::Running;
 
             // Task ANDR2-001 (2026-07-17, external audit
             // `audit_devices_2026-07-17.md`): clear any stale
@@ -850,7 +825,7 @@ namespace Microsoft::Devices::Sensors::Detail
             // previous run (e.g. after the worker's poll loop already
             // observed a concurrent Stop()'s stopRequested_ and committed to
             // exiting before reaching its next rateChangeRequested_ check),
-            // the flag survives untouched across runState_ returning to
+            // the flag survives untouched across the lifecycle returning to
             // NotRunning. Without this reset, the *new* worker spawned by
             // this very Start() call would see rateChangeRequested_ still
             // true on an early poll iteration and wrongly re-apply
@@ -860,7 +835,7 @@ namespace Microsoft::Devices::Sensors::Detail
             // SetSampleInterval() call that should legitimately affect the
             // run this Start() call is about to begin can only be made after
             // this locked section releases stateMutex_ (SetSampleInterval()
-            // requires runState_ != NotRunning, which only becomes true
+            // requires lifecycle state != NotRunning, which only becomes true
             // inside this very section), so it is impossible for a
             // legitimate new-run request to be mistakenly cleared by this
             // reset. pendingTimeBetweenUpdates_ is also reset to this call's
@@ -889,9 +864,9 @@ namespace Microsoft::Devices::Sensors::Detail
 
             // Task ANDROID-BRIDGE-005: captured once, immediately, on this
             // (the calling, not the worker) thread, while still holding the
-            // lock -- see workerThreadId_'s own doc comment for why this
+            // lock -- see AndroidSensorWorkerLifecycle for why this
             // must not be re-derived later from worker_.get_id() itself.
-            impl_->workerThreadId_ = impl_->worker_.get_id();
+            impl_->lifecycle_.SetWorkerThreadId(impl_->worker_.get_id());
         }
 
         // Task: async startup reporting. Blocks until Run() has genuinely
@@ -937,7 +912,7 @@ namespace Microsoft::Devices::Sensors::Detail
     {
 #ifdef __ANDROID__
         // Task ANDROID-BRIDGE-005 (2026-07-16): isWorkerThread is derived
-        // from the stable workerThreadId_ captured at spawn time, never
+        // from the stable worker identity captured in lifecycle_ at spawn time, never
         // from impl_->worker_.get_id() -- the latter collapses to the
         // default "no thread" id the instant *anyone* calls join()/detach()
         // on worker_, which would silently misclassify a second, nested
@@ -949,7 +924,7 @@ namespace Microsoft::Devices::Sensors::Detail
         bool shouldReclaim = false;
         {
             // Task: AndroidSensorBridge::Start()/Stop() thread safety. Same
-            // mutex Start() uses, guarding runState_/reclaimClaimed_ and the
+            // mutex Start() uses, guarding lifecycle_ and the
             // stop signal (stopRequested_ store + ALooper_wake) against a
             // concurrent Start()/Stop() race on impl_->worker_ itself.
             // Released (end of this scope) before the blocking join() /
@@ -958,9 +933,12 @@ namespace Microsoft::Devices::Sensors::Detail
             // its own worker thread) can never deadlock against it.
             std::lock_guard<std::mutex> lock(impl_->stateMutex_);
 
-            isWorkerThread = (std::this_thread::get_id() == impl_->workerThreadId_);
+            const AndroidSensorWorkerLifecycle::StopDecision decision =
+                impl_->lifecycle_.RequestStop(std::this_thread::get_id());
+            isWorkerThread = decision.IsWorkerThread;
+            shouldReclaim = decision.ShouldReclaimWorker;
 
-            if (impl_->runState_ == Impl::RunState::Running)
+            if (decision.ShouldRequestStop)
             {
                 impl_->stopRequested_.store(true, std::memory_order_release);
                 ALooper* looper = impl_->looper_.load(std::memory_order_acquire);
@@ -968,23 +946,6 @@ namespace Microsoft::Devices::Sensors::Detail
                 {
                     ALooper_wake(looper);
                 }
-                impl_->runState_ = Impl::RunState::Stopping;
-            }
-
-            // Task ANDROID-BRIDGE-005: exactly one caller, across every
-            // combination of self/external and however many call Stop()
-            // concurrently, ever claims the right to touch impl_->worker_
-            // (join()/detach()) for a given Start() cycle -- reclaimClaimed_
-            // starts true (Start() resets it to false only once it has
-            // spawned a fresh, genuinely joinable worker_, so the first
-            // claimant here is guaranteed to find it truly joinable without
-            // needing to call joinable() itself, which would otherwise risk
-            // racing a concurrent unlocked detach()/join() from a previous
-            // claimant of an *earlier* cycle).
-            if (!impl_->reclaimClaimed_)
-            {
-                impl_->reclaimClaimed_ = true;
-                shouldReclaim = true;
             }
         }
 
@@ -1023,7 +984,7 @@ namespace Microsoft::Devices::Sensors::Detail
                 // teardown, everyone else waits for it" pattern
                 // SensorBase<T>'s ClaimDisposalOnce()/
                 // WaitForDisposalToComplete() already established --
-                // reclaimClaimed_ above is that claim, now shared with the
+                // lifecycle_'s reclamation decision above is that claim, shared with the
                 // self-stop branch as well (Task ANDROID-BRIDGE-005), which
                 // additionally closes the case where a reentrant self-stop
                 // and a concurrent external caller raced on this same
@@ -1042,10 +1003,10 @@ namespace Microsoft::Devices::Sensors::Detail
                 // startCv_ wait_for() gave up. There is no safe way in C++
                 // to forcibly cancel a thread blocked inside a native call,
                 // so this now waits, bounded, for Run() to genuinely finish
-                // (runState_ reaching NotRunning, signaled by Run()'s own
+                // (the lifecycle reaching NotRunning, signaled by Run()'s own
                 // exit guard) instead of joining unconditionally. If Run()
                 // finishes within the bound, join() immediately afterward is
-                // safe and near-instant (runState_ only reaches NotRunning
+                // safe and near-instant (the lifecycle only reaches NotRunning
                 // once Run() is already at its very last statement). If it
                 // does not, this gives up: detach() (safe on any joinable
                 // thread regardless of whether the underlying OS thread has
@@ -1059,7 +1020,10 @@ namespace Microsoft::Devices::Sensors::Detail
                 std::unique_lock<std::mutex> waitLock(impl_->stateMutex_);
                 const bool finished = impl_->runExitedCv_.wait_for(
                     waitLock, Impl::kNativeCallTimeout,
-                    [this] { return impl_->runState_ == Impl::RunState::NotRunning; });
+                    [this] {
+                        return impl_->lifecycle_.GetRunState()
+                            == AndroidSensorWorkerLifecycle::RunState::NotRunning;
+                    });
                 waitLock.unlock();
 
                 if (finished)
@@ -1076,11 +1040,11 @@ namespace Microsoft::Devices::Sensors::Detail
 
         if (isWorkerThread)
         {
-            // Never block waiting for runState_ to reach NotRunning here:
+            // Never block waiting for the lifecycle to reach NotRunning here:
             // Run() -- several stack frames below this very call, since
             // this is a reentrant self-stop from the worker's own
             // callback -- cannot finish executing (and therefore cannot
-            // reach the exit guard that sets runState_ = NotRunning) until
+            // reach the exit guard that marks the lifecycle NotRunning) until
             // this call, and the callback it is part of, returns. Waiting
             // here would self-deadlock (Task ANDROID-BRIDGE-005).
             return;
@@ -1091,7 +1055,7 @@ namespace Microsoft::Devices::Sensors::Detail
         // having been reclaimed -- those are different events whenever the
         // claimant above was a reentrant self-stop (which reclaims via a
         // near-instant detach(), long before the still-running Run() call
-        // actually returns). runState_ becomes NotRunning only from inside
+        // actually returns). The lifecycle becomes NotRunning only from inside
         // Run()'s own exit guard, so this predicate is already true
         // immediately whenever the claimant instead reclaimed via a
         // blocking join() (which cannot return before Run() has finished).
@@ -1101,10 +1065,11 @@ namespace Microsoft::Devices::Sensors::Detail
         // indefinitely for a *second*, non-claimant concurrent Stop() caller
         // even after the claimant above already gave up (bounded) and
         // detach()'d a genuinely wedged worker, since a permanently-stuck
-        // native call may never let runState_ reach NotRunning at all.
+        // native call may never let the lifecycle reach NotRunning at all.
         std::unique_lock<std::mutex> lock(impl_->stateMutex_);
         impl_->runExitedCv_.wait(lock, [this] {
-            return impl_->runState_ == Impl::RunState::NotRunning
+            return impl_->lifecycle_.GetRunState()
+                    == AndroidSensorWorkerLifecycle::RunState::NotRunning
                 || impl_->abandoned_.load(std::memory_order_acquire);
         });
 #endif
@@ -1115,13 +1080,14 @@ namespace Microsoft::Devices::Sensors::Detail
 #ifdef __ANDROID__
         std::lock_guard<std::mutex> lock(impl_->stateMutex_);
 
-        // Task ANDROID-BRIDGE-005 (2026-07-16): checks runState_, not
+        // Task ANDROID-BRIDGE-005 (2026-07-16): checks lifecycle state, not
         // worker_.joinable() -- this method must never call any method on
-        // impl_->worker_ at all (see reclaimClaimed_'s own doc comment for
+        // impl_->worker_ at all (see AndroidSensorWorkerLifecycle for
         // why an unguarded read of it here could race a concurrent Stop()
         // claimant's unlocked join()/detach() call on the very same
         // std::thread object).
-        if (impl_->runState_ == Impl::RunState::NotRunning)
+        if (impl_->lifecycle_.GetRunState()
+            == AndroidSensorWorkerLifecycle::RunState::NotRunning)
         {
             // Not currently started -- nothing live to update. The next
             // Start() call already takes its own explicit interval

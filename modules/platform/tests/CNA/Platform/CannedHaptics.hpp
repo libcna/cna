@@ -189,6 +189,12 @@ namespace CNA::Platform::Testing {
     class CannedHapticsPlatform final : public PlatformTestDecorator
     {
     public:
+        /** @brief Wraps the headless platform so canned haptics tests never initialize SDL. */
+        CannedHapticsPlatform()
+            : PlatformTestDecorator(PlatformFactory::Create("Headless"))
+        {
+        }
+
         /** @brief Tracks and forwards subsystem acquisition. */
         void AcquireSubsystem(const PlatformSubsystem subsystem) override
         {

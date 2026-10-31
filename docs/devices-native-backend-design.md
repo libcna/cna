@@ -68,7 +68,7 @@ exactly as originally intended (see "SDL backend scope, unchanged" — still tru
 **Update (2026-07-16, Task MOTION-011): the two interfaces' shapes are now identical.**
 `IMotionBackend::Start()` originally had no `CalibrationCallback` parameter at all,
 since `AndroidMotionBackend` never detected a calibration-needed condition itself — an
-independent audit (`../audit_devices.md`, `DEV-AUD-002`) confirmed this left
+the `DEV-AUD-002` review (resolved by commit `603ecdb4b`) confirmed this left
 `Motion::Calibrate` a permanent no-op with no possible producer, despite being a real,
 documented WP7 event (archived MSDN `hh239189(v=vs.105)`). `IMotionBackend::Start()`
 now takes a `CalibrationCallback onCalibrationNeeded` in addition to `ReadingCallback`,
@@ -205,7 +205,7 @@ tracking is per-class). **Task MOTION-011 (2026-07-16):** also independently reg
 above, `IsSupported()`/`Start()`'s overall success never depends on this sensor being
 available, and its data is never stored or exposed through `MotionReading` (which has no
 magnetometer field) — this bridge exists solely to make the previously-permanent
-`Motion::Calibrate` no-op (`../audit_devices.md`, `DEV-AUD-002`) fire under a real
+`Motion::Calibrate` no-op (`DEV-AUD-002`) fire under a real
 condition.
 
 **Coordinate-system remap status (Task DEVICES-0111 → `MOTION-012`, resolved 2026-07-16):**
@@ -217,7 +217,7 @@ already apply — confirmed correct via Android's own public developer documenta
 gravity, linear-acceleration, and gyroscope sensors all explicitly share the
 accelerometer's own coordinate system, which is fixed to the device's natural
 orientation and never adjusted by the OS for display rotation), not by guessing or by
-analogy alone — an independent audit (`../audit_devices.md`, `DEV-AUD-003`) prompted
+analogy alone — the `DEV-AUD-003` review prompted
 closing this out rather than leaving it open. **What remains unverified is the remap's
 sign/axis correctness on real hardware** (the same still-open gap `Accelerometer`/
 `Gyroscope` themselves carry, `docs/devices-hardware-checklist.md` §1/§2/§8), not

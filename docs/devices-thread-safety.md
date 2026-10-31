@@ -55,8 +55,8 @@ verified empirically under `devices-tsan`, not just reasoned about statically.
 - **`Compass`/`Motion`'s internal `TimeBetweenUpdatesChanged` handler** (forwards a
   live interval change to `backend_`, Task ANDROID-BRIDGE-002) is also safe to run
   concurrently with `SetBackendForTesting()` on the same instance (Task
-  SENSORBASE-009, 2026-07-16, external audit `audit_devices.md` finding
-  `DEV-AUD-006`) — the handler previously read `backend_` without holding the same
+  SENSORBASE-009, 2026-07-16, `DEV-AUD-006`, resolved by commit `965bd9998`) —
+  the handler previously read `backend_` without holding the same
   `mutex_` `SetBackendForTesting()` replaces it under; now guarded identically,
   confirmed by
   `CompassTests`/`MotionTests.ConcurrentSetTimeBetweenUpdatesAndSetBackendForTestingDoesNotCrash`

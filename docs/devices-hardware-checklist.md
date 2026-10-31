@@ -728,7 +728,8 @@ remap `Detail::ConvertAndroidPortraitToXnaLandscape()` applies to
 
 **Cross-reference (2026-07-07, Task `ACCEL-008` → `MOTION-012`; resolved 2026-07-16):**
 `ACCEL-008` decided to keep (and document + make opt-out-able) the landscape remap for
-`Accelerometer`/`Gyroscope`. `MOTION-012` (`../audit_devices.md` `DEV-AUD-003`) has now
+`Accelerometer`/`Gyroscope`. `MOTION-012` (`DEV-AUD-003`, resolved by commit
+`603ecdb4b`) has now
 confirmed, via Android's own public developer documentation (`developer.android.com/guide/
 topics/sensors/sensors_motion`: gravity/linear-acceleration/gyroscope sensors each
 "use... the same [coordinate system as]... the acceleration sensor"; `sensors_overview`:

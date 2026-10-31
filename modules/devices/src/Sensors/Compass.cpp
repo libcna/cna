@@ -83,7 +83,7 @@ namespace Microsoft::Devices::Sensors
             // SetBackendForTesting(). A safe no-op if not currently started —
             // ICompassBackend::SetSampleInterval()'s own contract.
             //
-            // Task DEV-AUD-006 (2026-07-16, external audit `audit_devices.md`):
+            // Task DEV-AUD-006 (2026-07-16, resolved by commit 965bd9998):
             // previously read backend_ here without holding the lock, while
             // SetBackendForTesting() replaces the same unique_ptr under it -- a
             // concurrent setTimeBetweenUpdatesProperty() call and the CNAEXT
@@ -368,7 +368,7 @@ namespace Microsoft::Devices::Sensors
             else
             {
                 // Task LIFE-001 (mirrors Detail::AndroidSensorBridge's own
-                // reclaimClaimed_/runExitedCv_ pattern, Task ANDROID-BRIDGE-005):
+                // lifecycle reclamation/runExitedCv_ pattern, Task ANDROID-BRIDGE-005):
                 // someone else already claimed stopping the current
                 // generation -- wait for them to finish rather than also
                 // calling backend_->Stop() concurrently.

@@ -875,7 +875,7 @@ TEST(MotionTests, ConcurrentStartStopFromMultipleThreadsDoesNotCrash)
     }
 }
 
-// Task DEV-AUD-006 (2026-07-16, external audit `audit_devices.md`): mirrors
+// Task DEV-AUD-006 (2026-07-16, resolved by commit 965bd9998): mirrors
 // CompassTests.ConcurrentSetTimeBetweenUpdatesAndSetBackendForTestingDoesNotCrash
 // -- see that test for the full rationale.
 TEST(MotionTests, ConcurrentSetTimeBetweenUpdatesAndSetBackendForTestingDoesNotCrash)

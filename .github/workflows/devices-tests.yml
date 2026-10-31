@@ -1,24 +1,14 @@
 name: Devices and Sensors Tests
 
-# DEV-BUILD-003 (devices plan): builds CnaTests and runs the full
-# Microsoft::Devices / Microsoft::Devices::Sensors gtest suite on a desktop
-# Linux runner. Every test run here executes without any physical sensor or
-# haptic hardware present — the two tests that genuinely require real hardware
-# (AccelerometerTests.GetCurrentValuePropertyDoesNotThrowWhenSupported,
-# GyroscopeTests.GetCurrentValuePropertyDoesNotThrowWhenSupported) are not
-# excluded from the filter; they are written to self-skip via
-# GTEST_SKIP() when getIsSupportedProperty() is false, which is always the
-# case on a CI runner with no accelerometer/gyroscope, so they show up as
-# "SKIPPED" rather than needing a separate hardware-only filter.
+# DEV-BUILD-003 (devices plan): builds and runs the focused Devices test
+# executables on a desktop Linux runner. Hardware-dependent tests remain in
+# the executables and self-skip when the corresponding device is unavailable.
 #
 # Also covers CNA::Devices (Clipboard/FileDialog/MessageBox/
 # SystemTray/Camera/DisplayInfo/PowerInfo/SystemInfo/Locale/UrlLauncher —
 # modules/devices-ext/tests/CNA/Devices/), the CNAEXT extension surface gated by CNA_DEVICES. Before
 # this fix, this job silently never compiled that surface at all (the
-# devices-ubsan preset never set CNA_DEVICES=ON) and never ran its suites
-# either (DEVICES_GTEST_FILTER below named only Microsoft::Devices suites) —
-# The FileDialog/MessageBox mutex-lifetime regression
-# tests never actually executed under a sanitizer in real CI. Every CNA::Devices
+# devices-ubsan preset never set CNA_DEVICES=ON). Every CNA::Devices
 # test here exercises an injectable device backend (SetBackendForTesting()), not
 # real camera/dialog/tray hardware. Camera texture-upload tests still create an OPENGLES3
 # GraphicsDevice, so that suite runs against Xvfb below.
@@ -55,17 +45,6 @@ on:
 concurrency:
   group: devices-tests-${{ github.ref }}
   cancel-in-progress: true
-
-env:
-  # Exact-suite-name filter, kept in sync with docs/devices-build.md Section 2/6
-  # (DEV-BUILD-002) — every TEST(...) under modules/devices/tests/Microsoft/Devices/, no more
-  # and no fewer. Update both places together if a suite is added/renamed.
-  DEVICES_GTEST_FILTER: "AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
-  # Exact-suite-name filter for modules/devices-ext/tests/CNA/Devices/ (the CNA_DEVICES-gated CNAEXT
-  # surface) — kept as a second, separate variable rather than folded into DEVICES_GTEST_FILTER so
-  # each stays independently traceable to its own directory, matching this file's existing
-  # one-variable-per-scope convention.
-  CNA_DEVICES_GTEST_FILTER: "CameraTests.*:ClipboardTests.*:DisplayInfoTests.*:FileDialogTests.*:LocaleTests.*:MessageBoxTests.*:PowerInfoTests.*:SystemInfoTests.*:SystemTrayTests.*:UrlLauncherTests.*"
 
 # Read-only: no job here writes to the repository, its releases or its packages.
 permissions:
@@ -156,14 +135,17 @@ jobs:
         working-directory: cna_devices
         run: cmake --preset devices-ubsan
 
-      - name: Build CnaTests
+      - name: Build focused Devices targets
         working-directory: cna_devices
-        run: cmake --build --preset devices-ubsan --parallel 2
+        run: >-
+          cmake --build --preset devices-ubsan --parallel 2 --target
+          CnaDevicesTests CnaDevicesExtTests cna_strict_xna_api_check
 
       - name: Run Devices/Sensors test suite
         working-directory: cna_devices
-        run: |
-          ./cmake-build-devices-ubsan/CnaTests --gtest_filter="${DEVICES_GTEST_FILTER}"
+        env:
+          SDL_AUDIODRIVER: dummy
+        run: ./cmake-build-devices-ubsan/CnaDevicesTests
 
       # Separate step (not merged into the filter above) so a failure here is
       # attributable to the CNA::Devices surface specifically, not the Microsoft::Devices one.
@@ -172,8 +154,7 @@ jobs:
         env:
           SDL_VIDEODRIVER: x11
           SDL_AUDIODRIVER: dummy
-        run: |
-          xvfb-run -a ./cmake-build-devices-ubsan/CnaTests --gtest_filter="${CNA_DEVICES_GTEST_FILTER}"
+        run: xvfb-run -a ./cmake-build-devices-ubsan/CnaDevicesExtTests
 
       # Task DEVPERF-001: this job is this project's clean-room reproducibility
       # evidence -- a fresh actions/checkout (no access to any contributor's
@@ -185,8 +166,6 @@ jobs:
       # contain submodule content at all). Building and running the strict
       # XNA API surface check here, in addition to the gtest suite above, is
       # the other half of the required work this task calls for.
-      - name: Build and run strict XNA API surface check
+      - name: Run strict XNA API surface check
         working-directory: cna_devices
-        run: |
-          cmake --build --preset devices-ubsan --target cna_strict_xna_api_check --parallel 2
-          ./cmake-build-devices-ubsan/cna_strict_xna_api_check
+        run: ./cmake-build-devices-ubsan/cna_strict_xna_api_check

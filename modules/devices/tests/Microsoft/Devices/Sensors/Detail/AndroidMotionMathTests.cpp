@@ -9,6 +9,10 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
 using Microsoft::Devices::Sensors::Detail::ConvertRotationVectorToXnaQuaternion;
+using Microsoft::Devices::Sensors::Detail::ConvertAndroidMotionVectorToXna;
+using Microsoft::Devices::Sensors::Detail::AndroidMotionVectorKind;
+using Microsoft::Devices::Sensors::Detail::AndroidSensorLandscapeOrientation;
+using Microsoft::Devices::Sensors::Detail::AndroidStandardGravity;
 using Microsoft::Devices::Sensors::Detail::ExtractYawPitchRollFromQuaternion;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Quaternion;
@@ -17,6 +21,91 @@ using Microsoft::Xna::Framework::Vector3;
 namespace
 {
     constexpr float Tolerance = 1e-3f;
+}
+
+TEST(AndroidMotionMathTests, GravityConvertsToGAndRemapsRotation90)
+{
+    const Vector3 converted = ConvertAndroidMotionVectorToXna(
+        AndroidStandardGravity,
+        2.0f * AndroidStandardGravity,
+        -AndroidStandardGravity,
+        AndroidMotionVectorKind::Gravity,
+        true,
+        AndroidSensorLandscapeOrientation::Rotation90);
+
+    EXPECT_NEAR(converted.X, 1.0f, Tolerance);
+    EXPECT_NEAR(converted.Y, -2.0f, Tolerance);
+    EXPECT_NEAR(converted.Z, -1.0f, Tolerance);
+}
+
+TEST(AndroidMotionMathTests, GravityConvertsToGAndRemapsRotation270)
+{
+    const Vector3 converted = ConvertAndroidMotionVectorToXna(
+        AndroidStandardGravity,
+        2.0f * AndroidStandardGravity,
+        -AndroidStandardGravity,
+        AndroidMotionVectorKind::Gravity,
+        true,
+        AndroidSensorLandscapeOrientation::Rotation270);
+
+    EXPECT_NEAR(converted.X, -1.0f, Tolerance);
+    EXPECT_NEAR(converted.Y, 2.0f, Tolerance);
+    EXPECT_NEAR(converted.Z, -1.0f, Tolerance);
+}
+
+TEST(AndroidMotionMathTests, DeviceAccelerationUsesGravityUnits)
+{
+    const Vector3 converted = ConvertAndroidMotionVectorToXna(
+        0.5f * AndroidStandardGravity,
+        -0.25f * AndroidStandardGravity,
+        0.0f,
+        AndroidMotionVectorKind::DeviceAcceleration,
+        true,
+        AndroidSensorLandscapeOrientation::Rotation90);
+
+    EXPECT_NEAR(converted.X, 0.5f, Tolerance);
+    EXPECT_NEAR(converted.Y, 0.25f, Tolerance);
+    EXPECT_NEAR(converted.Z, 0.0f, Tolerance);
+}
+
+TEST(AndroidMotionMathTests, DeviceRotationRatePreservesRadiansPerSecond)
+{
+    const Vector3 converted = ConvertAndroidMotionVectorToXna(
+        1.0f,
+        2.0f,
+        -3.0f,
+        AndroidMotionVectorKind::DeviceRotationRate,
+        true,
+        AndroidSensorLandscapeOrientation::Rotation270);
+
+    EXPECT_NEAR(converted.X, -1.0f, Tolerance);
+    EXPECT_NEAR(converted.Y, 2.0f, Tolerance);
+    EXPECT_NEAR(converted.Z, -3.0f, Tolerance);
+}
+
+TEST(AndroidMotionMathTests, DisabledRemapPreservesConvertedAndroidAxes)
+{
+    const Vector3 gravity = ConvertAndroidMotionVectorToXna(
+        AndroidStandardGravity,
+        2.0f * AndroidStandardGravity,
+        -AndroidStandardGravity,
+        AndroidMotionVectorKind::Gravity,
+        false,
+        AndroidSensorLandscapeOrientation::Rotation270);
+    const Vector3 rotationRate = ConvertAndroidMotionVectorToXna(
+        1.0f,
+        2.0f,
+        -3.0f,
+        AndroidMotionVectorKind::DeviceRotationRate,
+        false,
+        AndroidSensorLandscapeOrientation::Rotation90);
+
+    EXPECT_NEAR(gravity.X, 1.0f, Tolerance);
+    EXPECT_NEAR(gravity.Y, 2.0f, Tolerance);
+    EXPECT_NEAR(gravity.Z, -1.0f, Tolerance);
+    EXPECT_NEAR(rotationRate.X, 1.0f, Tolerance);
+    EXPECT_NEAR(rotationRate.Y, 2.0f, Tolerance);
+    EXPECT_NEAR(rotationRate.Z, -3.0f, Tolerance);
 }
 
 // Task MOT2-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):

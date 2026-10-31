@@ -84,80 +84,48 @@ directory, so deleting a build directory or running `cmake --build --clean-first
 and is a one-time cost per checkout, not per build. Re-verified 2026-07-06: from a fresh
 clone with Steps 1-2 already done, `cmake --preset devices-ubsan` completed the full
 first-time vendored SDL3/SDL_image/SDL_mixer build and configured successfully with no
-errors. `cmake --build --preset devices-ubsan --target CnaTests -j"$(nproc)"` then
-built the full test binary from scratch in **~3m42s** (parallel build, this
-environment's core count) with zero errors — confirmed by actually running both
-commands in a genuinely fresh clone, not assumed from the existing checkout this
-document's other sections use.
+errors. The focused Devices verification targets are now `CnaDevicesTests`,
+`CnaDevicesExtTests`, and `cna_strict_xna_api_check`; build them with at most eight
+parallel jobs.
 
 ## 1. Desktop debug build (Linux, `OPENGLES3` backend)
 
 ```bash
 cmake -S . -B cmake-build-debug \
-      -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
+      -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON -DCNA_DEVICES=ON \
+      -DCMAKE_BUILD_TYPE=Debug
 
-cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"
+cmake --build cmake-build-debug --target CnaDevicesTests --parallel 8
 ```
 
 The test target and its transitive CNA libraries build clean as of this writing (2026-07-04, `feature/devices`,
 the devices phase-8 plan) — compiled and tested locally in this session's
 git checkout; see the ZIP-export caveat above for what this does not claim.
 
-## 2. Devices-only test filter
+## 2. Focused Devices test executables
 
-**Re-verified 2026-07-06 (`DEV-BUILD-002`) against the full, current
-`tests/Microsoft/Devices/` tree** — every `.cpp` file under that directory was listed
-and every `TEST(...)` suite name extracted directly (21 suites, 283 `TEST()` cases
-total, confirmed by a plain `grep -rE '^(TEST|TEST_F|TEST_P)\(' tests/Microsoft/Devices`
-count; no `TEST_F`/`TEST_P` fixtures exist in this scope, only plain `TEST`). The
-substring-based filter this section previously documented (e.g. bare `Accelerometer`,
-`Motion`) had **two real problems**, both confirmed by diffing its actual `ctest -N`
-match list against the 283-case ground truth above:
-- **Silently dropped `CalibrationEventArgsTests`** (3 tests) — its suite name contains
-  none of the old filter's substrings.
-- **Matched 2 unrelated false positives outside `Microsoft::Devices`** —
-  `GamePadTest.GetAccelerometerEXTReturnsFalseAndZeroesOutputWhenNoGamePadConnected`
-  (via the bare `Accelerometer` substring) and
-  `PlatformInputBridgeTouchGestureTest.FingerMotionThroughProcessEventProducesFlick` (via the
-  bare `Motion` substring).
-
-The corrected filter below uses the 21 full suite names instead of loose substrings —
-this is both complete (matches all 283 cases, confirmed) and precise (zero
-cross-namespace false positives, confirmed by diff):
+Devices tests have dedicated executables, so do not maintain a hand-written list of
+GoogleTest suites. Building and running the executable includes every current and future
+test under `modules/devices/tests/Microsoft/Devices/` automatically:
 
 ```bash
-# Via ctest — matches exactly the 283 current Devices/Sensors/VibrateController
-# TEST() cases, nothing more, nothing less (confirmed 2026-07-06):
-cd cmake-build-debug && ctest --output-on-failure \
-    -R "AccelerometerFailedExceptionTests|AccelerometerReadingEventArgsTests|AccelerometerReadingTests|AccelerometerTests|AndroidSensorOrientationTests|AttitudeReadingTests|CalibrationEventArgsTests|CompassReadingTests|CompassTests|AndroidCompassMathTests|AndroidMotionMathTests|AndroidSensorBridgeTests|GyroscopeReadingTests|GyroscopeTests|MotionReadingTests|MotionTests|ScopeExitTests|SensorBaseTests|SensorFailedExceptionTests|SensorSubsystemOwnershipTests|VibrateControllerTests"
-# 283 tests, 281 passing, 2 expected hardware skips, as of 2026-07-06 (feature/devices).
-
-# Or directly via the test binary's own gtest filter — same 21 suites, same coverage:
-./cmake-build-debug/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
-# Same 283 tests, 281 passing, 2 expected hardware skips.
+cmake --build cmake-build-debug --target CnaDevicesTests --parallel 8
+SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaDevicesTests
 ```
 
-**Re-verified 2026-07-06 (stabilization pass, same day as the count above but a later
-pass — `ANDROID-BRIDGE-002`/`READINGS-002`/`MOTION-008` and the `ShouldAcceptUpdateAt()`
-monotonic-clock fix all landed test changes in between):** the same 21-suite filter now
-matches **293** tests (281 → 290 passed as tests were added across those tasks, 2
-expected hardware skips throughout) — confirmed by actually running the command above
-again, not assumed. The suite list itself is unchanged (still 21 suites, no new `.cpp`
-file added under `tests/Microsoft/Devices/`); only per-suite test counts grew. If this
-number drifts again, re-run the ground-truth `grep -rE '^(TEST|TEST_F|TEST_P)\('
-tests/Microsoft/Devices` count from the paragraph above rather than trusting either
-number at face value.
+When `CNA_DEVICES=ON`, the extension surface under
+`modules/devices-ext/tests/CNA/Devices/` is checked separately. Some camera tests create
+a graphics device, so use a private display (or the repository's private GPU runner),
+never the owner's live desktop:
 
-If a new file is added under `tests/Microsoft/Devices/` with a new suite name, add that
-suite name to both filters above — re-verify with the same diff technique (compare
-`ctest -N -R "<filter>"`'s match list against a fresh `grep -rE
-'^(TEST|TEST_F|TEST_P)\(' tests/Microsoft/Devices` count) rather than assuming the
-filter still covers everything.
+```bash
+cmake --build cmake-build-debug --target CnaDevicesExtTests --parallel 8
+tools/platform/run_gpu_tests_private.sh --exec cmake-build-debug/CnaDevicesExtTests
+```
 
-Both commands' 2 skips are the same pair: `AccelerometerTests`/`GyroscopeTests`'
-`GetCurrentValuePropertyDoesNotThrowWhenSupported` — these `GTEST_SKIP()` themselves
-*because* this dev container genuinely has no accelerometer/gyroscope hardware, which
-is itself the expected, correct result here, not a failure.
+Use `./cmake-build-debug/CnaDevicesTests --gtest_list_tests` when an exact current test
+inventory is needed; do not copy a count or suite list into this document. Tests that
+genuinely require unavailable hardware remain in the executable and call `GTEST_SKIP()`.
 
 **Concurrency tests in this suite are stress tests, not single-shot checks — a single
 green `ctest` run does not prove a concurrency fix is correct.** The devices phase-6 plan
@@ -179,7 +147,7 @@ iterations) before trusting a single pass:
 ```bash
 cd cmake-build-debug
 for i in $(seq 1 40); do
-  ./CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*" > /tmp/run_$i.log 2>&1 || echo "run $i FAILED"
+  ./CnaDevicesTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*" > /tmp/run_$i.log 2>&1 || echo "run $i FAILED"
 done
 ```
 
@@ -205,65 +173,35 @@ propagating anywhere — it never will.
 cd cmake-build-debug && ctest --output-on-failure
 ```
 
-As of the devices phase-8 plan: 2051 tests, 2 failures — both pre-existing, unrelated
-`EasyGL`/`easy-gl` graphics-backend bugs (`EasyGL_MRT_TwoAttachments`,
-`easy-gl-resource-smoke-tests`) that that session's environment happened to have a real
-GPU/display to actually run for the first time (previously silently `Not Run`
-headless) — confirmed via direct investigation to be 100% unrelated to
-`Microsoft::Devices` (see devices phase-5 plan Task P5-1's Resolution for the full
-finding). Both pass now (`OPENGLES3`, 2026-10-29).
-
-**As of devices plan Phase 10 (2026-07-05):** 3348 tests, 36 failures — same root
-cause category (`EasyGL`/graphics-backend, headless-environment-dependent — this
-session's container has no real GPU/display, so more `EasyGL` cases fail/skip than the
-2 from the session above that did have one), still confirmed 100% unrelated to
-`Microsoft::Devices`: the Devices-only filter (Section 2 above) is separately,
-independently 100% green. Not fixed here — out of scope for `Microsoft::Devices` work,
-and the exact failure count is expected to vary by environment (GPU/display
-availability), not something to chase toward a fixed number. The total test count only
-grows as `Microsoft::Devices` (and the rest of CNA) gains tests.
+For Devices changes, run the focused executables in Section 2 first. The repository-wide
+suite includes GPU/window tests and must be run through the private runner when those
+tests are selected; its total count is intentionally not frozen here.
 
 ## 4. Android cross-compile
 
-Requires an Android NDK. This session found one already present at
-`~/Android/Sdk/ndk/30.0.14904198` — **do not assume this exists in every environment**;
-it was absent in every session before devices phase-4 plan Task P4-11, so check
-first (`ls ~/Android/Sdk/ndk/` or equivalent) rather than assuming either way.
+Requires an Android NDK. Select an installed version explicitly rather than copying a
+machine-specific version number from this document:
 
 ```bash
+CNA_ANDROID_NDK=/absolute/path/to/Android/Sdk/ndk/<installed-version>
 cmake -S . -B cmake-build-android -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE="$HOME/Android/Sdk/ndk/30.0.14904198/build/cmake/android.toolchain.cmake" \
+  -DCMAKE_TOOLCHAIN_FILE="$CNA_ANDROID_NDK/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI=arm64-v8a \
   -DANDROID_PLATFORM=android-24 \
   -DCNA_BUILD_TESTS=OFF
 
-cmake --build cmake-build-android -j"$(nproc)"
+cmake --build cmake-build-android --parallel 8
 ```
 
-`-DCNA_BUILD_TESTS=OFF`: `googletest` was not configured for the Android NDK toolchain
-in this session, so `CnaTests` was never cross-compiled — only the configured CNA libraries.
-This is a **compile-only** verification: no APK packaging, no emulator/device
-run. Confirmed (Task P4-11, then re-confirmed after further changes in Task P5-7) that
-`Accelerometer.cpp`/`Gyroscope.cpp`'s `#ifdef __ANDROID__` code actually gets compiled
-in, via the NDK's own `llvm-nm` (the host's plain `nm` produces empty/wrong output
-against the cross-compiled ARM64 object files):
+`-DCNA_BUILD_TESTS=OFF` means only the configured CNA libraries are cross-compiled. This
+is a **compile-only** verification: no APK packaging and no emulator/device run. The
+Android-only sensor sources live under `modules/devices/src/Sensors/`; confirm their
+objects were produced rather than relying on a host build that excludes `__ANDROID__`:
 
 ```bash
-"$HOME/Android/Sdk/ndk/30.0.14904198/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" -C \
-    cmake-build-android/CMakeFiles/CNA.dir/src/Devices/Microsoft/Sensors/Accelerometer.cpp.o \
-    | grep -i landscape
+find cmake-build-android/modules/devices -name 'AndroidSensorBridge.cpp.o' \
+    -o -name 'AndroidMotionBackend.cpp.o' -o -name 'AndroidSensorWorkerLifecycle.cpp.o'
 ```
-
-Devices phase-7 plan Task P7-7 re-ran this same `llvm-nm` check against Phase 7's
-actual then-new symbols (the global native sensor mutex, `WaitForDisposalToComplete()`,
-and the shared dispatch manager) in
-`Accelerometer.cpp.o`/`Gyroscope.cpp.o`, not just re-confirming the Task P4-11-era
-landscape symbols still compile — see that task's Resolution for the exact commands.
-Devices phase-8 plan Task P8-8 did the same again for Phase 8's actual new symbols
-(`dispatchToken_`, the lock-proof-parameter overloads of
-`EnsureSubsystemInitialized()`/`OpenDefaultSensorLocked()`/`ProbeIsSupported()`).
-Devices phase-9 plan Task P9-4 re-confirmed the library cross-compile once more
-(no source changes since Task P8-8, so `ninja` correctly reported nothing to rebuild).
 
 ### 4.1 APK packaging and emulator/device run (devices plan Phase 9, 2026-07-05)
 
@@ -457,119 +395,29 @@ path is already exercised here).
 
 ## 6. Sanitizer builds (Task P8-4)
 
-**A single green `ctest` run proves neither memory safety nor thread safety.** Section 2
-already covers stress-looping a plain build to surface bugs that only show up under real
-timing pressure (Task P6-1's addendum, Task P7-3). Sanitizers are the complementary
-tool: they catch a real bug on the *first* triggering execution, rather than requiring
-dozens of loop iterations to get lucky. Both are worth using — a stress loop under a
-sanitizer is stronger evidence than either alone.
-
-`CMakePresets.json` has three presets, each verified working in this session
-(devices phase-8 plan Task P8-4 — configured, built, and run against the full
-Devices-only test suite, not just written and assumed):
-
-These use the same corrected, exact-suite-name filter as Section 2 above (a bare
-`Accelerometer*`/`Motion*` glob here would pick up the same `GamePadTest`/
-`PlatformInputBridgeTouchGestureTest` false positives noted there):
+Use the focused executable with each Devices sanitizer preset. This avoids stale suite
+filters while retaining every test added to the module:
 
 ```bash
-# AddressSanitizer — catches use-after-free, heap corruption, buffer overflows.
-# Does NOT catch data races; use ThreadSanitizer for that.
+# AddressSanitizer: lifetime and memory errors.
 cmake --preset devices-asan
-cmake --build --preset devices-asan
-./cmake-build-devices-asan/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
+cmake --build --preset devices-asan --target CnaDevicesTests --parallel 8
+SDL_AUDIODRIVER=dummy ./cmake-build-devices-asan/CnaDevicesTests
 
-# ThreadSanitizer — catches data races. This is the one that actually validates
-# Microsoft::Devices's own locking discipline.
+# ThreadSanitizer: data races.
 cmake --preset devices-tsan
-cmake --build --preset devices-tsan
-./cmake-build-devices-tsan/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
+cmake --build --preset devices-tsan --target CnaDevicesTests --parallel 8
+SDL_AUDIODRIVER=dummy ./cmake-build-devices-tsan/CnaDevicesTests
 
-# UndefinedBehaviorSanitizer — catches signed overflow, misaligned access,
-# invalid enum values, null-pointer-arithmetic UB, etc.
+# UndefinedBehaviorSanitizer.
 cmake --preset devices-ubsan
-cmake --build --preset devices-ubsan
-./cmake-build-devices-ubsan/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
+cmake --build --preset devices-ubsan --target CnaDevicesTests --parallel 8
+SDL_AUDIODRIVER=dummy ./cmake-build-devices-ubsan/CnaDevicesTests
 ```
 
-**Actual results as of the devices phase-8 plan (2026-07-04), all three presets
-configured, built, and run against this exact filter** (224 tests, 222 passed, 2
-expected skips — this direct `--gtest_filter` glob form matches a few more suites than
-Section 2's `ctest -R` regex form catches by name; both cover the same
-`Microsoft::Devices` scope, the exact count differs slightly by matching mechanics, not
-by coverage):
-- **ASan:** clean (0 issues) with the Task P8-1 fix in place. Used during Task P8-1 to
-  get a *reliable* answer on a use-after-free that a plain (non-sanitized) run did not
-  reproduce — heap-use-after-free bugs do not reliably crash without instrumentation,
-  since freed small allocations often aren't immediately overwritten; ASan reported a
-  definitive, exact-line `heap-use-after-free` when that fix was temporarily reverted.
-- **TSan:** first run surfaced **two** distinct races, not one. The first was the
-  expected pre-existing `sharp-runtime` finding (see below). The **second was real, and
-  new**: `SensorBaseTests.cpp`'s own `TestSensorBase` fixture incremented a plain
-  `int timeBetweenUpdatesChangedCount` from its `TimeBetweenUpdatesChanged` handler —
-  which fires *outside* `mutex_` by design (never hold the lock while raising an event)
-  — so Task P8-2's own new `ConcurrentGetSetTimeBetweenUpdatesPropertyDoesNotCrash` test
-  (the first test in this codebase's history to actually drive concurrent value changes
-  on `TimeBetweenUpdates`) raced on it from multiple threads. This is a test-fixture-only
-  race, not a `Microsoft::Devices` production-code bug, but real and worth fixing
-  properly: changed to `std::atomic<int>`, confirmed clean on the next TSan run. **This
-  is exactly the point of actually running the sanitizer instead of just writing the
-  preset** — a plain, unsanitized run of the same test never showed any symptom.
-  After that fix, the *only* remaining finding (41 reports, all the identical location)
-  is the pre-existing, out-of-scope `sharp-runtime` race:
-  `System::TimeSpan::TimeSpan(const TimeSpan&)` incrementing an unsynchronized global
-  `copy_count` debug/instrumentation counter at `sharp-runtime/src/System/TimeSpan.cpp:55`.
-  This is a `sharp-runtime` issue (a separate repo with its own `CLAUDE.md`/git history —
-  see `NEXT.md`'s "do not fix bugs discovered in sharp-runtime..." rule), not a
-  `Microsoft::Devices` bug. **If a future TSan run reports anything other than this one
-  `TimeSpan.cpp:55` finding, treat it as a real, new bug worth investigating** — don't
-  assume it's "just that same old sharp-runtime thing" without checking the actual
-  file/line, the same mistake this task's first run would have been if the second race
-  had been waved away without reading it.
-- **UBSan:** clean (0 issues).
-
-**Re-verified as of devices plan Phase 10 (2026-07-05), all three presets
-reconfigured, rebuilt, and re-run against the updated filter above** (271 tests, 269
-passed, 2 expected skips):
-- **ASan:** clean (0 issues) — confirmed on Phases 6-8's new `Detail::AndroidSensorBridge`/
-  `AndroidCompassBackend`/`AndroidMotionBackend` code too (their non-Android inert paths
-  and pure math functions run on this desktop build; the real `#ifdef __ANDROID__` code
-  cannot execute here at all, only compile — see `docs/devices-hardware-checklist.md`
-  §6-8 for what that leaves genuinely unverified).
-- **TSan:** 40 reports, **all confirmed the identical known finding** — checked directly,
-  not assumed: every single report's own `Location is global 'System::TimeSpan::copy_count'`
-  line matches exactly, despite the surrounding call stacks now varying more (e.g. via
-  `SensorBase.hpp:294`, `DateTimeOffset.cpp:71/74` — different construction paths through
-  `Accelerometer`'s constructor and `AccelerometerReading`'s default `Timestamp`, all
-  ultimately copying the same `TimeSpan`/`DateTimeOffset` types that hit the same
-  unsynchronized `sharp-runtime` counter). This re-confirms the "if a future TSan run
-  reports anything other than this one finding, treat it as new" instruction above still
-  holds — verified by actually reading all 40 reports' location lines, not by pattern-matching
-  the call stacks alone (which looked different enough at a glance to warrant checking).
-- **UBSan:** clean (0 issues).
-
-**Re-verified 2026-07-06 (`DEV-BUILD-002`), all three presets rebuilt and re-run against
-the corrected, exact-suite-name filter above** (283 tests, 281 passed, 2 expected
-skips — matches the ground-truth 283 `TEST()` count exactly, unlike every prior
-session's filter):
-- **ASan:** clean (0 issues).
-- **TSan:** 41 reports, all confirmed the identical known finding — every report's
-  `Location is global 'System::TimeSpan::copy_count'` line matches exactly (checked
-  directly, not assumed); this is the same pre-existing, out-of-scope `sharp-runtime`
-  race documented above, not a new `Microsoft::Devices` finding.
-- **UBSan:** 3 reports, all pre-existing and confirmed 0 in any `Microsoft::Devices`
-  file — 2× `Vector3.cpp:117` and 1× `Matrix.cpp:249`, both `GetHashCode()` signed
-  integer overflow, triggered indirectly by `AccelerometerReadingTests`/
-  `AttitudeReadingTests` hashing a `Vector3`/`Matrix` member, not a bug in the reading
-  struct's own code.
-
-**Throwaway, non-preset builds used during development** (e.g.
-`/tmp/cmake-build-asan-check`) are equally valid if you'd rather not create a build
-directory inside the repo — pass the same `CMAKE_CXX_FLAGS`/`CMAKE_EXE_LINKER_FLAGS`
-directly to a plain `cmake -S . -B <dir>` invocation instead of using the preset. Either
-way, remember these are Debug, unoptimized-ish (`-O0`/`-O1`), instrumented builds —
-useful for correctness verification, not for measuring performance, and slower to
-build/run than a plain `cmake-build-debug`.
+Run `CnaDevicesExtTests` as an additional target through the private GPU runner when a
+change touches `modules/devices-ext/`. Historical sanitizer findings belong in Git
+history or the current defect handoff, not as fixed test counts in this command guide.
 
 ## 7. Decided against: a native Android vibration backend (devices plan Task DEVICES-0031, 2026-07-05)
 
@@ -592,19 +440,11 @@ evidence trail before reconsidering this.
 
 ## 8. Continuous Integration (`DEV-BUILD-003`, 2026-07-06)
 
-`.github/workflows/devices-tests.yml` builds `CnaTests` and runs the exact-suite-name
-Devices/Sensors filter from Section 2 above on every push/PR that touches
-`include/Microsoft/Devices/**`, `src/Devices/Microsoft/**`,
-`tests/Microsoft/Devices/**`, or the top-level CMake files, plus on manual
-`workflow_dispatch`. It runs on a plain `ubuntu-latest` GitHub-hosted runner — no
-physical sensor or haptic hardware is available there, which is the point: the two
-tests that need real hardware
-(`AccelerometerTests.GetCurrentValuePropertyDoesNotThrowWhenSupported`,
-`GyroscopeTests.GetCurrentValuePropertyDoesNotThrowWhenSupported`) are not excluded from
-the CI filter at all — they call `GTEST_SKIP()` internally whenever
-`getIsSupportedProperty()` is false (see their own bodies), so on a hardware-free runner
-they simply report `SKIPPED`, the same way they do in this local development container.
-No separate "hardware-only" CI filter was needed for that reason.
+`.github/workflows/devices-tests.yml` builds `CnaDevicesTests`, `CnaDevicesExtTests`, and
+`cna_strict_xna_api_check` on every push/PR that touches the Devices module paths or
+their build configuration, plus on manual `workflow_dispatch`. It runs on a plain
+`ubuntu-latest` GitHub-hosted runner without physical sensor or haptic hardware.
+Hardware-dependent tests are not filtered out; they self-skip when unsupported.
 
 The job:
 - checks out this repo (non-recursive submodules — `third_party/SDL`/
@@ -625,22 +465,17 @@ The job:
 - configures and builds with the existing `devices-ubsan` preset (Section 6) rather than
   a plain, non-sanitized build, so every CI run also gets UndefinedBehaviorSanitizer
   coverage for free, at no extra job;
-- runs `CnaTests` with the Section 2 filter directly (not through `ctest`, matching this
-  project's own documented reason in the `tests` preset description — `ctest` races
-  several tests that share hardcoded `/tmp` fixture paths across processes);
+- runs the complete `CnaDevicesTests` executable directly, without a copied suite list;
+- runs `CnaDevicesExtTests` separately under Xvfb because its camera tests create a
+  graphics device on the hosted runner;
 - builds and runs `cna_strict_xna_api_check` directly as its own separate step (Task
   `DEVPERF-001`, 2026-07-17) — this target is registered as its own `ctest` test
   (`StrictXnaApiSurfaceCheck_Compile_Run`, `cmake/Harnesses.cmake`), so it was never
-  actually exercised by the `CnaTests`-binary-direct step above, which is a distinct
+  actually exercised by the focused gtest executables above, which are distinct
   gtest executable.
 
-This CI job has not yet actually executed on GitHub Actions as of this writing (no push
-to a remote branch has triggered it in this session) — the exact commands it runs
-(`cmake --preset devices-ubsan`, `cmake --build --preset devices-ubsan --parallel`, the
-Section 2 filter) were each independently verified locally in this container, and the
-apt package list is `third_party/SDL`'s own documented Ubuntu list, but the *workflow
-file itself* running green on an actual GitHub-hosted runner is not yet confirmed —
-worth checking the Actions tab after the first push that includes it.
+Consult the Actions run for the current hosted-runner result; this document does not
+freeze a run ID, test count, or copied filter that can drift from the executables.
 
 ### Reproducibility from a clean checkout (`DEVPERF-001`, 2026-07-17)
 

@@ -202,8 +202,6 @@ namespace Microsoft::Devices::Sensors::Detail
         // but the same g-unit convention is the only one consistent with
         // DeviceAcceleration's documented unit and with a physically sensible
         // "vector of magnitude ~1 at rest" reading.
-        constexpr float StandardGravity = 9.80665f;
-
         // Task MOTION-012 (2026-07-16): applies the exact same landscape
         // remap Accelerometer.cpp/Gyroscope.cpp already use to
         // Gravity/DeviceAcceleration/DeviceRotationRate, respecting the
@@ -228,33 +226,39 @@ namespace Microsoft::Devices::Sensors::Detail
         // performed. `Motion.Attitude` (the quaternion) is explicitly
         // out of scope for this remap -- a quaternion is not a plain
         // vector, and any fix there is `MOTION-002`'s own open question.
-        Vector3 ApplyLandscapeRemapIfEnabled(const Vector3& raw)
+        Vector3 ConvertMotionVectorSample(
+            const AndroidSensorSample& sample, const AndroidMotionVectorKind kind)
         {
-            if (!IsAndroidLandscapeRemapEnabled())
+            const bool remapEnabled = IsAndroidLandscapeRemapEnabled();
+            AndroidSensorLandscapeOrientation mappedOrientation =
+                AndroidSensorLandscapeOrientation::Rotation90;
+            if (remapEnabled)
             {
-                return raw;
+                CNA::Platform::IPlatformSensors* sensors =
+                    CNA::Platform::GetCurrentPlatform().GetSensors();
+                const CNA::Platform::SensorDisplayRotation rotation = sensors != nullptr
+                    ? sensors->GetDisplayRotation()
+                    : CNA::Platform::SensorDisplayRotation::Unknown;
+                if (rotation == CNA::Platform::SensorDisplayRotation::Degrees270)
+                {
+                    mappedOrientation = AndroidSensorLandscapeOrientation::Rotation270;
+                }
             }
 
-            CNA::Platform::IPlatformSensors* sensors =
-                CNA::Platform::GetCurrentPlatform().GetSensors();
-            const CNA::Platform::SensorDisplayRotation rotation = sensors != nullptr
-                ? sensors->GetDisplayRotation()
-                : CNA::Platform::SensorDisplayRotation::Unknown;
-            const AndroidSensorLandscapeOrientation mappedOrientation =
-                (rotation == CNA::Platform::SensorDisplayRotation::Degrees270)
-                    ? AndroidSensorLandscapeOrientation::Rotation270
-                    : AndroidSensorLandscapeOrientation::Rotation90;
-
-            return ConvertAndroidPortraitToXnaLandscape(raw.X, raw.Y, raw.Z, mappedOrientation);
+            return ConvertAndroidMotionVectorToXna(
+                sample.Values[0],
+                sample.Values[1],
+                sample.Values[2],
+                kind,
+                remapEnabled,
+                mappedOrientation);
         }
     }
 
     void AndroidMotionBackend::HandleGravitySample(const AndroidSensorSample& sample)
     {
-        const Vector3 converted = ApplyLandscapeRemapIfEnabled(Vector3(
-            sample.Values[0] / StandardGravity,
-            sample.Values[1] / StandardGravity,
-            sample.Values[2] / StandardGravity));
+        const Vector3 converted =
+            ConvertMotionVectorSample(sample, AndroidMotionVectorKind::Gravity);
 
         {
             std::lock_guard<std::mutex> lock(stateMutex_);
@@ -267,10 +271,8 @@ namespace Microsoft::Devices::Sensors::Detail
 
     void AndroidMotionBackend::HandleLinearAccelerationSample(const AndroidSensorSample& sample)
     {
-        const Vector3 converted = ApplyLandscapeRemapIfEnabled(Vector3(
-            sample.Values[0] / StandardGravity,
-            sample.Values[1] / StandardGravity,
-            sample.Values[2] / StandardGravity));
+        const Vector3 converted =
+            ConvertMotionVectorSample(sample, AndroidMotionVectorKind::DeviceAcceleration);
 
         {
             std::lock_guard<std::mutex> lock(stateMutex_);
@@ -288,12 +290,12 @@ namespace Microsoft::Devices::Sensors::Detail
     // documented identically: "Gets the rotational velocity of the device,
     // in radians per second" (archived MSDN hh312728(v=vs.105)). Both sides
     // already agree, so a straight pass-through is correct. Task MOTION-012:
-    // the landscape remap is still applied (see ApplyLandscapeRemapIfEnabled()'s
+    // the landscape remap is still applied (see ConvertMotionVectorSample()'s
     // own doc comment) -- units and axis convention are independent concerns.
     void AndroidMotionBackend::HandleGyroscopeSample(const AndroidSensorSample& sample)
     {
         const Vector3 converted =
-            ApplyLandscapeRemapIfEnabled(Vector3(sample.Values[0], sample.Values[1], sample.Values[2]));
+            ConvertMotionVectorSample(sample, AndroidMotionVectorKind::DeviceRotationRate);
 
         {
             std::lock_guard<std::mutex> lock(stateMutex_);
