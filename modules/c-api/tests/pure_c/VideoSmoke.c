@@ -12,6 +12,7 @@ typedef struct VideoSmokeState {
     int validated;
     int real_frame_exercised;
     CNA_Handle content_manager;
+    CNA_VideoHandle video_after_manager_destroy;
 } VideoSmokeState;
 
 typedef struct WrongThreadState {
@@ -209,7 +210,8 @@ static int validate_content_loaded_video(
     const CNA_Handle game,
     const CNA_Handle device,
     const int video_available,
-    CNA_Handle* const out_manager)
+    CNA_Handle* const out_manager,
+    CNA_VideoHandle* const out_video_after_manager_destroy)
 {
     const CNA_ContentManagerCreateInfo create_info = {
         sizeof(CNA_ContentManagerCreateInfo), UINT32_C(1), view(VideoContentRoot), UINT64_C(0)
@@ -225,6 +227,13 @@ static int validate_content_loaded_video(
     CNA_VideoSoundtrackType soundtrack = UINT32_C(99);
     CNA_MediaState state = UINT32_C(99);
     CNA_Bool flag = UINT8_C(9);
+    CNA_VideoFrameEXT frame = {
+        sizeof(CNA_VideoFrameEXT), CNA_VIDEO_FRAME_EXT_STRUCT_VERSION, CNA_INVALID_HANDLE,
+        UINT64_C(0), 0.0, CNA_FALSE, {0U, 0U, 0U}
+    };
+    CNA_Texture2DInfo frame_info = {
+        sizeof(CNA_Texture2DInfo), UINT32_C(1), 0U, 0U, 0U, 0U
+    };
     int32_t number = -1;
     float fps = -1.0F;
     int64_t ticks = INT64_C(-1);
@@ -281,6 +290,11 @@ static int validate_content_loaded_video(
         if (cna_video_player_play(player, loaded) != CNA_RESULT_SUCCESS ||
             cna_video_player_get_video(player, &playing, &flag) != CNA_RESULT_SUCCESS ||
             flag != CNA_TRUE || playing != loaded ||
+            cna_video_player_get_frame_ext(player, &frame) != CNA_RESULT_SUCCESS ||
+            frame.available != CNA_TRUE || frame.texture == CNA_INVALID_HANDLE ||
+            frame.generation == UINT64_C(0) ||
+            cna_texture2d_get_info(frame.texture, &frame_info) != CNA_RESULT_SUCCESS ||
+            frame_info.width != 160U || frame_info.height != 90U ||
             cna_video_destroy(loaded) != CNA_RESULT_SUCCESS ||
             cna_video_player_get_state(player, &state) != CNA_RESULT_SUCCESS ||
             state != CNA_MEDIA_STATE_PLAYING) {
@@ -312,12 +326,12 @@ static int validate_content_loaded_video(
         cna_content_manager_unload(manager) != CNA_RESULT_SUCCESS ||
         cna_content_manager_set_root_directory(manager, view(VideoContentRoot)) !=
             CNA_RESULT_SUCCESS ||
-        cna_video_get_height(loaded_again, &number) != CNA_RESULT_SUCCESS || number != 90 ||
-        cna_video_destroy(loaded_again) != CNA_RESULT_SUCCESS) {
+        cna_video_get_height(loaded_again, &number) != CNA_RESULT_SUCCESS || number != 90) {
         return 0;
     }
 
     *out_manager = manager;
+    *out_video_after_manager_destroy = loaded_again;
     return 1;
 }
 
@@ -604,7 +618,8 @@ static CNA_Result on_update(
     }
     if (!validate_video_values(graphics_device, FixturePath, &video_available) ||
         !validate_content_loaded_video(
-            game, graphics_device, video_available, &state->content_manager) ||
+            game, graphics_device, video_available, &state->content_manager,
+            &state->video_after_manager_destroy) ||
         !validate_video_player(game, graphics_device, FixturePath, video_available)) {
         return CNA_RESULT_INVALID_STATE;
     }
@@ -631,7 +646,9 @@ int main(void)
         return 1;
     }
 
-    VideoSmokeState smoke_state = {0, 0, CNA_INVALID_HANDLE};
+    VideoSmokeState smoke_state = {
+        0, 0, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE
+    };
     CNA_GameCallbacks callbacks = {
         sizeof(CNA_GameCallbacks), UINT32_C(1), 0, on_update, 0, 0, 0, &smoke_state
     };
@@ -748,8 +765,13 @@ int main(void)
         }
     }
 
+    int32_t surviving_width = -1;
     if (cna_video_player_destroy(player) != CNA_RESULT_SUCCESS ||
-        cna_content_manager_destroy(smoke_state.content_manager) != CNA_RESULT_SUCCESS) {
+        cna_content_manager_destroy(smoke_state.content_manager) != CNA_RESULT_SUCCESS ||
+        cna_video_get_width(smoke_state.video_after_manager_destroy, &surviving_width) !=
+            CNA_RESULT_SUCCESS ||
+        surviving_width != 160 ||
+        cna_video_destroy(smoke_state.video_after_manager_destroy) != CNA_RESULT_SUCCESS) {
         (void)remove(FixturePath);
         return 5;
     }
