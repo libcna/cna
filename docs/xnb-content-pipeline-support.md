@@ -61,7 +61,8 @@ requirements. "Full" is not a guarantee for every possible XNB object graph or p
 |---|---|---|
 | Primitives (`Byte`/`SByte`/`Int16`/`UInt16`/`Int32`/`UInt32`/`Int64`/`UInt64`/`Single`/`Double`/`Boolean`/`Char`/`String`) | ✅ Full | |
 | Math (`Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `Plane`, `Point`, `Rectangle`, `BoundingBox`, `BoundingSphere`, `BoundingFrustum`, `Ray`) | ✅ Full | |
-| `Decimal`/`DateTime`/`TimeSpan` | ✅ Full | Faithful field-for-field decoding, not a lossy `double` shortcut |
+| `Decimal`/`TimeSpan` | ✅ field/tick decoding | Decimal is conditional on Sharp Runtime's native Int128 support; neither uses a lossy double shortcut. |
+| `DateTime` | ✅ ticks; Kind not preserved | The XNB reader masks out Kind and constructs an Unspecified value, despite current Sharp Runtime supporting Kind. The writer also writes ticks only; this is an open XNB limitation in handoff §5.1. |
 | `Curve` | ✅ Full | |
 | `Texture2DReader` | ✅ all 20 classic XNA formats | All 17 uncompressed formats preserve the serialized format and exact mip bytes. DXT1/3/5 blocks stay compressed when the active renderer supports exact compressed transfer; other renderers software-decode them to `Color`, matching FNA's backend-capability fallback. A non-power-of-two DXT texture under Reach takes the same `Color` path: the genuine Platformer `Fonts/Hud.xnb` is a 128×132 Dxt3 atlas that XNA loads under Reach, while the public `Texture2D` constructor still refuses Reach NPOT DXT (`SAMPLE-013`) |
 | `Texture3DReader` | ✅ all 15 legal XNA HiDef volume formats | Preserves the serialized uncompressed format and each mip's exact bytes; DXT1/3/5 are correctly refused because XNA excludes compressed volume textures. Reader tests cover synthetic streams, format bytes and a depth-dominant mip chain; CNA also writes volume fixtures. Distinguish these self-authored witnesses from an independently produced Microsoft volume asset |
@@ -351,6 +352,7 @@ payload's semantic validity, external dependencies or the active renderer's capa
 | LZ4 compression | ✅ MonoGame's raw-block XNB representation is supported; generic LZ4 frames are intentionally not an XNB format |
 | Generic collection readers for an unregistered `T` combination | ❌ Not supported — each closed combination needs its own explicit registration |
 | `SoundEffect` XMA2 and unknown codecs | ❌ Not supported — see the audio support matrix above |
+| `DateTime` Kind | ❌ UTC/local Kind is discarded by the current XNB read/write path; existing tick-only round trips do not qualify Kind fidelity. |
 | Ecosystem identifiers outside the accepted whitelist, including `'b'`/`'5'`/`'O'`/`'S'`/`'V'` | ❌ Rejected by the current CNA/FNA-compatible header policy; header acceptance alone would not establish payload or platform support. |
 
 ## Test fixture corpus

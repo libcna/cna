@@ -1,11 +1,11 @@
 # `.xnb` interoperability: what CNA writes, and how strongly each claim is verified
 
-CNA has a native C++ XNB **writer** and a content pipeline that compiles source assets straight to
-`.xnb`, with no XNA Game Studio, MonoGame, FNA build tooling, MSBuild or proprietary source
-involved. This document says exactly what it produces and, for every claim, *how that claim was
-checked*.
+CNA has a native C++ XNB **writer** and source pipeline. Supported native routes build without a
+managed XNA/MonoGame build host; some routes still need external services, such as legacy `fxc`
+for `.fx` or a configured XMA encoder. This page distinguishes the current implementation from
+retained fixture/oracle results and their qualification limits.
 
-The read side is a separate document: `docs/xnb-content-pipeline-support.md` covers loading
+The [runtime loader guide](xnb-content-pipeline-support.md) covers loading
 already-built `.xnb` files. The writer's design decisions are §12 below; its task history (`XNAP-*`)
 is in Git history.
 
@@ -28,7 +28,9 @@ is in Git history.
 
 > **The genuine runtime has loaded what CNA writes.** The harness in `tests/interop/xna40/` loads
 > CNA-written `.xnb` files through Microsoft's own XNA 4.0 `ContentManager` (runtime 4.0.0.0 under
-> Wine with DXVK, on a real GPU) and asserts every value their manifests declare. The eight committed
+> Wine with DXVK, on a real GPU) and asserts the fields its public-API adapters expose. Logged `(not asserted)` gaps remain: for
+> example SoundEffect checks Duration, Song checks load/Duration without playback, and Video
+> checks dimensions/frame rate. The eight committed
 > fixtures pass uncompressed and LZX-compressed, and `Effect`, `Song` and `Video`, built from CNA's
 > own sources, pass too (`XNAPP-280`/`281`; re-run 2026-10-29, 3/3 CTests). The per-type tables below
 > still carry the labels they were written with; §11 says exactly what the runtime has covered.
@@ -49,7 +51,7 @@ Three layers, separated so that source decoding never leaks into serialization:
 ```text
                      source asset
                           │
-                    ContentImporter          ← one per source kind, format-agnostic
+                    ContentImporter          ← one per registered source route
                           │
                    ContentProcessor          ← policy: colour key, mips, resampling, conversion
                           │
@@ -71,13 +73,13 @@ implementation in the tree — `CNA::Internal::Xnb` — and
 `XnbArchitectureUniquenessTest` fails if a second one is reintroduced under the paths a superseded
 implementation once used.
 
-The **importer and the processor are identical for both formats**; only the serializer differs.
-Forking processors per output format is the one mistake this design exists to prevent, so a
-format-specific limitation is resolved **in the writer**: the XNB texture writer picks an
-XNA-representable representation out of the canonical value and refuses with a named reason when
-none exists. A processor never learns which container it is feeding.
+The registry/coordinator and many import/processing functions are shared. Processing can still
+observe output format, target and profile: font atlas encoding and Reach constraints are examples.
+Native conventions and XNA project mappings can also select different defaults. Writers enforce
+additional format limits; generic XML and legacy effect routes have XNB writers only. Shared
+infrastructure does not mean every source/parameter combination reaches both containers.
 
-`docs/content-pipeline.md` documents the build system itself — component selection, parameters,
+The [native pipeline guide](content-pipeline.md) documents the build system itself — component selection, parameters,
 dependencies, the manifest, incremental builds, publication — all of which applies to both formats
 unchanged.
 
@@ -97,9 +99,10 @@ Every capability table uses these labels, and "supported" is never written witho
 | `xna40` | Loaded by a genuine Microsoft XNA 4.0 runtime, with values asserted. The tables do not use it per row; §11 lists what the runtime has loaded. |
 | `none` | Not verified. |
 
-These are cumulative in strength but not in coverage: a type can be `cna-rt` without being `spec`
-simply because the independent parser has no decoder for it yet, and that is recorded honestly
-below rather than rounded up.
+These are complementary evidence types, not a universal strength ladder. Each applies to named
+fixtures, asserted fields and configurations. A parser or CNA round trip can miss a genuine-XNA
+requirement (the LZX trailer is the recorded example); a byte golden does not qualify every input
+or platform. Labels summarize retained results, not automatic proof that an optional test ran now.
 
 ---
 
@@ -142,8 +145,8 @@ out:
 | Not emitted | Why |
 |---|---|
 | Aligned-offset blocks | A fourth Huffman tree that saves a few bits on offset-heavy data. Verbatim-only is a conforming subset; CNA's reader and the independent parser both decode aligned blocks, so a file from another producer that uses them still loads. |
-| Uncompressed LZX blocks | They would save nothing and need the bitstream-realignment dance around them. This is also the shortcut that is **not** taken: setting `0x80` over unentropy-coded bytes would be technically conforming and worthless. |
-| Intel `E8` call translation | The header bit is always zero. No `.xnb` uses it, and CNA's decoder — like FNA's, which never finished that transform — refuses a non-zero file size there. |
+| Uncompressed LZX blocks | The encoder chooses verbatim blocks only. Uncompressed blocks are valid and could reduce overhead on incompressible input, but their emission/realignment path is not implemented here. |
+| Intel `E8` call translation | CNA writes the header bit as zero. The retained fixtures do not establish a need for it; CNA/FNA decoding refuses a non-zero transform file size rather than implementing the transform. |
 
 An LZX block and an output frame coincide, one block per frame. That costs a little ratio (trees
 are retransmitted every 32 KiB, and a match may not reach across a frame boundary) and buys
@@ -164,25 +167,27 @@ Measured on the committed corpus and on a 64×64 RGBA texture: a 16 571-byte unc
 build such an asset uncompressed.
 
 **Verification.** Three independent oracles, deliberately not one: CNA's own LZX decoder (a port
-predating this encoder by years, shipped against real Microsoft-produced files) round-trips every
+predating this encoder, tested against retained external files) round-trips every
 case; `tools/xnb/xnb_conformance.py` carries **its own LZX decoder**, written from the format
 description in another language sharing no code, constants or tables, and it decodes every
 CNA-produced LZX fixture down to asset values — the same decoder reproduces both externally
 produced LZX fixtures byte for byte against FNA's own reference output, which is what earns it the
 right to judge CNA's encoder; and the container framing is asserted field by field against the
-layout those two external fixtures demonstrate.
+layout those two external fixtures demonstrate. Those decoders still accepted the missing-trailer
+output that genuine XNA rejected; the separate runtime evidence in §11 is essential to that case.
 
 **What LZX does not give you** is integrity checking: neither LZX nor the XNB container carries a
 checksum, so a truncated or corrupted stream can decode to the declared byte count and be wrong.
-That is a property of the format. The tested contract is that such a stream either refuses or
-produces different bytes — it never quietly passes for the original.
+That is a property of the format. A mutation may be rejected, change decoded values, or affect only unused/padding bytes. Neither
+successful decoding nor the finite fuzz suite provides an integrity guarantee.
 
-### 2.2 Target platforms — three are XNA 4.0, thirteen are not
+### 2.2 Target platforms — writer choices and runtime qualification
 
 This is the most common thing to get wrong about XNB, so it is stated plainly: **Microsoft XNA 4.0
 shipped for three platforms.** Every other platform byte the format carries was introduced by a
-later, non-Microsoft implementation. Writing one of those bytes produces a file that no Microsoft
-XNA 4.0 runtime ever produced or consumed, and CNA's API, CLI help and diagnostics all say so.
+later, non-Microsoft implementation. Such identifiers describe an extended ecosystem, not a Microsoft target. The writer currently
+exposes eight choices below; the runtime reader accepts a wider 16-byte whitelist. Neither an
+emitted nor an accepted header byte establishes native-platform execution.
 
 | `--xnb-platform` | Byte | Category |
 |---|---|---|
@@ -199,11 +204,12 @@ XNA 4.0 runtime ever produced or consumed, and CNA's API, CLI help and diagnosti
 combinations that are contradictory on their face — LZ4 compression on an XNA 4.0 target platform,
 for instance, because that pairing describes a file that cannot exist.
 
-**Writing `x` into the header is not Xbox 360 support, and the writer now refuses to pretend it
-is.** The 360 is big-endian. CNA has exactly one piece of Xbox-specific payload handling — the
-`SoundEffect` WAVEFORMATEX fields are byte-swapped — and nothing else is: not a texture's `Int32`
-dimension fields, not a model's bone table, not even the sound's own sample bytes, which CNA's
-**reader** already refuses to transcode out of an Xbox file for exactly that reason.
+**Writing `x` into the header does not qualify Xbox 360 runtime support.** CNA has explicit
+SoundEffect WAVEFORMATEX byte swaps, but its writer still refuses by default where payload
+qualification is missing. This is current conservative policy, not a measured rule that every XNB
+integer/field must use the console CPU's native byte order. The retained XML/compiler comparison
+already reproduces a supported Xbox-target payload byte for byte. The target also selects Compact
+Framework assembly identities (§2.4), and console textures/effects/audio need their own evidence.
 
 So `--xnb-platform xbox360` is **refused by default**, in code rather than only in documentation,
 with a message naming what is missing. `--xnb-allow-unverified-xbox` (or
@@ -211,11 +217,10 @@ with a message naming what is missing. `--xnb-allow-unverified-xbox` (or
 hardware producing candidate files is the only way this gap ever closes, and a refusal with no
 escape hatch would prevent that.
 
-Windows Phone 7 (`m`) is **not** refused. It is a little-endian ARM platform with no known payload
-difference from Windows, so the honest statement is narrower: the header byte can be emitted, the
-payloads are the same ones Windows gets, and **nothing about it is verified** because no
-`m`-platform fixture and no Windows Phone runtime exist here. That is a documentation claim, not a
-byte-order one, which is why it is not enforced in code.
+Windows Phone 7 (`m`) is not refused. Target-specific Compact Framework qualifiers are verified
+by retained compiler outputs, including `phone_font_description.xnb`; most payload processing is
+shared with the Windows route. No Phone runtime/device qualification is recorded. Those finite
+compiler/name witnesses are stronger than no evidence and weaker than a working Phone game.
 
 ### 2.3 Version
 
@@ -236,9 +241,11 @@ correction is a one-line data change:
 | `MonoGameFixture` | Read out of a MonoGame-produced `.xnb` committed to this repository. |
 | `DerivedRule` | Not directly observed; produced by the rule below, which every observed file follows. |
 
-The rule, derived from the fixtures: **a reader type is assembly-qualified exactly when it does not
-live in `Microsoft.Xna.Framework`; generic arguments are always fully qualified.** No name in this
-table was taken from MonoGame or FNA source code.
+For built-in identities, the observed rule qualifies readers outside `Microsoft.Xna.Framework`
+and fully qualifies generic arguments. System arguments use target-specific mscorlib identities:
+desktop 4.0.0.0, or Compact Framework 3.7.0.0 with distinct Xbox/Phone public-key tokens. These
+are retained build witnesses, not native-device results. User-defined names need their own assembly
+identity; do not infer one from the built-in rule.
 
 `--xnb-reader-names` selects between `xna40` (the table above, the default and the most compatible)
 and `portable` (bare names). CNA, FNA and MonoGame all normalize the assembly qualifier away before
@@ -260,7 +267,7 @@ which is why they are not the default.
 | `Boolean`, `Byte`, `SByte`, `Int16`, `UInt16`, `Int32`, `UInt32`, `Int64`, `UInt64`, `Single`, `Double` | matching `…Reader` | ✅ | ✅ | — |
 | `Char` | `CharReader` (UTF-8 encoded; a lone surrogate is refused) | ✅ | ✅ | — |
 | `String` | `StringReader` (7-bit-encoded UTF-8 byte length; invalid UTF-8 is refused) | ✅ | ✅ | — |
-| `TimeSpan`, `DateTime` | matching `…Reader` | ✅ | — | `DateTime`'s top two `Kind` bits are written as Unspecified, because `System::DateTime` does not model a kind; the reader masks them for the same reason. |
+| `TimeSpan`, `DateTime` | matching `…Reader` | ✅ ticks | — | TimeSpan writes ticks. The current DateTime writer writes only ticks and the reader discards Kind bits, although Sharp Runtime now models Kind. Tick round trips do not establish UTC/local/Unspecified fidelity; see handoff §5.1. |
 | `Decimal` | `DecimalReader` | ✅ | — | Four Int32 words — lo, mid, hi, flags — behind `SHARP_RUNTIME_HAS_NATIVE_INT128`; see below. |
 | `Vector3`, `Matrix`, `Rectangle` | matching `…Reader` | ✅ | ✅ | — |
 | `Vector2`, `Vector4`, `Quaternion`, `Color`, `Point`, `Plane`, `BoundingBox`, `BoundingSphere`, `Ray` | matching `…Reader` | ✅ | — | The independent parser has no decoder for these yet; that is a gap in the parser, not in the writer. |
@@ -323,17 +330,17 @@ written without the dispatch index its reader consumes.
 | `ExternalReference<T>` | `ExternalReferenceReader`, and the inline form | ✅ | ✅ | Both forms: inline in a known field (no dispatch index, what every stock effect uses) and boxed where the static type is `object`. Absolute and escaping references are refused in both. |
 
 Every one of these is recorded in the build manifest by the reader its root object dispatches to,
-observed from the write rather than declared beside it (`rootReaderName`, manifest schema 9). An
-`.xnb` has no asset type id and no schema version, so that reader name is its compatibility
-identity: a build that changes which reader an asset dispatches to invalidates the artifact instead
-of being skipped as unchanged.
+observed from the write (`rootReaderName`, introduced in manifest schema 9; current schema 10).
+XNB has per-reader version fields, but no CNB-style global asset type/schema pair. The root reader
+name is part of the artifact identity; component/codec/schema identities must still change when
+implementation compatibility changes. It is not a substitute for every version or dependency.
 
 ---
 
 ## 4. The strongest results: byte-identical to two other producers' output
 
-Three assets in this repository are written by CNA and compared, byte for byte, against files
-produced by somebody else. That is the strongest verification available without running a real
+Three early writer fixtures compare CNA bytes with external output. Later XML/font/model/sample
+witnesses extend the evidence elsewhere; this is not a count of every golden asset in the tree. That is the strongest verification available without running a real
 runtime, because it compares output to output rather than output to a description.
 
 | Fixture | Producer | What it proves |
@@ -348,8 +355,8 @@ The tests are `XnbWriterTest.GoldenXna40ListOfStringsIsByteIdentical`,
 The third one changed the writer. CNA emitted the 16-byte `PCMWAVEFORMAT` block, which omits
 `cbSize`; the observed producer emits the full 18-byte `WAVEFORMATEX` with `cbSize` present and
 zero. The field is length-prefixed so both are legal and CNA's reader accepts both — but matching
-an observed producer beats matching none, so the writer now emits 18. Every `SoundEffect` CNA
-writes is two bytes longer than it was.
+an observed producer beats matching none, so the writer now emits 18. The ordinary PCM framing changed by two bytes; this is not a fixed-size claim for every codec's
+format extension.
 
 ---
 
@@ -375,19 +382,22 @@ Stated plainly, because a gap named is worth more than a gap rounded up.
 
 | Not supported | Detail |
 |---|---|
-| **Compiling `.fx` to shader bytecode** | CNA does not *embed* an HLSL compiler, and that remains a standing decision ([`fx-compiled-effects.md`](fx-compiled-effects.md) §1). What it now does instead is **drive an external one**: the `.fx` route resolves the include tree, records every included file as a build dependency, invokes a compiler behind the `EffectCompilerService` interface, and refuses anything that comes back that is not an Effect Framework 9.1 container. The only compiler known to produce that container is Microsoft's own legacy `fxc` at profile `fx_2_0`, which cannot be vendored; supply it with `--fx-compiler` (or `CNA_FXC`), and `--fx-compiler-launcher wine` (or `CNA_FXC_LAUNCHER`) on a non-Windows build machine — see `docs/content-pipeline.md`, "Effects: `.fxb` and `.fx`", for the full precedence order. **Not verified against a real `fxc`** — none exists in the environment this was written in, so no test uses one: the unit tests substitute the compiler at the `EffectCompilerService` seam and the product-route tests drive a project-owned stand-in across a real process boundary, which proves CNA's own integration and nothing about `fxc` (`XNAP-A4`). It will still never fake a compile by embedding source text in an `Effect` asset. |
+| **No embedded HLSL compiler** | The `.fx` source route drives a configured external EffectCompilerService, resolves includes as dependencies and validates the returned legacy effect payload. Supply `--fx-compiler`/`CNA_FXC` and a launcher where needed; CNA does not ship Microsoft's legacy fxc. Real June 2010 `fx_2_0`/Wine comparisons now exist (XNAPP-191/192): seventeen effects account for compiler-version-string/padding differences, and pass-dependent XNA headers are emitted. Tests without that configured compiler can skip; stand-in process tests prove integration only. See [effect compilation](fx-compiled-effects.md) and the native guide for scope and precedence. |
 | **Aligned-offset and uncompressed LZX blocks** | CNA *reads* both and emits neither: verbatim blocks are a conforming subset and the other two buy nothing here. See §2.1.1. |
-| **Xbox 360 semantics** | Beyond the `SoundEffect` WAVEFORMATEX byte swap, nothing is endian-corrected or tiled — and the writer refuses an `x` target rather than emitting Windows bytes under an Xbox header. `--xnb-allow-unverified-xbox` overrides it for hardware testing. No CNA output has been loaded on a console, and an Xbox 360 `Effect` would need Xenos shader bytecode, which no compiler available here produces (`XNAPP-257`/`258`). |
-| **Windows Phone semantics** | The header byte is written and the payloads are Windows's, which is very likely correct for a little-endian ARM target and is nonetheless **unverified**: no `m` fixture and no Windows Phone runtime exist here. |
+| **Xbox 360 runtime qualification** | The writer remains opt-in for unverified Xbox payloads. It has target-specific reader identities and finite genuine-compiler XML/font witnesses, plus SoundEffect format-field swaps. This is not native-console qualification, proof of correct texture tiling/audio samples, or a Xenos effect compiler. `--xnb-allow-unverified-xbox` is a testing escape hatch. |
+| **Windows Phone runtime qualification** | The `m` header and target-specific Compact Framework reader qualifiers can be written and have retained compiler/name witnesses. No working Phone runtime/device run is recorded; shared Windows payload paths do not establish complete Phone semantics. |
 | **Array-valued effect parameters** | An `EffectMaterial` parameter that is `float[]`, `int[]` or `Matrix[]` is not written. Which reader instantiation XNA writes for one — `ArrayReader` or `ListReader`, over which element type — is not established by any fixture available here, and a guess would produce a file that loads into the wrong shape rather than one that fails to load. CNA's **reader** applies them if some other producer writes them. |
-| **`Decimal`** | Conditional on sharp-runtime's 128-bit integer support, on the read side too. |
+| **`Decimal`** | Conditional on Sharp Runtime's native 128-bit integer support, on the read side too. |
+| **DateTime Kind preservation** | Current XNB writing/reading preserves ticks but discards UTC/local Kind, although Sharp Runtime supports it. The existing round trips do not qualify that state; handoff §5.1 records the open defect. |
 
 ---
 
 ## 7. Source assets: what compiles to `.xnb`
 
-The output format is chosen at the **writer** boundary only, so every source route reaches both
-containers and no importer or processor is duplicated.
+The same coordinator selects registered routes and format-specific writers. Processors can observe
+format/target/profile, and some routes deliberately refuse one container. This table summarizes
+supported native/convention routes; XNA project importer/processor pairs have their own mappings
+and parameter defaults. See the native pipeline and migration guides.
 
 | Source | Route | `.cnb` | `.xnb` |
 |---|---|---|---|
@@ -397,7 +407,11 @@ containers and no importer or processor is duplicated.
 | `.gltf`, `.glb` | glTF importer → model processor → model writer | ✅ | ✅ `Model` |
 | `.cnj` | CNJ importer, then the matching processor | ✅ | ✅ |
 | `.fxb` (already-compiled effect) | `CompiledEffectImporter` → `CompiledEffectProcessor` → Effect writer | — | ✅ `Effect` |
-| `.fx` (HLSL effect source) | `EffectSourceImporter` → `EffectSourceProcessor` → Effect writer | — | ⚠️ `impl` `Effect`, and only with an external `fxc` — see §6 |
+| `.fx` (HLSL effect source) | `EffectSourceImporter` → `EffectSourceProcessor` → Effect writer | — | Conditional external-compiler route with retained real-fxc evidence — see §6 |
+| `.x`, `.fbx` | Native model-source route / XNA component mapping | Supported material/format subset | `Model`; finite importer and compiler witnesses |
+| `.mp3`, `.wma` | Native Song streaming-copy route; project pairs can select Song or SoundEffect processing | Route-dependent | Route-dependent Song/SoundEffect; optional decoding/encoding services apply |
+| `.wmv` | Probe/Video route | External-media Video metadata | External-media Video metadata |
+| Intermediate `.xml` | XmlImporter → typed PassThroughProcessor → registered XNB writer | Explicit refusal | Registered built-in or game-defined type |
 | `.xnb` | XNB importer (transcode to `.cnb`) | ✅ | — |
 
 Texture policy parameters apply in one documented, deterministic order: **colour key → resize →
@@ -435,9 +449,11 @@ payload as CNB's native contract. A `.fx` build with no compiler configured fail
 effect with one complete explanation — naming the discovery order it tried — rather than once per
 asset or with a misleading shader error.
 
-Audio sources may be 8-bit unsigned, 16-bit, 24-bit or 32-bit PCM, or 32-bit IEEE float. Everything
-wider than 16 bits is narrowed to the Pcm16 both containers store, deterministically, **with a
-warning naming the loss**. Compressed WAV tags are refused rather than guessed at.
+The native WAV source route accepts PCM8/16/24/32 and IEEE-float input. PCM8 and PCM16 retain
+their width (CNB SoundEffect schema 2 and XNB WAVEFORMATEX); wider/float input is normalized to
+PCM16 with the documented conversion warning. That source route refuses compressed WAV tags;
+the runtime XNB reader's ADPCM handling is a separate path. Project processor/quality selection
+can choose other conversions. See the [media guide](xna-content-pipeline-media.md).
 
 ### Using it
 
@@ -446,7 +462,9 @@ cna-content build Content -o bin/Content --format xnb \
     --xnb-platform windows --xnb-version 5 --xnb-profile reach
 ```
 
-Per-asset overrides, including `--format`, live in `.cna-content.json` beside the source root.
+Per-asset overrides live in `.cna-content.json`. Its root/asset `outputFormat` value can override
+the CLI format choice; the JSON's `format` identifies its configuration schema and is not the CLI
+option spelled as a key.
 
 ---
 
@@ -457,9 +475,8 @@ put its own asset into an `.xnb` without changing CNA. Two halves are needed, an
 optional: a writer, and a reader that gives the written bytes meaning.
 
 ```cpp
-// The writer half. RequireCollectionCount(), the nesting-depth guard, the string ceilings and
-// every other limit apply to it exactly as they do to a built-in, because it writes *through*
-// XnbWriter rather than around it.
+// The writer half. Use the bounded byte/string/object APIs and explicitly validate custom
+// collection counts. These APIs do not sandbox arbitrary component code.
 class WaypointListXnbWriter final : public XnbTypeWriter<WaypointList>
 {
 public:
@@ -467,7 +484,7 @@ public:
     {
         XnbReaderIdentity identity;
         identity.readerBaseName = "ExampleGame.Content.WaypointListReader";
-        identity.readerAssembly = XnbAssembly::None;   // not an XNA assembly, so unqualified
+        identity.readerAssembly = XnbAssembly::None;   // bare name for this CNA-only example
         identity.targetBaseName = "ExampleGame.WaypointList";
         identity.targetAssembly = XnbAssembly::None;
         identity.evidence = XnbNameEvidence::DerivedRule;
@@ -497,7 +514,13 @@ ContentTypeReaderManager::AddTypeCreator(
 const std::vector<std::uint8_t> file = WriteXnbAsset(waypoints, {}, "waypoints", registry);
 ```
 
-`XnbWriterTest.AGameCanRegisterItsOwnTypeWriterAndReaderAndRoundTripThroughThem` is exactly this,
+This sketch assumes the Xnb namespace/ContentReader aliases, a WaypointList with Vector3 points,
+and its matching reader have been supplied. Bare custom names (`XnbAssembly::None`) demonstrate
+CNA registration, not automatic genuine-XNA assembly resolution. For an existing managed game,
+the reader assembly/name and payload need separate verification; the [migration guide](xna-content-pipeline-migration.md)
+§7 shows the XNA-shaped ContentTypeWriter route with an explicit runtime reader name.
+
+`XnbWriterTest.AGameCanRegisterItsOwnTypeWriterAndReaderAndRoundTripThroughThem` exercises this,
 run end to end, including the check that a custom writer inherits the same ceilings the built-ins
 have.
 
@@ -508,7 +531,7 @@ instantiations CNA's own runtime reader registry resolves are registered by defa
 on the other side, and a test asserts exactly that for every built-in writer. `List<Single>` is not
 a gap; it is one `registry.Register(...)` call plus its reader.
 
-At the pipeline level, a custom `ContentTypeWriter` reaches `.xnb` by returning
+At the canonical native pipeline level, `CNA::Content::Pipeline::ContentTypeWriter` reaches `.xnb` by returning
 `ContentOutputFormat::Xnb` from `OutputFormat()`. `docs/content-pipeline.md`'s **Custom
 extensions** section covers the rest of that contract — stable component identities, schema and
 codec versioning, and the source/toolchain compatibility model.
@@ -517,8 +540,9 @@ codec versioning, and the source/toolchain compatibility model.
 
 ## 9. Provenance
 
-Every wire-format decision in this writer comes from one of three places, and nothing comes from a
-fourth.
+The original writer campaign recorded the following provenance categories. Later target/compiler
+witnesses and the current source/tests supplement that historical record; this section is not an
+independent audit of every algorithm's authorship.
 
 | Source | What came from it |
 |---|---|
@@ -526,9 +550,8 @@ fourth.
 | **CNA's own reader** | The counterpart of every writer: the writer was built against the reader, which was written first and independently, and the round-trip tests are the check that they agree. |
 | **Published format descriptions** | The container header, 7-bit encoding, .NET `BinaryWriter` string encoding, the S3TC block layouts, the LZ4 block grammar, and the RIFF/WAVE chunk rules. |
 
-Nothing in the writer, the block-compression encoder, the LZ4 encoder, the `.spritefont` route or
-the independent conformance parser is derived from MonoGame's or FNA's implementation, and no
-Microsoft binary was decompiled. The MonoGame `.xnb` files in `tests/assets/xnb/` are used as
+The original writer/build-tool campaign used fixture/specification-based implementations rather
+than copying MonoGame/FNA content-building source or decompiling Microsoft's pipeline methods. The MonoGame `.xnb` files in `tests/assets/xnb/` are used as
 **black-box fixtures** — bytes to read and compare against — and each carries a manifest recording
 its origin and licence (they are Ms-PL, the same licence as CNA).
 
@@ -540,9 +563,11 @@ in the tree). Both are build-time and test-time only; no CNA runtime module link
 
 ### 9.1 Source rules for the content-pipeline parity work
 
-These are the rules the XNA 4.0 Content Pipeline parity work (`XNAPP-*`) set for itself, carried
-over unchanged from its plan, which was deleted on 2026-10-29. The section numbers they cite
-(§18, §23, §25) are that plan's, in Git history.
+These are the historical clean-room source rules of the XNA Content Pipeline parity campaign
+(`XNAPP-*`), whose plan was deleted on 2026-10-29. Its section numbers (§18, §23, §25) refer to
+that plan in Git history. They concern deriving content-building implementations; the project's
+current [AGENTS.md](../AGENTS.md) governs ongoing work, including the normal local FNA runtime
+reference and approved exact-runtime IL measurements.
 
 **Allowed, and actually used:**
 
@@ -563,15 +588,16 @@ over unchanged from its plan, which was deleted on 2026-10-29. The section numbe
 6. Published XNB format documentation and the committed black-box fixtures
    (`tests/assets/xnb/xna40/`, `tests/assets/xnb/monogame/`).
 
-**Forbidden, and enforced:** decompiling any XNA method body; deriving an algorithm from IL or
+**Forbidden within that content-building campaign:** decompiling pipeline method bodies; deriving an algorithm from IL or
 native code; reading or copying MonoGame's or FNA's content-*building* source; copying another
 clean-room implementation; committing a Microsoft DLL, EXE, font or SDK component; inventing an
 API member because it "probably existed". `XNAPP-315` is the gate: no file under `tests/` or
 `tools/` may contain a Microsoft binary, and the oracle's compiled output lives only under the
 ignored `build/`.
 
-The **FNA reference tree** (`/rv/data/library/github.com/FNA-XNA/FNA`) is the runtime reference
-and has no content-*building* code, so it is neither needed nor consulted here. Where XNA and FNA
+The local **FNA reference tree** is the normal runtime/read-side reference. It supplies no
+corresponding XNA content-building implementation; the build-side campaign instead used the
+metadata, black-box tools and public sample sources above. No fixed checkout path is required. Where XNA and FNA
 disagree, XNA wins (`CLAUDE.md`, decided 2026-09-04).
 
 The sample `.xnb` sweep (`XNASWEEP-*`, [`tools/xna-sample-sweep/README.md`](../tools/xna-sample-sweep/README.md))
@@ -582,14 +608,20 @@ pipeline implementation is still black-box only.
 
 ---
 
-## 10. Reproducing every claim in this document
+## 10. Reproducing the native checks
 
 ```bash
-# The writer's own unit tests, the round trips, and the golden comparison.
-./CnaContentTests --gtest_filter='Xnb*Writer*:XnbConformance*:XnbInteropCorpus*'
+# Build the existing native test targets (maximum eight compiler jobs; four here).
+cmake --build cmake-build-multi --target CnaContentTests CnaContentPipelineTests --parallel 4
 
-# The build-time module: block compression, the .spritefont route, the compressed texture route.
-./CnaContentPipelineTests
+# Writer round trips and golden comparisons: always use the private GPU/window runner.
+tools/platform/run_gpu_tests_private.sh --exec env CNA_GRAPHICS_RENDERER=OPENGLES3 \
+    SDL_AUDIODRIVER=dummy cmake-build-multi/CnaContentTests \
+    --gtest_filter='Xnb*Writer*:XnbConformance*:XnbInteropCorpus*'
+
+# Build-time block/font/compressed-texture tests need the same private environment.
+tools/platform/run_gpu_tests_private.sh --exec env CNA_GRAPHICS_RENDERER=OPENGLES3 \
+    SDL_AUDIODRIVER=dummy cmake-build-multi/CnaContentPipelineTests
 
 # The independent, specification-based parser, run by hand over any .xnb.
 python3 tools/xnb/xnb_conformance.py --json path/to/asset.xnb
@@ -617,7 +649,64 @@ display). Three CTests drive it, and each skips rather than fails on a machine w
 | `XnaPipelineGenuineRuntimeInteropLzx` | the same eight, LZX-compressed |
 | `XnaPipelineGenuineRuntimeBuiltFamilies` | `Effect`, `Song` and `Video`, built from CNA's own committed sources by `run-built-families-interop.sh` |
 
-The device is HiDef because XNA refuses a `Texture3D` under Reach. Running it found three defects
+Prepare the reference assemblies and runtime prefix explicitly with `CNA_XNA40_REFERENCES` and
+`CNA_XNA40_WINEPREFIX`. The wrapper uses exit 77 for missing prerequisites, registered as a CTest
+skip; a skipped test is not runtime qualification. The three CTests share an `xna-interop-scratch`
+resource lock because their wrappers clear/use the same scratch directory. Run them through the
+private display runner, and let its DISPLAY reach Wine (an old `CNA_XNA40_DISPLAY` override can
+otherwise select a different display):
+
+```bash
+tools/platform/run_gpu_tests_private.sh --exec env -u CNA_XNA40_DISPLAY \
+    ctest --test-dir cmake-build-multi \
+    -R '^XnaPipelineGenuineRuntime(Interop|InteropLzx|BuiltFamilies) Running it found three defects
+nothing else could: the LZX encoder's missing end-of-stream trailer, which the runtime needs
+(`LzxEncoderTest.EveryCompressedPayloadEndsWithTheTrailerXnaRequires`), and two in the built
+families, among them an unqualified `VideoReader` name (`XNAPP-281`). All three pass as of
+2026-10-29.
+
+## 12. Design decisions
+
+* **`XnbByteWriter` rather than `System::IO::BinaryWriter`.** XNB writing needs an in-memory body
+  that the header is prepended to, and a UTF-8 `charcs` overload `BinaryWriter` does not have;
+  `CnbByteWriter` set the precedent of a CNA-owned deterministic writer beside sharp-runtime's
+  reader.
+* **`<FontName>` is a font family, and the reproducible routes come first.** XNA asks Windows to
+  resolve the family through GDI+, so the same `.spritefont` builds differently on different
+  machines, and not at all without the font. CNA looks, in order, for a font file of that name
+  beside the description (`Console`, `Console.ttf`, `Console.otf`, `Console.ttc`); a font file
+  beside it whose own family table answers the name the way Windows matches it (`Peric.ttf` is
+  the Pericles family; `XNASWEEP-100`/`105`); the directories a build passes with
+  `--font-directory`, then `CNA_FONT_PATH`; and only then the installed fonts, which warns that
+  the build now depends on what this machine has installed.
+* **Build-time components live in `modules/content-pipeline/`.** FreeType, the block-compression
+  encoder and any future importer stay out of the link closure of a game that only loads content:
+  `cna_content_pipeline` is linked by `cna_content_compiler` and nothing else, so the dependency
+  graph enforces that build-time boundary (`CnaXnbDependencyBoundary`). This does not mean runtime
+  asset families have no native importers; ContentManager's family-specific link paths are
+  documented in [link-size architecture](link-size-architecture.md).
+* **Block compression is reached through a callable.** `cna_content` declares the encoder's shape
+  (`TextureBlockEncoder`) and never links one; `cna_content_pipeline` supplies it. A registry
+  without an encoder builds every uncompressed texture and refuses a compressed `textureFormat`
+  with a message naming the configuration that would provide one, rather than quietly writing
+  uncompressed pixels.
+
+## 13. Current verification
+
+Reconciled on 2026-11-01 against writer/identity/canonical data, processing and manifest contracts,
+the independent parser, retained compiler fixtures and genuine-runtime harness adapters/wrappers.
+Existing native content/pipeline targets build. The related selected XNB/reader/writer/manifest
+run passes 456 cases, with eight LZX decoder/differential/fuzz cases; five XML source-route cases
+also pass privately, including comparisons with retained target-specific compiler output.
+All 16 uncompressed/LZX fixture files parse independently and match their explicit expectation
+manifests, and nine pipeline metadata gates pass. These are finite native/fixture checks: no new
+Microsoft runtime, real-fxc, Phone/Xbox device or sanitizer campaign was run. The DateTime Kind
+finding is source-inspected and remains open, with no runtime fix/new Kind regression in this edit.
+ \
+    --output-on-failure -j1
+```
+
+The recorded device is HiDef because XNA refuses a `Texture3D` under Reach. Running it found three defects
 nothing else could: the LZX encoder's missing end-of-stream trailer, which the runtime needs
 (`LzxEncoderTest.EveryCompressedPayloadEndsWithTheTrailerXnaRequires`), and two in the built
 families, among them an unqualified `VideoReader` name (`XNAPP-281`). All three pass as of

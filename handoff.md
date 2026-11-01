@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- XNB writer/interoperability guide reconciliation (2026-11-01, XNAP-12/82, XNAPP-191/192):
+  the page corrects format-aware processing, XNB-only routes, PCM8/schema-2 retention, manifest
+  version 10/per-reader versions, real-fxc evidence, eight writable versus 16 readable targets and
+  retained Compact Framework Phone/Xbox compiler witnesses. It distinguishes native-device
+  qualification and public-field harness assertions, qualifies compression/provenance/custom-
+  writer limits and uses private reproduction commands. DateTime Kind is now a documented open
+  XNB defect (§5.1), not an absent Sharp Runtime feature; the read-side guide receives that narrow
+  related correction. Existing targets build; related 456 native and eight LZX cases pass, five
+  XML-route cases pass, 16 independent parser reports match explicit manifests, and nine metadata
+  gates pass. No runtime/wire change or new Microsoft/real-fxc/device/sanitizer qualification.
 - XNB runtime-loader guide reconciliation (2026-11-01, XNB-42/42A/45/46): the page now
   describes typed/lazy built-in registration, current CNB/CNJ resolution, generic families and
   VideoReader. It distinguishes ReflectiveReader generic names and binary writer order from XML,
@@ -1733,6 +1743,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- XNB DateTime writing emits getTicksProperty() only (content/src/Xnb/XnbBuiltInWriters.cpp),
+  and DateTimeReader masks the top Kind bits and constructs DateTime(ticks). Sharp Runtime now
+  stores DateTimeKind (#1941), so their comments blaming an absent runtime capability are stale:
+  UTC/local Kind is lost even though the value can represent it. Source-inspected 2026-11-01;
+  TimeSpanAndDateTimeRoundTripThroughTheReader and DateTimeReaderExtractsTicksMaskingOutKindBits
+  assert ticks only, not Kind. Both XNB guides now state the gap. No runtime correction/new Kind
+  regression or fresh Microsoft DateTime binary measurement was added during this docs task.
 - ModelEffectCollection::Enumerator::getCurrentProperty and
   GamerCollection<T>::GamerCollectionEnumerator::getCurrentProperty throw InvalidOperationException
   when hasCurrent_ is false (before start/after end/reset). Original Microsoft XNA Graphics IL
