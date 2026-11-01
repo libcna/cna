@@ -35,6 +35,9 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Documentation inventory language correction (2026-11-01): `documents.md` is entirely in
+  English, including status labels, audit guidance and duplicate-review notes, on the owner's
+  request. Its tracked file list and review states are preserved; future updates stay in English.
 - C API math/3D-value contract reconciliation (2026-11-01):
   `docs/c-api/MATH_AND_3D_VALUES.md` is now a current value, geometry, curve and vertex contract
   rather than the accumulated CBIND-035 implementation plan. It records implemented outside-origin
