@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Android graphics documentation reconciliation (2026-11-01):
+  `docs/android-graphics-limitations.md` distinguishes earlier full builds/application runs from
+  the later SDL/platform-only dependency-audit build and the unrebuilt final pin. It records the
+  emulator detection rule, actual GLES float-readback regression and existing volume context-loss
+  defect without implying physical-device or SDLGPU qualification. The CMake default is checked
+  with an isolated script (Android → OPENGLES3), workflow/source references and local links are
+  verified. Documentation-only; no Android cross-build, emulator or physical-device run was
+  performed in this audit.
 - Native consumer-boundary documentation reconciliation (2026-11-01): `docs/binding.md` now
   describes the approved native C API/C ABI scope instead of prescribing language-specific
   binding architectures, packaging or implementations. It corrects single-game versus runtime

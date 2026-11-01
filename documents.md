@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 92 reviewed, 14 updated incidentally and awaiting their own audit, and 71 not yet
+Summary: 93 reviewed, 14 updated incidentally and awaiting their own audit, and 70 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -53,7 +53,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 
 - 🟡 **PENDING — updated incidentally** — [`docs/README.md`](docs/README.md)
 - ✅ **REVIEWED** — [`docs/alphatesteffect-support.md`](docs/alphatesteffect-support.md)
-- ⬜ **PENDING** — [`docs/android-graphics-limitations.md`](docs/android-graphics-limitations.md)
+- ✅ **REVIEWED** — [`docs/android-graphics-limitations.md`](docs/android-graphics-limitations.md)
 - ⬜ **PENDING** — [`docs/apple-platforms.md`](docs/apple-platforms.md)
 - 🟡 **PENDING — updated incidentally** — [`docs/ascii-post-process-effect.md`](docs/ascii-post-process-effect.md)
 - ⬜ **PENDING** — [`docs/audio-alsa.md`](docs/audio-alsa.md)
