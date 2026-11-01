@@ -2,91 +2,116 @@
 
 ## Status
 
-The museum's October 2026 follow-up found browser optional-format and canvas-lifetime defects,
-missing vertex texture fetch and a surface-free start. All are repaired or documented, and the
-museum's reruns of 2026-10-25 (WEBGPU on the GPU through a headless Weston, and the browser build)
-confirm them (`../museum-simulator/docs/CNA_FINDINGS.md`). This section and *Important limitations*
-hold the current status; older validation results below describe their tested configurations.
+Status: current native and browser contract, reconciled with the implementation, live capability
+queries and known-defect ledger on **2026-11-01**.
 
-The WebGPU renderer was activated by the project owner on **2026-07-12** and has been a **supported
-CNA graphics renderer** (`GraphicsRendererMaturity::Supported`) since 2026-10-17 -- one of the project's 10 public renderer identities, native (wgpu-native)
-on desktop and, since 2026-08-26, also in the browser through Emscripten's emdawnwebgpu port.
+`WEBGPU` is a **supported** CNA renderer identity. It uses pinned wgpu-native on desktop and
+Emscripten's `emdawnwebgpu` port in a browser. Current execution evidence covers Linux x86_64 and
+headless Chrome. Windows, macOS and linux-aarch64 native packages are configured and checksum-pinned
+but are not qualified on their target hardware.
 
-**Parity, stated precisely.** WebGPU has no known locally-actionable implementation gap against
-the currently targeted normal CNA/XNA graphics surface on the tested Linux/native and browser
-environments. That is not a project-wide parity certification: the Windows, macOS and
-linux-aarch64 packages are unverified (`WEBGPU-1`, *Important limitations*), and "verified" in
-this document means verified on Linux x86_64, natively and in headless Chrome, unless it says
-otherwise. Equivalence with EasyGL means equivalent observable XNA-facing behaviour, including
-renderer-side emulation where WebGPU has no matching state (`textureSampleBias` for
-`MipMapLevelOfDetailBias`, triangle-edge expansion for `FillMode::WireFrame`). The shared gaps
-that once qualified this claim are closed: vertex-stage texture sampling (`FX-109`, by the museum
-B8 repair) and `SpriteBatch.Begin`'s complete sampler state (graphics row 1119, by `SDLGPU-64`).
+**Parity, stated precisely.** WebGPU implements the targeted CNA/XNA rendering surface on the
+tested Linux/native and browser environments, including every stock effect, PBR extensions,
+instancing, render targets, custom and compiled-effect shader routes, and browser presentation.
+It is not project-wide parity certification: two shared presentation cases are known defects,
+several operations have explicit capability or route boundaries, optional features vary by adapter,
+and native platforms outside Linux x86_64 remain unqualified.
 
-The task record that built the renderer (`WEBGPU-1`..`WEBGPU-209`, 2026-07/10) is in Git history;
-source comments cite its rows as "WEBGPU-nnn".
+Applications must therefore use the live renderer capability profile, numeric limits and
+per-format queries. The explicit product defects and route-specific boundaries are in
+[Important limitations](#important-limitations). The completed campaign plan and its
+`WEBGPU-1` through `WEBGPU-209` row names remain in Git history rather than being repeated as a
+task diary here; `WEBGPU-1` still names the platform-qualification boundary.
 
-Select it with:
+## Sources of truth
+
+This page owns WebGPU-specific build, platform, rendering and lifecycle behavior. It deliberately
+delegates moving inventories and shared contracts:
+
+- [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md) is the concise
+  cross-renderer comparison.
+- [`renderer-capability-profiles.md`](renderer-capability-profiles.md) defines the live query model.
+- [`cross-renderer-parity-fixtures.md`](cross-renderer-parity-fixtures.md) owns the shared parity and
+  conformance corpora.
+- [`web-emscripten-graphics-limitations.md`](web-emscripten-graphics-limitations.md) owns the browser
+  toolchain, canvas, main-loop, threading and persistence contract.
+- [`shader-effect-vs-fx-bytecode.md`](shader-effect-vs-fx-bytecode.md) separates source
+  `ShaderEffect` from compiled XNA Effect bytecode; [`fx-compiled-effects.md`](fx-compiled-effects.md)
+  owns the bytecode runtime and its input restrictions.
+- [`sampler-state-support.md`](sampler-state-support.md),
+  [`occlusionquery-support.md`](occlusionquery-support.md) and the render-target documents own the
+  corresponding shared XNA contracts.
+- [`handoff.md` section 5](../handoff.md#5-known-bugs-and-limitations) is the sole current defect
+  ledger. A historical WebGPU paragraph must not override it.
+
+The implementation lives in `modules/renderers/webgpu/`; native dependency discovery is
+`cmake/ThirdPartyWebGPU.cmake`, and renderer selection is in `cmake/RendererSelection.cmake`.
+
+## Build and deployment
+
+Select the renderer at configure time:
 
 ```bash
-cmake -S . -B cmake-build-webgpu \
+cmake -S . -B cmake-build-webgpu -G Ninja \
   -DCNA_GRAPHICS_RENDERER=WEBGPU \
   -DCMAKE_BUILD_TYPE=Debug
 cmake --build cmake-build-webgpu --parallel 8
 ```
 
-CNA pins the native implementation to **wgpu-native v29.0.1.1**. By default CMake downloads the
-official prebuilt package for a supported host. For offline or reproducible builds, extract the
-official package yourself and configure:
+CNA pins native WebGPU to **wgpu-native v29.0.1.1**. With an empty `CNA_WEBGPU_ROOT` and
+`CNA_WEBGPU_AUTO_DOWNLOAD=ON` (the default), CMake selects the official host package, verifies its
+pinned SHA-256 before extraction and caches it in the build tree. An unknown package/version hash
+fails closed.
+
+For an offline or externally managed package, provide an absolute extracted root:
 
 ```bash
-cmake -S . -B cmake-build-webgpu \
+cmake -S . -B cmake-build-webgpu -G Ninja \
   -DCNA_GRAPHICS_RENDERER=WEBGPU \
-  -DCNA_WEBGPU_ROOT=/absolute/path/to/extracted/wgpu-native \
-  -DCNA_WEBGPU_AUTO_DOWNLOAD=OFF
-```
-
-The extracted root must contain `include/webgpu.h` (or `include/webgpu/webgpu.h`) and a
-`libwgpu_native` library below `lib/`. The existing CNA requirements still apply: the SDL3
-and SDL3_mixer submodules, plus the sibling `../sharp-runtime` checkout, must be
-present.
-
-For the verified Linux x86_64 layout, an extracted package may be placed at
-`vendor/wgpu-native/` with `include/webgpu/webgpu.h` and `lib/libwgpu_native.so`. The following
-clean offline sequence builds a self-contained demo directory:
-
-```bash
-cmake -S . -B cmake-build-webgpu \
-  -DCNA_GRAPHICS_RENDERER=WEBGPU \
-  -DCNA_WEBGPU_ROOT="$PWD/vendor/wgpu-native" \
+  -DCNA_WEBGPU_ROOT=/absolute/path/to/wgpu-native \
   -DCNA_WEBGPU_AUTO_DOWNLOAD=OFF \
-  -DCNA_BUILD_TESTS=OFF \
-  -DCNA_BUILD_EXAMPLES=ON \
-  -DCMAKE_BUILD_TYPE=Debug \
-  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
-cmake --build cmake-build-webgpu --target cna_demo_2d --parallel 8
-cd cmake-build-webgpu
-readelf -d ./cna_demo_2d | grep -E 'NEEDED.*wgpu|RUNPATH'
-ldd ./cna_demo_2d | grep libwgpu_native.so
-timeout 60s ./cna_demo_2d --smoke 120
+  -DCMAKE_BUILD_TYPE=Debug
+cmake --build cmake-build-webgpu --parallel 8
 ```
 
-The WebGPU CMake target links wgpu-native by filename despite the package library lacking an ELF
-SONAME, copies the runtime beside `cna_demo_2d`, and gives the executable a `$ORIGIN` runtime path.
-This enables the executable to use its sibling `libwgpu_native.so` rather than requiring the
-original package location at runtime.
+The root may contain the official `include/webgpu/webgpu.h` layout, the older
+`include/webgpu-headers/webgpu.h` layout or a directly discoverable `webgpu.h`, plus the matching
+library under `lib/` or `bin/`. Changing `CNA_WEBGPU_ROOT` in an existing tree clears the cached
+find result before resolving the new package.
 
-## Native window requirement and explicit fallback
+Native executables receive the wgpu-native runtime next to the target. Linux uses a sibling
+`libwgpu_native.so` through the target's runtime path; Windows receives `wgpu_native.dll`. An
+installed C++ consumer must preserve the exported `WebGPU::WebGPU` dependency described by the CNA
+package rather than linking an unrelated system version.
 
-CNA's native WebGPU renderer requires a platform window with a supported native surface.
-`PresentationParameters.HeadlessEXT` and SDL's `offscreen` video driver do not provide one.
-This renderer does not implement a surface-free backbuffer/presentation path. Offscreen
-`RenderTarget2D` rendering on an already-created windowed device is supported and is a
-different operation. `GraphicsRendererSelection.GetAvailable()` / `IsAvailable()` describe
-compiled-in identities, not a guarantee that a device can be created in the current environment.
+### Browser build
 
-An application willing to substitute another compiled-in renderer must opt in **before**
-constructing its first device:
+An Emscripten configuration does not download or copy wgpu-native. The same renderer sources link
+`--use-port=emdawnwebgpu`, which routes the unified WebGPU C API to `navigator.gpu`:
+
+```bash
+emcmake cmake -S . -B cmake-build-wasm-webgpu -G Ninja \
+  -DCNA_GRAPHICS_RENDERER=WEBGPU \
+  -DCNA_BUILD_EXAMPLES=ON \
+  -DCNA_BUILD_TESTS=OFF
+cmake --build cmake-build-wasm-webgpu --parallel 8 --target cna_demo_2d
+```
+
+The browser platform requirements, HTTP MIME rules, Asyncify ownership and headless-Chrome
+qualification boundary are in
+[`web-emscripten-graphics-limitations.md`](web-emscripten-graphics-limitations.md). Node can prove
+module loading, but it has no browser canvas and is not WebGPU execution evidence.
+
+## Surface and renderer selection
+
+Native WebGPU needs a real platform window that wgpu-native can turn into a surface. An SDL
+`offscreen` window and `PresentationParameters.HeadlessEXT` do not provide a surface-free
+backbuffer. Rendering into an offscreen `RenderTarget2D` after a windowed device exists is supported
+and is a different operation.
+
+Renderer availability means that an identity was compiled in, not that the current process can
+create its device. A program that permits substitution must install an explicit fallback before
+the first device is constructed:
 
 ```cpp
 const std::vector<CNA::GraphicsRendererType> fallback{
@@ -95,1568 +120,272 @@ CNA::GraphicsRendererSelection::SetFallbackChain(fallback);
 CNA::GraphicsRendererSelection::SetPreferred(CNA::GraphicsRendererType::WebGPU);
 ```
 
-Alternatively, `EnableAutomaticFallback(true)` tries the configured automatic order. A missing
-WebGPU surface is logged and recorded in `GetFallbackHistory()` as `InitializationFailed`,
-including the platform's diagnostic. `GetSelected()` remains WebGPU; `GetActive()` names the
-renderer that actually succeeded. Without fallback, the creation exception propagates and CNA
-does not silently change the renderer. Recovery after a failed construction remains possible.
-
-The native regression `MultiRendererFallbackTest.SurfaceFreeWebGpuFailureRecordsAnActionableFallback`
-checks both a windowless request and, when launched with `SDL_VIDEODRIVER=offscreen`
-and `CNA_TEST_OFFSCREEN_WINDOW=1`, an actual SDL offscreen window. The latter opt-in belongs
-to the platform-neutral test; only its launcher selects a native driver. The test verifies
-the failure history and exact SOFTWARE clear/readback pixels.
-This documents existing fallback behavior, not a claim that WebGPU itself rendered without a surface.
-
-## Web / browser target (Emscripten)
-
-`WEBGPU` is one renderer identity with two backends, not two renderers. The browser build reuses all
-of `WebGPURenderer.cpp` and every WGSL shader; five seams differ, each behind
-`#if defined(__EMSCRIPTEN__)` -- the three below, then the two after them:
-
-- **Surface.** `CreateSurface()` uses `WGPUEmscriptenSurfaceSourceCanvasHTMLSelector` targeting the
-  CSS selector `"#canvas"` (SDL3's Emscripten default canvas), instead of a native window handle.
-- **Async completion.** WebGPU is promise-based in the browser. The renderer keeps its single
-  synchronous adapter/device/readback path and, under Emscripten, requests
-  `WGPUCallbackMode_AllowSpontaneous` and yields with `emscripten_sleep()` (Asyncify, enabled
-  project-wide) so the browser event loop can settle the promise — instead of the native
-  `wgpuInstanceProcessEvents()` pump. The deepest of those yields, the adapter/device request inside
-  `GraphicsDevice` construction, unwinds 4,324–4,704 bytes in a Debug bundle, more than
-  Emscripten's default 4 KiB Asyncify stack, so a build that compiles `WEBGPU` in links its Asyncify
-  executables with `-sASYNCIFY_STACK_SIZE=65536` automatically; a `WEBGL2`-only build keeps the
-  default (its frame-boundary wait unwinds under 1 KiB).
-- **Toolchain.** `cmake/ThirdPartyWebGPU.cmake` has an `if(EMSCRIPTEN)` branch that links
-  Emscripten's **emdawnwebgpu** port (`--use-port=emdawnwebgpu`) with no wgpu-native download and no
-  runtime library to copy. The port's `webgpu/webgpu.h` is the same unified header wgpu-native v29
-  exposes, which is why the shared code compiles unchanged. (The older `-sUSE_WEBGPU=1` built-in was
-  removed in Emscripten 4.0.10 and is not used.)
-
-The remaining two seams (the fourth and fifth), which the first browser run required:
-
-- **Present.** `Present()` skips `wgpuSurfacePresent()` under Emscripten — emdawnwebgpu aborts on it
-  ("use requestAnimationFrame instead"). The canvas is shown automatically when `Game::RunLoop()`
-  yields to `requestAnimationFrame` each frame; the queue submit is the whole frame.
-- **Resize.** The browser sizes the surface from the `<canvas>` backing store, not from
-  `wgpuSurfaceConfigure()`, so on a canvas resize `wgpuSurfaceGetCurrentTexture()` returns the new
-  size while the configured depth/MSAA attachments still hold the old one. After acquiring the frame
-  texture the renderer resyncs `physicalWidth_/physicalHeight_` (and the depth/MSAA textures) to the
-  texture it actually got. One shared guard, `PlatformRendererSurfaceState`, was relaxed to accept
-  the `Web` surface, which is a canvas selector rather than a native window pointer.
-
-Select it under `emcmake` with `-DCNA_GRAPHICS_RENDERER=WEBGPU`. As of 2026-08-26 the **2D path runs
-in a real browser**: `cna_demo_2d` renders 120 SpriteBatch frames in headless Chrome (over the real
-AMD Vulkan WebGPU path — SwiftShader exposes no WebGPU adapter here) with audio, no WebGPU
-validation error, a mid-run canvas resize, and clean teardown. Reproduce with
-`scripts/run-webgpu-browser-test.sh`; `CNA_WEBGPU_DEMO=cna_house3d_demo` drives the 3D `BasicEffect`
-path (perspective, depth test, texturing) through the same harness, also green in-browser, and
-`CNA_WEBGPU_DEMO=cna_webgpu_{pbr3d,envmap3d,skinned3d,dualtexture3d,alphatest3d}_page` confirm every
-stock effect shader -- `PbrEffect`, cube-map `EnvironmentMapEffect`, bone-palette `SkinnedEffect`,
-`DualTextureEffect` and `AlphaTestEffect` -- compiles and renders in-browser
-(`WEBGPU-121`/`122`, both ✅). Since 2026-09-06,
-`CNA_WEBGPU_DEMO=cna_webgpu_compiled_effect_page` drives **compiled XNA Effects** through the same
-harness (13/13; needs `-DCNA_WEBGPU_COMPILED_EFFECTS=ON` on the Emscripten configure):
-
-```sh
-emcmake cmake -S . -B cmake-build-wasm-webgpu -DCNA_GRAPHICS_RENDERER=WEBGPU \
-      -DCNA_BUILD_EXAMPLES=ON -DCNA_WEBGPU_COMPILED_EFFECTS=ON \
-      -DFETCHCONTENT_SOURCE_DIR_FNA3D="$HOME/deps/libcna-FNA3D"
-cmake --build cmake-build-wasm-webgpu --target cna_webgpu_compiled_effect_page -j4
-CNA_WEBGPU_DEMO=cna_webgpu_compiled_effect_page scripts/run-webgpu-browser-test.sh
-```
-
-**Canvas lifetime (`WEBGPU-133`, museum follow-up October 2026).** The earlier lazy-discard
-repair only marked a canvas texture stale after backbuffer readback. Other operations also yield
-through Asyncify: offscreen reads, capability probes, shader validation and occlusion results.
-The browser may expire its current canvas texture at any such yield, including during render-pass
-replay. Reacquiring after readback also discarded untouched pixels in a subsequent partial draw.
-See the [WebGPU automatic-expiry contract](https://www.w3.org/TR/webgpu/#automatic-expiry-task-source).
-
-The browser now renders into one cached, owned backbuffer (recreated on size/format changes),
-also used for readback and MSAA resolves. `Present` acquires the canvas only after rendering,
-copies the backbuffer and submits without any callback wait. This adds one retained color texture
-and one GPU copy per browser presentation, not a second draw pass or a second normal frame submit.
-Native rendering keeps its direct surface path; before reconfiguration it must release its acquired
-surface output, otherwise wgpu-native aborts. The museum's own full browser tour remains pending.
-
-The focused regression checks readback/partial-draw preservation, capability probes, offscreen
-maps, reconfiguration, resize, MSAA and pending occlusion results. Build
-`cna_webgpu_canvas_lifetime_page` and run (Node22+, Chrome, Python3/Pillow):
-
-```sh
-tools/platform/run_gpu_tests_private.sh --exec node scripts/run-webgpu-canvas-lifetime-test.mjs cmake-build-wasm-webgpu
-```
-
-It also captures the actual presented canvas and checks every pixel exactly. Native
-default-WEBGPU builds register `WebGPU_CanvasLifetime` from the same fixture.
-
-Historical effect-page results (`WEBGPU-133`) were `PbrEffect` 5/5,
-`EnvironmentMapEffect` 4/4, `SkinnedEffect` 9/9, `DualTextureEffect` 4/4 and `AlphaTestEffect` 4/4;
-the 2D/3D smokes passed that checkpoint. (The earlier `SkinnedEffect` D2 failure was this same multi-read
-artifact, not a skinning bug: per-render probing confirmed the WeightsPerVertex=2 quad shifts right
-correctly.) The one remaining web-specific refusal is the `--webgpu-2d-validation` scene's
-`MinimizeEXT()` (a native-only `GameWindow` operation, not a renderer limit).
-
-**The five behaviours whose browser answer is not implied by the native one (`WEBGPU-196`).**
-`cna_webgpu_coverage_page` answers them in headless Chrome, one check per frame, reading pixels back
-rather than trusting an absence of errors -- **9/9**. `FillMode::WireFrame` draws edges for a 3D quad
-AND a `SpriteBatch` quad (1036 lit pixels against a solid 96000), which is only possible because the
-wireframe is an index expansion rather than a polygon mode and browser WebGPU has no polygon mode at
-all. A declaration whose elements are listed in the other order gives a byte-identical picture
-(`WEBGPU-155`). Position from stream 0 and colour from stream 1 both reach one draw (`WEBGPU-172`). A
-custom-WGSL `ShaderEffect` compiles under the browser's **Tint** -- a different compiler from
-native's Naga, which is why this needed a run at all -- and draws. And a device loss recovers, after
-the adapter fix described above, which this page is what found. Compiled (bytecode) Effects have
-their own page, `cna_webgpu_compiled_effect_page` (`webgpu_browser_compiled_effect_test.cpp`), which
-runs **13/13** in headless Chrome: the capability, a compiled vertex+pixel pair, uniforms, a
-Texture2D sampler, SpriteBatch with a custom compiled Effect, both passes of a multi-pass technique,
-a cube sampler, both slices of a volume sampler, a render target as the sampled source, and -- since
-`WEBGPU-208` -- a `SamplerState.MipMapLevelOfDetailBias` of 0 and of +1 selecting two different mip
-levels, which is the rung that proves Tint accepts and lowers the biased sample rather than merely
-that the translator emitted one. It
-settles two things the native suites cannot: whether **Tint** accepts the WGSL this route generates
-(native goes through Naga), and whether MojoShader's C parser and SPIR-V emitter behave compiled to
-WebAssembly. Until 2026-09-06 this paragraph said compiled Effects needed no browser run because
-`CNA_WEBGPU_COMPILED_EFFECTS` was refused at configure time under Emscripten; `WEBGPU-203` removed
-that refusal by translating the route's SPIR-V into WGSL.
-
-**Cross-backend pixel parity (`WEBGPU-123`).** `cna_diag_webgpu` builds the shared, renderer-agnostic
-`cross_renderer_diagnostic_scene` (one unlit vertex-colour triangle -> 64x64 RGBA8) for WEBGPU,
-native and Emscripten, exactly as `cna_diag_easygl`/`cna_diag_software` do.
-`scripts/run-webgpu-parity-test.sh` runs the Emscripten `cna_diag_webgpu` in headless Chrome,
-extracts its dump out of MEMFS, and diffs it against another backend's dump with `cna_diag_compare`.
-Against the native SOFTWARE CPU rasterizer's dump of the same scene the max per-channel difference is
-1 and the mean 0.139 across the whole frame (both have the identical 1682 non-black pixels) -- well
-inside the tool's default tolerance of 40. A native `OPENGL33` (EasyGL) dump, produced headless under
-Xvfb + Mesa `llvmpipe`, was compared too: WebGPU matches the CPU reference essentially exactly (0
-pixels over tolerance), whereas EasyGL differs from BOTH WebGPU and SOFTWARE at the same 57
-triangle-edge coverage pixels -- a GL fill-rule / pixel-centre convention difference at the triangle
-boundary, not a WebGPU defect (WebGPU is on the reference-matching side).
-
-## Automated native smoke test
-
-With `CNA_BUILD_TESTS=ON`, the WebGPU configuration registers `WebGPU_Native2D_Smoke` with CTest:
-
-```bash
-ctest --test-dir cmake-build-webgpu -R '^WebGPU_Native2D_Smoke$' --output-on-failure
-```
-
-The test runs `cna_demo_2d --smoke 120` when the host exposes Wayland or X11. It passed in 2.30
-seconds on the verified desktop. When neither `WAYLAND_DISPLAY` nor `DISPLAY` is available, the
-wrapper reports a clear skipped result rather than treating the lack of a desktop GPU/display as a
-renderer failure.
-
-## Running the full WebGPU test suite
-
-The WebGPU CTests create a real GPU-backed surface (wgpu-native needs a real adapter), so they need an
-X display with a real GPU behind it. Since GPU test isolation GTI-0001 the build no longer
-bakes one in: `CNA_TEST_DISPLAY` is empty by default and each test inherits the launcher's `DISPLAY`.
-The reproducible configuration and run:
-
-```bash
-cmake -S . -B cmake-build-webgpu \
-  -DCNA_GRAPHICS_RENDERER=WEBGPU \
-  -DCNA_BUILD_TESTS=ON \
-  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
-cmake --build cmake-build-webgpu --parallel 8
-tools/platform/run_gpu_tests_private.sh cmake-build-webgpu -L WebGPU --output-on-failure -j1
-```
-
-`run_gpu_tests_private.sh` provides a private rootful Xwayland inside a headless compositor: it has DRI3
-and the host's real GPU, and nothing appears on the desktop. **Do not point the tests at `:0`** — that is
-the owner's live desktop; it takes `-DCNA_TEST_DISPLAY=:0 -DCNA_TEST_ALLOW_LIVE_DISPLAY=ON` on purpose.
-A plain software `Xvfb` (no render node / no adapter) has **no** WebGPU adapter and the readback tests
-fail for that reason alone — that is an environment limitation, not a
-renderer defect. (`WebGPU_ChecksumVerification` and `WebGPU_PresentModeMapping` are pure CMake/unit
-tests and run with no display or GPU at all.)
-
-Known gap: outside these two configurations, a no-display / no-adapter host makes the GPU-backed tests
-FAIL rather than SKIP. A shared preflight that returns the CTest skip code (77) when no usable
-display/adapter is present is not yet wired for the whole suite (only the native smoke test skips
-cleanly today) — tracked as WebGPU test-infra follow-up.
-
-CNA enables compiler caching automatically when `ccache` is installed. The setting is applied
-before the sibling `sharp-runtime` project is added, so both CNA and `sharp-runtime` objects are
-reused across compatible build directories. Disable it with `-DCNA_USE_CCACHE=OFF`; existing custom
-compiler launchers are never overwritten. Even without `ccache`, reusing the same CMake build
-directory keeps the normal incremental object cache and avoids rebuilding unchanged
-`sharp-runtime` sources.
-
-## Verified native smoke gate
-
-`WEBGPU-125` was verified on Linux desktop on 2026-07-12 with the explicit offline package:
-
-```bash
-cmake -S . -B /tmp/cna-webgpu-125 \
-  -DCNA_GRAPHICS_RENDERER=WEBGPU \
-  -DCNA_WEBGPU_ROOT="$PWD/vendor/wgpu-native" \
-  -DCNA_WEBGPU_AUTO_DOWNLOAD=OFF \
-  -DCNA_BUILD_TESTS=OFF \
-  -DCNA_BUILD_EXAMPLES=ON \
-  -DCMAKE_BUILD_TYPE=Debug
-cmake --build /tmp/cna-webgpu-125 --target cna_demo_2d -j1
-cd /tmp/cna-webgpu-125
-timeout 60s ./cna_demo_2d --smoke 120
-```
-
-The executable cleared and presented 120 frames, then exited with status 0 in 2.10 seconds. No
-uncaptured WebGPU error, device-loss report or dynamic-loader failure was emitted. This verifies
-the native initialization, frame submission, present and normal teardown path only; it is not a
-pixel-correctness result for SpriteBatch or Texture2D.
-
-## SpriteBatch validation scene
-
-`cna_demo_2d` provides the deterministic coverage scene used to verify `WEBGPU-126`:
-
-```bash
-cd /tmp/cna-webgpu-125
-./cna_demo_2d --webgpu-2d-validation --smoke 120
-```
-
-It uploads `player.png` and displays source rectangles, tint/alpha blending, rotation, horizontal
-and vertical flips, linear and point filtering, and clamp/wrap/mirror address modes. The last
-three use UVs outside the texture's `[0, 1]` range so their visual results differ. During the run,
-the native window resizes from 800×600 to 960×540 and back, exercising logical presentation and
-surface reconfiguration. The command completes without WebGPU errors; a manual desktop screenshot
-review on 2026-07-12 confirmed the expected crop, tint/alpha, rotation, flips and sampler results.
-
-## Lifecycle recovery
-
-`WEBGPU-127` replaced the original unbounded adapter/device callback waits with
-`wgpuInstanceProcessEvents` polling and a 10-second timeout. This avoids the pinned v29 package's
-unimplemented `wgpuInstanceWaitAny` path, which aborts rather than waiting. A minimized or
-zero-size window now unconfigures the surface and releases the depth attachment; restoring it
-causes the normal surface configuration path to rebuild them. The 180-frame validation command
-above exercised resize, minimize, restore and normal teardown with exit status 0 and no WebGPU
-error.
-
-An **occluded** surface is different: it is configured and intact, but wgpu-native reports its own
-`Occluded` status (`0x00030001`) instead of a texture -- on macOS for any window the system does not
-show, which is every window while the session is locked. XNA's back buffer exists regardless, so
-such a frame renders into an offscreen texture of the surface's format, size and usage, and only the
-present is skipped (Apple M4 `AM4-089`): `GetBackBufferData` reads it and the frame's
-render-target work stays ordered as on a visible window. Only a surface that cannot be configured,
-or another non-success status, still drops the frame -- whole, every draw family (`AM4-078`).
-
-## Independent application integration and native 2D baseline
-
-`WEBGPU-130` integrated `../mobile-eggbert` (`WindowsPhoneSpeedyBlupi`, an independently-developed
-XNA-style game, not a CNA example) as a second, real-world consumer of this renderer, verified on
-Linux desktop 2026-07-12:
-
-```bash
-cd ../mobile-eggbert
-cmake -B cmake-build-debug \
-  -DCNA_GRAPHICS_RENDERER=WEBGPU \
-  -DCNA_WEBGPU_ROOT=/absolute/path/to/cna_graphics/vendor/wgpu-native \
-  -DCNA_WEBGPU_AUTO_DOWNLOAD=OFF
-cmake --build cmake-build-debug --target WindowsPhoneSpeedyBlupi --parallel 8
-cd cmake-build-debug
-../../cna/tools/platform/run_gpu_tests_private.sh --exec ./WindowsPhoneSpeedyBlupi
-```
-
-The build links `cna_renderer_webgpu` and copies `libwgpu_native.so` beside the executable
-with `$ORIGIN` first in `RUNPATH`, the same deployment shape `WEBGPU-128` verified for `cna_demo_2d`.
-On a real desktop session it reached its main menu automatically (~5 seconds after launch) with
-pixel-correct `SpriteBatch` rendering (title text, an animated character, a player-select panel, a
-Setup icon and a Play button), and a simulated click on the Play button correctly triggered its
-mission-start sequence — an animated cutscene with a filling progress bar and a cross-fade
-transition, rendered correctly frame-by-frame with no WebGPU validation errors. This exercises real
-multi-sprite, multi-frame animation and alpha-blended fade compositing beyond the synthetic
-validation scene above, independently confirming the SpriteBatch pipeline, Texture2D upload and
-resize/present paths against a second, unrelated codebase.
-
-`WEBGPU-131` closes the native 2D baseline on this evidence: `WEBGPU-124`–`WEBGPU-130` are all
-verified. (At the time of this 2026-07-12 record, 3D effects, render targets and MRT were still open;
-all have since shipped — see the "Important limitations" section below for the current boundary.)
-
-## GPU readback and a real translucency fix (2026-07-12)
-
-`WebGPURenderer::ReadBackbuffer()`/`GraphicsDevice.GetBackBufferData()` are implemented
-(`WEBGPU-91`/`55`): a row-aligned staging buffer, `wgpuCommandEncoderCopyTextureToBuffer` inside
-the frame's own command encoder, `wgpuBufferMapAsync` polling. Because a naive implementation could
-only ever observe the *previous* frame's content on a swapchain-backed target, `Present()` was
-refactored into a shared `EnsureFrameRendered()` so `GetBackBufferData()` can force an on-demand
-render of whatever is queued so far in the current `Draw()` call. A presentation that nobody reads
-does not copy the backbuffer into staging memory. The first read of a rendered generation performs
-one copy; repeated reads reuse that capture until a new draw generation invalidates it. The
-`WebGPU_Clear_Readback` and `WebGPU_ReadbackCost` CTests cover pixel correctness and this cost model.
-
-Writing that test's alpha case then found and fixed a real, previously-unknown bug (`WEBGPU-132`):
-the `SpriteBatch` pipeline's blend factors didn't match its own shader's non-premultiplied output,
-so any tint/texture alpha strictly between 0 and 255 was silently ignored for colour — a
-translucent sprite rendered fully opaque. Invisible to `WEBGPU-126`'s manual screenshot review;
-caught only by a pixel assertion.
-
-## First 3D draw path (2026-07-12)
-
-`DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()` (a `VertexPositionColor`, stride-16,
-unlit/untextured 3D draw — the path `GraphicsDevice.DrawUserPrimitives()`/
-`DrawUserIndexedPrimitives()` already route to directly) are implemented: a 128-float uniform
-buffer, a `colored3d.wgsl`
-shader, and a depth-aware pipeline cache. New `WebGPU_Colored3D` CTest proves genuine depth-buffer
-comparison (not "last draw wins"): a near and a far full-screen quad resolve to the near one
-regardless of draw order. Since `IGraphicsRenderer::DrawPrimitivesEx()`'s own default implementation
-falls back to `DrawColoredPrimitives()`, simple (unlit, untextured) `BasicEffect`/`Model.Draw()`
-calls now render via that fallback instead of throwing, though real lighting/texture/fog dispatch
-(`WEBGPU-66`) is still open. Writing this test's own depth-order check also found and fixed a
-separate, real gap: `WebGPURenderer::ApplyDepthStencilState()` was entirely unimplemented
-(silently inherited the interface's no-op default), so `GraphicsDevice.DepthStencilState` — the
-real XNA API surface almost every game/effect uses — had zero effect on this renderer; only the
-older `SetDepthTestEnabled()`/`SetDepthWriteEnabled()` convenience methods worked. Now implements
-the depth portion. Stencil ops (`WEBGPU-83`) are now implemented across **every 3D family**. Each
-`GetOrCreatePipeline*3D()` bakes the XNA `DepthStencilState` stencil parameters into
-`WGPUStencilFaceState` (via `ToWGPUStencilOperation` / `FillWGPUStencilState`), captures the state
-per draw in its `*DrawCommand` (`CaptureStencilStateEXT`), folds the read/write masks into that
-family's pipeline cache key (WebGPU keeps the masks as *pipeline* state; a disabled stencil folds a constant, so non-stencil draws keep their existing keys), and
-applies the reference dynamically per draw (`wgpuRenderPassEncoderSetStencilReference`). This makes
-a stamp-then-gate stencil sequence (e.g. `Always`/`Replace` then `Equal`/`Keep`) work within one
-render-target bind cycle. Three tests prove it on the real GPU: the shared
-`rendertarget_depthstencil_usage` acceptance test (colored3d route, its `stencilInRT`/
-`stencilPreserves` flags flipped true, discriminating check C2); the WebGPU-local
-`WebGPU_StencilFamily` test (Textured3D route — stamps then gates and asserts the gate is *rejected*
-outside the stamped region); and `WebGPU_StencilTwoSided` (`DepthStencilState.TwoSidedStencilMode` —
-a back-facing triangle picks up the `CounterClockwise*` ops, differential vs the two-sided=false
-control, matching the EasyGL cross-renderer parity contract). The two-sided front/back mapping
-(front = the primary/CW ops → `stencilFront`, back = the CCW ops → `stencilBack`) is therefore
-pixel-verified, not merely implemented.
-
-## PbrEffect (unskinned metallic-roughness BRDF)
-
-`pbr3d.wgsl` / `GetOrCreatePipelinePbr3D()` implement `PbrEffect`'s real glTF 2.0
-metallic-roughness BRDF (GGX distribution + Smith-Schlick-GGX visibility + Schlick Fresnel),
-ported from `EasyGLRenderer::EnsurePbrProgram()`'s GLSL shader. Rigid PBR accepts a single
-vertex stream declaring POSITION0/NORMAL0 as Vector3 and TEXCOORD0 as Vector2, with optional
-TANGENT0 Vector4, TEXCOORD1 Vector2 and COLOR0 Color. Offsets/order/padding are resolved from
-the declaration; missing tangents use the GL neutral input `(0,0,0,1)`. Canonical 48/60-byte
-streams retain resident GPU storage; other supported layouts are normalized at draw capture.
-The `PbrVertexContract_WEBGPU` regression also exercises buffered/indexed nonzero offsets.
-Base color, normal, metallic-roughness, emissive
-and occlusion maps are all supported, each falling back to a 1x1 default texture (flat normal /
-white, matching the EasyGL renderer's own "map absent" convention) when `PbrEffect` leaves that
-map unbound. Group 0 reuses the existing `Uniforms`/`LitLightParams` UBO shapes byte-for-byte
-(populated by the already-existing `FillExtUniforms()`/`FillLitLightUniforms()` helpers) plus one
-new small `PbrFactors` UBO for `MetallicFactor`/`RoughnessFactor`; group 1 is a new 5-texture +
-1-sampler bind group. New `WebGPU_Pbr3D` CTest hand-derives the exact GGX/Fresnel formula for a
-fixed light/view/normal geometry and independently confirms the observed pixel values are within
-a few 8-bit units of the analytic prediction (after accounting for the sRGB swapchain's gamma
-encoding), plus qualitative ambient/facing/back-facing/normal-map/metallic-vs-dielectric checks.
-
-**Scope**: unskinned only, at the time this shader was added. Fog and alpha-test are deliberately
-not wired into `pbr3d.wgsl`: every other WebGPU 3D shader already defers fog identically, and
-`PbrEffect::FillGpuDrawParams()` never sets `GpuDrawParams::alphaTest` away from its always-pass
-default, so that branch would be permanently dead code. `SkinnedPbrEffect` (stride 68) is now
-implemented separately — see "SkinnedEffect and SkinnedPbrEffect (bone-palette skinning)" below.
-
-## SkinnedEffect and SkinnedPbrEffect (bone-palette skinning)
-
-`skinned3d.wgsl`'s four shader-module variants (per-pixel-lit/per-vertex-lit ×
-without/with vertex colour) plus `skinned_pbr3d.wgsl` close this renderer's former "no skinning
-shader at all" gap, ported line-for-line from
-`EasyGLRenderer::EnsureSkinnedProgram()`/`EnsureSkinnedVertexLitProgram()`/
-`EnsurePbrSkinnedProgram()`. Bone-palette skinning (up to 72 bones, a new `SkinningParams` UBO —
-a `WeightsPerVertex` header plus `array<mat4x4f, 72>`) matches Task 895's convention: only the
-first `WeightsPerVertex` (1, 2, or 4) weight/index pairs are summed. Because a WebGPU pipeline must
-supply every vertex-shader-referenced attribute location from its own vertex buffer layout (unlike
-`EasyGLRenderer::ApplyLayout`'s own "leave attribute 5 unbound" precedent for stride 52),
-the stride-52 (`VertexPositionNormalTextureSkinned`) and stride-56 (with a trailing per-vertex
-`Color`, CNB-67) cases each get their own shader module pair, mirroring this renderer's existing
-`texturedShader_`/`coloredTexturedShader_` precedent for the analogous stride-20/24 split; the
-vertex-colour gate multiplies the *final* combined diffuse+specular output, applied after the
-specular add (matching the EasyGL reference's own fix for that exact ordering trap).
-`skinned_pbr3d.wgsl` (stride 68, `VertexPositionNormalTangentTextureSkinned`) reuses the same
-bone-palette vertex transform (extended to also skin Tangent) feeding `pbr3d.wgsl`'s own BRDF
-fragment stage unchanged, and reuses `pbrBindGroupLayout1_` (the 5-texture group) unchanged for its
-own group 1. No vertex colour on the PBR+skinning combo (matches the EasyGL reference, which has
-none either) and no fog/alpha-test on any of the new shaders (same deliberate deferral as every
-other WebGPU 3D shader — `SkinnedEffect`/`SkinnedPbrEffect` never set `GpuDrawParams::alphaTest`
-away from its always-pass default).
-
-New `WebGPU_Skinned3D` (9 checks) and `WebGPU_SkinnedPbr3D` (5 checks) CTests both pass 100%: a
-hand-derived NDC-shift check (two bones, one identity and one a translation, summed under a
-uniform-scale-then-perspective-divide argument worked out algebraically, not measured) proves both
-the bone-palette translation genuinely reaches the vertex shader *and* that `WeightsPerVertex`
-correctly gates which bones contribute; ambient/facing/back-facing checks prove real lighting
-reaches both shader families; a `VertexColorEnabled` check (pure black per-vertex colour, mirroring
-`modules/renderers/easygl/examples/easygl_skinnedeffect_vertexcolor_test.cpp`'s own convention) proves the stride-56 colour
-path; and a `PreferPerPixelLighting` check (Gouraud-averaged vs fresh-per-fragment specular at a
-triangle seam) proves the vertex-lit/pixel-lit dispatch selects two genuinely different shaders.
-
-## RenderTarget2D (single-target, 2026-07-18)
-
-`WebGPURenderTargetRenderer` (`WEBGPU-53`/`54`) is this renderer's first real off-screen render
-target: its own colour texture, always created in the swapchain's own chosen format
-(`surfaceFormat_`) rather than `Texture2D`'s `RGBA8Unorm` so every existing
-`GetOrCreatePipeline*3D()` (each hardcodes `target.format = surfaceFormat_` at pipeline-creation
-time) renders into it unchanged, with zero new pipeline-cache dimensions; and its own depth
-texture created in the exact format the requested `DepthFormat` maps to (`WEBGPU-39`,
-`MapDepthFormatEXT()`: `None`→no depth texture, `Depth16`→`Depth16Unorm`, `Depth24`→`Depth24Plus`,
-`Depth24Stencil8`→`Depth24PlusStencil8`, the same per-value mapping EasyGL does). The pass's depth attachment, the pipeline's `depthStencil` state (null for `None`,
-where no depth test happens) and the stencil load/store ops (named only on a stencil-carrying format)
-are all threaded from that real format via `replayDepthFormat_`/`replayDepthHasStencil_`, and the
-format is part of the 3D and sprite pipeline keys so a pass with a different depth format gets its own
-pipeline. Observably verified by `WebGPU_DepthFormat`.
-
-The trickier part was this renderer's existing single-deferred-render-pass-per-frame architecture:
-every queued `Clear()`/3D-draw/`SpriteBatch` command normally collapses into one render pass
-against the swapchain, lazily, the first time something actually needs the frame to be real
-(`EnsureFrameRendered()`). `SetRenderTarget2D()` now eagerly flushes whatever was queued for the
-OUTGOING target the instant the target actually changes (closing out that render pass immediately
-via the new `RenderPendingDrawsToRenderTarget()`, and starting fresh accumulation for the new
-target) rather than tagging every one of this renderer's ~10 `Queue*Draw()` families with a target
-and replaying them grouped-by-target at final-flush time — the smaller change for a renderer with
-no pre-existing per-draw deferred/replay infrastructure to extend.
-
-A `RenderTarget2D` sampled back as an ordinary texture (`SpriteBatch`/`BasicEffect.Texture`) needed
-one more fix: every `Queue*Draw()` previously resolved its bound texture with an *unchecked*
-`static_cast<const WebGPUTextureRenderer*>`, safe only because `WebGPUTextureRenderer` used to be the
-only `ITextureRenderer`-implementing class this renderer had. `WebGPURenderTargetRenderer` is a
-second, unrelated one, so this became a real hazard the first time a `GpuDrawParams::textureN`
-actually pointed at one — fixed by introducing `IWebGPUSamplable` and a `dynamic_cast`-based `ResolveSamplable()`
-helper everywhere a texture pointer is stored, so an incompatible type now safely resolves to
-"unbound" instead of undefined behaviour.
-
-Mip-chain regeneration was deferred here until `WEBGPU-164` (2026-09-05) — `CreateRenderTarget2D()`
-threw a clear error for `mipMap=true` rather than under-delivering a chain the XNA layer had already
-promised. It is implemented now: see *Mip-mapped RenderTarget2D* below. MSAA (`WEBGPU-58`) is implemented
-and verified end-to-end as of 2026-07-18: the renderer-global `sampleCount_`,
-`ApplyMultiSampleCount()`'s empirically-probed clamped-return-value contract, and
-`WebGPURenderTargetRenderer`'s unconditional mirroring of that global sample count all work, and a
-genuine multisample-resolved render now works through the real `GraphicsDevice`/`BasicEffect` draw
-path for both the backbuffer and a `RenderTarget2D` (`WebGPU_Msaa`, 6/6). The initial investigation
-found the MSAA infrastructure itself was already correct; the reported failures (Checks B/D-2/E)
-turned out to be a test-authoring defect in `modules/renderers/webgpu/examples/webgpu_msaa_test.cpp` — its diagonal triangle
-relied on `BasicEffect`'s default `RasterizerState` (`CullCounterClockwiseFace`) without the
-`RasterizerState::CullNone` override every other WebGPU 3D test in this suite sets, and the
-triangle's winding is a genuine XNA back face under this renderer's (independently correct)
-`ToWGPUCullMode()` mapping, so it was being legitimately backface-culled regardless of MSAA. See
-`WEBGPU-58`'s plan row (Git history) for the full investigation. `WebGPU_RenderTarget2D` (8 checks) verifies a Clear-only round
-trip and a real `BasicEffect` draw round trip via `GetData()`, a depth+stencil-tested target (a
-farther red quad loses to a nearer green one, with a genuine `ClearOptions::Stencil` clear — this
-also closed `WEBGPU-8`/`9`'s previously-unexercised stencil-attachment gap), sampling all 3 targets
-back through `SpriteBatch`, and — the architecture's critical proof — that a render-target-targeted
-`Clear()` sandwiched between two backbuffer `Clear()`/readback calls does not leak into the
-backbuffer's own render pass.
-
-## EnvironmentMapEffect and real instancing (2026-07-18)
-
-`env_map3d.wgsl` / `GetOrCreatePipelineEnvMap3D()` (`WEBGPU-25`/`36`/`74`) close this renderer's
-former "no cube-map shader at all" gap, with the formula of `EasyGLRenderer::
-EnsureEnvMapped3DProgram()`'s GLSL. Stride 32
-(`VertexPositionNormalTexture`, the same layout as `lit_textured3d.wgsl`). Group 0 binding 0 is a
-new `Transform` UBO (mvp+world — WebGPU has no push constants); binding 1 is `EnvMapParams` (eye
-position, diffuse, emissive+amount, all 3 directional lights, envMapSpecular+Fresnel, fog, and a
-CPU-precomputed 3×3 normal matrix, since WGSL has no `inverse()`). Group 1 is a new 3-binding shape
-(sampler + `texture_2d` + `texture_cube`), mirroring `dualTextureBindGroupLayout_`'s own 3-binding
-shape with the second `texture_2d` swapped for a `texture_cube`. Getting a cube map to sample at all
-required a new, minimal `WebGPUTextureCubeRenderer` (`WEBGPU-56`/`113`) — this renderer previously had
-no `TextureCube` support whatsoever; this cube-sampling slice was deliberately minimal at the time
-(no `GetData()`, no `RenderTargetCube`, mip regeneration untested), all of which have since been added
-(`GetData` in `WEBGPU-113`, `RenderTargetCube` render targets + mip regeneration in `WEBGPU-114`, plain
-mip generation in `WEBGPU-52`). `WebGPU_EnvMap3D`
-(4/4): hand-derived geometry (`View`=`World`=Identity, quad at z=0.5, `Normal`=(0,0,-1)) makes the
-reflection vector land exactly on `CubeMapFace::NegativeZ` — proven by painting each of the 6 faces
-a distinct solid colour and asserting the correct one appears (not just "some colour"); a
-differential Fresnel check (identical scene, only `FresnelFactor` differs) proves the Fresnel term
-genuinely gates the blend rather than being present-but-inert; `EnvironmentMapAmount=0`
-independently proves the amount also gates it; the indexed-draw dispatch path is exercised too.
-
-`instanced3d.wgsl` / `GetOrCreatePipelineInstanced3D()` / `DrawInstancedPrimitivesEx()`
-(`WEBGPU-27`/`38`/`68`) is the other half: a genuine second `WGPUVertexStepMode_Instance` vertex
-buffer binding carrying a per-instance mat4 world transform. Unlike the bind-group-shaped families above, a second vertex stream
-needs **no new bind group layout at all** in WebGPU (vertex buffers are set via
-`wgpuRenderPassEncoderSetVertexBuffer()`, entirely separate from bind groups), so this reuses
-`coloredBindGroupLayout_`/`coloredPipelineLayout_` unchanged; `[0..15]` of that UBO is
-View×Projection rather than a full MVP, since world comes from the per-instance stream (matching
-`FillInstancedPushConst()`'s own deliberate choice to ignore the caller's own `World` matrix
-entirely). This renderer's pipeline cache key genuinely includes both the per-vertex and per-instance buffer strides, so the GPU-side
-binding always matches whatever the caller's buffers actually declare. `params.instanceVb ==
-nullptr` falls back to a real `DrawIndexedPrimitivesEx()` draw rather than throwing. `WebGPU_Instanced3D` (5/5, tested directly at the
-`IGraphicsRenderer` level, matching `modules/renderers/directx9/examples/directx9_instanced_test.cpp`'s own established
-test-authoring convention for this API): 3 instances in ONE draw call each paint their own small
-quad at their own independently-predicted screen location with the shared `DiffuseColor` — proving
-the per-instance buffer is genuinely read per-instance, not e.g. always instance 0 or a hardcoded
-2-instance special case — plus an untouched-background check and the null-`instanceVb` fallback.
-
-## RenderTargetCube (2026-07-18)
-
-`WebGPURenderTargetCubeRenderer` (`WEBGPU-114`) is this renderer's first real render-into-a-cube-face
-support — before this, `CreateRenderTargetCube()` was `IGraphicsRenderer`'s own nullptr-returning
-default. It owns ONE shared 6-array-layer colour `WGPUTexture` (the same layout
-`WebGPUTextureCubeRenderer`, WEBGPU-56/113, already established for a plain `TextureCube`) plus ONE
-shared `size`×`size` depth texture — created in the exact format the requested `DepthFormat` maps to
-(`WEBGPU-39`, `MapDepthFormatEXT()`; `None` allocates no depth texture at all) — reused across all 6
-faces, safe because only ONE face is ever bound/rendered-into at a time. Each face gets its own
-`WGPUTextureViewDimension_2D` view (the render-pass colour attachment); one further
-`WGPUTextureViewDimension_Cube` view spans all 6 layers for sampling back.
-
-Making a cube face act as its own distinct "target identity" for this renderer's pre-existing
-eager-flush-on-target-switch design (see the `RenderTarget2D` section above) needed generalising
-that design's previously `RenderTarget2D`-only switch logic: `WebGPURenderer::
-FlushCurrentRenderTarget()` is a new shared entry point (factored out of the old inline
-`SetRenderTarget2D`-only if/else) that flushes whichever of {backbuffer, a bound `RenderTarget2D`,
-a bound `RenderTargetCube` face} is currently active, via a new `currentRenderTargetCubeFace_`/
-`currentRenderTargetCubeFaceIndex_` pair mirroring the pre-existing `currentRenderTarget_` field.
-This means switching directly between two DIFFERENT faces of the SAME (or a different)
-`RenderTargetCube` — not just face↔backbuffer — still correctly flushes the outgoing face's own
-render pass first, verified directly (`WebGPU_RenderTargetCube` Check A: all 6 faces bound
-face-to-face with no intervening backbuffer switch, each reading back its own distinct `Clear()`
-colour).
-
-Sampling a `RenderTargetCube` back as `EnvironmentMapEffect.EnvironmentMap` needed one more small
-piece: a new `IWebGPUCubeSamplable` interface (the cube-map sibling of the pre-existing
-`IWebGPUSamplable`), implemented by BOTH `WebGPUTextureCubeRenderer` and
-`WebGPURenderTargetCubeRenderer`, resolved via a safe `dynamic_cast` (`ResolveCubeSamplable()`).
-Before this, `GpuDrawParams::envMap` was resolved via a `dynamic_cast` to the concrete
-`WebGPUTextureCubeRenderer` type ONLY, so a `RenderTargetCube` (a different concrete class) bound as
-an env map would have silently failed that cast and rendered the 1x1 white-cube fallback instead of
-its own real content — this is CNA's primary real-world `RenderTargetCube` use case (dynamic
-reflection/environment maps), so this wiring matters as much as the render-into support itself.
-
-Per-face MSAA and `mipMap=true` mip regeneration are both implemented (`WEBGPU-114`, closed
-2026-08-27). MSAA: when the renderer's global `sampleCount_` > 1 each face renders into its own
-multisampled colour attachment and resolves into that face's single-sample layer — SIX separate
-single-layer MSAA textures, because WebGPU forbids a multisampled ARRAY texture — with the shared depth attachment allocated at the same sample count;
-`GetMultiSampleCount()` reports the applied count, mirroring `RenderTarget2D` (the per-instance
-`multiSampleCount` argument is not read — the cube multisamples only when the backbuffer was created
-multisampled). mipMap: the colour texture carries a full mip chain and each face is regenerated from
-its resolved level 0 after that face's render pass (`GenerateMipsForLayer`, the `WEBGPU-52`
-downsample cascade, parameterized by colour format so a `surfaceFormat_`/BGRA cube target works);
-MSAA and mipMap compose — the resolve writes level 0, then the cascade downsamples it — and `GetData`
-accepts levels 0..`LevelCount`-1. `WebGPU_RenderTargetCube` (18/18) verifies: 6-face direct
-face-to-face switching, a real `BasicEffect` 3D draw into a face, the `EnvironmentMapEffect` sampling
-round trip above, the critical "an intervening cube-face-targeted `Clear()` must not leak into the
-backbuffer's own render pass" architecture check (mirrors the `RenderTarget2D` section's own Check E),
-a mipMap=true chain with a genuine level-1 downsample (Check E), 4x per-face MSAA resolve with no
-cross-face leak and blended edge pixels (Check F), and MSAA+mipMap combined.
-
-A finding surfaced while writing this test — that `QueueSprite()` computed every sprite's clip-space
-geometry from the BACKBUFFER's logical dimensions unconditionally, never from the currently-bound
-render target — **has since been fixed** (`QueueSprite` now derives clip space from the
-bound target's own dimensions; the letterboxed-backbuffer edge was closed by `WEBGPU-141`(A)). A
-`SpriteBatch.Draw()` into an off-screen `RenderTarget2D`/cube face now maps 1:1 into that target's own
-pixels, verified by `WebGPU_SpriteBatch_RenderTarget`. (The historical note that
-`webgpu_rendertargetcube_test.cpp` Check C paints with a 3D draw to avoid this remains true of that
-test, but is no longer a workaround for a live bug.)
-
-## Real mip generation for Texture2D/TextureCube (2026-07-18)
-
-`WEBGPU-52`: previously, `mipMap=true` on a plain `Texture2D`/`TextureCube` only pre-allocated
-empty GPU storage for levels 1+ — no content was ever generated from level 0. Investigating the
-row's own originally-suggested technique (`wgpuCommandEncoderCopyTextureToTexture`) confirmed it is
-a raw same-size copy in this project's pinned wgpu-native v29.0.1.1 — there is no
-`vkCmdBlitImage`-equivalent filtered-downsample primitive in wgpu-native at all. The real technique
-other WebGPU-based engines use, and the one implemented here
-(`WebGPURenderer::GenerateMipsForLayer()`, wrapped by `GenerateMips2D()`/
-`GenerateMipsCubeFace()`): one render pass per mip level, each drawing a full-screen triangle (the
-standard 3-vertex, no-vertex-buffer `@builtin(vertex_index)` trick — no `SpriteVertex`-style vertex
-buffer needed) that samples the PREVIOUS level through a real `WGPUFilterMode_Linear` `WGPUSampler`
-into the NEXT level's own single-mip-level render-attachment view. This is a genuine filtered
-downsample, not a nearest-neighbor copy — proven directly by `webgpu_mipgen_test.cpp`'s hard-edged
-red/blue stripe check, whose boundary destination pixel reads back an exact `(128,0,128)` 50/50
-blend, not a hard unblended edge.
-
-**Important, deliberate, honestly-documented divergence from FNA and every sibling CNA renderer.**
-`EasyGLRenderer` only ever regenerates mip content for a RENDER
-TARGET being unbound (`glGenerateMipmap`-on-unbind, matching real FNA3D
-`OPENGL_ResolveTarget` semantics) — neither it, nor real FNA/XNA itself, auto-generates mip
-content for a PLAIN `Texture2D`/`TextureCube` at all (mip levels beyond 0 are always
-user/content-pipeline-supplied via explicit per-level `SetData()`, matching how a real XNA
-content-pipeline-processed `.xnb` already carries every level pre-baked at content-build time —
-there is no runtime "generate the rest from level 0" API anywhere in real XNA/FNA for a plain
-texture). This WebGPU renderer's mip generation DOES generate real content automatically instead,
-triggered whenever content is written to level 0: `WebGPUTextureRenderer::UpdatePixels()` (covers
-both the constructor's initial pixel upload AND any later `Texture2D::SetData(level=0,...)` call,
-since that XNA-layer method always re-uploads the whole level 0 via a CPU-side shadow buffer, even
-for a partial-rectangle update) and `WebGPUTextureCubeRenderer::SetData(face, level=0, ...)`
-(per-face, on every call). This makes WebGPU's plain-texture mip behaviour strictly BETTER (never
-garbage/undefined content at level>0) but genuinely DIFFERENT from FNA and every other CNA renderer
-for the identical public `Texture2D`/`TextureCube(mipMap=true)` constructor call. A later explicit
-`SetData(level>0,...)` call is not retroactively protected — a subsequent level-0 write will
-regenerate over it, exactly the same interaction a real mip chain has with itself.
-
-`RenderTarget2D`/`RenderTargetCube` mip regeneration (the actual FNA-equivalent feature, matching
-EasyGL's own render-target-only precedent) remains a separate, already-tracked, still-open
-scope cut (see the `RenderTarget2D`/`RenderTargetCube` sections above) — this section's own work
-does not touch either render-target class.
-
-`webgpu_mipgen_test.cpp` (`WebGPU_MipGen` CTest, 9/9): a hard-edged red/blue vertical stripe
-(deliberately NOT power-of-2-aligned with the 2:1 downsample's texel pairing, so a straddling
-destination pixel actually exists) proves the genuine linear blend above for both `Texture2D` level
-1 and one `TextureCube` face's level 1; a chain-downsampled level 2 (sourced from level 1, not
-level 0, proving the per-level loop chains correctly) has real, plausible, non-garbage content; and
-`mipMap=false` construction with non-empty pixel data does not crash.
-
-## Shader sources and whole-set validation (WEBGPU-28)
-
-Every WGSL shader source lives in one place -- `include/CNA/Internal/Renderers/WebGPU/webgpu_shaders.hpp`
--- as `inline constexpr char k*[]` constants (`kSprite`, `kColored`, `kPbr`, `kSkinnedPbr`, `kMipBlit`,
-…). `WebGPURenderer.cpp` references them by a `const char*` alias where each literal used to be inline,
-so the compiled shader bytes are unchanged (the whole pixel suite still passes). A `kDirectShaders`
-registry lists the 18 directly-compiled sources; `kPbr`/`kSkinnedPbr` are marked templates expanded at
-runtime by `ExpandPbrVertexColourWgslEXT` into a bare and a vertex-colour variant.
-
-`WebGPURenderer::ValidateAllShadersEXT()` compiles the WHOLE set (22 modules: the 18 direct sources plus
-the 4 Pbr/SkinnedPbr variants) through the device inside a `WGPUErrorFilter_Validation` error scope and
-returns the number that failed. Because most stock shaders are already compiled at device init
-(`ConfigureSurface`), the value this adds is catching an error in a shader a given scene never draws --
-the lazy mipBlit shader, or any unused effect -- as a single deterministic failure rather than at that
-effect's first pipeline creation. It runs at device init when `CNA_WEBGPU_VALIDATE_SHADERS` is set (off
-by default -- compiling ~24 modules is not free), and is exercised unconditionally by the
-`WebGPU_ShaderValidation` CTest.
-
-## Implemented baseline
-
-The initial renderer is deliberately useful rather than an empty scaffold. It currently provides:
-
-- renderer selection and `CNA_RENDERER_WEBGPU` build wiring;
-- native SDL3 surface creation for Win32, macOS/Metal, Linux/X11 and Linux/Wayland, with an
-  Android native-window path compiled when the required SDL property is available;
-- instance, adapter, device and queue initialization with device-lost and uncaptured-error
-  reporting;
-- surface capability selection, resize reconfiguration and FIFO/Immediate/Mailbox present-mode
-  selection from CNA's swap interval;
-- back-buffer acquisition, command encoding, color/depth/stencil clears, submission and present;
-- RGBA8 `Texture2D` creation, level uploads and mip-chain allocation;
-- 16-bit and 32-bit index-buffer uploads plus generic vertex-buffer uploads;
-- a WGSL SpriteBatch pipeline with tint, source rectangle, destination rectangle, rotation,
-  origin, layer depth, transforms, flips, linear/nearest filtering and wrap/clamp/mirror sampler
-  caching;
-- CNA logical-presentation modes and window/logical coordinate conversion.
-
-## Semantic vertex layouts for the stock 3D families (2026-09-04, `WEBGPU-155`–`159`)
-
-Until `WEBGPU-155` this renderer chose a stock shader family, and that family's whole
-`WGPUVertexAttribute` array, **from the vertex buffer's byte stride**. A stride is not a layout:
-
-* the same semantic content is legally described at several strides (padding, an unused element, a
-  different vertex struct) — a `Position+Colour` record padded to 32 bytes was read as
-  `VertexPositionNormalTexture`, so its declared colour was dropped and twelve padding bytes were lit
-  as a normal;
-* the same stride legally describes different semantic content — 24 bytes is
-  `VertexPositionColorTexture` *and* the `Position+Normal` vertex Microsoft's own Primitives3D sample
-  uses, which must be lit;
-* strides the table did not list were refused outright — including 36, which is exactly what the
-  stock XNA `ModelProcessor` emits for a mesh with a colour channel, and 40, the canonical
-  `PositionNormalDualTexture`.
-
-The dispatch now asks the **declaration**. `WebGPURenderer::SelectStockVertexShapeEXT()` picks the
-family from the semantics the declaration names plus the effect state, and
-`ResolveStockVertexLayoutForDrawEXT()` binds each of that family's inputs by `(usage, usageIndex)` at
-the declared element's own offset and format. The stride survives as exactly one thing: the
-pipeline's `arrayStride`. The resolver itself is renderer-neutral
-(`modules/graphics/include/CNA/Internal/Graphics/StockVertexSemantics.hpp`), so a second renderer
-adopting it gets the same bindings from the same declaration rather than a second interpretation.
-
-Element **order** is unrestricted, deliberately: XNB model data routinely orders
-`TextureCoordinate` before `Normal`, and a renderer that keys on list position reads such a mesh
-from the wrong bytes. What is still checked, before anything native exists, is the **format** of each
-semantic the selected program consumes (`RequireDeclarationMatchesStockProgram`).
-
-A semantic a program declares but the declaration does not supply — `DualTextureEffect`'s
-`TEXCOORD1` on a single-UV mesh, a colour input on a mesh with no colour channel — reads a shared
-16-byte **neutral record** holding `(0, 0, 0, 1)`, bound at vertex-buffer slot 1 with per-instance
-step so every vertex of the single-instance draw reads it. That value is not a convenience: D3D9,
-which XNA is defined against, fills a vertex register's missing components with `(0, 0, 0, 1)`, and
-OpenGL's disabled generic vertex attribute — what the reference renderer leaves such an input at —
-has the same default.
-
-Shader changes that came with it: the two lit families gained a colour input at `@location(3)`
-(XNA's `VSBasicVertexLightingVc` family — the vertex colour multiplies the diffuse result *before*
-the specular term is added), and both dual-texture families gained `TEXCOORD1` so the overlay is
-sampled with its own UV set.
-
-**What was deliberately NOT converted**, and still selects its attribute array from the stride with
-the declaration-fidelity guard's refusal keeping it safe: the **skinned** and **PBR** routes. `WEBGPU-177`
-owns their conversion. A declaration those routes cannot represent is refused by name, exactly as
-before. (The **instanced** route was on this list until `WEBGPU-172` converted it — see below.)
-
-Verified by the shared EasyGL↔WebGPU parity fixtures (`WEBGPU-207`, see
-[`cross-renderer-parity-fixtures.md`](cross-renderer-parity-fixtures.md)) plus the renderer-neutral
-`VertexDeclarationLayoutTests`, where WebGPU moved from the refusing arm to the translating one.
-
-## Compiled XNA Effects (2026-09-06, `WEBGPU-166`-`171`)
-
-`Effect(GraphicsDevice&, byte[])` -- the XNA Effect Framework binary a game's `.xnb` carries --
-runs on this renderer **natively**, behind the off-by-default `CNA_WEBGPU_COMPILED_EFFECTS` option
-(MojoShader is a fetched dependency the renderer does not otherwise need, the same arrangement
-SDLGPU and EasyGL use). It passes the shared `FX-060` conformance suite with
-no skips -- 66/66 compiled-effect tests on 2026-10-29, native and WGSL routes -- and
-`GraphicsCapability::CompiledEffects` reports true at the `GraphicsDevice` seam.
-
-**The route.** XNA/D3D9 bytecode -> MojoShader's portable `spirv` profile -> a combined-image-sampler
-rewrite -> `WGPUShaderSourceSPIRV`. There is no MojoShader WebGPU adapter, so the nine-function
-`MOJOSHADER_effectShaderContext` is CNA's own.
-
-**The one translation step, and why it is needed.** MojoShader's Vulkan-mode SPIR-V emits one
-`OpTypeSampledImage` global per D3D9 sampler register -- Vulkan's combined-image-sampler shape.
-**WGSL has no such type**: a texture binding and a sampler binding are always two separate
-resources, and naga's SPIR-V frontend refuses to load a combined global. Everything else MojoShader
-emits passes naga untouched, so `SpirvCombinedSamplerSplit` (in the shared MojoShader module,
-because it depends on no graphics API) is the whole gap: it rewrites each combined global into an
-image variable plus a sampler variable and rebuilds the combined value with `OpSampledImage` under
-the original load's result id, which keeps every downstream instruction valid with no renumbering.
-
-**Bindings.** MojoShader's four fixed descriptor sets ARE core WebGPU's four bind groups -- 0 vertex
-samplers, 1 vertex uniforms, 2 pixel samplers, 3 pixel uniforms -- so nothing is remapped. Each
-sampler register occupies two bindings after the split, and which two is reported by the rewrite
-rather than assumed. Uniform blocks follow MojoShader's own 16-byte-slot-per-declared-register
-layout, snapshotted at pass-apply time because this renderer records its draws at `Present()`.
-
-**What works:** reflection, techniques, passes, annotations, scalar/vector/matrix/array parameters,
-textures and samplers, per-pass render and sampler state, clone isolation, ordinary non-indexed and
-indexed (16- and 32-bit) draws, instancing, multiple vertex streams, `SpriteBatch.Begin(...,
-effect)` including multi-pass and the sprite-texture override of slot 0, a `RenderTarget2D` as a
-sampler source, and pixel-stage cube AND volume sampling. Real XNA 4.0 game content with `ps_1_x`
-pixel shaders works too -- **all 27 committed technique/pass pairs across all nine fixtures**, which
-needed four additive MojoShader fixes, now commits on libcna/mojoshader: `TEXCRD` in the SPIR-V profile,
-a `Location` on `ps_1_x`'s `r0`-as-colour-output, a unique `OpEntryPoint` interface, and a
-`gl_PointCoord` patch-up guarded on the variable it belongs to rather than on the `attrib_offsets`
-slot it shares. The last two closed the six passes that used to be refused
-(`FX-134`); every one of them is a gap the GLSL profile does not have, and the shared SPIR-V linker
-means SDLGPU gained them too. **And the browser**: the same effects run under
-Emscripten, through WGSL translated from the same SPIR-V.
-
-**What does not:** nothing currently. The two former entries are implemented: a vertex shader
-that samples a texture receives the public `VertexTextures`/`VertexSamplerStates`, captured with
-each deferred draw (`VertexVector4TextureAndSamplerReachTheDraw`,
-`VertexSingleTextureAndSamplerReachTheDraw`, `PointVertexTexturesDoNotRequireFloat32Filterable`),
-and `SamplerState.MipMapLevelOfDetailBias` -- see *Compiled-effect LOD bias* below.
-
-**Compiled-effect LOD bias (`WEBGPU-208`, 2026-09-06).** All six
-`SamplerState` fields a compiled pass can set now reach the GPU. The first five ride
-`WGPUSamplerDescriptor`; the sixth cannot, because that descriptor has no bias field at all, so it
-reaches the **shader** instead -- and it does so in the SPIR-V, before the native and browser routes
-divide, which is what makes the two incapable of disagreeing about it.
-
-`MojoShaderEffect::InjectSamplerLodBias` adds one uniform block to the normalized module (a `vec4`
-per D3D9 sampler register, in the pixel sampler group at a binding the combined-sampler split cannot
-reach) and rewrites every implicit sample to carry a `Bias` image operand loaded from **its own
-register's** element. The index is a constant at each sample site, resolved from the sampler
-variable the sample loaded, so a shader that samples `s0` and `s1` with different biases keeps them
-apart -- there is no per-shader bias and no dynamic indexing. Natively the module is handed to
-wgpu-native as SPIR-V and naga lowers the operand; in a browser `SpirvToWgsl` turns exactly that
-operand into `textureSampleBias(...)` for Tint. Zero bias is byte-identical to the old behaviour,
-and the value is uniform DATA: changing a bias rewrites a buffer and never rebuilds a pipeline.
-
-The bias is captured with the deferred draw like every other piece of pass state, so a later
-`Apply()` cannot change what an already-queued draw samples. WGSL clamps a sample bias to roughly
-[-16, +16) and CNA clamps on the way in, the same clamp `ApplySamplerMipState` makes for the stock
-routes. Two corrections this made to what this document used to say: the bullet above claimed the
-value was "discarded ... so every stock draw family discards it too" (false since `WEBGPU-205`), and
-then that it was unavailable on the compiled route (false since `WEBGPU-208`).
-
-**The browser route (`WEBGPU-203`, 2026-09-06).** Browser WebGPU ingests WGSL
-and nothing else -- emdawnwebgpu's own `createShaderModule` has a single chained-struct case -- so
-`GetOrCreateCompiledEffectShaderModuleEXT`, the ONE seam where the two targets differ, translates
-the finished SPIR-V into WGSL under Emscripten and hands it over as `WGPUShaderSourceWGSL`.
-Everything above that seam is the same code on both targets. The translator
-(`modules/renderers/common/mojoshader/src/SpirvToWgsl.cpp`) is a SPIR-V module parser and typed IR
-over the subset THIS pipeline emits, measured across all 27 passes before it was written: 55
-opcodes, 9 GLSL.std.450 instructions, five storage classes, seven decorations, one builtin, no
-matrices, no loops, no phi, one function per module. Anything outside that subset is refused by
-name. It adds no dependency. Bind groups, binding numbers, vertex input locations, uniform layout
-and the entry point NAME all come out as the SPIR-V carried them, so the renderer's layouts and
-pipelines are identical between routes -- which is what makes the native SPIR-V route a usable
-oracle: `SetCompiledEffectShaderLanguageEXT` re-runs 16 shared cross-renderer contracts natively
-through the browser's representation, pixel checks included. In a browser,
-`cna_webgpu_compiled_effect_page` runs 13/13 (see *Browser coverage* above). The one thing WGSL
-cannot express from this corpus is a shader that writes `gl_PointSize` or reads `gl_PointCoord`;
-WebGPU has neither, and the translator refuses such a module by name. Since `WEBGPU-208` the
-translated subset also carries exactly one image operand, `Bias` -- every other operand mask is
-still refused by name, and `textureSampleBias` is emitted only where the injected SPIR-V asked for
-it.
-
-**One trap for anyone reading the pin's headers.** `wgpuHasInstanceFeature` and
-`wgpuGetInstanceFeatures` are exported symbols that PANIC (`not implemented`) on wgpu-native
-v29.0.1.1 and take the process with them -- `panic_cannot_unwind`, not a catchable failure and not a
-false return. An instance feature can only be requested in `WGPUInstanceDescriptor::requiredFeatures`.
-`wgpuDeviceCreateShaderModuleSpirV` is not an alternative route either: it requires
-`PASSTHROUGH_SHADERS`, whose enum this release comments out.
-
-## Multiple vertex streams (2026-09-05, `WEBGPU-172`)
-
-`GraphicsCapability::MultiStreamVertexInput` is **true**. XNA's `SetVertexBuffers` takes an array
-because a vertex's elements may live in several buffers, each with its own `VertexDeclaration`,
-stride, `VertexOffset` and `InstanceFrequency`; until this task the capability fell through to the
-shared `false` default and `GraphicsDevice::ValidateVertexStreamCapability()` refused such a draw
-before submission — truthful, but a refusal of an ordinary XNA shape.
-
-The implementation is WebGPU's native model rather than an emulation: one `WGPUVertexBufferLayout`
-per **resolved** stream, each with that stream's own `arrayStride` and step mode. The resolver
-(`ResolveStockVertexLayoutAcrossStreamsEXT`) searches every bound declaration for each of the chosen
-program's inputs, so an input is bound to whichever buffer declares its semantic, and a stream that
-supplies nothing the program consumes never reaches the pipeline at all. Native slots are therefore
-assigned **densely over the streams a draw actually reads**, not by public binding slot: XNA lets a
-draw bind slots 0 and 15 while using two streams, and taking the public slot as the native index
-would need sixteen native buffers to describe a two-buffer draw. The neutral record moves to the
-slot after the real streams (slot 1 for a single-stream draw, exactly where it was).
-
-Program **selection** widened with it: "is this a lit vertex?" is now "does *some* bound stream
-declare a `Normal`?". Asking only slot 0 picks an unlit program for a mesh whose normals are simply
-in another buffer — and for the canonical split (position-only at stride 12, colour-only at stride 4)
-neither stream alone is a layout any renderer recognises.
-
-The **instanced** route was converted in the same task, with one deliberate asymmetry. Its
-per-vertex inputs (`POSITION0`, and `COLOR0` when a stream declares one) are resolved by semantic
-like every other family. Its per-instance world-matrix columns are resolved **positionally** — the
-k-th element across the concatenated per-instance declarations feeds column k. That is the reference
-renderer's own rule (`EasyGLRenderer::PlaceInstanceStreams` assigns consecutive locations from
-`kStockInstanceBaseLocation` in declaration order, whatever semantic each element names), and it is
-the only rule both existing corpora satisfy: the shared oracle spells the columns
-`TEXCOORD1`–`TEXCOORD4` while this renderer's own instanced examples spell them
-`POSITION1`–`POSITION4`. A world matrix has no XNA-defined semantic to be faithful to, so matching
-the reference is the answer rather than picking one spelling and breaking the other. The columns may
-still be split across buffers — the shared oracle splits them 48 + 16 bytes. A classic instanced
-draw resolves to exactly two streams and produces the same binding pair the family always built by
-hand, geometry at slot 0 and the matrix at slot 1.
-
-A buffer made through the low-level `IGraphicsRenderer::CreateVertexBuffer(count)` entry point
-carries no declaration at all, which this renderer's own instanced examples rely on.
-`SynthesizeMissingStreamDeclarationsEXT` gives such a stream the canonical layout for its stride —
-position-only for a stride the table does not list, which is what this route has always assumed —
-and a per-instance one the four `Vector4` columns at 0/16/32/48, exactly the attribute array the
-family used to hardcode.
-
-`InstanceFrequency` greater than one has no native counterpart — in wgpu-native v29.0.1.1
-`WGPUVertexBufferLayout` carries only `nextInChain`/`stepMode`/`arrayStride`/`attributes`,
-`WGPUVertexStepMode` offers only `Vertex` and `Instance`, and no `WGPUNativeFeature` adds a step
-rate. It is honoured by **materializing** the records the draw will read: instance *i* reads source
-record `VertexOffset + i / frequency`, so each source record is repeated `frequency` times at queue
-time and a divisor-of-one binding reads exactly what a divisor-of-`frequency` one would. The
-frequency therefore never reaches the pipeline or its cache key.
-
-`GetMaxVertexStreams()` is the device's own `maxVertexBuffers` limit less the one slot reserved for
-the neutral record, clamped to the resolver's stream table — 7 on the development machine, and never
-a constant.
-
-The pipeline cache key carries each stream's **input rate**, never its frequency: a native
-vertex-buffer layout has a step mode and nothing finer, so letting the frequency into the key would
-compile a second identical pipeline for the same geometry at frequency 2.
-`WebGPU_InstancedOffsetFrequency_Cardinality` counts pipeline variants and is what measures it.
-
-**Still refused, by name:** a draw that splits its vertex across bindings on the **skinned**/**PBR**
-families or under a custom WGSL `ShaderEffect`. Those routes still derive their layout from one byte
-stride, so they would read a split vertex from the first stream alone; `RequireSingleStreamRouteEXT`
-says so rather than rendering a subset of the bound streams. `WEBGPU-177` converts the first pair.
-
-Verified by the two shared multi-stream oracles (`OrdinaryDrawMultiStreamTests`,
-`InstancedDrawMultiStreamTests`, 48 cases) and by the `multi_stream_split` parity fixture, whose
-EasyGL and WebGPU frames are byte-identical.
-
-## Mip-mapped RenderTarget2D (2026-09-05, `WEBGPU-164`)
-
-`RenderTarget2D(..., mipMap: true)` used to throw. It now allocates the chain `CalculateMipLevels`
-declares and regenerates levels 1.. from level 0 **when the target is unbound** — FNA3D's
-`ResolveTarget` timing, and the same rule `WebGPURenderTargetCubeRenderer` (`WEBGPU-114`) already
-followed per face. The cascade is the existing `GenerateMipsForLayer` render-pass downsample, so no
-new machinery was added; MSAA composes the way it does for the cube target, because the resolve
-writes level 0 and the cascade then reads it.
-
-Two details are worth naming. The colour texture now needs **two views**: `colorView_` spans the
-whole chain and is what a shader samples, while a new `colorLevel0View_` names exactly one level and
-is what the render pass attaches (and what an MSAA pass resolves into) — a colour attachment may name
-only one mip level. And `GetData(level)` reads that level's own dimensions rather than the target's,
-so a 2×2 level returns four texels instead of a level-0-sized copy.
-
-Implementing this exposed two latent bugs, both unreachable before a mipped target could be part of
-an MRT set. The shared mip-blit pipeline is cached **by format alone** but was built with
-`InitStockColorTargetsEXT`'s attachment count — the count of whatever MRT set happened to be bound —
-so a first creation while a two-target set was bound baked a two-target pipeline and reused it for
-every later single-attachment blit. It is now always exactly one target, which is what a blit pass
-has by construction. And `~WebGPURenderTargetRenderer` cleared `currentRenderTarget_` while leaving
-`mrtExtraTargets_` holding the surviving slots of a set whose slot 0 no longer existed, dropping the
-queued draws and leaving the next flush to build an N-attachment pass around a null slot 0; the
-destructor now flushes the set first, while every attachment is still alive, and then drops the
-binding whole. Mip regeneration also runs for **every** slot of an MRT set rather than slot 0 alone.
-
-Verified by `WebGPU_RenderTarget2D` Check G (a 32×32 target painted in two halves; level 4 keeps
-both), by the `render_target_mip` parity fixture — a 64×64 target painted in four quadrants, with
-`GetData` asserted at both ends of the chain and the target sampled back both unrestricted and pinned
-to its coarsest level, **byte-identical to EasyGL, max diff 0** — and by the three shared
-render-target suites (`rendertarget_msaa_mip_readback`, `rendertarget_msaa_depth_contract`,
-`rendertarget_first_use`) whose WebGPU "declares mipped targets unimplemented" declarations were
-deleted rather than left describing a boundary that no longer exists.
-
-## The pipeline key and the bound target (2026-09-05, `WEBGPU-197`, partial)
-
-A WebGPU render pipeline bakes its colour target's **format** and **sample count**. All twelve of
-this renderer's 3D families read the swap-chain `surfaceFormat_` and one renderer-global
-`sampleCount_` instead of the pass they were about to be used in, which is why a `RenderTarget2D`
-could not honour its own `multiSampleCount` and why no non-`Color` target could ever be drawn into.
-
-`ReplayDrawsInOrder` now records the pass's own colour format and sample count — alongside the depth
-format it already recorded — and `Build3DPipelineEXT` reads those, with both folded into every 3D
-pipeline cache key. `PassDestination` already carried the values per target, and the SpriteBatch path
-had keyed on them since it was written; this is the 3D side catching up.
-
-Both halves are finished and proven — the sample count by `WEBGPU-165` below, the colour format by
-`WEBGPU-198`, which makes a non-`Color` target creatable. The measurement that matters for this
-section is the 3D-draw leg of `RenderTargetFormatAgreement`: a pipeline built against the swap
-chain's format and then used in a float target's pass is a **hard native error** on this pin
-(`"Render pipeline targets are incompatible with render pass"` — demonstrated the same day by the
-mip-blit bug `WEBGPU-164` found), so eight such draws landing is the key change working rather than
-an absence of evidence.
-
-The `WEBGPU-58` finding had to be settled first, because per-pass sample-count variants built from
-shared shader modules are exactly the reuse that task measured as silently wrong on this pin — no
-validation error, correct-looking draw, wrong pixels — which is why `ClearAllPipelineCaches()` tears
-down every module and layout when the global sample count changes. It was **re-measured and does not
-reproduce**: `WebGPU_MsaaModuleReuseProbe` uses one module set for a 1-sample pipeline and then a
-4-sample one and compares that frame against a 4-sample frame from a fresh set — **max channel
-difference 0**, stable across runs, with non-vacuity asserted separately so two empty frames cannot
-pass. The probe asserts the equality rather than printing it, so the hazard returning on a new pin
-goes red rather than corrupting frames quietly.
-
-One methodological note from that probe, because its first version gave a confident wrong answer:
-mapping the readback buffer is not enough here. The map callback can fire while the copy that fills it
-is still queued, and the readback then returns an all-zero frame — precisely the "pipeline fine, draw
-fine, no validation error, only the pixels wrong" signature `WEBGPU-58` recorded. Waiting on
-`wgpuQueueOnSubmittedWorkDone` first is what made the answer trustworthy. That is a plausible
-explanation for the original finding, not a demonstrated one.
-
-## Render-target colour formats (2026-09-05, `WEBGPU-198`)
-
-`ClassifyRenderTargetFormatEXT` is overridden here and answered by a **device probe**, not a table: a
-1×1 `WGPUTextureUsage_RenderAttachment` texture of the real native format is created inside a
-`WGPUErrorFilter_Validation` scope — the technique `Supports4xMsaa()` already used — and the answer
-is cached per format. On this adapter all six float formats come back renderable, so WebGPU reports 8
-of 27 `SurfaceFormat` values renderable against EasyGL's 9.
-
-The map is the reference renderer's own eight-format set: `Single`→`R32Float`,
-`Vector2`→`RG32Float`, `Vector4`→`RGBA32Float`, `HalfSingle`→`R16Float`, `HalfVector2`→`RG16Float`,
-`HalfVector4`/`HdrBlendable`→`RGBA16Float`. `Color` is deliberately absent from it — it maps to the
-live `surfaceFormat_`, which keeps every existing `Color` target byte-identical to its earlier form.
-`Rgba64` maps to `RGBA16Unorm`, which is **not** core WebGPU — natively it needs wgpu-native's
-`WGPUNativeFeature_TextureFormat16bitNorm`; in a browser it needs
-`TextureFormatsTier1` (`texture-formats-tier1`). CNA requests the appropriate feature when
-the adapter offers it, including when recreating a device. Without it the format is reported
-unsupported **before creating any probe texture**: the browser rejects these format values with
-a JavaScript `TypeError`, which a WebGPU validation error scope cannot catch. The guard covers
-all six 16-bit normalized native formats, even though `Rgba64` is the only one currently mapped
-as a CNA render target. See the [Chrome feature description](https://developer.chrome.com/blog/new-in-webgpu-142).
-
-The exact-format renderer factories throw `NotSupportedException` when support is absent.
-The public XNA `RenderTarget2D`/`RenderTargetCube` constructors still select a supported format
-from the requested *preference*, including `Color` fallback; inspect their `Format` property.
-This correction does not add previously unsupported ordinary Texture2D/TextureCube formats.
-
-Regression: build `cna_webgpu_optional_format_page` in an existing Emscripten WEBGPU
-configuration, then run (Node22+ and Chrome required):
-
-```sh
-tools/platform/run_gpu_tests_private.sh --exec node scripts/run-webgpu-optional-format-test.mjs cmake-build-wasm-webgpu
-```
-
-The driver runs both feature-enabled and genuinely feature-disabled devices, checking capability
-reports, exact-factory refusals, preferred-format fallback and exact pixel readback. It retains
-reports under the build directory (or a second directory argument). A host lacking tier1 cannot
-validate the enabled branch and does not produce a false pass. Native default-WEBGPU builds
-register the same fixture as `WebGPU_OptionalFormat`.
-
-The historical measured answer (`WEBGPU-201`) is worth stating exactly, because a feature check alone gets
-it wrong in both directions. **This adapter has `TextureFormat16bitNorm`** and the device requests
-it — so "the adapter lacks it" is false. And `RGBA16Unorm` still is not a render target here: with
-the feature enabled, creating one with `TextureBinding` usage succeeds while the same texture with
-`RenderAttachment` usage fails. So "the adapter has it, therefore it works" is false too. `Rgba64` is
-refused on that tested adapter as a render target for a **usage** boundary, not a missing feature, and
-`GetAdditionalLimitationsTextEXT()` says which of the two applies.
-That historical result is not a universal statement about current native or browser adapters:
-with the feature enabled, the actual device's render-attachment probe remains authoritative.
-
-`CreateRenderTarget2DEXT` is overridden so the target is **allocated in the format it was asked
-for** — `IGraphicsRenderer`'s default forwards to the format-less overload and drops the argument,
-which is exactly what would let a target be classified in one format and allocated in another — and
-an `Unsupported` format is refused there by name.
-
-**Every render-target transfer is sized from the format** (`WEBGPU-202`), and the pipeline key covers
-**every** MRT slot's format, not slot 0's alone — two sets differing only in slot 1 would otherwise
-share a pipeline, which the native layer rejects outright (`"Incompatible color attachments at
-indices [1]"`). Clear values needed no work: `WGPURenderPassColorAttachment.clearValue` is four
-doubles, so a 2.0 clear reaches an RGBA16Float target unclamped. Resolve needed none either — a
-multisampled float target resolves here. `UpdatePixelsLevel()`'s fixed four-byte texel is left alone
-deliberately: it belongs to a plain `Texture2D`, and `Texture::ValidateFormat` still admits `Color`
-alone for those on every renderer, so widening it would be unreachable code.
-
-**The readback is typed by the target's format.** It assumed four UNORM8 bytes per texel, which held
-only while a render target could only be `Color`; the width now comes from the format (2/4/8/16) and
-the BGRA swizzle applies to BGRA8 alone, since reordering a float texel's bytes would corrupt it.
-That was not optional: nine `HdrRenderTargetRoundTripTest` cases had been skipping on
-`SupportsSurfaceFormatAsRenderTargetEXT` and started running the moment float targets became
-creatable. Five of them failed against an earlier cut of this work that refused the float readback —
-a game could query the format, create the target, render HDR into it, and then not read it back,
-which is the shape `WEBGPU-163` exists to prevent. All nine pass now, including values above 1.0
-surviving, a multisampled float target resolving without clamping, and a float target generating a
-mip chain (this section and `WEBGPU-164` composing).
-
-The **cube** path carried the same defect and got the same fix: `CreateRenderTargetCubeEXT` was not
-overridden, so a `RenderTargetCube(HdrBlendable)` reported the float format it was asked for while
-holding 8-bit texels — MOD-107's silent substitution, in the one path image-based lighting depends
-on, and passing its own test only because that test does not read values back.
-
-**32-bit float targets and their two optional features** (`WEBGPU-200`). `R32Float`, `RG32Float` and
-`RGBA32Float` are renderable in core WebGPU, but *sampling* one with a filtering sampler needs
-`WGPUFeatureName_Float32Filterable` and *blending* into one needs `Float32Blendable`. Both are
-requested at device creation when the adapter offers them — this one has both. Where they are
-absent, neither refuses the format: the targets stay renderable, drawable, clearable and readable,
-and only the feature-dependent operation is refused, **by name**. A non-opaque `BlendState` on such a
-target throws naming `Float32Blendable`; a filtering sample throws naming `Float32Filterable` and
-says that `TextureFilter::Point` samples it without the feature.
-`GetAdditionalLimitationsTextEXT()` names whichever is missing. That text is **composed** from every
-applicable clause rather than returning the first one — it returns a single string, and a device can
-be subject to several of these boundaries at once; an early-return chain silently hid the float32
-clauses the moment the `Rgba64` one was added in front of them.
-
-Both refusals sit at the **public draw entry**, not in the pipeline builder. That distinction was
-found the hard way: a builder only runs on a cache miss, so a refusal written there fired for the
-first such draw and then silently stopped firing for every later one that hit the pipeline cache.
-`WebGPU_Float32Features` blends into the same target twice, which is what caught it. That test also
-exists because every adapter here *has* both features, so these branches would otherwise never
-execute — `DebugForceFloat32FeaturesAbsentEXT` makes the renderer report them absent without removing
-the real device features, so what runs is CNA's own decision-making.
-
-The row's alternative — binding an unfilterable-float view with a non-filtering sampler instead of
-refusing — is deliberately not implemented. It needs a second bind-group layout declaring
-`UnfilterableFloat`/`NonFiltering` and cannot be verified on any adapter available here, so a named
-refusal a caller can act on was chosen over an unverifiable bind path.
-
-The sampled-channel rule is now explicit (`WEBGPU-209`). XNA/D3D9 expands channels absent from the
-stored format to one: `Single`/`HalfSingle` sample as `(R,1,1,1)`, and
-`Vector2`/`HalfVector2`/`NormalizedByte2`/`Rg32` as `(R,G,1,1)`. WebGPU natively supplies zero for
-the absent green/blue channels, so stock SpriteBatch carries the logical source format with the
-queued draw and applies the XNA mask/fill in its fragment shader. The renderer-neutral
-`SingleChannelExpansionTest` proves both one-channel values and that a four-channel `Color` texture
-is unchanged. ShadowMapping's `Single` preview consequently matches OPENGLES3 instead of rendering
-red. This is an XNA sampling rule, not a change to typed render-target readback bytes.
-
-## Per-target MultiSampleCount (2026-09-05, `WEBGPU-165`)
-
-`RenderTarget2D` and `RenderTargetCube` honour their constructor's `multiSampleCount`. Both used to
-discard it and mirror the renderer-global `sampleCount_` unconditionally — necessary while every
-pipeline baked one global count, since a target that opted out would have been pipeline-incompatible
-the moment anything drew 3D into it, but observable through the public property with nothing rendered:
-an explicit request for no multisampling reported 4 on a device where the global probe chose 4.
-
-Each target now clamps its own request through the adapter probe, allocates its MSAA colour attachment
-— and its depth attachment, which must agree — at that count, and reports it. The clamp itself was
-wrong and is fixed: `PickSampleCount` answered 4 for *any* request of 2 or more, which is an increase
-rather than a clamp, so a caller asking for 2 got 4. It now rounds **down** to a probed count, which is
-what the shared `applied <= requested` contract requires.
-
-`webgpu_msaa_test` Check D measures it in one frame with the backbuffer at 4×: a target requesting 0
-reports 0 **and renders a binary diagonal**, while a sibling requesting 4 reports 4 **and blends its
-diagonal**. Two live targets, two sample counts, both the property and the edge pixels — which also
-exercises the re-measured module-reuse path for real.
-
-## Device loss: what the pin actually does (2026-09-06, `WEBGPU-180`)
-
-Measured against **wgpu-native v29.0.1.1**, not read from the header, by
-`spikes/webgpu-devicelost-spike/` — which carries the full transcript and the reasoning. The four
-facts a caller needs:
-
-**A device replace is renderer-internal.** `WGPUInstance`, `WGPUAdapter` and `WGPUSurface` all
-survive it: a second device requested from the same adapter can re-configure the *same* surface and
-acquire from it. Recovery never has to reach back into `CNA::Platform` or rebuild the window.
-
-**A lost device must be gated BEFORE the acquire, never after.** `wgpuSurfaceGetCurrentTexture` on a
-surface whose device is lost does not return a failure status — it panics inside wgpu-native
-(`Parent device is lost`) and, because the panic cannot unwind across the C ABI, **aborts the
-process**. There is nothing to read and nothing to catch. `CanBeginDrawEXT()` returning false is what
-stands between a lost device and that abort; it is a safety mechanism, not a convenience for `Game`.
-
-**On native, the device-lost callback never fires.** For an application-initiated `wgpuDeviceDestroy`
-this pin delivers no `WGPUDeviceLostCallback` at all — not under `AllowProcessEvents` with the
-instance pumped, not with `wgpuDevicePoll` on the device, not on releasing the last reference, and
-not under `AllowSpontaneous`. The renderer therefore raises `RendererDeviceEvent` itself at the point
-it destroys the device. This is a statement about v29.0.1.1, not about WebGPU; a later pin may change
-it, and the spike is the check.
-
-**On the web target it does fire, and that asymmetry is deliberate.** `emdawnwebgpu` bridges the real
-`GPUDevice.lost` promise to the C callback, and `wgpuDeviceDestroy` is literally `device.destroy()`,
-which the WebGPU specification resolves with reason `"destroyed"`. The browser's reason vocabulary is
-narrower than the header's — only `Unknown` and `Destroyed` are reachable from a browser reason
-string. This half is derived from the port's own JavaScript, not confirmed in a browser; that
-confirmation belongs with `WEBGPU-196`.
-
-
-## What the 2026-09-06 coverage batch changed (`WEBGPU-174`–`191`, `195`)
-
-Swept here by `WEBGPU-194`, because each of these is a capability this document either did not
-mention or implied the renderer lacked. They are behaviour changes, not just new tests.
-
-**A missing texture no longer refuses a draw.** `AlphaTestEffect` with a null `Texture`, and
-`DualTextureEffect` with a null `Texture` or `Texture2`, used to abort: the shape selector gated
-those families on the texture being bound, so the draw fell into the stride-derived ladder and was
-refused there. Opaque white is the identity for `tex * colour` and is what `EasyGLRenderer` binds
-for a missing unit, so both families now take the neutral-white default (`WEBGPU-174`/`175`).
-`EnvironmentMapEffect` still carries the same gate for its cube map and is left to its own row.
-
-**`EnvironmentMapEffect`'s Fresnel weight is computed per VERTEX**, clamped to [0,1], and
-interpolated — not recomputed per fragment (`WEBGPU-176`). XNA evaluates `ComputeFresnelFactor` in
-the vertex shader and Direct3D 9 saturates the `COLOR1` register it travels in; recomputing per
-fragment is a different function once vertices carry different normals, and is invisible on a
-flat-normal quad, which is why every earlier test missed it.
-
-**`SkinnedEffect` accepts any declaration that can supply its five semantics**, not only stride 52
-and 56 (`WEBGPU-177`). `BLENDINDICES0` may be declared `Vector4` as well as `Byte4` — XNA's
-`VertexElementFormat` describes the bytes in the buffer, not the register — and such a stream is
-normalized into the canonical record at capture rather than being refused. WebGPU has no vertex
-format that reads unsigned bytes as un-normalized floats, so a rewrite is what avoids doubling every
-skinned shader.
-
-**`SurfaceFormat::NormalizedByte2`/`NormalizedByte4` are stored natively** as `rg8snorm`/`rgba8snorm`
-(`WEBGPU-184`). Neither is renderable in core WebGPU, so such a texture drops its `RenderAttachment`
-usage. A mipmapped signed-normalized texture is valid and accepts an explicitly authored level
-chain (`MSR-018`); only WebGPU's optional automatic render-pass downsampler is unavailable for this
-format, so a level-zero write does not fabricate or overwrite higher levels. This is the path used
-by XNA normal-map XNB assets, including `NormalMappingEffect`'s complete 1024-to-1 and 16-to-1
-chains. `Bgr565`, `Bgra5551` and `Bgra4444` stay refused by name and
-`GetAdditionalLimitationsTextEXT()` says why: WebGPU has no 16-bit packed colour format, so
-accepting them would mean a texture reporting one format while the GPU holds another.
-
-**`SupportsCapability(MultiSampleAntiAliasing)` answers from the device probe** rather than the
-shared permissive default (`WEBGPU-195`), so it and `PickSampleCount()` are one answer instead of
-two.
-
-**The default viewport is the PRESENTATION rectangle, in device pixels** (`WEBGPU-162`).
-`GraphicsDevice.Viewport` is logical, and `GraphicsDevice::setViewportProperty` maps it into the
-presentation rectangle before it reaches the renderer, so the renderer seam is physical. That mapping
-was inert here until this row, because the inherited `GetDefaultViewportRect()` returned the logical
-size and made it the identity -- which is why a letterboxed or resized window drew the game into a
-corner while `Clear` covered the whole surface. The override now mirrors EasyGL's algorithm exactly.
-
-Two consequences a reader of the sprite path needs. A sprite is baked VIEWPORT-LOCAL, and the units
-are logical when the viewport is the presentation rectangle and physical when it is not -- because
-where the rasterizer viewport already applies the presentation scale, baking against the physical
-width applies it twice. And the distinction cannot be replaced by inverting the mapping to recover a
-single logical extent, tempting as that is: a viewport can be stale relative to the surface it is
-inverted against. Measured -- on the first frame of a 37x23 backbuffer the device viewport is already
-37x23 while the surface is still 800x480, and the inverse yields an extent of 1.8x1.1.
-
-**A device loss recovers differently in a browser than natively, and the difference is in the
-specification** (`WEBGPU-196`). Natively, `DebugRestoreContext()` requests a second device from the
-adapter it already holds -- `WEBGPU-180` measured that this works on wgpu-native v29. In a browser it
-cannot: a `GPUAdapter` is **consumed** by `requestDevice()` per the WebGPU specification, so a second
-request is rejected with `adapter is "consumed": it has already been used to create a device`. The
-web target therefore releases the spent adapter and requests a fresh one, re-reading the optional
-features from it, since a replacement adapter is not obliged to offer the same feature set. Measured
-in headless Chrome, not inferred.
-
-**A real window resize reconfigures the surface, and only one check can tell** (`WEBGPU-192`).
-When the platform window changes size without anyone calling `GraphicsDevice::Reset()` -- the game
-never touches `PresentationParameters` -- under `FixedHeightDynamicWidth` the viewport width follows
-the window while its height stays pinned to `PreferredBackBufferHeight`; under the default
-`Letterbox` it remains the logical backbuffer. `BackBufferWidth`/`BackBufferHeight` deliberately do
-NOT follow in either mode (CNA's confirmed divergence from FNA, which would otherwise corrupt the
-virtual-resolution scaling). `webgpu_real_window_resize_test`
-drives it through `GameWindow::BeginScreenDeviceChange` / `EndScreenDeviceChange` -- public XNA API,
-no windowing-library header, the same call `GraphicsDeviceManager::ApplyChanges()` makes.
-
-The part worth knowing: CNA refreshes the viewport from the reported drawable on **every**
-`Present()`, so every viewport-shaped check passes even on a renderer whose swap chain is still the
-old size. Measured, by making `ConfigureSurface` skip a size change: four of the six checks stayed
-green, including the one for validation errors -- wgpu-native tolerates presenting through a
-stale-size surface rather than reporting it. The check that failed was clearing the resized
-backbuffer and reading the pixel back. On this renderer, "no errors" is not a substitute for looking
-at a pixel.
-
-**A device-loss gate exists and is load-bearing.** `CanBeginDrawEXT()` reports `false` while the
-device is lost (`WEBGPU-181`), and on this pin that is a safety mechanism rather than a convenience:
-`WEBGPU-180` measured that `wgpuSurfaceGetCurrentTexture` on a surface whose device is lost does not
-return a failure status but panics inside wgpu-native and aborts the process. See *Device loss: what
-the pin actually does* above.
-
-**The device can be destroyed and recreated, and the game's ordinary resources survive it**
-(`WEBGPU-182`). `DebugSimulateContextLoss()` releases every registered resource's handles and every
-device-owned object, unconfigures the surface and destroys the `WGPUDevice`;
-`DebugRestoreContext()` requests a new one from the surviving adapter, re-configures the same
-surface, rebuilds every registered resource and raises `DeviceResetting`/`DeviceReset`. Verified end
-to end: `CanBeginDrawEXT()` goes false and back, each event fires exactly once, and a texture created
-and drawn AFTER the recreate renders correctly with no validation error. A `Texture2D` uploaded
-before the loss still samples correctly afterwards, a `VertexBuffer` created before it still draws, a
-`RenderTarget2D` created before it still renders, and one that was BOUND when the device went is
-still the bound target after the restore — the clear and the sprite issued straight after the restore
-both land in it.
-
-Each of those four survives for a different reason, and the differences are the useful part. The
-texture is rebuilt from `WEBGPU-181`'s shared CPU pixels (or the compressed block store). The vertex
-buffer needed no rebuild at all, because the deferred replay builds its own vertex buffer from the
-CPU shadow and nothing binds the renderer's native handle in a render pass. The render target is
-rebuilt **empty**, which is XNA-correct rather than a shortcut: a device reset discards a render
-target's contents — the same thing `RenderTargetUsage` already names for a far cheaper event — so
-what survives is the object (size, format, sample count) and its binding, not its pixels.
-
-**What still cannot survive a loss is refused rather than broken.** A `TextureCube`,
-`RenderTargetCube`, `Texture3D`, occlusion query or custom `ShaderEffect` cannot yet rebuild itself,
-so a live one is counted and `DebugSimulateContextLoss()` throws `System::NotSupportedException`
-naming them while any exists — a named refusal in place of a dead native handle. That refusal is not
-cosmetic: with the render target's own registration removed as a negative control, so that it kept
-handles from the destroyed device, the first submit after the restore was a wgpu-native
-`Validation Error` that panics and aborts the process.
-
-**A stale `GraphicsDevice.Viewport` was scaling every sprite** (`WEBGPU-178`). `GetViewportSize()`
-answered from the last surface CONFIGURATION rather than the last surface the platform REPORTED, so
-in a one-frame program the device's `Viewport` kept its 800x480 default over a 128x96 backbuffer and
-`SpriteBatch`, whose projection comes from that `Viewport`, drew everything at 128/800 of its size.
-
-**What is still not byte-identical to the reference renderer, and why.** The reviewed per-fixture
-policies are owned by `scripts/run-parity-corpus.sh` and explained in
-[`cross-renderer-parity-fixtures.md`](cross-renderer-parity-fixtures.md), rather than duplicated
-here. The remaining whole-frame exceptions are localized rasterization/sample-centre differences
-or fixtures whose meaningful oracle is an A/B comparison within each renderer; they are not a
-known disagreement in the feature semantics asserted by the corpus.
-
-
-## The shared parity corpus (`WEBGPU-193`/`WEBGPU-207`)
-
-The current inventory, oracle rules, per-renderer frame policies and private-runner commands live
-in [`cross-renderer-parity-fixtures.md`](cross-renderer-parity-fixtures.md). The canonical list is
-`CNA_PARITY_FIXTURES` in `ParityFixtures.cmake`; this renderer page does not duplicate it.
-
-The 2026-11-01 reconciliation ran all 32 current fixtures against the desktop `OPENGL33` EasyGL
-reference. Every fixture passed its own assertions under both OPENGL33 and WebGPU and the complete
-corpus met its reviewed frame policy: 24 strict comparisons, six measured allowances and two
-within-renderer oracles. `OPENGLES3` remains a valid fixture-assertion leg, but is not the desktop
-frame reference because profile restrictions such as unavailable sampler LOD bias intentionally
-produce a different image.
-
-
-## CNA graphics extensions on WebGPU (2026-09-22, `WMG-0001`–`WMG-0015`)
-
-The `WMG-*` rows (Git history) were the evidence ledger; this is the capability boundary.
-The general-purpose modern GPU layer that workstream also implemented here — compute shaders,
-storage buffers and textures, the `Texture2DArray` facade, GPU timers and indirect draws over
-those resources — was retired together with its common interfaces
-(MRT, 2026-10-13); nothing below describes it. What this renderer supports of
-CNA's graphics extensions:
-
-* **Shader packages in WGSL.** Every stock shader package carries a WGSL variant, generated from
-  the *same* Vulkan GLSL as its SPIR-V by `tools/shader_package/generate_shader_package.py` (naga,
-  transform `cna-webgpu-glsl/1`, with a spv→wgsl→spv block-layout equivalence gate). Push constants
-  become a `set = 3, binding = 0` uniform block, combined samplers split into texture + sampler at
-  `binding + 32`, and a uniform block of small-element arrays becomes a `std430 readonly buffer`
-  (WGSL's uniform address space requires a 16-byte array stride) — a detail of translating ordinary
-  vertex/fragment shaders, not a storage-buffer API. A block that mixes array and non-array members
-  is refused by name rather than rewritten.
-* **The descriptor binding contract**: group 0 the draw texture and its sampler
-  at binding 32; group 1 bound textures, cubes, volumes, uniform arrays (capacity 72) and the
-  engine matrices, each sampler at `binding + 32`; group 2 the stock families' shadow block; group
-  3 the 128-byte scalar block. Which contract a package uses is read from the shader, not from its
-  language.
-* **Every surviving `GetMax*EXT`/`GetMin*EXT` limit** — uniform-buffer bytes and offset alignment,
-  sampled textures per stage, vertex bindings and attributes, colour attachments — is read from the
-  device's actual limits. Readback stages through a 256-byte-row-aligned buffer.
-* **Shadow reception** (`WMG-0014`) in `BasicEffect`, `SkinnedEffect`, `PbrEffect` and
-  `SkinnedPbrEffect` — directional, cascaded, point and spot — through a group-2 block identical
-  across those families. A draw with a shadow map takes the per-pixel path whatever
-  `PreferPerPixelLighting` says.
-* **Image-based lighting** (`WMG-0022`) in `PbrEffect` and `SkinnedPbrEffect`, through a group-3
-  block that is the WGSL twin of EasyGL's `cnaIblAmbient` — the same split-sum equation, with `roughness * (mipCount - 1)` selecting the prefiltered mip through
-  `textureSampleLevel`, and the three resources read through sampler slots 10, 11 and 12 as on EasyGL. `SupportsImageBasedLightingEXT()` answers **true**.
-* **Base-instance drawing is not claimed** (`SupportsBaseInstanceDrawingEXT()` answers false, the
-  interface default): the `ShaderEffect` route expands its per-instance streams from
-  `GpuDrawParams::firstInstance`, but the stock instanced route does not, so
-  `DrawInstancedPrimitivesBaseInstanceEXT` refuses. (This bullet said the opposite until
-  2026-10-14; no override ever existed.)
-* **Debug labels** (`WMG-0020`). `SetStringMarkerEXT` queues a label into the ordered stream and
-  `wgpuRenderPassEncoderInsertDebugMarker` emits it at its own position among the draws; the
-  renderer additionally opens a debug group around each of its render passes.
-* **Per-instance vertex streams for a `ShaderEffect`** (`WMG-0021`), on both the descriptor and the
-  legacy contract. Instance attribute locations continue after the per-vertex declaration's element
-  count, which is EasyGL's convention, so one shader source describes its inputs on both. The `InstanceFrequency` divisor is expanded per instance at queue time, because
-  wgpu-native's `WGPUVertexBufferLayout` carries a step mode and no step rate.
-
-What a caller must still ask about:
-
-* `ExecutesShaderEffectSourceEXT()` is **true** here — this renderer really does
-  compile the source a `ShaderEffect` carries. That source must be WGSL: `GetShaderDialectEXT()`
-  answers `Wgsl`, and a test that types GLSL into a `ShaderEffect` is asking a question this
-  renderer cannot be asked.
+Without an opt-in fallback, surface/device creation failure propagates. With one, the failed WebGPU
+attempt is retained in `GetFallbackHistory()` and `GetActive()` reports the identity that actually
+succeeded. The complete precedence and latch rules are in
+[`runtime-renderer-selection.md`](runtime-renderer-selection.md).
+
+Native surface creation uses the platform window's Win32, X11, Wayland, Cocoa or Android handle
+directly; the renderer does not depend on `sdl3webgpu`. On the browser target it creates a surface
+from the `#canvas` CSS selector.
+
+## Current rendering contract
+
+The implementation is a deferred renderer: public calls capture resources, state, viewport,
+scissor and effect values at call time; replay preserves the original draw/clear order. Render
+target changes and readbacks flush the required work without regrouping draws by family.
+
+| Area | Current WebGPU behavior |
+|---|---|
+| 2D and presentation | `SpriteBatch`, sorting, blend/sampler/rasterizer state, logical presentation, resize, readback and native/browser presentation are implemented. |
+| Classic 3D | `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect` and `SkinnedEffect` execute renderer-owned WGSL, including stock fog and XNA's opaque-black fallback for an enabled but unbound classic texture. |
+| CNA PBR extensions | `PbrEffect` and `SkinnedPbrEffect`, material maps, IBL and shadows use the same renderer and capability model. |
+| Draw paths | User, buffer-backed, indexed and instanced draws are implemented. Declaration-driven layouts, multiple vertex streams and per-instance streams are supported within the route boundaries below. |
+| State | Blend equations/factors, per-target color masks, culling, scissor, viewport/depth range, depth bias, complete depth/stencil operations and multisample masks are captured per draw. |
+| Resources | `Texture2D`, `TextureCube`, `Texture3D`, vertex/index buffers, 2D/cube render targets, mip chains, readback and compressed transfers are implemented. |
+| Render targets | Per-target MSAA, mip regeneration after resolve, two through four 2D MRT attachments and sampled render targets are implemented. |
+| Queries | Occlusion queries use native query sets, resolve buffers and asynchronous readback. Separate contiguous runs are aggregated into one logical query. |
+| Custom shaders | WGSL `ShaderEffect` source is compiled and executed. Compiled XNA Effect bytecode is an independent opt-in route. |
+| Wireframe | Triangle edges are expanded into a portable line list; the implementation is shared by native and browser targets. |
+
+### Stock effects and vertex input
+
+Stock dispatch is chosen from effect state and vertex semantics, not only a byte stride. Ordinary
+families resolve each declaration by `VertexElementUsage` and semantic index, so reordered elements
+and compatible split streams do not need a renderer-specific packed struct. Skinned input is
+normalized into CNA's canonical GPU record when its declaration supplies the required position,
+normal, UV, blend weights and byte-or-vector blend indices. PBR routes likewise validate the input
+they consume instead of silently reinterpreting an unrelated stride.
+
+Multiple input bindings and instance streams are real WebGPU vertex buffers. An instance frequency
+larger than one is materialized so XNA's divisor behavior remains observable even where the native
+step mode offers only vertex/instance. `GetMaxVertexStreams()` reports the smaller of the live
+device limit and CNA's resolver limit. Base-instance drawing is a separate capability and remains
+unsupported.
+
+An absent texture on a classic stock effect samples opaque black when XNA does. PBR maps use their
+own neutral material defaults: white for multiplicative/no-op maps and a flat tangent-space normal
+for an absent normal map. The two rules are intentionally not interchangeable.
+
+### Wireframe
+
+Core WebGPU has no portable polygon mode. CNA converts every triangle in a wireframe draw to three
+line edges at queue time and submits an indexed line list. This covers ordinary, indexed, user,
+stock-effect, custom-effect, instanced and SpriteBatch polygon routes on both native and browser
+targets. Line and point primitives are unchanged because they have no polygon interior.
+
+An edge shared by two triangles is emitted twice. Depth bias is dropped for the expanded line draw
+because WebGPU forbids polygon depth bias on line topology. `SpriteBatch::Begin` still follows XNA:
+a null rasterizer argument selects its default solid state, so pass a wireframe state to `Begin`
+when sprite outlines are wanted. More rationale is in
+[`webgpu-design-notes.md`](webgpu-design-notes.md).
+
+## Textures, formats and render targets
+
+Support is classified by resource kind and use. A format can be sampleable but not renderable, or
+renderable but unable to filter or blend without an optional adapter feature. Use
+`SupportsSurfaceFormatAsTextureEXT`, `SupportsSurfaceFormatAsRenderTargetEXT`, the renderer
+capability profile and the returned applied MSAA count instead of a hard-coded table.
+
+Stable WebGPU-specific boundaries are:
+
+- `SurfaceFormat::Bgr565`, `Bgra5551` and `Bgra4444` are refused for `Texture2D` and
+  `TextureCube`; WebGPU has no matching packed 16-bit color texture, and CNA does not report a
+  widened RGBA8 allocation as the requested format.
+- `NormalizedByte2` and `NormalizedByte4` use native signed-normalized storage where the XNA
+  profile permits them. Signed-normalized textures can carry authored mips but cannot use CNA's
+  render-pass mip generator.
+- DXT1/3/5 and BC7, including the CNA sRGB variants, stay compressed on `Texture2D` and
+  `TextureCube` when the device exposes `TextureCompressionBC`. Content loaders preserve the block
+  stream on that route and fall back to the shared decoded path when native compressed transfer is
+  unavailable.
+- `Rgba64` render targets require the native `TextureFormat16bitNorm` feature or browser
+  `texture-formats-tier1`, plus actual `RENDER_ATTACHMENT` usage. CNA probes both rather than
+  inferring support from the enum.
+- `Single`, `Vector2` and `Vector4` targets remain renderable/readable without the optional
+  float32 features. Filtering them requires `Float32Filterable`; blending into them requires
+  `Float32Blendable`. Only the dependent draw is refused when the feature is absent.
+- Requested MSAA is reduced to an actually creatable count. A target owns and resolves its own
+  sample count; 2D and cube targets can also regenerate their mip chains after unbinding.
+
+Plain RGBA8 `Texture2D` and `TextureCube` resources created with mipmaps are a documented WebGPU
+deviation: writing level zero regenerates the remaining chain. XNA/FNA and sibling CNA renderers
+normally leave plain texture levels application-authored and auto-regenerate only render targets.
+Non-RGBA8 and compressed WebGPU textures retain explicitly authored levels instead of passing them
+through the RGBA8 blit generator.
+
+### Multiple render targets
+
+The public XNA ceiling is four color attachments. WebGPU accepts two through four compatible
+`RenderTarget2D` objects and builds one render pass with a shared depth/stencil attachment. A custom
+WGSL fragment shader can write `@location(0..N-1)`; stock effects and SpriteBatch write attachment
+zero only, with write masks disabled on the remaining attachments. `Clear()` clears all bound
+attachments, and MSAA resolves each independently.
+
+Shared validation rejects null, foreign-device, duplicate or incompatible targets before the
+active set changes. WebGPU additionally refuses cube faces in an MRT set; a single cube-face target
+is supported. Binding a single target, a cube face or the backbuffer flushes and ends the previous
+MRT set.
+
+## Shader routes
+
+### Source `ShaderEffect`
+
+The live device reports `ShaderDialectEXT::Wgsl` and
+`ExecutesShaderEffectSourceEXT() == true`. Invalid WGSL produces an effect compile error rather
+than an uncaught device validation error. A draw snapshots its uniform and resource state, so later
+setter calls do not change already queued work.
+
+The legacy untyped string contract remains available:
+
+| Element | Legacy convention |
+|---|---|
+| Entry points | vertex `vs_main`, fragment `fs_main` |
+| Vertex locations | declaration element order, continuing across bound streams |
+| Uniforms | one block at `@group(0) @binding(0)`, described by `DeclareUniformBlockEXT`; `World`, `View` and `Projection` are injected by those exact names |
+| Optional 2D sample | sampler at binding 1 and `texture_2d<f32>` at binding 2 |
+
+With `CNA_CNAEXT=ON`, explicitly typed WGSL packages use the reflected descriptor contract and
+their declared vertex/fragment entry points. The renderer supports 2D, cube and volume resources
+within that contract and refuses unbindable groups, arrays or resource dimensions by name. New
+portable extension code should query `SupportsShaderLanguageEXT` and prefer typed payloads rather
+than guessing from the renderer identity.
+
+Both source contracts work on 3D, instanced and SpriteBatch paths. A legacy SpriteBatch shader uses
+the fixed position/UV/color layout. Sprite geometry receives the normal `Begin` transform, but a
+custom WGSL effect does not receive an automatically named `MatrixTransform` uniform.
+
+### Compiled XNA Effects
+
+`CNA_WEBGPU_COMPILED_EFFECTS=ON` enables the Direct3D 9 Effect Framework bytecode route and adds the
+MojoShader dependency. It is off by default. MojoShader emits SPIR-V; native WebGPU consumes the
+adapted module, while the Emscripten route translates it to WGSL before browser validation. The
+same option therefore builds on both targets.
+
+The public capability is false when the option is off, and construction is refused instead of
+silently substituting a stock shader. Reflection, pass/state behavior, supported sampler types,
+SpriteBatch inheritance and remaining shader-model refusals are maintained in
+[`fx-compiled-effects.md`](fx-compiled-effects.md).
+
+## Browser presentation and asynchronous work
+
+Native callbacks are driven synchronously by pumping `wgpuInstanceProcessEvents()`. In an
+Emscripten build, waits yield through Asyncify so JavaScript promises, adapter/device requests and
+buffer maps can complete. CNA application targets that need this route receive the required
+Asyncify configuration from the renderer-aware build helpers.
+
+Native rendering acquires the current surface texture and presents it explicitly. A browser canvas
+texture can expire at any task yield, including a readback or capability probe, so the browser path
+renders into an owned backbuffer. `Present` then acquires the canvas, copies the finished image and
+submits without waiting. This also preserves untouched pixels across partial draws. Resize follows
+the acquired canvas texture's actual dimensions and recreates depth/MSAA attachments when needed.
+
+The browser loop, canvas/CSS size distinction, C ABI embedding and platform qualification are
+owned by [`web-emscripten-graphics-limitations.md`](web-emscripten-graphics-limitations.md).
+
+## Queries and device loss
+
+An occlusion query tags the draws between `Begin` and `End`. Each contiguous render-pass run gets a
+native query slot, and readback aggregates all runs in the logical interval. Vulkan has been
+measured returning an exact sample count; Metal returns visibility (zero or one). Other native and
+browser adapters must be treated according to `PixelCountIsPreciseEXT()` rather than assumed exact.
+
+The deterministic debug path can destroy and recreate the device, then restore ordinary registered
+buffers, `Texture2D` resources and `RenderTarget2D` objects. Render-target pixel contents are
+discarded on recreation. `DebugSimulateContextLoss()` deliberately refuses while a live
+`TextureCube`, `RenderTargetCube`, `Texture3D`, occlusion query or custom `ShaderEffect` exists,
+because those objects cannot yet rebuild their native handles. The driver-reported device-lost
+callback currently records the diagnostic; asynchronous real-driver recovery is not a qualified
+contract.
 
 ## Important limitations
 
-The desktop feature set now covers 3D (every stock effect, with FNA fog parity), real instancing,
-`RenderTarget2D`/`RenderTargetCube`, MSAA (backbuffer + `RenderTarget2D`), `Texture3D`, mip generation,
-the full render state (blend, rasterizer/cull, viewport, scissor, depth-stencil incl. full stencil ops),
-`Texture2D`/`TextureCube`/backbuffer readback (`WEBGPU-51`), MRT, occlusion queries, custom WGSL effects,
-GPU-native compressed textures, and -- since 2026-08-26 -- the browser path (`WEBGPU-119`–`122`). Those
-are described in their own sections above and are no longer "limitations". What is **genuinely still
-open**:
+These are current boundaries, not completed campaign history:
 
-**Added 2026-09-06 (closeout pass): the list this sentence promises, which the document had stopped
-carrying.** Everything after it is a *supported* feature described with its boundary, so a reader
-arriving here found no open list at all.
+- **Platform qualification:** native execution is verified on Linux x86_64, and browser execution
+  in headless Chrome. Windows, macOS and linux-aarch64 native packages remain unverified on their
+  target hardware (`WEBGPU-1`). Browser evidence is Chrome-centric; Firefox, Safari and a broad
+  physical-device matrix are not continuous gates.
+- **Known presentation defects:** the two unregistered shared programs recorded in
+  [`handoff.md` section 5.1](../handoff.md#51-defects) currently fail on WebGPU: a mid-frame switch
+  to Letterbox/Overscan leaves the sprite unscaled, and two Deferred SpriteBatch batches under
+  different custom viewports read back black. This page does not downgrade or duplicate that
+  defect ledger.
+- **A native surface is mandatory:** there is no surface-free WebGPU backbuffer. Use an explicit
+  renderer fallback when the process may run without a presentable window.
+- **Recovery is resource-dependent:** the live resource kinds named in the device-loss section
+  block simulated recovery until they are disposed, and asynchronous recovery after a real
+  driver-reported device loss is not qualified.
+- **MRT accepts 2D targets only:** cube faces work singly but are refused in a plural target set.
+- **Base instance is unsupported.** Instancing itself, instance offsets and instance frequencies
+  are implemented; the separate base-instance capability remains false.
+- **Some fixed stock layouts require one per-vertex stream:** ordinary stock families, custom WGSL
+  and compiled effects can bind split declarations, but the current skinned/PBR fixed-layout
+  normalization routes refuse a split vertex rather than read only its first stream.
+- **Optional formats are adapter facts:** packed 16-bit color textures are refused; BC,
+  normalized 16-bit targets, float32 filtering/blending and applied MSAA depend on live features
+  and probes as described above.
+- **Metal partial sample masks:** a mask that keeps no samples is handled exactly and one that
+  keeps all samples is ordinary; a partial mask is refused on wgpu-native's Metal backend because
+  it cannot apply the requested pipeline sample mask.
+- **LOD bias has named route limits:** stock XNA effects and compiled effects apply it in shader
+  code and clamp it to WebGPU's practical range. Custom WGSL owns its own sample calls, and the PBR
+  extension families currently accept the state without applying it. See
+  [`sampler-state-support.md`](sampler-state-support.md).
+- **Plain RGBA8 mip generation differs from XNA/FNA:** a level-zero write regenerates the chain,
+  as documented in the texture section.
+- **Custom SpriteBatch WGSL has no automatic `MatrixTransform` uniform:** geometry is transformed,
+  but a shader needing that named value must carry its own uniform.
 
-* **`WEBGPU-1` — the only open WebGPU row.** Build/link/run verification of the Windows, macOS and
-  linux-aarch64 wgpu-native packages. Hashes pinned, Linux x86_64 verified; the other three need
-  hardware this machine does not have.
+## Validation
 
-The historical `FX-109` vertex-sampler refusal is superseded by the museum B8 repair.
-Compiled HiDef draws capture `VertexTextures` and `VertexSamplerStates` independently of pixel
-slots, after pass application, and retain the sampled resources until submission. Ordinary
-`Texture2D` Single/Vector4 storage is supported; point sampling uses non-filtering bind-group
-layouts without requiring `Float32Filterable`. Filtering float32 compiled samplers requires that
-optional feature and otherwise throws `NotSupportedException`. Float cubes remain refused because
-their transfer path has not been generalized. The browser shader translation maps TEXLDL's
-explicit level to WGSL `textureSampleLevel`; unsupported image-operand combinations still refuse.
-Measured coverage: native Linux (lavapipe and the museum's RADV run of its `vertextexture` fixture),
-not a blanket platform claim; the repair evidence is in Git history
-(`git show 9d49828f4:CNA_MUSEUM_REPAIR_HANDOFF.md`).
+Never run the native GPU suite on the owner's live desktop. Build with at most eight jobs and use
+the private compositor/GPU runner:
 
-(Per-target `multiSampleCount` on `RenderTarget2D` and `RenderTargetCube` was on this list until
-`WEBGPU-165`; see *Per-target MultiSampleCount* above.)
+```bash
+cmake --build cmake-build-webgpu --parallel 8
+tools/platform/run_gpu_tests_private.sh cmake-build-webgpu \
+  -L WebGPU --output-on-failure -j6
+```
 
-**Multiple render targets are supported** (`WEBGPU-85`/`86`/`87`): `SupportsCapability(MultipleRenderTargets)`
-reports true, and `SetRenderTargets` binds 2..4 `RenderTarget2D` targets that share width/height/sample
-count (a mismatch, a cube face, a null target, or a count > 4 is refused with a
-`System::NotSupportedException`). A custom `ShaderEffect` whose WGSL fragment writes `@location(0..N-1)`
-fans out to every attachment; a built-in (stock/SpriteBatch) draw writes attachment 0 only (`writeMask`
-0 on the rest) -- the same "the stock pipeline writes attachment 0" behaviour every other renderer has.
-Depth/stencil is single and shared by the pass. See the MRT section below for the full boundary.
+The shared rendered corpus is a separate, stable parity gate:
 
-**GPU-native block-compressed textures are supported** (`WEBGPU-144`): when the adapter advertises
-`WGPUFeatureName_TextureCompressionBC` (requested at device creation), DXT1/3/5 and BC7 (and their
-sRGB variants) upload their raw 4x4 blocks to a `WGPUTextureFormat_BC{1,2,3,7}*` texture and the GPU
-decodes them at sample time -- no CPU decompression. This is the first CNA renderer to do so;
-`Texture2D`'s existing compressed block-transfer contract (`IsCompressedTransferFormatEXT`) routes the
-bytes, and the renderer keeps the per-mip blocks as the authoritative `GetData` store.
-`WebGPU_CompressedTexture` proves a DXT1 and a DXT5 texture sample correctly and round-trip their exact
-block bytes. Reachable via the direct `Texture2D(device, w, h, mipMap, SurfaceFormat::Dxt*)` +
-`SetData(blockBytes, count)` API **and now via the content loaders too** (Phase 2, XNB-24):
-`Texture2D::DDSFromStreamEXT` and the `.xnb` `Texture2DReader` keep DXT content compressed and upload
-the raw blocks instead of CPU-decoding to Color. Both loaders gate on a new renderer-opt-in capability
-`LoadsCompressedContentNativelyEXT()` (default false; WebGPU-only, so every other renderer
-keeps its existing decode-to-Color loaders) AND the per-format `IsCompressedTransferFormatEXT`, so a
-loaded DXT texture keeps its `Dxt*` format exactly when the device can transfer it and decodes to Color
-otherwise. `WebGPU_CompressedContent` proves both loaders take the native path (format preserved, full
-mip chain, renders correctly). Baking this Phase-2 path exposed and fixed a compressed-mip upload bug:
-a sub-4x4 tail mip (2x2/1x1) must be written with its **block-aligned** copy extent (`ceil(dim/4)*4`),
-which wgpu-native validates against, not its logical size -- Phase 1's single 4x4 level never hit it.
+```bash
+tools/platform/run_gpu_tests_private.sh cmake-build-webgpu \
+  -R '^WebGPU_Parity_' --output-on-failure -j6
+```
 
-**Block-compressed `TextureCube` works end to end** (`WEBGPU-206`). `CreateTextureCube` passes the
-requested format through — it used to discard it, which is why every cube was RGBA8 whatever it was
-asked for — and the cube is classified by the *same* `ClassifyWebGPUTextureFormat` the 2D path uses:
-a cube here is a six-layer 2D texture plus a cube view, and the BC feature does not restrict block
-storage to non-array 2D. Blocks upload per face and per mip through `SetCompressedDataEXT`, whole
-level at a time; `GetData` returns them **decoded**, through the framework's own `DxtUtil`/`Bc7Util`,
-because that is what the shared contract asks for and decoding stored blocks is not fabrication. A
-DDS/XNB cube keeps its blocks, since the cube content reader has always gated on
-`IsCompressedCubeTransferFormatEXT`, which this renderer now overrides to match its 2D answer.
-`WEBGPU-163`'s refusal survives exactly where it should: on a device without the BC feature.
+Browser harnesses must run in an actual browser, not Node-only module mode. The canvas-lifetime
+driver requires Node 22+ with global `WebSocket` support. The standard smoke and canvas-lifetime
+routes are:
 
-(What follows is the state before that, kept because it explains why the refusal existed.)
-**Block compression was `Texture2D`-only; a `TextureCube` refused it at construction** (`WEBGPU-163`).
-`CreateTextureCube` discards the requested `surfaceFormat` and `WebGPUTextureCubeRenderer` stores RGBA8,
-so the support above does not extend to a cube. Until `WEBGPU-163`, one classifier answered for both
-resource kinds, and a `TextureCube(device, size, mipMap, SurfaceFormat::Dxt1)` therefore **constructed**
-on a BC-capable device and then threw from every `SetData`. `IGraphicsRenderer` now asks
-`ClassifyTextureCubeFormatEXT()` for a cube -- defaulting to the 2D verdict, so no other renderer moved --
-and this renderer overrides it to refuse every block-compressed format by name, saying in the message
-that the same format remains available as a `Texture2D` so a caller can fall back deliberately. This is
-an interim honest refusal, **not** a platform limitation: a BC cube is a six-layer 2D texture plus a
-`WGPUTextureViewDimension_Cube` view and nothing in `WGPUFeatureName_TextureCompressionBC` forbids it.
-`WEBGPU-206` is the parity implementation.
+```bash
+tools/platform/run_gpu_tests_private.sh --exec \
+  env CNA_WEBGPU_DEMO=cna_house3d_demo scripts/run-webgpu-browser-test.sh
+tools/platform/run_gpu_tests_private.sh --exec \
+  node scripts/run-webgpu-canvas-lifetime-test.mjs cmake-build-wasm-webgpu
+```
 
-**Occlusion queries are supported** (`WEBGPU-84`): `SupportsCapability(OcclusionQuery)` reports true,
-`CreateOcclusionQuery()` returns a real query backed by a `WGPUQuerySet`. The WebGPU specification
-guarantees only zero versus non-zero for an occlusion result, and the count is the backend's: wgpu's
-Vulkan backend counts samples (a fully occluded draw reads back 0 and a visible one a full target of
-samples, `WebGPU_OcclusionQuery`), while its Metal backend records Metal's boolean visibility, so a
-visible draw reads 1 there -- `PixelCountIsPreciseEXT()` reports false on a Metal adapter
-(Apple M4 `AM4-091`). Other backends (DX12, GLES, a browser) are not measured. Every contiguous
-query run receives a query-set slot; later runs, including a run after `Clear` opens a new render
-pass, receive additional slots and readback aggregates them into the logical result. Exact adapters
-sum samples, while visibility-only adapters promise only zero versus non-zero. The shared logical
-interval coordinator separately partitions overlapping XNA query objects and combines their
-segments without replaying draws.
+Focused native programs under `modules/renderers/webgpu/examples/` cover formats, MSAA, render
+targets, queries, custom/compiled effects, draw ordering, device recovery, browser lifetime and
+performance cardinality. Their individual historical pass totals are intentionally not copied
+here; CTest registration and the shared corpus files are the moving inventory.
 
-**`BlendState.MultiSampleMask`** is pipeline state (`WGPUMultisampleState.mask`), and wgpu-native's
-Metal backend does not apply it -- Metal has no pipeline sample mask. So the renderer judges the mask
-against the bound target when a draw is recorded (Apple M4 `AM4-131`): a
-single-sample target ignores it, as in XNA; a mask that keeps every sample draws normally; one that
-keeps none is not recorded at all, which is exact on every adapter; and one that keeps some samples
-and drops others is applied by the Vulkan backend but refused with `NotSupportedException` on a Metal
-adapter, rather than silently written to every sample. `SupportsPartialMultiSampleMaskEXT()` answers
-which.
+## Architecture summary
 
-**Stock-effect fog is at full parity** (`WEBGPU-145`–`148`, plus the pre-existing
-`EnvironmentMapEffect` fog): every FNA stock 3D effect that exposes `FogEnabled`/`FogStart`/`FogEnd`/
-`FogColor` -- `BasicEffect` (colored/textured/vertex-colour-textured/lit per-pixel + per-vertex),
-`AlphaTestEffect`, `DualTextureEffect`, `SkinnedEffect` -- now applies FNA's `ApplyFog`. The design
-carries the CPU-prepared FNA view-space fog vector (`EffectHelpers.SetFogVector`, already on
-`GpuDrawParams.fogVector`) plus `fogColor` in the shared primary uniform block (widened 128→160 bytes);
-each WGSL family computes `fogFactor = 1 - saturate(dot(vec4(pos,1), fogVector))` in the vertex stage
-(the SKINNED position for `SkinnedEffect`, matching FNA) and `rgb = mix(fogColor, rgb, fogFactor)` in
-the fragment stage. Tests: `WebGPU_BasicEffect_Fog`/`AlphaTestEffect_Fog`/`DualTextureEffect_Fog`/
-`SkinnedEffect_Fog` (each uses `FogStart==FogEnd`→`FogColor` as the drop-the-fog discriminator).
+- Stock shaders are WGSL modules; per-draw effect data uses uniform buffers because WebGPU has no
+  portable push constants.
+- Immutable pipelines and bind groups are cached by every state that affects them. Transient
+  vertex/uniform buffers use bounded pools; SpriteBatch uses retained buffers rather than creating
+  one native object per draw.
+- The ordered replay stream is the single authority for draw, clear, query and target-transition
+  ordering. A later state mutation cannot retroactively change an earlier command.
+- WebGPU's `VertexElementFormat::Color` maps to normalized RGBA bytes, not a nonexistent BGRA
+  vertex format.
+- Fullscreen, input and window policy remain in the shared platform layer; the renderer consumes a
+  surface and a presentation rectangle.
 
-`FillMode::WireFrame` is not on the open list either: as of `WEBGPU-153` it is **implemented and
-reported true**, by triangle-edge expansion rather than by a polygon mode -- see its own section
-below.
-
-`GetBackBufferData()` and a first real 3D draw path (`DrawColoredPrimitives`/
-`DrawIndexedColoredPrimitives`, with genuine depth testing) are implemented — see below. Interface
-methods still not overridden by this renderer retain the common renderer's existing unsupported/
-default behavior (mostly silent no-ops, by `IGraphicsRenderer`'s own design for state setters).
-
-### `FillMode::WireFrame`, by triangle-edge expansion (`WEBGPU-153`)
-
-A wireframe does not need a polygon mode. `WEBGPU-153` implements WebGPU's portable route by
-re-expanding a triangle index sequence into a 32-bit line-list index buffer. This is deliberately
-different from current EasyGL, which reports general wireframe support only when its live context
-exposes a native polygon mode.
-
-**How.** At **queue** time, a draw whose captured `FillMode` is `WireFrame` and whose primitive is
-`TriangleList` or `TriangleStrip` has its command rewritten in place: each triangle's three edges
-become three two-index lines in a 32-bit index buffer, and the topology becomes
-`WGPUPrimitiveTopology_LineList`. Nothing downstream has a wireframe branch at all -- what the
-replay receives is an ordinary 32-bit indexed line-list command, which every `Issue*Draw` family
-already knows how to draw, and the topology is already part of every pipeline cache key.
-
-| Step | Behaviour |
-|---|---|
-| `GraphicsDevice::SupportsCapability(GraphicsCapability::WireFrame)` | **`true`**, backed by pixels: the shared `WireFrameTriangleOracle` measures interior `0/1089` with all three edges present, against Solid's `1089/1089` |
-| A wireframe polygon draw | **Accepted.** Exactly one queued command, one native draw, one extra pipeline (the line-list variant is a sibling of the solid one, not a new key per draw), no extra pass, retry or frame |
-| `RasterizerState.DepthBias` on that draw | **Dropped for it.** WebGPU forbids a depth bias on a line topology, and a depth bias is defined as an offset along a *polygon's* depth slope -- a line has none |
-| An interior edge shared by two triangles | Drawn **twice**. Shared vertices stay shared |
-| A `LineList`, `LineStrip` or `PointListEXT` draw under `WireFrame` | **Untouched.** A fill mode selects how a *polygon's interior* is rasterized; a line or point has no interior, so `Solid` and `WireFrame` are the same request. Measured byte-identical under both modes |
-
-**Coverage.** Every public 3D draw route performs the expansion -- ordinary non-indexed and indexed
-(16- and 32-bit, with nonzero `vertexStart` / `startIndex` / `baseVertex`), both
-`DrawUserPrimitives` / `DrawUserIndexedPrimitives` families, every stock-effect family, the custom
-WGSL `ShaderEffect` route and the instanced route. `WebGpuWireFrameContract.EveryPublicDrawRouteWireframesAndAcceptsSolid`
-asserts it per route, because "some routes wireframe and the rest quietly fill" is exactly the defect
-worth catching and a whole-suite total would hide it.
-
-**`SpriteBatch` wireframes too** (`WEBGPU-154`, 2026-09-06). A sprite is two triangles, XNA's
-`FillMode` is a `RasterizerState` field
-that applies to every primitive the device rasterizes, and `SpriteBatch.Begin` assigns the device's
-`RasterizerState` -- so a batch begun with a `WireFrame` state must draw outlines. EasyGL filled
-instead when this row was first written (measured 576/576 pixels, four ways, graphics row 1115),
-but EasyGL's general wireframe path has since moved to native polygon mode (`SOFTWARE-178`). The
-current cross-renderer acceptance is that
-no route accepts a wireframe request and draws a filled polygon.
-
-Mechanically it costs nothing per sprite. One shared 12-entry `uint16` line list is created on the
-first wireframe sprite and reused forever, because each sprite's six vertices sit at
-`spriteIndex * 6` in the shared vertex buffer and are reached through `baseVertex`; the fill mode
-joins the sprite pipeline cache key, since a line-list pipeline is a different pipeline object rather
-than a different draw call. The custom-WGSL `ShaderEffect` sprite route takes the same two changes.
-Measured on a 192x192 sprite: `Solid` lights 36864 pixels, `WireFrame` 957. Note one consequence a
-caller can see -- `SpriteBatch::Begin(...)` with a **null** `rasterizerState` resolves to
-`CullCounterClockwise`, which is `Solid`, so a device set to `WireFrame` still fills unless the state
-is passed to `Begin`. That is XNA's own behaviour, not a renderer choice.
-
-**Why not `polygonMode`.** The pinned wgpu-native *does* expose one:
-`WGPUPrimitiveStateExtras::polygonMode` with `WGPUPolygonMode_Line`, behind
-`WGPUNativeFeature_PolygonModeLine` (listed for DX12/Vulkan/Metal). It is deliberately unused,
-because it is **native-only** and browser WebGPU has no polygon mode at all; index expansion is the
-one route that works on both targets, so this renderer has one implementation rather than two.
-
-**The history, because this renderer has given three different answers.** Before `WEBGPU-115` it
-reported `WireFrame` **supported**, accepted the request, built and natively submitted a distinct
-pipeline for it, and returned a frame byte-identical to the `Solid` one -- an affirmative false claim
-through the public capability query. `WEBGPU-115` replaced that with a deterministic refusal, on the
-stated grounds that "wgpu-native exposes no polygon mode, so a wireframe request cannot reach any
-native pipeline state". `WEBGPU-153` disproved the premise rather than the refusal: a wireframe never
-needed a polygon mode, and the sentence was wrong about the API as well. All three states are
-recorded in `WebGpuWireFrameContractTests.cpp`, which measures the current one.
-
-### Custom WGSL `ShaderEffect` (`WEBGPU-76`)
-
-A `ShaderEffect` constructed with WGSL vertex and fragment source is genuinely compiled and run by
-this renderer on the 3D draw routes (`DrawUserPrimitives` / `DrawUserIndexedPrimitives` /
-`DrawPrimitives` / `DrawIndexedPrimitives`). Unlike SOFTWARE/HEADLESS
-(which accept a source and ignore it), WebGPU's pixels are its shader's, so it reports:
-
-- `GraphicsDevice.GetShaderDialectEXT()` → `ShaderDialectEXT::Wgsl` — ask this before supplying source;
-- `GraphicsDevice.ExecutesShaderEffectSourceEXT()` → `true`.
-
-**Authoring contract.** A custom effect's WGSL must follow this renderer's fixed conventions:
-
-| Element | Convention |
-|---|---|
-| Entry points | vertex `vs_main`, fragment `fs_main` (two independent modules — redeclare any shared struct in each) |
-| Vertex inputs | `@location(i)` for the *i*-th element of the bound `VertexDeclaration` (`location = declaration index`, the same convention EasyGL uses) |
-| Uniform block | `@group(0) @binding(0) var<uniform> …` — visible to both stages. Declare its size and each member's byte offset to the framework with `ShaderEffect.DeclareUniformBlockEXT(sizeBytes, names, offsets, count)`; WGSL has no loose uniforms, so this name→offset map is how `SetUniform*(name, …)` reaches the shader |
-| Matrices | the renderer sets `World`, `View`, `Projection` (those exact names, column-major, untransposed) into the block every draw — declare them and read `Projection * View * World * vec4f(pos, 1.0)` |
-| Texture (optional) | if the fragment samples, declare `@group(0) @binding(1) var …: sampler;` and `@group(0) @binding(2) var …: texture_2d<f32>;`. Unit 0 comes from `ShaderEffect.SetTexture(0, tex)`; an unbound unit falls back to a neutral-white texture |
-
-The compiled program, its bind-group/pipeline layouts and its per-pass pipelines are owned by the
-effect; a draw captures the uniform block **by value** at the call, so two draws of the same effect
-with different `SetUniform*` values render correctly. Compilation failures are reported through
-`ShaderEffect.IsEffectValid()` / `GetCompileErrorEXT()`, never as a device error.
-
-The same `WebGPUEffectRenderer` also drives **SpriteBatch** custom effects (`WEBGPU-142`):
-`SpriteBatch.Begin(..., effect)` runs the effect's WGSL per sprite. The sprite vertex layout is fixed
-(`position`/`uv`/`color` at `@location(0/1/2)`) and needs no matrices — sprite vertices are already NDC
-— so a sprite effect's vertex shader passes position through; the fragment samples the sprite's texture
-at the reserved `@binding(1)`/`@binding(2)` and reads its uniform block at `@binding(0)`. A compiled
-Effect-Framework effect (no WGSL) is refused. Proven by `WebGPU_ShaderEffect3D` (3D) and
-`WebGPU_SpriteBatch_ShaderEffect` (2D).
-
-**Still open:** the `SpriteEffect`-style `MatrixTransform` uniform is not auto-injected for a
-SpriteBatch custom effect (an app that needs `Begin(..., transformMatrix)` to reach a custom shader
-would bake it into a uniform itself); the `SpriteBatch` transform matrix is applied to the sprite
-geometry as usual.
-
-### Multiple render targets (`WEBGPU-85`/`86`/`87`)
-
-`SetRenderTargets` binds 2..4 `RenderTarget2D` targets into one render pass. `PassDestination` carries
-up to four colour attachments (slot 0 in its single fields, slots 1..N-1 in its `mrt*` arrays), and
-the one shared `ReplayOrderedSegments` builds an N-entry `WGPURenderPassColorAttachment` array from it
-— there is no separate MRT replay path. Every pipeline that replays into the pass is built for that
-attachment count and keyed by it, so a 1-target and a 2-target pipeline are distinct cache entries.
-
-| Aspect | Behaviour |
-|---|---|
-| Binding | 2..4 `RenderTarget2D` sharing width/height/sample count. A mismatch (named target), a cube face, a null target, or count > 4 is refused with a `System::NotSupportedException`. |
-| Custom `ShaderEffect` draw | Writes every attachment: its WGSL fragment declares `@location(0..N-1)`. This is the real MRT path — `WebGPU_MRT` binds 2 then 4 targets and proves slot N holds slot N's own content (a distinct swizzle of `uBase`), not slot 0's. |
-| Stock / SpriteBatch draw | Writes attachment 0 only (its single `@location(0)` output); slots 1..N-1 have `writeMask` 0 — the "the stock/2D pipeline writes attachment 0" behaviour every other renderer has (`ExpandStock`/`InitStockColorTargetsEXT`). This is what makes the shared cross-renderer MRT tests pass. |
-| Clear | `Clear()` clears every bound attachment (XNA has no per-attachment clear granularity). |
-| Depth/stencil | Single, shared by the pass (slot 0's). |
-| Unbind | `SetRenderTarget(nullptr)` / `SetRenderTargets({})` / any single-target or cube-face bind flushes the set into all its targets and drops back to one attachment. |
-
-Every render target here uses the backbuffer's `surfaceFormat_`, so all attachments in an MRT set
-share a format. Per-slot `ColorWriteChannels`/`1`/`2`/`3` **are** honoured for a custom-effect MRT
-draw (`WEBGPU-143`): slot *i*'s `@location(i)` output is masked by that attachment's own
-`BlendState.ColorWriteChannels`, proven by `WebGPU_MRT`'s Check C. XNA has one blend *equation* for
-all targets, so there is no per-slot independent blend to model; the set shares slot 0's blend
-factors. MSAA + MRT resolves each attachment independently.
-
-**Wireframe** was implemented exactly that way by `WEBGPU-153` -- index expansion into a line
-topology -- and is no longer a deviation; see its section above.
-
-## Architecture notes
-
-- WebGPU uses WGSL shader modules; resource bindings use bind-group layouts and bind groups.
-- WebGPU has no push constants, so 3D effect data uses uniform buffers.
-- Per-draw vertex/uniform buffers are pooled, not churned (`WEBGPU-12`): `AcquireTransientBuffer`
-  serves them from a bounded pool keyed by `(usage, power-of-two size class)` and `RecycleTransient-
-  Buffer` returns them after submit instead of releasing, so a warmed scene stops allocating.
-  Recycling is fence-free -- the single device queue orders every `wgpuQueueWriteBuffer` write after
-  the prior cycle's reads. The SpriteBatch vertex buffer is a 3-slot ring (`WEBGPU-59`).
-- Adjacent stock SpriteBatch commands with identical texture, sampler, blend, viewport, scissor,
-  rasterizer and target state are emitted as one native draw. Texture sorting can therefore turn
-  interleaved compatible sprites into one run per texture. A custom effect, wireframe mode, marker,
-  clear, 3D draw, occlusion-query boundary or any relevant state change remains an explicit run
-  barrier. `WebGPU_SpriteRunCost` checks both draw counts and exact pixels.
-- Native presentation does not stage a backbuffer readback. Staging is created only when
-  `GetBackBufferData()` asks for it and is cached for repeated reads of the same rendered generation;
-  `WebGPU_ReadbackCost` guards the copy count.
-- Pipeline state is largely immutable and cached per family. All 12 3D pipeline families
-  (`GetOrCreatePipeline*3D`) share ONE `WGPURenderPipelineDescriptor` assembly,
-  `Build3DPipelineEXT(Pipeline3DDescEXT)` (`WEBGPU-29`): each family passes only its vertex layout,
-  shader module(s), pipeline layout and label, and keeps its own cache key/map. The SpriteBatch and
-  MipBlit pipelines keep their own builders (not 3D families).
-- Native surface creation is performed directly from the platform window's native handle
-  (`TryGetWin32`/`TryGetX11`/`TryGetWayland`/`TryGetCocoa`/`TryGetAndroid` over the `HWND`,
-  `Display*` + XID, `wl_display*` + `wl_surface*`, ... that SDL3's video driver owns); CNA does not
-  require the separate `sdl3webgpu` compatibility library, and the renderer itself includes no SDL
-  header. (`WMG-0024` once built it with `CNA_ENABLE_SDL=OFF` on CNA's own Wayland and X11
-  platforms; those were retired on 2026-10-06, and a windowed WebGPU build now runs on SDL3.)
-
-The WebGPU-specific design choices — push constants → UBO, wireframe by edge expansion,
-async → synchronous callback pumping, `Color` → `Unorm8x4` vertex format, and windowing handled by
-the shared platform — are collected in `docs/webgpu-design-notes.md`.
-
-What is still open is *Important limitations* above; the `WEBGPU-nnn` task record is in Git history.
+The rationale for the durable API choices is in
+[`webgpu-design-notes.md`](webgpu-design-notes.md). Historical implementation checkpoints belong to
+Git history; current behavior belongs here, in the focused subsystem pages and in the executable
+tests.

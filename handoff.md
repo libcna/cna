@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- WebGPU renderer-document reconciliation (2026-11-01): the 1,662-line `WEBGPU-1`..`209` campaign
+  diary is replaced by a 391-line current native/browser contract with the required precise parity
+  statement and an explicit limitations section. It removes contradictory historical claims about
+  opaque-white classic null textures, unimplemented render-target mips and semantic layouts,
+  Texture2D-only block compression and an all-clear limitations list. The page now delegates moving
+  inventories, distinguishes live adapter capabilities from fixed support, records the two known
+  presentation defects, surface requirement, device-loss boundary, MRT/cube, base-instance,
+  split-stream, format, sample-mask, LOD-bias and custom SpriteBatch limits, and documents both
+  legacy and reflected WGSL plus opt-in compiled effects. All local links and the renderer-identity
+  gate pass; 187 WebGPU-specific targets rebuild, and the private native run passes all 190 tests
+  in the `WebGPU` label (188 executed passes and two declared conformance skips). The browser
+  canvas-lifetime harness was not rerun because this host has Node 20.19.2 while the driver requires
+  Node 22+ with global `WebSocket`; the previously recorded headless-Chrome evidence is unchanged.
 - Documentation reconciliation inventory (2026-11-01): root `documents.md` now lists all 178
   tracked `docs/**/*.md` files and distinguishes completed standalone reconciliation from pending
   work and files changed only as supporting indexes/ledgers. It records the two partially duplicate

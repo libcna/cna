@@ -1,7 +1,7 @@
 # Stav dokumentace v `docs/`
 
 Inventura: 2026-11-01. Rozsah: všech 178 aktuálně verzovaných souborů `docs/**/*.md`.
-Souhrn: 49 zpracovaných, 23 podpůrně aktualizovaných čekajících na vlastní audit a 106 dosud
+Souhrn: 50 zpracovaných, 22 podpůrně aktualizovaných čekajících na vlastní audit a 106 dosud
 samostatně nezpracovaných.
 
 Tento soubor sleduje současný dokumentační úklid. Stav neříká, že čekající dokument je nutně
@@ -11,6 +11,7 @@ věcná kontrola proti aktuálnímu zdrojovému kódu, testům a `handoff.md`.
 ## Význam stavů
 
 - ✅ **ZPRACOVÁNO** — dokument prošel samostatnou kontrolou/reconciliací a případnou úpravou.
+- 🔵 **PROBÍHÁ** — právě probíhá samostatný audit; nevybírat znovu jako další úlohu.
 - 🟡 **ČEKÁ — podpůrně aktualizováno** — při jiné úloze byl změněn, ale ještě neprošel vlastním
   úplným auditem. Samotný počet commitů proto neznamená dokončení.
 - ⬜ **ČEKÁ** — v tomto průchodu zatím nebyl samostatně zpracován.
@@ -33,8 +34,8 @@ Další vícenásobné změny nebyly stejnou prací dvakrát:
 - `docs/graphics-renderer-feature-matrix.md` bylo změněno 7×: jednou vlastním auditem a dále při
   navazujících opravách jednotlivých rendererů a schopností.
 - `docs/task-id-index.md` bylo změněno 6× jako směrovací registr, ne šesti samostatnými audity.
-- `docs/webgpu-renderer.md` bylo změněno 5× kvůli různým subsystémům; jeho rozsáhlý samostatný
-  úklid ještě čeká.
+- `docs/webgpu-renderer.md` bylo před vlastním auditem změněno 5× kvůli různým subsystémům;
+  samostatný šestý průchod 2026-11-01 jej přepsal na aktuální kontrakt a je nyní dokončený.
 - `docs/migration-guide.md` bylo změněno 4×; první tři změny byly návazné opravy a poslední commit
   byl úplný audit.
 - `docs/rasterizerstate-support.md` bylo změněno 4× kvůli odstranění starého culling auditu,
@@ -171,7 +172,7 @@ nejsou součástí aktuálního inventáře.
 - ✅ **ZPRACOVÁNO** — [`docs/web-emscripten-graphics-limitations.md`](docs/web-emscripten-graphics-limitations.md)
 - ✅ **ZPRACOVÁNO** — [`docs/webgl2-renderer.md`](docs/webgl2-renderer.md)
 - ⬜ **ČEKÁ** — [`docs/webgpu-design-notes.md`](docs/webgpu-design-notes.md)
-- 🟡 **ČEKÁ — podpůrně aktualizováno** — [`docs/webgpu-renderer.md`](docs/webgpu-renderer.md)
+- ✅ **ZPRACOVÁNO** — [`docs/webgpu-renderer.md`](docs/webgpu-renderer.md)
 - ⬜ **ČEKÁ** — [`docs/windows-visual-studio.md`](docs/windows-visual-studio.md)
 - ⬜ **ČEKÁ** — [`docs/xma-encoder-backend.md`](docs/xma-encoder-backend.md)
 - ⬜ **ČEKÁ** — [`docs/xna-4-enumerator-reference.md`](docs/xna-4-enumerator-reference.md)
