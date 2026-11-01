@@ -1,9 +1,21 @@
 # Avatar demos
 
 The avatar demos use only the standard XNA avatar API (`AvatarDescription`, `AvatarAnimation`,
-`AvatarRenderer`) on CNA's original avatar catalog, described in `avatars.md`. Each creates a
+`AvatarRenderer`) on CNA's original avatar catalog, described in [avatars.md](avatars.md). Each creates a
 `GraphicsDeviceManager` and adds a `GamerServicesComponent`, which is all `AvatarRenderer` needs;
-no extension call and no content directory is involved.
+no avatar-specific extension or application content directory is needed. CLI/capture helpers are
+demo utilities rather than additions to XNA's avatar API.
+
+## Build availability
+
+The four `cna_demo_avatar*` targets and `cna_demo_net_avatar_sync` are currently registered only
+with `CNA_BUILD_EXAMPLES=ON`, a native build and a default renderer of OPENGLES3 or OPENGL33.
+Gamer-services must be enabled, and the network demo also requires Net. Merely compiling a GL
+renderer into a multi-renderer binary is insufficient when another renderer is the default.
+These target gates do not describe the wider renderer support of the avatar API.
+
+`cna_avatar_editor`, `cna_avatar_review` and `cna_guide_review` use a separate native example gate
+that excludes only HEADLESS/STUB defaults. They are not the same target family as the four demos.
 
 ## Controls
 
@@ -23,8 +35,13 @@ service signs in a local offline profile. For unattended runs set
 `CNA_GAMER_SERVICES_AUTO_SIGN_IN=<profile name>` (a different name per process), and
 `CNA_GAMER_SERVICES_PROFILES_DIR` to keep the profiles out of your own store.
 
-`--smoke N` exits after N drawn frames without input; `--screenshot <path>` saves one of the last
-frames' back buffer as a PNG (the demos use the HiDef profile so it can be read back). Run them through
+For the ordinary avatar/gallery/dual demos, `--smoke N` counts Update calls, not Draw calls;
+fixed-step catch-up can therefore produce fewer than N rendered frames. Screenshot capture is
+attempted during Draw near the end of that update budget. Use a sufficiently long run for async
+avatar loading and inspect the output; very short runs need not yield a ready avatar or screenshot.
+The bone-state boundary demo instead runs its own bounded lifecycle, including a window after
+Ready. Avatar sync has a separate final-update/screenshot handshake. The demos select HiDef for
+backbuffer readback. Run them through
 `tools/platform/run_gpu_tests_private.sh`'s private display, never on a live desktop.
 
 ## Troubleshooting: network demo startup (ENet port binding, discovery)
@@ -34,23 +51,20 @@ Applies to any Net-using demo (`demo_net_avatar_sync`, `demo_net_client_server_a
 `demo_net_avatar_sync` is the avatar demo that exercises it.
 
 - **"No session found after searching - is a host running?"** — the client
-  (`NetworkSession::Find`) searches for `kSearchWindowMs` (150ms) per attempt and retries up to
-  100 times (`modules/net/src/Internal/ENetDiscoveryService.cpp`); a host must already be running and
+  (`NetworkSession::Find`) uses the discovery search window (`kSearchWindowMs`, currently 150 ms).
+  The avatar-sync demo, not Find itself, adds up to 100 retry searches separated by 50 ms.
+  A host must already be running and
   past its own `NetworkSession::Create` call before the client starts searching. Launch the host
   process first, give it a moment to finish creating its session, then launch the client — a tight
-  race between the two process launches (both started in the same shell command with no delay) is
-  the most common cause of a spurious "not found," not a real bug. the host-migration
+  race between the two process launches can produce a temporary empty result. The host-migration
   cross-process integration test (`TwoProcessLoopbackTest.cpp`, Net Task 5.5) uses exactly this ordering (host, brief pause, then client) for
   the same reason.
-- **"Failed to bind discovery UDP socket."** — the discovery service binds a well-known UDP port
-  (61190) with `SO_REUSEADDR` specifically so multiple independent host/client *processes* on the
-  same machine can each bind it (confirmed empirically reliable on Linux; Windows' `SO_REUSEADDR`
-  has different, looser semantics and is expected to work but is not independently verified in
-  this project's Linux-only dev environment). If this still fails, something else on the machine
-  (a firewall rule, a completely unrelated process, or a stale process from a crashed previous
-  run) is holding that exact port in a way `SO_REUSEADDR` can't share around — check for and kill
-  any leftover demo processes (`pkill -f cna_demo_net`) before retrying, and check firewall rules
-  if it persists on a fresh machine.
+- **"Failed to bind discovery UDP socket."** — discovery binds UDP port 61190 with
+  `SO_REUSEADDR`, plus `SO_REUSEPORT` on Apple, for the platform's shared discovery socket rules.
+  Check the bind diagnostic and socket/process ownership; stop only the specific demo processes
+  belonging to the test. A packet-filtering or broadcast problem can prevent discovery without
+  causing a bind error, so diagnose those separately. Linux and Apple socket behavior must not be
+  treated as a Windows qualification.
   - Note this is **specifically** the discovery port, not the real game-session transport port —
     `NetworkSession::Create`'s own ENet host binds an OS-assigned ephemeral port (`CreateHost(0,
     ...)`, native platforms), so session-level connections essentially never hit a fixed-port
@@ -61,7 +75,15 @@ Applies to any Net-using demo (`demo_net_avatar_sync`, `demo_net_client_server_a
   behavior, not a CNA limitation) — both host and client must be on the same local broadcast
   domain (e.g. the same Wi-Fi/switch segment) for discovery to find each other automatically.
 - **Host migration (`AllowHostMigration`) doesn't seem to promote a new host** — host migration
-  targets the specific 3-real-process scenario the host-migration integration test
-  (`TwoProcessLoopbackTest.cpp`, Net Task 5.5) exercises (the original host process actually exiting/disconnecting); it does not run
-  speculatively or "just in case" — confirm the original host process actually terminated, not
-  just became unresponsive within the same process.
+  should be tested with a real transport disconnect and surviving peers. The permanent reference
+  is `TwoProcessLoopbackTest.HostMigrationPromotesOneSurvivorAndTheOtherReconnectsAcrossRealProcesses`
+  in `modules/net/tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp`; pausing the original host
+  process is a different failure condition and is not equivalent to that test.
+
+## Verification
+
+The 2026-11-01 documentation audit built all five targets in the existing GL-default multi tree.
+The four local avatar demos completed bounded private-display runs and wrote screenshots;
+the dual/gallery captures were inspected. The network demo was built but its two-process play was
+not rerun as part of that smoke. These checks validate current demo startup/capture, not every
+animation, catalog combination or network/hardware environment.

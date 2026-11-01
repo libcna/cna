@@ -35,6 +35,20 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Avatar documentation reconciliation (2026-11-01): `docs/avatars.md` corrects synchronous
+  signed-in cache hits, native versus inline Emscripten loading, assembly failure, item/descriptor
+  format distinctions, revision identity, pack-store roots, fallback bodies and qualification
+  limits. `avatar-art-direction.md` replaces the obsolete six-head proposal/Blender repair log
+  with current original-art criteria and freshly measured revision-5 proportions; `avatar-demos.md`
+  corrects GL-default target gates, Update-count smoke budgets, screenshot timing and discovery
+  retries/socket troubleshooting. The C API page receives the related first-byte IsValid correction.
+  Static acceptance checks the catalog, 20 documentation claims and 36 golden metadata entries;
+  the full bind-pose show-through audit passes. All five demo targets and focused test targets
+  build. On private GL-default multi displays, 187/188 avatar tests pass with one explicit
+  unsupported failure-injection skip, visual regression and all three C avatar smokes pass, and
+  four local demos capture screenshots (dual/gallery inspected). Network demo play, all-renderer
+  acceptance, external service deployment and performance were not requalified. No asset, golden,
+  implementation or ABI changes.
 - Apple-platform documentation reconciliation (2026-11-01): `docs/apple-platforms.md` now
   separates current CMake/workflow contracts from historical M4/retired-renderer measurements,
   removes contradictory live-CI claims and moves the long finished campaign table to Git history.

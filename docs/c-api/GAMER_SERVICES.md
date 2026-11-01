@@ -212,8 +212,9 @@ operation leak.
 
 `CNA_AvatarExpression` is a fixed value and is validated when used. An avatar description is an owned
 handle created from exactly `CNA_AVATAR_DESCRIPTION_BYTE_COUNT` bytes; byte validity is reported
-separately. Random descriptions are locally generated CNA avatars. Unreadable bytes remain invalid,
-report height zero and use the canonical fallback body type.
+separately. Random descriptions are locally generated CNA avatars. `IsValid` follows the native
+first-byte rule, so a noncanonical nonzero buffer can report true while CNA cannot decode it.
+Such bytes report height zero and the female fallback body type, and produce an unavailable renderer.
 
 An animation created from a preset is a real clip with a duration, expression keys and 71 bone
 transforms. The canonical animation interface has no separate C implementation hook; the animation
@@ -221,7 +222,9 @@ handle is the concrete object accepted by renderer draw routes.
 
 An avatar renderer retains its description. Transform and lighting groups use versioned structures
 with per-field presence flags. The renderer is unavailable for an unreadable description, otherwise
-progresses through loading to ready. Bind-pose reads require ready state. Drawing also requires gamer
+progresses through loading to ready or becomes unavailable on assembly failure. Native builds load
+on a shared worker; Emscripten assembly is inline. Bind-pose reads require ready state. Actual
+rendering requires gamer
 services initialized with a graphics device. The current ABI exposes the standard avatar renderer
 surface only; removed extension history belongs in [ABI_VERSIONING.md](ABI_VERSIONING.md), not in
 the live contract.

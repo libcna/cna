@@ -11,11 +11,14 @@ console), with avatars that resemble that era in original art. What remains limi
 likeness) is in [`gamer-services-known-limitations.md`](gamer-services-known-limitations.md).
 
 **Who owns what.** The CNA service owns each account's `AvatarDescription` and its revision; the CNA
-runtime owns the standard, immutable avatar catalogs (meshes, textures, animations), compiled into
+runtime owns the standard avatar catalog snapshots (meshes, textures, animations), compiled into
 every release. `AvatarDescription.BeginGetFromGamer` retrieves only the description, and
 `AvatarRenderer` draws it with the locally installed catalog of exactly the version it names.
 Normal rendering never downloads a per-user model or asset. The service's catalog packs are only an
 optional, versioned update path for a catalog a client does not have (below).
+Catalog version identifies compatible item/description meaning; a revision may refine art while
+keeping that version and its released IDs. A compiled-in snapshot is fixed for that build, but two
+builds carrying different revisions can render compatible description bytes with different art.
 
 ## Descriptions
 
@@ -70,8 +73,10 @@ constructor reproduces the same avatar. The same generator with a seed is repeat
 `AvatarDescription.BeginGetFromGamer`/`EndGetFromGamer` read a gamer's avatar from the configured
 CNA service (see `docs/gamer-services-server.md`): a signed-in gamer, a gamer returned by
 `Gamer.GetFromGamertag`, or a remote `NetworkGamer` met in an online session all carry a service
-identity. The operation completes during `GamerServicesDispatcher.Update` (never synchronously)
-and `EndGetFromGamer` returns the stored description. A gamer without an avatar, without a service
+identity. An uncached service read completes through `GamerServicesDispatcher.Update`, and
+`EndGetFromGamer` returns the stored description. A matching signed-in cache hit completes
+synchronously and invokes its callback before Begin returns, even for a service-backed gamer.
+A gamer without an avatar, without a service
 identity (a remote System Link gamer), or an unreachable service yields an
 invalid, all-zero description, so games take their usual "no avatar" path.
 A signed-in local offline profile (no service configured, see `docs/gamer-services-server.md`) has
@@ -87,8 +92,9 @@ and constructing an `AvatarDescription` from them) need nothing from the service
 As in XNA, each signed-in player index keeps the description `EndGetFromGamer` returned for it
 until that gamer's avatar changes; other gamers get a fresh description on every read.
 `GamerServicesDispatcher.Update` reads a kept avatar again every 10 seconds (the service's copy, or
-the local profile's store, which the CNA avatar editor writes) and, when it differs, empties the
-slot and raises that description's `Changed` on the dispatcher thread with the `SignedInGamer` as
+the local profile's store, which the CNA avatar editor writes). Local profiles compare bytes;
+service records compare their nonzero revisions, falling back to bytes when no revision is available.
+A detected change empties the slot and raises that description's `Changed` on the dispatcher thread with the `SignedInGamer` as
 sender. The C++ description is a value, so its `Changed` is shared by every copy of it (subscribing
 or unsubscribing through any copy is subscribing to the one event). An unchanged avatar, a new
 catalog, or an unreachable service raises nothing; signing out empties the slot without an event.
@@ -137,8 +143,8 @@ keeps the edits. When the stored avatar changes elsewhere while the editor is op
 editor shows the new one and an edited one says that saving replaces it. Running games see a saved
 avatar through `AvatarDescription.Changed`.
 
-`cna_avatar_editor` is built with the examples (`CNA_BUILD_EXAMPLES`) whenever the default renderer
-draws (not HEADLESS or STUB), as are `cna_avatar_review` and `cna_guide_review`.
+`cna_avatar_editor` is built with native examples (`CNA_BUILD_EXAMPLES` and gamer services enabled)
+when the default renderer is not HEADLESS or STUB, as are `cna_avatar_review` and `cna_guide_review`.
 `--capture DIR` walks the categories, tries on and keeps choices, randomizes and saves, writing a
 PNG of each step; with `CNA_GAMER_SERVICES_AUTO_SIGN_IN` naming a profile and
 `CNA_GAMER_SERVICES_PROFILES_DIR` a scratch store it runs unattended on a private display.
@@ -150,9 +156,11 @@ PNG of each step; with `CNA_GAMER_SERVICES_AUTO_SIGN_IN` naming a profile and
 `GamerServicesDispatcher.Initialize`), and constructs a renderer from a description gets:
 
 - **States.** A description without an avatar, or one CNA cannot read, is `Unavailable` and
-  draws nothing. A valid one is `Loading` while one shared background thread assembles the body,
-  wardrobe and face from the asset catalog, then `Ready`. Identical descriptions share the
-  assembled model.
+  draws nothing. A decodable one starts `Loading` and becomes `Ready` after successful assembly;
+  a failed assembly becomes `Unavailable`. Native builds use one shared background loader;
+  Emscripten executes its submitted assembly job inline. A cached model can also already be ready
+  internally while the new renderer still awaits Poll. Identical descriptions share the assembled
+  model while it remains retained.
 - **Bind pose and skeleton.** `ParentBones` is XNA's 71-entry table. Once ready, `BindPose`
   holds 71 local transforms relative to the parent, scaled to the description's height (bind
   rotations are identity, so they are pure translations).
@@ -174,6 +182,11 @@ PNG of each step; with `CNA_GAMER_SERVICES_AUTO_SIGN_IN` naming a profile and
   given to the dispatcher (XNA's rule); drawing before gamer services are initialized throws
   `InvalidOperationException`. A renderer's buffers and textures belong to that device: when it is
   disposed they are released with it, and a renderer drawn on a new device builds them again there.
+
+The matrix-array Draw overload validates exactly 71 inputs even before a loading/unavailable
+draw can return; the animation overload rejects null. BindPose and State refuse a disposed
+renderer, and BindPose also refuses before Ready. Dispose is idempotent and releases the renderer's
+model/GPU references; an already submitted native load can finish into its own shared state.
 
 ## Animations
 
@@ -214,7 +227,7 @@ and **revision 5** (manifest `"revision": 5`), the current content of the same v
 ear shape's lobes, so earrings hang from the lobe of the shape worn, and keeps trousers and skirts
 under the top in the deepest crouch (only the front of a top's hem follows the thighs, skirts take
 the hips' share the top has, the tank top has a little more ease). A revision may improve the art of
-every item and add entries, but every first-release id keeps its kind and its description format
+every item and add entries, but every first-release id keeps its kind and its minimum item format
 1 (hair 1–10, tops 20–28, bottoms 40–45, shoes 60–64, glasses 80–83, hats 100–104, facial hair
 120–123), and everything a revision adds is marked `"format": 3`, so only a format 3 description
 can name it. A first-release avatar is therefore still a valid, canonical description, and a CNA
@@ -222,6 +235,9 @@ build or service that reads only formats 1 and 2 never meets an id it does not h
 gives it a copy without the format 3 parts. A new catalog *version* (v4) was considered and set
 aside: it would have doubled the shipped catalog and made v3 a second generation to support.
 `AvatarCatalogTest.CatalogV3RevisionsKeepTheFirstReleaseAndAddOnlyFormat3Entries` pins the rule.
+An item's manifest format is a minimum requirement, not necessarily the descriptor's final
+encoding: facial hair/face controls require descriptor format 2 even when the referenced item's
+minimum is 1. New format-3 fields/items require descriptor format 3.
 
 A description is drawn from exactly the catalog version it names — the compiled-in manifest of
 that version, else an installed pack of it (below) — never from another. Files are found by size and SHA-256, so two
@@ -274,7 +290,8 @@ the visual language):
   and the next in about 140-210 ms, and an avatar a renderer still draws is reused in about 0.3 ms
   (Debug, `AvatarRendererTest.AnAvatarIsReusedWhileDrawnAndReleasedWithItsTexturesAfterwards` in a
   process of its own, which the acceptance's `measure` stage runs; revision 4 was recorded as
-  450-500 and 200-230 ms, revision 3 as 345 and 185 ms). Once no renderer draws an avatar, it and
+  450-500 and 200-230 ms, revision 3 as 345 and 185 ms). These are historical Debug measurements,
+  not fresh timings for every current machine or renderer. Once no renderer draws an avatar, it and
   its textures are released; parsed catalog models are kept for reuse, at most 96.)
 
 **Compatibility rules are data**, not code: a hat's `hairCover` gives the line where its brim
@@ -306,9 +323,10 @@ highlight (`cnaSpecular`, `cnaShininess`: SkinnedEffect's specular colour scale 
 an asset without them draws as before). The reader refuses anything outside that contract: external
 URIs, other rigs, non-identity bind rotations, out-of-range indices or weights, and oversized data.
 Since revision 2 the catalog needs contract level 2 (`CatalogReaderLevel`, the manifest's
-`"reader"`): the kinds, styles, rules and material extras above. Every renderer draws it with the
-same two paths it already had (opaque parts, then
-translucent decals); nothing in the catalog is renderer-specific.
+`"reader"`): the kinds, styles, rules and material extras above. Supported drawing paths use opaque
+parts followed by translucent decals; the catalog data is renderer-neutral. Working 3D,
+SkinnedEffect, buffers and textures still depend on the selected renderer/profile, and HEADLESS
+ownership checks do not establish rasterized pixels.
 The catalog recipe's dot products, lengths, distances and normalization retain
 binary32 rounding at each intermediate (including normalization's reciprocal).
 This applies both to imported normals and to deformation, including proportions
@@ -433,8 +451,10 @@ installs that exact catalog as one pack, if the configuration allows it (`avatar
 4. One rename activates it. An interrupted install leaves only staging, which a retry reuses after
    verifying each file again; an invalid pack is discarded; nothing half-installed is ever read.
 
-Installed packs are kept, not cached: `CNA_GAMER_SERVICES_CATALOGS_DIR`, else
-`$XDG_DATA_HOME/cna/avatar-catalogs` (`%LOCALAPPDATA%\cna\avatar-catalogs` on Windows), one
+Installed packs are kept, not cached: `CNA_GAMER_SERVICES_CATALOGS_DIR`, then Windows LOCALAPPDATA
+when available, then `$XDG_DATA_HOME/cna/avatar-catalogs`, then
+`$HOME/.local/share/cna/avatar-catalogs`; without a configured/home root there is no install root.
+This is the catalog store's policy, distinct from StorageDevice's Apple data-home policy. There is one
 self-contained `v<N>/` per version. Catalog versions are CNA-wide identities: the pack installed
 first is that version, and a different catalog offered under the same number is refused. A version
 that failed to install is not asked for again for a minute. A version below the baseline is never
@@ -455,7 +475,25 @@ revision, so installing a catalog or receiving a projection is never a change.
 
 The fallback order for a description is: (1) its catalog is installed; (2) its pack is installed
 now; (3) the service's projection (when it came from the service); (4) the deterministic default
-avatar -- the newest installed body with the description's body type, height, build and colours,
+avatar -- the newest compiled-in body with the description's body type, height, build and colours,
 every item its slot default (its ids are never read against another catalog); (5) `Unavailable`
 only when not even a body can be drawn. Descriptions exchanged directly between games (bytes over a
 `NetworkSession`) take (1), (2) and (4).
+
+Pack installation depends on a configured, available service transport and policy. Browser service
+transport is outside the current supported boundary; the local catalog path does not establish
+browser pack downloads. See [browser-network-readiness.md](browser-network-readiness.md).
+
+## Documentation audit evidence
+
+The 2026-11-01 audit rechecked the codec offsets/canonical formats, cache and completion paths,
+loader platform split, renderer state/disposal, pack roots/fallback and current catalog metadata
+against source. Static acceptance passes for catalog v3 revision 5 and all 36 golden-view metadata
+entries; the bind-pose geometry/proportion audit passes its default show-through budget.
+
+On the GL-default multi-renderer build, 188 selected avatar tests ran: 187 pass and the GPU-upload
+refusal case skips because that renderer accepts vertex buffers. The visual regression passes,
+as do all three C avatar identity/render/exit-while-loading smoke tests, through private displays.
+All five demo targets build and four local demos complete screenshot runs. This is focused current
+evidence, not a new all-renderer acceptance, service-deployment run, physical-device qualification
+or fresh performance baseline. No catalog assets or golden files were regenerated.
