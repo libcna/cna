@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D04 (2026-11-02): Effect/Gamer boxed Current getters now delegate to typed
+  Current, preserving null at default/before/end/reset positions. Both corrected native cases
+  fail with the old guards, then pass; six model cursor and 98 gamer collection/property cases
+  pass privately after rebuilding. A retained oracle reproduces fresh genuine-XNA/Wine null
+  observations for default/empty/one-null-entry cursors and records loaded assembly hashes.
+  Model/gamer C smoke, three ABI/header/doc gates, two provenance gates and local docs links pass.
+  The C cursor invalid-state contract, mutation checks, layouts and borrowed ownership are
+  unchanged; no new runtime stub or physical/native Windows/signed-in service qualification.
 - CNA-FIX-D03 (2026-11-02): XNB DateTime preserves Kind and stores/restores Local
   through UTC ticks, using Sharp Runtime’s existing current-zone conversion. Actual Microsoft
   compiler output and isolated reader invocations under Wine measure the Local conversion and
@@ -1880,16 +1888,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-- ModelEffectCollection::Enumerator::getCurrentProperty and
-  GamerCollection<T>::GamerCollectionEnumerator::getCurrentProperty throw InvalidOperationException
-  when hasCurrent_ is false (before start/after end/reset). Original Microsoft XNA Graphics IL
-  method 962 calls the wrapper's typed Current; GamerServices IL method 64 calls the typed
-  List<T>.Enumerator.Current and boxes it. These return the stored null outside a valid position,
-  rather than invoking List's checked non-generic getter. Source/IL-inspected on 2026-11-01;
-  original/reference DLL bytes match. Existing ModelEffectCollectionEnumeratorTest and
-  GamerCollectionEnumeratorTest cases assert CNA's mismatching throw, so their passes do not
-  close the gap. docs/xna-4-enumerator-reference.md records the corrected reference. No runtime
-  correction/new regression or fresh genuine-XNA execution was added during this docs task.
 - BitmapContent's RegionInside helper adds signed Int32 rectangle coordinates/extents before
   comparing them with bitmap dimensions (content-pipeline/src/Xna/Graphics/BitmapContent.cpp).
   Positive inputs such as X=INT_MAX, Width=1 overflow the signed addition, so ValidateCopyArguments

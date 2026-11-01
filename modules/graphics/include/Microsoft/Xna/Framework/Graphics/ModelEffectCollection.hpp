@@ -44,7 +44,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
             /**
              * @brief Gets the current element through the non-generic interface.
-             * @return The current Effect pointer boxed as an object.
+             * @return The current Effect pointer boxed as an object, including null outside a valid position.
              */
             [[nodiscard]] std::any getCurrentProperty() const override;
 

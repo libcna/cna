@@ -157,6 +157,7 @@ TEST(ModelEffectCollectionEnumeratorTest, EmptyOneManyCopyResetAndCppIteration)
         ModelEffectCollection::Enumerator>);
     ModelEffectCollection::Enumerator defaultValue;
     EXPECT_EQ(defaultValue.Current(), nullptr);
+    EXPECT_EQ(std::any_cast<Effect*>(defaultValue.getCurrentProperty()), nullptr);
     EXPECT_THROW((void)defaultValue.MoveNext(), System::NullReferenceException);
     EXPECT_THROW(defaultValue.Reset(), System::NullReferenceException);
     defaultValue.Dispose();
@@ -172,10 +173,12 @@ TEST(ModelEffectCollectionEnumeratorTest, EmptyOneManyCopyResetAndCppIteration)
 
     auto emptyCursor = empty.GetEnumerator();
     EXPECT_EQ(emptyCursor.Current(), nullptr);
-    EXPECT_THROW((void)emptyCursor.getCurrentProperty(), System::InvalidOperationException);
+    EXPECT_EQ(std::any_cast<Effect*>(emptyCursor.getCurrentProperty()), nullptr);
     EXPECT_FALSE(emptyCursor.MoveNext());
     EXPECT_EQ(emptyCursor.Current(), nullptr);
+    EXPECT_EQ(std::any_cast<Effect*>(emptyCursor.getCurrentProperty()), nullptr);
     emptyCursor.Reset();
+    EXPECT_EQ(std::any_cast<Effect*>(emptyCursor.getCurrentProperty()), nullptr);
     EXPECT_FALSE(emptyCursor.MoveNext());
 
     auto single = one.GetEnumerator();
@@ -185,7 +188,7 @@ TEST(ModelEffectCollectionEnumeratorTest, EmptyOneManyCopyResetAndCppIteration)
     EXPECT_EQ(std::any_cast<Effect*>(single.getCurrentProperty()), first);
     EXPECT_FALSE(single.MoveNext());
     EXPECT_EQ(single.Current(), nullptr);
-    EXPECT_THROW((void)single.getCurrentProperty(), System::InvalidOperationException);
+    EXPECT_EQ(std::any_cast<Effect*>(single.getCurrentProperty()), nullptr);
     single.Reset();
     ASSERT_TRUE(single.MoveNext());
     EXPECT_EQ(single.Current(), first);
@@ -193,11 +196,11 @@ TEST(ModelEffectCollectionEnumeratorTest, EmptyOneManyCopyResetAndCppIteration)
     EXPECT_EQ(single.Current(), first);
     auto polymorphicCursor = one.GetEnumerator();
     System::Collections::IEnumerator& erased = polymorphicCursor;
-    EXPECT_THROW((void)erased.getCurrentProperty(), System::InvalidOperationException);
+    EXPECT_EQ(std::any_cast<Effect*>(erased.getCurrentProperty()), nullptr);
     ASSERT_TRUE(erased.MoveNext());
     EXPECT_EQ(std::any_cast<Effect*>(erased.getCurrentProperty()), first);
     erased.Reset();
-    EXPECT_THROW((void)erased.getCurrentProperty(), System::InvalidOperationException);
+    EXPECT_EQ(std::any_cast<Effect*>(erased.getCurrentProperty()), nullptr);
 
     auto a = many.GetEnumerator();
     auto b = many.GetEnumerator();

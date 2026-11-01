@@ -411,6 +411,7 @@ TEST(GamerCollectionEnumeratorTest, EmptyAndOneElementStates)
 
     Enumerator defaultValue;
     EXPECT_EQ(defaultValue.Current(), nullptr);
+    EXPECT_EQ(std::any_cast<SignedInGamer*>(defaultValue.getCurrentProperty()), nullptr);
     EXPECT_THROW((void)defaultValue.MoveNext(), System::NullReferenceException);
     EXPECT_THROW(defaultValue.Reset(), System::NullReferenceException);
     defaultValue.Dispose();
@@ -418,24 +419,26 @@ TEST(GamerCollectionEnumeratorTest, EmptyAndOneElementStates)
     auto empty = SignedInGamerCollection::CreateInternal({});
     auto emptyCursor = empty.GetEnumerator();
     EXPECT_EQ(emptyCursor.Current(), nullptr);
-    EXPECT_THROW((void)emptyCursor.getCurrentProperty(), System::InvalidOperationException);
+    EXPECT_EQ(std::any_cast<SignedInGamer*>(emptyCursor.getCurrentProperty()), nullptr);
     EXPECT_FALSE(emptyCursor.MoveNext());
     EXPECT_FALSE(emptyCursor.MoveNext());
     EXPECT_EQ(emptyCursor.Current(), nullptr);
+    EXPECT_EQ(std::any_cast<SignedInGamer*>(emptyCursor.getCurrentProperty()), nullptr);
     emptyCursor.Reset();
+    EXPECT_EQ(std::any_cast<SignedInGamer*>(emptyCursor.getCurrentProperty()), nullptr);
     EXPECT_FALSE(emptyCursor.MoveNext());
 
     auto gamer = SignedInGamer::CreateInternal("tag1");
     auto one = SignedInGamerCollection::CreateInternal({&gamer});
     auto cursor = one.GetEnumerator();
     EXPECT_EQ(cursor.Current(), nullptr);
-    EXPECT_THROW((void)cursor.getCurrentProperty(), System::InvalidOperationException);
+    EXPECT_EQ(std::any_cast<SignedInGamer*>(cursor.getCurrentProperty()), nullptr);
     ASSERT_TRUE(cursor.MoveNext());
     EXPECT_EQ(cursor.Current(), &gamer);
     EXPECT_EQ(std::any_cast<SignedInGamer*>(cursor.getCurrentProperty()), &gamer);
     EXPECT_FALSE(cursor.MoveNext());
     EXPECT_EQ(cursor.Current(), nullptr);
-    EXPECT_THROW((void)cursor.getCurrentProperty(), System::InvalidOperationException);
+    EXPECT_EQ(std::any_cast<SignedInGamer*>(cursor.getCurrentProperty()), nullptr);
     cursor.Reset();
     ASSERT_TRUE(cursor.MoveNext());
     EXPECT_EQ(cursor.Current(), &gamer);
@@ -444,11 +447,11 @@ TEST(GamerCollectionEnumeratorTest, EmptyAndOneElementStates)
     EXPECT_FALSE(cursor.MoveNext());
     auto polymorphicCursor = one.GetEnumerator();
     System::Collections::IEnumerator& erased = polymorphicCursor;
-    EXPECT_THROW((void)erased.getCurrentProperty(), System::InvalidOperationException);
+    EXPECT_EQ(std::any_cast<SignedInGamer*>(erased.getCurrentProperty()), nullptr);
     ASSERT_TRUE(erased.MoveNext());
     EXPECT_EQ(std::any_cast<SignedInGamer*>(erased.getCurrentProperty()), &gamer);
     erased.Reset();
-    EXPECT_THROW((void)erased.getCurrentProperty(), System::InvalidOperationException);
+    EXPECT_EQ(std::any_cast<SignedInGamer*>(erased.getCurrentProperty()), nullptr);
 }
 
 TEST(GamerCollectionEnumeratorTest, MultipleIndependentCopyResetAndCppIteration)

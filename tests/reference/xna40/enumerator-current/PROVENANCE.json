@@ -1,0 +1,40 @@
+{
+  "task": "CNA-FIX-D04",
+  "measured_at": "2026-11-02",
+  "host": "Genuine Microsoft XNA 4.0 under existing Wine/.NET 4 prefix on Linux",
+  "assemblies": [
+    {
+      "identity": "Microsoft.Xna.Framework.Graphics, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553",
+      "location": "C:\\windows\\Microsoft.Net\\assembly\\GAC_32\\Microsoft.Xna.Framework.Graphics\\v4.0_4.0.0.0__842cf8be1de50553\\Microsoft.Xna.Framework.Graphics.dll",
+      "sha256": "39aed7fd8e308ccace5ce9390256f1c829ca72c2eccd97d4a0f629f24015d3a5"
+    },
+    {
+      "identity": "Microsoft.Xna.Framework.GamerServices, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553",
+      "location": "C:\\windows\\Microsoft.Net\\assembly\\GAC_MSIL\\Microsoft.Xna.Framework.GamerServices\\v4.0_4.0.0.0__842cf8be1de50553\\Microsoft.Xna.Framework.GamerServices.dll",
+      "sha256": "627e84c06cc4e409870b068c9ec9149adba425e47e64185f92d839db2aa35484"
+    }
+  ],
+  "collections": [
+    "Microsoft.Xna.Framework.Graphics.ModelEffectCollection",
+    "Microsoft.Xna.Framework.GamerServices.GamerCollection<Gamer>"
+  ],
+  "boxed_Current": {
+    "default": null,
+    "empty-before": null,
+    "empty-after": null,
+    "empty-reset": null,
+    "one-before": null,
+    "one-valid": null,
+    "one-after": null,
+    "one-reset": null
+  },
+  "MoveNext": {
+    "empty": false,
+    "one-null-entry": true,
+    "after-one-null-entry": false
+  },
+  "nonempty_probe": "One null entry inserted into the existing wrapped managed list. No Effect or Gamer resources allocated.",
+  "source": "tools/xna-pipeline-oracle/framework/CollectionEnumeratorOracle.cs",
+  "reproduce": "CNA_XNA40_REFERENCES=/path/to/xna/assemblies bash tools/xna-pipeline-oracle/framework/run-collection-enumerator-oracle.sh /tmp/xna-enumerator-output",
+  "qualification": "Default, empty and one-null-entry cursor states through the genuine non-generic IEnumerator interface. No native Windows, physical graphics or signed-in gamer qualification."
+}

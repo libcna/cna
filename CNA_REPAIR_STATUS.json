@@ -45,9 +45,14 @@
       "id": "CNA-FIX-D04",
       "source_section": "5.1 Defects",
       "summary": "ModelEffectCollection::Enumerator::getCurrentProperty and GamerCollection<T>::GamerCollectionEnumerator::getCurrentProperty throw InvalidOperationException when hasCurrent_ is false (before start/after end/reset).",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Delegate effect/gamer boxed Current getters to the already-correct typed Current, returning the typed null pointer outside a valid position. Preserve mutation checks and existing layouts.",
+      "evidence": [
+        "Fresh genuine-XNA measurements under Wine return null at default/before/end/reset positions for both wrappers, including a one-null-entry list; the retained source/runner reproduces those observations and loaded assembly hashes.",
+        "Both native corrected cursor regressions fail with the old guards. After correction, six model cursor tests and 98 gamer collection/property tests pass privately.",
+        "Rebuilt model/gamer C API smoke and three ABI/header/doc-export gates pass; the documented C cursor invalid-state contract remains unchanged. Two provenance gates and local docs links pass.",
+        "No public API/layout change or new stub/dependency. Native pointer ownership remains borrowed; this is not native Windows, physical graphics or signed-in service qualification."
+      ]
     },
     {
       "id": "CNA-FIX-D05",

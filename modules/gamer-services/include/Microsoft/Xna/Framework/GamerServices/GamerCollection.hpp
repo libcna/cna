@@ -73,16 +73,11 @@ namespace Microsoft::Xna::Framework::GamerServices
 
             /**
              * @brief Gets the current gamer through the non-generic interface.
-             * @return The current gamer pointer boxed as an object.
+             * @return The current gamer pointer boxed as an object, including null outside a valid position.
              */
             [[nodiscard]] std::any getCurrentProperty() const override
             {
-                if (!hasCurrent_)
-                {
-                    throw System::InvalidOperationException(
-                        "Enumeration has not started or has finished.");
-                }
-                return std::any(current_);
+                return std::any(Current());
             }
 
             /**

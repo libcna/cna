@@ -70,21 +70,19 @@ enumerator, whose disposal is a no-op. The `ModelEffectCollection` and
 `GamerCollection<T>` backing lists can be mutated by their assembly code; the
 other four collections expose no equivalent resize path to the enumerator.
 
-### Current boxed-Current mismatch
+### Boxed Current
 
-Original Graphics IL method 962 implements `ModelEffectCollection.Enumerator`'s non-generic
-getter by calling its typed `get_Current()`. GamerServices IL method 64 directly calls
-`List<T>.Enumerator.get_Current()` and boxes its result. Neither calls List's non-generic
-`IEnumerator.Current` state check. This corrects the earlier text that attributed that check to
-the XNA wrapper.
+Original Graphics IL method 962 implements the Effect wrapper's non-generic getter through
+its typed Current; GamerServices IL method 64 calls the typed List enumerator getter and boxes
+its result. A fresh genuine-XNA run under Wine confirms null at default/before/end/reset
+positions for both wrappers, including a list with one null entry. The retained
+[measurement](../tests/reference/xna40/enumerator-current/PROVENANCE.json) names the assemblies,
+records their loaded hashes and gives the oracle reproduction command. No graphics device or
+signed-in gamer is needed by that probe.
 
-Current CNA `ModelEffectCollection::Enumerator::getCurrentProperty()` and
-`GamerCollection<T>::GamerCollectionEnumerator::getCurrentProperty()` instead test `hasCurrent_`
-and throw InvalidOperationException before start/after end/reset. Existing tests assert that CNA
-behaviour, so passing them is not proof of parity for this getter. The mismatch is recorded in
-[`handoff.md`](../handoff.md) §5.1; this documentation audit does not change the implementation or
-replace its regression expectations. The IL call-target check was repeated locally, without a new
-Windows/XNA execution campaign.
+CNA's boxed getters now delegate to the typed Current without an extra position check. A null
+reference is represented by a `std::any` containing the typed null pointer, preserving the same
+cast as a valid element. Collection mutation still invalidates MoveNext and Reset.
 
 In CNA, model and gamer reference objects are held as non-owning pointers, and
 Touch holds `TouchLocation` values. Sharp Runtime already supplies all three
@@ -102,9 +100,15 @@ begin/end iteration is a separate C++ path and does not provide these XNA cursor
 
 ## Verification
 
-The existing `CnaTests` target builds. On 2026-11-01 all 12 tests in the six model, touch and gamer
-enumerator suites passed privately with OPENGLES3/dummy audio. They cover default/empty/single/
-multiple elements, copies, reset, disposal and applicable mutation/snapshot cases. The effect/gamer
-tests currently pin the mismatching boxed-Current exception described above; they must not be
-reported as twelve independent Microsoft parity proofs. The fresh runtime surface audit also
-confirms the declarations. No new genuine-XNA execution or lifetime/sanitizer campaign was run.
+On 2026-11-02, the rebuilt graphics target passes all six model collection cursor cases, and
+the gamer target passes all 98 selected collection/property cases. Both corrected cursor cases
+fail against the old guards, then pass after the change. Model/gamer C API smoke and three
+ABI/header/doc-export gates pass privately; their C cursor result contract is unchanged. The
+retained oracle wrapper reproduces the genuine-XNA observations and loaded assembly hashes.
+
+The earlier 2026-11-01 documentation pass ran all 12 cases in the six model/touch/gamer suites,
+but two cases then pinned CNA's incorrect boxed-Current exception. Those expectations are now
+corrected and extended for default, empty, exhausted and reset states through concrete and
+non-generic interfaces. Existing pointer identity, copy, disposal, mutation and iteration checks
+remain. The genuine-XNA probe confirms the null contract under Wine; it does not qualify native
+Windows, physical graphics, signed-in gamer services or borrowed-pointer lifetimes.

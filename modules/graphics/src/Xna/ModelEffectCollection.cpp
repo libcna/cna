@@ -27,11 +27,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     std::any ModelEffectCollection::Enumerator::getCurrentProperty() const
     {
-        if (!hasCurrent_)
-        {
-            throw System::InvalidOperationException("Enumeration has not started or has finished.");
-        }
-        return std::any(current_);
+        return std::any(Current());
     }
 
     bool ModelEffectCollection::Enumerator::MoveNext()
