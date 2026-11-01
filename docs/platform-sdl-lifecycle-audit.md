@@ -1,197 +1,96 @@
-# SDL subsystem lifecycle audit (PLAT-4)
+# SDL subsystem ownership and teardown
 
-> Audit of every `SDL_Init*` / `SDL_Quit*` call site in CNA production code, and of the mechanisms
-> that coordinate them. PLAT-29 must reproduce this behaviour exactly — the
-> ordering here is subtle, was arrived at deliberately (Tasks `SDLCORE-001`, `SDLCORE-011`,
-> `P7-1`, `VIB2-003/004`), and already has dedicated regression tests. This document exists so
-> PLAT-29 is a port, not a redesign.
->
-> Hand-written, unlike `platform-sdl-classification.csv` and `platform-renderer-sdl-audit.md`,
-> which are generated. Re-derive the call-site list with:
-> `grep -rnE '\bSDL_(Init|InitSubSystem|QuitSubSystem|Quit|WasInit)\s*\(' modules/*/src modules/*/include`
+This is the current PLAT-4/PLAT-29 lifecycle contract, checked against source on 2026-11-01.
+Historical token counts and pre-migration call sites are in Git history. See
+[platform abstraction](platform-abstraction.md) and [renderer boundary](platform-renderer-boundary.md)
+for the broader ownership model.
 
-## The single most important finding
+## Global lifetime and platform references
 
-**CNA production code never calls `SDL_Init()` or `SDL_Quit()`.**
+CNA production code does not call SDL_Init or SDL_Quit. Applications/tests may own global SDL
+startup/termination; a CNA consumer need not preinitialize everything just to let CNA acquire the
+subsystems it uses. Do not add a platform-wide Initialize/Shutdown that steals the host's global
+SDL lifetime.
 
-Verified by scanning every `.cpp`/`.hpp`/`.mm` under `modules/` with comments and string literals
-stripped: 30 files call `SDL_Init()`/`SDL_Quit()`, and **all 30 are tests or examples** — i.e.
-code acting as *the application*. Production CNA acquires and releases individual subsystems and
-nothing more.
+IPlatform exposes AcquireSubsystem, ReleaseSubsystem and IsSubsystemInitialized for five abstract
+subsystems: Video, Audio, Gamepad, Haptic and Sensor. Sdl3Platform maps these to SDL_InitSubSystem,
+SDL_QuitSubSystem and SDL_WasInit. A successful acquire increments that instance's ownedRefCounts;
+a failed acquire throws without recording ownership. An unpaired release is a no-op.
 
-The ownership split is therefore:
+IsSubsystemInitialized observes native global state; it does not prove that this instance owns a
+reference. Destruction closes cached sensor/haptic handles and balances this instance's remaining
+references, rather than shutting down the host's independent references.
 
-| Owner | Responsibility |
+## Actual owners
+
+| Native subsystem | Current owner and release boundary |
 |---|---|
-| The application (game, test, example) | `SDL_Init()` / `SDL_Quit()` — global SDL lifetime |
-| CNA production code | `SDL_InitSubSystem()` / `SDL_QuitSubSystem()` — lazy, per-subsystem, refcounted by SDL |
+| Video | GraphicsDevice conditionally acquires PlatformSubsystem::Video for a non-HeadlessEXT device. It records success and releases after renderer, presenter and window teardown. |
+| Gamepad | Sdl3Platform lazily attempts acquisition when GetGamepad/GetJoystick is first used, then refreshes both services. The platform retains its successful reference until destruction. |
+| Sensor | Platform-neutral device sessions and CNA input sensor helpers acquire/release through IPlatform. The last owned sensor release deactivates cached native handles before quitting. |
+| Haptic | Clients acquire/release through IPlatform; the SDL3 service also retains a protected discovery reference, described below. |
+| Audio | SDL3 playback, recording and mixer-stream implementations acquire native SDL audio references directly and release after stream/device/callback teardown, including failed-open cleanup. Framework/media callers use the audio facade. |
+| Camera | A separate process-wide startup probe in Sdl3ServiceSupport, outside PlatformSubsystem and the per-instance reference map. Its retained lifetime is an explicit exception below. |
 
-This is a behavioural contract, not an accident, and it constrains PLAT-29 directly:
+The gamepad bridge no longer guards direct SDL calls with SDL_WasInit. Game skips its controller
+pump until the platform subsystem is initialized. The first service query attempts startup once;
+failure is absorbed as no devices and is not retried on every frame. The Linux SDL3 constructor
+seeds the classic joystick driver only when the embedding host has not specified its own hint;
+startup cost and physical-device behavior still depend on that choice and host.
 
-> `IPlatform::Initialize()` must **not** become `SDL_Init()`, and `IPlatform::Shutdown()` must
-> **not** become `SDL_Quit()`.
+SDL also starts implicit dependencies: gamepad implies joystick, while audio, video, joystick,
+sensor and camera imply events in the pinned SDL3 headers. The abstraction does not expose every
+one of these native subsystem flags as its own enum.
 
-Doing so would take global SDL lifetime away from the application and change the observable
-behaviour of every existing game, test and example — including the ones that deliberately call
-`SDL_Quit()` themselves in `main()`. The platform contract needs a subsystem-acquisition model
-(acquire/release with refcounting), plus an explicitly documented position on who owns global
-initialisation. The recommendation is that `IPlatform` keeps CNA's current stance: it acquires
-what it needs and releases it, and global lifetime stays the host application's.
+## Serialization, retained discovery and camera
 
-## Subsystems in use
+SdlGlobalStateMutex/SdlGlobalStateLock serialize native process-global mutations across platform
+instances; a per-instance mutex alone is insufficient. GL attribute/window creation transactions
+use the same coordination. Destruction during exit on a thread already holding that lock avoids
+relocking it, with dedicated exit-under-lock coverage.
 
-Only five, all acquired lazily on first need:
+Subsystem operations must not synchronously dispatch to a main-thread queue whose pump is blocked
+or absent. Standalone sensor Start/Stop can run without Game. This does not waive SDL/OS thread
+requirements for video/window operations; Apple video startup, for example, requires the main
+thread and has an explicit diagnostic.
 
-| Subsystem | Refs | Acquired by | Released by |
-|---|---:|---|---|
-| `SDL_INIT_SENSOR` | 22 | `Sdl3Platform::AcquireSubsystem(Sensor)` | `Sdl3Platform::ReleaseSubsystem(Sensor)` after the last platform session/reference |
-| `SDL_INIT_VIDEO` | 14 | `GraphicsDevice` constructor | `GraphicsDevice::Dispose()` |
-| `SDL_INIT_AUDIO` | 12 | SDL3 audio playback/recording backends and audio-facade queued streams | The same owners, after their callback/stream barriers — see below |
-| `SDL_INIT_HAPTIC` | 11 | `Sdl3Platform::AcquireSubsystem(Haptic)` | `Sdl3Platform::ReleaseSubsystem(Haptic)` after the last platform client |
-| `SDL_INIT_GAMEPAD` | 9 | `SdlInputBridge` (guarded by `SDL_WasInit`) | `SdlInputBridge` |
+Haptic enumeration retains one discovery acquisition per SDL3 platform. Client releases cannot
+consume it. Releasing the last client closes cached handles/effects, while discovery preserves the
+native ID list so an enumerated ID remains meaningful when opened later. Platform destruction
+balances discovery as well as other owned references.
 
-`SDL_INIT_EVENTS` is never named explicitly: it is initialised implicitly as a dependency of
-`SDL_INIT_VIDEO`/`SDL_INIT_GAMEPAD`. A platform implementation that does not go through SDL must
-account for that implicit dependency rather than inheriting it for free.
+CameraSupported/whole capability queries may start SDL_INIT_CAMERA once. The probe uses the global
+lock, reuses an already-started camera subsystem and caches startup success/failure. It deliberately
+does not quit between enumeration and opening a camera: doing so invalidates IDs. This reference
+is not balanced by Sdl3Platform destruction. It is not evidence that a physical camera exists or
+permission was granted. Host SDL_Quit/reinitialization is not a transparent camera-service reset;
+the cached once-only probe is not retried. See [camera contract](cna-devices-camera-design.md).
 
-## Per-subsystem detail
+## Static vibration teardown
 
-### `SDL_INIT_VIDEO` — `GraphicsDevice`
+VibrateController's function-local singleton may outlive an application's SDL_Quit and the ambient
+platform. The explicit safe sequence is to call DevicesShutdownCoordinator::Shutdown while the
+platform/native services are alive, before the host's SDL_Quit. Shutdown destroys the adapter before
+publishing its flag and is idempotent; subsequent controller calls have no backend.
 
-> **PLAT-62 update:** the direct calls recorded below were the migration baseline. `GraphicsDevice`
-> now acquires/releases `PlatformSubsystem::Video` through its enclosing `IPlatform`, records a
-> successful acquisition, and balances it after destroying the renderer and its owned
-> `IPlatformWindow`. SDL3 maps that pair onto these same native calls; HEADLESS/TERMINAL only
-> maintain their platform-local reference count.
+The process-exit fallback is narrower: its atexit callback sets the flag and deliberately avoids
+calling a platform that may already have been destroyed. PlatformVibrateBackend's destructor
+skips service release after shutdown, and ordinary ReleaseService only calls a captured platform
+if that same platform is still installed. The fallback does not promise timely physical-device
+cleanup or make arbitrary host teardown order equivalent to explicit shutdown.
 
-The acquisition is **conditional**, and the condition is load-bearing:
+Closing a stale native haptic handle after SDL_Quit can dereference freed native state; this is a
+source-based hazard, not a newly reproduced physical-haptic failure. A QuitSubSystem call's
+native refcount guard alone does not make stale handle closure safe.
 
-```cpp
-if (!presentationParameters_.getHeadlessEXTProperty())
-{
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) { throw makeSdlError(...); }
-}
-```
+## Verification
 
-`HeadlessEXT` is what lets a device run with no display server at all — the headless renderer's
-central promise ("`SDL_INIT_VIDEO` never called") depends on this branch. This historical
-asymmetry was removed by PLAT-62's recorded conditional release, while the platform contract still
-keeps unpaired release tolerant for cleanup after partial initialization.
+Focused coverage includes Sdl3PlatformTests (balanced/independent references and concurrent
+instances), PlatformConformance.SubsystemsAreRefcounted, CurrentPlatform transfer/reset tests,
+SensorSubsystemOwnershipTests, DevicesShutdownCoordinatorTests and DevicesShutdownOrderingTests.
+The latter spawns a harness that exercises real SDL_Quit both with explicit shutdown and the
+fallback. VibrateController's concurrent-call test checks the adapter synchronization path.
 
-### `SDL_INIT_AUDIO` — owned by the audio implementation
-
-> **PLAT-96/112 update:** the ownership models recorded by the original audit no longer exist in
-> framework/media code. Playback opens a selected `IAudioDevice`, recording opens a selected
-> `IAudioRecordingDevice`, and queued PCM streams are opaque `MixerStream` objects behind
-> `CNA::Internal::Audio::MixerEngine`. The SDL3 implementations acquire the native audio
-> subsystem on a successful open/create and release the same reference only after the device or
-> stream and its callback barrier have been torn down. Failed opens balance their provisional
-> acquisition too.
-
-`AudioMixer`, `Microphone`, `MediaPlayer`, and `VideoPlayer` therefore contain no direct native
-subsystem lifecycle calls. In particular, `VideoPlayer` no longer has a special acquire/release
-path: PLAT-112 connects its decoded float PCM to an initially-paused mixer playback stream and
-destroys that opaque stream through the audio facade. The remaining `SDL_INIT_AUDIO` tokens are
-implementation details under `modules/audio`, where the platform ratchet explicitly permits the
-selected audio backend.
-
-### `SDL_INIT_SENSOR` — platform sessions plus a process-wide mutex
-
-> **PLAT-108 update:** `Accelerometer` and `Gyroscope` now acquire
-> `PlatformSubsystem::Sensor` and open an independently owned `IPlatformSensorSession` through
-> `IPlatformSensors`. `Detail::PlatformSensorSubsystem<TSensor>` owns only platform-neutral
-> registration, callback barriers and per-type sharing; all native init/enumerate/open/close/quit
-> operations live in `Sdl3Platform`/`Sdl3Sensors`.
-
-`CNA::Input::Sensors` now participates through PLAT-29's platform refcount: each static
-enumeration/read acquires and releases one `PlatformSubsystem::Sensor` reference, and a read closes
-its `IPlatformSensors` handle before releasing that reference. SDL's own refcount therefore
-aggregates it with the independent `Microsoft::Devices` holds instead of either surface using
-`SDL_WasInit()` as an ownership shortcut.
-
-`Sdl3Platform`'s process-wide `SubsystemLifecycleMutex()` preserves the former serialization
-across **all platform instances**, not merely within one instance. It remains a mutex rather than
-main-thread dispatch because
-`SDL_RunOnMainThread(..., wait_complete=true)` is drained only by `SDL_RunMainThreadCallbacks()`,
-which runs only from `SDL_PumpEventsInternal()` — so routing subsystem calls through it would
-hang whenever nothing is pumping events, which is exactly what CNA's own concurrent
-`Start()`/`Stop()` stress tests do. **A platform implementation must not "fix" this by moving
-subsystem calls onto the main thread.** `Microsoft::Devices` classes are usable standalone with
-no `Game`/`GraphicsDeviceManager` at all, so there may be no event pump running.
-
-### `SDL_INIT_HAPTIC` — platform haptics
-
-> **PLAT-108 update:** `VibrateController` now uses a private `PlatformVibrateBackend` adapter.
-> Device selection, non-gamepad correlation, simple rumble, two-motor effects and native handle
-> ownership all live in `IPlatformHaptics`/`Sdl3Haptics`. `Sdl3Platform`'s process-wide subsystem
-> lifecycle mutex serializes its native subsystem acquire/release with the sensor path.
-
-The SDL3 haptics service now retains one lazy discovery reference until its platform
-is destroyed. Releasing the last short-lived enumeration/open caller used to destroy
-SDL's device list; a subsequent call rescanned devices and assigned different IDs,
-so an enumerated ID could not be opened. The discovery reference is not consumable
-by client releases. The last **client** release still closes cached haptic handles
-and effects before relinquishing that client's reference; discovery retains only
-the native list. Platform destruction balances the retained reference along with
-its other owned references. Global SDL lifetime still belongs to the host.
-
-### `SDL_INIT_GAMEPAD` — `SdlInputBridge`
-
-`modules/input/src/Internal/SdlInputBridge.cpp:1599` guards on `SDL_WasInit(SDL_INIT_GAMEPAD)`
-before acquiring at `:1606`; releases at `:1611`. The `SDL_WasInit` guard is the one place CNA
-inspects SDL's refcount rather than just adjusting it, so the platform contract needs an
-equivalent "is this subsystem already up?" query.
-
-## Static-teardown ordering: `DevicesShutdownCoordinator`
-
-The subtlest constraint, and the one most likely to be broken by a naive port.
-
-`VibrateController::getDefaultProperty()` returns a function-local static whose platform adapter
-can retain an `IPlatformHaptics` handle and subsystem reference. Function-local statics are
-destroyed after `main()` returns — potentially **after** an application's own `SDL_Quit()`.
-Reading SDL's implementation, the underlying native close/quit operations have genuinely
-different outcomes:
-
-- `SDL_CloseHaptic()` on a handle `SDL_Quit()` already freed is a **real heap-use-after-free**
-  (`CHECK_HAPTIC_MAGIC` dereferences to validate). Reasoned from SDL's source and *documented as
-  not empirically reproduced* in this environment, because no physical haptic device is ever
-  opened here.
-- `SDL_QuitSubSystem(SDL_INIT_HAPTIC)` after `SDL_Quit()` **was checked and found already safe** —
-  it is gated by `SDL_ShouldQuitSubsystem()`, a refcount check.
-
-`DevicesShutdownCoordinator::Shutdown()` is the application's opt-in fix, to be called before its
-own `SDL_Quit()`. PLAT-108 strengthened it: it destroys the controller's platform adapter
-*before* publishing the shutdown flag, so retained effects/devices close and the platform
-reference is balanced while native services are still valid. The controller is inert afterward
-and its eventual static destructor has no platform resource left to release. Any platform
-implementation whose shutdown runs at static-teardown time inherits the same hazard, so this
-escape hatch remains platform-neutral.
-
-## Regression tests that pin this behaviour
-
-PLAT-29 is verified by these passing unchanged, not by inspection:
-
-- `modules/devices/tests/Microsoft/Devices/Detail/DevicesShutdownOrderingTests.cpp`
-- `modules/devices/tests/Microsoft/Devices/Detail/DevicesShutdownCoordinatorTests.cpp`
-- `modules/devices/tests/Microsoft/Devices/Sensors/SensorSubsystemOwnershipTests.cpp`
-- `modules/devices/tests/Microsoft/Devices/VibrateControllerTests.cpp`
-  (`ConcurrentCallsFromMultipleThreadsDoNotCrashOrDeadlock`)
-
-## Requirements this places on PLAT-19 / PLAT-29
-
-1. **Acquire/release, not init/shutdown.** The contract needs
-   `AcquireSubsystem(PlatformSubsystem)` / `ReleaseSubsystem(...)` semantics with refcounting,
-   plus an `IsSubsystemInitialized(...)` query for the `SDL_WasInit` case.
-2. **Global lifetime stays with the application.** `IPlatform::Initialize()` ≠ `SDL_Init()`.
-   Document this explicitly in the contract, or it will be "fixed" later by someone reasonably
-   assuming otherwise.
-3. **Tolerate unpaired releases.** PLAT-62 now balances `GraphicsDevice` video ownership, but
-   cleanup after partial initialization may still release an unacquired subsystem and must remain
-   harmless. (The audio statement was the pre-PLAT-97 baseline; audio now has per-object leases.)
-4. **Never route subsystem calls through a main-thread dispatch.** It deadlocks without an event
-   pump, and CNA supports device usage with no pump running.
-5. **Preserve the headless branch.** Skipping video acquisition entirely, not merely hiding a
-   window, is what makes display-server-free operation possible.
-6. **Keep an explicit pre-`SDL_Quit()` shutdown hook** for the static-teardown ordering hazard.
-7. **Account for implicit `SDL_INIT_EVENTS`.** It is never named but is always present as a
-   dependency of video/gamepad.
+These tests complement source inspection. Empty-device success does not qualify physical sensor/
+haptic hotplug or native driver teardown on every OS. Run window/native suites through the private
+runner; the application must keep borrowed platform services alive until their consumers finish.

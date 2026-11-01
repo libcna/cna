@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Entrypoint/lifecycle documentation reconciliation (2026-11-01, PLAT-54/PLAT-29): obsolete
+  entrypoint findings are replaced by the current platform header, Android/iOS public SDL edge,
+  MSVC GUI mainCRTStartup helper and optional SDL3main target behavior. SDL lifecycle now records
+  lazy platform-owned gamepad startup, retained haptic discovery, the separate process-wide camera
+  startup exception, implicit events dependencies and explicit versus fallback static shutdown.
+  Production-source scan finds no SDL_Init/SDL_Quit calls. Device/harness targets build; private
+  tests pass all nine shutdown/sensor cases and the vibration concurrency case. Platform ownership
+  tests pass 48/49; the camera-isolation case skips after earlier initialization and passes alone
+  in a fresh process. No new native Windows/mobile or physical-device qualification, implementation
+  or ABI changes.
 - Platform-boundary documentation reconciliation (2026-11-01, PLAT-57/PLAT-76): the platform
   guide and renderer boundary now describe current factory/link behavior, capability probes,
   service/window/context ownership, native handles including UIKit, surface snapshots and actual

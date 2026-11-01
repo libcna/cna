@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 123 reviewed, 12 updated incidentally and awaiting their own audit, and 42 not yet
+Summary: 125 reviewed, 12 updated incidentally and awaiting their own audit, and 40 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -139,13 +139,13 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/opengl33-renderer.md`](docs/opengl33-renderer.md)
 - ✅ **REVIEWED** — [`docs/physical-modules.md`](docs/physical-modules.md)
 - ✅ **REVIEWED** — [`docs/platform-abstraction.md`](docs/platform-abstraction.md)
-- ⬜ **PENDING** — [`docs/platform-entrypoint-audit.md`](docs/platform-entrypoint-audit.md)
+- ✅ **REVIEWED** — [`docs/platform-entrypoint-audit.md`](docs/platform-entrypoint-audit.md)
 - ⬜ **PENDING** — [`docs/platform-input-notes.md`](docs/platform-input-notes.md)
 - ⬜ **PENDING** — [`docs/platform-input-seam-mapping.md`](docs/platform-input-seam-mapping.md)
 - ⬜ **PENDING** — [`docs/platform-performance.md`](docs/platform-performance.md)
 - ✅ **REVIEWED** — [`docs/platform-renderer-boundary.md`](docs/platform-renderer-boundary.md)
 - ✅ **REVIEWED** — [`docs/platform-renderer-sdl-audit.md`](docs/platform-renderer-sdl-audit.md)
-- ⬜ **PENDING** — [`docs/platform-sdl-lifecycle-audit.md`](docs/platform-sdl-lifecycle-audit.md)
+- ✅ **REVIEWED** — [`docs/platform-sdl-lifecycle-audit.md`](docs/platform-sdl-lifecycle-audit.md)
 - ⬜ **PENDING** — [`docs/platform-terminal-analysis.md`](docs/platform-terminal-analysis.md)
 - ✅ **REVIEWED** — [`docs/rasterizerstate-support.md`](docs/rasterizerstate-support.md)
 - ✅ **REVIEWED** — [`docs/releasing.md`](docs/releasing.md)
