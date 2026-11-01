@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 135 reviewed, 12 updated incidentally and awaiting their own audit, and 30 not yet
+Summary: 137 reviewed, 12 updated incidentally and awaiting their own audit, and 28 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -105,12 +105,12 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ⬜ **PENDING** — [`docs/gamer-services-server.md`](docs/gamer-services-server.md)
 - ✅ **REVIEWED** — [`docs/gdm-coverage.md`](docs/gdm-coverage.md)
 - ✅ **REVIEWED** — [`docs/gltf-api-change-review.md`](docs/gltf-api-change-review.md)
-- ⬜ **PENDING** — [`docs/gltf-campaign-retrospective.md`](docs/gltf-campaign-retrospective.md)
+- ✅ **REVIEWED** — [`docs/gltf-campaign-retrospective.md`](docs/gltf-campaign-retrospective.md)
 - ✅ **REVIEWED** — [`docs/gltf-center-collapse-verdict.md`](docs/gltf-center-collapse-verdict.md)
 - 🟡 **PENDING — updated incidentally** — [`docs/gltf-conformance.md`](docs/gltf-conformance.md)
 - ⬜ **PENDING** — [`docs/gltf-conventions.md`](docs/gltf-conventions.md)
 - ⬜ **PENDING** — [`docs/gltf-limitations.md`](docs/gltf-limitations.md)
-- ⬜ **PENDING** — [`docs/gltf-performance.md`](docs/gltf-performance.md)
+- ✅ **REVIEWED** — [`docs/gltf-performance.md`](docs/gltf-performance.md)
 - ✅ **REVIEWED** — [`docs/gltf-renderer-pbr-fallbacks.md`](docs/gltf-renderer-pbr-fallbacks.md)
 - ✅ **REVIEWED** — [`docs/gltf-renderer-stride-conformance.md`](docs/gltf-renderer-stride-conformance.md)
 - ✅ **REVIEWED** — [`docs/graphics-renderer-feature-matrix.md`](docs/graphics-renderer-feature-matrix.md)

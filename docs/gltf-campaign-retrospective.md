@@ -1,7 +1,8 @@
 # glTF campaign retrospective
 
-Status: written 2026-08-18 (`GLTF-460`). Scope: the campaign plan's 475 rows, from the 2026-08-11
-forensic audit to the milestone in force today.
+Historical retrospective written on 2026-08-18 (GLTF-460), reconciled on 2026-11-01.
+Counts, environment discoveries and retired renderer examples below describe that campaign,
+not today's renderer inventory or a new conformance qualification.
 
 This is not a summary of what was done — the campaign plan was that, row by row; it was deleted on
 2026-10-29 and its record is in Git history.
@@ -15,10 +16,10 @@ tied to a specific defect that actually happened rather than to a principle that
 
 The campaign opened with eight reproduced defects (`D1`–`D8`), and the observation that shaped
 everything after it: **every one of them produced a model that rendered.** None crashed, none threw,
-none produced an obviously broken image. That is the defect class this subsystem generates, because a
-glTF importer's failure mode is not a crash — it is a plausible surface.
+none produced an obviously broken image. These were plausible but incorrect semantic results;
+malformed-input handling can fail loudly and was a different part of the campaign.
 
-The cost was not distributed the way the row count suggests. 475 rows closed, but the expensive ones
+The cost was not distributed the way the row count suggests. the retrospective counted 475 campaign rows, but the expensive ones
 were not the hard features; they were the **rules that were already implemented and quietly wrong**:
 
 | Defect shape | Example | Cost |
@@ -28,7 +29,8 @@ were not the hard features; they were the **rules that were already implemented 
 | Declared, and unreachable | `GLTF-472`: two renderers' complete `COLOR_0` shaders sat behind a draw route that never selected them | One predicate each — and a new class of test |
 | Refused for the wrong reason | `GLTF-473`: `OPENGLES1` (retired 2026-09-17) read a PBR record's `NORMAL` floats as a vertex colour | A shared guard, and a rule about *when* a refusal counts |
 
-The pattern across all four rows: **the implementation was present and the wiring was not.** That is
+The shared pattern is a missing semantic/dispatch check. Flat-normal splitting was an algorithmic
+error, while unreachable shader cases were wiring errors; they are not the same defect. That is
 worth naming because it is invisible to the review style this project otherwise does well — reading
 the code that implements the feature.
 
@@ -36,19 +38,20 @@ the code that implements the feature.
 
 ## 2. Which oracle layer caught what
 
-The campaign's seven-layer ladder (L0–L7, `docs/gltf-conformance.md`) is the reusable part, and its
+The campaign's eight numbered layers (L0–L7, `docs/gltf-conformance.md`) is the reusable part, and its
 value was not evenly distributed either.
 
 | Layer | What it is | What it actually caught |
 |---|---|---|
 | L0–L2 | container, buffer, accessor decode | Malformed-input handling; the sparse-accessor and index-decode defects. Cheap, and it found real bugs. |
 | L3 | the semantic mesh a conforming reader must produce | **The highest-yield layer.** It is where a *derived* value belongs — flat normals, generated tangents, the vertex split — and where `flatnormals.py` gives a second opinion instead of restating CNA. |
-| L4–L5 | draw state and byte-exact vertex buffers | Stride/ABI regressions; the layout table's own consistency. |
+| L4–L5 | transformed world geometry and byte-exact vertex buffers | Transform/stride/ABI regressions and the layout table's own consistency. |
 | L6 | captured `GpuDrawParams` | Effect selection and factor transport — `GLTF-372`'s alpha-test vector reached the effect and nothing consumed it. |
 | L7 | rendered pixels vs committed goldens, two independent processes | Renderer-specific divergence, and the only layer that can prove a shader is *evaluated* rather than *written*. |
 
-**The gap the ladder did not cover, and the lesson of the last week:** every layer above reads either
-data or source. None of them asks whether a draw *arrives*. Five defects lived in exactly that gap —
+**The gap in the then-current coverage:** L0–L6 and the static inventories did not execute every
+renderer dispatch route. L7 did render pixels, but only for selected policies/fixtures, so it could
+not close that all-renderer gap by itself. Five defects lived in exactly that gap —
 `SDLGPU` and `DILIGENT`'s (retired 2026-09-17) unreachable `COLOR_0` (`GLTF-472`), `OPENGLES1`'s
 (retired 2026-09-17) misread PBR record
 (`GLTF-473`), and `OPENGL4`'s and `DILIGENT`'s stride-chosen programs (`GLTF-475`) — and **every
@@ -57,9 +60,10 @@ declared the layout and genuinely contained the shader expression the audit grep
 
 The fix was a new tier, not a new assertion: the live draw tests — `RendererStrideConformance`
 (`docs/gltf-renderer-stride-conformance.md`) and
-`CrossRendererContract.NoRendererPaintsAVertexAttributeInsteadOfTheEffectsDiffuseColour`. They draw
+`CrossRendererContractTest.NoRendererPaintsAVertexAttributeInsteadOfTheEffectsDiffuseColour`. They draw
 through a real device and require the draw to succeed, or to be refused by name, or to answer the
-exact colour the caller asked for. They are cheap, the stride half runs in CI on five renderers, and
+exact colour the caller asked for where readback is available. The stride CI now lists six
+identities, including WEBGPU (see the current stride page), and
 between them they found the five defects above.
 
 **The fifth one is the sharpest argument for the tier**, because the row that predicted the fourth
@@ -84,7 +88,7 @@ only because no encode existed to disable.
 > finished. The cheap version of this check — does each component name each input at all? — is one
 > test, and it would have caught this one on the day `IGL` landed.
 
-> **Reusable rule.** A source audit can only see what a component *declares*. If a subsystem has a
+> **Reusable rule.** A source-fragment inventory can miss the wiring between declarations. If a subsystem has a
 > dispatch step between "the feature exists" and "the feature runs", the audit must include one test
 > that executes the dispatch. Adding a table row to an inventory is not that test.
 
@@ -100,12 +104,12 @@ and a prose number is a comment.* Where a claim is worth keeping honest, it is w
 `SpecularTextureInventoryClassifiesEveryPbrRenderer` names the unfinished set, so finishing one is a
 deliberate edit rather than silent drift.
 
-**Recorded environment blockers were wrong more often than they were right.** Four were checked in
-the last week; **three were false**:
+**Recorded environment blockers need dates.** In that campaign's last week, three of four checked
+blockers were found false. These results are historical, not claims about installed tools today:
 
 | Recorded blocker | Reality |
 |---|---|
-| DirectX11 L7 "needs a DXVK'd Wine prefix this environment does not have" | It had one (`GLTF-471`) |
+| Retired DirectX11 L7 "needs a DXVK'd Wine prefix this environment does not have" | It had one (`GLTF-471`) |
 | `OPENGLES1` (retired 2026-09-17) cannot be run — no ES 1.1 driver | The side-by-side Mesa build from 2026-07-22 was still installed (`GLTF-473`) |
 | DirectX9 shaders "regenerated only through the pinned `d3dcompiler_47.dll` … which this environment does not have" | The DLL was in `~/.cache/winetricks`, SHA-256-identical to the pinned value (`GLTF-465`) |
 | WebGPU needs a wgpu-native artifact | **True** — it was downloaded, once, into `~/deps` |
@@ -137,11 +141,20 @@ looks like churn and was not. Each cycle was driven by a specific, checkable arg
 
 The lasting output is not the name. It is the partition, its qualifier — *an explicit refusal counts
 as one only if it happens before any incompatible vertex-layout interpretation and before any GPU
-submission* — and the fact that both are machine-checked rather than remembered.
+submission* — and the regression gates that check known source partitions and selected live draw paths.
+Source-string inventories are not a universal semantic proof of every native program.
 
-**The milestone in force is `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT`**, with renderer coverage
-stated beside it rather than inside it. `GLTF ROBUST` remains open on rows 6 and 12
-([`gltf-conformance.md`](gltf-conformance.md) §8.3).
+The historical milestone was renamed GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT, with renderer
+coverage stated separately. Current capability/limitations and evidence belong to
+[gltf-limitations.md](gltf-limitations.md) and [gltf-conformance.md](gltf-conformance.md).
+This retrospective does not redeclare it or promote ROBUST from old row counts. Point/spot
+approximation and multi-renderer reference qualification are different unresolved questions;
+a current live stride pass does not settle them.
+
+The current specular source partition includes all six PBR families and has no factor-only
+remainder. That corrects the historical examples without claiming a fresh all-renderer pixel pass.
+The 2026-11-01 audit checked cited source gates/history and current stride execution; it did not
+rerun the historical campaign or prove its old environment blockers still absent.
 
 ---
 

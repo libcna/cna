@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- glTF performance/retrospective reconciliation (2026-11-01, GLTF-433/460): current CPU-time
+  estimators, ASan-scaled ceilings, value-copy/cache sharing and per-command parsing replace old
+  timing/identity claims. Accessor totals are logical dense bytes, multiple unpacked arrays can
+  overlap, and the morph test's hard-coded 200% excludes deltas, scratch and native/shadow storage.
+  Historical timing/RSS tables are retained with scope; current accessor totals are 24,072/26,084
+  bytes. The retrospective distinguishes eight L0–L7 layers, algorithm versus wiring defects,
+  selected pixel coverage, dated environment blockers and current six-family source partitions.
+  The Content target builds; privately all nine small performance/lifetime tests pass, while both
+  external large-reference tests skip for absent configuration. No new large-asset RSS, sanitizer,
+  performance campaign, conformance milestone, implementation or ABI changes.
 - glTF renderer documentation reconciliation (2026-11-01, GLTF-374/389): PBR now inventories
   all six shading families including FNA3D/SOFTWARE, seven map roles, GPU-neutral versus exact CPU
   defaults, current specular/vertex-color support and material/transform/coverage contracts.
