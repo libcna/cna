@@ -1,12 +1,14 @@
 # Graphics Device ABI
 
-`CNA/C/graphics_device.h` is the C surface of the canonical `GraphicsDevice` family. It grows
-slice by slice under CBIND-035F; this document states what the header currently guarantees and,
-explicitly, what it does not.
+`CNA/C/graphics_device.h` exposes viewport values, graphics-device state and events, frame control,
+buffer and texture bindings, draw submission, occlusion queries and device extensions. The device
+may be borrowed from a game or independently owned by C. Declaring an operation or identity does
+not advertise renderer support; query the active device before choosing an optional path.
 
-CBIND-035F1 establishes the value and identity vocabulary the later device slices consume. It is a
-value contract: it does not create, borrow or drive a device, and declaring an identity here does
-not advertise renderer support for the operation that consumes it.
+Renderer discovery and detailed capability queries are in
+[`RENDERERS_AND_CAPABILITIES.md`](RENDERERS_AND_CAPABILITIES.md). Shared ownership, threading and
+error rules are in [`OWNERSHIP.md`](OWNERSHIP.md),
+[`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md) and [`ERRORS.md`](ERRORS.md).
 
 ## Fixed-layout viewport
 
@@ -19,14 +21,13 @@ Three initializers represent the three constructors:
 
 | C operation | Canonical constructor | Result |
 |---|---|---|
-| `cna_viewport_init` | `Viewport()` | zero position/size, `min_depth` 0, `max_depth` 1 |
+| `cna_viewport_init` | `Viewport()` / XNA `default(Viewport)` | all six fields zero |
 | `cna_viewport_init_bounds` | `Viewport(int, int, int, int)` | given position/size, `min_depth` 0, `max_depth` 1 |
 | `cna_viewport_init_from_rectangle` | `Viewport(const Rectangle&)` | rectangle position/size, `min_depth` 0, `max_depth` 1 |
 
-The default is deliberately not an all-zero structure: the canonical default constructor leaves
-`MaxDepth` at 1, and the C route reports exactly what CNA produces rather than what a zeroed POD
-would suggest. A caller that memsets a `CNA_Viewport` to zero therefore gets a degenerate depth
-range, not the framework default.
+The default preserves XNA's zero-initialized value type, including `MaxDepth = 0`. Only the two
+parameterized constructors establish the usual 0–1 depth range. Initialize from bounds when that
+range is required; a zeroed `CNA_Viewport` has the same values as `cna_viewport_init`.
 
 `cna_viewport_get_aspect_ratio` returns width divided by height, or zero when either dimension is
 zero — the native guard, not an error. `cna_viewport_get_bounds`, `cna_viewport_set_bounds` and
@@ -45,8 +46,10 @@ string or writes nothing and returns `CNA_RESULT_BUFFER_TOO_SMALL` with the requ
 `{X:… Y:… Width:… Height:… MinDepth:… MaxDepth:…}`, with the depth values in the native
 six-decimal form.
 
-Every operation is a pure value transform: no handle, no allocation, no thread affinity, and a null
-output pointer is `CNA_RESULT_INVALID_ARGUMENT` with no partial write.
+These operations require no handle or device thread. Formatting text may allocate internally;
+returned bytes use caller-owned storage. A null required output returns
+`CNA_RESULT_INVALID_ARGUMENT`; the copy route reports the required size without writing a short
+buffer prefix.
 
 ## Stable identities
 
@@ -77,21 +80,22 @@ not assumed.
 
 ## Device lifetime, state and events
 
-CBIND-035F2 adds the device's own contract on top of the borrowed handle that `graphics.h`
-already provides. CABI-10/13 later added an independently owned form of the same device.
-
 ### Borrowed and caller-owned lifetimes
 
-`cna_game_get_graphics_device` borrows the running `Game`'s device for the duration of one
-lifecycle callback; the handle is generation-invalidated the moment that callback returns. The
-game creates that device from its adapter, profile and presentation state, and
-`cna_game_destroy` disposes it.
+`cna_game_get_graphics_device` borrows the game's device during a lifecycle callback or before the
+first run, step or tick. A callback loan ends when that callback returns; a pre-run loan ends when
+the first callback returns. Repeated queries within a validity window return the same handle, and
+an out-of-callback query after running has begun is refused. The game creates and disposes its
+device. The complete borrowing contract is in
+[`RENDERERS_AND_CAPABILITIES.md`](RENDERERS_AND_CAPABILITIES.md#borrowed-graphics-device-handle).
 
 `cna_graphics_device_create` instead constructs an independent device outside any `Game` from an
 adapter index, graphics profile and presentation parameters. Its handle is owned until
 `cna_graphics_device_destroy`; several independently owned devices may coexist, and the ordinary
-device operations and resource-creation routes accept either handle form. Resources retain their
-creating-device identity, so cross-device use is refused even between two caller-owned devices.
+device operations and resource-creation routes accept either handle form. Resources carry their
+creating-device identity; routes that combine resources enforce their documented same-device
+rules. Destroy a device's resources before releasing the device. Standalone-device resources do
+not count as game children and do not block an unrelated `cna_game_destroy`.
 
 `cna_graphics_device_dispose` does not transfer or release either kind of handle. It returns
 `CNA_RESULT_NOT_SUPPORTED` for a valid device: a borrowed device belongs to its game, while a
@@ -149,11 +153,9 @@ Two payload decisions are deliberate limitations, not omissions:
   reported as presence only. The resource `Name` is a canonical string and is passed as a
   callback-scoped UTF-8 view.
 
-Neither payload can therefore tie an event to a C handle. Doing so would need a stable opaque
-lifecycle ID assigned in the native `GraphicsResource` base object, carried by both events,
-queryable from every graphics-resource handle and defined across C++ copy and move -- and, because
-both structures are published at version 1, an additive versioned extension rather than a resize
-(CABI-45, deferred as a design question).
+Neither payload ties an event to a C handle or exposes a stable lifecycle ID. Such an identity
+would need a separately versioned extension; consumers cannot infer one from these version-1
+payloads.
 
 A subscription is an owned handle. It does **not** block `cna_game_destroy`: destroying the game
 disposes the device — which is exactly when a `Disposing` subscriber wants to be called — and the
@@ -167,9 +169,9 @@ registration handles stay releasable afterwards; releasing one twice returns
 `CNA_ERROR_CATEGORY_STATE`; `NoSuitableGraphicsDeviceException` becomes `CNA_RESULT_NOT_SUPPORTED`
 with `CNA_ERROR_CATEGORY_NOT_SUPPORTED`. The exception message — default or custom — reaches the
 caller through the ordinary per-thread UTF-8 diagnostic. The conversion lives in the shared
-exception firewall, so it applies to every C entry point, not just the device family. Only the
-DirectX 9 backend currently raises these conditions, so the conversion is proven by a focused
-adapter test rather than by a HEADLESS device.
+exception firewall, so it applies to every C entry point, not just the device family.
+`CApi_BoundaryDetail` independently checks the exception translation without requiring a driver
+fault.
 
 `IGraphicsDeviceService` is an abstract C++ interface. C can neither implement nor instantiate it;
 `cna_game_get_graphics_device` is the C route to the device it exposes. Its four service-level
@@ -189,15 +191,19 @@ addresses them by stage and slot instead of handing out a collection object:
 | `cna_graphics_device_set_texture` | `Textures`/`VertexTextures` `operator()` |
 | `cna_graphics_device_unbind_texture` | `RemoveDisposedTexture` |
 
-`CNA_TEXTURE_COLLECTION_MAX_TEXTURES` is 16 and is asserted against the canonical
-`TextureCollection::MaxTextures` at compile time. Any slot at or above it, and any stage other than
-`CNA_SHADER_STAGE_PIXEL` or `CNA_SHADER_STAGE_VERTEX`, is `CNA_RESULT_INVALID_ARGUMENT`.
+`CNA_TEXTURE_COLLECTION_MAX_TEXTURES` is 16 and is asserted against the canonical storage maximum
+at compile time. Any slot at or above it, and any stage other than `CNA_SHADER_STAGE_PIXEL` or
+`CNA_SHADER_STAGE_VERTEX`, is `CNA_RESULT_INVALID_ARGUMENT`. The native collection additionally
+limits vertex sampling to four slots in HiDef and none in Reach; reading an index within the
+storage maximum but outside that active range returns `CNA_RESULT_OUT_OF_RANGE`. Vertex texture
+formats must also satisfy the native vertex-sampling rules.
 
 A read fills a versioned `CNA_TextureSlotInfo`. Its two fields answer two different questions:
-`bound` says whether the native slot holds a texture at all, and `texture` names the C handle that
-bound it. They diverge when canonical CNA code fills the slot itself — a SpriteBatch flush, for
-instance — in which case `bound` is `CNA_TRUE` and `texture` is `CNA_INVALID_HANDLE`, because no C
-resource owns that texture and inventing a handle for it would be a lie.
+`bound` says whether the native slot holds a texture at all, and `texture` names a still-live C
+handle recorded by the C binding route for that exact native texture. A native binding with no
+matching record can therefore report `bound = CNA_TRUE` and `texture = CNA_INVALID_HANDLE`, even
+when the texture exists elsewhere under a C handle. This query does not create a handle or acquire
+ownership.
 
 Binding takes any owned texture handle: Texture2D, Texture3D, TextureCube or either render-target
 type. Passing `CNA_INVALID_HANDLE` empties the slot. Binding stores no ownership and no reference
@@ -234,51 +240,7 @@ caller's array the pixels land. Two capacity rules are decided in C, before any 
 the array must hold `start_index + element_count` pixels, and `element_count` must cover the whole
 selected region. Both report `CNA_RESULT_BUFFER_TOO_SMALL`; the canonical routine would otherwise
 surface an undersized count as a generic native failure. Nothing outside the requested window is
-written, and a backend without honest readback returns `CNA_RESULT_NOT_SUPPORTED` with the
-destination untouched.
-
-Buffer binding replaces the native pointer-and-vector surface:
-
-| C operation | Canonical member |
-|---|---|
-| `cna_graphics_device_set_vertex_buffer` / `_set_vertex_buffer_offset` | both `SetVertexBuffer` overloads |
-| `cna_graphics_device_set_vertex_buffers` | `SetVertexBuffers` |
-| `cna_graphics_device_get_vertex_buffer_count` / `_copy_vertex_buffers` | `GetVertexBuffers` |
-| `cna_graphics_device_get_vertex_buffer` | `GetVertexBuffer` |
-| `cna_graphics_device_set_index_buffer` / `_get_index_buffer` | `SetIndexBuffer`, `GetIndexBuffer`, `Indices` and the `Indices` property pair |
-
-The four canonical index-buffer accessors are one operation in CNA, so they collapse to one
-validated get/set pair. `cna_graphics_device_set_vertex_buffers` validates every binding — a
-negative vertex offset or instance frequency, or an unusable handle — before applying any of them,
-so a rejected call leaves the previous binding set intact. Reads report the owning C handle; as with
-sampler slots, a binding applied by canonical CNA code reports `CNA_INVALID_HANDLE` rather than
-inventing one.
-
-## Frame control and buffer binding
-
-Three clear routes cover the canonical overloads that `cna_game_clear` does not:
-`cna_graphics_device_clear_rgba` takes four floating-point channels,
-`cna_graphics_device_clear_color_depth` clears color and depth together, and
-`cna_graphics_device_clear_options` takes a `CNA_ClearOptions` mask with a depth and stencil value.
-Non-finite channels or depths, and unknown option bits, are `CNA_RESULT_INVALID_ARGUMENT` before the
-device is touched. `cna_graphics_device_present` presents the frame.
-
-`cna_graphics_device_reset` reuses the device's current presentation parameters;
-`cna_graphics_device_reset_with_parameters` takes new ones plus a **nullable** `adapter_index`
-pointer. That single pointer expresses both canonical overloads: a null pointer is the
-keep-the-current-adapter form, a non-null one selects an adapter by the same index the
-`cna_graphics_adapter_*` queries use. The renderer-private device window handle is preserved across
-the reset, because a C caller never supplies it. A successful reset raises the device's resetting
-and reset events in that order, which a C subscriber observes.
-
-`cna_graphics_device_get_backbuffer_data_window` reads a window of the back buffer through a
-versioned `CNA_BackBufferReadback`. The canonical nullable `Rectangle*` becomes an explicit
-`has_source_rectangle` flag plus a value, and `start_index`/`element_count` describe where in the
-caller's array the pixels land. Two capacity rules are decided in C, before any native read: the
-array must hold `start_index + element_count` pixels, and `element_count` must cover the whole
-selected region. Both report `CNA_RESULT_BUFFER_TOO_SMALL`; the canonical routine would otherwise
-surface an undersized count as a generic native failure. Nothing outside the requested window is
-written, and a backend without honest readback returns `CNA_RESULT_NOT_SUPPORTED` with the
+written, and a renderer without honest readback returns `CNA_RESULT_NOT_SUPPORTED` with the
 destination untouched.
 
 Buffer binding replaces the native pointer-and-vector surface:
@@ -305,9 +267,8 @@ Three routes draw from the currently bound buffers — `cna_graphics_device_draw
 `cna_primitive_type_get_vertex_count` exposes the canonical topology-to-vertex-count helper so a
 caller can size an array without attempting a draw.
 
-The canonical surface has **twenty-nine** user-primitive overloads. They vary along three
-dimensions — vertex representation, whether a `VertexDeclaration` is supplied, and index width —
-so the C surface has two functions and puts those dimensions in a versioned descriptor:
+The native user-primitive overloads vary by vertex representation, explicit declaration and index
+width. The C surface uses two functions and versioned descriptors for those dimensions:
 
 ```c
 CNA_UserPrimitives primitives = {
@@ -324,9 +285,9 @@ declaration-less raw overloads read their bytes as an array of native objects, w
 produce. The C-safe equivalent of those overloads is `CNA_USER_VERTEX_SOURCE_POSITION_COLOR`
 without a declaration, which produces the same result through the conversion.
 
-Every draw route first checks the device's 3D capability, so a 2D-only backend answers
-`CNA_RESULT_NOT_SUPPORTED` rather than surfacing whatever generic failure its first unsupported
-internal call happens to raise.
+After validating its arguments and handles, every draw route checks the device's 3D capability
+before native submission. A device without that capability returns `CNA_RESULT_NOT_SUPPORTED`.
+Indexed user draws use `CNA_UserIndices` to select 16- or 32-bit indices and an index offset.
 
 ## Device extensions
 
@@ -336,9 +297,9 @@ pair, current-effect assignment and the multisample renderer rebuild map CNA's o
 extensions. The three pipeline-state toggles are capability-gated like the draw routes.
 
 `cna_graphics_device_set_current_effect` needs one extra guarantee the canonical API does not give:
-the device stores a borrowed `Effect*`, so the C API keeps the assigned effect alive until it is
-replaced, cleared, or the game is destroyed. Destroying the effect's own handle while it is current
-therefore cannot leave the device pointing at freed memory.
+the device stores a borrowed `Effect*`, so the C API retains the assigned effect independently of
+its handle. Clearing or replacing the assignment releases that reference. Destroying the effect's
+own handle while it is current therefore cannot leave the device pointing at freed memory.
 
 `OnResourceCreated`, `OnResourceDestroyed`, `AddResourceReference`, `RemoveResourceReference` and
 `GetRenderer` have **no** C route, because each takes or returns a native object: a partially
@@ -347,19 +308,63 @@ effects are already reachable — resource events through the subscriptions abov
 automatically for every owned C resource and readable through the tracked-count query, and renderer
 identity and capabilities through `graphics.h`.
 
+The later device extensions are available in the same header:
+
+- `cna_graphics_device_notify_content_lost_resources_ext` notifies a snapshot of content-losable
+  resources, allowing callbacks to dispose resources safely during notification;
+- `cna_graphics_device_supports_surface_format_as_render_target_ext` asks the format-acceptance
+  predicate used by render-target construction;
+- `cna_graphics_device_executes_shader_effect_source_ext` distinguishes accepting a shader effect
+  from executing its source, and `cna_graphics_device_supports_image_based_lighting_ext` queries the
+  renderer's IBL path. A broad `CUSTOM_EFFECTS` capability is insufficient for either guarantee.
+
+### Display color space
+
+`CNA_DisplayColorSpace` defines `SRGB`, `SCRGB` and `HDR10` as values 0, 1 and 2. The get route
+reports the active space; the set route returns `CNA_RESULT_SUCCESS` with `out_changed = CNA_FALSE`
+when a defined space is unavailable. Undefined identities return `CNA_RESULT_INVALID_ARGUMENT`.
+
+`cna_graphics_device_supports_display_color_space_ext` may try the requested space and restore the
+previous one. It is an active probe and can cause a momentary visible change; an already-active
+space needs no transition. This answer describes the live renderer/display, not a permanent
+property of its renderer identity.
+
 ## Occlusion queries
 
-`cna_occlusion_query_create` owns a game-child query; `_begin`, `_end`, `_get_is_complete`,
-`_get_pixel_count`, `_has_renderer` and `_destroy` complete the surface. Creation checks the
-device's occlusion-query capability, so a backend without one refuses at creation rather than at
-the first use. The handle is a full graphics resource: the generic `cna_graphics_resource_*` name,
-string, tag, device, disposal and disposing-subscription routes accept it, which is where the
-canonical protected `Dispose(bool)` and `GetTypeName` behavior is observed. Some backends report
-only zero or one from the pixel count rather than an exact sample count.
+`cna_occlusion_query_create` creates an owned query for the supplied device. On a game-owned device
+it is a game child and blocks game destruction until released. Creation rejects Reach and a device
+without the occlusion-query capability. The handle is a full graphics resource: the generic
+`cna_graphics_resource_*` name, string, tag, device, disposal and disposing-subscription routes
+accept it, which is where the canonical protected `Dispose(bool)` and `GetTypeName` behavior is
+observed. `cna_occlusion_query_has_renderer` reports the native object's presence and
+`cna_occlusion_query_destroy` disposes and releases the handle.
 
-## Not yet in this header
+The begin/end/completion/pixel-count routes preserve XNA's state machine: end without begin,
+nested begin, repeated end and reuse before a completion observation return
+`CNA_RESULT_INVALID_STATE`. Reading the pixel count also observes completion and refuses a result
+that is not ready. Distinct queries may overlap independently. Observing completion permits reuse
+even when the observation returned false; it does not make the previous pixels available.
+
+`cna_occlusion_query_get_is_pixel_count_precise_ext` distinguishes a sample tally from a visibility
+answer. Read it alongside the completed result because a renderer may classify its native query
+on first begin. For an imprecise result, use only zero versus non-zero; dividing by an area does
+not yield coverage. Renderer-specific precision and HEADLESS's validation sentinel are documented
+in [`occlusionquery-support.md`](../occlusionquery-support.md).
+
+## Related headers and verification
 
 Renderer/capability discovery remains in `graphics.h`; presentation parameters, display mode and
 adapter queries remain in `display.h`; blend/depth-stencil/rasterizer/sampler state remains in
-`graphics_state.h`. SpriteBatch itself lives in `graphics.h`, including its text and mesh routes. The `graphics-ext`
-post-process family is owned by CBIND-035F7 and is not callable yet.
+`graphics_state.h`. SpriteBatch itself lives in `graphics.h`, including its text and mesh routes.
+The post-processing, ASCII and other optional graphics extensions are already exposed through
+`graphics_ext.h`; see [`GRAPHICS_EXT.md`](GRAPHICS_EXT.md).
+
+`CApi_GraphicsDeviceSmoke` covers viewport defaults and transforms, device state/events, sampler
+and buffer bindings, clear/reset/readback, draw submission and query acceptance/state. On SDLGPU
+its occlusion branch verifies the capability refusal; renderer query and pixel evidence belongs to
+the native subsystem tests. `CApi_GraphicsExtSmoke` covers the later device extensions, including
+color-space identity validation and optional post-processing. The owned-device, concurrent-device
+and secondary-context smoke tests exercise independent device lifetimes. `CApi_LifecycleSmoke`
+and `CApi_RuntimeComponentDeviceBorrow` cover callback borrowing; `CApi_BoundaryDetail` covers
+exception translation. These tests complement the generated ABI and boundary checks; one passing
+renderer configuration does not qualify every platform or driver.

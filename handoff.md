@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API graphics-device contract reconciliation (2026-11-01):
+  `docs/c-api/GRAPHICS_DEVICE.md` now describes the current device surface and removes a duplicated
+  frame-control/buffer-binding section. It corrects default Viewport to all-zero fields including
+  MaxDepth, records pre-run borrowing and standalone-device ownership, and documents the active
+  vertex-sampler ranges and the distinction between a native binding and a recorded C handle.
+  The page no longer promises allocation-free text formatting or unavailable post-processing;
+  it covers the implemented content-loss, format, shader-source, IBL and display-color-space
+  queries, including the color-space probe's temporary transition, and the current occlusion
+  state machine and precision query. Public device Doxygen now states that event registrations
+  do not block game destruction and recognizes the pre-run borrowing window. The selected
+  device/ABI header targets build, all 11 focused C API tests pass through the private SDLGPU
+  runner, and all nine coverage, generation, limitation, export and release gates pass. SDLGPU's
+  occlusion test verifies refusal; native renderer tests remain the evidence for query pixels.
 - Historical C API generation-audit retirement (2026-11-01):
   the 402-line `docs/c-api/GENERATION_AUDIT.md` snapshot from `CBIND-AUDIT-001` was removed from
   live documentation. Its October 12 counts, ABI version, 123-test inventory, Wine/DXVK results and

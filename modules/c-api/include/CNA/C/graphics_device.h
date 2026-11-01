@@ -529,8 +529,9 @@ CNA_C_API CNA_Result cna_graphics_device_dispose(CNA_Handle graphics_device);
  * @param out_registration Receives an owned registration handle on success.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
- * The callback and context remain caller-owned until unsubscription. The registration keeps the
- * game alive in the same way an owned graphics resource does.
+ * The callback and context remain caller-owned until unsubscription or final source disposal.
+ * The registration does not block game destruction: it observes final device events, becomes
+ * detached when the source is gone, and remains the caller's to release exactly once.
  */
 CNA_C_API CNA_Result cna_graphics_device_subscribe_event(
     CNA_Handle graphics_device,
@@ -762,8 +763,8 @@ CNA_C_API CNA_Result cna_graphics_device_present(CNA_Handle graphics_device);
 /**
  * @brief Creates a GraphicsDevice this caller owns, outside any Game.
  *
- * Every other route in this ABI hands out the Game's own device, borrowed for the duration of a
- * callback. This one creates an independent device with XNA's own constructor arguments, and the
+ * Game-device accessors return a borrowed handle valid during a callback or the documented pre-run
+ * window. This route creates an independent device with XNA's own constructor arguments, and the
  * caller destroys it with @ref cna_graphics_device_destroy. Several may exist at once, and one may
  * be destroyed while another is still live. Several threads may create and destroy devices at the
  * same time; building and tearing down the window, renderer and context is serialised inside CNA.
