@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Development-environment documentation reconciliation (2026-11-01): the Debian recipe now
+  distinguishes root/shared-runtime CMake requirements, compiler versus standard library, actual
+  CI sibling-branch resolution, base/video/media/C API dependency gates, ALSA versus SDL dummy
+  audio, Wayland probe versus optional decoration, patch provenance and host-specific tooling.
+  All forty install-block package names exist in the local apt index; Debian CMake/Doxygen/Draco/
+  DXVK metadata is checked. All nine focused dependency/cache/patch/header/deployment configuration
+  checks pass in the existing multi tree privately. No package install/upgrade, fresh-machine
+  bootstrap, Wine-prefix provisioning, new cross build, implementation or ABI changes.
 - Physical-module documentation reconciliation (2026-11-01): current direct CNA/Sharp Runtime
   dependencies replace the obsolete table, adding Platform/ContentPipelineBuild, optional
   GamerServices and avatar/C API boundaries. Static/shared umbrella composition, mixed-C singleton

@@ -1,9 +1,10 @@
 # CNA development environment — Debian 13
 
 What a fresh Debian 13 ("trixie") machine, desktop or headless, needs to build CNA natively and
-run its tests. The configure step is the authority this page is checked against: a missing
-required package stops it with an error naming the package, and each optional one prints a
-`CNA: … enabled` or `… disabled` line saying what it changed.
+run its tests. This is a host/configuration recipe, reconciled on 2026-11-01, not a claim that
+every target or the entire test matrix runs after one package install. Current CMake probes and
+feature messages define the selected dependency set; optional missing tools can disable/skip
+checks, while required dependencies fail configuration.
 
 Install the baseline, fetch the sibling checkouts and submodules, then add only the optional
 groups you need. The build commands themselves are in the repository
@@ -30,18 +31,18 @@ sudo apt-get install -y \
 
 | Packages | Why |
 |---|---|
-| `build-essential`, `cmake`, `ninja-build`, `git`, `pkg-config` | A C++23 compiler (trixie's GCC 14; Clang 15+ also works), CMake 3.20 or newer (trixie has 3.31), the Ninja generator the documented build trees use, and `pkg-config` for the optional probes below. |
+| `build-essential`, `cmake`, `ninja-build`, `git`, `pkg-config` | A compiler and standard library with the C++23 features CNA/Sharp Runtime use. The audited host uses GCC 14; do not infer complete library support from a Clang version alone. Root minimum CMake is 3.20, but the native ELF shared runtime requires 3.30+; older CMake needs CNA_SHARED_LIBRARY=OFF. Trixie's [CMake package](https://packages.debian.org/trixie/cmake) is 3.31.6. Ninja is the documented tree generator. |
 | `ccache` | Optional but recommended. `CNA_USE_CCACHE=ON`, the default, uses it when it is found and builds without it otherwise. |
-| `libcurl4-openssl-dev`, `nlohmann-json3-dev` | **Required.** GamerServices and Net, both on by default, use libcurl for TLS and WebSockets and nlohmann-json for the service protocol. Configure fails without them; `-DCNA_ENABLE_NET=OFF -DCNA_ENABLE_GAMER_SERVICES=OFF` removes both modules and both packages. |
+| `libcurl4-openssl-dev`, `nlohmann-json3-dev` | Required by the default native GamerServices/Net configuration for service TLS/WebSockets and JSON. To omit those modules/dependencies, use CNA_ENABLE_NET=OFF and CNA_ENABLE_GAMER_SERVICES=OFF; keep CNA_BUILD_C_API=OFF because the C adapter currently requires them. |
 | `libx11-dev` … `libxtst-dev` | SDL3 is built from the vendored submodule, but its configure looks for the X11 headers of its x11 video driver on the system. Once it finds `libx11-dev` it stops if any of these extension packages is missing; XTest is one of them. Xinerama is no longer used. |
 | `libgl-dev`, `libegl-dev` | The OpenGL and EGL headers SDL3 probes for its GL context support, which the GL renderers use. Without them SDL3 silently builds without that support. meta-gl carries its own GLES headers. The older names `libgl1-mesa-dev` and `libegl1-mesa-dev` that CI uses install the same headers. |
-| `libasound2-dev`, `libpulse-dev` | SDL3's ALSA and PulseAudio output backends. `libasound2-dev` is also what `CNA_AUDIO_PLATFORM=ALSA` needs ([`audio-alsa.md`](audio-alsa.md)). Tests use SDL's dummy audio driver either way. |
+| `libasound2-dev`, `libpulse-dev` | SDL3's ALSA and PulseAudio output backends. libasound2-dev also enables CNA_AUDIO_PLATFORM=ALSA ([audio-alsa.md](audio-alsa.md)). SDL tests normally use dummy audio; SDL_AUDIODRIVER does not mute/configure CNA's separate ALSA mixer. |
 | `weston`, `xwayland`, `mesa-vulkan-drivers` | [`tools/platform/run_gpu_tests_private.sh`](../tools/platform/run_gpu_tests_private.sh) is the standard way to run GPU and window tests, never on the live desktop. It starts a headless Weston and a private rootful Xwayland, which has DRI3 and so presents Vulkan on the real GPU. Without Weston or Xwayland it exits 77 (skip). `mesa-vulkan-drivers` is the Vulkan driver (RADV, Intel, or lavapipe on a machine with no usable GPU) that `SDLGPU` and `WEBGPU` run on; neither needs Vulkan headers to build. |
 | `xvfb`, `x11-utils` | Xvfb serves the X11-protocol tests (`CnaPlatformSdl3X11Tests`, through `tools/platform/x11_test_server.sh`) and the `xvfb-run` harnesses under `scripts/`. It is **not** a substitute for the private runner: it has no DRI3, so Vulkan cannot present on it, and its OpenGL is Mesa's software llvmpipe. `x11-utils` gives the runner `xdpyinfo` for its DRI3 check. |
 | `python3`, `python3-pil` | Configure works without Python, but with it the default suite registers its Python checks, and the platform boundary gates are Python scripts ([`platform-abstraction.md`](platform-abstraction.md)). `EasyGL_XnaLineCoverage` diffs images with Pillow. |
-| `libfreetype-dev`, `doxygen` | The default suite checks these rather than skipping them. FreeType is the build-time `.spritefont` pipeline (`CNA_ENABLE_FONT_PIPELINE=AUTO`), whose link boundary `CnaXnbDependencyBoundary` verifies. The C API coverage gates parse headers with Doxygen 1.9.x, which is the version trixie ships. |
+| `libfreetype-dev`, `doxygen` | FreeType enables the optional build-time .spritefont pipeline (CNA_ENABLE_FONT_PIPELINE=AUTO); CnaXnbDependencyBoundary checks its isolation. C API coverage pins use Doxygen 1.9.x; point CNA_C_API_DOXYGEN at that version when needed. [Trixie ships 1.9.8](https://packages.debian.org/trixie/doxygen). Availability/skip behavior follows each registered gate. |
 
-The vendored SDL3 is built once per configuration into a `.sdl-prebuilt-<key>/` directory in the
+The vendored SDL3 is cached by target/capability key in a `.sdl-prebuilt-<key>/` directory in the
 source tree and shared by every build tree. Installing an SDL prerequisite later does not rebuild
 it, so install the SDL packages before the first configure. If you add one afterwards, remove the
 cache directory the configure output names (other build trees use it too) and reconfigure. The
@@ -61,13 +62,11 @@ against the other tree's SDL. Give such a tree a root of its own with
 ## Sibling checkouts and submodules
 
 ```bash
-# in the directory that holds the checkouts
-git clone --recurse-submodules https://github.com/libcna/cna.git
-git clone --branch next https://github.com/libcna/sharp-runtime.git
-git clone https://github.com/libcna/easy-gl.git
-git clone https://github.com/libcna/meta-gl.git
+# Fresh integration checkout; sibling directories must not already exist.
+git clone --branch next https://github.com/libcna/cna.git
 cd cna
-git submodule update --init --recursive   # an existing clone, and after a pull that moves a submodule
+scripts/ci/clone_siblings.sh next sharp-runtime easy-gl meta-gl
+git submodule update --init
 ```
 
 - The siblings are separate checkouts consumed with `add_subdirectory`, not submodules.
@@ -75,29 +74,32 @@ git submodule update --init --recursive   # an existing clone, and after a pull 
   (`OPENGLES3`, the Linux default, `OPENGL33` and `WEBGL2`), and it adds `meta-gl` from its own
   `../meta-gl`. `CNA_SHARP_RUNTIME_ROOT` and `CNA_EASYGL_ROOT` point a build, such as a worktree,
   at checkouts elsewhere; meta-gl must still sit next to that easy-gl.
-- CNA `next` builds against sharp-runtime `next` and the default `develop` branch of easy-gl and
-  meta-gl. CI makes the same pairing (`scripts/ci/sibling_branch.sh`). A CNA release tag needs the
-  siblings' release tags instead: configure refuses a sibling that does not declare a version
+- CI tries candidate branches supplied by the workflow, then next, then develop, independently
+  for each sibling (`scripts/ci/sibling_branch.sh`). The fresh recipe uses that resolver rather
+  than assuming a permanent default branch for easy-gl/meta-gl. Update existing checkouts
+  deliberately instead of rerunning the clone helper. A release uses the recorded sibling pins;
+  configure also checks the declared version is
   compatible with the one `cmake/DependencyVersions.cmake` requires
   ([`releasing.md`](releasing.md)).
+  A matching version number alone does not prove that an older checkout supplies every component
+  target/header required by the current modular SDK.
 - `git submodule update --init` fills `third_party/SDL`, `third_party/SDL_mixer`,
   `third_party/draco`, `vendor/googletest` and the avatar catalogs in
   `modules/gamer-services/assets/avatars` ([cna-avatar-assets](https://github.com/libcna/cna-avatar-assets));
-  ENet, cgltf, stb and dr_libs are committed. The recursive forms above also clone SDL_mixer's codec
+  ENet, cgltf, stb and dr_libs are committed. Recursive submodule updates also clone SDL_mixer's codec
   submodules and Draco's test dependencies, which CNA's configuration builds none of, so the plain
-  `git submodule update --init` is enough and much faster.
+  `git submodule update --init` suffices for the normal CNA configuration. Upstream test/codec
+  configurations can require additional nested sources.
 - Some renderer dependencies are downloaded at configure time instead: the pinned wgpu-native
   release for `WEBGPU` (`CNA_WEBGPU_ROOT` for an offline build), FNA3D and MojoShader -- CNA's
   forks libcna/FNA3D and libcna/mojoshader, see `docs/fna3d-renderer.md` -- for `FNA3D` and the
   `*_COMPILED_EFFECTS` options (`FETCHCONTENT_SOURCE_DIR_FNA3D`), and SDL_shadercross for
   `SDLGPU` on Windows and Apple targets.
-- Third-party code is built as upstream ships it, with three exceptions, each explained where it
-  is applied: SDL carries two Emscripten-only patches, one iOS-only and one Android-only patch, and
-  one Vulkan-backend patch for every build that has that backend (`cmake/ThirdPartySDL.cmake`), SDL_shadercross one build-integration patch
-  (`cmake/ThirdPartySDLShaderCross.cmake`), and FNA3D and MojoShader carry CNA's fixes as commits on
-  the libcna forks. The submodules, ENet (upstream master, see `cmake/ThirdPartyENet.cmake`), cgltf
-  1.15 and dr_libs are upstream revisions unchanged; `third_party/stb` holds FNA3D's copies of
-  `stb_image.h` and `stb_image_write.h`, also unchanged.
+- Patch/provenance rules are explicit in the dependency integrations. Current SDL patch selection
+  is in cmake/ThirdPartySDL.cmake, shadercross integration in cmake/ThirdPartySDLShaderCross.cmake,
+  and CNA's FNA3D/MojoShader fixes are commits on the libcna forks. Consult those files and the
+  recorded pins rather than inferring an unchanged upstream tree or a fixed patch count from this
+  package guide. SDL patches are applied to build copies, not silently to the tracked submodule.
 - Configure checks that the sources it builds are the pinned ones, read-only: `third_party/SDL` and
   `third_party/SDL_mixer` against the revisions `cmake/VendoredSources.cmake` records -- a stale
   submodule, or a source archive without `.git`, by its tree id -- with
@@ -121,7 +123,7 @@ sudo apt-get install -y \
 
 | Packages | Enables | Switch (default) |
 |---|---|---|
-| `libavcodec-dev`, `libavformat-dev`, `libavutil-dev`, `libswresample-dev` | `VideoPlayer` playback and the build-time MP3/WMA/WMV importers. `libswscale-dev` is not needed; CNA converts YUV itself ([`video-backend.md`](video-backend.md)). | `CNA_ENABLE_VIDEO`, `CNA_ENABLE_MEDIA_PIPELINE` (`AUTO`) |
+| `libavcodec-dev`, `libavformat-dev`, `libavutil-dev`, `libswresample-dev` | VideoPlayer decoding and build-time MP3/WMA/WMV importers. VIDEO controls shared detection: VIDEO=OFF also disables AUTO media importing; MEDIA_PIPELINE=ON then fails. No libswscale headers are required ([video-backend.md](video-backend.md)). | CNA_ENABLE_VIDEO, CNA_ENABLE_MEDIA_PIPELINE (AUTO) |
 | `libzstd-dev` | Zstandard-compressed `.cnb` chunks. | `CNA_CNB_ZSTD` (`AUTO`) |
 | `libopus-dev` | Network voice (`NetworkGamer.HasVoice`). | `CNA_ENABLE_VOICE` (`AUTO`) |
 | `zlib1g-dev` | Compressed arrays of binary FBX files in the build-time content pipeline. Nothing else in the default configuration needs zlib. | probed |
@@ -129,7 +131,8 @@ sudo apt-get install -y \
 | `libudev-dev`, `libdbus-1-dev` | SDL3's udev device hotplug and its D-Bus integration (screensaver inhibition, IME, portals). SDL3 builds without them. | SDL3's own configure |
 | `mold` (or `lld`) | Faster links. `CNA_LINKER=AUTO` tries mold first, then lld ([`build-performance.md`](build-performance.md)). | `CNA_LINKER` (`AUTO`) |
 
-Draco comes from the pinned submodule. `libdraco-dev` (trixie has 1.5.6, CNA pins 1.5.7) is used
+Draco comes from the pinned submodule. [Trixie's libdraco-dev](https://packages.debian.org/trixie/libdraco-dev)
+is 1.5.6 while CNA pins 1.5.7; that system package is used
 only with `-DCNA_USE_SYSTEM_DRACO=ON`.
 
 ## Wayland
@@ -138,10 +141,12 @@ only with `-DCNA_USE_SYSTEM_DRACO=ON`.
 sudo apt-get install -y libwayland-dev wayland-protocols libxkbcommon-dev libdecor-0-dev
 ```
 
-Without these, the vendored SDL3 has no wayland video driver, and a Wayland desktop runs CNA
-programs through Xwayland. When they are present, configure selects a separate `-wayland` SDL
-cache key and builds SDL3 with the driver, without disturbing an existing X11-only cache.
-`libdecor-0-dev` draws window decorations on compositors that do not provide them, such as GNOME.
+Without the Wayland build prerequisites, the vendored SDL3 has no wayland video driver; a Wayland
+desktop can use Xwayland when it is available. The native capability probe checks pkg-config,
+wayland-scanner, Wayland/EGL and xkbcommon. When it succeeds, CMake selects a separate `-wayland`
+SDL cache key and builds the driver without disturbing an existing X11-only cache.
+`libdecor-0-dev` is optional decoration support for compositors that do not supply server-side
+decorations; it is not itself the native-driver capability probe.
 `CnaPlatformSdl3WaylandTests` runs on a private headless Weston, the compositor the GPU runner
 uses.
 
@@ -157,7 +162,8 @@ sudo apt-get install -y mingw-w64 wine dxvk dxvk-wine64
   executables; there is no `wine64` command.
 - GamerServices and Net need a Windows libcurl, which Debian does not package. Point
   `CURL_INCLUDE_DIR` and `CURL_LIBRARY` at a MinGW build of curl, or configure
-  `-DCNA_ENABLE_NET=OFF -DCNA_ENABLE_GAMER_SERVICES=OFF` as the Windows CI does. nlohmann-json comes
+  `-DCNA_ENABLE_NET=OFF -DCNA_ENABLE_GAMER_SERVICES=OFF -DCNA_BUILD_C_API=OFF` as a dependency-free
+  service profile. nlohmann-json comes
   from the host's headers.
 - `DIRECTX9` tests run through `scripts/run-wine-dxvk9.sh` on DXVK, which fails a run (exit 3)
   that silently fell back to Wine's own WineD3D. Each prefix is created with
@@ -193,10 +199,10 @@ sudo apt-get install -y mesa-utils vulkan-tools vulkan-validationlayers apitrace
   `VK_LOADER_LAYERS_ENABLE='*validation'`.
 - `apitrace`: `apitrace trace` and `apitrace dump` record and print every GL/EGL call a program
   makes, headless. The Qt viewer (`apitrace-gui`) is optional.
-- RenderDoc is not packaged by Debian. The self-contained Linux tarball from
-  [renderdoc.org](https://renderdoc.org) needs no installation. `renderdoccmd capture <program>`
-  injects it into a program, and `renderdoccmd convert` turns a capture into a structured XML
-  dump of its calls without the GUI.
+- RenderDoc is optional; use the [upstream project](https://renderdoc.org) for distribution and
+  version-specific capture/export instructions. This audit host has no RenderDoc package candidate
+  in its configured trixie index; that is not an assertion about every Debian suite/repository.
+  Run GPU capture commands through the private runner as well.
 - Mesa's own `MESA_DEBUG=1` and `LIBGL_DEBUG=verbose` environment variables need no package.
 
 ## Other targets
@@ -212,3 +218,13 @@ sudo apt-get install -y mesa-utils vulkan-tools vulkan-validationlayers apitrace
 - A windowless SDL-free build (`-DCNA_ENABLE_SDL=OFF`, with the `HEADLESS`, `SOFTWARE` or `STUB`
   renderer and `NULL` or `ALSA` audio) needs none of the SDL3 packages:
   [`platform-abstraction.md`](platform-abstraction.md).
+
+## Verification boundary
+
+The 2026-11-01 audit checks current CMake/CI scripts, all 40 package names in the installation
+blocks against the host's apt index, and Debian's CMake/Doxygen/Draco/DXVK package metadata.
+Existing native builds/probes run during the documentation campaign use this host; no clean
+machine installation, package upgrade, new Wine-prefix setup or cross-toolchain provisioning was
+performed. Respect the eight-job build limit and use the private runner for every GPU/window test.
+All nine focused dependency/cache/patch/header/deployment configuration checks pass in the existing
+multi tree through the private runner; this does not replace a fresh-system installation test.

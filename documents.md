@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 118 reviewed, 12 updated incidentally and awaiting their own audit, and 47 not yet
+Summary: 119 reviewed, 12 updated incidentally and awaiting their own audit, and 46 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -77,7 +77,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/d3d9-divergence-report.md`](docs/d3d9-divergence-report.md)
 - ✅ **REVIEWED** — [`docs/demo-input-checklist.md`](docs/demo-input-checklist.md)
 - ✅ **REVIEWED** — [`docs/depthstencilstate-support.md`](docs/depthstencilstate-support.md)
-- ⬜ **PENDING** — [`docs/development-environment.md`](docs/development-environment.md)
+- ✅ **REVIEWED** — [`docs/development-environment.md`](docs/development-environment.md)
 - ✅ **REVIEWED** — [`docs/devices-android.md`](docs/devices-android.md)
 - ✅ **REVIEWED** — [`docs/devices-api-coverage.md`](docs/devices-api-coverage.md)
 - ✅ **REVIEWED** — [`docs/devices-build.md`](docs/devices-build.md)
