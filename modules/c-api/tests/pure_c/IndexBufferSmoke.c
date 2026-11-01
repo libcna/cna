@@ -267,6 +267,56 @@ static void on_content_lost(
     }
 }
 
+static int validate_content_lost_snapshot(const CNA_Handle device)
+{
+    CNA_IndexBufferHandle dynamic_buffer = CNA_INVALID_HANDLE;
+    CNA_IndexBufferHandle static_buffer = CNA_INVALID_HANDLE;
+    CNA_IndexBufferEventRegistrationHandle registration = CNA_INVALID_HANDLE;
+    LifecycleState state = {CNA_INVALID_HANDLE, 0, 0, 0};
+    CNA_IndexBufferInfo dynamic_info = {
+        .struct_size = sizeof(CNA_IndexBufferInfo), .struct_version = UINT32_C(1)};
+    CNA_IndexBufferInfo static_info = {
+        .struct_size = sizeof(CNA_IndexBufferInfo), .struct_version = UINT32_C(1)};
+    CNA_IndexBufferTransfer transfer = make_transfer(
+        CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS, CNA_SET_DATA_NONE, 0U, 2U);
+    const uint16_t indices[2] = {0U, 1U};
+
+    if (create_buffer(device, CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS, CNA_TRUE,
+                      CNA_BUFFER_USAGE_NONE, 2, &dynamic_buffer) != CNA_RESULT_SUCCESS ||
+        create_buffer(device, CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS, CNA_FALSE,
+                      CNA_BUFFER_USAGE_NONE, 2, &static_buffer) != CNA_RESULT_SUCCESS ||
+        cna_index_buffer_subscribe_content_lost(
+            dynamic_buffer, on_content_lost, &state, &registration) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    for (int notification = 1; notification <= 2; ++notification) {
+        if (cna_graphics_device_notify_content_lost_resources_ext(device) != CNA_RESULT_SUCCESS ||
+            state.content_lost_count != notification ||
+            cna_index_buffer_get_info(dynamic_buffer, &dynamic_info) != CNA_RESULT_SUCCESS ||
+            dynamic_info.is_content_lost != CNA_TRUE ||
+            cna_index_buffer_get_info(static_buffer, &static_info) != CNA_RESULT_SUCCESS ||
+            static_info.is_content_lost != CNA_FALSE) {
+            return 0;
+        }
+        transfer.element_count = 0U;
+        if (cna_index_buffer_set_data(dynamic_buffer, &transfer, NULL, 0U) != CNA_RESULT_SUCCESS ||
+            cna_index_buffer_get_info(dynamic_buffer, &dynamic_info) != CNA_RESULT_SUCCESS ||
+            dynamic_info.is_content_lost != CNA_TRUE) {
+            return 0;
+        }
+        transfer.element_count = 2U;
+        if (cna_index_buffer_set_data(dynamic_buffer, &transfer, indices, 2U) != CNA_RESULT_SUCCESS ||
+            cna_index_buffer_get_info(dynamic_buffer, &dynamic_info) != CNA_RESULT_SUCCESS ||
+            dynamic_info.is_content_lost != CNA_FALSE || state.content_lost_count != notification) {
+            return 0;
+        }
+    }
+    return cna_index_buffer_unsubscribe_content_lost(registration) == CNA_RESULT_SUCCESS &&
+           cna_index_buffer_destroy(dynamic_buffer) == CNA_RESULT_SUCCESS &&
+           cna_index_buffer_destroy(static_buffer) == CNA_RESULT_SUCCESS;
+}
+
 static void on_disposing(const CNA_Handle resource, void* const context)
 {
     LifecycleState* const state = (LifecycleState*)context;
@@ -477,6 +527,7 @@ static CNA_Result on_load(
         !validate_transfer(
             device, CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS,
             CNA_TRUE, CNA_SET_DATA_NO_OVERWRITE) ||
+        !CNA_TEST_STAGE(validate_content_lost_snapshot(device)) ||
         !validate_lifecycle_and_failures(device, state)) {
         return CNA_RESULT_INVALID_STATE;
     }

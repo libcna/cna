@@ -1,0 +1,684 @@
+{
+  "schema_version": 1,
+  "campaign": "CNA repairs from handoff, Galaxy Eggbert reports, tests and CI",
+  "source_snapshot_commit": "37c69080d",
+  "handoff_tasks": [
+    {
+      "id": "CNA-FIX-D01",
+      "source_section": "5.1 Defects",
+      "summary": "SDLGPU stock fog blends toward raw FogColor rather than FogColor multiplied by completed fragment alpha.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D02",
+      "source_section": "5.1 Defects",
+      "summary": "C API owned ContentManagers use a process-wide count (CnaCApiContent.cpp's unconditional AddOwnedContentManager; CnaCApiRuntime.cpp's HasOwnedContentManagers game-destroy guard).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D03",
+      "source_section": "5.1 Defects",
+      "summary": "XNB DateTime writing emits getTicksProperty() only (content/src/Xnb/XnbBuiltInWriters.cpp), and DateTimeReader masks the top Kind bits and constructs DateTime(ticks).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D04",
+      "source_section": "5.1 Defects",
+      "summary": "ModelEffectCollection::Enumerator::getCurrentProperty and GamerCollection<T>::GamerCollectionEnumerator::getCurrentProperty throw InvalidOperationException when hasCurrent_ is false (before start/after end/reset).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D05",
+      "source_section": "5.1 Defects",
+      "summary": "BitmapContent's RegionInside helper adds signed Int32 rectangle coordinates/extents before comparing them with bitmap dimensions (content-pipeline/src/Xna/Graphics/BitmapContent.cpp).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D06",
+      "source_section": "5.1 Defects",
+      "summary": "Content Pipeline font discovery can reuse stale compiled SpriteFont bytes.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D07",
+      "source_section": "5.1 Defects",
+      "summary": "glTF unlit material selection can still sample occlusion: ExtractMesh selects DualTextureEffect for an unskinned/uncoloured non-PBR material with base-colour and occlusion images, including KHR_materials_unlit.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D08",
+      "source_section": "5.1 Defects",
+      "summary": "Standalone tools/gltf_to_cnj unitScale parsing accepts trailing text and positive infinity: std::stof's consumed length is ignored and only value>0 is checked.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D09",
+      "source_section": "5.1 Defects",
+      "summary": "PropertyDictionary's BoxedValuesEqual delegates supported float/double values to operator==, so pair-based Contains/Remove treat two NaNs as unequal.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D10",
+      "source_section": "5.1 Defects",
+      "summary": "CNJ numeric extraction narrows before validating representability: ParseCnjEnvelope casts cnjVersion's double to int before the version-range check, and ReadCnjAnimationClip casts an inline track's numeric boneIndex directly to int.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D11",
+      "source_section": "5.1 Defects",
+      "summary": "Native FileDialog moves its callback into the platform request, then suppresses a thrown PlatformException without completing the callback.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D12",
+      "source_section": "5.1 Defects",
+      "summary": "`cna_vertex_buffer_get_info` hard-codes `is_content_lost = CNA_FALSE`, although native DynamicVertexBuffer notification sets its loss flag and raises ContentLost, and subsequent nonempty uploads clear it.",
+      "status": "fixed",
+      "resolution": "Read the canonical dynamic-buffer loss flag; static buffers still report false. No ABI layout/signature change.",
+      "evidence": [
+        "Strict-C regression fails before fix; passes after fix on private OPENGLES3 and SDLGPU.",
+        "Two notify/reupload cycles; callback count; empty write preserves loss, nonempty write clears it; static buffer stays false.",
+        "python3 tools/c-api/generate_routes.py --check: 3205 routes current; five route-generator unit cases pass."
+      ]
+    },
+    {
+      "id": "CNA-FIX-D13",
+      "source_section": "5.1 Defects",
+      "summary": "C API network-event injection validates `CNA_NetworkEventInfo.reliable` as an ordinal in 0..4, rejecting the valid `Chat` flag combinations 5, 6 and 7.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D14",
+      "source_section": "5.1 Defects",
+      "summary": "Standalone C network-gamer factories do not retain their session or, for a local gamer, its signed-in gamer.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D15",
+      "source_section": "5.1 Defects",
+      "summary": "`cna_video_player_get_video` can return a stale handle with `out_available = CNA_TRUE` after the caller destroys the Video handle used for Play.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D16",
+      "source_section": "5.1 Defects",
+      "summary": "`cna_index_buffer_get_info` always reports `is_content_lost = CNA_FALSE`, including after a real dynamic-buffer ContentLost notification.",
+      "status": "fixed",
+      "resolution": "Read the canonical dynamic-buffer loss flag; static buffers still report false. No ABI layout/signature change.",
+      "evidence": [
+        "Strict-C regression fails before fix; passes after fix on private OPENGLES3 and SDLGPU.",
+        "Two notify/reupload cycles; callback count; empty write preserves loss, nonempty write clears it; static buffer stays false.",
+        "python3 tools/c-api/generate_routes.py --check: 3205 routes current; five route-generator unit cases pass."
+      ]
+    },
+    {
+      "id": "CNA-FIX-D17",
+      "source_section": "5.1 Defects",
+      "summary": "`cna_graphics_resource_get_graphics_device` fails for a valid resource created on an independently owned C device.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D18",
+      "source_section": "5.1 Defects",
+      "summary": "`GraphicsDeviceManager::setPreferredBackBufferWidthProperty` and `setPreferredBackBufferHeightProperty` accept zero and negative values.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D19",
+      "source_section": "5.1 Defects",
+      "summary": "A direct `Dispose()` of the `GraphicsDevice` managed by `GraphicsDeviceManager` does not forward `GraphicsDevice::Disposing` to `GraphicsDeviceManager::DeviceDisposing`.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D20",
+      "source_section": "5.1 Defects",
+      "summary": "`Microphone::Start` reports `MicrophoneState::Started` even when the capture device failed to open: `modules/audio/src/Xna/Microphone.cpp` swallows the failure (`catch (...)`, following FNA) and sets the state unconditionally.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D21",
+      "source_section": "5.1 Defects",
+      "summary": "`WEBGPU` fails two shared presentation programs it is not registered for, which EasyGL and `SDLGPU` pass (`cmake-build-multi` run with `CNA_GRAPHICS_RENDERER=WEBGPU`, 2026-10-28): `presentation_mode_contract_test.cpp` under Letterbox and Overscan, where a sprite covering the 40x40 logical canvas after a mid-frame `SetPresentationMode` lands unscaled (40x40 at the letterbox origin instead of filling 96x96), and `spritebatch_presentation_test.cpp`'s two Deferred batches under different custom viewports, which both read black.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D22",
+      "source_section": "5.1 Defects",
+      "summary": "On Android, the landscape remap `Accelerometer`, `Gyroscope` and `Motion` apply by default (`Detail::ConvertAndroidPortraitToXnaLandscape`, a CNAEXT convenience that `SetAndroidLandscapeRemapEnabled(false)` turns off) is, for both landscape rotations, a reflection (`diag(1,-1,1)` / `diag(-1,1,1)`, determinant -1) rather than a rotation: a real 90\u00b0 turn of the device exchanges X and Y.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D23",
+      "source_section": "5.1 Defects",
+      "summary": "Three `SpriteBatch::Begin` overloads take `BlendState` by value (`SpriteBatch.hpp`: the two-argument one, one of the two five-argument ones and the six-argument one; the other five-argument overload takes `const BlendState*`), where XNA's `BlendState` is a class passed by reference.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D24",
+      "source_section": "5.1 Defects",
+      "summary": "EasyGL (`OPENGLES3`, `OPENGL33`, `WEBGL2`) disables blending whenever colour and alpha both use `Blend::One` / `Blend::Zero`, without looking at the blend functions (`EasyGLRenderer::ApplyBlendState`).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D25",
+      "source_section": "5.1 Defects",
+      "summary": "EasyGL's `ApplyRasterizerMultiSampleState` is still selected by the build default's `CNA_GL_PROFILE_OPENGL33` definition instead of the active runtime `GlProfile`.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D26",
+      "source_section": "5.1 Defects",
+      "summary": "In browser fullscreen the drawable a GL renderer letterboxes into is not the rectangle the browser presents.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-D27",
+      "source_section": "5.1 Defects",
+      "summary": "An EasyGL `Texture3D` does not survive a GL context loss (WebGL 2, Android): unlike every other EasyGL texture, buffer, render target and query, `EasyGLTexture3DRenderer` is not an `easygl::RecoverableResource`, so it is never registered for restoration and keeps a dead handle.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L01",
+      "source_section": "5.2 Limitations",
+      "summary": "The media oracle wrapper does not propagate driver failure as its final status: tools/xna-pipeline-oracle/media/run-media-oracle.sh captures a failed/timed-out Wine invocation, publishes available partial records and finishes with echo/status 0.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L02",
+      "source_section": "5.2 Limitations",
+      "summary": "The retained XNA/Wine wma/mp3_mono_44100_128k.mp3 record returns AudioContent labelled Wma with readable metadata, then fails Data access.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L03",
+      "source_section": "5.2 Limitations",
+      "summary": "BitmapContent's lazy factory list currently omits PixelBitmapContent<Vector3>, despite its supported pixel trait.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L04",
+      "source_section": "5.2 Limitations",
+      "summary": "tools/audit_xna_runtime_surface.py returns failure for missing types, but its final return does not reject missing/review member counts by itself.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L05",
+      "source_section": "5.2 Limitations",
+      "summary": "XnaPipelineFinalAuditIsGreen is an evidence-metadata gate, not current runtime qualification.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L06",
+      "source_section": "5.2 Limitations",
+      "summary": "Embedded Content Pipeline hosts must keep font-search configuration fixed while builds run.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L07",
+      "source_section": "5.2 Limitations",
+      "summary": "scripts/gltf-renderer-parity.sh compares normalized GTest result lines and does not reliably propagate each underlying process failure.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L08",
+      "source_section": "5.2 Limitations",
+      "summary": "GamerServices AssetDiskCache's default 256 MiB capacity is an eviction target, not a strict cross-process budget: separate writers scan and evict without a shared capacity lock and can concurrently admit different entries.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L09",
+      "source_section": "5.2 Limitations",
+      "summary": "tools/net/voice_physical_check.sh prints capture/playback child statuses, spectral measurements and Guide sound counts but does not aggregate every failure into its shell exit status.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L10",
+      "source_section": "5.2 Limitations",
+      "summary": "CNB read limits cap serialized/logical chunk sizes and individual counts, not peak decoded memory.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L11",
+      "source_section": "5.2 Limitations",
+      "summary": "CNB's retained measurement spikes are exploratory, not input/correctness validators: codec errors/mismatches or skipped missing payloads may return zero, and the mmap probe uses sparse 4096-byte touches, weak I/O checks and an unconditional x86 SSE4.2 call.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L12",
+      "source_section": "5.2 Limitations",
+      "summary": "The clean-build benchmark driver selects broad feature profiles but does not pin CNA_SHARED_LIBRARY/platform/every dependency revision or new option; BUILD_SHARED_LIBS=OFF does not select a static CNA umbrella.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L13",
+      "source_section": "5.2 Limitations",
+      "summary": "SkinnedModelEXT attachment verifies bone count only, leaving joint order/bind-pose/device compatibility to callers; its sampler also assumes palette-space, time-ordered keys without checking AnimationClipEXT::TargetSpace.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L14",
+      "source_section": "5.2 Limitations",
+      "summary": "The compiled-effect fuzzer walks bounded metadata, clones and applies passes, but does not fuzz all typed accessors/setters or draw.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L15",
+      "source_section": "5.2 Limitations",
+      "summary": "Five GraphicsDevice platform-window ownership/adoption/query-failure tests require a combination of SDL-free platform, window-creating renderer and fake-window tolerance that the current configurations do not provide.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L16",
+      "source_section": "5.2 Limitations",
+      "summary": "The external XMA adapter validates only RIFF/chunk/tag structure, preserves requested loop fields rather than extracting measured quantized ones, and does not make the built-in Xbox WAV route select XMA.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L17",
+      "source_section": "5.2 Limitations",
+      "summary": "The Input signature guard is not exhaustive: it omits GamePad keyboard-emulation methods, eight Equals(std::any) overloads, four value ToString methods, TouchPanel emulation/suppression pairs and TouchCollection's nested enumerator API.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L18",
+      "source_section": "5.2 Limitations",
+      "summary": "The SDL3 Camera wrapper does not map camera-removal events or poll permission again after Ready.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L19",
+      "source_section": "5.2 Limitations",
+      "summary": "The installed C++ SDK export registers `EmscriptenExceptionAbi` but not the source-build `EmscriptenAsyncify` / `EmscriptenAbi` targets.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L20",
+      "source_section": "5.2 Limitations",
+      "summary": "`RasterizerState.MultiSampleAntiAlias` is honored by `SOFTWARE` and by a single/default-profile desktop `OPENGL33` build only; the multi-profile selection defect is in \u00a75.1.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L21",
+      "source_section": "5.2 Limitations",
+      "summary": "`SDLGPU` applies `BlendState.MultiSampleMask` on a multisampled target only when it keeps every sample or none: the pinned SDL reserves `SDL_GPUMultisampleState::sample_mask`/`enable_mask`, so a mask of none drops the draw and any partial mask throws `System::NotSupportedException` (DC-R2, owner decision, `c7f6c68e5`).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L22",
+      "source_section": "5.2 Limitations",
+      "summary": "Native `SurfaceFormat::Alpha8` render-target storage is unavailable on every renderer: `GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Alpha8)` is false, and a render target preferring Alpha8 falls back to `Color` as XNA's preferred-format rule allows (`GraphicsCapabilityFloatRenderTargetTests.cpp`).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L23",
+      "source_section": "5.2 Limitations",
+      "summary": "`FNA3D` refuses a `PbrEffect` or `SkinnedPbrEffect` draw whose vertex declaration has no `TANGENT0` with `System::NotSupportedException` (`FNA3D-MISSING-STOCK-INPUT`, `modules/renderers/fna3d/src/Fna3dDraw.cpp`) wherever FNA3D picks its SDLGPU or Direct3D 11 driver, which cannot build a pipeline with a missing input; its OpenGL driver and every other renderer supply the GL neutral tangent (`91612a0a3`).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L24",
+      "source_section": "5.2 Limitations",
+      "summary": "Online sessions and invitations are native-only; a browser build refuses them explicitly (`docs/browser-network-readiness.md`, `docs/gamer-services-known-limitations.md` \u00a726)..",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L25",
+      "source_section": "5.2 Limitations",
+      "summary": "`DIRECTX9` is validated under Wine (+DXVK) only.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L26",
+      "source_section": "5.2 Limitations",
+      "summary": "The installed C++ SDK (`CNA_INSTALL_CXX`, `docs/installed-cpp-sdk.md`) is validated on native Linux only, shared and static; the static SDK was validated with the C API off, so a mixed static C/C++ adapter is unproven.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L27",
+      "source_section": "5.2 Limitations",
+      "summary": "The content and content-pipeline *tests* are not Unicode-clean: about 1,150 `.string()` calls, most narrowing a fixture path before handing it to CNA, so under a non-ASCII `TEMP` on Windows they throw in the test body (Windows portability WINPORT-F5, measured on native Windows 2026-09-16).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L28",
+      "source_section": "5.2 Limitations",
+      "summary": "**`SDLGPU` is the default renderer on Windows, macOS and iOS but is not qualified there** since the 2026-10-13 retirement of `DIRECTX11` and `METAL` (`docs/removed-renderers.md`).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L29",
+      "source_section": "5.2 Limitations",
+      "summary": "iOS has simulator smoke evidence only, with `SOFTWARE`..",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L30",
+      "source_section": "5.2 Limitations",
+      "summary": "`Microsoft::Devices` sensors and vibration have never run on a phone: the Android axis, compass and attitude mappings are derived and host-tested only.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L31",
+      "source_section": "5.2 Limitations",
+      "summary": "`WEBGPU` is supported (promoted from experimental on 2026-10-17) and verified on Linux x86_64 and in headless Chrome only; its Windows, macOS and linux-aarch64 wgpu-native packages are unverified (`WEBGPU-1`, `docs/webgpu-renderer.md`)..",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L32",
+      "source_section": "5.2 Limitations",
+      "summary": "`SOFTWARE` is a bounded CPU renderer, and `HEADLESS` and `STUB` make no pixel claim (`docs/renderer-registry.md`, \"Categories and maturity\")..",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L33",
+      "source_section": "5.2 Limitations",
+      "summary": "Per-subsystem capability boundaries, by design rather than defect, are in the documents listed in \u00a73..",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L34",
+      "source_section": "5.2 Limitations",
+      "summary": "In a `CNA_SHARED_LIBRARY=ON` tree, `CMAKE_LINK_DEPENDS_NO_SHARED` (`CMakeLists.txt`) keeps the executables from relinking when `libcna.so` changes.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L35",
+      "source_section": "5.2 Limitations",
+      "summary": "**Pixel-centre bias.** Every renderer moves 3D triangles 63/128 of a pixel, not 1/2, to emulate Direct3D 9's integer pixel centres (2026-10-26 audit B2-07).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L36",
+      "source_section": "5.2 Limitations",
+      "summary": "**Pixel centres of lines and points.** The XNA correction above moves triangles only, in every FNA3D driver; lines and points are drawn at the host's half-integer centres.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L37",
+      "source_section": "5.2 Limitations",
+      "summary": "**MojoShader SPIR-V gaps** (FNA3D's SDLGPU driver, CNA's SDLGPU and WEBGPU compiled effects): ps_1_4 `BEM` and `TEXDEPTH` refuse by name (\"unimplemented in spirv profile\"); GLSL implements both..",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L38",
+      "source_section": "5.2 Limitations",
+      "summary": "**MojoShader FOG and other vertex semantics** (after the review's fixes): FOG in any lane, alone or packed, translates in every profile, and SPIR-V's vertex and pixel FOG interfaces match in type; GLSL ES and Metal place FOG lanes positionally, so a vertex/pixel pair declaring FOG in different lanes behaves differently there than in the other profiles (not measured on Direct3D 9).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L39",
+      "source_section": "5.2 Limitations",
+      "summary": "**FNA3D OpenGL ES 3 readback** reads RGBA8, `ColorSrgbEXT` (stored as `GL_SRGB8_ALPHA8` since the review; the unsized format FNA3D used before was refused by ES 3 at upload, so such a texture never had storage), the float formats, and any other format only where the implementation's own read layout is the format's; it refuses the rest by name.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L40",
+      "source_section": "5.2 Limitations",
+      "summary": "**FNA3D pixel-store state**: readbacks and uploads save and restore every pack/unpack value they set, so another user of the context keeps its own; an upload therefore makes six `glGetIntegerv` calls, each a synchronization point under Mesa's glthread..",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L41",
+      "source_section": "5.2 Limitations",
+      "summary": "**FNA3D tracing with several devices** shares one trace session among overlapping devices without telling them apart: the second device's creation is not recorded and its calls replay on the first device's state (2026-10-26 review R9-02), and its SwapBuffers with its own window override still trips the tracer's assertion.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L42",
+      "source_section": "5.2 Limitations",
+      "summary": "**MojoShader's D3D11 glue** (FNA3D's D3D11 driver; found in the review's third round, not fixed): a ps_3_0 register packing semantics that the vertex shader writes to separate registers (FOG in `o1.x`, TEXCOORD0 in `o2.yzw`, read together from `v0`) produces HLSL naming a member that does not exist and fails to compile -- also before the review (R9-01); and the integer input-layout rewrite finds a semantic by substring, so `DEPTH1` can match an earlier `DEPTH10` and swap their integer/float declarations (R9-03).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L43",
+      "source_section": "5.2 Limitations",
+      "summary": "**SDL_shadercross initialization is the application's** (MojoShader's SDL_GPU glue): the glue calls neither `SDL_ShaderCross_Init()` nor `_Quit()`, which act on the whole process without reference counting, so DXBC is offered only after the application initialized ShaderCross (`mojoshader.h`); FNA3D's SDLGPU driver forwards DXBC to SDL when it is offered.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L44",
+      "source_section": "5.2 Limitations",
+      "summary": "**A shared SDL prebuilt can change under a running build** when a tree with another manifest rebuilds it (2026-10-26 review R3-01/R4-01; the watched stamp protects only the next build).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L45",
+      "source_section": "5.2 Limitations",
+      "summary": "**Audio output has no device-change or device-loss handling of CNA's own.** The SDL3 backend opens `SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK`, so a change of the system default is whatever SDL3 does with a default-device stream; the ALSA backend does not reopen a PCM that disappears.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L46",
+      "source_section": "5.2 Limitations",
+      "summary": "**EasyGL re-sends per-draw state the previous draw already set** (performance only; no picture is wrong).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L47",
+      "source_section": "5.2 Limitations",
+      "summary": "**Custom-effect lookup and recovery limits** (`IEFFECT-AUDIT-001`, 2026-11-01): EasyGL's name setters still query GL on every call; mutable `GetProgram()` permits relinking without a detectable executable revision, so a handle/context-keyed cache would be unsafe.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L48",
+      "source_section": "5.2 Limitations",
+      "summary": "**Three audio reports from the 2026-07-17 audit stay unconfirmed, not open:** high-pitched sound effects, missing audio files, and distorted or sped-up gameplay audio.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-L49",
+      "source_section": "5.2 Limitations",
+      "summary": "Three content-pipeline residues against genuine XNA output, none visible in the 7,726-reference sample sweep (`tools/xna-sample-sweep/README.md`, *What is left*): a generated `.x` normal can carry the opposite sign of a zero (13 of 1,291 probe normals, `XNASWEEP-231`); FBX bone transforms keep an ulp-level residue that grows with depth, inside the float tolerance (`XNASWEEP-228`..`232`); and `MeshHelper.OptimizeForCache`'s strip termination is empirical (9 of 20 probes exact, `XNASWEEP-149`)..",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-E01",
+      "source_section": "5.3 External and driver limitations",
+      "summary": "**Conformance programs on drivers and capability boundaries** (`*_Conformance_*`, `modules/graphics/examples/conformance/`, measured 2026-10-15/17): - `render_target_own_msaa` D (2x) failed on EasyGL in 2026-10-17's run and on SDLGPU and FNA3D once B2-04 gave multisampled targets XNA's integer pixel centres: its edge sat at the half-integer centre, beyond both 2x samples.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-E02",
+      "source_section": "5.3 External and driver limitations",
+      "summary": "**LeakSanitizer reports leaks in the pinned SDL** (measured 2026-10-22/23 during the museum repairs): about 50 KB in about 910 allocations from initialization to destruction with no CNA code linked (lavapipe and RADV), so an SDLGPU sanitizer run does not end at exit 0 under LeakSanitizer; CNA suppresses none of it.",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    },
+    {
+      "id": "CNA-FIX-E03",
+      "source_section": "5.3 External and driver limitations",
+      "summary": "**`DIRECTX9` under Wine with DXVK 2.6.0: `DirectX9_CompiledEffects` hangs or aborts in DXVK's device teardown; DXVK 3.1.1 does not** (measured 2026-10-17, `cmake-build-mingw`, Release, `CNA_DIRECTX9_COMPILED_EFFECTS=ON`).",
+      "status": "pending",
+      "resolution": null,
+      "evidence": []
+    }
+  ],
+  "windows_validation_tasks": [
+    {
+      "id": "CNA-DEMOS-ISSUE-003",
+      "status": "pending",
+      "source": "handoff.md \u00a78.1"
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-101",
+      "status": "pending",
+      "source": "handoff.md \u00a78.1"
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-152",
+      "status": "pending",
+      "source": "handoff.md \u00a78.1"
+    }
+  ],
+  "owner_decisions": [
+    {
+      "id": "licence-header-policy",
+      "status": "pending",
+      "source": "handoff.md \u00a76"
+    }
+  ],
+  "galaxy_eggbert": {
+    "source": "../../openeggbert/galaxy-eggbert",
+    "status": "pending",
+    "findings": []
+  },
+  "local_tests": {
+    "status": "pending",
+    "evidence": []
+  },
+  "github_ci": {
+    "status": "pending",
+    "evidence": []
+  }
+}

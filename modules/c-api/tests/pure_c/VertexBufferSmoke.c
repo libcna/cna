@@ -511,6 +511,56 @@ static void on_content_lost(
     }
 }
 
+static int validate_content_lost_snapshot(const CNA_Handle device)
+{
+    CNA_VertexBufferHandle dynamic_buffer = CNA_INVALID_HANDLE;
+    CNA_VertexBufferHandle static_buffer = CNA_INVALID_HANDLE;
+    CNA_VertexBufferEventRegistrationHandle registration = CNA_INVALID_HANDLE;
+    LifecycleState state = {CNA_INVALID_HANDLE, 0, 0, 0};
+    CNA_VertexBufferInfo dynamic_info = {
+        .struct_size = sizeof(CNA_VertexBufferInfo), .struct_version = UINT32_C(1)};
+    CNA_VertexBufferInfo static_info = {
+        .struct_size = sizeof(CNA_VertexBufferInfo), .struct_version = UINT32_C(1)};
+    CNA_VertexBufferTransfer transfer = make_transfer(
+        CNA_VERTEX_TYPE_POSITION_COLOR, CNA_SET_DATA_NONE, 0U, 2U);
+    const CNA_VertexPositionColor vertices[2] = {0};
+
+    if (!create_buffer(device, CNA_VERTEX_TYPE_POSITION_COLOR, CNA_TRUE,
+                       CNA_BUFFER_USAGE_NONE, 2, &dynamic_buffer) ||
+        !create_buffer(device, CNA_VERTEX_TYPE_POSITION_COLOR, CNA_FALSE,
+                       CNA_BUFFER_USAGE_NONE, 2, &static_buffer) ||
+        cna_vertex_buffer_subscribe_content_lost(
+            dynamic_buffer, on_content_lost, &state, &registration) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    for (int notification = 1; notification <= 2; ++notification) {
+        if (cna_graphics_device_notify_content_lost_resources_ext(device) != CNA_RESULT_SUCCESS ||
+            state.content_lost_count != notification ||
+            cna_vertex_buffer_get_info(dynamic_buffer, &dynamic_info) != CNA_RESULT_SUCCESS ||
+            dynamic_info.is_content_lost != CNA_TRUE ||
+            cna_vertex_buffer_get_info(static_buffer, &static_info) != CNA_RESULT_SUCCESS ||
+            static_info.is_content_lost != CNA_FALSE) {
+            return 0;
+        }
+        transfer.element_count = 0U;
+        if (cna_vertex_buffer_set_data(dynamic_buffer, &transfer, NULL, 0U) != CNA_RESULT_SUCCESS ||
+            cna_vertex_buffer_get_info(dynamic_buffer, &dynamic_info) != CNA_RESULT_SUCCESS ||
+            dynamic_info.is_content_lost != CNA_TRUE) {
+            return 0;
+        }
+        transfer.element_count = 2U;
+        if (cna_vertex_buffer_set_data(dynamic_buffer, &transfer, vertices, 2U) != CNA_RESULT_SUCCESS ||
+            cna_vertex_buffer_get_info(dynamic_buffer, &dynamic_info) != CNA_RESULT_SUCCESS ||
+            dynamic_info.is_content_lost != CNA_FALSE || state.content_lost_count != notification) {
+            return 0;
+        }
+    }
+    return cna_vertex_buffer_unsubscribe_content_lost(registration) == CNA_RESULT_SUCCESS &&
+           cna_vertex_buffer_destroy(dynamic_buffer) == CNA_RESULT_SUCCESS &&
+           cna_vertex_buffer_destroy(static_buffer) == CNA_RESULT_SUCCESS;
+}
+
 static void on_disposing(const CNA_Handle resource, void* const context)
 {
     LifecycleState* const state = (LifecycleState*)context;
@@ -717,6 +767,7 @@ static CNA_Result on_load(
         !CNA_TEST_STAGE(validate_all_typed(device)) ||
         !CNA_TEST_STAGE(validate_default_and_raw(device)) ||
         !CNA_TEST_STAGE(validate_raw_with_options(device)) ||
+        !CNA_TEST_STAGE(validate_content_lost_snapshot(device)) ||
         !CNA_TEST_STAGE(validate_lifecycle_and_failures(device, state))) {
         return CNA_RESULT_INVALID_STATE;
     }

@@ -21,9 +21,9 @@ native buffer-size limits. Failed creation leaves the output handle invalid. New
 indices read as zero when readback is permitted.
 
 `get_info` reports capacity, width, usage, dynamic identity and renderer presence. Its
-`is_content_lost` field currently has a defect: the C route writes constant false rather than
-reading the dynamic buffer's real flag. This is recorded in [`handoff.md` §5.1](../../handoff.md#51-defects).
-It is not a native content-loss invariant.
+`is_content_lost` field reads the native dynamic buffer's current loss flag; static buffers
+report false. Device loss sets the dynamic flag, an empty upload leaves it unchanged, and a
+successful nonempty upload clears it.
 
 The dedicated type-name count/copy routes deliberately return `CNA_INDEX_BUFFER_TYPE_NAME`
 (`Microsoft.Xna.Framework.Graphics.IndexBuffer`) for **both** kinds. Use the snapshot's `dynamic`
@@ -96,8 +96,7 @@ code updates its CPU shadow before submitting to the renderer.
 `CNA_RESULT_NOT_SUPPORTED`. Device recovery can notify content-losable resources, and
 `cna_graphics_device_notify_content_lost_resources_ext` can explicitly trigger that notification.
 Native `DynamicIndexBuffer` sets its loss flag and raises `ContentLost`; a subsequent nonempty
-upload clears the flag. The C snapshot defect above prevents observing the flag through
-`get_info`, but does not suppress the callback.
+upload clears the flag. `get_info` exposes that flag without changing it or suppressing callbacks.
 
 ContentLost registrations use a different handle kind from generic Disposing registrations.
 They hold a weak native reference, can be unsubscribed after buffer destruction and still require
@@ -117,8 +116,8 @@ game-child count; it remains necessary after explicit disposal.
 caller windows, all streaming options, offset uploads, WriteOnly refusal, metadata and base type
 names, event-kind separation, disposal, failure atomicity and invalid/stale/wrong-kind/wrong-thread
 paths. Its no-ThreeD branch checks creation refusal. Header checks cover version-one layouts.
-The current audit ran this smoke with SDLGPU; it does not establish a fresh sanitizer or other
-renderer result. A separate strict-C probe on a 64×64 owned HiDef SDLGPU device confirmed prefix
-preservation, one ContentLost callback with a false C snapshot, no Disposing callback from typed
-destruction, and successful event/device cleanup. The snapshot defect has no permanent public-C
-regression test yet; the smoke checks false only before a loss notification.
+The CNA-FIX-D16 regression adds two loss/reupload cycles, verifies the event and true dynamic
+snapshot, checks that an empty upload preserves the loss and a nonempty upload clears it, and
+confirms a static buffer stays false. The extended smoke failed before the fix and passes on
+OPENGLES3 and SDLGPU through the private runner. These focused runs do not establish a new
+sanitizer or native Windows result.

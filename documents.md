@@ -10,10 +10,12 @@ retains its evidence boundaries. Current defects and limitations remain in `hand
 Keep this inventory and future updates in English. A future pending status means a new review is
 needed, not that the document is necessarily incorrect.
 
-Completion checks: all 177 tracked Markdown files occur exactly once below. The topical index in
+At completion of the documentation review, all 177 tracked Markdown files occurred exactly once
+below. The topical index in
 `docs/README.md` links all 138 other top-level pages, and `docs/c-api/README.md` links its 37
-contract subpages. Across all docs pages and this inventory, 1,277 local Markdown links have no
-missing paths or heading anchors. Historical snapshots and proposals remain identified as such.
+contract subpages. That pass checked 1,277 local Markdown links without missing paths or heading
+anchors. Historical snapshots and proposals remain identified as such; later code repairs update
+their owning contracts and are tracked separately in `CNA_REPAIR_STATUS.json`.
 
 ## Status definitions
 

@@ -67,7 +67,8 @@ CNA_Result cna_index_buffer_get_info(
             static_cast<CNA_IndexElementSize>(object->value->getIndexElementSizeProperty()),
             static_cast<CNA_BufferUsage>(object->value->getBufferUsageProperty()),
             ToCBool(object->dynamic),
-            CNA_FALSE,
+            ToCBool(object->dynamic &&
+                    std::static_pointer_cast<DynamicIndexBuffer>(object->value)->getIsContentLostProperty()),
             ToCBool(object->value->HasRenderer()),
             0U
         };

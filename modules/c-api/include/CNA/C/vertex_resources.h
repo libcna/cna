@@ -64,7 +64,7 @@ typedef struct CNA_VertexBufferInfo {
     CNA_BufferUsage buffer_usage;
     /** @brief True when this handle owns a DynamicVertexBuffer. */
     CNA_Bool dynamic;
-    /** @brief Currently false; the C snapshot does not yet expose native dynamic loss state. */
+    /** @brief Current dynamic-buffer content-loss flag; always false for a static buffer. */
     CNA_Bool is_content_lost;
     /** @brief True while the native renderer allocation is present. */
     CNA_Bool has_renderer;

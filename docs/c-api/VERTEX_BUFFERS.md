@@ -17,10 +17,9 @@ stride/element count. Both static and dynamic handles use the dedicated base typ
 `Microsoft.Xna.Framework.Graphics.VertexBuffer` name, even though the native dynamic type has its
 own name. Declaration elements use count/copy. No renderer or native object pointer is exposed.
 
-The C info field `is_content_lost` is currently hard-coded false. This does not describe the native
-dynamic state: device content-loss notification sets the native flag and raises `ContentLost`,
-and a nonempty write clears it. The C snapshot defect is recorded in
-[handoff.md §5.1](../../handoff.md#51-defects).
+The C info field `is_content_lost` reads the native dynamic state. Device content-loss notification
+sets the flag and raises `ContentLost`; a successful nonempty write clears it. An empty write
+leaves it unchanged, and static buffers report false.
 
 ## Typed array transfers
 
@@ -89,8 +88,10 @@ C registry entry and owning game/device child count.
 ## Verification
 
 `CApi_VertexBufferSmoke` covers built-in layouts, dynamic/raw options, offsets, prefix preservation,
-declaration copies, disposal and invalid/stale/kind/thread refusals. Its existing event assertions
-cover subscription lifetime and an initial false loss state, not a notification-to-info transition.
+declaration copies, disposal and invalid/stale/kind/thread refusals. CNA-FIX-D12 adds two
+loss/reupload cycles, checks event-to-info propagation, empty-write preservation, nonempty-write
+reset and the static-buffer false invariant. This extended smoke failed before the fix and passes
+on OPENGLES3 and SDLGPU through the private runner.
 `CApi_GraphicsDeviceSmoke` and model/lifetime tests cover related device and resource use.
 C17/C++23 header targets check ABI layout. Renderer refusals are capability-dependent; a run on one
 renderer is not evidence for all renderer implementations.

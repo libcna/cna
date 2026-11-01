@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D12/D16 (2026-11-01): both C buffer info snapshots now expose their native dynamic
+  ContentLost flag instead of constant false. Strict-C regressions fail before the fix and pass
+  after it on OPENGLES3 and SDLGPU through the private runner. Each covers two loss/reupload
+  cycles, callback counts, empty-write preservation, nonempty-write reset and static-buffer false.
+  The index route is regenerated from its TOML source; generator freshness and its five unit cases
+  pass. Public field comments and owning contracts match; no ABI layout/signature change or stub.
+  The owner-authorized repair queue is CNA_REPAIR_STATUS.json, seeded from all 79 §5 groups at
+  37c69080d; Galaxy Eggbert intake, full local tests and GitHub CI remain subsequent workstreams.
 - Independent documentation review (2026-11-01, DOCS-REVIEW-001): a separate GPT-6.1 Sol
   xhigh session reviewed the cleanup through bdf18a7d5 using source-backed samples and structural
   checks. All eight confirmed documentation finding groups are corrected: callback diagnostic and
@@ -1572,11 +1580,17 @@ incremental builds keep stale outputs.
 
 ### Exact next task
 
+The owner has started the repair campaign: first verify and fix the actionable §5 items, then
+verify CNA reports in ../../openeggbert/galaxy-eggbert, then resolve failing CNA tests and GitHub
+CI jobs. CNA_REPAIR_STATUS.json assigns stable IDs from the 37c69080d inventory and preserves
+every workstream. A scope/capability boundary or missing platform qualification is not a completed
+runtime fix. Keep its evidence and disposition explicit as the queue is worked.
+
 The museum Pipeline Workshop items are all answered: 1 (build-wide nested names, `98aa655f2` and
 `419723275`), 9 (`bbed8c61e` on Sharp Runtime `f990d074`, measured against
 genuine XNA, demos `9598b43`) and 16 (owner: the documentation half is enough; the task sources
-stay in `modules/content-pipeline`). What remains needs a host this machine does not have: the
-three Windows/XNA platform validations (003, 101, 152; §8.1). The museum's reruns of
+stay in `modules/content-pipeline`). Three validations from that earlier campaign still need a host
+this machine does not have: the Windows/XNA cases (003, 101, 152; §8.1). The museum's reruns of
 2026-10-25 against `9d49828f4` are in `../museum-simulator/docs/CNA_FINDINGS.md`: every finding it
 can run here is verified fixed or documented, the ThreadSanitizer races and ENet's UBSan shift
 included (a `-fsanitize=thread,undefined` museum tree: no report), and so is the Android emulator's
@@ -1612,9 +1626,9 @@ evidence, and Git history preserves measurement history. Every implementation pl
 and `plans/` removed (2026-10-29); `docs/task-id-index.md` says where each one's content went. Do
 not let an issue disappear from §5 or §8.
 
-Ready to pick up next, when the owner asks: the three native-Windows validations in §8.1.
+Continue the active CNA_REPAIR_STATUS.json queue; retain the native-Windows obligations in §8.1.
 
-Repository state last reconciled: **2026-10-31** (`next`, `b8e05abf8`), after the graphics
+Historical repository checkpoint: **2026-10-31** (`next`, `b8e05abf8`), after the graphics
 capability, PBR inventory, cube/volume documentation and retained glTF record reconciliations. The
 preceding content checkpoint completed compressed manifest inventory, shared bounded container
 decoding and type-erased LZ4 loading. The last plans were retired on 2026-10-29 (`225e88b09`). The
@@ -1866,12 +1880,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   caller waiting. Found by source inspection on 2026-11-01 in devices-ext/src/FileDialog.cpp;
   the canned tests do not inject this throwing-provider transition. No runtime fix or physical
   dialog failure reproduction is claimed (`docs/devices-ext.md`).
-- `cna_vertex_buffer_get_info` hard-codes `is_content_lost = CNA_FALSE`, although native
-  DynamicVertexBuffer notification sets its loss flag and raises ContentLost, and subsequent
-  nonempty uploads clear it. Found by source inspection on 2026-11-01 during the vertex-buffer
-  documentation audit. `CApi_VertexBufferSmoke` checks the initial false value and registration
-  lifetime, not notification-to-info propagation; no permanent C regression covers that transition.
-  Consumers can use the loss callback but cannot query the true flag through this C snapshot.
 - C API network-event injection validates `CNA_NetworkEventInfo.reliable` as an ordinal in 0..4,
   rejecting the valid `Chat` flag combinations 5, 6 and 7. Both
   `NetworkSessionSendNetworkEventExt` and `LocalNetworkGamerEnqueuePacketExt` contain this check;
@@ -1896,16 +1904,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   output sentinel. Player/device/game cleanup succeeds. `CApi_VideoSmoke` checks continued player
   state after original-handle release, but not this getter transition; no permanent regression
   test covers it yet. Keep the original Video handle while relying on association queries.
-- `cna_index_buffer_get_info` always reports `is_content_lost = CNA_FALSE`, including after a
-  real dynamic-buffer ContentLost notification. `modules/c-api/spec/IndexBuffer.toml` hard-codes
-  the field instead of reading `DynamicIndexBuffer::getIsContentLostProperty()`. Measured on
-  2026-11-01 with a strict-C probe through the private SDLGPU runner: create a 64×64 owned HiDef
-  device and a dynamic 16-bit buffer, subscribe, then call
-  `cna_graphics_device_notify_content_lost_resources_ext`; one callback fires but the subsequent
-  successful info query returns false. Native notification sets the flag, and a nonempty upload
-  clears it. `CApi_IndexBufferSmoke` only checks the initial false snapshot; this transition has no
-  permanent public-C regression test yet. Consumers can observe the callback but cannot query
-  the true loss state through the C snapshot until the route is corrected.
 - `cna_graphics_resource_get_graphics_device` fails for a valid resource created on an independently
   owned C device. `CnaCApiGraphicsResource.cpp` passes the resource's owner token unconditionally
   to `BorrowGameGraphicsDevice`; that token is an owned-device handle on this path, so the game

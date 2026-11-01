@@ -62,7 +62,7 @@ typedef struct CNA_IndexBufferInfo {
     CNA_BufferUsage buffer_usage;
     /** @brief True when this handle owns a DynamicIndexBuffer. */
     CNA_Bool dynamic;
-    /** @brief Currently constant false in the C snapshot; does not reflect the native loss flag. */
+    /** @brief Current dynamic-buffer content-loss flag; always false for a static buffer. */
     CNA_Bool is_content_lost;
     /** @brief True while the native renderer allocation is present. */
     CNA_Bool has_renderer;

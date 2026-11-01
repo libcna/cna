@@ -420,7 +420,8 @@ private:
         buffer->value->getVertexCountProperty(),
         static_cast<CNA_BufferUsage>(buffer->value->getBufferUsageProperty()),
         ToCBool(buffer->dynamic),
-        CNA_FALSE,
+        ToCBool(buffer->dynamic &&
+                std::static_pointer_cast<DynamicVertexBuffer>(buffer->value)->getIsContentLostProperty()),
         ToCBool(buffer->value->HasRenderer()),
         0U,
         declaration.getVertexStrideProperty(),
