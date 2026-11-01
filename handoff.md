@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Shared parity-fixture documentation reconciliation (2026-11-01): the former 13-fixture
+  `WEBGPU-207` snapshot now documents the canonical 32-entry rendered corpus and the separate
+  32-entry conformance-program corpus driven by `ParityFixtures.cmake`, including their actual
+  family registrations, primary versus full-frame oracles, reviewed policy types and extension
+  workflow. All examples now use the private GPU runner. Both frame scripts inherit its display,
+  refuse an absent display and validate that the reference is desktop `OPENGL33` rather than the
+  capability-different default `OPENGLES3`; the WebGPU page delegates the moving inventory to the
+  shared guide. Registered OPENGLES3, OPENGL33, WebGPU and SDLGPU parity suites complete 32/32,
+  32/32, 32/32 and 34/34 without failure. The freshly built OPENGL33 reference also passes both
+  complete OPENGL33↔WebGPU and OPENGL33↔SDLGPU corpora, with every fixture satisfying its own
+  oracle and its reviewed whole-frame policy.
 - FNA3D renderer-document reconciliation (2026-10-31): the mixed `FNA3D-0`..`63` campaign
   narrative is replaced by the current Experimental portable-family contract. The page now owns
   the pinned FNA3D/MojoShader forks, offline source verification, runtime OpenGL/Direct3D 11/

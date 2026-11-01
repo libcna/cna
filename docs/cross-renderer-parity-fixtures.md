@@ -1,141 +1,182 @@
 # Shared cross-renderer parity fixtures
 
-**`WEBGPU-207`**.
+**Status: reconciled with the registry and runners on 2026-11-01.** A parity fixture is one
+renderer-neutral public-XNA program whose assertions run unchanged through every participating
+renderer. It prevents two renderer-specific tests from becoming two subtly different oracles for
+the same behavior.
 
-## Why this exists
+The authoritative inventories and registration functions are in
+[`ParityFixtures.cmake`](../modules/graphics/examples/parity/ParityFixtures.cmake):
 
-A behavioural claim about a renderer used to be verified by a test written for that renderer. Two
-renderers therefore got two tests of the same behaviour — two oracles, which can disagree without
-either of them failing, and which have to be kept in step by hand for as long as both exist.
+- `CNA_PARITY_FIXTURES` is the shared rendered-parity corpus;
+- `CNA_CONFORMANCE_FIXTURES` is the separate renderer-neutral conformance-program corpus;
+- `cna_register_parity_fixtures()` registers both corpora for a rasterizing family;
+- `cna_register_conformance_programs()` registers only the conformance programs for a family that
+  cannot participate in whole-frame parity.
 
-A **parity fixture** is one renderer-neutral source that states a behaviour *and its expected
-result*, executed unchanged by every renderer that opts in. There is one oracle, so "EasyGL and
-another renderer agree" is something the suite can actually establish rather than something a
-reader infers from two green tests.
+Do not copy either inventory into another CMake file. The original `WEBGPU-207` task established
+the shared registry; its task record is historical, while this page describes the current
+infrastructure.
 
-This is not a new harness. It extends the renderer-agnostic dump-and-compare mechanism that
-`modules/graphics/examples/cross_renderer_diagnostic_scene.cpp` and `cross_renderer_2d_corpus.cpp`
-already used, and it writes its frames in exactly the format `cross_renderer_diagnostic_compare.cpp`
-(`cna_diag_compare`) already reads.
+## The two test families
 
-## Adding a fixture
+| Family | Source shape | Oracle and output | Current registration |
+|---|---|---|---|
+| Parity fixture | `modules/graphics/examples/parity/parity_<name>.cpp`, derived from `CNA::Parity::ParityFixture` | In-program `Expect*` assertions are primary; the optional RGBA8 frame dump supports a second cross-renderer comparison | EasyGL, WebGPU and SDLGPU |
+| Conformance program | `modules/graphics/examples/conformance/<name>_test.cpp`, normally a complete `PixelTestGame` | Public-API assertions and pixels; exits 77 with a named capability reason when genuinely inapplicable | EasyGL, WebGPU, SDLGPU, Software, Headless and FNA3D |
 
-1. Write `modules/graphics/examples/parity/parity_<name>.cpp`:
-   - derive from `CNA::Parity::ParityFixture` (`parity/ParityFixture.hpp`) and implement
-     `RunFixture()`;
-   - use only public XNA API — no `#ifdef`, no renderer include, no renderer name anywhere;
-   - state the expected semantics as `Expect*` assertions **in the fixture**;
-   - end with `CNA_PARITY_FIXTURE_MAIN(<YourFixture>)`.
-2. Append `<name>` to `CNA_PARITY_FIXTURES` in
-   `modules/graphics/examples/parity/ParityFixtures.cmake`.
+Conformance programs preserve behavior first measured in many older renderer campaigns. They are
+not parity fixtures merely because the same CMake file registers them: they do not derive from
+`ParityFixture`, do not participate in `run-parity-corpus.sh`, and may make a capability-based
+skip. Keeping the lists separate prevents a renderer without whole-frame output from weakening the
+shared behavioral coverage.
 
-That is the whole cost. Every renderer whose `examples/CMakeLists.txt` calls
-`cna_register_parity_fixtures()` — EasyGL, WebGPU and SDL GPU today — builds and registers the new
-source as `<Renderer>_Parity_<name>` automatically. SDL GPU uses the helper's `TARGET_PREFIX`
-option to retain its established executable names; that changes no fixture or oracle.
+## Current parity surface
 
-## Running them
+`CNA_PARITY_FIXTURES` currently contains 32 sources. The names below are grouped for navigation;
+the CMake list, not this prose count or grouping, decides what is built.
 
-Each renderer's own build runs its half as an ordinary test:
+| Area | Fixture names |
+|---|---|
+| Presentation and resources | `backbuffer_msaa`, `render_target_mip`, `hdr_render_target`, `compressed_cube` |
+| Vertex input and draw routing | `vertex_semantics`, `lit_untextured`, `lit_vertex_color`, `unlit_position_color`, `multi_stream_split`, `instanced_draw` |
+| Stock effects | `dual_texture_uv1`, `basic_effect_light_terms`, `basic_effect_vertex_color`, `basic_effect_alpha_scale`, `alpha_test_sweep`, `alpha_test_sources`, `dual_texture_terms`, `env_map_terms`, `skinned_terms` |
+| SpriteBatch and SpriteFont | `sprite_geometry`, `sprite_state`, `sprite_font` |
+| Sampling and render state | `sampler_filters`, `sampler_max_mip_level`, `sampler_lod_bias`, `sprite_sampler_state`, `blend_states`, `depth_states`, `stencil_states`, `stencil_compare`, `rasterizer_viewport`, `fill_mode_wireframe` |
+
+Each entry has its detailed behavioral claim beside it in `ParityFixtures.cmake` and in the fixture
+source. Adding or removing an entry there changes EasyGL, WebGPU and SDLGPU registration together.
+The CMake function rejects a registered name whose source is missing.
+
+## Running registered tests
+
+Every parity fixture is a GPU/window test. Run the registered renderer leg through the private GPU
+runner; never call these `ctest` selections on the owner's desktop:
 
 ```bash
-ctest --test-dir cmake-build-debug  -R 'EasyGL_Parity'  --output-on-failure   # OPENGL33 build
-ctest --test-dir cmake-build-webgpu -R 'WebGPU_Parity' --output-on-failure    # WEBGPU build
-ctest --test-dir cmake-build-sdlgpu -R 'SdlGpu_Parity' --output-on-failure    # SDLGPU build
+tools/platform/run_gpu_tests_private.sh cmake-build-opengl33 \
+  -R '^EasyGL_Parity_' --output-on-failure -j6
+tools/platform/run_gpu_tests_private.sh cmake-build-webgpu \
+  -R '^WebGPU_Parity_' --output-on-failure -j6
+tools/platform/run_gpu_tests_private.sh cmake-build-sdlgpu \
+  -R '^SdlGpu_Parity_' --output-on-failure -j6
 ```
 
-The cross-renderer pixel comparison needs both builds, because `CNA_GRAPHICS_RENDERER` is a
-compile-time choice:
+These runs execute the fixture's own assertions. They are sufficient to accept or reject the
+behavior each source promises; they do not compare every output pixel between renderer families.
+
+## Running cross-renderer frame comparisons
+
+The same fixture can also write its full backbuffer as tightly packed RGBA8. The comparison layer
+looks for differences outside the sampled assertion regions:
 
 ```bash
-scripts/run-parity-fixture.sh vertex_semantics            # both legs + cna_diag_compare
-scripts/run-parity-fixture.sh vertex_semantics cmake-build-debug cmake-build-webgpu 2
-scripts/run-parity-corpus.sh cmake-build-debug cmake-build-sdlgpu sdlgpu
+tools/platform/run_gpu_tests_private.sh --exec \
+  scripts/run-parity-fixture.sh vertex_semantics \
+  cmake-build-opengl33 cmake-build-webgpu 2
+
+tools/platform/run_gpu_tests_private.sh --exec \
+  scripts/run-parity-corpus.sh \
+  cmake-build-opengl33 cmake-build-webgpu webgpu
+
+tools/platform/run_gpu_tests_private.sh --exec \
+  scripts/run-parity-corpus.sh \
+  cmake-build-opengl33 cmake-build-sdlgpu sdlgpu
 ```
 
-Each fixture executable also takes an optional output path and writes its whole backbuffer there as
-raw R,G,B,A bytes, so `cna_diag_compare <a> <b> <tolerance> <WxH>` can diff any two renderers' frames
-by hand.
+`run-parity-fixture.sh` compares one EasyGL/WebGPU fixture with `cna_diag_compare`.
+`run-parity-corpus.sh` reads `CNA_PARITY_FIXTURES` directly and compares EasyGL with either WebGPU
+or SDLGPU. Both scripts inherit the private runner's `DISPLAY`; they refuse to run without a
+display instead of falling back to a hard-coded server. `CNA_PARITY_DISPLAY` remains an explicit
+test-infrastructure override and must never be pointed at the live desktop.
 
-## The two layers, and which one is the oracle
+The frame reference must be a desktop `OPENGL33` EasyGL build. `OPENGLES3` runs the same fixture
+assertions, including profile-specific limitations such as the absence of sampler LOD bias, but
+its frame is not interchangeable with the desktop reference. Both scripts inspect each build's
+`CMakeCache.txt` and refuse a mismatched renderer identity.
 
-| Layer | What it is | When it decides |
-|---|---|---|
-| The fixture's `Expect*` assertions | The shared oracle. Runs in both builds' CTest suites. | Always. A behavioural row's acceptance is these. |
-| The raw frame dump + `cna_diag_compare` | A pixel-for-pixel cross-check of the whole frame. | When a difference the assertions do not happen to sample still matters. |
+The scripts require the fixture executables and `cna_diag_compare` to have been built in the named
+trees. A cross-renderer comparison cannot come from one multi-renderer process: renderer selection
+is a compile-time property for these trees, so each leg is its own executable.
 
-## The tolerance convention
+## Which result is authoritative
 
-Rasterization fill rules legitimately differ at primitive **edges** — `WEBGPU-123` measured EasyGL
-diverging from three other renderers on 57 triangle-edge pixels and nowhere else. So a fixture:
+| Layer | Role |
+|---|---|
+| Fixture `Expect*` assertions | Primary behavioral oracle. They run in every registered renderer leg and decide the fixture's contract. |
+| Full-frame dump comparison | Secondary cross-check. It detects an unexpected difference outside the assertion samples. |
 
-- samples **interior** regions, never a boundary pixel (`CNA::Parity::kEdgeInset`, and
-  `ParityGrid::Interior()` applies it);
-- compares a region **average** rather than one texel, so a stray edge pixel cannot decide a verdict;
-- uses tolerance **0–2** for a flat, unshaded, unfiltered colour (2 covers the
-  unorm8 → f32 → unorm8 round trip and nothing else), and `CNA::Parity::kShadingTolerance` for a
-  lit, filtered or blended one — with the call site saying *why* the wider one is justified.
+Two broken renderers can produce identical empty frames, so byte equality alone never establishes
+correctness. Every fixture must prove that the feature materially changed the result before its
+frame is useful as parity evidence.
 
-A difference that needs more than `kShadingTolerance` is a **finding**, not a tolerance argument. It
-belongs in the renderer's own documentation or `handoff.md` §5, not in the fourth argument
-of an assertion.
+The corpus runner owns the reviewed full-frame policy:
 
-**When the whole-frame dump does not apply.** A fixture whose picture is *entirely* boundary — a
-wireframe is one-pixel lines and nothing else — cannot be judged by `cna_diag_compare`, because the
-only pixels it has are the ones two conforming rasterizers may legitimately disagree about.
-`fill_mode_wireframe` is the current example: EasyGL and WebGPU differ on 367 of 32768 pixels
-(1.12%, measured 2026-09-05), all of them on an edge and none anywhere else. The right answer is
-**not** a tolerance wide enough to swallow that; it is to say so in the fixture and let its
-assertions — interior coverage and per-edge counts, which agree exactly — be the comparison. A
-fixture that opts out of the dump comparison must say why in its header, as that one does.
+- a fixture not listed in its exception table is strict: no pixel may differ by more than the
+  per-channel rounding tolerance;
+- `allow:<count>:<reason>` permits a measured number of differing pixels for a named rasterization
+  boundary;
+- `internal:<reason>` means the fixture's within-renderer assertions are the complete oracle
+  because a whole-frame comparison is not meaningful.
 
-## Making a fixture prove something
+The WebGPU and SDLGPU policy tables are independent. Do not inherit an exception merely because
+both implementations often run over Vulkan, and never widen a budget just to make a run green.
 
-Two renderers that both draw nothing agree perfectly. Every fixture therefore has to show that the
-thing under test **changed the output**:
+## Assertion and tolerance rules
 
-- `ExpectDistinct(label, regionA, regionB, minDelta)` — the attribute materially altered the result;
-- `ExpectBrighter(label, lit, unlit, minDelta)` — a relational claim that is exactly true on every
-  conforming renderer, unlike an absolute shade;
-- `ExpectFlat(label, region, maxSpread)` — the sampled region really is the flat interior the
-  fixture claims, so a later average is not quietly reading across a geometry edge.
+Rasterization fill rules legitimately differ at primitive edges. A fixture should therefore:
 
-Prefer a relational assertion wherever the exact value is a legitimate implementation detail; use an
-absolute one where XNA's own arithmetic makes the value exact (an unlit vertex colour, an `N·L` of
-exactly 1 or 0, a point-sampled texel).
+- sample interiors rather than boundary pixels (`CNA::Parity::kEdgeInset` and
+  `ParityGrid::Interior()` provide the shared convention);
+- compare a region average when a single edge texel could otherwise decide the result;
+- use tolerance 0–2 only for flat, unfiltered values where that allowance covers numeric
+  round-trip behavior;
+- use `CNA::Parity::kShadingTolerance` only for lit, filtered or blended values, with the reason
+  visible at the assertion;
+- treat a larger unexplained difference as a renderer finding, not a tolerance choice.
 
-## Current fixtures
+Prefer relational assertions where the exact shade is implementation-dependent:
 
-| Fixture | Row | What it establishes |
-|---|---|---|
-| `vertex_semantics` | `WEBGPU-155` | Element order, element offset and buffer stride do not change the pixels: one mesh through four legal declarations of the same semantic content. |
-| `lit_untextured` | `WEBGPU-156` | A `Position+Normal` declaration lights — at stride 24 and padded to 32 — and the normal materially drives the shading. |
-| `lit_vertex_color` | `WEBGPU-157` | The stock `ModelProcessor`'s stride-36 `Position+Normal+Color+TextureCoordinate` vertex renders lit, with `VertexColorEnabled` gating the tint. |
-| `unlit_position_color` | `WEBGPU-158` | A stride-32 declaration with no `Normal` renders unlit and keeps its colour, while a real `VertexPositionNormalTexture` at the same stride still lights. |
-| `dual_texture_uv1` | `WEBGPU-159` | `DualTextureEffect` samples its two textures with `TEXCOORD0` and `TEXCOORD1` independently, and an absent `TEXCOORD1` reads `(0,0)`. |
-| `multi_stream_split` | `WEBGPU-172` | A vertex split across two `VertexBufferBinding`s (position-only at stride 12, colour-only at stride 4) renders the same picture as the same vertex in one packed stride-16 buffer, and each binding's `VertexOffset` is converted with its own stride. |
-| `render_target_mip` | `WEBGPU-164` | A `mipMap: true` `RenderTarget2D` has a real chain: `GetData` at both ends returns the drawn quadrants and their regenerated mean, and sampling the target unrestricted versus pinned to its coarsest level gives materially different pictures. |
-| `hdr_render_target` | `WEBGPU-199` | An `HdrBlendable` target keeps values above 1.0: drawn at half tint, a target holding 2.0 saturates at 255 while one holding 1.0 gives 128, so a target that clamped its own storage renders both columns the same and fails. |
-| `compressed_cube` | `WEBGPU-206` | A `Dxt1` `TextureCube` stores blocks, reads back decoded, and samples exactly like the RGBA8 cube it encodes. **The only fixture whose oracle is internal rather than cross-renderer**: both quads are rendered offscreen at identical geometry so the reflection is the same for both cubes, but the reflection *direction* still differs between renderers (pixel-centre convention, `WEBGPU-187`), so its frames are deliberately not byte-comparable across renderers. |
-| `basic_effect_light_terms` | `WEBGPU-173` | Each `BasicEffect` lighting term arrives through its own colour channel — emissive red, ambient green, the extra lights blue, specular white — so a term routed through the wrong slot cannot pass a brightness check. |
-| `basic_effect_vertex_color` | `WEBGPU-173` | `VertexColorEnabled` and `TextureEnabled` are independent gates: all columns share one mesh carrying the same non-white COLOR0, so always-multiplying and never-multiplying both fail. Includes the per-channel saturation check. |
-| `basic_effect_alpha_scale` | `WEBGPU-173` | `EnableDefaultLighting`; `Alpha` premultiplying into RGB under an **opaque** blend, where the alpha channel is discarded; and a 1000× world scale over 1/1000 geometry reproducing the identity transform exactly. |
-| `fill_mode_wireframe` | `WEBGPU-153` | `FillMode::WireFrame` draws all three triangle edges and leaves the interior empty, while `FillMode::Solid` fills it. |
+- `ExpectDistinct()` proves that two cases do not collapse to the same output;
+- `ExpectBrighter()` proves a directional lighting or blend relationship;
+- `ExpectFlat()` proves that a sampled region is actually the uniform interior it claims to be.
 
-## Adding a renderer
+Use an absolute expected value only where XNA's arithmetic makes it exact, such as an unlit vertex
+color, an `N·L` of exactly zero or one, or a point-sampled authored texel.
 
-In that renderer's `examples/CMakeLists.txt`, inside the block that already builds its example
-tests:
+## Adding a parity fixture
 
-```cmake
-include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)
-cna_register_parity_fixtures(
-    BUILDER      cna_<renderer>_test      # the module's own "add an example executable" macro
-    TARGET_SUFFIX <renderer>
-    TEST_PREFIX   <Renderer>
-    LABELS       "Parity;<Renderer>"
-    ENVIRONMENT  "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-```
+1. Add `modules/graphics/examples/parity/parity_<name>.cpp`.
+2. Derive from `CNA::Parity::ParityFixture` and implement `RunFixture()`.
+3. Use only public XNA API: no renderer include, renderer name or renderer-specific `#ifdef`.
+4. Put the expected semantics and a non-degeneracy assertion in the fixture itself.
+5. End with `CNA_PARITY_FIXTURE_MAIN(<FixtureType>)` so the optional dump path is supported.
+6. Add the name once to `CNA_PARITY_FIXTURES`, with a concise behavioral claim.
+7. Build and run all three registered renderer legs through the private runner.
+8. Run both corpus comparisons. If a whole-frame exception is legitimate, add a measured,
+   renderer-specific policy and reason to `run-parity-corpus.sh`.
+9. Mutation-check the fixture: deliberately break the behavior, prove the intended assertion goes
+   red, revert, and reconfirm the registered legs.
 
-A renderer that cannot execute a given fixture at all should not be added until it can: a fixture
-that is skipped everywhere defends nothing.
+A fixture skipped by every renderer proves nothing. If the contract is capability-conditional or
+cannot provide comparable whole-frame output, it probably belongs in `CNA_CONFORMANCE_FIXTURES`
+instead.
+
+## Adding a conformance program
+
+Add one complete public-API program under `modules/graphics/examples/conformance/` and register its
+base name in `CNA_CONFORMANCE_FIXTURES`. A capability precondition may exit 77, but it must identify
+the missing capability; an unexpected renderer/profile refusal is not a successful skip. The
+shared function registers the program for every participating family, including conformance-only
+Software, Headless and FNA3D.
+
+## Adding a renderer family
+
+A rasterizing family joins the parity corpus by including `ParityFixtures.cmake` and calling
+`cna_register_parity_fixtures()` inside its examples/tests block with its builder, target naming,
+test prefix, labels, platform environment and validation-fatal patterns. Follow the existing
+EasyGL, WebGPU and SDLGPU registrations rather than copying an old generic snippet.
+
+A family that cannot emit meaningful parity frames may call
+`cna_register_conformance_programs()` directly, as Software, Headless and FNA3D do. It must not
+join the parity list by turning unsupported fixtures into blanket skips.

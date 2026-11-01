@@ -49,6 +49,9 @@ on it) rather than assuming either way.
 - **[`renderer-capability-profiles.md`](renderer-capability-profiles.md)** — the additive detailed
   feature/limit/per-format query model, its generated English limitations report and the matching
   C ABI. Start here when the legacy 64-bit capability summary is too coarse.
+- **[`cross-renderer-parity-fixtures.md`](cross-renderer-parity-fixtures.md)** — the shared
+  EasyGL/WebGPU/SDLGPU behavioral fixture contract, its separate six-family conformance corpus,
+  oracle and tolerance rules, private-GPU execution and extension workflow.
 - **[`gltf-renderer-stride-conformance.md`](gltf-renderer-stride-conformance.md)** — current
   seven-layout audit and automated evidence across STUB, HEADLESS and OpenGL ES 3.
 - **[`gltf-renderer-pbr-fallbacks.md`](gltf-renderer-pbr-fallbacks.md)** — five-map native binding

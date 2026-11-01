@@ -1298,50 +1298,26 @@ answered from the last surface CONFIGURATION rather than the last surface the pl
 in a one-frame program the device's `Viewport` kept its 800x480 default over a 128x96 backbuffer and
 `SpriteBatch`, whose projection comes from that `Viewport`, drew everything at 128/800 of its size.
 
-**What is still not byte-identical to the reference renderer, and why.** Three parity fixtures
-deliberately do not compare frames: `sampler_filters` (magnification lands its gradient half a texel
-apart), `rasterizer_viewport` (276 pixels of 12800, all on triangle hypotenuses), and
-`parity_sprite_geometry`'s single half-pixel-destination cell (32 pixels, its top and left coverage
-edges). All three are the same cause — the pixel-centre convention `WEBGPU-187` owns — and each
-fixture's assertions are internal A/B claims that hold on both renderers.
+**What is still not byte-identical to the reference renderer, and why.** The reviewed per-fixture
+policies are owned by `scripts/run-parity-corpus.sh` and explained in
+[`cross-renderer-parity-fixtures.md`](cross-renderer-parity-fixtures.md), rather than duplicated
+here. The remaining whole-frame exceptions are localized rasterization/sample-centre differences
+or fixtures whose meaningful oracle is an A/B comparison within each renderer; they are not a
+known disagreement in the feature semantics asserted by the corpus.
 
 
-## The EasyGL↔WebGPU parity corpus and its per-fixture verdicts (`WEBGPU-193`, 2026-09-06)
+## The shared parity corpus (`WEBGPU-193`/`WEBGPU-207`)
 
-`scripts/run-parity-corpus.sh` runs every fixture in `CNA_PARITY_FIXTURES` under both renderers and
-checks each against a **frame policy written down in the script itself**, so a fixture that stops
-being byte-identical fails rather than quietly acquiring a wider tolerance. Three policies exist —
-`strict` (identical at tolerance 2), `allow:N` (at most N pixels may differ, with the measurement and
-the reason), and `internal` (frames are not compared because a cross-renderer comparison is
-inapplicable, with the reason). **A new fixture is `strict` by default**; it joins the exception
-table only with a measurement and a sentence.
+The current inventory, oracle rules, per-renderer frame policies and private-runner commands live
+in [`cross-renderer-parity-fixtures.md`](cross-renderer-parity-fixtures.md). The canonical list is
+`CNA_PARITY_FIXTURES` in `ParityFixtures.cmake`; this renderer page does not duplicate it.
 
-Verdicts as of 2026-09-06 — **30 fixtures, every one passing its own assertions under BOTH
-renderers, 24 of them byte-identical**:
-
-| Frame verdict | Fixtures |
-|---|---|
-| identical | `vertex_semantics`, `lit_untextured`, `lit_vertex_color`, `unlit_position_color`, `dual_texture_uv1`, `multi_stream_split`, `render_target_mip`, `hdr_render_target`, `basic_effect_light_terms`, `basic_effect_vertex_color`, `basic_effect_alpha_scale`, `alpha_test_sweep`, `alpha_test_sources`, `dual_texture_terms`, `env_map_terms`, `skinned_terms`, `sprite_state`, `sprite_font`, `blend_states`, `depth_states`, `stencil_states`, `sampler_max_mip_level`, `sampler_lod_bias`, `sprite_sampler_state`, `instanced_draw` |
-| localized difference, measured | `sprite_geometry` 32 px (its one half-pixel-destination cell's top and left coverage edges); `rasterizer_viewport` 276 of 12800 (the triangle hypotenuses, none in the quad cells); `fill_mode_wireframe` 367 of 32768 (the drawn line pixels themselves — GL line rules against a WebGPU line list) |
-| not compared, internal oracle | `compressed_cube` (which cube FACE a reflection lands on is convention-dependent; its oracle is a BC cube against an RGBA8 cube within one renderer); `sampler_filters` (magnification lands a linear gradient half a texel apart; its claims are point-vs-linear A/Bs within one renderer) |
-
-`sprite_sampler_state` was corrected by `SDLGPU-64` on 2026-09-09. `SpriteBatch::Begin` now assigns
-the complete state to `GraphicsDevice.SamplerStates[0]`, as XNA does, and the common renderer hook
-carries filter, all three address modes, anisotropy, `MaxMipLevel` and
-`MipMapLevelOfDetailBias`. The fixture now requires sprite biases +1 and -2 to select different mip
-colours, verifies every retained device property, passes on EasyGL and WebGPU, and the two complete
-frames remain byte-identical (max diff 0). WebGPU applies the bias with the same shader-side
-`textureSampleBias` semantic already used by its stock 3D paths.
-
-**Every localized difference and both internal oracles have the same single cause**: the XNA
-pixel-centre convention, which `WEBGPU-187` owns and which the two renderers do not yet agree on.
-Nothing in this table is a rendering feature the two renderers disagree about — the differences are
-confined to coverage edges, and each affected fixture's own assertions pass on both.
-
-`env_map_terms` and `skinned_terms` sit in the `identical` row at tolerance 2 while carrying an
-allowance, because their worst channel difference is exactly 2: EasyGL's fragment shader is
-`precision mediump float`, so an interpolated Fresnel gradient and a specular `pow` round one unit
-differently. That is rounding, not divergence.
+The 2026-11-01 reconciliation ran all 32 current fixtures against the desktop `OPENGL33` EasyGL
+reference. Every fixture passed its own assertions under both OPENGL33 and WebGPU and the complete
+corpus met its reviewed frame policy: 24 strict comparisons, six measured allowances and two
+within-renderer oracles. `OPENGLES3` remains a valid fixture-assertion leg, but is not the desktop
+frame reference because profile restrictions such as unavailable sampler LOD bias intentionally
+produce a different image.
 
 
 ## CNA graphics extensions on WebGPU (2026-09-22, `WMG-0001`–`WMG-0015`)

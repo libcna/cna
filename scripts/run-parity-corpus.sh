@@ -17,31 +17,66 @@
 # The default for a new fixture is `strict`: a fixture is added to the exception table only with a
 # measurement and a sentence, never to make a run green.
 #
-# Usage:  scripts/run-parity-corpus.sh [easygl-build] [comparison-build] [webgpu|sdlgpu]
-# DISPLAY comes from CNA_PARITY_DISPLAY (default :131). Exit 0 = every fixture passed its own
-# assertions under both renderers AND met its frame policy.
+# Usage:  scripts/run-parity-corpus.sh [opengl33-build] [comparison-build] [webgpu|sdlgpu]
+# DISPLAY is inherited from the caller (normally tools/platform/run_gpu_tests_private.sh), with
+# CNA_PARITY_DISPLAY as an explicit test-infrastructure override. There is deliberately no fixed
+# fallback display. Exit 0 = every fixture passed its own assertions under both renderers AND met
+# its frame policy.
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-EASYGL_BUILD="${1:-cmake-build-debug}"
+EASYGL_BUILD="${1:-cmake-build-opengl33}"
 COMPARISON_RENDERER="${3:-webgpu}"
 case "$COMPARISON_RENDERER" in
     webgpu)
         COMPARISON_BUILD="${2:-cmake-build-webgpu}"
         COMPARISON_LABEL="WEBGPU"
-        comparison_binary() { printf '%s/cna_parity_%s_webgpu' "$REPO_ROOT/$COMPARISON_BUILD" "$1"; }
+        comparison_binary() { printf '%s/cna_parity_%s_webgpu' "$COMPARISON_ROOT" "$1"; }
         ;;
     sdlgpu)
         COMPARISON_BUILD="${2:-cmake-build-sdlgpu}"
         COMPARISON_LABEL="SDLGPU"
-        comparison_binary() { printf '%s/cna_test_sdlgpu_parity_%s' "$REPO_ROOT/$COMPARISON_BUILD" "$1"; }
+        comparison_binary() { printf '%s/cna_test_sdlgpu_parity_%s' "$COMPARISON_ROOT" "$1"; }
         ;;
     *)
         echo "error: comparison renderer must be 'webgpu' or 'sdlgpu'" >&2
         exit 2
         ;;
 esac
-DISPLAY_VALUE="${CNA_PARITY_DISPLAY:-:131}"
+
+build_path() {
+    case "$1" in
+        /*) printf '%s' "$1" ;;
+        *) printf '%s/%s' "$REPO_ROOT" "$1" ;;
+    esac
+}
+
+require_renderer() {
+    local build_root="$1" expected="$2" cache="$1/CMakeCache.txt" actual
+    [[ -f "$cache" ]] || {
+        echo "error: missing CMake cache '$cache'" >&2
+        exit 2
+    }
+    actual="$(sed -n 's/^CNA_GRAPHICS_RENDERER:STRING=//p' "$cache" | tail -1)"
+    [[ "$actual" == "$expected" ]] || {
+        echo "error: '$build_root' selects ${actual:-unknown}, expected $expected" >&2
+        exit 2
+    }
+}
+
+EASYGL_ROOT="$(build_path "$EASYGL_BUILD")"
+COMPARISON_ROOT="$(build_path "$COMPARISON_BUILD")"
+require_renderer "$EASYGL_ROOT" OPENGL33
+case "$COMPARISON_RENDERER" in
+    webgpu) require_renderer "$COMPARISON_ROOT" WEBGPU ;;
+    sdlgpu) require_renderer "$COMPARISON_ROOT" SDLGPU ;;
+esac
+
+DISPLAY_VALUE="${CNA_PARITY_DISPLAY:-${DISPLAY:-}}"
+if [[ -z "${DISPLAY_VALUE}" ]]; then
+    echo "error: no private GPU display; run through tools/platform/run_gpu_tests_private.sh --exec" >&2
+    exit 2
+fi
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -80,7 +115,7 @@ printf '%s\n' "-----------------------------------------------------------------
 
 failures=0
 for fixture in $FIXTURES; do
-    easygl_bin="$REPO_ROOT/$EASYGL_BUILD/cna_parity_${fixture}_easygl"
+    easygl_bin="$EASYGL_ROOT/cna_parity_${fixture}_easygl"
     comparison_bin="$(comparison_binary "$fixture")"
     if [[ ! -x "$easygl_bin" || ! -x "$comparison_bin" ]]; then
         printf '%-26s %-8s %-8s %-10s %s\n' "$fixture" "-" "-" "-" "NOT BUILT"
