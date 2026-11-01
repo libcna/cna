@@ -52,7 +52,7 @@ typedef uint32_t CNA_MouseCursorStock;
 CNA_C_API CNA_Result cna_mouse_cursor_create_ext(CNA_MouseCursorHandle* out_cursor);
 
 /**
- * @brief Borrows one of the stock system cursors.
+ * @brief Creates an owned C handle referring to a shared stock system cursor.
  *
  * @param game Active owned or callback-borrowed game handle.
  * @param stock One `CNA_MOUSE_CURSOR_STOCK_*` identity.
@@ -61,7 +61,7 @@ CNA_C_API CNA_Result cna_mouse_cursor_create_ext(CNA_MouseCursorHandle* out_curs
  *
  * All twelve canonical stock properties collapse into this one route. The canonical stock cursors
  * are **process-lifetime singletons whose disposal is a deliberate no-op**, so the handle is a
- * borrowed view: destroying it releases the handle and never frees the shared native cursor, and
+ * separately owned view: destroying it releases the handle and never frees the shared cursor, and
  * `cna_mouse_cursor_dispose` on it succeeds without doing anything — exactly as the canonical
  * `Dispose` does. Two calls for the same identity name the same underlying cursor.
  */
@@ -82,7 +82,7 @@ CNA_C_API CNA_Result cna_mouse_cursor_get_stock_ext(
  *         canonical color format, matching the canonical refusal; or a documented
  *         handle/thread/native failure.
  *
- * The returned cursor owns its native resource and must be released with
+ * The returned cursor owns its pixel description and must be released with
  * `cna_mouse_cursor_destroy`. It does not keep the texture alive: the canonical factory copies the
  * pixels, so the texture may be released immediately afterwards.
  */
@@ -94,7 +94,7 @@ CNA_C_API CNA_Result cna_mouse_cursor_create_from_texture2d(
     CNA_MouseCursorHandle* out_cursor);
 
 /**
- * @brief Disposes a cursor's native resource without releasing its handle.
+ * @brief Disposes a created cursor's description without releasing its handle.
  *
  * @param cursor Owned cursor handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
@@ -111,7 +111,7 @@ CNA_C_API CNA_Result cna_mouse_cursor_dispose(CNA_MouseCursorHandle cursor);
  * @param cursor Owned cursor handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  *
- * Releasing a created cursor frees its native resource; releasing a stock cursor frees only the
+ * Releasing a created cursor frees its description; releasing a stock cursor frees only the
  * handle.
  */
 CNA_C_API CNA_Result cna_mouse_cursor_destroy(CNA_MouseCursorHandle cursor);
@@ -123,10 +123,9 @@ CNA_C_API CNA_Result cna_mouse_cursor_destroy(CNA_MouseCursorHandle cursor);
  * @param cursor Owned or stock cursor handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
- * The canonical operation returns nothing, so a backend that cannot change the cursor — and a
- * cursor with nothing behind it — succeed and change nothing. The C API does not keep the cursor
- * alive on the caller's behalf: releasing it while it is the active cursor is the caller's
- * responsibility to avoid, exactly as with the canonical reference.
+ * An absent mouse service or a disposed cursor is a no-op. Otherwise the platform installs the
+ * shape/image and can report an unsupported operation or native failure. SDL3 owns the installed
+ * native cursor independently of this description; releasing the C handle does not uninstall it.
  */
 CNA_C_API CNA_Result cna_mouse_set_cursor_ext(CNA_Handle game, CNA_MouseCursorHandle cursor);
 

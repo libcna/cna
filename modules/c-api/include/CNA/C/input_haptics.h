@@ -12,10 +12,10 @@ extern "C" {
 /**
  * @brief Owned handle to an opened force-feedback device.
  *
- * A device that failed to open is still a real handle: the open routes always succeed and
- * `cna_haptic_device_get_is_open` reports whether hardware is actually behind it. Every other
- * route on a closed device is a safe no-op that reports `CNA_FALSE`, exactly as the canonical
- * class behaves.
+ * Missing hardware can produce a valid closed-device handle; `cna_haptic_device_get_is_open`
+ * distinguishes that result. With valid arguments, closed-device actions report false and effect
+ * creation reports -1. Open and device routes still perform argument/handle/thread checks and can
+ * report allocation or platform failures.
  */
 typedef CNA_Handle CNA_HapticDeviceHandle;
 

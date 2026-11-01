@@ -35,6 +35,20 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API input-contract reconciliation (2026-11-01):
+  `docs/c-api/INPUT_SNAPSHOTS.md` now covers the current input families and their value, handle
+  and callback lifetimes. It distinguishes C capture from platform polling, consuming relative
+  mouse reads from stored joystick trackball deltas, platform touch snapshots from gesture-only
+  C event injection, and missing hardware from argument or platform failure. Cursor ownership
+  and SDL3 installation are documented. IME coordinates are characters, not UTF-8 byte offsets;
+  activation requires the published handle/id pair, which a raw-handle setter clears rather than
+  restores. Matching C-header and smoke-test comments are corrected, including the smoke's lack
+  of real IME activation evidence. The obsolete complete-input-coverage claim is replaced with
+  the generated inventory's current boundary. All selected C API targets and C17/C++23 header
+  checks build; all nine focused input/ABI/identity tests pass through the private SDLGPU runner,
+  and all nine coverage, generation, limitation, export and release gates pass. Public ABI and
+  executable test/implementation behavior are unchanged; physical hardware validation remains
+  separate from these smoke results.
 - C API index-buffer contract reconciliation (2026-11-01):
   `docs/c-api/INDEX_BUFFERS.md` now records owned/pre-run device inputs, positive fixed capacity,
   the HiDef requirement for 32-bit indices and the dedicated base type name for both buffer kinds.

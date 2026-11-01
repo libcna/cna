@@ -1794,12 +1794,9 @@ static void on_text_editing_candidates(
     }
 }
 
-/* Text input is probed by behavior, never by renderer identity. A backend that creates a real
-   window publishes it into the canonical static, so this suite must not assume either state: it
-   forces the unbound case to prove the documented null-guarded contract, then restores whatever was
-   bound and exercises the real path for whichever answer that backend gives. The events are
-   observable on every backend through the raise routes, which is exactly why the canonical class
-   has them. */
+/* This suite exercises text events and the unbound activation path. Setting or restoring a raw
+   handle clears the portable window id, so these calls do not establish real IME activation.
+   Native TextInputEXTTest covers the handle/id pair through a test platform. */
 static int validate_text_input_family(const CNA_Handle game)
 {
     /* A three-byte code point and a two-byte one, so the borrowed view is real UTF-8, not ASCII. */
@@ -1827,8 +1824,7 @@ static int validate_text_input_family(const CNA_Handle game)
 
     memset(&record, 0, sizeof(record));
 
-    /* Whatever this backend bound is process-wide state that must be put back. A windowed backend
-       publishes its real window here; a windowless one leaves zero. Neither is assumed. */
+    /* Save the raw window value. The C setter can restore this value, but not its platform id. */
     if (cna_text_input_get_window_handle_ext(game, &bound) != CNA_RESULT_SUCCESS ||
         cna_text_input_get_window_handle_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
@@ -1873,8 +1869,8 @@ static int validate_text_input_family(const CNA_Handle game)
         return 0;
     }
 
-    /* A bogus handle round trips because the C API never dereferences it, and the canonical reset
-       is what clears it -- which is also how a stale handle can never reach the backend. */
+    /* The raw value round trips without reaching the platform: the setter cleared its id.
+       The reset also clears the stored raw value. */
     if (cna_text_input_set_window_handle_ext(game, UINT64_C(0xDEADBEEF)) != CNA_RESULT_SUCCESS ||
         cna_text_input_get_window_handle_ext(game, &window) != CNA_RESULT_SUCCESS ||
         window != UINT64_C(0xDEADBEEF) ||
@@ -1884,9 +1880,8 @@ static int validate_text_input_family(const CNA_Handle game)
         return 0;
     }
 
-    /* With whatever this backend really bound put back, the same routes reach the platform. The
-       answer is the backend's to give: only the relationship between the answers is asserted, so a
-       backend with a live window supplies real activation evidence and one without stays honest. */
+    /* Restoring the raw value leaves the platform id unset. These assertions accept inactive
+       answers and verify the result shape, not activation on a real window. */
     if (cna_text_input_set_window_handle_ext(game, bound) != CNA_RESULT_SUCCESS ||
         cna_text_input_start_ext(game) != CNA_RESULT_SUCCESS ||
         cna_text_input_is_active_ext(game, &after_start) != CNA_RESULT_SUCCESS ||
@@ -1958,7 +1953,7 @@ static int validate_text_input_family(const CNA_Handle game)
         return 0;
     }
 
-    /* start and length are byte offsets forwarded verbatim: the canonical dispatch does not
+    /* IME start and length are forwarded verbatim: the canonical dispatch does not
        validate them against the text, and neither does C. */
     {
         const CNA_StringView text = {composition, sizeof(composition) - 1U};

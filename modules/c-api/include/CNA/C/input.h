@@ -613,9 +613,9 @@ typedef struct CNA_KeyboardState {
  * @param out_state Caller-provided versioned structure to receive the snapshot.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
- * The call delegates to CNA's current `Keyboard::GetState`; it is not cached once per update or
- * draw frame, so two calls in one callback are two independently timed snapshots. It must run on
- * the game's creation/graphics thread. The returned POD has no handle lifetime and may be copied.
+ * The call delegates to CNA's current `Keyboard::GetState` without pumping events or forcing a
+ * hardware poll. The platform may return its stored frame snapshot. It must run on the game's
+ * creation thread. The returned POD has no handle lifetime and may be copied.
  */
 CNA_C_API CNA_Result cna_keyboard_get_state(
     CNA_Handle game,
@@ -690,7 +690,8 @@ CNA_C_API CNA_Result cna_keyboard_state_copy_pressed_keys(
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
  * Capture must run on the game creation thread. The returned POD may then be copied or inspected
- * on any thread without another platform call.
+ * on any thread without another platform call. Absolute X/Y are logical coordinates; relative
+ * mode reports and consumes accumulated displacement, so a later read can return zero movement.
  */
 CNA_C_API CNA_Result cna_mouse_get_state(
     CNA_Handle game,

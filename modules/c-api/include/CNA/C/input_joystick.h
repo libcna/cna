@@ -368,9 +368,9 @@ CNA_C_API CNA_Result cna_joysticks_copy_capabilities_guid(
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
  * An identifier that is not connected is **not an error**: the capture succeeds and every array
- * is empty, exactly as the canonical query behaves. Trackball values are relative motion since the
- * previous read, so capturing consumes them. Release the snapshot with
- * `cna_joystick_state_destroy`.
+ * is empty. Trackball values are relative deltas; SDL3 consumes hardware motion during its input
+ * poll and stores the result. C captures copy that stored snapshot without consuming it again.
+ * Release the snapshot with `cna_joystick_state_destroy`.
  */
 CNA_C_API CNA_Result cna_joysticks_capture_state(
     CNA_Handle game,

@@ -1,283 +1,247 @@
-# CNA C API Input Snapshots
+# CNA C API Input Snapshots and Devices
 
-## Capture model
+## Scope, capture and lifetime
 
-The keyboard, mouse, gamepad and touch capture functions perform one canonical CNA query at the
-call site and copy the result into a caller-owned structure. The required game handle establishes
-the active runtime and creation-thread boundary. A returned snapshot is not a borrowed native
-object and remains usable after its callback or game ends.
+The input boundary comprises `input.h`, `input_keyboard.h`, `input_mouse.h`,
+`input_cursor.h`, `input_gamepad.h`, `input_touch.h`, `input_text.h`,
+`input_haptics.h`, `input_joystick.h` and `input_devices.h` under
+[`modules/c-api/include/CNA/C/`](../../modules/c-api/include/CNA/C/).
 
-Capture is point-in-time, not frame-cached. Two calls during one update or draw callback perform
-two separate native captures and may observe different state if the platform input bridge changes
-between them. Every capture must run on the game's creation/graphics thread and returns
-`CNA_RESULT_THREAD` otherwise. The local query and normalization helpers inspect only copied POD
-values and may run on any thread.
+Routes taking a `game` require a live owned or callback-borrowed game handle on its creation
+thread. They do not require an active lifecycle callback or a running game loop. A wrong-thread
+call returns `CNA_RESULT_THREAD` when lookup is reached; input routes do not automatically
+marshal themselves to another thread. See [`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md).
+
+Each capture calls the corresponding native query and copies its result. The C layer adds no
+frame cache, but it also does not pump platform events or force a hardware poll. SDL3's keyboard,
+mouse and gamepad services maintain snapshots updated by the platform input cycle. Repeated
+reads can therefore return the same state; relative mouse displacement is a consuming exception.
+Guide input ownership and optional keyboard-gamepad emulation remain part of native capture.
+
+| Representation | Lifetime and release |
+|---|---|
+| Keyboard, mouse, gamepad, touch, capabilities and other POD values | Caller-owned copies; remain readable after the game or callback ends |
+| Joystick state | Owned snapshot handle containing variable-length arrays; destroy with `cna_joystick_state_destroy` |
+| Cursor or haptic device | Owned handle; family disposal keeps the handle, family destruction releases it |
+| Input event registration | Owned handle; unsubscribe with the matching family route |
+| Text-event payload | Borrowed only during the callback; copy strings and arrays before returning |
+
+POD-only helpers need no live game and may run on any thread when callers synchronize their own
+memory. Handle operations retain registry thread affinity, including joystick snapshot reads.
+For versioned structures, initialize the required size/version prefix as documented by the
+route; a constructor-style `*_init` route writes its result. UTF-8 count/copy routes use byte
+counts without a terminator and reject insufficient capacity without a partial array/string write.
+A required-count output may still change on that refusal. General rules are in
+[`HANDLES.md`](HANDLES.md), [`ABI_VERSIONING.md`](ABI_VERSIONING.md) and [`ERRORS.md`](ERRORS.md).
 
 ## Keyboard
 
-The version 1 snapshot contains four 64-bit words covering the same 256 numeric key slots as FNA's
-keyboard bitfield. Key `N` occupies bit `N % 64` of word `N / 64`. `input.h` names every one of the
-160 canonical `Keys` identities; a build/CTest audit compares the complete C list and every numeric
-value directly with CNA's native `Keys.hpp`.
+The version-one snapshot contains four 64-bit words for 256 key slots. Key `N` occupies bit
+`N % 64` of word `N / 64`. `input.h` names the canonical `Keys` identities, and
+`CApi_KeyIdentities` compares their names and numeric values with the native header.
 
-`is_key_down`, `is_key_up`, pressed-count and ascending count/copy functions inspect only the POD
-snapshot. They do not call CNA, SDL or a platform backend, so a copied snapshot may be queried from
-any thread. Key slots 0 through 255 are valid even where the sparse XNA enum has no named value;
-unnamed slots from a native capture remain clear. Values above 255 are invalid arguments. An
-undersized pressed-key destination receives the required count and no partial array.
+Key-down/up, key-state, pressed-count and ascending pressed-key copy operations inspect the
+snapshot. Numeric slots 0 through 255 are accepted even without a named enum member; larger
+values are invalid. Initialization from a key array, equality, hash and string routes are also
+available. A copied bitfield is not restricted to physically present keys.
 
-## Mouse
+Live keyboard routes include the player overload, modifiers, key/scancode conversion and
+name count/copy/lookups. The native player overload currently returns the shared keyboard state;
+it does not select a separate physical keyboard.
 
-`cna_mouse_get_state` copies logical X/Y coordinates, cumulative vertical and CNA horizontal wheel
-values, and five button states into `CNA_MouseState`. Pressed buttons use the stable
-`CNA_MOUSE_BUTTON_*` bit set. The snapshot contains no live cursor/window pointer and has no
-post-capture lifetime restriction.
+## Mouse and cursors
+
+`cna_mouse_get_state` reports logical game X/Y in absolute mode, cumulative vertical and
+horizontal wheel totals, and five button bits. In relative mode X/Y are accumulated movement
+deltas consumed by the native read; a second read without new movement reports zero displacement.
+Snapshot construction, equality, hash and text operations remain local value operations.
+
+The mouse family also exposes window-handle state, logical positioning, relative-mode control,
+global position/warp, capture and the process-wide Clicked event. An unsupported platform operation
+can fail through the exception barrier; a successful route with an `out_applied` or
+`out_available` flag still requires checking that flag.
+
+Cursor creation produces an owned Arrow description. `cna_mouse_cursor_get_stock_ext` returns
+an **owned C handle** referring to one of twelve shared native singletons: every returned handle
+needs destruction, while stock disposal is a no-op. Texture-based cursors copy Color or
+ColorSrgbEXT pixels and validate the hot spot; the source texture need not remain alive.
+
+Disposal clears a created cursor's description without invalidating its C handle. Setting a
+disposed cursor or using an absent mouse service is a no-op. Otherwise setting a cursor delegates
+to the platform and may report a platform failure. SDL3 owns its installed native cursor
+independently of the C description; releasing that description does not uninstall the cursor.
 
 ## Gamepad
 
-Player slots use the four zero-based `CNA_PLAYER_INDEX_*` identities. `cna_gamepad_get_state`
-matches CNA's ordinary `GamePad::GetState(PlayerIndex)` overload and therefore applies
-`CNA_GAMEPAD_DEAD_ZONE_INDEPENDENT_AXES`. The explicit overload accepts `NONE`,
-`INDEPENDENT_AXES` or `CIRCULAR`. A disconnected slot is a successful snapshot with
-`is_connected == CNA_FALSE` and rest values; disconnection is not an API error.
+Player slots are the four zero-based `CNA_PLAYER_INDEX_*` identities. Default capture uses
+`INDEPENDENT_AXES`; explicit capture also accepts `NONE` and `CIRCULAR`. A disconnected slot
+returns a successful disconnected snapshot with rest values.
 
-The snapshot carries connection and packet information, all 31 currently canonical physical,
-extension and derived gamepad button bits, two normalized thumbsticks and two normalized triggers.
-Combined local button queries match CNA: down is true only when every requested bit is present;
-up is its inverse. Consequently the empty mask is down and not up.
+The snapshot holds connection/packet state, the canonical physical, extension and derived button
+bits, two sticks and two triggers. Local button-down requires every requested bit; button-up is
+its inverse. The empty mask is therefore down and not up. The C state uses one button mask;
+component construction merges the supplied D-pad into that mask. Capabilities, component/state
+constructors, equality, hash and string routes accompany capture.
 
-`cna_gamepad_apply_dead_zone` exposes the same deterministic transform for synthetic or previously
-stored analog input without querying a device:
+`cna_gamepad_apply_dead_zone` is a local transform for caller-supplied analog values:
 
-- `NONE` square-clamps stick axes to `[-1, 1]` and triggers to `[0, 1]`;
-- `INDEPENDENT_AXES` excludes `7849/32768` from each left-stick axis and `8689/32768` from each
-  right-stick axis, rescales the remainder, then square-clamps it;
-- `CIRCULAR` excludes and rescales the length of each whole stick, then normalizes lengths above
-  one;
-- both processed modes exclude and rescale the trigger threshold `30/255` before clamping.
+- `NONE` clamps stick axes to `[-1, 1]` and triggers to `[0, 1]`.
+- `INDEPENDENT_AXES` removes/rescales each axis's dead zone, then clamps each axis.
+- `CIRCULAR` removes/rescales the stick's radial dead zone and normalizes lengths above one.
+- Both processed modes remove/rescale the trigger threshold before clamping.
 
-Null pointers, invalid modes and non-finite input are rejected without changing the destination.
+The thresholds are `CNA_GAMEPAD_LEFT_DEAD_ZONE`, `CNA_GAMEPAD_RIGHT_DEAD_ZONE` and
+`CNA_GAMEPAD_TRIGGER_THRESHOLD`. Null inputs, undefined modes and non-finite source values are
+rejected without overwriting the result.
 
-## Touch
+Live routes additionally expose vibration and trigger vibration, light-bar control, capabilities,
+device strings, firmware/Steam identity, connection/power state, player-index control, button
+labels, sensors and touchpads. Availability is separate from success: unavailable gyro,
+accelerometer and touchpad-finger queries set `out_available` false and leave the reading output
+unchanged. Device strings are read afresh by each size/copy call.
 
-`cna_touch_get_capabilities` copies current device connection and CNA's reported maximum touch
-count. `cna_touch_get_state` copies a collection into a fixed eight-entry `CNA_TouchState`; only
-the first `touch_count` entries are valid. CNA currently reports a maximum of four when a device
-is connected, while the eight-entry ABI capacity preserves the native `TouchPanel` storage bound.
-Platform absence is represented by disconnected/empty successful snapshots.
+## Touch snapshots, collection operations and gestures
 
-Each `CNA_TouchLocation` carries its id, state, logical-pixel position, optional previous state and
-position, and CNA's pressure extension in `[0, 1]` when the platform supplies it. The local
-find-by-id helper always writes either the first match or the canonical invalid sentinel. The
-previous-location helper always reconstructs an output location and reports false when its state
-is invalid, matching CNA's out-parameter behavior.
+`CNA_TouchState` has eight slots; only the first `touch_count` entries are valid.
+`cna_touch_get_capabilities` reports four as the XNA compatibility maximum when connected and
+zero otherwise. That reported maximum does not reduce snapshot storage to four.
+Connection detection includes live platform device enumeration and native touch-state fallbacks.
 
-## Text input
+Native capture first returns valid `SetFinger` slots, if any. Otherwise it copies the panel's
+platform-event state, ordered by touch id and limited to eight entries. Input suppression returns
+an empty collection. Thus real platform touches do reach the snapshot. The C
+`cna_touch_panel_raise_touch_event_ext` route invokes only the gesture dispatcher; it does not
+populate that event-state store. Use `cna_touch_panel_set_finger_ext` to supply explicit slots.
 
-Text input is the one input family that is event-driven rather than sampled, so it is the one that
-carries callbacks. `input_text.h` maps all three canonical events —
-committed text, IME composition and the IME candidate list — as owned
-`CNA_TextInputRegistrationHandle` values. The canonical events are process-wide statics, so a
-subscription takes no game handle; one `cna_text_input_unsubscribe_ext` releases all three kinds,
-because a registration already knows which event it came from.
+Locations contain id, state, position, previous state/position and pressure. Find-by-id writes a
+canonical invalid sentinel on a miss. Try-get-previous reconstructs the output even when it reports
+false. Equality and hash ignore pressure; location text contains only the position.
 
-A committed code unit crosses as a `uint16_t`. A code point above U+FFFF arrives as two calls, a
-high surrogate then a low surrogate, exactly as the canonical event delivers it. The two multi-field
-events hand over a versioned `CNA_TextEditingEventInfo` or `CNA_TextEditingCandidatesEventInfo`
-whose UTF-8 text and candidate strings are `CNA_StringView`s **borrowed only for the duration of the
-callback**; copy them before returning. Composition `start`/`length` are byte offsets into
-multi-byte text, forwarded verbatim and deliberately not range-checked, because the canonical
-dispatch does not check them either.
+The collection helpers mutate the caller's fixed snapshot: add, insert, remove, remove-at, clear,
+contains and index-of. Add/insert into a full snapshot return `CNA_RESULT_BUFFER_TOO_SMALL`.
+The native read-only property still reports true despite these exposed mutation helpers.
+`copy_to` inserts at the supplied destination index and shifts existing entries, preserving CNA's
+growable-vector behavior; callers supply both current destination count and capacity. Insufficient
+capacity reports the required final count without changing the destination array.
 
-The three `cna_text_input_raise_*_ext` routes map the canonical internal dispatchers, which is what
-makes the events observable without a real keyboard. Input text is copied and UTF-8 validated before
-dispatch; a refusal dispatches nothing.
+`CNA_GestureType` is a bit set; use C bitwise operators and the declared mask.
+`CNA_GestureSample` stores its properties as fields, including signed 100-nanosecond timestamp
+ticks and CNA finger-id extensions. Reading an empty gesture queue returns
+`CNA_RESULT_INVALID_STATE`; check availability first. Explicit enqueue supports synthetic samples.
 
-The native window is an opaque `uint64_t` the C API never dereferences, and only zero is guarded —
-a nonzero value must be a live window published by the platform layer. A backend that creates a real
-window publishes one automatically, and there activation genuinely takes effect; with no window
-bound, every activation route is a successful no-op and every query answers false. Do not infer
-which case applies from the compiled-in renderer: query the handle, or observe the answers.
+TouchPanel routes control display metrics/orientation, enabled gestures, mouse-touch emulation,
+window state and the device-exists flag. The C gesture dispatcher drops events while width or
+height is nonpositive; otherwise it scales normalized positions/deltas and rounds to pixels.
+Clearing an explicit finger slot reports its preceding active touch once as Released.
+`update_ext` advances previous/frame state. The test reset clears slots, event state, gestures,
+display metrics, orientation, window state and mouse-touch emulation. These are process-wide
+controls; coordinate changes with the application.
 
-An undefined `CNA_TEXT_INPUT_TYPE_*` identity is refused. This is a deliberate deviation: the
-canonical conversion silently falls back to plain text, so a C consumer would otherwise get a
-different keyboard than it asked for without being told.
+## Text input and IME
 
-`cna_text_input_reset_for_tests_ext` maps the canonical test-support reset. It clears the bound
-window handle and drops every subscription to all three events, including registrations this API
-handed out, so releasing one afterwards is a no-op rather than a failure. It changes process-wide
-state a caller may not own; restore the window handle afterwards.
+Three process-wide subscriptions deliver committed UTF-16 code units, IME composition and
+candidate lists. Subscription takes no game handle; the registration is released through
+`cna_text_input_unsubscribe_ext`. Mouse, joystick and device events also have callbacks.
 
-## Touch and gestures
+Platform UTF-8 committed text is decoded to UTF-16; a supplementary code point yields two code-unit
+callbacks. The explicit committed-text raise route accepts one `uint16_t` as supplied.
+Composition and candidate payloads carry UTF-8 `CNA_StringView` values borrowed only during the
+callback. Composition `start`/`length` retain the platform IME's character coordinates; they
+are not converted to UTF-8 byte offsets. The platform bridge normalizes an empty composition to
+zero coordinates. Explicit C raise routes forward the supplied coordinates and selected-candidate
+index without range checking; text/list inputs are copied and UTF-8 validated before dispatch.
+Invalid text dispatches no event.
 
-`input_touch.h` completes the touch family. It **extends** the fixed eight-slot `CNA_TouchState`
-snapshot the C API already had rather than introducing a second representation: the canonical
-`TouchCollection` mutation surface — add, insert, remove, remove-at, clear, contains, index-of and
-the copy — operates on that snapshot in place. Its capacity is exactly the canonical touch-panel
-maximum, and an append or insert past it is refused rather than silently dropping a touch.
+Activation uses a pair published by the native graphics layer: an opaque window handle and its
+portable platform window id. `cna_text_input_set_window_handle_ext` stores the raw value and
+**clears the platform id**, even when setting the same value. Setting/restoring only that value
+does not restore activation. Without the published id or a text-input service, start/stop/placement
+succeed as no-ops and queries return false. The explicit-window screen-keyboard query only
+accepts the currently published pair; it cannot query an arbitrary window.
 
-Three canonical value behaviors are reproduced rather than tidied up. Equality and the hash ignore
-the pressure extension, so two locations differing only in pressure are the same location and the
-collection's search and removal treat them as such. The text carries **only the position**, as
-`{Position:{X:… Y:…}}`. And the copy **inserts** at its index and shifts what is already there,
-because the canonical destination is a growable vector — which is why the destination's current
-element count is an argument in C rather than being inferred.
+Start/stop/placement have void native contracts and suppress native platform failures, so success
+alone does not prove activation. Query `is_active_ext` for the resulting state. Undefined
+`CNA_TEXT_INPUT_TYPE_*` values are rejected with `CNA_RESULT_INVALID_ARGUMENT`.
 
-`CNA_GestureType` is a real bit set, so the canonical flag operators need no route: C composes and
-masks it with its own operators, and every route validates against `CNA_GESTURE_TYPE_ALL`.
-`CNA_GestureSample` is a fixed 64-byte value whose eight canonical getters are plain fields;
-`System::TimeSpan` crosses as `int64_t` 100-nanosecond ticks, the same spelling `runtime.h` and
-`audio.h` already use.
-
-Every `TouchPanel` static takes an active game handle, for the same reason the gamepad and mouse
-queries do. Four of them behave in ways worth stating plainly:
-
-- **Reading an empty gesture queue is a refusal**, `CNA_RESULT_INVALID_STATE`, because the canonical
-  read throws. Check `cna_touch_panel_get_is_gesture_available` first. `..._enqueue_gesture_ext` is
-  what makes the queue observable with no touch device at all.
-- **A raised touch event feeds gesture detection, not the snapshot.** The slot array
-  `cna_touch_get_state` reports is populated by `cna_touch_panel_set_finger_ext`; the two are
-  separate sources. A raised event is also **dropped entirely** while no display size is published,
-  because the canonical dispatch scales normalized coordinates by that size.
-- **Clearing a slot does not make a touch vanish.** The next frame reports it once more as released
-  with its previous state carried over, which is the XNA contract for a lifted finger.
-- **The reset clears the display metrics and the window handle too.** The canonical class comment
-  says they survive; the implementation clears them deliberately, so a leaked display size cannot
-  corrupt another test's scaled coordinates. This contract follows the behavior.
-
-The display size, orientation, enabled gestures, window handle and device-exists flag are all
-process-wide state. Restore what you change. As with text input, do not assume the window handle
-starts at zero — a windowed backend publishes a real one.
+`cna_text_input_reset_for_tests_ext` clears every subscriber and both window identifiers.
+Outstanding registration handles still require unsubscription; removing an already-cleared
+subscription succeeds once, then the released handle is stale. Restoring the raw handle alone
+cannot restore the original window pair.
 
 ## Haptics
 
-`input_haptics.h` maps the `CNA::Input` force-feedback family. It is the only input family with no
-XNA counterpart at all, so — following `core_ext.h` — the whole header maps a CNA-namespace surface
-and its routes carry no `_ext` suffix. It is also the only input family whose canonical type is an
-owned resource rather than a value: `HapticDevice` becomes an owned `CNA_HapticDeviceHandle`, with
-the same destructor/`Dispose` split `MouseCursor` uses, so a caller can close a device without
-giving up its handle.
+`input_haptics.h` maps the CNA force-feedback family. Open routes require a live game and return
+an owned `CNA_HapticDeviceHandle`. Missing hardware/service can yield a valid closed device;
+check `get_is_open`. A standalone open device may provide rumble without an effect-device
+interface, so open state does not prove arbitrary effect support.
 
-**A closed device is not an error state.** `cna_haptics_open`, `..._open_from_joystick` and
-`..._open_from_mouse` never fail for want of hardware: each hands back a real handle, and
-`cna_haptic_device_get_is_open` reports whether anything is behind it. Every other route on a closed
-device succeeds and answers `CNA_FALSE`, zero or -1 through its output. That is what makes the
-family usable — and testable — on a machine with no force-feedback hardware, which is the normal
-case.
+For valid arguments on a closed device, actions return false, effect creation returns -1, the name
+is empty and capability effect limits remain -1 (unknown). Argument/handle/thread validation and
+allocation/platform failures remain possible; closed state does not bypass descriptor checks.
+Dispose closes native resources while keeping the handle; destroy releases it.
 
-Two representational decisions are worth knowing before using the header:
-
-- **A custom waveform travels beside the effect, not inside it.** The canonical descriptor owns its
-  sample vector; `CNA_HapticEffect` does not, so it stays a plain copyable POD. Every route that
-  takes an effect takes a `custom_data` pointer and a sample count alongside it.
-- **The device name is not part of the capability value.** A string does not belong in a POD, so
-  read it with `cna_haptic_device_get_name_size`/`_copy_name`. That is why
-  `cna_haptic_capabilities_equals` takes both names as arguments: it reproduces the canonical
-  comparison exactly rather than quietly comparing fewer fields than the canonical operator does.
-
-Canonical behavior preserved rather than tidied up: rumble strength, gain and autocenter are handed
-to the platform unvalidated; freeing an unknown effect identifier is a successful no-op, because the
-canonical operation reports nothing; and a closed device's capability value keeps `max_effects` and
-`max_effects_playing` at **-1**, which means "unknown" and is deliberately distinguishable from
-"none". `CNA_HapticFeature` is a real bit set, so its five canonical operators need no route — C
-composes them itself, and every route validates against `CNA_HAPTIC_FEATURE_ALL`.
-
-No `SDL_Haptic` ever crosses the ABI. The device enumeration is a point-in-time snapshot taken by
-each call, so an index from `cna_haptics_get_count` is only valid until the device set changes.
+Custom waveform samples travel in a separate `uint16_t` pointer/count beside the POD effect.
+Effect conversion validates its version, effect/direction identities and sample pointer/count,
+then copies the samples. Capability names likewise travel separately through size/copy routes and
+are explicit inputs to capability equality. Feature flags use C bitwise operations; capability
+equality forwards their stored bits rather than universally rejecting unknown bits.
+Rumble strength, gain and autocenter are forwarded without C-side clamping.
 
 ## Raw joysticks
 
-`input_joystick.h` maps the `CNA::Input` raw-joystick family — flight sticks, wheels, throttles and
-arbitrary HID controllers that `GamePad` cannot represent. Like haptics it is a CNA-namespace
-surface, so its routes carry no `_ext` suffix except the two hot-plug events and the test reset,
-whose names follow the canonical members. Everything here is raw and unmapped: axis order, button
-numbering and hat count are whatever the hardware reports, with no XNA semantic assignment. A device
-the platform also maps as a gamepad appears here too, as `CNA_JOYSTICK_TYPE_GAMEPAD` — an
-independent view of the same hardware, not a second copy of `GamePad`.
+`input_joystick.h` exposes raw axes, buttons, hats and trackballs, with device-specific ordering
+and no XNA button mapping. A controller recognized as a gamepad can also appear in this raw list.
+Enumeration is refreshed per call, so index-based info/name calls can observe hot-plug changes.
 
-**A snapshot is an owned handle, not a value.** This is the one place the input families depart from
-the fixed-POD rule, and deliberately. The canonical `JoystickStateEXT` carries four heterogeneous
-variable-length arrays — axes, buttons, hats and trackballs — with no canonical maximum, unlike the
-touch panel's fixed eight slots. A fixed value would have to invent a capacity, and any capacity
-small enough to be reasonable silently truncates a real HOTAS setup. Four independent per-array
-queries would avoid that but would answer from four different instants. So
-`cna_joysticks_capture_state` captures once into a `CNA_JoystickStateHandle`, and each array is read
-with its own count/copy pair against that one instant. Release it with `cna_joystick_state_destroy`.
+`cna_joysticks_capture_state` creates an owned snapshot with four variable-length arrays.
+Count/copy routes read those captured arrays, and an undersized copy leaves its array unchanged.
+Capture of an absent id succeeds with empty arrays. Absent capabilities report disconnected,
+zero counts, unknown type/power, power percent -1 and empty name/GUID. Name/GUID reads are separate
+live queries; they are explicit inputs to capability equality.
 
-**A hat is an identity, not a bit set.** The platform encodes a POV hat as an up/down bit combined
-with a left/right bit, but the canonical enumeration lists the nine reachable combinations, and so
-does `CNA_JoystickHatPosition`: `CNA_JOYSTICK_HAT_POSITION_RIGHT_UP` is 5, not `RIGHT | UP`. Do not
-compose these values.
+POV hat values are nine ordinal identities, not combinable direction bits: RIGHT_UP is 5.
+Trackball values are relative deltas. With SDL3, native polling consumes the hardware deltas and
+stores them in the platform snapshot; repeated C captures copy that stored value without consuming
+it again. This differs from relative mouse reads.
 
-**An absent device is an ordinary answer, not a failure** — the same contract haptics established.
-`cna_joysticks_get_capabilities` on an identifier that is not connected succeeds with
-`is_connected` false, zero counts, an unknown type and power state, a power percent of **-1**
-("unknown", deliberately distinguishable from an empty battery) and two empty strings;
-`cna_joysticks_capture_state` succeeds with four empty arrays. As with haptics, that is what makes
-the family testable on a machine with no joystick, which is the normal case.
-
-Two strings stay outside the capability value, for the reason a string never belongs in a POD: the
-device name and the device GUID are read by identifier through
-`cna_joysticks_get_capabilities_name_size`/`_copy_capabilities_name` and the matching GUID pair, and
-`cna_joystick_capabilities_equals` therefore takes both strings alongside both values so it
-reproduces the canonical ten-field comparison exactly. The GUID is the canonical lowercase
-hexadecimal text, not a binary value. The enumerated descriptor works the same way:
-`CNA_JoystickInfo` carries the identifier and type, and the name comes from
-`cna_joysticks_get_name_size_at`/`_copy_name_at`.
-
-The two hot-plug events are process-wide static fields, exactly like the mouse and text-input
-events, so their subscriptions take no game handle. One shared `cna_joysticks_unsubscribe_ext`
-releases either kind, `cna_joysticks_raise_connected_ext`/`_raise_disconnected_ext` invoke the same
-public field the platform layer invokes, and `cna_joysticks_reset_for_tests_ext` clears every
-subscriber — process-wide state a caller does not own alone. Releasing a registration after that
-reset removes nothing rather than failing.
-
-No `SDL_Joystick` ever crosses the ABI. The enumeration reports the devices the native layer
-currently holds open and is a point-in-time snapshot taken by each call, so an index from
-`cna_joysticks_get_count` is only valid until the device set changes. Trackball values are relative
-motion since the previous read, so capturing consumes them.
+Connected/disconnected subscriptions are process-wide and need no game. Raise/reset routes do
+take a game. Reset clears subscribers without releasing their registration handles; unsubscribe
+each handle afterwards.
 
 ## Host sensors, device enumeration, clipboard and power
 
-`input_devices.h` maps the last four `CNA::Input` extensions, all of them small host-system
-queries: the machine's own motion sensors, the connected-device lists, the system clipboard and the
-battery state. None has an XNA counterpart, so the routes take no `_ext` suffix except the hot-plug
-events and the test reset.
+`input_devices.h` exposes host accelerometer/gyroscope readings, sensor enumeration, mouse/
+keyboard/touch-device metadata, text clipboard operations and power. Host sensor absence is
+successful with `out_available = false`, leaving the reading untouched. These sensors are
+separate from the controller sensor routes.
 
-**Availability is separate from the answer, and the answer is left alone.**
-`cna_sensors_get_accelerometer` and `cna_sensors_get_gyroscope` report through an `out_available`
-flag; having no sensor is an ordinary success, not a failure. When the flag is false the reading
-output is **left exactly as the caller left it**, because the canonical query leaves its reference
-untouched — so a caller that pre-fills a value keeps it. These are the machine's own sensors; a
-controller's are `cna_gamepad_get_gyro_ext` and `cna_gamepad_get_accelerometer_ext`.
+Device lists are metadata only: a listed id does not select a separate XNA keyboard or mouse
+state. `CNA_InputDeviceInfo` uses a 64-bit id to accommodate touch devices. Each index-based
+query re-enumerates, and names remain separate UTF-8 size/copy results. Four mouse/keyboard
+hot-plug events use process-wide subscriptions and family unsubscription.
 
-The three device lists — mice, keyboards, touch devices — are the same index-addressed enumeration
-the joystick and haptic families use: `cna_input_devices_get_mouse_count`, `_get_mouse_info_at`,
-`_get_mouse_name_size_at`, `_copy_mouse_name_at`, and the keyboard and touch equivalents. They are
-**metadata only**, exactly as the canonical class documents: XNA input state stays merged across
-devices, so an identifier here does not select a device to read from. `CNA_InputDeviceInfo` carries
-a `uint64_t` identifier, wider than the sensor and joystick descriptors, because a touch-device
-identifier is 64-bit natively.
+Clipboard set validates the text and requests the native void operation. Missing service and
+suppressed platform write failures can still return success; readback is a separate observation,
+and another process can change the clipboard between size/copy calls. This C family exposes text;
+native primary-selection and MIME-data additions are not implied by it.
 
-The four hot-plug events work like the joystick pair: process-wide static fields, so their
-subscriptions take no game handle, one shared `cna_input_devices_unsubscribe_ext` releases any of
-them, each has a raise route, and `cna_input_devices_reset_for_tests_ext` clears all four at once.
+Power reports state, seconds remaining and percent. Unknown/Error are result values, and -1
+means an unknown duration or percentage.
 
-**The clipboard's setter reports that the request was made, not that it succeeded.** The canonical
-operation returns nothing, so there is no platform outcome to forward, and this ABI does not invent
-one: `cna_clipboard_set_text` succeeds even where the platform ignores it — a headless session with
-no clipboard, or a browser that requires a user gesture. Read it back with
-`cna_clipboard_get_text_size`/`cna_clipboard_copy_text` if the outcome matters. The clipboard is
-also process-external state that another application can change between two calls, so treat the size
-as a hint and always use the byte count the copy itself reports.
+## Validation and scope boundary
 
-`cna_power_get_info` returns the same `CNA_PowerState` identity the gamepad power query uses and
-always writes all three outputs. `CNA_POWER_STATE_UNKNOWN` and `CNA_POWER_STATE_ERROR` are canonical
-answers rather than C failures, and -1 in the remaining-seconds or percent output means "unknown"
-rather than "none left".
+The strict-C tests are `CApi_InputSnapshotsSmoke`, `CApi_HapticsSmoke`,
+`CApi_JoystickSmoke` and `CApi_InputDevicesSmoke`. They cover local values, malformed inputs,
+event dispatch/lifetime, handle/thread failures and live-query or absent-device outcomes.
+Key/button identity checks and C17/C++23 header builds cover the ABI declarations.
 
-## Current scope boundary
+The current audit runs these C tests through the private SDLGPU runner. The text smoke restores
+only a raw handle after reset and accepts an inactive result; it does not prove real IME activation.
+Native `TextInputEXTTest` cases separately exercise published handle/id pairs through a test
+platform. Physical gamepad, touch, sensor and force-feedback behavior requires the hardware/platform
+evidence in [`input-manual-verification-results.md`](../input-manual-verification-results.md).
 
-Apart from the text-input, joystick and device hot-plug events above, the input families
-deliberately expose no live native state pointer or per-key platform call. Every public `input`
-declaration now has a C mapping, so the module's share of the coverage matrix is closed.
+C API coverage is tracked in [`COVERAGE.md`](COVERAGE.md); the input module still has planned
+rows. A mapped declaration or passing absent-device smoke does not establish complete hardware
+support. Native behavior and platform limits are in [`input-backend.md`](../input-backend.md) and
+[`input-fna-fidelity.md`](../input-fna-fidelity.md).

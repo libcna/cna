@@ -53,10 +53,10 @@ typedef struct CNA_TextEditingEventInfo {
      */
     CNA_StringView text;
 
-    /** @brief Byte offset of the active editing region inside @ref text. */
+    /** @brief Platform IME start position in characters, forwarded without byte conversion. */
     int32_t start;
 
-    /** @brief Byte length of the active editing region inside @ref text. */
+    /** @brief Platform IME selection length in characters, forwarded unchanged. */
     int32_t length;
 } CNA_TextEditingEventInfo;
 
@@ -198,15 +198,14 @@ CNA_C_API CNA_Result cna_text_input_raise_text_input_ext(
  *
  * @param game Active owned or callback-borrowed game handle.
  * @param text Borrowed UTF-8 draft composition, copied before dispatch.
- * @param start Byte offset of the active editing region.
- * @param length Byte length of the active editing region.
+ * @param start IME start position in characters, forwarded as supplied.
+ * @param length IME selection length in characters, forwarded as supplied.
  * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_ENCODING` when @p text is not valid UTF-8; or a
  *         documented argument/handle/thread/native failure.
  *
- * `start` and `length` are passed straight through, exactly as the canonical dispatch does. They
- * are byte offsets into a multi-byte string, not character counts, and are deliberately not
- * validated against the text length — the canonical implementation forwards SDL's IME values
- * unchanged and a C consumer must index the text carefully.
+ * `start` and `length` are passed straight through without validation against the text length.
+ * The platform contract uses character coordinates; this route does not convert them to UTF-8
+ * byte offsets or normalize values supplied by the caller.
  */
 CNA_C_API CNA_Result cna_text_input_raise_text_editing_ext(
     CNA_Handle game,
@@ -251,16 +250,15 @@ CNA_C_API CNA_Result cna_text_input_get_window_handle_ext(
     uint64_t* out_window);
 
 /**
- * @brief Binds the text-input APIs to a native window handle.
+ * @brief Stores the raw text-input window handle and clears its portable platform identity.
  *
  * @param game Active owned or callback-borrowed game handle.
  * @param window Opaque native window value; zero unbinds.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
- * Only zero is guarded. A nonzero value is handed to the platform backend unvalidated, exactly as
- * the canonical property does, so it must be a live native window supplied by the platform layer.
- * With no window bound, every activation and placement route below is a successful no-op and every
- * query answers false.
+ * Activation needs the handle/id pair published by the native graphics layer. This setter clears
+ * the id even when assigning the same raw handle, so restoring only this value does not restore
+ * activation. Without the published id, activation/placement are no-ops and queries return false.
  */
 CNA_C_API CNA_Result cna_text_input_set_window_handle_ext(
     CNA_Handle game,
@@ -299,7 +297,8 @@ CNA_C_API CNA_Result cna_text_input_is_screen_keyboard_shown_ext(
  * @param out_shown Receives `CNA_TRUE` when the keyboard is shown for that window.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
- * This maps the canonical explicit-window overload, which ignores the bound window handle.
+ * Only the currently published handle/id pair can reach the platform service. An unrelated raw
+ * handle returns false.
  */
 CNA_C_API CNA_Result cna_text_input_is_screen_keyboard_shown_for_window_ext(
     CNA_Handle game,
@@ -312,7 +311,8 @@ CNA_C_API CNA_Result cna_text_input_is_screen_keyboard_shown_for_window_ext(
  * @param game Active owned or callback-borrowed game handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
- * With no window bound this succeeds and changes nothing, matching the canonical null guard.
+ * Without a published platform window id this succeeds and changes nothing. Native platform
+ * activation failures are suppressed by the void contract; query the resulting active state.
  */
 CNA_C_API CNA_Result cna_text_input_start_ext(CNA_Handle game);
 
@@ -360,9 +360,9 @@ CNA_C_API CNA_Result cna_text_input_set_input_rectangle_ext(
  * @param game Active owned or callback-borrowed game handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
- * This maps the canonical test-support reset: it clears the bound window handle and drops every
- * subscription to all three events, including ones this API handed out. A registration released
- * afterwards is a no-op.
+ * Clears both window identifiers and every subscriber to all three events. Registration handles
+ * still need unsubscription; their first release succeeds even when the subscription was cleared.
+ * Restoring only the raw window handle does not restore the portable id needed for activation.
  */
 CNA_C_API CNA_Result cna_text_input_reset_for_tests_ext(CNA_Handle game);
 
