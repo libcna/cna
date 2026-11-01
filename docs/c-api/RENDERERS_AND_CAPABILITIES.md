@@ -1,106 +1,167 @@
-# CNA C API Renderers and Capabilities
+# CNA C API renderers and capabilities
 
-## CNA owns renderer selection
+Status: reconciled with the C headers, C++ adapters, detailed capability profile and pure-C
+contract tests on **2026-11-01**.
 
-The C API uses the renderer CNA selects. It does not expose a renderer pointer or create a renderer
-selection path of its own. The C API reports the active renderer identity, build/platform
-capabilities and supported feature flags using fixed-width POD output.
+## Renderer ownership and selection
 
-A build that compiles several renderers in chooses among them at run time
-([`runtime-renderer-selection.md`](../runtime-renderer-selection.md)), and the CNAEXT `cna_graphics_renderer_*_ext` family in
-`core_ext.h` is the C face of that same `CNA::GraphicsRendererSelection`, not a second mechanism. It
-lists the renderers compiled into the build (`cna_graphics_renderer_get_available_count_ext`,
-`_copy_available_ext`, `_get_is_available_ext`), accepts a preferred renderer by identity or name and
-a fallback chain until the first device latches the choice, and then reports the selected and
-active renderers and every fallback record with its reason and message.
+The C API uses CNA's renderer registry and `GraphicsRendererSelection`; it does not expose a
+renderer pointer or maintain a second selection mechanism. A single-renderer build contains one
+identity. A multi-renderer build contains several and may select or fall back at run time as
+documented in [`runtime-renderer-selection.md`](../runtime-renderer-selection.md).
 
-An operation unavailable on the active renderer returns `CNA_RESULT_NOT_SUPPORTED` and leaves any
-documented output parameter unchanged. It must not silently substitute different graphics behavior.
+The C surface distinguishes four renderer answers that must not be conflated. The first three are
+no-device queries in `core_ext.h`; the fourth belongs to a borrowed graphics device:
 
-## Capability queries
+- `cna_graphics_renderer_get_current_type` and its name/category/maturity companions describe the
+  build's **compile-time default**;
+- `cna_graphics_renderer_get_selected_ext` reports the renderer CNA will try first;
+- `cna_graphics_renderer_get_active_ext` reports the renderer that actually created the device and
+  refuses the query before selection is latched;
+- `cna_graphics_device_get_renderer_info` reports the active identity of that borrowed device.
 
-`cna_game_get_graphics_device` returns one callback-scoped borrowed device handle. Repeated queries
-within the same callback return the same handle; CNA invalidates it before the callback returns.
-The handle cannot be obtained outside a lifecycle callback and has no release operation.
+The `_available_*_ext` routes enumerate the identities compiled into the binary. Preferred
+identity, explicit fallback chain and automatic fallback may be changed only before the first
+graphics device latches selection. The fallback-history routes then expose every rejected attempt,
+its stable reason and its diagnostic text. Category and maturity are classifications, not feature
+promises; their exact mapping is in [`renderer-registry.md`](../renderer-registry.md).
 
-`CNA_RendererInfo` reports a stable `CNA_GraphicsRendererType`, the canonical renderer name length,
-the device's maximum single-axis texture dimension and a capability bit set. The matching
-one-capability query is authoritative when new capabilities no longer fit the current structure
-version. Renderer names use the UTF-8
-query/copy protocol rather than raw native string pointers. Every answer delegates to
-`GraphicsDevice::GetGraphicsRendererName`, `GetMaxTextureDimension` or `SupportsCapability`; the C
-adapter does not maintain a renderer-name feature table that could drift from CNA.
+## Borrowed graphics-device handle
 
-A recognized capability that is unavailable is a successful query returning `CNA_FALSE` and an
-unset bit. An operation that requires it returns `CNA_RESULT_NOT_SUPPORTED` and leaves documented
-outputs unchanged. An unknown capability identifier returns `CNA_RESULT_INVALID_ARGUMENT`.
+`cna_game_get_graphics_device` returns a borrowed handle in either of two validity windows:
 
-## The two identity ranges are closed and enumerable
+- during a lifecycle callback, from the callback-borrowed game handle, until that callback returns;
+- before the first run, step or tick, from the owned game handle, until the first callback returns.
 
-`CNA_GRAPHICS_RENDERER_UNKNOWN` through `CNA_GRAPHICS_RENDERER_MAXIMUM`, and
-`CNA_GRAPHICS_CAPABILITY_THREE_D` through `CNA_GRAPHICS_CAPABILITY_MAXIMUM`, are **bounded** ranges,
-so a consumer can walk either space without naming each member and without a table of its own that
-would drift. Anything above either maximum is refused by every route that accepts that identity;
-`CNA_GRAPHICS_RENDERER_UNKNOWN` is a value routes *report*, never one they accept.
+Repeated queries in the same window return the same handle. It has no release operation and must
+not be retained past its window. Once a run has begun, an out-of-callback query is refused. Owned
+resources created through the borrowed device, such as textures and a `SpriteBatch`, have their own
+handles and lifetimes; the borrowed device itself never becomes owned by C.
 
-**The renderer range is bounded but not contiguous, and a walker must expect gaps.** A retired
-identity's value is permanently reserved and never reassigned, so 1, 2, 5, 7, 8, 10, 14–21, 23–30,
-32–42 and 44–51 are holes: forty-one identities have been retired (`docs/removed-renderers.md`). A reserved value is a well-formed `uint32_t` in range that no longer names a
-renderer, and every route that takes a renderer identity refuses it with
-`CNA_RESULT_INVALID_ARGUMENT` — "not a public CNA renderer identity" — exactly as it refuses a value
-that was never assigned. Walking the range and keeping what is accepted is therefore correct; walking
-it and *assuming* each value names a renderer is not. The capability range has no such gaps: the
-two capabilities of the retired modern GPU layer (`COMPUTE_SHADERS` 17, `INDIRECT_DRAW` 18) were the
-last two values, so removing them moved `CNA_GRAPHICS_CAPABILITY_MAXIMUM` back to 16.
+## Capability query layers
 
-The detailed renderer-feature and renderer-limit ranges, by contrast, have gaps for the same reason
-the renderer range does. Features 18, 19, 20 and 23 and limits 2–10, 12, 13, 15, 19 and 21 named
-compute, storage, texture-array, indirect-draw and timestamp contracts of that retired layer; they are
-permanently reserved, and `cna_graphics_device_get_renderer_feature_support_ext` and
-`cna_graphics_device_get_renderer_limit_ext` refuse them with `CNA_RESULT_INVALID_ARGUMENT`. Format
-usage bits 5–7 are reserved the same way and `CNA_RENDERER_FORMAT_USAGE_ALL` excludes them.
+The answers belong to the active device, its graphics profile, native adapter/driver and current
+presentation state. Renderer identity is useful orientation but is not a safe substitute for a
+capability query.
 
-Both ranges are held against CNA's own enumerations at compile time, because they had already
-fallen behind: `TINYGL`, `IGL` and `PIXIJS` existed as CNA renderers with no C identity at all, so
-each was refused as "not a public CNA renderer identity" while the coverage matrix recorded it as
-mapped. (All three identities have since been retired, which does not weaken the point — the gate
-is what keeps the two sides equal in either direction.) The C identity table is pinned to the count
-of renderers CNA declares, and the capability translation is exhaustive over CNA's enumeration, so
-a renderer or capability added to CNA without a C identity fails the build rather than reaching a
-consumer as `UNKNOWN`, and one removed from CNA without its C constant being retired fails it too.
-That gate caught `NANOVG` during the `modern`-into-`next` merge, before the merged C library could
-publish a renderer it would later report as unknown.
+### Legacy summary
 
-Platform-device availability uses the same successful-snapshot rule. `cna_touch_get_capabilities`
-reports connection and maximum touches, while `cna_audio_get_capabilities` probes CNA's real native
-audio mixer and reports whether playback can currently be opened. Applications therefore need not
-infer device support from the graphics renderer, operating-system name or build configuration.
-The audio probe can initialize CNA's process-wide mixer but creates no owned C handle.
+Version 1 of `CNA_RendererInfo` reports:
 
-## Initial SpriteBatch state boundary
+- the active `CNA_GraphicsRendererType`;
+- canonical renderer-name byte length;
+- maximum two-dimensional texture width or height;
+- the 64-bit `CNA_GraphicsCapabilityFlags` compatibility summary.
 
-The initial batched C path maps every native `SpriteSortMode` and the two `SpriteEffects` bits. Its
-begin state is intentionally fixed to XNA's defaults: AlphaBlend, LinearClamp,
-DepthStencilState.None, CullCounterClockwise, identity transform and no custom effect. State-object
-and effect handles are later coverage work; the adapter does not invent approximate replacements.
-If a renderer raises `System::NotSupportedException` while creating, beginning, submitting or
-ending this path, the exception barrier returns `CNA_RESULT_NOT_SUPPORTED`. The active-batch
-destroy route remains available for cleanup after a failed flush.
+The name itself uses the normal UTF-8 size/copy pair. The adapter obtains every value from the
+native `GraphicsDevice`; it has no independent renderer-name capability table.
+
+`cna_graphics_device_supports_capability` is the authoritative one-capability form. The defined
+`CNA_GraphicsCapability` identities are contiguous from `THREE_D` through `MAXIMUM`. A recognized
+but unavailable capability succeeds and writes `CNA_FALSE`; an undefined identity returns
+`CNA_RESULT_INVALID_ARGUMENT`. `MULTIPLE_RENDER_TARGETS` and `TEXTURE_3D` also reflect the current
+Reach/HiDef graphics profile.
+
+The flags remain a compatibility summary. New code that needs an atomic promise, a numeric limit
+or a per-format answer should use the detailed layer rather than infer it from a broad bit.
+
+### Detailed profile
+
+The CNAEXT routes expose the same cached `RendererCapabilityProfile` described in
+[`renderer-capability-profiles.md`](../renderer-capability-profiles.md):
+
+- `cna_graphics_device_get_renderer_feature_support_ext` returns `UNKNOWN`, `UNSUPPORTED`,
+  `SUPPORTED` or `RESTRICTED` for one defined feature;
+- `cna_graphics_device_get_renderer_limit_ext` returns a `known` flag and a value, with zero used
+  for an unknown value and also permitted as a real known limit;
+- `cna_graphics_device_get_surface_format_support_ext` returns separate known-usage and
+  supported-usage masks, with supported bits always a subset of known bits;
+- the capability-report size/copy pair exposes the cached diagnostic report as non-terminated
+  UTF-8 text.
+
+`RESTRICTED` is not equivalent to `SUPPORTED`; callers must read the feature-specific contract.
+An absent known-usage bit means unknown, not unsupported. The report is diagnostic prose and must
+not be parsed as a machine protocol.
+
+Feature and limit identities are append-only but sparse because retired values stay reserved.
+Reserved or out-of-range feature/limit values return `CNA_RESULT_INVALID_ARGUMENT`, not an
+`UNKNOWN` answer. Format-usage bits 5-7 are likewise retired, and
+`CNA_RENDERER_FORMAT_USAGE_ALL` excludes them. The canonical defined catalogs, retired gaps,
+snapshot invalidation points and operation-specific meanings belong to the detailed-profile page.
+
+## Renderer identity values
+
+`CNA_GraphicsRendererType` is a stable, sparse numeric identity. Live constants are never
+renumbered and a retired value is never reused. `CNA_GRAPHICS_RENDERER_UNKNOWN` is report-only and
+is refused by every identity-taking route.
+
+`CNA_GRAPHICS_RENDERER_MAXIMUM` is the highest-valued **live** identity (`FNA3D`, value 43). It is
+not a count, a promise that every lower value is live or the highest value ever assigned: retired
+values also exist above it. A consumer that needs this binary's usable set must call the
+`_available_*_ext` routes rather than scan integers and assume each one is valid. The permanent
+retired-name/value ledger and next never-assigned value are in
+[`removed-renderers.md`](../removed-renderers.md).
+
+A retired numeric value returns `CNA_RESULT_INVALID_ARGUMENT`; the error message identifies the
+retired renderer and says that its value remains reserved. The name-taking selection route gives
+the corresponding retired-name diagnostic. The predicate
+`cna_graphics_renderer_try_parse_name_ext`, by contrast, succeeds with `out_recognized` false for
+both unknown and retired names because neither names a public live identity. `SDL_GPU` is a
+refused former CMake spelling of live `SDLGPU`, not another retired value; the C name parser simply
+does not recognize it.
+
+The C/C++ identity mapping and live/retired registries are mechanically checked by
+`scripts/check_renderer_identities.py`. Adding, removing or restoring a renderer requires an
+explicit C identity decision; an unmapped renderer fails the registry gate instead of degrading
+to `UNKNOWN` at run time.
+
+## SpriteBatch state boundary
+
+`cna_sprite_batch_begin` maps every native `SpriteSortMode` and uses XNA's default state tuple:
+AlphaBlend, LinearClamp, DepthStencilState.None, CullCounterClockwise, identity transform and the
+default sprite effect. The two `SpriteEffects` mirror bits are accepted per submitted command.
+
+The wider overloads are also exposed:
+
+- `cna_sprite_batch_begin_with_states` accepts complete blend, sampler, depth/stencil and
+  rasterizer descriptors;
+- `cna_sprite_batch_begin_with_effect` accepts optional state descriptors, an owned Effect handle
+  from the same game and an optional transform. `CNA_INVALID_HANDLE` selects the default effect and
+  a null matrix selects identity.
+
+If the active renderer refuses creation, begin, submission or flush with
+`System::NotSupportedException`, the exception barrier returns `CNA_RESULT_NOT_SUPPORTED`.
+Destroying an active batch cancels queued deferred commands and remains available for cleanup
+after a failed end/flush.
 
 ## Backbuffer readback boundary
 
-`CNA_BackBufferInfo` reports the logical dimensions and format from canonical presentation
-parameters. Full-buffer RGBA8 readback uses the native `GraphicsDevice::GetBackBufferData(Color*)`
-route after capacity validation and copies through native `Color` values; it never exposes or
-reinterprets renderer memory. HEADLESS has no rasterized backbuffer and returns
-`CNA_RESULT_NOT_SUPPORTED` without modifying the destination. On a renderer that can read its
-backbuffer back, `LifecycleSmoke.c` verifies the exact red, green and blue uploaded texels plus an
-untouched clear pixel before presentation.
+`CNA_BackBufferInfo` reports logical dimensions and the canonical presentation format.
+`cna_graphics_device_get_backbuffer_data_rgba8` reads the complete logical backbuffer and reports
+the required pixel count. `cna_graphics_device_get_backbuffer_data_window` accepts a versioned
+source rectangle, destination start index and element count for a bounded readback. Both copy
+through native `Color` values; neither exposes or reinterprets renderer memory.
 
-## Test policy
+Capacity and structure errors are decided before native readback. Pixel writes are all-or-nothing,
+including when the renderer returns `CNA_RESULT_NOT_SUPPORTED`. Callers must still follow each
+route's documented scalar-output rules: the full-buffer route reports its required count before
+the native read is attempted. `HEADLESS` has no rasterized backbuffer and honestly returns
+`CNA_RESULT_NOT_SUPPORTED`.
 
-HEADLESS is the deterministic lifecycle/state control. It proves C callback order, handle lifetime,
-error behavior and honest refusal when no pixel result exists. It cannot by itself prove visual
-pixel correctness, so the same C test checks exact pixels wherever the backbuffer can be read back. Every later rendering claim requires an appropriate real-renderer observation in
-addition to HEADLESS. Renderer-specific unavailability is recorded in the public C API coverage
-matrix and feature documentation.
+## Verification policy
+
+The pure-C suites divide the contract by responsibility:
+
+- `CoreExtSmoke` covers identities, compile-time/selected/active answers, availability, fallback
+  and retired diagnostics;
+- `GraphicsDeviceSmoke` covers the detailed feature/limit/format ranges, report buffers and
+  windowed backbuffer readback;
+- `GraphicsSurfaceSmoke` covers default, explicit-state and effect-bearing `SpriteBatch` begin;
+- `LifecycleSmoke` covers borrowed-handle lifetime, the legacy summary and exact full-backbuffer
+  pixels where readback exists.
+
+`HEADLESS` is the deterministic lifecycle, state and honest-refusal control; it cannot prove pixel
+correctness. Rendering claims therefore require a real-renderer observation in addition to the
+HEADLESS route. Current C API coverage is in [`COVERAGE.md`](COVERAGE.md), and current defects and
+platform qualification gaps belong only in
+[`handoff.md` section 5](../../handoff.md#5-known-bugs-and-limitations).

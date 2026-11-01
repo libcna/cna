@@ -443,6 +443,9 @@ static int validate_renderer_selection(void)
         cna_graphics_renderer_try_parse_name_ext(view("VULKAN"), &parsed, &recognized) !=
             CNA_RESULT_SUCCESS ||
         recognized != CNA_FALSE || parsed != CNA_GRAPHICS_RENDERER_UNKNOWN ||
+        cna_graphics_renderer_try_parse_name_ext(view("SDL_GPU"), &parsed, &recognized) !=
+            CNA_RESULT_SUCCESS ||
+        recognized != CNA_FALSE || parsed != CNA_GRAPHICS_RENDERER_UNKNOWN ||
         cna_graphics_renderer_try_parse_name_ext(view("HEADLESS"), 0, &recognized) !=
             CNA_RESULT_INVALID_ARGUMENT) {
         return (fprintf(stderr, "SEL ARM %d\n", 6), 0);

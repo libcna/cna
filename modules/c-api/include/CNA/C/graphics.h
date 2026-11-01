@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-/** @brief Fixed-width identity of the graphics renderer compiled into CNA. */
+/** @brief Fixed-width identity of a CNA graphics renderer. */
 typedef uint32_t CNA_GraphicsRendererType;
 
 /** @brief Indicates an unknown renderer identity. */
@@ -507,7 +507,7 @@ typedef struct CNA_RendererInfo {
     /** @brief Bit set of capabilities reported by the active native graphics device. */
     CNA_GraphicsCapabilityFlags capability_flags;
 
-    /** @brief Stable identity of the graphics renderer compiled into CNA. */
+    /** @brief Stable identity of the active graphics renderer used by this device. */
     CNA_GraphicsRendererType renderer_type;
 
     /** @brief Maximum supported width or height of a two-dimensional texture in pixels. */

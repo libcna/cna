@@ -396,7 +396,7 @@ CNA_C_API CNA_Result cna_graphics_renderer_get_category(
     CNA_GraphicsRendererCategory* out_category);
 
 /**
- * @brief Reports the implementation-technology category of the renderer compiled into this build.
+ * @brief Reports the implementation-technology category of the compile-time default renderer.
  *
  * @param out_category Receives the category identity.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
@@ -446,7 +446,7 @@ CNA_C_API CNA_Result cna_graphics_renderer_get_maturity(
     CNA_GraphicsRendererMaturity* out_maturity);
 
 /**
- * @brief Reports the recommendation maturity of the renderer compiled into this build.
+ * @brief Reports the recommendation maturity of the compile-time default renderer.
  *
  * @param out_maturity Receives the maturity identity.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
@@ -482,17 +482,6 @@ CNA_C_API CNA_Result cna_graphics_renderer_maturity_copy_name(
     uint64_t capacity,
     uint64_t* out_bytes);
 
-/**
- * @brief Reports the renderer identity compiled into this build.
- *
- * @param out_type Receives the renderer identity.
- * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
- *
- * Unlike `cna_graphics_device_get_renderer_info`, this needs no device and no graphics
- * initialization: the
- * canonical query is a compile-time constant. An identity is not a capability claim — probe the
- * behavior a consumer actually depends on rather than branching on this value.
- */
 /** @brief Fixed-width reason a renderer was passed over during selection. */
 typedef uint32_t CNA_GraphicsRendererFallbackReason;
 
@@ -758,10 +747,21 @@ CNA_C_API CNA_Result cna_graphics_renderer_try_parse_name_ext(
  */
 CNA_C_API CNA_Result cna_graphics_renderer_reset_selection_for_tests_ext(void);
 
+/**
+ * @brief Reports the build's compile-time default renderer identity.
+ *
+ * @param out_type Receives the renderer identity.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * Unlike `cna_graphics_device_get_renderer_info`, this needs no device and no graphics
+ * initialization: the canonical query is a compile-time constant. In a multi-renderer build it
+ * does not report a later run-time selection or fallback result. An identity is not a capability
+ * claim; probe the behavior a consumer actually depends on rather than branching on this value.
+ */
 CNA_C_API CNA_Result cna_graphics_renderer_get_current_type(CNA_GraphicsRendererType* out_type);
 
 /**
- * @brief Reports the compiled-in renderer's name length without a terminator.
+ * @brief Reports the compile-time default renderer's name length without a terminator.
  *
  * @param out_bytes Receives the required byte count without a terminator.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
@@ -769,7 +769,7 @@ CNA_C_API CNA_Result cna_graphics_renderer_get_current_type(CNA_GraphicsRenderer
 CNA_C_API CNA_Result cna_graphics_renderer_get_current_name_size(uint64_t* out_bytes);
 
 /**
- * @brief Copies the compiled-in renderer's name without a terminator.
+ * @brief Copies the compile-time default renderer's name without a terminator.
  *
  * @param destination Caller-owned destination, or null only when @p capacity is zero.
  * @param capacity Destination capacity in bytes.

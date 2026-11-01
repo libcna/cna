@@ -1,7 +1,7 @@
 # Stav dokumentace v `docs/`
 
 Inventura: 2026-11-01. Rozsah: všech 177 aktuálně verzovaných souborů `docs/**/*.md`.
-Souhrn: 53 zpracovaných, 22 podpůrně aktualizovaných čekajících na vlastní audit a 102 dosud
+Souhrn: 54 zpracovaných, 22 podpůrně aktualizovaných čekajících na vlastní audit a 101 dosud
 samostatně nezpracovaných.
 
 Tento soubor sleduje současný dokumentační úklid. Stav neříká, že čekající dokument je nutně
@@ -222,7 +222,7 @@ Odstraněné historické soubory (`graphics-ext-scope-reduction.md`,
 - ⬜ **ČEKÁ** — [`docs/c-api/OWNERSHIP.md`](docs/c-api/OWNERSHIP.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/README.md`](docs/c-api/README.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/RELEASE_GATE.md`](docs/c-api/RELEASE_GATE.md)
-- ⬜ **ČEKÁ** — [`docs/c-api/RENDERERS_AND_CAPABILITIES.md`](docs/c-api/RENDERERS_AND_CAPABILITIES.md)
+- ✅ **ZPRACOVÁNO** — [`docs/c-api/RENDERERS_AND_CAPABILITIES.md`](docs/c-api/RENDERERS_AND_CAPABILITIES.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/SHARP_RUNTIME_BOUNDARY.md`](docs/c-api/SHARP_RUNTIME_BOUNDARY.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/STORAGE.md`](docs/c-api/STORAGE.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/STRINGS_AND_BUFFERS.md`](docs/c-api/STRINGS_AND_BUFFERS.md)

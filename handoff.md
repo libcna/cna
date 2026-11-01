@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C renderer/capability contract reconciliation (2026-11-01):
+  `docs/c-api/RENDERERS_AND_CAPABILITIES.md` is rewritten from its initial-slice description to the
+  current C surface. It now distinguishes compile-time default, selected, active and per-device
+  identities; documents both callback and pre-run borrowed-device windows; separates the legacy
+  capability flags from the four-state feature, known limit and per-format mask profile; explains
+  sparse renderer/feature/limit identity spaces; and covers explicit-state/effect SpriteBatch
+  begin plus full and windowed backbuffer readback. The unrelated audio/touch paragraph and the
+  obsolete claim that state/effect handles were future work are gone. Public C header comments now
+  identify the compile-time default and active device renderer precisely, and the misplaced
+  `get_current_type` Doxygen block is attached to its declaration. `CoreExtSmoke` now pins former
+  `SDL_GPU` alongside retired `VULKAN` as unrecognized by the C name predicate. The four relevant
+  C smoke targets build and pass on the private display; the ABI-header baseline and all three
+  renderer registry/discipline/combination checks pass.
 - Removed-renderer archive reconciliation (2026-11-01): `docs/removed-renderers.md` remains the
   historical record for all 41 retired identities, but now separates its current permanent-value
   contract from dated coverage and validation evidence. It clarifies that retired constants are
