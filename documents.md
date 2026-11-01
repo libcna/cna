@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 149 reviewed, 12 updated incidentally and awaiting their own audit, and 16 not yet
+Summary: 150 reviewed, 12 updated incidentally and awaiting their own audit, and 15 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -71,7 +71,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/cnb-mmap-measurements.md`](docs/cnb-mmap-measurements.md)
 - ⬜ **PENDING** — [`docs/cnj-format.md`](docs/cnj-format.md)
 - ✅ **REVIEWED** — [`docs/consoles.md`](docs/consoles.md)
-- ⬜ **PENDING** — [`docs/content-pipeline-benchmark.md`](docs/content-pipeline-benchmark.md)
+- ✅ **REVIEWED** — [`docs/content-pipeline-benchmark.md`](docs/content-pipeline-benchmark.md)
 - 🟡 **PENDING — updated incidentally** — [`docs/content-pipeline.md`](docs/content-pipeline.md)
 - ✅ **REVIEWED** — [`docs/cross-renderer-parity-fixtures.md`](docs/cross-renderer-parity-fixtures.md)
 - ✅ **REVIEWED** — [`docs/d3d9-divergence-report.md`](docs/d3d9-divergence-report.md)

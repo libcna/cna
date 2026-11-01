@@ -1,12 +1,19 @@
-# CNA Content Pipeline scheduler benchmark
+# CNA Content Pipeline performance records
 
 > Status: developer performance evidence for `CP-028`, measured 2026-08-29. This is not a released
 > performance guarantee or a CI threshold.
 
-The reproducible harness is `tools/content/benchmark_content_pipeline.py`. It compares the explicit
-`--workers 1` serial fallback with a selected parallel worker count and verifies the SHA-256 of the
-complete output tree, including `.cna-content-manifest.json`, after every sample. A byte difference
-between serial and parallel results fails the run instead of being reported as performance data.
+The scheduler harness is `tools/content/benchmark_content_pipeline.py`. It compares explicit
+`--workers 1` with a selected parallel count, hashing sorted relative file paths and contents
+(including `.cna-content-manifest.json`) after each sample. It compares the resulting digest sets
+at the end of each scenario and fails on differences, including differences between repetitions
+at one worker count. Empty directories, permissions and timestamps are not part of this check.
+This tests byte determinism for the selected fixtures, not every custom component or graph.
+
+All timing/size tables on this page are dated historical records. The harness/fixtures/tests remain
+available, but the original binary hashes, full settings and raw samples for every table are not
+retained here. A current run measures the current source/dependency/build configuration rather
+than reproducing old numbers automatically.
 
 Run it from the repository root after building the stock and example custom compilers:
 
@@ -19,10 +26,15 @@ python3 tools/content/benchmark_content_pipeline.py \
   --json-output /tmp/cna-content-benchmark.json
 ```
 
-The harness creates its fixtures outside the repository and removes them after the run. Fixture
-copying, seed builds, output-tree verification, and cleanup are not timed. Serial and parallel
-sample order alternates each iteration to reduce systematic filesystem-cache/thermal ordering
-bias. Results are medians of wall-clock compiler subprocess duration; p95 is retained in JSON.
+The harness creates fixtures under the OS temporary root and removes them in `finally`, unless
+`--keep-workspace` is requested. It generates assets there, not CMake builds. Fixture copying,
+seed builds, output hashing and cleanup are outside the timer. Serial/parallel order alternates
+each iteration; samples are subprocess wall times, including startup and all compiler work.
+
+JSON retains every timing, medians and a floor-index p95 (with seven samples this is the maximum).
+The "cold" scenario deletes output/manifest, not OS page caches. The JSON records the checkout
+revision and basic host/count metadata, but no binary/input hashes, complete compiler/cache
+configuration, dependency versions or digest values. Preserve those separately for comparisons.
 
 ## CP-028 reference run
 
@@ -47,15 +59,15 @@ custom parents; every custom writer also produces one bounded child output.
 | one changed image in mixed tree | 0.452893 s | 0.208050 s | 2.177x | 0.468337 s | 0.222804 s |
 | one changed shared dependency, 96 parents | 0.094938 s | 0.076481 s | 1.241x | 0.098621 s | 0.078200 s |
 
-All serial/parallel tree checks passed. The smaller speedup for the custom graph is expected: its
-nodes perform little parsing or encoding, so process, graph, staging, hashing, and filesystem costs
-dominate. The measurements justify opt-in parallelism for non-trivial mixed directories while also
-supporting the conservative `workers=1` default for small builds and custom components whose
-reentrancy has not been established.
+The historical run reports all serial/parallel tree checks passed. Its synthetic custom nodes
+perform little parsing/encoding; the smaller observed speedup is consistent with a larger share of
+process/graph/staging/hashing/filesystem cost, but these aggregate timers do not profile that share.
+The result supported opt-in parallelism for these mixed directories. The current CLI still
+defaults to one worker; independently authored components need their own reentrancy qualification.
 
 Because this is a shared developer host and a Debug build, absolute times must not be compared
-across machines or used as a release threshold. The harness and JSON output are the authoritative
-way to repeat the experiment after scheduler changes.
+across machines or used as a release threshold. The harness and retained per-run JSON provide
+a method for comparing matched current configurations after scheduler changes.
 
 ## XNAP-93: XNB output and texture-policy costs
 
@@ -67,8 +79,9 @@ serialization and atomic publication all included — so they answer "what does 
 build?" rather than "how fast is this loop?". Each figure is the best of three runs on an
 otherwise-idle container, Debug build, single asset, single worker.
 
-**Environment**: the same container the rest of this plan's work was done in; Linux 6.18, GCC 13,
-`cmake-build-unit` (Debug, `CNA_PLATFORM=SDL3`, `CNA_GRAPHICS_RENDERER=STUB`), no sanitizer.
+**Recorded environment**: Linux 6.18, GCC 13, `cmake-build-unit` (Debug, `CNA_PLATFORM=SDL3`,
+`CNA_GRAPHICS_RENDERER=STUB`), no sanitizer. The tables entered in `682a73760`/`5d69a3400`
+are a separate campaign from the scheduler median table; do not mix their estimators.
 
 ### One 1024x1024 RGBA source (1 megapixel, 4 MiB of level-zero pixels)
 
@@ -82,19 +95,19 @@ otherwise-idle container, Debug build, single asset, single worker.
 
 What the differences say:
 
-- **Mip generation costs about 0.13 s per megapixel** for the whole chain — the integer
-  area-average resampler, run ten times over geometrically shrinking images.
-- **Block compression is the expensive step, at roughly 1.4 megapixels per second.** That is
-  slower than a tuned production encoder and it is a deliberate trade: the encoder refines two
-  endpoint seeds per block (the colour bounding box and the most distant texel pair) rather than
-  one, which is what stops a red-and-blue block collapsing to flat magenta. `refinementRounds` is
-  the dial — 0 skips the least-squares refinement entirely — and quality is recorded in
-  `XNAP-53`.
-- **LZ4 runs at roughly 20 MB/s** and took this texture to 85% of its uncompressed size; the
-  synthetic source has per-texel noise, so it is close to a worst case. A flat 32x32 texture goes
-  from 4283 to 478 bytes.
-- Serialization itself does not appear as a line here because it is not measurable against the
-  rest: the `Color`/no-mips row is dominated by PNG decoding.
+- The mip-enabled end-to-end sample was **0.13 s slower** for this one source. It includes the
+  changed processing/output work; it is not an isolated resampler throughput or universal cost
+  per megapixel.
+- The Dxt1 sample added about **0.75 s**, corresponding to roughly 1.4 megapixels/s if attributed
+  entirely to the added work. This is an inference from process totals, not a standalone encoder
+  comparison. The encoder's bounding-box/farthest-pair seeds and configurable `refinementRounds`
+  are source contracts; the historical quality work is XNAP-53.
+- LZ4's sample added about **0.20 s** and produced about 85% of the uncompressed XNB size.
+  Attributing that delta to four MiB gives roughly 20 MiB/s, not independently measured codec
+  throughput. The recorded flat 32×32 sample fell from 4283 to 478 bytes; these two sources do not
+  establish best/worst cases for arbitrary content.
+- Serialization and PNG decoding were not timed independently, so this table does not establish
+  their individual shares or show that serialization is negligible.
 
 ### One `.spritefont`, 190 glyphs at 32 px
 
@@ -102,15 +115,16 @@ What the differences say:
 |---|---|---|
 | `.spritefont` + TTF -> SpriteFont `.xnb` | 0.044 s | 1 058 241 bytes (512x512 atlas) |
 
-FreeType rasterization, shelf packing and serialization together cost well under a tenth of a
-second for a full Latin-1 font, so a project's font count is not a build-time concern.
+This one font's recorded total was under a tenth of a second. Cost for many fonts, larger glyph
+sets, sizes or different faces was not measured; it is not a bound on a project's font budget.
 
 ### Large models
 
-The committed glTF corpus exists to cover *shapes*, not sizes -- its largest fixture is a few
-hundred kilobytes -- so this row was honestly absent until a source existed to measure.
-`tools/xnb/generate_large_model.py` authors one deterministically rather than downloading one,
-which would be neither reproducible nor licensable. It stresses what a Model build spends time on:
+The campaign used `tools/xnb/generate_large_model.py` to author increasing grids/materials/
+hierarchies rather than relying on the small correctness fixtures. The current generator remains
+available; keep its revision and environment when regenerating bytes. This is synthetic scaling
+evidence, not a representative production character or a claim that licensed external reference
+assets cannot be used. It stresses what a Model build spends time on:
 vertex and index counts, mesh and primitive counts (a part is three shared-resource references),
 material count, and hierarchy depth.
 
@@ -124,47 +138,51 @@ Regenerate and re-measure with:
 
 ```bash
 python3 tools/xnb/generate_large_model.py --scale large --out /tmp/large/src/model.glb
-cna-content build /tmp/large/src -o /tmp/large/out --format xnb --quiet
+cmake-build-debug/cna-content build /tmp/large/src -o /tmp/large/out-xnb --format xnb --quiet
+cmake-build-debug/cna-content build /tmp/large/src -o /tmp/large/out-cnb --format cnb --quiet
 ```
 
 What the three sizes say:
 
-- **The Model route is linear in vertex count.** 60 000 vertices in 0.66 s and 968 256 in 10.01 s
-  is 91 000 and 97 000 vertices per second -- the same rate at sixteen times the size. A Model
-  writer that interned shared resources by identity rather than by value, or that rebuilt the bone
-  table per part, would show a rate that fell as the model grew; this one does not. The committed
-  `LargeModelScalingTest` asserts the same property on the output-size axis, which is the half a
-  timing run on one machine cannot be trusted for.
-- **XNB and CNB cost the same to within noise** (0.66 vs 0.62 s, 10.01 vs 10.04 s). Both are fed
-  by one importer and one processor, and serialization is not where the time goes -- glTF decoding
-  and canonical-model construction are.
-- **Peak memory is roughly 6x the source**: 33 MiB for the 2.6 MB medium source, 346 MiB for the
-  42.5 MB large one. The decoded glTF document, the canonical model and the output buffer are all
-  live at once. A build machine sizing itself for content should budget from the largest single
-  asset, not from the total.
-- **The warm rebuild of the large model is 1.72 s**, all of it hashing the 42.5 MB source to prove
-  it has not changed. Incremental correctness is not free on a large asset, but it is six times
-  cheaper than rebuilding.
+- The medium/large XNB samples show about **91,000/97,000 vertices per second**. Similar
+  throughput across these two synthetic sizes is consistent with approximately linear behavior
+  over that range; it cannot prove asymptotic complexity or rule out every resource-interning bug.
+  `LargeModelScalingTest` separately checks generator counts, a small/medium XNB output/source-size
+  band (0.5–1.5× the small ratio), and a nonempty medium CNB build. It does not time the route,
+  build the largest scale or validate semantic equivalence of both outputs.
+- XNB/CNB best-of-three totals were close (0.66/0.62 s and 10.01/10.04 s). The routes share
+  importer/processor work, but these samples alone do not quantify noise, prove equal cost or
+  isolate serialization from glTF/canonical-model construction.
+- The record gives **33 MiB** for the 2,659,384-byte medium source and **346 MiB** for the
+  42,509,644-byte large one: about **13.0× and 8.5×**, not 6× source bytes. The RSS estimator/raw
+  logs are not retained here. These sample multipliers are not a general budget; overlapping
+  document/canonical/output storage and multiple concurrently built assets also matter.
+- The recorded warm rebuild was **1.72 s**, about one sixth of that full build. It includes
+  process/coordinator/manifest/fingerprint work; no phase profile here assigns all of it to source
+  hashing.
 
-Not measured: nothing on this page has been run on anything but the container described above, and
-none of it is a threshold. A build that got twice as slow would still pass every test in the
-repository; these numbers exist so that somebody notices.
+These absolute historical values are not CI thresholds or qualification of other hosts.
+The current size-band and loose timing-ratio tests described here check narrower regressions;
+they do not assert that today's build matches these absolute times.
 
 ### What this means for a real build
 
-The pipeline parallelizes across assets (`--workers`), not within one, so these are per-asset
-costs on one core. A project whose textures are all `DxtCompressed` should expect block
-compression to dominate its content build, and should expect the incremental manifest to make that
-cost appear once rather than every build. A project with one very large model should expect that
-model to set its wall clock, because no worker count divides a single asset.
+`--workers` schedules build nodes/assets rather than subdividing one node's work. A single
+expensive model or texture can limit batch speedup; codec libraries and other subprocess work are
+not guaranteed to consume exactly one CPU core. The incremental manifest avoids reprocessing
+unchanged nodes when their dependencies/configuration remain valid. Measure the project's actual
+mix before predicting whether block compression, hashing, graph work or a large model dominates.
 
 ## XNAPP-301: the XNA routes at size
 
 > Measured 2026-09-07 on this machine, `cmake-build-debug` (a debug build), one asset per run
-> unless the row says otherwise, the fastest of three. `XnaRouteScalingTests.cpp` runs the same
-> four measurements on every build and fails if four times the input costs more than eight times
-> the time, which is the shape a quadratic route has. The numbers below are what those runs
-> printed; they are evidence, not a threshold.
+> unless the row says otherwise, the fastest of three. The enabled
+> `modules/content-pipeline/tests/CNA/Content/Pipeline/XnaRouteScalingTests.cpp` has four
+> synthetic XNB route tests. These execute when selected, not merely when the project builds.
+> If the small best-of-three run takes at least 20 ms, the larger must take strictly less than
+> eight times as long for four times the input; below that floor the test only reports a ratio.
+> This loose two-point timing gate is not an asymptotic-complexity proof. Values below are the
+> old printed record, not current results.
 
 | Route | Small | Large | Small | Large | Ratio for 4x the input |
 |---|---|---|---:|---:|---:|
@@ -173,9 +191,9 @@ model to set its wall clock, because no worker count divides a single asset.
 | `.xml` → `List<string>` | 25 000 | 100 000 elements | 355 ms | 1289 ms | **3.6x** |
 | whole tree | 400 | 1600 assets | 613 ms | 3887 ms | **6.3x** |
 
-The three single-asset routes are linear or better than linear in their input, which is what the
-row asked. A ratio below four is not a surprise: process start, the manifest and the staging
-directory are a fixed cost the small build pays in full.
+The three single-asset ratios were below four in that run. Fixed overhead, caching and host noise
+can all affect such ratios; this is consistent with the intended scaling without proving linear
+or better-than-linear complexity.
 
 The fourth row is the one worth writing down. The coordinator's cost per asset is not flat — it
 rises from about 1.6 ms at 400 assets to 2.5 ms at 1600 and 4.1 ms at 3200:
@@ -186,12 +204,20 @@ rises from about 1.6 ms at 400 assets to 2.5 ms at 1600 and 4.1 ms at 3200:
 | per asset | 2.10 ms | 1.79 ms | 1.77 ms | 2.03 ms | 2.68 ms | 4.13 ms |
 | exponent over the previous row | — | 0.77 | 0.99 | 1.19 | 1.40 | 1.63 |
 
-Three things are known about it and are worth keeping together, because each rules something out.
-It is **not in any route**: an all-skip rebuild, which runs no importer, processor or writer at
-all, has the same shape (542 ms at 400, 3769 ms at 1600). It is **not the source directory's
-size**: splitting the same assets into subdirectories of fifty changes nothing (1.69 ms and
-2.60 ms per asset against the flat tree's 1.59 and 2.48). And it **parallelizes** -- 1600 assets
-take 5068 ms at one worker and 2332 ms at three -- so it is per-node work rather than serial
-coordination. It stays sub-quadratic across every size measured, which is what the test asserts;
-what it is exactly has not been chased, because no project in the corpus is near this size and a
-guess would be worse than a recorded measurement.
+The historical all-skip rebuild also grew similarly (542 ms at 400, 3769 ms at 1600), so route
+execution was not required for the observed overhead. Splitting assets into groups of fifty did
+not remove it in that experiment (1.69/2.60 ms per asset versus 1.59/2.48 flat). Three workers
+improved one 1600-asset sample (5068 → 2332 ms), showing that some work could overlap; this does
+not rule out serial coordination, directory effects at other scales or mixed costs. The exact
+root cause was not established by these samples. The current test gates only its 400/1600 pair,
+not every row in the six-size table or all future corpus sizes.
+
+## Current verification
+
+The 2026-11-01 audit checked the scheduler harness, CLI worker dispatch, generator and both scaling
+test files. Stock/custom compiler targets and `CnaContentPipelineTests` build. Privately with
+HEADLESS, all seven route/model scaling tests pass. A reduced harness run (two assets per kind,
+four shared parents, workers 1/2, two iterations) passes all four scenarios' output-file/manifest
+digest checks and emits valid sample JSON. This is a current correctness/scaling-gate and harness
+smoke, not the original 128-asset/seven-sample performance campaign, large-scale RSS profiling or
+semantic renderer/runtime qualification of generated assets.

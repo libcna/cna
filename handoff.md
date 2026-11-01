@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Content-pipeline benchmark reconciliation (2026-11-01, CP-028/XNAP-93/XNAPP-301): the page
+  separates dated timing records from current harness evidence, defines file-digest scope, fresh
+  output versus cold caches, p95/provenance limits and node-level workers. It corrects inferred
+  codec/serialization costs, overclaimed linearity/equality, actual size/timing gate scopes and
+  historical RSS/source ratios (13.0x/8.5x, not 6x). Stock/custom compilers and focused pipeline
+  tests build; all seven scaling tests pass privately with HEADLESS. A reduced workers-1/2,
+  two-iteration harness run passes all four scenarios' file/manifest digest checks and emits valid
+  sample JSON. No full historical performance/RSS campaign, generated-asset renderer/semantic
+  qualification, implementation or ABI change.
 - CNB measurement reconciliation (2026-11-01, CNBF-105/108): both records retain historical
   tables with provenance/missing raw inputs, correct MiB/s, codec comparison/savings arithmetic
   and actual adaptive-mean versus minimum-of-three probe methods, and replace universal NVMe/
