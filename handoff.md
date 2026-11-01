@@ -35,6 +35,18 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API gamer-services contract reconciliation (2026-11-01):
+  `docs/c-api/GAMER_SERVICES.md` is now a current C-boundary contract instead of a chronological
+  implementation narrative. It separates deterministic no-service strict-C evidence from the
+  manual configured-service client, records owned versus borrowed handles, distinguishes waiting
+  callback routes from Guide's genuinely deferred keyboard and message-box workflows, and keeps
+  service limitations in the native limitations page. The page and public Doxygen now describe a
+  gamer tag as a fixed `uint64_t` token rather than a pointer-sized value, correct the obsolete claim
+  that no supported runtime has a friend service, and state that `PropertyDictionary` recognizes
+  nine kinds but exposes setters for eight because streams are inspection-only. Historical avatar
+  extension removal moved out of the live contract. All 13 selected gamer, Guide, achievement,
+  leaderboard, avatar, ABI and boundary C API tests pass through the private SDLGPU runner; all nine
+  coverage, generation, limitation, export and release gates pass.
 - C API shared-byte fuzzing reconciliation (2026-11-01):
   `docs/c-api/FUZZING.md` now states the exact shared adapter boundary instead of claiming that one
   string-view target covers every caller-controlled byte parser in the expanded C API. It records

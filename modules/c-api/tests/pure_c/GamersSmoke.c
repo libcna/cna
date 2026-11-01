@@ -134,7 +134,7 @@ static int validate_profile(const CNA_GamerHandle gamer)
     return ok && cna_gamer_profile_get_motto_size(profile, &size) == CNA_RESULT_INVALID_HANDLE;
 }
 
-/* Neither lookup can succeed on any runtime this ABI builds on, and the refusal is the answer. */
+/* In this no-service fixture neither lookup can succeed, and the refusal is the answer. */
 static int validate_unsupported_lookups(void)
 {
     CNA_GamerHandle gamer = CNA_INVALID_HANDLE;

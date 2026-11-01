@@ -578,9 +578,8 @@ typedef CNA_Handle CNA_SignedInGamerHandle;
  * argument/thread/native failure.
  *
  * CNAEXT: the canonical factory exists so a platform layer can publish a signed-in gamer. This is
- * the minimum gamer-services surface a network session needs, because the canonical session
- * constructor requires at least one signed-in gamer; the rest of the gamer-services API is a later
- * coverage task.
+ * also the minimum gamer-services surface a network session needs, because the canonical session
+ * constructor requires at least one signed-in gamer.
  */
 CNA_C_API CNA_Result cna_signed_in_gamer_create_ext(
     CNA_StringView gamertag,
@@ -1019,9 +1018,9 @@ CNA_C_API CNA_Result cna_gamer_get_is_disposed(CNA_GamerHandle gamer, CNA_Bool* 
  * @param out_tag Receives the tag, zero if none was set.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * The canonical tag holds any boxed value at all. A C caller gets a 64-bit integer it owns the
- * meaning of, which is the same choice the graphics resources already made — a pointer-sized value
- * a caller can key its own table with, rather than an opaque box C cannot open.
+ * The canonical tag holds any boxed value at all. A C caller gets a fixed-width 64-bit token whose
+ * meaning it owns, rather than an opaque box C cannot open. A canonical value not written through
+ * this C ABI reads back as zero.
  */
 CNA_C_API CNA_Result cna_gamer_get_tag(CNA_GamerHandle gamer, uint64_t* out_tag);
 
@@ -1772,9 +1771,8 @@ CNA_C_API CNA_Result cna_friend_collection_get_is_disposed(
  * @param out_gamer Receives an owned gamer handle naming a friend.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
  *
- * CNAEXT: the canonical factory exists so a platform layer can publish a friend list. No runtime this
- * ABI builds on has a friend service, so this is also the only way a C caller obtains a friend to
- * exercise the friend surface against.
+ * CNAEXT: the canonical factory exists so a platform layer can publish a friend list. It also gives
+ * a C caller a deterministic friend fixture without requiring a configured account service.
  */
 CNA_C_API CNA_Result cna_friend_gamer_create_ext(
     CNA_StringView gamertag,
@@ -3044,9 +3042,9 @@ CNA_C_API CNA_Result cna_signed_in_gamer_get_game_defaults(
  * @param out_dictionary Receives an owned dictionary handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
  *
- * CNAEXT. The canonical factory takes a map of boxed values, which C cannot express; an empty
- * dictionary plus the typed setters reaches every state that map could hold, because every value the
- * canonical getters understand is one of the nine kinds.
+ * CNAEXT. The canonical factory takes a map of boxed values, which C cannot express. This route
+ * creates an empty dictionary that the eight writable typed setters can populate. Streams are the
+ * ninth recognized kind but are inspection-only at this boundary.
  */
 CNA_C_API CNA_Result cna_property_dictionary_create_ext(
     CNA_PropertyDictionaryHandle* out_dictionary);
