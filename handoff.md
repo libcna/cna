@@ -35,6 +35,18 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- glTF conventions reconciliation (2026-11-01, GLTF-105/132/241/337/349/392): the guide corrects
+  asset +Z front versus camera -Z, column-vector TRS order, test/byte-identity claims, current
+  coloured PBR strides, seven-map transforms, CPU morph work/retained weight tracks, empty-light
+  fallback, native punctual/IBL versus automatic import, lossy specular-glossiness conversion and
+  renderer/source-gate boundaries. Khronos's primary specification supports coordinate/TRS/unlit
+  corrections. The related limitations rows now record unlit occlusion selection and parked
+  skinned lights accurately. Temporary exports reproduce that selection and lax unitScale parsing;
+  identically failing synthetic runners reproduce the parity wrapper's zero exit (§5). Content/
+  converter targets build and all 139 selected convention/layout/material/morph/animation/skin/
+  shape/source/documentation cases pass privately on OPENGLES3 with dummy audio. Inventory/local
+  links pass. No runtime/wire change, permanent regressions for those new findings, new full
+  all-renderer framebuffer campaign or upstream-header hash qualification.
 - GamerServices limitations reconciliation (2026-11-01, GS-011/GSH-01–22): all 46 stable
   entries/summary rows remain, with current FNA3D/Linux avatar evidence, bounded request replay,
   privacy/poll/reconnect timing, native/cross Opus and Android curl conditions, admission/request
@@ -1577,6 +1589,17 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- glTF unlit material selection can still sample occlusion: ExtractMesh selects DualTextureEffect
+  for an unskinned/uncoloured non-PBR material with base-colour and occlusion images, including
+  KHR_materials_unlit. ApplyUnlitMaterialEXT keeps both textures, although the extension requires
+  baseColorFactor/baseColorTexture/vertex colour without lighting-model inputs. A temporary
+  fixture based on mat-unlit and the dual-texture image inputs exported unlit=true, stride 28,
+  DualTextureEffect and texture2 successfully (2026-11-01). No permanent framebuffer regression
+  or runtime fix was added during the docs/gltf-conventions.md audit.
+- Standalone tools/gltf_to_cnj unitScale parsing accepts trailing text and positive infinity:
+  std::stof's consumed length is ignored and only value>0 is checked. Both 1trailing and inf
+  exported a small temporary glTF fixture with exit 0 (2026-11-01). Require full-token and finite
+  validation in a runtime/tooling task; no parser correction was bundled into the documentation audit.
 - PropertyDictionary's BoxedValuesEqual delegates supported float/double values to operator==,
   so pair-based Contains/Remove treat two NaNs as unequal. .NET floating-point Equals treats two
   NaNs as equal (Microsoft Double.Equals and Single.NaN documentation, linked from
@@ -1718,6 +1741,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- scripts/gltf-renderer-parity.sh compares normalized GTest result lines and does not reliably
+  propagate each underlying process failure. Both renderer runs can fail with matching outputs
+  and the script can return zero; its marker/source-policy companion tests also do not prove
+  upstream byte identity or every possible renderer compensation. On 2026-11-01 two synthetic
+  CnaTests runners printing the same failing test and exiting 1 yielded wrapper exit 0.
+  docs/gltf-conventions.md records the scope; verify each selected test run independently before
+  citing parity.
 - GamerServices AssetDiskCache's default 256 MiB capacity is an eviction target, not a strict
   cross-process budget: separate writers scan and evict without a shared capacity lock and can
   concurrently admit different entries. mtime updates also make LRU approximate. Existing tests

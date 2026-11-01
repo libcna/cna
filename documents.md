@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 156 reviewed, 10 updated incidentally and awaiting their own audit, and 11 not yet
+Summary: 157 reviewed, 10 updated incidentally and awaiting their own audit, and 10 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -108,7 +108,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/gltf-campaign-retrospective.md`](docs/gltf-campaign-retrospective.md)
 - ✅ **REVIEWED** — [`docs/gltf-center-collapse-verdict.md`](docs/gltf-center-collapse-verdict.md)
 - 🟡 **PENDING — updated incidentally** — [`docs/gltf-conformance.md`](docs/gltf-conformance.md)
-- ⬜ **PENDING** — [`docs/gltf-conventions.md`](docs/gltf-conventions.md)
+- ✅ **REVIEWED** — [`docs/gltf-conventions.md`](docs/gltf-conventions.md)
 - ✅ **REVIEWED** — [`docs/gltf-limitations.md`](docs/gltf-limitations.md)
 - ✅ **REVIEWED** — [`docs/gltf-performance.md`](docs/gltf-performance.md)
 - ✅ **REVIEWED** — [`docs/gltf-renderer-pbr-fallbacks.md`](docs/gltf-renderer-pbr-fallbacks.md)
