@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Enumerator-reference reconciliation (2026-11-01, XNA-ENUM-001): the page separates old
+  326/331 and 323/329 counts from the current 331/331 type census, corrects default Touch's inline/
+  empty state, names borrowed lifetimes/native-iterator boundaries and fixes the description of
+  XNA's boxed Current getters. Original Graphics/GamerServices IL confirms both wrappers call the
+  typed getter; CNA instead checks hasCurrent_ and throws (§5.1). The existing CnaTests target
+  builds and all 12 cases across six enumerator suites pass privately, but effect/gamer tests
+  currently assert that mismatching exception. No runtime fix, replacement regression or new
+  genuine-XNA/sanitizer execution was bundled into the docs audit.
 - Current runtime member-report reconciliation (2026-11-01, XNA-MEMBER-002): a fresh
   Microsoft XML/DLL/Clang audit reproduces the stored JSON exactly: 331/331 types, 3627/3627
   members, no AST errors, zero missing/review entries, the same 164 represented baseline gaps.
@@ -1699,6 +1707,16 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- ModelEffectCollection::Enumerator::getCurrentProperty and
+  GamerCollection<T>::GamerCollectionEnumerator::getCurrentProperty throw InvalidOperationException
+  when hasCurrent_ is false (before start/after end/reset). Original Microsoft XNA Graphics IL
+  method 962 calls the wrapper's typed Current; GamerServices IL method 64 calls the typed
+  List<T>.Enumerator.Current and boxes it. These return the stored null outside a valid position,
+  rather than invoking List's checked non-generic getter. Source/IL-inspected on 2026-11-01;
+  original/reference DLL bytes match. Existing ModelEffectCollectionEnumeratorTest and
+  GamerCollectionEnumeratorTest cases assert CNA's mismatching throw, so their passes do not
+  close the gap. docs/xna-4-enumerator-reference.md records the corrected reference. No runtime
+  correction/new regression or fresh genuine-XNA execution was added during this docs task.
 - BitmapContent's RegionInside helper adds signed Int32 rectangle coordinates/extents before
   comparing them with bitmap dimensions (content-pipeline/src/Xna/Graphics/BitmapContent.cpp).
   Positive inputs such as X=INT_MAX, Width=1 overflow the signed addition, so ValidateCopyArguments
