@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 87 reviewed, 14 updated incidentally and awaiting their own audit, and 76 not yet
+Summary: 88 reviewed, 14 updated incidentally and awaiting their own audit, and 75 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -225,7 +225,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/c-api/RELEASE_GATE.md`](docs/c-api/RELEASE_GATE.md)
 - ✅ **REVIEWED** — [`docs/c-api/RENDERERS_AND_CAPABILITIES.md`](docs/c-api/RENDERERS_AND_CAPABILITIES.md)
 - ✅ **REVIEWED** — [`docs/c-api/SHARP_RUNTIME_BOUNDARY.md`](docs/c-api/SHARP_RUNTIME_BOUNDARY.md)
-- ⬜ **PENDING** — [`docs/c-api/STORAGE.md`](docs/c-api/STORAGE.md)
+- ✅ **REVIEWED** — [`docs/c-api/STORAGE.md`](docs/c-api/STORAGE.md)
 - ✅ **REVIEWED** — [`docs/c-api/STRINGS_AND_BUFFERS.md`](docs/c-api/STRINGS_AND_BUFFERS.md)
 - ⬜ **PENDING** — [`docs/c-api/TEXTURES.md`](docs/c-api/TEXTURES.md)
 - ⬜ **PENDING** — [`docs/c-api/TEXTURE_VOLUMES.md`](docs/c-api/TEXTURE_VOLUMES.md)

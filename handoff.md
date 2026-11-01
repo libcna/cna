@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API storage-contract reconciliation (2026-11-01): `docs/c-api/STORAGE.md` now states that
+  indexed listings are freshly enumerated and unordered, completion callbacks can precede output
+  publication/final failure, and zero-length I/O still validates handles but bypasses native
+  capabilities. It documents content-reader stream retention, protected device tokens, container
+  disposal versus final release, retained registrations and the actual desktop/Android/browser
+  root policy. Obsolete share-repair history is removed. Storage and content-reader targets build
+  and both focused tests pass with build-local data roots through the private SDLGPU runner.
+  Runtime implementation and public ABI are unchanged.
 - C API shared-boundary documentation reconciliation (2026-11-01): `OWNERSHIP.md`,
   `SHARP_RUNTIME_BOUNDARY.md` and `STRINGS_AND_BUFFERS.md` now distinguish owned views, callback
   loans, independent devices, native disposal and release. They remove the nonexistent generic
