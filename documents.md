@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 171 reviewed, 6 updated incidentally and awaiting their own audit, and 0 not yet
+Summary: 172 reviewed, 5 updated incidentally and awaiting their own audit, and 0 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -155,7 +155,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/rendertarget-support.md`](docs/rendertarget-support.md)
 - ✅ **REVIEWED** — [`docs/runtime-renderer-selection.md`](docs/runtime-renderer-selection.md)
 - ✅ **REVIEWED** — [`docs/sampler-state-support.md`](docs/sampler-state-support.md)
-- 🔵 **IN PROGRESS** — [`docs/sdl-gpu-renderer.md`](docs/sdl-gpu-renderer.md)
+- ✅ **REVIEWED** — [`docs/sdl-gpu-renderer.md`](docs/sdl-gpu-renderer.md)
 - ✅ **REVIEWED** — [`docs/sdlgpu-shader-effect-layout.md`](docs/sdlgpu-shader-effect-layout.md)
 - ✅ **REVIEWED** — [`docs/shader-effect-vs-fx-bytecode.md`](docs/shader-effect-vs-fx-bytecode.md)
 - ✅ **REVIEWED** — [`docs/skinned-model-ext.md`](docs/skinned-model-ext.md)
@@ -188,7 +188,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/xna-fna-behavior-decisions.md`](docs/xna-fna-behavior-decisions.md)
 - ✅ **REVIEWED** — [`docs/xna-intermediate-xml-format.md`](docs/xna-intermediate-xml-format.md)
 - ✅ **REVIEWED** — [`docs/xna4-runtime-compatibility.md`](docs/xna4-runtime-compatibility.md)
-- 🟡 **PENDING — updated incidentally** — [`docs/xnb-content-pipeline-support.md`](docs/xnb-content-pipeline-support.md)
+- 🔵 **IN PROGRESS** — [`docs/xnb-content-pipeline-support.md`](docs/xnb-content-pipeline-support.md)
 - 🟡 **PENDING — updated incidentally** — [`docs/xnb-interoperability.md`](docs/xnb-interoperability.md)
 
 ## `docs/c-api/`

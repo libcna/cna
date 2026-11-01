@@ -1,8 +1,10 @@
 # SDLGPU renderer
 
 `-DCNA_GRAPHICS_RENDERER=SDLGPU` maps XNA 4.0 onto SDL3's GPU API (`SDL_gpu.h`). SDL owns the
-drivers underneath it: Vulkan on Linux and Android, Direct3D 12 on Windows, Metal on macOS and iOS.
-Those are SDL's backends, not CNA renderer identities (`docs/renderer-registry.md`). `SDLGPU` is
+drivers underneath it: the usual native routes are Vulkan on Linux/Android, Direct3D 12 on
+Windows and Metal on macOS/iOS. Actual driver selection depends on SDL, shader formats and the
+host; a platform name alone does not establish a usable device or qualification.
+Those are SDL's backends, not CNA renderer identities ([renderer registry](renderer-registry.md)). `SDLGPU` is
 the default renderer on Windows, macOS and iOS (`cmake/RendererIdentityDefault.cmake`). The source
 is `modules/renderers/sdl-gpu/`.
 
@@ -13,10 +15,11 @@ rows as `SDLGPU-nnn`.
 
 | Option | Default | Effect |
 |---|---|---|
-| `CNA_SDLGPU_SHADERCROSS` | ON on Windows and Apple, OFF elsewhere | Links the pinned SDL_shadercross statically and translates the stock SPIR-V shaders to the DXBC or MSL that the D3D12 and Metal drivers consume (`SDLGPU-92`). Vulkan takes the SPIR-V directly. SDL is linked after every static archive that calls it, because GNU/MinGW resolves archives in one pass (`SDLGPU-98`). |
+| `CNA_SDLGPU_SHADERCROSS` | ON on Windows and Apple, OFF elsewhere | Links the pinned SDL_shadercross statically and translates SPIR-V to formats accepted by the selected SDL device, including the configured D3D12/Metal routes (`SDLGPU-92`). Vulkan can take SPIR-V directly. SDL is linked after the renderer/ShaderCross archives that call it (`SDLGPU-98`). |
 | `CNA_SDLGPU_COMPILED_EFFECTS` | OFF | Runs compiled XNA `Effect` bytecode through MojoShader's SDL_GPU adapter (`FX-061`); with ShaderCross on, the same route reaches D3D12 and Metal (`SDLGPU-93`). |
 
-The stock shaders are GLSL under `src/shaders/`, compiled by `compile_shaders.py` (libshaderc) into
+The stock shaders are GLSL under `modules/renderers/sdl-gpu/src/shaders/`, compiled by
+`compile_shaders.py` (libshaderc) into
 the committed `spirv_shaders.hpp`; regenerate it after editing a `.glsl` file. CNAEXT
 `ShaderEffect` has two distinct routes. With `CNA_CNAEXT=ON`, an explicit `ShaderCodeEXT` or
 `ShaderPackageEXT` supplies SPIR-V directly in every live SDLGPU build; the renderer remaps its
@@ -28,25 +31,30 @@ definition and runtime `libshaderc`; that route is off on Windows, Apple and Ems
 
 ## Parity with EasyGL
 
-The final sweep (2026-09-11) found every audited ordinary XNA 4.0 graphics family observably
-equivalent to EasyGL on Linux/Vulkan and on Direct3D 12, except three things SDL_gpu cannot
-express:
+The 2026-09-11 campaign compared its named ordinary-XNA fixtures with EasyGL on Linux/Vulkan
+and Direct3D 12. That finite result is not a guarantee for every asset/state combination or every
+platform. The following XNA limitations remain explicit:
 
 | Feature | SDLGPU behaviour |
 |---|---|
-| `BlendState.MultiSampleMask` | A mask keeping every sample or none is applied exactly; any other mask is refused, and `RendererFeature::MultiSampleMask` reports Restricted (CNA-DEMOS DC-R2, 2026-10-24). |
+| `BlendState.MultiSampleMask` | On a multisampled target, a mask keeping every active sample or none is applied; a partial active-sample mask is refused when drawing. Single-sample targets ignore the mask. `RendererFeature::MultiSampleMask` reports Restricted (CNA-DEMOS DC-R2, 2026-10-24). |
 | `PresentInterval::Two` | SDL_gpu has no half-rate present mode; it presents with plain VSYNC, as `One` does. |
 | `OcclusionQuery` | SDL_gpu has no query API. The renderer reports the limitation and refuses to construct a query rather than fabricate a result (`SDLGPU-80`). |
 
+Use current capability/format queries for the active device. For example, the legacy
+`GraphicsCapability::FloatRenderTargets` and `HalfFloatRenderTargets` flags currently return false;
+neither the SDL driver name nor a historical fixture sweep establishes every format capability.
+
 Parity covers the ordinary XNA surface only, not the CNAEXT graphics extensions. Where the audit
-found EasyGL itself wrong, SDLGPU follows XNA/FNA instead of copying it; the one such EasyGL
-defect still open is in [`../handoff.md`](../handoff.md) §5.1.
+found EasyGL itself wrong, SDLGPU follows the measured XNA/FNA contract. The blend-equation
+shortcut found by that campaign and other current renderer defects remain in
+[`handoff.md`](../handoff.md) §5.1; an EasyGL comparison is not an independent Microsoft oracle.
 
 ## Platform evidence
 
 | Platform and SDL driver | Evidence |
 |---|---|
-| Linux, Vulkan | The full Debug `SdlGpu_*` registration set, with Vulkan validation errors and warnings fatal: 392/392 at the 2026-10-31 sweep, including five declared contract skips. |
+| Linux, Vulkan | The 2026-10-31 Debug sweep covered all 392 registered `SdlGpu_*` cases: 387 passes and five declared contract skips, with no failures. Validation errors/warnings were fatal where the fixture enabled/captured the corresponding diagnostics. This does not qualify disabled ShaderCross/compiled-effect legs. |
 | Windows, Direct3D 12 | MinGW cross-builds under Wine with vkd3d-proton: headless devices and pipelines (`SDLGPU-99`…`SDLGPU-114`) and a real swapchain through a private compositor (`SDLGPU-94`), with D3D12 debug-layer errors and warnings fatal. A hosted native-MSVC smoke workflow exists, but no successful run is recorded and neither route is Windows-hardware qualification. |
 | macOS, Metal | Historical evidence: the Mac mini M4 campaign (`AM4-*`, 2026-10-07/08) passed the full tree 10,962/10,962 before the 2026-10-13 native-renderer retirement. SDLGPU has not been re-qualified on Apple hardware since ([`apple-platforms.md`](apple-platforms.md)). |
 | iOS, Metal | Never successfully built with SDLGPU; the non-gating CI leg is an attempt, not qualification ([`apple-platforms.md`](apple-platforms.md)). |
@@ -71,10 +79,13 @@ defect still open is in [`../handoff.md`](../handoff.md) §5.1.
 - **Immutable sampler and pipeline caches are bounded** to the 256 most recently used entries
   per family; an evicted handle goes through SDL's command-buffer-aware destruction
   (`SDLGPU-126`/`127`).
-- **Backbuffer readback uses a lazy CNA-owned proxy.** SDL's swapchain texture remains write-only,
-  so the first `GetBackBufferData` request enables a readable logical-backbuffer texture. Deferred
-  draws target that texture and presentation blits it to the swapchain; games that never read the
-  backbuffer allocate no proxy and pay no per-frame proxy cost. Readback addresses the requested
+- **Backbuffer readback and split-frame flushes use a CNA-owned proxy.** SDL's swapchain texture
+  remains write-only. A `GetBackBufferData` request or a pending-frame flush before Present enables
+  persistent proxy-backed rendering; presentation blits the proxy to the swapchain. A windowed
+  game that needs neither can stay on the direct swapchain path. Headless presentation also uses
+  a proxy, so absence of readback alone does not prove that no proxy is allocated. Once enabled,
+  this renderer keeps the proxy path, recreating the texture as its dimensions/format require.
+  Readback addresses the requested
   logical backbuffer rather than a letterboxed or live-window viewport (`GFX-165`, formerly the
   open swapchain leg of `SDLGPU-39`).
 - **CNJ and native CNB Effect assets are intentionally different contracts.** CNJ carries the
@@ -89,9 +100,12 @@ defect still open is in [`../handoff.md`](../handoff.md) §5.1.
 ## Tests
 
 The integration programs are in `modules/renderers/sdl-gpu/examples/` and register as `SdlGpu_*`
-only when `SDLGPU` is the default renderer; the shared renderer-neutral parity fixtures are in
-`modules/graphics/examples/parity/`. Every registration fails on a Vulkan validation or D3D12
-debug-layer error or warning when the corresponding debug layer is enabled (`SDLGPU-115`). Test
+when that examples subdirectory is enabled with `SDLGPU` as the default renderer; separately
+registered shared shader/source-layout checks can also use the `SdlGpu_` prefix. The shared
+renderer-neutral parity fixtures are in
+`modules/graphics/examples/parity/`. GPU fixture registrations use failure patterns for captured
+Vulkan validation or D3D12 debug-layer errors/warnings when the corresponding layer is enabled
+(`SDLGPU-115`); check the individual registration's failure patterns and debug-layer availability. Test
 counts in the platform table are dated evidence, not a fixed inventory; use
 `ctest -N -R '^SdlGpu_'` in the current build tree. Validation-specific assertions require a Debug
 build, while the same fixtures retain their functional pixel checks in other configurations.
@@ -102,5 +116,21 @@ and `WAYLAND_DISPLAY` so no host display leaks in (`SDLGPU-116`). Run them throu
 runner, never on the live desktop:
 
 ```bash
+cmake --build cmake-build-sdlgpu --parallel 4
 tools/platform/run_gpu_tests_private.sh cmake-build-sdlgpu -R '^SdlGpu_' -j6
 ```
+
+Build the selected fixture targets (or the whole existing configuration as above) before testing;
+the private runner does not rebuild executables or synchronize an old example with a newer shared
+library.
+
+## Current verification
+
+Rechecked on 2026-11-01 against renderer selection, shader intake, capability/mask handling,
+cache limits, backbuffer proxy paths and fixture registration. In the existing Linux Debug tree
+(ShaderCross and compiled effects OFF), the final private Vulkan run covered all 392 registrations:
+**388 passed, four skipped, zero failed**, with no graphics-profile deaths. The skips were the
+shader-effect refusal case and three query-dependent conformance cases. An earlier attempt found
+six stale executables with a ContentManager symbol mismatch; rebuilding those programs and their
+shared-library dependency resolved it, and the final complete run was clean. This does not add
+Windows/Apple/mobile hardware or disabled optional-feature qualification.

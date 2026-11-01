@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- SDLGPU renderer-guide reconciliation (2026-11-01, SDLGPU-39/58/92/115, GFX-165): the page
+  distinguishes finite historical parity, SDL driver selection and current capability reporting;
+  specifies partial active-sample-mask refusal and corrects proxy activation for pre-Present
+  flushes/headless presentation as well as readback. Fixture registration/debug patterns and
+  optional-feature qualification are scoped precisely. The renderer and six stale consumer
+  programs/shared-library dependency build; after resolving their loader-symbol mismatch, the
+  final full private Vulkan Debug run covers all 392 SdlGpu registrations: 388 pass/four declared
+  skips/zero failures, no profile deaths. ShaderCross/compiled effects are OFF. No runtime change
+  or new Windows/Apple/mobile qualification.
 - XNA/FNA decision-ledger reconciliation (2026-11-01): the ledger now preserves historical
   binding findings without claiming an external consumer's current maintenance status and states
   the approved native-C boundary. It names the local FNA revision, corrects GetValueString's real
