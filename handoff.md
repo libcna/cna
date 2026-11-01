@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- GamerServices manual-qualification reconciliation (2026-11-01, GS-AUDIT-P4/GSH-16): the plan
+  names the actual service/fake/voice targets, required build features, synchronized harness
+  barriers/departure order, external crash coordination and recovery-clock scope. It distinguishes
+  loopback acoustic measurements and individual phase statuses from a complete audio acceptance
+  gate, and CTest skips from seven executed namespace passes. All seven companion gate definitions
+  and return-77 policies match source (server checkout fb357f0); it has no configured build tree
+  here, so none of those gates was executed. The seven selected CNA harness/test targets build,
+  shell syntax and links pass, and GamerServices_FakeBackend passes privately with HEADLESS/dummy
+  audio. All 19 manual cases remain unexecuted; no physical devices, remote accounts, WAN/NAT,
+  Windows/macOS runtime, server deployment or power-loss qualification is claimed.
 - CNB-format reconciliation (2026-11-01, CNBF-001/003/105/114/115/121): the specification
   separates generic container parsing from asset decoding/runtime construction, bounds its
   conformance/determinism claims, corrects SoundEffect v1/v2 support, equal compressed lengths,
@@ -1680,6 +1690,12 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- tools/net/voice_physical_check.sh prints capture/playback child statuses, spectral measurements
+  and Guide sound counts but does not aggregate every failure into its shell exit status. A zero
+  exit alone does not qualify real capture/output; the manual plan requires phase results and
+  reviewed finite acoustic measurements. The two-process probe itself is loopback, not WAN voice.
+  Source-inspected 2026-11-01; no physical audio was exercised during this documentation audit
+  (`docs/gamer-services-manual-qualification.md`).
 - CNB read limits cap serialized/logical chunk sizes and individual counts, not peak decoded
   memory. DecodeAnimationClipFromCnb allows overlapping key ranges and copies every track's
   slice into a separate vector, so many tracks sharing a long range can amplify decoded memory

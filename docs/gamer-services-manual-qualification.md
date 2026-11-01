@@ -2,13 +2,27 @@
 
 Written by the GamerServices audit (GS-AUDIT-P4, 2026-10-02) for the cases software tests cannot
 close; [`gamer-services-known-limitations.md`](gamer-services-known-limitations.md) lists them
-(28, 29, 31 and 33).
+(especially 28–31 and 33). Commands and harness behavior were source-reviewed again on
+2026-11-01; that review is not execution of this qualification plan.
 
 **NOT EXECUTED / NO PASS CLAIM.** Software audit closes with these device, network and platform limitations. Run only on disposable lab machines/VMs and approved devices, never the owner's live desktop. Linux window-capable runs must use `tools/platform/run_gpu_tests_private.sh`; Windows/macOS use an isolated lab session/VM. Keep raw passwords/tokens and room recordings out of retained evidence. This plan does not authorize destructive system crashes or power cuts.
 
 ## Common setup and evidence
 
-Build the four `cna_service_*_client_harness` targets (`cmake/Harnesses.cmake`), `CnaGamerServicesTests`, `CnaNetTests` and `../cna-gamer-services-server/build` to completion before launching anything. Provision a disposable SQLite service with a trusted TLS certificate and accounts alice/Alice, bob/Bob, charlie/Charlie, dana/Dana. Copy the exact title/achievement/board setup from server `tests/cna_session_e2e.py` (BestScoreLifeTime, Rounds:int32, arbitrated Kills). Server README documents admin `title`, `user`, `achievement`, `leaderboard`, `privilege` and other commands; user passwords enter via stdin, never command-line arguments/logs.
+Configure CNA with `CNA_BUILD_TESTS=ON`, `CNA_ENABLE_NET=ON` and GamerServices enabled. Build
+`cna_service_session_client_harness`, `cna_service_directory_client_harness`,
+`cna_service_relay_client_harness` and `cna_service_avatar_client_harness`
+(`cmake/Harnesses.cmake`), plus `CnaGamerServicesTests` and `CnaNetTests`. The separate
+`cna_service_client_harness` is the deterministic fake-backend probe, not one of those four
+service clients. Physical voice additionally needs `cna_net_two_process_harness` and a build
+with voice/Opus available (`CNA_ENABLE_VOICE=ON` requires the dependency; AUTO can omit it).
+Build the companion service in its own configured tree before the cases using it. This guide
+uses `../cna-gamer-services-server/build` as an example, not an installed CNA component.
+
+Provision a disposable SQLite service with a trusted TLS certificate and accounts alice/Alice,
+bob/Bob, charlie/Charlie, dana/Dana. Copy the title/achievement/board setup from that server's
+`tests/cna_session_e2e.py` (BestScoreLifeTime, Rounds:int32, arbitrated Kills). The server README
+documents admin commands; user passwords enter via stdin, never command-line arguments/logs.
 
 Configure each native client with `CNA_GAMER_SERVICES_ENDPOINT=https://<qualified-name>:<port>/cna/v1`, `CNA_GAMER_SERVICES_CA_BUNDLE=<lab CA>`, `CNA_GAME_ID=<provisioned title>`. Use actual remote service address, not 127.0.0.1 on two hosts. Record OS/compiler/build hashes, endpoint address family, TLS verification, topology/router/NAT evidence, feature capabilities, device IDs and timestamped per-process logs. Capture server aggregate outcomes and database reads/integrity checks where indicated. Never label a loopback run as LAN/WAN/NAT qualification.
 
@@ -20,7 +34,22 @@ tools/platform/run_gpu_tests_private.sh --exec cmake-build-debug/cna_service_ses
 # Repeat with ranked, and optional third argument invite / add / migrate / crash.
 ```
 
-Provide passwords for Alice/Charlie on A and Bob/Dana on B through stdin. Launch B after A prints `session-created`. At both `session-roster`, feed `continue`; require `session-exchanged 5` or `6`, with all five reliable packets verified. Feed `continue` at exchange and playing boundaries, then at `session-lobby`. Final normal departure order: PlayerMatch joiner then host; Ranked host then joiner. Each input gate has a 60-second timeout: use a coordinator/pipes if necessary. Require `session-done`, zero exit and expected persisted scores/columns. Public current harness is session qualification, not physical voice UI; voice procedures below require a small title/probe that continuously pumps Dispatcher and NetworkSession and exposes Guide/social/voice state.
+Provide passwords for Alice/Charlie on A and Bob/Dana on B through stdin. Launch B after A prints
+`session-created`. Wait for both processes at each barrier before feeding `continue`: first
+`session-roster`, then `session-exchanged 5` or `6`, `session-playing` and `session-lobby`.
+All five reliable payloads must be verified; the sixth is best-effort unreliable. At the final
+barrier release the PlayerMatch joiner and wait for its completion before releasing the host;
+for Ranked, complete the host first and then release the joiner.
+Both must finish with `session-done`, zero exit and the expected persisted scores/columns.
+The `crash` variant instead needs an external coordinator to terminate the disposable host at
+the departure boundary; the host argument does not crash itself.
+
+Each input line has a 60-second timeout and the harness keeps pumping updates while waiting.
+The companion Python driver is a Linux automation reference; its process orchestration is not
+evidence that redirected stdin or native UI input works on Windows/macOS. Qualify those adapters
+in their own lab sessions. This harness exposes session qualification, not a continuous physical
+voice UI; voice cases need a title/probe that pumps Dispatcher and NetworkSession and exposes
+Guide/social/voice state.
 
 ## Test cases
 
@@ -34,7 +63,7 @@ Provide passwords for Alice/Charlie on A and Bob/Dana on B through stdin. Launch
 | M06 direct Internet / relay boundary | WAN setup; separate SystemLink LAN reference | attempt only supported online creation/join; make relay unavailable once | online starts on relay; unavailable relay gives bounded failure and rollback. Direct Internet peers and STUN/ICE are **UNSUPPORTED**, not a missing “fallback pass” | configured path/capabilities, refusal/rollback and deadlines; no invented direct-success assertion |
 | M07 IPv4 / IPv6 | public IPv4 endpoint, then service bound to `::` with certificate-matching IPv6 DNS/literal; force external v6 path | repeat session/restart/recovery over each endpoint; separately test v6-only/NAT64 if deployment needs it | HTTP/WSS external IPv6 path works if supported by platform; ENet local carrier/LAN remains IPv4. Unsupported deployment must fail clearly | external DNS/routes/address family, TLS errors/success, carrier separation, no IPv4 fallback disguised as v6 success |
 | M08 graceful migration / crash | M01/M05, harness `migrate` then `crash` | after lobby, leave host or terminate **only disposable host process**; continue survivor | HostChanged Alice→Bob, old gamers removed, survivor authoritative, continued session and bounded timeout | event/roster logs before/after; process termination timing; no system crash |
-| M09 disconnect/reconnect | WAN/LAN disposable clients | interrupt client connectivity for 5 s and restore; separately exceed 15 s recovery budget; re-sign-in/rejoin | temporary recovery or bounded SessionEnded; old grants/membership not incorrectly reused; restored admission works | measured outage, reconnect/termination reason, directory rows/grant outcomes |
+| M09 disconnect/reconnect | WAN/LAN disposable clients | interrupt connectivity for 5 s and restore; separately exceed the service carrier's 15 s recovery window; re-sign-in/rejoin | temporary recovery or bounded SessionEnded; old grants/membership not incorrectly reused; restored admission works. Recovery starts when the carrier detects failure, not at the operator's wall-clock outage start; host migration and ENet peer timeouts are separate | measured outage/detection/recovery times, termination reason, directory rows/grant outcomes |
 | M10 server restart | disposable service and live session | stop/restart service at same endpoint (~1 s) at roster boundary, then repeat longer outage | short restart recovers directory/relay; longer failure terminates within documented budgets; durable awards/boards survive | before/after SQLite state and integrity, server startup, client recovery/events |
 | M11 client restart / replay | authenticated lab account and provisioned key/board | award and commit; terminate client after successful response; reopen/login/read; repeat identical requests, then contradictory score epoch | first completion time preserved, board columns/rating exact; same report no corruption; contradictory committed epoch refused | safe request IDs/outcome codes, ticks/int64 values, restart logs; no tokens |
 | M12 physical microphone input | approved Linux microphone/speaker, PipeWire tools + NumPy, built `cna_net_two_process_harness` | run command below; then speak briefly between two lab machines in a live session | actual capture→Opus→remote decode detected; unplug/replug behaves safely; one local talker/machine is expected | numeric tone results, selected device/format, capture state; recordings discarded |
@@ -46,16 +75,27 @@ Provide passwords for Alice/Charlie on A and Bob/Dana on B through stdin. Launch
 | M18 scale/long churn (deployment-specific) | representative provisioned account/title count and lab load generator, isolated service | sustain session/social/download usage within stated limits; record authenticated budget cardinality/cleanup and account churn | memory/latency within deployment budget; refusal/recovery at caps; no claim of cluster support or bounded retired gamer reclamation | RSS/cardinality/latency/load/timeout series and topology; optional capacity acceptance, not a generic new audit |
 | M19 avatar GPU/platform | Linux private GPU runner and isolated Windows/macOS lab builds; provision CNA catalog, local and online avatar layouts | render standard AvatarRenderer.Draw with neutral and animated poses, multiple expressions/body layouts, reload changed catalog/layout; exercise loading/unavailable/dispose | actual skinned 71-bone model and textures draw without errors; state/disposal behavior correct; compare CNA expected poses, not unsupported Xbox asset parity | screenshots/frame captures, renderer/GPU/driver/build/catalog hashes, bone/pose diagnostics and graphics errors |
 
-Physical Linux probe (select approved devices first; the script uses system defaults and emits a short tone):
+Physical Linux probe (select approved devices first; the script uses system defaults and emits
+tones and Guide sounds, including a synthetic 433 Hz playback signal):
 
 ```sh
 tools/platform/run_gpu_tests_private.sh --exec tools/net/voice_physical_check.sh \
   cmake-build-debug /tmp/gs-phase4-physical-voice
 ```
 
+This is a two-process **loopback** acoustic probe, not a two-host or WAN voice test. In addition
+to Python/NumPy it needs working `pactl`, `pw-play`, `pw-record`, an unmuted output and real
+capture permission. The capture client requires detected speech, a 1 kHz spectral share above
+0.2 and more than ten times the 700 Hz comparison share. Playback's client status checks talking;
+the script reports output/room spectral measurements and Guide burst counts for review rather
+than applying a complete output-quality acceptance gate. Require `capture exit=0`,
+`playback exit=0`, finite expected tone measurements and the planned audible/Guide observations.
+The shell script's overall exit status alone is not sufficient: it does not aggregate all phase
+failures. Normal exit removes temporary recordings; keep only the reviewed numeric evidence.
+
 Windows/macOS microphone/output M12–M15 require their actual platform recording/playback adapters and a lab title/probe; the PipeWire shell script is Linux-specific. Record adapters and device permissions. No software test is a substitute.
 
-## Seven unchanged isolated-network gates
+## Seven isolated-network gates
 
 Prerequisites: Linux `unshare`, `ip`, `slirp4netns`, permitted user/network namespaces; `CNA_SERVICE_SLIRP4NETNS` may select a real helper. Establish `unshare --user --map-root-user --net true` succeeds. Supply all four fresh harness paths and avatar catalogs, then execute:
 
@@ -83,6 +123,11 @@ tools/platform/run_gpu_tests_private.sh --exec ctest --test-dir ../cna-gamer-ser
 | `service_cna_session_host_crash` | `--crash --isolated`; terminate disposable host, migration survives | old/new host roster/event/packet assertions |
 | `service_cna_session_add_gamer` | `--add --isolated`; admit Dana after initial join | additional account/machine/roster/packet assertions |
 
-Require **all seven execute without return 77**, preserve their original assertions, distinct namespace inodes and genuine isolated routes. Missing tools/namespaces remain SKIPPED, never passes. Existing loopback crash/add passes do not remove these stronger gates. Namespace NAT success still does not prove physical WAN or symmetric NAT.
+Require **all seven execute and pass**, without return 77, while preserving their original
+assertions, distinct namespace inodes and genuine isolated routes. CTest registers 77 as a skip;
+its overall zero exit can therefore include unexecuted cases. Retain the per-test outcomes and
+logs, not just the CTest return code. Missing tools/namespaces remain SKIPPED, never passes.
+Existing loopback crash/add passes do not remove these stronger gates. Namespace NAT success
+still does not prove physical WAN or symmetric NAT.
 
 Application process interruption is safe to qualify with disposable files. OS crash/power-loss simulation is not part of this plan's execution authorization: the declared OS-cache contract promises neither. A future explicitly authorized storage-lab test may measure loss behavior without reclassifying ordinary persistence as power-loss-durable.
