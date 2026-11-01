@@ -6,6 +6,7 @@
 #include <CNA/C/graphics_resource.h>
 #include <CNA/C/cna.h>
 
+#include <float.h>
 #include <stddef.h>
 
 // The ABI version *value* is gated by tools/c-api/generate_abi_baseline.py, which measures
@@ -18,6 +19,10 @@
 // does not have to track.
 _Static_assert(CNA_ABI_VERSION_ENCODE(1, 2, 3) == UINT32_C(0x00010203),
                "CNA C ABI version encoding must remain stable: major<<16 | minor<<8 | patch");
+_Static_assert(sizeof(float) == 4U && FLT_RADIX == 2 && FLT_MANT_DIG == 24 && FLT_MAX_EXP == 128,
+               "CNA C ABI float must be IEEE-754 binary32");
+_Static_assert(sizeof(double) == 8U && FLT_RADIX == 2 && DBL_MANT_DIG == 53 && DBL_MAX_EXP == 1024,
+               "CNA C ABI double must be IEEE-754 binary64");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
 _Static_assert(sizeof(CNA_Handle) == sizeof(uint64_t),

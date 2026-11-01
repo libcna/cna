@@ -78,6 +78,23 @@ FLAGS = """
 #define CNA_PROBE_YES ((uint8_t)1)
 """
 
+STRUCT_V1 = """
+typedef struct CNA_Probe {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    uint32_t value;
+} CNA_Probe;
+"""
+
+STRUCT_V1_APPENDED = """
+typedef struct CNA_Probe {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    uint32_t value;
+    uint32_t extra;
+} CNA_Probe;
+"""
+
 
 def measure(body: str) -> dict:
     with tempfile.TemporaryDirectory() as root:
@@ -144,6 +161,27 @@ class ConstantMeasurementTests(unittest.TestCase):
             "constant removed: CNA_RENDERER_FORMAT_USAGE_STORAGE_WRITE",
             "constant changed: CNA_RENDERER_FORMAT_USAGE_ALL: 8191 -> 7967",
         ])
+
+    def test_appending_to_an_existing_struct_is_also_a_layout_break(self):
+        additions, found, _ = baseline.describe_differences(
+            measure(STRUCT_V1), measure(STRUCT_V1_APPENDED))
+        self.assertEqual(additions, ["struct field added: CNA_Probe.extra"])
+        self.assertEqual(found, ["struct layout changed: CNA_Probe: size/align 12/4 -> 16/4"])
+
+
+class VersionDocumentationTests(unittest.TestCase):
+    def test_current_abi_version_is_read_from_the_release_note(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "ABI_VERSIONING.md"
+            path.write_text("The current experimental ABI is **0.52.0** (today).\n", encoding="utf-8")
+            self.assertEqual(baseline.documented_abi_version(path), (0, 52, 0))
+
+    def test_missing_current_abi_identity_is_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "ABI_VERSIONING.md"
+            path.write_text("# ABI release notes\n", encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                baseline.documented_abi_version(path)
 
 
 class PublicHeaderTests(unittest.TestCase):

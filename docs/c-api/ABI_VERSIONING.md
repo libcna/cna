@@ -9,6 +9,11 @@ unload or destruction and can be created without the optional decoder; decoding 
 concern. This is a purely additive change: the library exports 3,213 symbols and no existing
 route, constant, layout or error rule changes.
 
+## ABI change ledger
+
+The entries below are release notes for their named ABI generation. Counts and status statements
+inside an entry describe that historical generation, not necessarily the current surface.
+
 ### Previous ABI 0.51.0
 
 The ABI was **0.51.0** (2026-10-30). It renames the surviving public renderer
@@ -47,7 +52,7 @@ error rule changes, but a binding that requires the new routes or names needs th
 ### Previous ABI 0.49.0
 
 The ABI was **0.49.0** (2026-10-17). It **renames the renderer classification
-surface**, which `CBIND-037A` published in 2026-08 under the "graphics backend" vocabulary the
+surface**, which `CBIND-037A` published in 2026-08 under the "graphics renderer" vocabulary the
 2026-08 renderer naming normalization had just retired: both classify a `CNA_GraphicsRendererType`,
 so they are renderer classifications. The C++ types behind them were renamed the same way
 (`CNA::GraphicsRendererCategory`, `CNA::GraphicsRendererMaturity`).
@@ -359,7 +364,7 @@ minor-version increment, these release notes and an updated baseline.
 **Why it was removed rather than kept refusing.** The route existed for one renderer's mesh ABI:
 Skia's bounded `SkVertices`/SkSL submission (`SKIA-144`--`157`). Skia was retired in 2026-08, and
 after the 2026-09-17 curation to 25 identities **no renderer in the tree implemented it** -- the
-`ISpriteBatchRenderer` base threw `std::runtime_error` for every backend, which
+`ISpriteBatchRenderer` base threw `std::runtime_error` for every renderer, which
 `cna_sprite_batch_draw_mesh_ext` converted into `CNA_RESULT_NOT_SUPPORTED`. A C caller could
 therefore reach it, but never succeed on any supported renderer. Keeping a route that every renderer
 refuses is a permanently dead branch of the ABI, so while the ABI is still `0.x` and experimental
@@ -411,7 +416,7 @@ the operation without inferring support from the renderer name.
 `0.25.0` appended **one shader-payload identity**,
 `CNA_SHADER_DIALECT_SPIRV` (`7`), for renderers that require already-compiled SPIR-V bytecode
 rather than Vulkan GLSL source. The distinction is observable: native CNA Vulkan consumes SPIR-V
-words, while IGL's Vulkan backend compiles GLSL source, and both previously reported
+words, while IGL's Vulkan renderer path compiled GLSL source, and both previously reported
 `CNA_SHADER_DIALECT_GLSL_VULKAN`. Existing identities retain values `0` through `6`; only
 `CNA_SHADER_DIALECT_MAXIMUM` moves from `6` to `7`. The minor increments because the closed
 enumerable range changed, and `VULKAN-264` recorded the renderer-side contract and tests (the
@@ -456,7 +461,7 @@ same integer it had before `0.20.0` retired it, so a binding built against `0.19
 sees the values it always saw; a binding built against `0.20.0`/`0.21.0` gains ten constants and
 a higher ceiling. `SKIA` alone stays retired, which leaves its number (`19`) a permanent gap in
 the identity range -- the reason `CNA_GRAPHICS_RENDERER_MAXIMUM` still may not be read as "every
-value below this names a live backend".
+value below this names a live renderer".
 
 `0.21.0` added the small public-API tail introduced by SAMPLE-060/061, from
 C API task `CBIND-124`: `cna_environment_get_device_type` with its two fixed device
@@ -623,6 +628,9 @@ CBIND-058, every one of them additive. `0.3.0` was **not** additive and that is 
 used to accept one. A caller that passed only `CNA_FALSE` and `CNA_TRUE` -- what this document has
 always required -- is unaffected. A caller that passed anything else was already getting a value
 read as true in some routes and false in others, so there was no consistent behaviour to preserve.
+
+## Version encoding and compatibility
+
 The packed representation is a `uint32_t`:
 
 ```text
@@ -631,23 +639,24 @@ bits 15..8   minor
 bits  7..0   patch
 ```
 
-The public header will provide `CNA_ABI_VERSION_ENCODE(major, minor, patch)`,
+The public header provides `CNA_ABI_VERSION_ENCODE(major, minor, patch)`,
 `CNA_ABI_VERSION_MAJOR`, `CNA_ABI_VERSION_MINOR`, `CNA_ABI_VERSION_PATCH`, and
 `cna_get_abi_version()`. A consumer must reject a different major. From `1.0` on it may then require
 a minimum minor and accept every later one, because later minors are only additive. While the
 major is `0` that is not enough: under the `0.x` rule below any minor may break, so a `0.x`
-consumer must also reject a minor it was not written against — CNA.NET admits exactly one — and may
-accept a later patch of that minor.
+consumer must also reject a minor it has not explicitly reviewed and may accept a later patch of
+that minor.
 
 The installed CMake package checks only the first half: its version file is `SameMajorVersion`, so
 `find_package(CNA 0.1 CONFIG)` accepts `0.1` and every later `0.x`, and rejects a `1.x`. Under `0.x`
 the consumer's own runtime check against `cna_get_abi_version()` is what refuses a newer minor;
 `modules/c-api/examples/c/hello_cna.c` shows it.
 
-ABI `0.x` is experimental: an incompatible change requires a minor-version increment, release
-notes and a regenerated ABI baseline. ABI `1.x` and later permit only additive, backward-compatible
-changes within a major. Removing or changing an existing function, numeric constant, struct field,
-field meaning, ownership rule, error rule or callback rule requires a new ABI major.
+ABI `0.x` is experimental: an incompatible change requires owner review, a minor-version
+increment, release notes and a regenerated ABI baseline. ABI `1.x` and later permit only additive,
+backward-compatible changes within a major. From `1.x`, removing or changing an existing function,
+numeric constant, struct field, field meaning, ownership rule, error rule or callback rule requires
+a new ABI major.
 
 ### What a `CNA_Bool` outside {0, 1} does
 
@@ -661,15 +670,16 @@ then disagreed about what they had accepted, since the implementation read the f
 `!= CNA_FALSE` in 97 places and as `== CNA_TRUE` in 77. A byte of `9` therefore meant **true** in
 one route and **false** in another. `CBIND-067` made all 94 uniform.
 
-The guarantee is held by a **generated** test rather than by 94 hand-written assertions
-(`tools/c-api/generate_bool_contract_test.py`, run as `CApi_BoolContractSmoke`), so a route
-declared with a new flag parameter is covered the moment it is declared. The generator errors on a
-by-value parameter type it has no stand-in for rather than dropping that route, so the covered set
-cannot shrink quietly.
+The guarantee is held by a **generated** test rather than by a hand-maintained route list
+(`tools/c-api/generate_bool_contract_test.py`, run as `CApi_BoolContractSmoke`), so a route declared
+with a new flag parameter is covered the moment it is declared. The current test covers **98**
+routes; the 94 above is the historical `0.3.0` measurement. The generator errors on a by-value
+parameter type it has no stand-in for rather than dropping that route, so the covered set cannot
+shrink quietly.
 
 ## Naming and linkage
 
-The public export macro will be named `CNA_C_API`. On Windows it expands to `__declspec(dllexport)`
+The public export macro is named `CNA_C_API`. On Windows it expands to `__declspec(dllexport)`
 while building the C API and `__declspec(dllimport)` for a shared-library consumer. On ELF and
 Mach-O targets it uses default visibility while building the library and has no import annotation
 for consumers. Static consumers use the documented `CNA_C_API_STATIC` definition.
@@ -690,7 +700,7 @@ The C API uses only these primitive representations:
 | Boolean | `CNA_Bool` = `uint8_t`, with only `CNA_FALSE` (0) and `CNA_TRUE` (1) valid — see below |
 | Result/category/flag/set identifiers | typedef of `uint32_t` plus named integer constants, never a C `enum` field |
 | Length/count/capacity/offset | `uint64_t` |
-| Floating point | IEEE-754 binary32 `float` or binary64 `double`, verified on every supported build |
+| Floating point | IEEE-754 binary32 `float` or binary64 `double`, pinned by the C and C++ header assertion walls |
 | Handle | `CNA_Handle` = `uint64_t` |
 
 `long`, `unsigned long`, `wchar_t`, `size_t`, raw C++ `bool`, a compiler-selected enum underlying
@@ -709,27 +719,39 @@ uint32_t struct_version;
 ```
 
 The caller initializes `struct_size` to `sizeof(the exact known struct)` and `struct_version` to the
-documented version. CNA accepts only the fields contained in `struct_size`; new fields are appended
-at the end. A too-small mandatory prefix returns `CNA_RESULT_INVALID_ARGUMENT`; a future larger
-struct is accepted only after its known prefix is validated.
+documented version. Every current versioned structure uses version `1`. CNA requires the exact
+version understood by that route and at least the complete size compiled into the library. It
+validates the known fields required by the route, including reserved storage where defined; a
+larger same-version structure is accepted and its unknown tail is ignored, while a smaller
+structure returns `CNA_RESULT_INVALID_ARGUMENT`.
 
-Every public ABI struct receives C and C++ `sizeof`, `alignof` and `offsetof` tests. Public structs
-may not rely on packing pragmas. The API uses explicit fields rather than native compiler bit-field
-layout. A C API value struct is converted field-by-field to its C++ counterpart; it is never
-`reinterpret_cast` to an XNA/Sharp Runtime value type.
+This is one-way forward tolerance: a newer, larger caller can talk to an older library, but an older,
+smaller caller cannot satisfy a newer library that has enlarged the same structure. Appending a field
+to an existing structure is therefore an ABI break, not a routine additive change. Compatible growth
+uses existing reserved storage or introduces a new explicitly supported structure version, structure
+type or route while preserving the old contract.
+
+The generated C baseline records `sizeof`, alignment and every field offset and size for every
+public ABI struct. The hand-written C and C++ assertion walls additionally pin selected high-risk
+layouts. Public structs may not rely on packing pragmas. The API uses explicit fields rather than
+native compiler bit-field layout. A C API value struct is converted field-by-field to its C++
+counterpart; it is never `reinterpret_cast` to an XNA/Sharp Runtime value type.
 
 ## API evolution
 
 New capabilities use one of these paths:
 
 1. Add a new function with a new name.
-2. Append fields to a versioned struct.
+2. Use reserved storage, or add a new explicitly versioned structure or route while keeping the old
+   contract available.
 3. Add a new named `uint32_t` constant after checking numeric stability.
 4. Add an explicitly labelled experimental header/function family before ABI 1.0.
 
-Changing an existing meaning is forbidden. Deprecated functions continue to export through their
-ABI major and direct consumers to their replacement in documentation. The C API's version is
-independent of the CNA project version and independent of Sharp Runtime's version.
+During experimental `0.x`, changing an existing meaning is an incompatible change governed by the
+reviewed minor-version rule above. From `1.x`, it is forbidden within an ABI major. Deprecated
+functions continue to export through their ABI major and direct consumers to their replacement in
+documentation. The C API's version is independent of the CNA project version and independent of
+Sharp Runtime's version.
 
 ## The recorded baseline
 
@@ -752,19 +774,21 @@ silently different binary.
 
 When the check disagrees with the build it says which kind of difference it found:
 
-- **Additions** — a new struct, field, constant or export. Permitted by the four evolution paths
-  above; re-record them with `--write` and the diff shows exactly what was added.
+- **Additions** — a new struct, field, constant or export. The label describes the generated diff;
+  it does not by itself declare the change compatible. In particular, adding a field to an existing
+  structure also changes its recorded layout and is an ABI break. Re-record compatible additions
+  with `--write`, and the diff shows exactly what was added.
 - **ABI breaks** — a struct that changed size or alignment, a field that moved or was resized, a
   constant whose value changed, an export that vanished, or a library whose reported version
   disagrees with its headers. Each is named individually. These are what this section forbids.
 
 Two gates run it:
 
-- `CApiAbiHeaderBaseline` measures the headers alone. It needs no build, so it runs in the ordinary
-  build and in the `c-api-abi-baseline` CI job, which is where a moved field is most likely to be
-  introduced.
+- `CApiAbiHeaderBaseline` measures the headers alone. It runs in native, non-cross-compiling C API
+  build trees and in the Linux `c-api-abi-baseline` CI job, which is where a moved field is most
+  likely to be introduced.
 - `CApiAbiBaseline` adds the two halves only a built library can answer — its own ABI version and
-  its export list — and runs in each C API build tree.
+  its export list — and runs for native ELF and Mach-O C API libraries.
 
 Until CBIND-159 the probe skipped every macro whose value opens with a parenthesis, so the
 capability and format-usage flag bits and `CNA_RENDERER_FORMAT_USAGE_ALL` were not
@@ -785,7 +809,8 @@ python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c
 The current baseline records 3,213 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
-only the answers do. A route whose backend or layer is absent exists and refuses, rather than
-disappearing from the library. `CNA_CNAEXT` is the newest member of that list and the one with the
-most at stake, because it is `OFF` by default: the engine-layer routes are declared and exported in
-every build and answer `CNA_RESULT_NOT_SUPPORTED` where the layer was compiled out.
+only the answers do. A route whose renderer facility or optional feature is absent exists and
+refuses, rather than disappearing from the library. `CNA_CNAEXT` controls the ASCII, CRT,
+colour-depth and DebugDraw extension families; `CNA_DEVICES` controls optional device and sensor
+support. Their routes remain declared and exported when the corresponding implementation is absent
+and answer `CNA_RESULT_NOT_SUPPORTED` where appropriate.

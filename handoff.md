@@ -35,6 +35,21 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API ABI/versioning contract reconciliation (2026-11-01):
+  `docs/c-api/ABI_VERSIONING.md` now separates its historical release ledger from the current
+  contract, records the current 98 generated `CNA_Bool` routes, and describes the actual `0.x`
+  review rule and native gate scopes. Most importantly, it no longer presents appending a field to
+  an existing versioned structure as a compatible evolution path: the implementation requires the
+  exact structure version and at least the library's compiled size, so its larger-tail tolerance is
+  one-way and an older smaller caller cannot use a newer enlarged layout. Compatible growth must
+  use reserved storage or a new supported structure/version/route. The baseline regression suite
+  now proves that an appended field is also a layout break, and the generator rejects a current ABI
+  identity in the release note that disagrees with `abi.h`; the CI path filter includes both files.
+  C and C++ header walls now pin the promised IEEE-754 binary32/binary64 representations. The
+  header-only and full-library baselines agree on ABI 0.52.0, 196 structs, 296 scalar types, 1,478
+  integer constants, 11 floating constants, 14 string constants, 141 colours and 3,213 exports;
+  all 12 generator regressions and all seven focused C API CTests pass, the latter through the
+  private SDLGPU runner.
 - C API WebAssembly artifact reconciliation (2026-11-01):
   `docs/c-api/WASM_ARTIFACT.md` is now a current consumer contract rather than an eleven-part
   snapshot tied to the deleted `fixcnats.md`. It removes the stale qualified ABI 0.21.0, lists all

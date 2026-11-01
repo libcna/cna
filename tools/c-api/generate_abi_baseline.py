@@ -10,10 +10,11 @@ compares the whole picture with ``abi_baseline.json``.
 
 The point is not that the numbers are asserted — many already are — but that a change to any of them
 shows up as a **reviewable diff** instead of a silently different binary.  ``docs/c-api/ABI_VERSIONING.md``
-allows additions and forbids changing an existing meaning, so when the baseline and the build
-disagree this tool says which kind of difference it found:
+allows compatible additions. During experimental ``0.x`` an incompatible change needs an
+owner-reviewed minor increment and release note; from ``1.x`` it needs a new major. When the
+baseline and the build disagree this tool says which kind of difference it found:
 
-* additions — permitted by the evolution policy, and the baseline needs updating;
+* additions — review for compatibility, then update the baseline if permitted;
 * removals or changed layouts, values or offsets — **ABI breaks**, named individually.
 
 ``--library`` is optional, which splits the gate in two.  With it, everything above is measured.
@@ -38,11 +39,22 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 INCLUDE_DIR = REPO_ROOT / "modules" / "c-api" / "include"
 HEADER_DIR = INCLUDE_DIR / "CNA" / "C"
 BASELINE_PATH = Path(__file__).resolve().parent / "abi_baseline.json"
+VERSION_DOC_PATH = REPO_ROOT / "docs" / "c-api" / "ABI_VERSIONING.md"
 
 SCHEMA_VERSION = 1
 
 # `CNA_C_API` is the platform linkage macro and expands to a storage-class attribute, not a value.
 SKIPPED_MACROS = {"CNA_C_API"}
+
+
+def documented_abi_version(path: Path = VERSION_DOC_PATH) -> tuple[int, int, int]:
+    """Read the current experimental ABI identity from its release-note contract."""
+    text = path.read_text(encoding="utf-8")
+    match = re.search(r"The current experimental ABI is \*\*(\d+)\.(\d+)\.(\d+)\*\*", text)
+    if match is None:
+        raise SystemExit(
+            f"{path} must declare 'The current experimental ABI is **major.minor.patch**'.")
+    return tuple(int(part) for part in match.groups())
 
 
 def read_headers(header_dir: Path = HEADER_DIR) -> dict[str, str]:
@@ -323,9 +335,9 @@ def describe_differences(baseline: dict, measured: dict) -> tuple[list[str], lis
                 f"{old.get('size')}/{old.get('align')} -> {new.get('size')}/{new.get('align')}")
         old_fields, new_fields = old.get("fields", {}), new.get("fields", {})
         for field in sorted(set(new_fields) - set(old_fields)):
-            # Appending a field to a versioned struct is the evolution policy's second path; it is
-            # an addition only when it does not move anything already there, which the size/align
-            # and per-field comparisons above and below decide independently.
+            # The diff classifies the new name as an addition, but size/alignment independently
+            # decides compatibility. Appending to an existing struct normally also emits a layout
+            # break because an older, smaller caller cannot satisfy the newer library's size check.
             additions.append(f"struct field added: {name}.{field}")
         for field in sorted(set(old_fields) - set(new_fields)):
             breaks.append(f"struct field removed: {name}.{field}")
@@ -394,6 +406,17 @@ def main() -> int:
         raise SystemExit("--write needs --library: a baseline without the export list is not one.")
 
     measured = measure(library, arguments.compiler, arguments.compile_flags)
+    header_version = measured["abi_version"]
+    actual_version = (header_version["major"], header_version["minor"], header_version["patch"])
+    release_note_version = documented_abi_version()
+    if release_note_version != actual_version:
+        print(
+            "docs/c-api/ABI_VERSIONING.md declares current ABI "
+            f"{'.'.join(map(str, release_note_version))}, but the headers declare "
+            f"{'.'.join(map(str, actual_version))}.",
+            file=sys.stderr,
+        )
+        return 1
     summary = (
         f"{len(measured['structs'])} structs, {len(measured['scalars'])} scalar types, "
         f"{len(measured['integers'])} constants, {len(measured['floats'])} floating constants, "
@@ -426,10 +449,10 @@ def main() -> int:
             print(f"  BREAK  {entry}", file=sys.stderr)
         if len(breaks) > 40:
             print(f"  ... and {len(breaks) - 40} more", file=sys.stderr)
-        print("docs/c-api/ABI_VERSIONING.md forbids changing an existing meaning within a major "
-              "version. Add a new name instead, or record an owner-approved break.", file=sys.stderr)
+        print("Under experimental 0.x, record an owner-approved minor increment and release note; "
+              "from 1.x, add a new name or increment the major.", file=sys.stderr)
     if additions:
-        print(f"{len(additions)} addition(s), which the evolution policy permits:", file=sys.stderr)
+        print(f"{len(additions)} addition(s), which require compatibility review:", file=sys.stderr)
         for entry in additions[:40]:
             print(f"  add    {entry}", file=sys.stderr)
         if len(additions) > 40:

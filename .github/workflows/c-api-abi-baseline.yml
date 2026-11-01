@@ -6,12 +6,12 @@
 # holding it against a checked-in baseline.
 #
 # The value is that a change becomes a **reviewable diff** rather than a silently different binary.
-# Additions are permitted by docs/c-api/ABI_VERSIONING.md and are simply re-recorded; a moved field,
-# a changed value or a vanished export is named as a break.
+# Compatible additions are re-recorded after review; growing an existing struct, moving a field,
+# changing a value or removing an export is named as a break.
 #
 # The header half needs no build, which is what lets this run on every push instead of waiting for a
 # nightly. The export half needs the built library and runs as the CApiAbiBaseline ctest test in
-# each of the four C API build trees.
+# native ELF and Mach-O C API build trees.
 
 name: C API ABI baseline
 
@@ -20,6 +20,7 @@ on:
     branches: [next, develop, main]
     paths:
       - 'modules/c-api/include/**'
+      - 'docs/c-api/ABI_VERSIONING.md'
       - 'tools/c-api/abi_baseline.json'
       - 'tools/c-api/generate_abi_baseline.py'
       - 'tools/c-api/test_generate_abi_baseline.py'
@@ -28,9 +29,11 @@ on:
     branches: [next, develop, main]
     paths:
       - 'modules/c-api/include/**'
+      - 'docs/c-api/ABI_VERSIONING.md'
       - 'tools/c-api/abi_baseline.json'
       - 'tools/c-api/generate_abi_baseline.py'
       - 'tools/c-api/test_generate_abi_baseline.py'
+      - '.github/workflows/c-api-abi-baseline.yml'
   workflow_dispatch:
 
 concurrency:

@@ -7,10 +7,17 @@
 #include <CNA/C/cna.h>
 
 #include <cstddef>
+#include <limits>
 
 // The version value is gated by generate_abi_baseline.py (CApiAbiHeaderBaseline); this wall checks
 // the encoding, which nothing else does. See AbiHeaderC.c for why the literal was removed.
 static_assert(CNA_ABI_VERSION_ENCODE(1, 2, 3) == UINT32_C(0x00010203));
+static_assert(sizeof(float) == 4U && std::numeric_limits<float>::is_iec559 &&
+              std::numeric_limits<float>::radix == 2 && std::numeric_limits<float>::digits == 24 &&
+              std::numeric_limits<float>::max_exponent == 128);
+static_assert(sizeof(double) == 8U && std::numeric_limits<double>::is_iec559 &&
+              std::numeric_limits<double>::radix == 2 && std::numeric_limits<double>::digits == 53 &&
+              std::numeric_limits<double>::max_exponent == 1024);
 static_assert(sizeof(CNA_Result) == sizeof(uint32_t));
 static_assert(sizeof(CNA_Handle) == sizeof(uint64_t));
 static_assert(sizeof(CNA_GraphicsResourceTag) == sizeof(uint64_t));
