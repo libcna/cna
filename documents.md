@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 119 reviewed, 12 updated incidentally and awaiting their own audit, and 46 not yet
+Summary: 120 reviewed, 12 updated incidentally and awaiting their own audit, and 45 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -93,7 +93,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/dualtextureeffect-support.md`](docs/dualtextureeffect-support.md)
 - ✅ **REVIEWED** — [`docs/emscripten-mainloop-game-lifetime.md`](docs/emscripten-mainloop-game-lifetime.md)
 - ✅ **REVIEWED** — [`docs/environmentmapeffect-support.md`](docs/environmentmapeffect-support.md)
-- ⬜ **PENDING** — [`docs/filesystem-path-model.md`](docs/filesystem-path-model.md)
+- ✅ **REVIEWED** — [`docs/filesystem-path-model.md`](docs/filesystem-path-model.md)
 - ⬜ **PENDING** — [`docs/fna-reference-harness.md`](docs/fna-reference-harness.md)
 - ✅ **REVIEWED** — [`docs/fna3d-parity-report.md`](docs/fna3d-parity-report.md)
 - ✅ **REVIEWED** — [`docs/fna3d-renderer.md`](docs/fna3d-renderer.md)

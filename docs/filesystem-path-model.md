@@ -4,9 +4,11 @@ What a path is inside CNA, what a `std::string` holding a path means, and where 
 between them happens. This exists because the answer used to be different in different modules, and
 on Windows that is not a style question — it decides whether a file opens.
 
-The measurements behind every claim here are in `spikes/windows-unicode-path-spike/`; the
-migration that applied them was the Windows portability workstream (`WINPORT-*`, 2026-09, Git
-history).
+The original Windows encoding measurements are in
+[windows-unicode-path-spike](../spikes/windows-unicode-path-spike/README.md) (MSVC 19.44, ACP1252).
+WINPORT-* applied that model; later title/content/storage contracts have their own source and
+regression tests. The 2026-11-01 audit checks current helpers/call boundaries without rerunning
+every historical Windows measurement.
 
 ---
 
@@ -19,7 +21,7 @@ delete.
 
 ```cpp
 std::ifstream in(path, std::ios::binary);            // yes
-std::ifstream in(path.string(), std::ios::binary);   // no  -- throws on Windows
+std::ifstream in(path.string(), std::ios::binary);   // no -- can narrow through a code page
 ```
 
 **2. A narrow `std::string` holding a path means UTF-8.** That is the encoding of a path in a public
@@ -41,11 +43,12 @@ both convert through the process ANSI code page and throw when a character has n
 | `PathToUtf8(path)` | UTF-8, separators as the path holds them | logs, exception text, names shown to a player |
 | `PathToGenericUtf8(path)` | UTF-8, `/` separators | identities, map and cache keys, manifests, anything another platform reads |
 | `PathFromUtf8(text)` | native `std::filesystem::path` | every return trip to the filesystem |
-| `IsWellFormedUtf8(text)` | `bool` | validating text that arrived from a game or a file |
+| `TryPathFromUtf8(text)` | native path or empty optional | conversion-failure-aware counterpart of PathFromUtf8; not an existence check |
+| `IsWellFormedUtf8(text)` | `bool` | Unicode validity, separately from filename/path policy |
 
 `ContentPathToUtf8()` / `ContentPathFromUtf8()` in `CNA/Internal/ContentPath.hpp` are the content
 pipeline's existing spellings of `PathToGenericUtf8()` / `PathFromUtf8()` and forward to them
-unchanged. Roughly a hundred pipeline call sites use them and are already correct.
+unchanged. Use the helpers rather than deriving an encoding policy from a call-site count.
 
 ### Why not just `u8string()` everywhere
 
@@ -64,65 +67,39 @@ does, and fails on an identical set of inputs. Separator style and text encoding
 
 ---
 
-## The ten questions, answered
+## Text, validation and logical identifiers
 
-**1. What encoding does a public CNA `std::string` path mean?** UTF-8. Where the type is fixed by
-the XNA 4.0 API — `ContentManager.RootDirectory`, `Texture2D(const std::string& assetName)`,
-`WaveBank`, `SoundBank` — the signature is preserved and the meaning is declared, rather than the
-signature being changed. XNA's own equivalents are UTF-16 `String`; UTF-8 is the narrow encoding
-that loses nothing relative to them.
+Public narrow path text uses UTF-8, retaining fixed XNA-style string signatures such as
+ContentManager.RootDirectory and the audio/content APIs. ASCII names already satisfy it.
+This supports well-formed Unicode names; it is not a claim that every arbitrary native UTF-16
+sequence or POSIX byte name is portable Unicode.
 
-**2. Are paths entering CNA expected to be UTF-8?** Yes. A game that hard-codes an ASCII asset name
-is unaffected, because ASCII is UTF-8.
+PathFromUtf8 constructs a path from char8_t code units, and the output helpers use u8string/
+generic_u8string. Exact conversion internals and failure categories depend on the standard library.
+The recorded MSVC test uses native UTF-16 and UTF-8 conversions without an ANSI round trip.
 
-**3. How are Windows native paths converted?** Through `std::filesystem::path`'s own UTF-8 ↔ UTF-16
-conversion (`u8string()` / `path(std::u8string)`), which is `MultiByteToWideChar(CP_UTF8, …)` and
-its inverse. No `std::codecvt`, no locale, no ANSI code page. Where CNA calls Win32 directly it uses
-the wide entry points and `Win32Utf::ToWide()` / `ToUtf8()`, which are strict `CP_UTF8`
-conversions.
+On POSIX, conversion deliberately preserves native filename bytes even when they are not valid
+UTF-8. On Windows, malformed UTF-8 can fail conversion (filesystem_error in the measured MSVC
+configuration). Call IsWellFormedUtf8 first when an API requires the same Unicode validity decision
+on both hosts. That function accepts U+0000 as valid Unicode; it does not validate a legal filename,
+reject rooted paths, check existence or grant access. TryPathFromUtf8 catches std::exception from
+conversion and returns an empty optional; it adds none of those filename/authorization checks.
 
-**4. How are paths displayed in logs?** As UTF-8, via `PathToUtf8()`, preserving the separators the
-path actually has. CNA's log sinks are UTF-8. A Windows console that renders that as mojibake is a
-console setting, not a corrupted path — see "Proving a path is right", below.
+Logs and serialized references use the text helpers. Content manifests, external references and
+cache identities use generic-form UTF-8 with '/' separators. This is a portable representation for
+suitable relative names, not proof that arbitrary absolute roots, drive names, case collisions,
+reserved names or files themselves transfer between systems.
 
-**5. How are paths serialized?** As generic-form UTF-8, via `PathToGenericUtf8()`. That is what
-content manifests, XNB external references, `cna-buildcontent.json` and CNB asset names already
-store, and the migration did not change any on-disk format.
+Conversion does not resolve dot components, canonicalize, change case or normalize Unicode.
+Generic form uses the host path parser's separators: Windows recognizes backslash as a separator;
+POSIX can preserve it as a literal character. An API that accepts Windows-style asset spelling
+therefore normalizes it explicitly, separately from UTF-8 conversion.
 
-**6. Are serialized paths portable between Windows and Linux?** Yes, and that is the reason for
-generic form: `content/textures/a.png` is written on both, so content built on Linux loads on
-Windows and the other way round.
-
-**7. Are separators normalized?** Only by `PathToGenericUtf8()`, and only separators. Conversion
-never resolves `.` or `..`, never canonicalises, never touches case, and never applies Unicode
-normalisation. Those are separate decisions with separate call sites.
-
-> **Do not validate authored text through a conversion that rewrites it.** `PathToGenericUtf8()`
-> turns `\` into `/` on Windows, so a check that looks for a `\` in its *output* can never find
-> one there and is dead code on exactly the platform it was written for. This is not hypothetical:
-> the external-content-dependency check did that, and `@shared/folder\escape.bin` was one rejected
-> filename on POSIX and two accepted path components on Windows — one authored manifest with two
-> meanings. A rule about how text was *written* has to be applied to the text as written, before
-> any conversion. The corollary: a logical content identifier (`@alias/path`, an asset name, a
-> manifest key) has one separator, `/`, on every platform (Windows closeout WINCLOSE-0006).
-
-**8. What happens with invalid UTF-8?** `PathFromUtf8()` does not validate, and the two platforms
-then differ because they genuinely differ (see question 9). On Windows the standard library throws
-`std::filesystem::filesystem_error` — measured, deterministic, never silent mojibake. On POSIX the
-bytes are preserved. A public API that wants one answer on both platforms calls
-`IsWellFormedUtf8()` first and refuses explicitly.
-
-**9. What about filesystem names not representable as UTF-8 on POSIX?** They are preserved. A POSIX
-filename is an arbitrary byte sequence; rejecting non-UTF-8 bytes in the conversion would make files
-that genuinely exist unopenable, which is a Linux regression traded for a Windows feature. This is
-the one place the model is deliberately platform-asymmetric, and it is asymmetric because the
-platforms are.
-
-**10. Is lexical normalization part of conversion, or separate?** Separate. `lexically_normal()`,
-`weakly_canonical()` and the containment helpers in `CNA/Internal/PathContainment.hpp` are called
-where that behaviour is wanted. Note that on Windows `lexically_normal()` also rewrites `/` as `\`,
-so a key built from `lexically_normal().string()` does not match one built from `generic_string()` —
-another reason identities go through `PathToGenericUtf8()`.
+Validate authored logical text before any conversion that rewrites it. A manifest identifier such
+as @alias/path has one authored separator, '/', on every host. Checking for forbidden backslash
+only after generic conversion would miss it on Windows. The external-dependency correction
+WINCLOSE-0006 records that boundary; it is distinct from TitleContainer's intentional acceptance
+of Windows-style separators.
 
 ---
 
@@ -133,10 +110,10 @@ Each library has its own contract, verified against its source rather than assum
 | Library | What it expects on Windows | How CNA meets it |
 |---|---|---|
 | SDL3, SDL3_mixer | UTF-8 (`WIN_UTF8ToStringW` → `CreateFileW`) | pass `PathToUtf8()` |
-| FFmpeg (libavformat) | UTF-8 (`ff_win32_open` widens with `utf8towchar`) | pass `PathToUtf8()` at the call |
+| FFmpeg (libavformat) | Its UTF-8 filename API | pass UTF-8 text; CNA's current Windows build has no enabled FFmpeg decoder integration, so this is not Windows playback qualification |
 | stb_image, stb_image_write | **ANSI** — the `_wfopen` branch needs `STBI_WINDOWS_UTF8`, which CNA does not define | do not pass a filename; use the memory entry points |
 | cgltf | **ANSI** — `cgltf_default_file_read` is a bare `fopen` | install CNA-owned `cgltf_file_options` callbacks that open a native `path` |
-| FreeType | documented as `fopen` semantics; the CMake build ships wide semantics, so it is build-dependent | use `FT_New_Memory_Face` and remove the question |
+| FreeType | Filename behavior depends on its build | read a native file into memory and use FT_New_Memory_Face |
 | zlib, Draco, dr_flac, dr_mp3, stb_vorbis | no path crosses — memory APIs only | nothing to do; keep it that way |
 | shaderc | the `filename` argument is a diagnostic label, never opened | nothing to do |
 
@@ -159,13 +136,20 @@ The first and third rows are the traps. A POSIX-absolute path is *not* absolute 
 drive-relative path has a root name without being absolute — so `is_absolute()` alone is not a test
 for "rooted", and code that needs "rooted" must ask `has_root_directory()` or inspect both.
 
-Containment is asked as a path question, not a string question: normalise both sides, take
-`lexically_relative()`, and treat a result that is empty or begins with `..` as an escape. That
-answer is identical on both platforms, including for the `..config` case, where a directory whose
-name merely begins with two dots is correctly *not* an escape.
+Containment is a path-component question. PathContainment.hpp normalizes both sides, optionally
+weakly canonicalizes existing components (default on), and checks lexically_relative. It rejects
+an empty result, the root itself ('.'), or a first component exactly '..'. A directory called
+..config is not that component. Canonicalization errors refuse the request. The returned path
+retains the lexical spelling rather than the canonical spelling.
+
+Relative-input helpers normalize backslashes and reject slash-rooted/drive-prefixed input before
+joining. File-relative helpers distinguish the join directory from the authorization root, allowing
+legitimate in-root sibling references. Native root parsing still follows each platform's rules;
+this does not make all Windows/POSIX paths equivalent. The check and later open are separate
+operations, not an atomic filesystem sandbox against concurrent symlink/directory replacement.
 
 Case sensitivity is not part of this model. Windows is usually case-insensitive and case-preserving,
-POSIX usually is not, and CNA does not normalise case anywhere to paper over that. See
+POSIX usually is not, and the UTF-8 conversion layer does not normalize case. See
 `CNA/Internal/CaseInsensitivePath.hpp` for the one place case is deliberately resolved -- the XNA
 asset paths of `TitleContainer`, `ContentManager` and the XACT banks, which accept Windows separators
 and fall back to a unique case-insensitive match so titles open on case-sensitive hosts. It
@@ -173,10 +157,9 @@ promises a spelling that opens the file, not the casing stored on disk, so on a 
 filesystem the requested spelling comes back unchanged (graphics shared cleanup GSC-0007, formerly
 WINNATIVE-F26).
 
-Long paths are a separate concern from encoding and are tracked separately. With
-`LongPathsEnabled=0`, which is the default, `std::filesystem` on MSVC enforces the legacy 260-character
-`MAX_PATH` and `create_directories` fails beyond it. Unicode correctness does not imply long-path
-support and this document does not claim it.
+Long paths are separate from encoding. The recorded MSVC/Windows configuration with
+LongPathsEnabled=0 hit legacy MAX_PATH behavior; this is not a claim about every machine's registry,
+application manifest or standard library. Unicode correctness alone does not qualify long paths.
 
 ### TitleContainer's XNA path contract
 
@@ -188,7 +171,7 @@ names produce `ArgumentException`. Keep this ordering: a removed component may
 contain a reserved character, and XNA's empty-component rules are not equivalent
 to a blanket `lexically_normal()`.
 
-The relative URI check retains XNA4's Framework4 limit of65520 UTF-16 code units,
+The relative URI check rejects lengths of 65520 UTF-16 code units or more,
 not UTF-8 bytes. This is a title compatibility boundary, not a general filesystem
 or modern Sharp Runtime URI limit. Ordinary OS path limits can fail earlier.
 
@@ -206,6 +189,21 @@ missing/unreadable files retain its documented `IO` category and do not overwrit
 the destination buffer. The native absolute-path acceptance test was corrected
 against genuine XNA, not treated as an intentional extension.
 
+This OpenStream contract does not redefine every CNAEXT helper on TitleContainer. In particular,
+ReadToPointer uses a separate native-file path and must not be treated as the same validated
+OpenStream entry point.
+
+### Title location versus save storage
+
+TitleLocation initializes from the selected platform filesystem's base path, falling back to
+the current directory only when no base is supplied; an explicit title path updates the internal
+media/content bridge. Title-relative access is not the save-root policy.
+
+StorageDevice resolves a separate per-game root, with browser persistence readiness, Android's
+private storage service and native per-user environment fallbacks. Selecting SDL3/HEADLESS/TERMINAL
+does not by itself relocate native saves to the title directory. See
+[C API storage contract](c-api/STORAGE.md) for the shared native storage/lifetime boundary.
+
 ---
 
 ## Proving a path is right
@@ -219,3 +217,11 @@ correctness is asserted by:
 - asking the wide Win32 API (`GetFileAttributesW`, `CreateFileW`) directly;
 - redirecting a test's output to a file and reading the raw bytes, rather than reading it through a
   console or a PowerShell pipeline that re-encodes.
+
+## Audit verification
+
+On 2026-11-01, focused Core/Runtime targets build in the existing multi-renderer tree. All 71
+UTF-8/validation/containment/Unicode/case-resolution cases and all 18 TitleContainer/TitleLocation
+cases pass through the private runner. This is current Linux evidence. The CP1252/MSVC, native
+Windows path-root/long-path and Android packaged-asset observations are historical or source
+boundaries, not newly executed platform qualification.

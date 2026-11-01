@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Filesystem-path documentation reconciliation (2026-11-01): historical CP1252 measurements
+  are separated from current helpers; TryPathFromUtf8, Unicode versus legal-name validation,
+  NUL, POSIX raw bytes, host separator parsing, portable-name limits and exact containment
+  behavior replace universal round-trip/platform claims. The obsolete Win32Utf reference is
+  removed, long-path/library claims are scoped, and title/save plus OpenStream/CNAEXT-pointer
+  boundaries are explicit. Core/Runtime targets build; 71 focused path cases and 18 title cases
+  pass on private Linux displays. No fresh native-Windows, Android packaged-asset or long-path
+  qualification, implementation or ABI changes.
 - Development-environment documentation reconciliation (2026-11-01): the Debian recipe now
   distinguishes root/shared-runtime CMake requirements, compiler versus standard library, actual
   CI sibling-branch resolution, base/video/media/C API dependency gates, ALSA versus SDL dummy
