@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API handle-contract reconciliation (2026-11-01):
+  `docs/c-api/HANDLES.md` now matches the process-wide registry and family adapters. It removes
+  nonexistent public runtime/generic-release/kind-query assumptions and separates the single
+  C-owned game from multiple independent devices. Registry slots store generation, kind, a shared
+  object reference, creation thread and C tag; family code enforces parent/device/borrow rules.
+  The page distinguishes copied tokens, owned aliases, callback loans, native disposal and handle
+  release; it qualifies zero-handle and validation-order exceptions, documents foreign-thread
+  dispatch and records that the registry has no generic `SHUTTING_DOWN` gate. Generation retirement
+  remains explicit, with the helper-boundary test distinguished from public churn evidence.
+  Matching `abi.h` comments no longer imply a separate runtime identity check. The selected registry,
+  runtime, lifetime and C/C++ ABI targets build; all 11 focused tests pass through the private SDLGPU
+  runner and all nine generation, ABI, export, route/Boolean and release checks pass. Public ABI
+  signatures, values and layouts are unchanged.
 - C API shared graphics-resource/surface contract reconciliation (2026-11-01):
   `docs/c-api/GRAPHICS_RESOURCES.md` now covers the current resource, state, display, target and font
   boundary. It adds OcclusionQuery to the generic resource kinds, per-handle C tags, disposal

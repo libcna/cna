@@ -52,7 +52,7 @@ typedef uint32_t CNA_Result;
 /** @brief Indicates that an argument violates the documented C API contract. */
 #define CNA_RESULT_INVALID_ARGUMENT UINT32_C(1)
 
-/** @brief Indicates that a handle is stale, invalid, from another runtime, or has the wrong kind. */
+/** @brief Indicates that a handle is stale, invalid, or has the wrong object kind. */
 #define CNA_RESULT_INVALID_HANDLE UINT32_C(2)
 
 /** @brief Indicates that an operation is invalid for the current object or runtime state. */
@@ -100,7 +100,12 @@ typedef uint8_t CNA_Bool;
 /** @brief Boolean true value. */
 #define CNA_TRUE ((CNA_Bool)1)
 
-/** @brief Opaque generation-checked CNA object handle. */
+/**
+ * @brief Opaque, process-local, generation-checked CNA object handle.
+ *
+ * Copying the numeric value does not retain an additional owned reference or extend a borrow.
+ * The supplying route defines the handle's lifetime and its family release operation.
+ */
 typedef uint64_t CNA_Handle;
 
 /** @brief Invalid opaque CNA object handle. */

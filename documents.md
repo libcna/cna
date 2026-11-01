@@ -1,7 +1,7 @@
 # Stav dokumentace v `docs/`
 
 Inventura: 2026-11-01. Rozsah: všech 176 aktuálně verzovaných souborů `docs/**/*.md`.
-Souhrn: 77 zpracovaných, 14 podpůrně aktualizovaných čekajících na vlastní audit a 85 dosud
+Souhrn: 78 zpracovaných, 14 podpůrně aktualizovaných čekajících na vlastní audit a 84 dosud
 samostatně nezpracovaných.
 
 Tento soubor sleduje současný dokumentační úklid. Stav neříká, že čekající dokument je nutně
@@ -210,7 +210,7 @@ Odstraněné historické soubory (`graphics-ext-scope-reduction.md`,
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/GRAPHICS_DEVICE.md`](docs/c-api/GRAPHICS_DEVICE.md)
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/GRAPHICS_EXT.md`](docs/c-api/GRAPHICS_EXT.md)
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/GRAPHICS_RESOURCES.md`](docs/c-api/GRAPHICS_RESOURCES.md)
-- ⬜ **ČEKÁ** — [`docs/c-api/HANDLES.md`](docs/c-api/HANDLES.md)
+- ✅ **ZPRACOVÁNO** — [`docs/c-api/HANDLES.md`](docs/c-api/HANDLES.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/INDEX_BUFFERS.md`](docs/c-api/INDEX_BUFFERS.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/INPUT_SNAPSHOTS.md`](docs/c-api/INPUT_SNAPSHOTS.md)
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/LIMITATIONS.md`](docs/c-api/LIMITATIONS.md)
