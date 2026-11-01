@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Camera documentation reconciliation (2026-11-01): `docs/cna-devices-camera-design.md`
+  replaces the historical proposal with the implemented platform/session ownership, first-device
+  selection, cached state and RGBA upload contracts. It records that Closed is not returned,
+  frames can be consumed before validation refuses upload, upload exceptions can propagate and
+  physical unplug/revocation is not tracked by the SDL3 wrapper. The C API page corrects the
+  scripted-provider injection description. `CnaDevicesExtTests` builds with CNA_DEVICES=ON in
+  the existing UBSan tree; all 13 canned Camera tests pass on a private display. No physical
+  camera, permission or recovery qualification, implementation or ABI changes.
 - Avatar documentation reconciliation (2026-11-01): `docs/avatars.md` corrects synchronous
   signed-in cache hits, native versus inline Emscripten loading, assembly failure, item/descriptor
   format distinctions, revision identity, pack-store roots, fallback bodies and qualification
@@ -1379,6 +1387,11 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- The SDL3 Camera wrapper does not map camera-removal events or poll permission again after
+  Ready. Unplug/revocation is therefore not guaranteed to become Lost; SDL may supply blank
+  frames until the session closes. Native Camera has no public reopen/device-selector route.
+  Source-inspected on 2026-11-01; canned state tests do not qualify real hardware loss/recovery
+  (`docs/cna-devices-camera-design.md`).
 - The installed C++ SDK export registers `EmscriptenExceptionAbi` but not the source-build
   `EmscriptenAsyncify` / `EmscriptenAbi` targets. The in-tree/add_subdirectory blocking Game::Run
   link recipe therefore cannot be assumed to work through the installed package. Found by source

@@ -189,8 +189,8 @@ having no frame ready is an ordinary `CNA_FALSE` rather than a failure, and **a 
 does not match the frame is refused the same way**, with no resize and no way to tell the two cases
 apart. Read the frame size first and size the texture to it.
 
-The canonical class takes its backend as a constructor argument, so the test seam is a second
-creation route, exactly as the system tray's is:
+The native class opens through the current platform's camera provider. The C adapter supplies its
+own scripted provider for the second creation route:
 `cna_camera_create_with_test_backend_ext`, then `cna_camera_set_test_frame_ext` and
 `cna_camera_set_test_state_ext`. That is the only way to reach a frame, or the refused and lost
 states, on a machine with no camera.
