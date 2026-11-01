@@ -27,16 +27,17 @@ typedef struct CNA_ContentManagerCreateInfo {
 } CNA_ContentManagerCreateInfo;
 
 /**
- * @brief Creates an owned content manager associated with the active game and graphics device.
+ * @brief Creates an owned content manager associated with a graphics device.
  *
- * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param graphics_device Valid game-device loan or owned standalone graphics-device handle.
  * @param create_info Versioned creation configuration.
  * @param out_content_manager Receives an owned content-manager handle on success.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
- * The resulting content manager survives the callback, must be destroyed on the game creation
- * thread and must be destroyed before its parent game. The root directory is copied during this
- * call. No native service-provider, path or stream object crosses the C boundary.
+ * A manager created with a game device survives the callback, must be destroyed on its owner
+ * thread and before its parent game. A standalone device must outlive the manager and its GPU
+ * resources; the manager does not retain that device object or prevent its destruction. The root
+ * directory is copied. No native service-provider, path or stream object crosses the C boundary.
  */
 CNA_C_API CNA_Result cna_content_manager_create(
     CNA_Handle graphics_device,
@@ -123,7 +124,8 @@ CNA_C_API CNA_Result cna_content_manager_load_texture2d(
 /**
  * @brief Creates an owned resource-backed content manager.
  *
- * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param graphics_device Valid game-device loan or owned standalone graphics-device handle;
+ *        the ownership and device-lifetime rules of @ref cna_content_manager_create apply.
  * @param create_info Versioned creation configuration.
  * @param out_content_manager Receives an owned content-manager handle on success.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
@@ -406,9 +408,9 @@ CNA_C_API CNA_Result cna_content_manager_get_has_service_provider(
  * @brief Gets the graphics device a content manager loads GPU resources with.
  *
  * @param content_manager Owned or game-borrowed content-manager handle.
- * @param out_graphics_device Receives the borrowed graphics-device handle.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the borrowed device handle is no
- * longer in scope, or a documented argument/handle/thread failure.
+ * @param out_graphics_device Receives the associated device handle without transferring ownership.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the associated device token has
+ * expired or been released, or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_content_manager_get_graphics_device(
     CNA_Handle content_manager,
@@ -418,9 +420,9 @@ CNA_C_API CNA_Result cna_content_manager_get_graphics_device(
  * @brief Sets the graphics device a content manager loads GPU resources with.
  *
  * @param content_manager Owned or game-borrowed content-manager handle.
- * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param graphics_device Valid game-device loan or owned standalone graphics-device handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure. The device
- * must belong to the same game as the content manager.
+ * must have the manager's creating owner token: the same game or the same standalone device.
  */
 CNA_C_API CNA_Result cna_content_manager_set_graphics_device(
     CNA_Handle content_manager,

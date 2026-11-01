@@ -27,12 +27,22 @@ The generic CNB container and codec boundary is documented separately in [`CNB.m
 
 ## Manager creation and ownership
 
-`cna_content_manager_create` takes a callback-scoped borrowed graphics-device handle. The resulting
-manager is an owned game child that survives the callback, remains owner-thread-affine and must be
-destroyed before its parent game. Its root string is copied. CNA constructs both C-created and
-game-owned managers without an `IServiceProvider`; `cna_content_manager_get_has_service_provider`
-therefore reports `CNA_FALSE`, while GPU content uses the explicitly associated graphics device.
-The device setter accepts only a device belonging to the same game.
+`cna_content_manager_create` accepts a valid game-device loan (including a valid pre-run loan) or
+an owned standalone graphics-device handle. The manager is owned and owner-thread-affine, and its
+root string is copied. With a game device it is a game child that survives the creating callback
+and must be destroyed before the game. With a standalone device it records that device's owner
+token; it does not become a child of an unrelated game. The manager does not retain the standalone
+device object: keep that device alive until the manager and its loaded GPU resources are finished,
+and destroy them before the device. Device destruction does not enforce this manager lifetime.
+
+CNA constructs both C-created and game-owned managers without an `IServiceProvider`;
+`cna_content_manager_get_has_service_provider` therefore reports `CNA_FALSE`, while GPU content
+uses the explicitly associated graphics device. The device setter requires the same creating
+owner token: the same game, or the same standalone device.
+
+There is a current accounting defect: all C-created managers increment a process-wide manager
+counter, and `cna_game_destroy` refuses while it is nonzero. A standalone manager can therefore
+block destruction of an unrelated game; see [handoff.md §5](../../handoff.md#5-known-bugs-and-limitations).
 
 `cna_game_get_content_manager_ext` instead returns the stable borrowed handle for the game's value
 member. It accepts all ordinary content-manager operations, cannot be destroyed and becomes invalid

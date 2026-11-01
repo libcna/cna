@@ -13,9 +13,18 @@ each platform you care about; pair it with the platform-specific caveats in
 ```bash
 git submodule update --init                       # first time only
 cmake -S . -B cmake-build-debug -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES3
-cmake --build cmake-build-debug --target cna_demo_input -j"$(nproc)"
-./cmake-build-debug/cna_demo_input                 # needs a display
+cmake --build cmake-build-debug --target cna_demo_input --parallel 8
+
+# Bounded startup smoke on a private display; timeout normally exits with status 124.
+tools/platform/run_gpu_tests_private.sh --exec \
+  timeout 5s ./cmake-build-debug/cna_demo_input
 ```
+
+Automated runs must use the private runner, never the owner's live desktop. The bounded command
+checks startup only; it does not perform the interactive checklist or establish hardware parity.
+For the checks below, a human tester needs an isolated interactive test session or a dedicated
+device with the relevant peripherals. Record that environment and the observed results; the
+private headless smoke does not supply physical input or visual confirmation.
 
 Global controls: **F1** toggles text input on/off; **F2** toggles relative mouse mode; **F3** warps
 the cursor to the window centre; **Esc** exits.

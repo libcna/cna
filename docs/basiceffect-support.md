@@ -113,8 +113,13 @@ unrelated shader shape. General declaration and format rules are in
 Stock fog uses FNA's view-space dot-product `FogVector`, including the world-view transform. When
 fog is disabled, the effect resets that vector and selects a no-fog shader variant. When enabled,
 `FogStart == FogEnd` uses the stock degenerate vector and produces full fog rather than a
-division-by-zero artifact. Fog blends RGB toward `FogColor * Alpha` while preserving the source
-alpha.
+division-by-zero artifact. Fog blends RGB toward `FogColor * composedAlpha` while preserving
+the fragment alpha. `composedAlpha` includes the effect's `Alpha` and any enabled texture and
+vertex-color alpha contributions; it is not just the `Alpha` property.
+
+Current SDLGPU stock fragments omit that fog-color alpha multiplication. Fractional-alpha fog
+therefore differs from the contract above; the source-verified boundary is recorded in
+[sdl-gpu-renderer.md](sdl-gpu-renderer.md#parity-with-easygl) and `handoff.md` §5.1.
 
 ## D3D9 vertex-color-output saturation
 

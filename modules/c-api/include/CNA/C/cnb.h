@@ -4906,9 +4906,11 @@ typedef CNA_Result (*CNA_CnbLoaderCallback)(
  * @param canonical_type_name The type's canonical name. Not merely a label: it is compared against
  *        the name the file itself carries before dispatch, so it must be exactly the string passed
  *        to @ref cna_cnb_asset_type_id_from_name. Must not be empty.
- * @param callback Non-null loader.
- * @param context Caller-owned context passed back to @p callback; it must outlive the
- *        registration, which is process-wide.
+ * @param callback Non-null loader. Its executable code must remain callable until the process-wide
+ *        registration is removed, all resolved loader copies are destroyed, and all invocations
+ *        have completed. Removing the registration does not invalidate resolved copies.
+ * @param context Caller-owned context passed back to @p callback; it must remain valid for the
+ *        same lifetime as @p callback, including invocations through copies resolved before removal.
  * @return A CNA result code; a null callback, an empty name, a non-custom identifier or a name
  *         that does not hash to the identifier is `CNA_RESULT_INVALID_ARGUMENT`, and an identifier
  *         already registered under a different name is `CNA_RESULT_INVALID_STATE`.

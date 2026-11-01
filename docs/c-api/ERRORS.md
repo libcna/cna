@@ -171,7 +171,9 @@ documented safe point and is reported by the enclosing game route as `CNA_RESULT
 category `CALLBACK`; the callback's own result is deliberately not propagated as the outer result.
 
 On failure the callback may place borrowed UTF-8 bytes in `CNA_CallbackError.message`. CNA copies a
-valid, non-empty message before the callback returns. An absent, empty, malformed, embedded-NUL or
+valid, non-empty message immediately after the callback returns. The bytes must remain valid
+through the return of the enclosing C route, for example in static or registration-context
+storage; a callback-local automatic buffer expires too early. An absent, empty, malformed, embedded-NUL or
 otherwise invalid message becomes the stable generic diagnostic
 `A C game lifecycle callback failed.`
 

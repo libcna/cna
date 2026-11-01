@@ -54,7 +54,8 @@ Earlier handle/usability failures leave it unchanged.
 
 An out-of-bounds **caller** window returns `CNA_RESULT_BUFFER_TOO_SMALL`; a nonzero capacity with
 a null pointer is invalid. Counts beyond the native Int32 range return `CNA_RESULT_OVERFLOW`.
-`set_data` explicitly rejects a count beyond buffer capacity with `CNA_RESULT_OUT_OF_RANGE`.
+`set_data` explicitly rejects a count beyond buffer capacity with `CNA_RESULT_INVALID_ARGUMENT`
+and `CNA_ERROR_CATEGORY_RANGE`.
 Nonempty `set_data_at` and `get_data` windows beyond native storage currently map the native
 size exception to `CNA_RESULT_INVALID_STATE`. These are distinct checks.
 

@@ -166,8 +166,8 @@ checks their packed values, and C17/C++23 header builds check their aggregate us
 The 17 `CNA_Packed*` aliases are raw 8/16/32/64-bit unsigned storage. `packed_vectors.h` selects
 the format for pack/unpack and equality/inequality through `CNA_PackedVectorFormat`; the generic
 carrier is `uint64_t`. Zero/raw initialization represents default/raw constructors. Narrow
-formats reject high bits on unpack/comparison with `CNA_RESULT_OUT_OF_RANGE`, and undefined
-formats are invalid.
+formats reject high bits on unpack/comparison with `CNA_RESULT_INVALID_ARGUMENT` and
+`CNA_ERROR_CATEGORY_RANGE`; undefined formats are invalid.
 
 Integer-backed packing rejects non-finite components it consumes; unused components are ignored.
 Alpha8 consumes W, two-component formats consume X/Y, Bgr565 consumes X/Y/Z and four-component

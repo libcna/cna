@@ -1,9 +1,9 @@
 # Building and Testing `Microsoft::Devices` — Reproducible Commands
 
-Every command below was actually run in a session working on `Microsoft::Devices`
-(the devices phase-4 to phase-8 plans, deleted long ago; Git history), not copy-pasted from
-documentation without running it. Where a command's success is asserted, it was
-verified in this repository, on this branch, this session.
+This page combines current build/test recipes with explicitly dated evidence from the devices
+phase-4 to phase-8 plans (retained in Git history). Historical success and timing claims describe
+those sessions, not a fresh execution of every command at the current checkout. Automated
+GPU/window runs use the private runner; compilation uses at most eight parallel jobs.
 
 **ZIP-export caveat (Task P7-6):** every claim in this document describes a real
 `git clone` of this repository with submodules initialized and the sibling repositories
@@ -50,7 +50,7 @@ Layout expected (all four as siblings under one parent directory):
 
 `meta-gl` has no further sibling or submodule dependencies of its own (confirmed by
 inspecting its `CMakeLists.txt`/`.gitmodules` directly) — this three-repo chain is the
-full transitive closure for an `OPENGLES3`-backend build. `sharp-runtime` has its own
+full transitive closure for an `OPENGLES3` renderer build. `sharp-runtime` has its own
 separate `vendor/googletest` submodule, handled automatically by its own build, not
 something this repo's setup needs to touch directly.
 
@@ -88,7 +88,7 @@ errors. The focused Devices verification targets are now `CnaDevicesTests`,
 `CnaDevicesExtTests`, and `cna_strict_xna_api_check`; build them with at most eight
 parallel jobs.
 
-## 1. Desktop debug build (Linux, `OPENGLES3` backend)
+## 1. Desktop debug build (Linux, `OPENGLES3` renderer)
 
 ```bash
 cmake -S . -B cmake-build-debug \
@@ -170,12 +170,12 @@ propagating anywhere — it never will.
 ## 3. Full test suite
 
 ```bash
-cd cmake-build-debug && ctest --output-on-failure
+tools/platform/run_gpu_tests_private.sh cmake-build-debug --output-on-failure -j4
 ```
 
 For Devices changes, run the focused executables in Section 2 first. The repository-wide
-suite includes GPU/window tests and must be run through the private runner when those
-tests are selected; its total count is intentionally not frozen here.
+suite includes GPU/window tests, so the full-suite command uses the private runner. Its total
+count is intentionally not frozen here.
 
 ## 4. Android cross-compile
 

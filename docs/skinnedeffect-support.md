@@ -131,6 +131,11 @@ draw call.
 
 ## 8. Later exactness fixes
 
+These fixes do not establish full SDLGPU fog composition parity. Current stock fragments mix
+toward raw FogColor rather than FogColor times the completed fragment alpha, so fractional-alpha
+fog remains a source-verified defect. See
+[sdl-gpu-renderer.md](sdl-gpu-renderer.md#parity-with-easygl) and `handoff.md` §5.1.
+
 - **Tasks 900/1111** added the missing fog forwarding and then corrected EasyGL's initial
   depth shortcut to FNA's real view-space dot-product formula, including the
   `FogStart == FogEnd` case.

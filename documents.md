@@ -12,7 +12,7 @@ needed, not that the document is necessarily incorrect.
 
 Completion checks: all 177 tracked Markdown files occur exactly once below. The topical index in
 `docs/README.md` links all 138 other top-level pages, and `docs/c-api/README.md` links its 37
-contract subpages. Across all docs pages and this inventory, 1,270 local Markdown links have no
+contract subpages. Across all docs pages and this inventory, 1,277 local Markdown links have no
 missing paths or heading anchors. Historical snapshots and proposals remain identified as such.
 
 ## Status definitions
@@ -25,6 +25,22 @@ missing paths or heading anchors. Historical snapshots and proposals remain iden
 
 Before starting the next cleanup task, update the selected file's status here. Mark it ✅ when
 the work is complete, verified and committed. This prevents accidental duplicate work.
+
+## Independent follow-up review
+
+A separate GPT-6.1 Sol session with xhigh effort reviewed the cleanup through `bdf18a7d5` on
+2026-11-01. Its source-backed samples and structural checks found eight actionable documentation
+groups: callback diagnostic and CNB-loader lifetimes, nonexistent C result names, DDS cube format
+claims, content-manager ownership, stale root status, the BasicEffect fog alpha formula, and
+execution recipes. All confirmed documentation/header corrections received a follow-up review.
+A further SDLGPU fog alpha defect was confirmed in the exact loaded shader artifacts. That and
+the existing global content-manager accounting defect are recorded in `handoff.md` §5.1; this
+documentation task does not claim runtime fixes for them.
+
+The follow-up was risk-based, not a second exhaustive line-by-line audit of all 177 pages or a
+new hardware/oracle qualification. Validation covered the affected existing builds, 13 private
+C API test cases, 20 metadata/header/ABI gates, 57 C API and 22 runtime-audit tooling unit cases,
+private bounded demo startup, local links and preservation of archived/frozen evidence.
 
 ## Were any documents reviewed more than once?
 

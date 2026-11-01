@@ -19,7 +19,7 @@ it is not a decodable PNG. That case measures callback allocation plus protocol/
 not image encoding/decoding, renderer synchronization or GPU readback.
 
 ```sh
-cmake -S . -B /tmp/cna-inspector-release -G Ninja \
+cmake -S . -B cmake-build-inspector-release -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCNA_BUILD_INSPECTOR=ON \
   -DCNA_BUILD_BENCHMARKS=ON \
@@ -32,12 +32,15 @@ cmake -S . -B /tmp/cna-inspector-release -G Ninja \
   -DCNA_ENABLE_DRACO=OFF \
   -DCNA_ENABLE_NET=OFF \
   -DCNA_BUILD_EXAMPLES=OFF
-cmake --build /tmp/cna-inspector-release --target \
+cmake --build cmake-build-inspector-release --target \
   cna_inspector_compiled_out_benchmark cna_inspector_benchmark --parallel 8
 
-/tmp/cna-inspector-release/modules/inspector/cna_inspector_compiled_out_benchmark
-/tmp/cna-inspector-release/modules/inspector/cna_inspector_benchmark
+./cmake-build-inspector-release/modules/inspector/cna_inspector_compiled_out_benchmark
+./cmake-build-inspector-release/modules/inspector/cna_inspector_benchmark
 ```
+
+Keep this persistent build variant inside the repository and reuse it between runs. `/tmp` is
+for disposable logs, not CMake build trees.
 
 The live benchmark averages 500 snapshot and 200 event round trips within each process, and takes
 the median of five preview requests separated by 55 ms. Its agent uses benchmark-specific limits

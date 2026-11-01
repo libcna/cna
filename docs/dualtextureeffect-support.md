@@ -65,6 +65,11 @@ are outside this pixel contract.
 
 ## 5. Fog behavior (Task 388)
 
+Current SDLGPU qualification has a separate alpha-composition defect: its stock fragment mixes
+toward raw FogColor rather than FogColor multiplied by the completed fragment alpha. The dated
+forwarding/fog-factor fixes below do not close that gap; see
+[sdl-gpu-renderer.md](sdl-gpu-renderer.md#parity-with-easygl) and `handoff.md` §5.1.
+
 **Real bug found and fixed on EasyGL.** Task 381's audit had already found
 `FillGpuDrawParams()` never forwards any fog fields — the same bug shape Task 378 fixed for
 `AlphaTestEffect`. **Larger than Task 378's fix**: unlike `AlphaTestEffect` (which reuses a shared

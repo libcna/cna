@@ -41,6 +41,14 @@ platform. The following XNA limitations remain explicit:
 | `PresentInterval::Two` | SDL_gpu has no half-rate present mode; it presents with plain VSYNC, as `One` does. |
 | `OcclusionQuery` | SDL_gpu has no query API. The renderer reports the limitation and refuses to construct a query rather than fabricate a result (`SDLGPU-80`). |
 
+The five classic stock effects also have a current fog alpha-composition defect: their affected
+fragment paths mix toward raw `FogColor`, rather than `FogColor * composedAlpha`. The intended
+formula uses the completed fragment alpha, including enabled texture/vertex alpha. Thus full fog
+at alpha 0.5 targets FogColor instead of half FogColor. Source tracing on 2026-11-01 confirmed the
+raw uniform/varying path and byte-identical regeneration of the exact checked-in SPIR-V arrays
+loaded by the renderer. This is a source/artifact finding, not a new distinguishing pixel run;
+historical opaque-alpha fog fixtures do not close it. The defect is tracked in `handoff.md` §5.1.
+
 Use current capability/format queries for the active device. For example, the legacy
 `GraphicsCapability::FloatRenderTargets` and `HalfFloatRenderTargets` flags currently return false;
 neither the SDL driver name nor a historical fixture sweep establishes every format capability.

@@ -195,7 +195,8 @@ addresses them by stage and slot instead of handing out a collection object:
 at compile time. Any slot at or above it, and any stage other than `CNA_SHADER_STAGE_PIXEL` or
 `CNA_SHADER_STAGE_VERTEX`, is `CNA_RESULT_INVALID_ARGUMENT`. The native collection additionally
 limits vertex sampling to four slots in HiDef and none in Reach; reading an index within the
-storage maximum but outside that active range returns `CNA_RESULT_OUT_OF_RANGE`. Vertex texture
+storage maximum but outside that active range returns `CNA_RESULT_INVALID_ARGUMENT` with
+`CNA_ERROR_CATEGORY_RANGE`. Vertex texture
 formats must also satisfy the native vertex-sampling rules.
 
 A read fills a versioned `CNA_TextureSlotInfo`. Its two fields answer two different questions:

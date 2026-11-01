@@ -24,7 +24,9 @@ pointers and context must remain valid until the game is destroyed.
 The five main callbacks are load, update, draw, unload and exiting. A callback receives a borrowed
 game handle valid only for that callback. Returning anything other than `CNA_RESULT_SUCCESS` stops
 the run at a safe point and makes the enclosing route report `CNA_RESULT_CALLBACK`; an optional
-`CNA_CallbackError` message is copied before the callback returns. Observer events registered with
+`CNA_CallbackError` message is copied immediately after the callback returns. Keep its backing
+bytes valid through the enclosing C route's return, using static or registration-context storage
+rather than a callback-local automatic buffer. Observer events registered with
 `cna_game_subscribe` return `void` and cannot fail the run.
 
 `CNA_GameFrameHooks` is deliberately a second versioned table. It supplies initialize, begin-run,

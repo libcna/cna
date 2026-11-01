@@ -12,13 +12,15 @@ This measures a representative non-overflowing hot path instead of the cheaper/d
 path. Run an optimized build on an otherwise idle machine:
 
 ```sh
-cmake -S . -B /tmp/cna-diag-off -G Ninja \
+cmake -S . -B cmake-build-diagnostics-off -G Ninja \
   -DCMAKE_BUILD_TYPE=Release -DCNA_DIAGNOSTICS=OFF -DCNA_BUILD_BENCHMARKS=ON
-cmake --build /tmp/cna-diag-off --target cna_diagnostics_benchmark --parallel 8
-/tmp/cna-diag-off/modules/diagnostics/cna_diagnostics_benchmark
+cmake --build cmake-build-diagnostics-off --target cna_diagnostics_benchmark --parallel 8
+./cmake-build-diagnostics-off/modules/diagnostics/cna_diagnostics_benchmark
 ```
 
-Use separate directories for STATS and FULL. The focused benchmark links diagnostics, not the
+Reuse persistent in-repository variants `cmake-build-diagnostics-stats` and
+`cmake-build-diagnostics-full` for STATS and FULL, changing `CNA_DIAGNOSTICS` accordingly. Keep
+build products out of `/tmp`; temporary logs may go there. The focused benchmark links diagnostics, not the
 whole engine; root configuration still needs its dependency/toolchain setup.
 Run each executable at least five times, report the median, and keep
 the same compiler, CPU affinity, power policy, and background workload. The program reports the

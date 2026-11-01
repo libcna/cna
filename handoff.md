@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Independent documentation review (2026-11-01, DOCS-REVIEW-001): a separate GPT-6.1 Sol
+  xhigh session reviewed the cleanup through bdf18a7d5 using source-backed samples and structural
+  checks. All eight confirmed documentation finding groups are corrected: callback diagnostic and
+  CNB-loader lifetimes, actual C result/category names, DDS cube normalization, content-manager
+  ownership, root ABI/consumer/qualification status, BasicEffect fog alpha and execution recipes.
+  Three public C header comments are reconciled without ABI/runtime changes. The reviewer checked
+  the corrections and the additional source/artifact-verified SDLGPU fog finding; that defect and
+  the global content-manager counter remain explicitly open in §5.1. Existing affected targets
+  build; 13 focused C API cases and 20 metadata/header/ABI gates pass privately, as do 57 C API
+  tooling and 22 runtime-audit tooling unit cases. Private input-demo startup reaches its expected
+  five-second timeout; this is not interactive hardware qualification. All 1,277 local Markdown
+  links resolve; frozen baseline/archived ledger bytes and generated report rendering are intact.
+  This independent review was risk-based, not a second exhaustive line-by-line audit of all pages.
 - Documentation cleanup complete (2026-11-01, DOCS-177): all 177 tracked docs Markdown pages have their
   own review recorded in the English documents.md inventory. The final docs/README.md audit
   replaces July currency/scope notices with a topical index covering all 138 other top-level
@@ -1650,7 +1663,7 @@ browser are all reached through SDL3's drivers), `HEADLESS`, or POSIX-only `TERM
 
 | Target | What is actually verified |
 |---|---|
-| Linux x86_64 | Everything; this is where the suites run. |
+| Linux x86_64 | Primary host for the recorded native builds and private-display suites. Evidence is scoped to their renderer, driver, feature configuration and fixtures; physical peripherals, services and optional modes retain the limitations in §5 and their subsystem pages. |
 | Windows | MinGW-w64 cross builds run under Wine: `DIRECTX9` through DXVK, `SDLGPU`'s Direct3D 12 backend through vkd3d-proton, `SOFTWARE`. `windows-msvc-ci.yml` now automatically builds and tests an SDL-free native-MSVC contract and an SDLGPU Direct3D 12 smoke set; it was added on 2026-10-30 and no successful run is recorded yet. The deeper `DIRECTX9` workflow remains manual. No real-Windows hardware validation is current (§5.2). |
 | Web (Emscripten) | `WEBGL2` and `WEBGPU` builds run in Chrome (`docs/web-emscripten-graphics-limitations.md`). |
 | Android | `OPENGLES3`, the default there, on an x86_64 emulator; `SDLGPU` on Android is not qualified (`docs/android-graphics-limitations.md`). |
@@ -1662,15 +1675,13 @@ reference is represented; the generated census is
 (`python3 tools/audit_xna_runtime_surface.py --write-reports`). Representation is not behaviour:
 behavioural fidelity is held by each module's tests.
 
-**Bindings.** C and C# are the maintained bindings. CNA.NET (`libcna/cna-dotnet` `develop`) admits
-exactly C ABI 0.47.0 and pins one CNA `next` commit (`CNA_UPSTREAM_COMMIT` in its
-`.github/workflows/build.yml`); its CI builds and loads the native library from that commit. CNA
-`next` is ABI 0.50.0: 0.48.0 (the 2026-10-13 renderer retirement) removed four renderer constants,
-0.49.0 (2026-10-17) renamed the renderer classification typedefs, constants and eight routes
-from `graphics_backend` to `graphics_renderer`, and 0.50.0 (2026-10-23, galaxy-eggbert UB-002)
-added the two `cna_skinned_model_ext_{get,set}_part_diffuse_color_at` routes. CNA.NET names none
-of them and must admit 0.50.0 before it moves its pin. CNA `main`/`develop` are the v0.1.0 release (ABI 0.46.0), which CNA.NET
-refuses. The archived bindings in `cna-lab` stay pinned to older ABIs and are not maintained.
+**Native C boundary.** The current native C API is experimental ABI **0.52.0**, defined by
+`modules/c-api/include/CNA/C/abi.h`; its change ledger is `docs/c-api/ABI_VERSIONING.md` and its
+release verdict is `docs/c-api/RELEASE_GATE.md`. The approved planning boundary is the native
+C API/C ABI (`docs/binding.md`); language-specific work needs separate owner authorization.
+External consumers own their current admission, packaging and platform evidence. Earlier CNA.NET
+branch/ABI pins in this section are historical (recoverable at `bdf18a7d5:handoff.md`), not a claim
+that the current external consumer admits this ABI or that CNA maintains a C# binding here.
 
 **Dependencies.** FNA3D and MojoShader are CNA's forks, `libcna/FNA3D` and `libcna/mojoshader`,
 pinned at `10f650b9d0f6` / `03b686fe1a33` on their `cna` branches (`docs/fna3d-renderer.md`). Both
@@ -1770,6 +1781,24 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- SDLGPU stock fog blends toward raw FogColor rather than FogColor multiplied by completed
+  fragment alpha. The colored3d, textured3d, lit_textured3d, alpha_test3d, dual_texture3d,
+  env_map3d and skinned_colored3d fragment paths have this source-level mismatch, affecting the
+  five classic stock effects when final alpha differs from one. FillFogUniforms forwards raw
+  color; the vertices preserve it, and the fragment mix omits outColor.a. Independent review on
+  2026-11-01 regenerated the entire spirv_shaders.hpp byte-identically and traced its arrays
+  through CreateShader to SDL_CreateGPUShader on the direct SPIR-V/Vulkan route. This confirms
+  loaded-artifact provenance, not a new pixel oracle or D3D12/Metal qualification. Existing
+  opaque-alpha fog fixtures do not test this distinction. The renderer, matrix and five effect
+  pages now state the gap; no runtime shader fix or new fractional-alpha regression was added.
+- C API owned ContentManagers use a process-wide count (CnaCApiContent.cpp's unconditional
+  AddOwnedContentManager; CnaCApiRuntime.cpp's HasOwnedContentManagers game-destroy guard).
+  Consequently a manager created for a standalone device can block destruction of an unrelated
+  game. Source-inspected during independent docs review, 2026-11-01; existing ContentSmoke cases
+  exercise the same-game refusal, not this cross-owner case. No runtime fix or new execution
+  regression was added. A standalone device must also outlive its manager and loaded GPU resources:
+  the manager stores a raw native device association and device destruction does not enforce that
+  caller-lifetime requirement; the C content contract now states it.
 - XNB DateTime writing emits getTicksProperty() only (content/src/Xnb/XnbBuiltInWriters.cpp),
   and DateTimeReader masks the top Kind bits and constructs DateTime(ticks). Sharp Runtime now
   stores DateTimeKind (#1941), so their comments blaming an absent runtime capability are stale:

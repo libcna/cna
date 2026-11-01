@@ -241,8 +241,10 @@ registers into the same process-wide registry. The manager path is fully reachab
 regression-tested; it was not true that custom CNB loaders could only be invoked directly.
 
 The callback receives borrowed document and manager handles plus the logical asset name. It returns
-an opaque caller-owned pointer that CNA never dereferences or frees. The callback context must
-outlive the registration.
+an opaque caller-owned pointer that CNA never dereferences or frees. Keep both the callback's
+executable code and its caller-owned context valid until the registration is removed, all resolved
+loader copies are destroyed, and every possible invocation has completed. Removing the registry
+entry does not invalidate already resolved loaders or end an invocation already in progress.
 
 `cna_cnb_loader_registry_register_builtins` installs only the device-independent Curve and
 AnimationClip loaders. A content manager installs the complete built-in set. Directly invoking a

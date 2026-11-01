@@ -36,7 +36,12 @@ typedef struct CNA_CallbackError {
     /** @brief Version of this caller-provided structure. */
     uint32_t struct_version;
 
-    /** @brief Borrowed UTF-8 diagnostic bytes valid until the callback returns. */
+    /**
+     * @brief Borrowed UTF-8 bytes copied immediately after a failing callback returns.
+     *
+     * Keep the backing storage valid through the return of the C route dispatching the callback.
+     * Use static or caller-context storage, not a callback-local automatic buffer.
+     */
     CNA_StringView message;
 } CNA_CallbackError;
 

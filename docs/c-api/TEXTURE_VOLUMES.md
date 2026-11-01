@@ -51,10 +51,10 @@ face transfers then return `CNA_RESULT_NOT_SUPPORTED`. Do not infer storage from
 creation alone.
 
 `cna_texturecube_create_from_dds_memory` borrows the encoded bytes during the call and decodes via
-a native MemoryStream. It can preserve a DDS format beyond the ordinary Color-only constructor.
-The selected renderer must support the decoded faces/mips. The C Color transfer routes remain
-subject to native format compatibility; a DDS-created handle does not add a raw compressed-transfer
-route.
+a native MemoryStream. Supported DDS source formats are CPU-decoded to RGBA8, including DXT
+decompression, and every face/mip is uploaded as `SurfaceFormat::Color`. The source's compressed
+or non-Color storage format is not retained. The selected renderer must support the resulting
+Color cube and mip chain; this factory does not add a raw compressed-transfer route.
 
 ## Retention and release
 

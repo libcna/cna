@@ -82,7 +82,8 @@ presets. A caller may then change fields and use the matching graphics-device ge
 Sampler operations select a stage with `CNA_ShaderStage`. Pixel samplers expose 16 slots; vertex
 samplers expose four in HiDef and none in Reach. Unknown stages and indices at or above the
 16-slot storage maximum return `CNA_RESULT_INVALID_ARGUMENT`; a vertex index within storage but
-outside the profile's active range returns `CNA_RESULT_OUT_OF_RANGE`.
+outside the profile's active range returns `CNA_RESULT_INVALID_ARGUMENT` with
+`CNA_ERROR_CATEGORY_RANGE`.
 
 Preset initialization is renderer-independent and may run on any thread. Applying/querying a
 device state requires a valid owned or borrowed device handle under the normal owner-thread

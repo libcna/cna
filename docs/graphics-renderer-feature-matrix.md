@@ -47,6 +47,11 @@ format-specific: use the live per-format profile before selecting a non-`Color`,
 floating-point or filterable resource. FNA3D's compressed readback additionally depends on its
 selected internal driver.
 
+Stock-effect support does not establish every combined state. SDLGPU currently omits the completed
+fragment-alpha factor from its stock fog color; see
+[the renderer boundary](sdl-gpu-renderer.md#parity-with-easygl) and the source-inspected defect in
+`handoff.md` §5.1.
+
 ## Rasterizing families: conditional and differentiating features
 
 | Feature | EasyGL | WebGPU | SDLGPU | Software | DirectX9 | FNA3D |

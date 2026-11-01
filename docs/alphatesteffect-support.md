@@ -116,6 +116,10 @@ When enabled, `FogStart == FogEnd` produces full fog instead of a division-by-ze
 applied after the alpha test, blends RGB toward `FogColor * composedAlpha`, and preserves alpha; it
 cannot change the keep/discard decision.
 
+Current SDLGPU stock fragments instead mix toward unscaled FogColor, so accepted fragments with
+fractional alpha do not meet that fog-color composition rule. See the source-verified boundary in
+[sdl-gpu-renderer.md](sdl-gpu-renderer.md#parity-with-easygl) and `handoff.md` §5.1.
+
 ## Renderer boundary
 
 | Renderer family | Current `AlphaTestEffect` evidence boundary |

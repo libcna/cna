@@ -29,7 +29,10 @@ Game lifecycle callbacks and frame hooks are the callback family with a failure 
 initializes a versioned `CNA_CallbackError` before each call. A callback returns
 `CNA_RESULT_SUCCESS` to continue; any other result stops the game at a safe point and the enclosing
 C route reports `CNA_RESULT_CALLBACK`. Before returning a failure, the callback may put valid UTF-8
-diagnostic bytes in `message`; CNA copies them before the callback returns. An absent, empty or
+diagnostic bytes in `message`; CNA copies them immediately after the callback returns. The bytes
+must survive that return: use static storage or storage owned by the registration context, and
+keep it valid through the return of the C route dispatching the callback. Callback-local automatic
+storage is not valid backing storage for this view. An absent, empty or
 invalid diagnostic becomes the stable generic callback-failure message. Event callbacks that
 return `void` only observe their event and cannot stop the game this way.
 
