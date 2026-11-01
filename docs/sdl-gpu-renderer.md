@@ -41,13 +41,14 @@ platform. The following XNA limitations remain explicit:
 | `PresentInterval::Two` | SDL_gpu has no half-rate present mode; it presents with plain VSYNC, as `One` does. |
 | `OcclusionQuery` | SDL_gpu has no query API. The renderer reports the limitation and refuses to construct a query rather than fabricate a result (`SDLGPU-80`). |
 
-The five classic stock effects also have a current fog alpha-composition defect: their affected
-fragment paths mix toward raw `FogColor`, rather than `FogColor * composedAlpha`. The intended
-formula uses the completed fragment alpha, including enabled texture/vertex alpha. Thus full fog
-at alpha 0.5 targets FogColor instead of half FogColor. Source tracing on 2026-11-01 confirmed the
-raw uniform/varying path and byte-identical regeneration of the exact checked-in SPIR-V arrays
-loaded by the renderer. This is a source/artifact finding, not a new distinguishing pixel run;
-historical opaque-alpha fog fixtures do not close it. The defect is tracked in `handoff.md` §5.1.
+CNA-FIX-D01 corrects fog alpha composition in seven stock fragment paths: RGB blends toward
+`FogColor * composedAlpha`, with completed fragment alpha preserved. The registered
+`SdlGpu_CrossFamily_StockEffectFogContract` checks 41 pixels across the five classic stock effects,
+including effect/texture alpha, both DualTexture alphas, BasicEffect vertex alpha and lit/unlit
+texturing, and textured/untextured SkinnedEffect. Before the fix it passed 32/41; after it, SDLGPU,
+EasyGL and Software each pass 41/41. Regeneration changes exactly the seven intended fragment
+arrays; the other 33 SPIR-V arrays are byte-identical. This is Linux/Vulkan evidence, not new
+Direct3D 12/Metal qualification.
 
 Use current capability/format queries for the active device. For example, the legacy
 `GraphicsCapability::FloatRenderTargets` and `HalfFloatRenderTargets` flags currently return false;
@@ -136,9 +137,9 @@ library.
 
 Rechecked on 2026-11-01 against renderer selection, shader intake, capability/mask handling,
 cache limits, backbuffer proxy paths and fixture registration. In the existing Linux Debug tree
-(ShaderCross and compiled effects OFF), the final private Vulkan run covered all 392 registrations:
-**388 passed, four skipped, zero failed**, with no graphics-profile deaths. The skips were the
-shader-effect refusal case and three query-dependent conformance cases. An earlier attempt found
-six stale executables with a ContentManager symbol mismatch; rebuilding those programs and their
-shared-library dependency resolved it, and the final complete run was clean. This does not add
-Windows/Apple/mobile hardware or disabled optional-feature qualification.
+(ShaderCross and compiled effects OFF), CNA-FIX-D01 rebuilt all 375 executable targets behind the
+393 registered `SdlGpu_*` cases. The final private Vulkan run has **391 passed, two skipped, zero
+failed**, with no graphics-profile deaths. The two skips are the unsupported occlusion-query
+precision/reuse cases. The expanded fog fixture passes 41/41 on SDLGPU, with independent EasyGL
+and Software controls also passing 41/41. This does not add Windows/Apple/mobile hardware or
+disabled optional-feature qualification.

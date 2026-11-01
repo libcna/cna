@@ -202,10 +202,10 @@ Legend: ✅ verified working.
 - **Task 1112** — replaced the original per-fragment Fresnel calculation with XNA/FNA's
   per-vertex calculation and interpolated scalar. The gradient test fails on the old ordering.
 
-The dated fog forwarding/factor checks do not qualify every alpha combination. SDLGPU's current
-stock fragment mixes toward unscaled FogColor instead of FogColor times the completed fragment
-alpha. That source-verified defect is documented in
-[sdl-gpu-renderer.md](sdl-gpu-renderer.md#parity-with-easygl) and `handoff.md` §5.1.
+CNA-FIX-D01 corrects SDLGPU's fog alpha composition. The shared pixel contract now verifies
+combined effect and base-texture alpha on SDLGPU, EasyGL and Software, in addition to the older
+fog-factor and final-stage checks. See
+[sdl-gpu-renderer.md](sdl-gpu-renderer.md#parity-with-easygl) for the evidence boundary.
 
 Phase 45 and all follow-up work named on this page are closed. Current renderer-wide capability
 status belongs in `graphics-renderer-feature-matrix.md`; unresolved defects belong in

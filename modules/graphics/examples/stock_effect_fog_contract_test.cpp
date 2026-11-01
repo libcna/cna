@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-112/SOFTWARE-317: renderer-neutral classic stock-effect fog contract.
+// SOFTWARE-112/SOFTWARE-317/CNA-FIX-D01: renderer-neutral classic stock-effect fog contract.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -158,18 +158,18 @@ class StockEffectFogContractTest final : public Game
     }
 
     Color RenderBasic(GraphicsDevice& device, RenderTarget2D& target,
-                      const FogCase& testCase, float alpha = 1.0f)
+                      const FogCase& testCase, float alpha = 1.0f, bool vertexColor = false)
     {
         Begin(device, target);
         BasicEffect effect(device);
         ConfigureFog(effect, testCase);
         effect.setLightingEnabledProperty(false);
         effect.setTextureEnabledProperty(false);
-        effect.VertexColorEnabled = false;
+        effect.VertexColorEnabled = vertexColor;
         effect.setDiffuseColorProperty(FogRef::kGeomRGB);
         effect.setAlphaProperty(alpha);
         effect.Apply();
-        const Color ignored(0, 255, 0, 255);
+        const Color ignored(0, 255, 0, vertexColor ? 128 : 255);
         const float z = testCase.objectZ;
         const VertexPositionColor vertices[6] = {
             {Vector3(-1,  1, z), ignored}, {Vector3(-1, -1, z), ignored},
@@ -180,12 +180,41 @@ class StockEffectFogContractTest final : public Game
         return Finish(device, target);
     }
 
+    Color RenderBasicTextured(GraphicsDevice& device, RenderTarget2D& target,
+                              Texture2D& texture, const FogCase& testCase, bool lighting,
+                              float alpha)
+    {
+        Begin(device, target);
+        BasicEffect effect(device);
+        ConfigureFog(effect, testCase);
+        effect.setLightingEnabledProperty(lighting);
+        effect.setTextureEnabledProperty(true);
+        effect.VertexColorEnabled = false;
+        effect.setTextureProperty(&texture);
+        effect.setDiffuseColorProperty(FogRef::kGeomRGB);
+        effect.setAlphaProperty(alpha);
+        effect.Apply();
+        const float z = testCase.objectZ;
+        const Vector3 normal(0, 0, 1);
+        const VertexPositionNormalTexture vertices[6] = {
+            {Vector3(-1, 1, z), normal, Vector2(0, 0)},
+            {Vector3(-1, -1, z), normal, Vector2(0, 1)},
+            {Vector3(1, -1, z), normal, Vector2(1, 1)},
+            {Vector3(-1, 1, z), normal, Vector2(0, 0)},
+            {Vector3(1, -1, z), normal, Vector2(1, 1)},
+            {Vector3(1, 1, z), normal, Vector2(1, 0)},
+        };
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 2);
+        return Finish(device, target);
+    }
+
     Color RenderAlpha(GraphicsDevice& device, RenderTarget2D& target,
-                      Texture2D& white, const FogCase& testCase)
+                      Texture2D& white, const FogCase& testCase, float alpha = 1.0f)
     {
         Begin(device, target);
         AlphaTestEffect effect(device);
         ConfigureFog(effect, testCase);
+        effect.setAlphaProperty(alpha);
         effect.setTextureProperty(&white);
         effect.setVertexColorEnabledProperty(false);
         effect.setDiffuseColorProperty(FogRef::kGeomRGB);
@@ -201,11 +230,12 @@ class StockEffectFogContractTest final : public Game
     }
 
     Color RenderDual(GraphicsDevice& device, RenderTarget2D& target,
-                     Texture2D& white, Texture2D& gray, const FogCase& testCase)
+                     Texture2D& white, Texture2D& gray, const FogCase& testCase, float alpha = 1.0f)
     {
         Begin(device, target);
         DualTextureEffect effect(device);
         ConfigureFog(effect, testCase);
+        effect.setAlphaProperty(alpha);
         effect.setTextureProperty(&white);
         effect.setTexture2Property(&gray);
         effect.setVertexColorEnabledProperty(false);
@@ -223,11 +253,12 @@ class StockEffectFogContractTest final : public Game
 
     Color RenderEnvironment(GraphicsDevice& device, RenderTarget2D& target,
                             Texture2D& blue, TextureCube& cube, const FogCase& testCase,
-                            float environmentAmount = 0.0f)
+                            float environmentAmount = 0.0f, float alpha = 1.0f)
     {
         Begin(device, target);
         EnvironmentMapEffect effect(device);
         ConfigureFog(effect, testCase);
+        effect.setAlphaProperty(alpha);
         effect.setTextureProperty(&blue);
         effect.setEnvironmentMapProperty(&cube);
         effect.setEnvironmentMapAmountProperty(environmentAmount);
@@ -255,12 +286,14 @@ class StockEffectFogContractTest final : public Game
     }
 
     Color RenderSkinned(GraphicsDevice& device, RenderTarget2D& target, Texture2D& blue,
-                        const FogCase& testCase, float boneZ = 0.0f)
+                        const FogCase& testCase, float boneZ = 0.0f, float alpha = 1.0f,
+                        bool textureEnabled = true)
     {
         Begin(device, target);
         SkinnedEffect effect(device);
         ConfigureFog(effect, testCase);
-        effect.setTextureProperty(&blue);
+        effect.setTextureProperty(textureEnabled ? &blue : nullptr);
+        effect.setAlphaProperty(alpha);
         effect.setDiffuseColorProperty(Vector3::One);
         effect.setAmbientLightColorProperty(Vector3::Zero);
         effect.setEmissiveColorProperty(Vector3::One);
@@ -374,6 +407,46 @@ protected:
                     scaledChannel(FogRef::kGeomRGB.Y, FogRef::kFogRGB.Y),
                     scaledChannel(FogRef::kGeomRGB.Z, FogRef::kFogRGB.Z),
                     static_cast<int>(std::lround(transparentAlpha * 255.0f))));
+
+        const FogCase fullFog{"alpha-composition full fog", identity,
+            Matrix::CreateTranslation(0, 0, -6), 0, true,
+            FogRef::kFogStart, FogRef::kFogEnd, 0.0f};
+        const Color translucentWhite(255, 255, 255, 128);
+        Texture2D translucent(device, 1, 1);
+        translucent.SetData(&translucentWhite, 1);
+        const float textureAlpha = 128.0f / 255.0f;
+        const auto fogWithAlpha = [&](float alpha)
+        {
+            return Color(static_cast<int>(std::lround(FogRef::kFogRGB.X * alpha * 255.0f)),
+                         static_cast<int>(std::lround(FogRef::kFogRGB.Y * alpha * 255.0f)),
+                         static_cast<int>(std::lround(FogRef::kFogRGB.Z * alpha * 255.0f)),
+                         static_cast<int>(std::lround(alpha * 255.0f)));
+        };
+        Check("BasicEffect fog includes vertex alpha",
+              RenderBasic(device, target, fullFog, transparentAlpha, true),
+              fogWithAlpha(transparentAlpha * textureAlpha));
+        for (bool lighting : {false, true})
+        {
+            Check(lighting ? "BasicEffect lit fog includes texture alpha"
+                           : "BasicEffect unlit fog includes texture alpha",
+                  RenderBasicTextured(device, target, translucent, fullFog, lighting, transparentAlpha),
+                  fogWithAlpha(transparentAlpha * textureAlpha));
+        }
+        Check("AlphaTestEffect fog includes texture alpha",
+              RenderAlpha(device, target, translucent, fullFog, transparentAlpha),
+              fogWithAlpha(transparentAlpha * textureAlpha));
+        Check("DualTextureEffect fog includes both texture alphas",
+              RenderDual(device, target, translucent, translucent, fullFog, transparentAlpha),
+              fogWithAlpha(transparentAlpha * textureAlpha * textureAlpha));
+        Check("EnvironmentMapEffect fog includes texture alpha",
+              RenderEnvironment(device, target, translucent, cube, fullFog, 0.0f, transparentAlpha),
+              fogWithAlpha(transparentAlpha * textureAlpha));
+        Check("SkinnedEffect fog includes texture alpha",
+              RenderSkinned(device, target, translucent, fullFog, 0.0f, transparentAlpha),
+              fogWithAlpha(transparentAlpha * textureAlpha));
+        Check("SkinnedEffect untextured fog includes effect alpha",
+              RenderSkinned(device, target, translucent, fullFog, 0.0f, transparentAlpha, false),
+              fogWithAlpha(transparentAlpha));
 
         std::printf("=== %d/%d PASS ===\n", passed_, total_);
         result_ = passed_ == total_ ? 0 : 1;

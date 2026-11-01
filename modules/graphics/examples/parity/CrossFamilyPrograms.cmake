@@ -1,5 +1,6 @@
-# RRC-046: programs that held an XNA behaviour on exactly one surviving implementation family after
-# the 2026-10-13 retirement, each given an independent second family. One list; each family's
+# RRC-046 and later shared regressions: renderer-neutral programs run on additional surviving
+# implementation families. The original retirement campaign added independent second families.
+# One list; each family's
 # examples CMakeLists calls cna_register_cross_family_programs(FAMILY <its identity> ...) and builds
 # exactly the entries naming it, registered as <TEST_PREFIX>_CrossFamily_<NAME>.
 #
@@ -77,6 +78,9 @@ function(cna_register_cross_family_programs)
             endif()
         endif()
     endmacro()
+
+    cna_cross_family_program(NAME StockEffectFogContract FAMILIES SDLGPU
+        SOURCE "graphics/examples/stock_effect_fog_contract_test.cpp")
 
     # ---- EasyGL-only after the retirement: a second family, SDLGPU ---------------------------
     cna_cross_family_program(NAME BlendState_Additive FAMILIES SDLGPU

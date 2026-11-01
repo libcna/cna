@@ -111,6 +111,6 @@ void main() {
         color = fragTint * tex;
     }
     outColor = color;
-    // Blend toward FogColor (RGB only). fragFog.a = keep (1 no fog, 0 full fog).
-    outColor.rgb = mix(fragFog.rgb, outColor.rgb, fragFog.a);
+    // Premultiplied fog uses the completed fragment alpha; fragFog.a is the keep factor.
+    outColor.rgb = mix(fragFog.rgb * outColor.a, outColor.rgb, fragFog.a);
 }

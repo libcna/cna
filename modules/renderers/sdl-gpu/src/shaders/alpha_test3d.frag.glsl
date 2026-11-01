@@ -34,6 +34,6 @@ void main() {
     bool passTest = (pc.alphaTol > 0.0) ? (abs(alpha - pc.alphaRef) < pc.alphaTol) : (alpha < pc.alphaRef);
     float w = passTest ? pc.alphaPassW : pc.alphaFailW;
     if (w < 0.0) discard;
-    // Blend toward FogColor (RGB only). fragFog.a = keep (1 no fog, 0 full fog).
-    outColor.rgb = mix(fragFog.rgb, outColor.rgb, fragFog.a);
+    // Premultiplied fog uses the completed fragment alpha; fragFog.a is the keep factor.
+    outColor.rgb = mix(fragFog.rgb * outColor.a, outColor.rgb, fragFog.a);
 }

@@ -117,9 +117,9 @@ division-by-zero artifact. Fog blends RGB toward `FogColor * composedAlpha` whil
 the fragment alpha. `composedAlpha` includes the effect's `Alpha` and any enabled texture and
 vertex-color alpha contributions; it is not just the `Alpha` property.
 
-Current SDLGPU stock fragments omit that fog-color alpha multiplication. Fractional-alpha fog
-therefore differs from the contract above; the source-verified boundary is recorded in
-[sdl-gpu-renderer.md](sdl-gpu-renderer.md#parity-with-easygl) and `handoff.md` §5.1.
+CNA-FIX-D01 corrects that multiplication in SDLGPU's stock fragments. The shared pixel regression
+checks effect/vertex alpha and lit/unlit textured BasicEffect paths, alongside the other stock
+effects; see [sdl-gpu-renderer.md](sdl-gpu-renderer.md#parity-with-easygl) for the bounded evidence.
 
 ## D3D9 vertex-color-output saturation
 

@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D01 (2026-11-01): all seven affected SDLGPU stock fragments now multiply fog
+  color by completed output alpha. The registered shared fog contract expands to 41 pixel cases
+  across five stock effects, including texture/vertex alpha, lit/unlit BasicEffect, both dual
+  textures and textured/untextured skinning. SDLGPU fails nine before the fix (32/41), then passes
+  41/41; independent EasyGL and Software controls also pass 41/41. Official regeneration changes
+  exactly seven fragment arrays; the other 33 SPIR-V arrays are byte-identical. After rebuilding
+  all 375 executables, the full private Linux/Vulkan Debug SDLGPU sweep passes 391/393 with two
+  unsupported-query skips, zero failures and no profile deaths. ShaderCross/compiled effects
+  remain OFF. The matrix and five effect guides match; no new D3D12/Metal/device qualification.
 - CNA-FIX-D13 (2026-11-01): session-event and local-packet injection now share the ordinary
   send routes' defined-bit validation. All eight Reliable/InOrder/Chat combinations are accepted;
   unknown bits are refused. Strict-C tests fail with both original ordinal checks and still fail
@@ -1815,16 +1824,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-- SDLGPU stock fog blends toward raw FogColor rather than FogColor multiplied by completed
-  fragment alpha. The colored3d, textured3d, lit_textured3d, alpha_test3d, dual_texture3d,
-  env_map3d and skinned_colored3d fragment paths have this source-level mismatch, affecting the
-  five classic stock effects when final alpha differs from one. FillFogUniforms forwards raw
-  color; the vertices preserve it, and the fragment mix omits outColor.a. Independent review on
-  2026-11-01 regenerated the entire spirv_shaders.hpp byte-identically and traced its arrays
-  through CreateShader to SDL_CreateGPUShader on the direct SPIR-V/Vulkan route. This confirms
-  loaded-artifact provenance, not a new pixel oracle or D3D12/Metal qualification. Existing
-  opaque-alpha fog fixtures do not test this distinction. The renderer, matrix and five effect
-  pages now state the gap; no runtime shader fix or new fractional-alpha regression was added.
 - XNB DateTime writing emits getTicksProperty() only (content/src/Xnb/XnbBuiltInWriters.cpp),
   and DateTimeReader masks the top Kind bits and constructs DateTime(ticks). Sharp Runtime now
   stores DateTimeKind (#1941), so their comments blaming an absent runtime capability are stale:

@@ -47,10 +47,10 @@ format-specific: use the live per-format profile before selecting a non-`Color`,
 floating-point or filterable resource. FNA3D's compressed readback additionally depends on its
 selected internal driver.
 
-Stock-effect support does not establish every combined state. SDLGPU currently omits the completed
-fragment-alpha factor from its stock fog color; see
-[the renderer boundary](sdl-gpu-renderer.md#parity-with-easygl) and the source-inspected defect in
-`handoff.md` §5.1.
+Stock-effect support does not establish every combined state. CNA-FIX-D01's shared 41-pixel fog
+contract verifies the corrected SDLGPU alpha composition against EasyGL and Software controls;
+see [the renderer boundary](sdl-gpu-renderer.md#parity-with-easygl) for the tested combinations and
+platform qualification.
 
 ## Rasterizing families: conditional and differentiating features
 

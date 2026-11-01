@@ -7,9 +7,14 @@
       "id": "CNA-FIX-D01",
       "source_section": "5.1 Defects",
       "summary": "SDLGPU stock fog blends toward raw FogColor rather than FogColor multiplied by completed fragment alpha.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Multiply fog RGB by completed fragment alpha in seven stock shader paths and regenerate the loaded SPIR-V arrays; preserve output alpha.",
+      "evidence": [
+        "Registered SDLGPU fog contract: 32/41 before fix, 41/41 after fix. Independent EasyGL and Software controls: 41/41 each.",
+        "Checks include effect/texture/vertex alpha, both dual textures, lit/unlit BasicEffect and textured/untextured SkinnedEffect.",
+        "Exactly seven intended fragment arrays changed; all 33 other generated arrays byte-identical.",
+        "All 375 SDLGPU executable targets rebuilt; full private Debug Linux/Vulkan sweep: 391 passed, two unsupported occlusion-query skips, zero failed out of 393. ShaderCross and compiled effects OFF."
+      ]
     },
     {
       "id": "CNA-FIX-D02",

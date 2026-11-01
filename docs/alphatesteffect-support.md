@@ -116,9 +116,9 @@ When enabled, `FogStart == FogEnd` produces full fog instead of a division-by-ze
 applied after the alpha test, blends RGB toward `FogColor * composedAlpha`, and preserves alpha; it
 cannot change the keep/discard decision.
 
-Current SDLGPU stock fragments instead mix toward unscaled FogColor, so accepted fragments with
-fractional alpha do not meet that fog-color composition rule. See the source-verified boundary in
-[sdl-gpu-renderer.md](sdl-gpu-renderer.md#parity-with-easygl) and `handoff.md` §5.1.
+CNA-FIX-D01 corrects SDLGPU's fog-color alpha multiplication. The shared pixel contract now
+checks accepted fragments with combined effect and texture alpha on SDLGPU, EasyGL and Software;
+see [sdl-gpu-renderer.md](sdl-gpu-renderer.md#parity-with-easygl) for the evidence boundary.
 
 ## Renderer boundary
 

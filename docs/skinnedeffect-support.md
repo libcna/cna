@@ -131,10 +131,9 @@ draw call.
 
 ## 8. Later exactness fixes
 
-These fixes do not establish full SDLGPU fog composition parity. Current stock fragments mix
-toward raw FogColor rather than FogColor times the completed fragment alpha, so fractional-alpha
-fog remains a source-verified defect. See
-[sdl-gpu-renderer.md](sdl-gpu-renderer.md#parity-with-easygl) and `handoff.md` §5.1.
+CNA-FIX-D01 additionally corrects SDLGPU's fog alpha composition. The shared pixel contract
+verifies combined effect/texture alpha and an untextured effect-alpha case on SDLGPU, EasyGL and
+Software. See [sdl-gpu-renderer.md](sdl-gpu-renderer.md#parity-with-easygl) for the evidence boundary.
 
 - **Tasks 900/1111** added the missing fog forwarding and then corrected EasyGL's initial
   depth shortcut to FNA's real view-space dot-product formula, including the

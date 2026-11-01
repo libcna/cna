@@ -31,6 +31,6 @@ void main() {
     vec4 tex = (pc.textureEnabled > 0.5)
         ? texture(uTexture, fragUV, samplerLodBias.slots0To3.x) : vec4(1.0);
     outColor = tex * fragTint;
-    // Blend toward FogColor (RGB only). fragFog.a = keep (1 no fog, 0 full fog).
-    outColor.rgb = mix(fragFog.rgb, outColor.rgb, fragFog.a);
+    // Premultiplied fog uses the completed fragment alpha; fragFog.a is the keep factor.
+    outColor.rgb = mix(fragFog.rgb * outColor.a, outColor.rgb, fragFog.a);
 }
