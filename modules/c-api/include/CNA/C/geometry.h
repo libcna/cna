@@ -132,7 +132,14 @@ CNA_C_API CNA_Result cna_ray_intersects_plane(
     CNA_Plane plane,
     CNA_Bool* out_hit,
     float* out_distance);
-/** @brief Intersects a ray with a frustum. @param ray Source ray. @param frustum Frustum to test. @param out_hit Receives whether an intersection exists. @param out_distance Receives the distance, or zero on no hit. @return A CNA result code. */
+/**
+ * @brief Intersects a ray with a frustum, including entry from an outside origin.
+ * @param ray Source ray; the direction is not normalized.
+ * @param frustum Frustum to test.
+ * @param out_hit Receives whether an intersection exists.
+ * @param out_distance Receives the ray parameter, or zero on no hit or a contained origin.
+ * @return A CNA result code.
+ */
 CNA_C_API CNA_Result cna_ray_intersects_frustum(
     CNA_Ray ray,
     CNA_BoundingFrustum frustum,
@@ -727,10 +734,9 @@ CNA_C_API CNA_Result cna_bounding_frustum_intersects_plane(
  * @param value Source frustum.
  * @param ray Ray to test.
  * @param out_hit Receives whether a hit exists.
- * @param out_distance Receives distance, or zero on no hit.
+ * @param out_distance Receives the ray parameter, or zero on no hit; the direction is not normalized.
  * @note Origins contained by the frustum, including its boundary, return a hit at zero.
- *       Outside-origin entry intersections remain unimplemented in the native API and
- *       currently report no hit. This function does not provide full ray clipping.
+ *       Outside-origin rays are clipped against the frustum's plane interval and can hit or miss.
  * @return A CNA result code.
  */
 CNA_C_API CNA_Result cna_bounding_frustum_intersects_ray(

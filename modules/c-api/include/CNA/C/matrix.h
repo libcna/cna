@@ -68,10 +68,11 @@ CNA_C_API CNA_Result cna_matrix_set_up(CNA_Matrix* value, CNA_Vector3 direction)
  * @brief Decomposes a matrix into scale, rotation and translation.
  * @param value Source matrix.
  * @param out_scale Receives scale, including on decomposition failure.
- * @param out_rotation Receives rotation, including Identity on singular scale.
+ * @param out_rotation Receives rotation, or Identity when native decomposition returns false.
  * @param out_translation Receives translation.
  * @param out_decomposed Receives whether decomposition succeeded.
  * @return A CNA result code.
+ * @note Singular scale does not always return false: the zero matrix returns true with NaN rotation.
  */
 CNA_C_API CNA_Result cna_matrix_decompose(
     CNA_Matrix value,

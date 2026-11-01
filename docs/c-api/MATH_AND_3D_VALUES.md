@@ -1,266 +1,216 @@
-# Math and 3D Value ABI
+# Math and 3D Value C API
 
-CBIND-035A establishes the C-safe value and identity vocabulary required by later 3D APIs. It is a
-layout contract, not an implementation claim for math, geometry, packed conversion or rendering
-operations.
+## Scope and representation
 
-## Fixed-layout values
+The C API exposes math operations, geometry, curves, color/packed conversion and vertex values.
+It also provides owned curve/collection and vertex-declaration handles. The relevant headers live
+under [`modules/c-api/include/CNA/C/`](../../modules/c-api/include/CNA/C/):
 
-`math_values.h` exposes caller-owned POD values for `CNA_Point`, `CNA_Vector4`, `CNA_Quaternion`,
-`CNA_Matrix`, `CNA_Plane`, `CNA_Ray`, `CNA_BoundingBox`, `CNA_BoundingSphere` and
-`CNA_BoundingFrustum`. They contain only fixed-width integers, `float` values and other public CNA
-PODs. `CNA_Matrix` stores `m11` through `m44` contiguously in row-major order. A bounding frustum
-stores its defining matrix; later operations derive planes and corners from that value rather than
-exposing native cached storage.
+| Headers | Boundary |
+|---|---|
+| `core.h`, `math_values.h` | Fixed-layout values and stable numeric identities |
+| `math.h`, `vectors.h`, `quaternion.h`, `matrix.h` | Scalar, Point/Rectangle, vector and matrix/quaternion operations |
+| `geometry.h` | Plane, Ray, bounding-volume queries and factories |
+| `curve.h` | CurveKey values and owned curve/collection handles |
+| `color.h`, `named_colors.h`, `packed_vectors.h` | Color channels/constants and format-tagged packing |
+| `vertex_values.h`, `vertex_resources.h` | Packed vertex values, declarations and binding descriptors |
 
-`CNA_VertexElement` is a 16-byte value containing a byte offset, format, semantic usage and usage
-index. `vertex_values.h` completes its constructors (aggregate initialization), equality, hash and
-exact-string routes. Vertex-declaration ownership and buffer submission remain later CBIND-035C/F
-work.
+C structures contain fixed-width integers, floats and other public PODs. They are converted
+field by field; they are not binary aliases of CNA's polymorphic C++ objects. `CNA_Matrix`
+stores `m11` through `m44` in row-major order. `CNA_BoundingFrustum` stores only its defining
+matrix: native planes/corners are reconstructed when an operation consumes it.
 
-The 17 `CNA_Packed*` names are raw unsigned storage aliases with the same 8-, 16-, 32- or 64-bit
-width as the corresponding public PackedVector value. They represent packed-value get/set storage
-without exposing C++ interfaces. `packed_vectors.h` now adds the complete format-tagged operation
-surface described below.
+POD values belong to the caller and have no handle lifetime or creation-thread affinity. This
+does not promise allocation-free execution: text formatting, frustum reconstruction and
+point-array factories can allocate native temporary storage. Curve/collection and declaration
+handles do have generation, kind and creation-thread checks; see [`HANDLES.md`](HANDLES.md).
 
-## Stable identities
+The headers freeze 32-bit enum identities for containment, plane intersection, curves and vertex/
+draw vocabulary. Acceptance belongs to the consuming route. For example,
+`CNA_PRIMITIVE_POINT_LIST_EXT` names a topology without promising that every renderer supports it.
+Current member mapping is tracked in [`COVERAGE.md`](COVERAGE.md).
 
-The headers freeze unsigned 32-bit constants for containment, plane intersection, curve
-continuity/loop/tangent, buffer usage, index element size, primitive topology, SetData options,
-vertex element format and vertex element usage. `CNA_PRIMITIVE_POINT_LIST_EXT` preserves CNA's
-public point-list extension identity; it does not imply that every renderer currently draws it.
+## Outputs, arrays and floating-point behavior
 
-## ABI evidence and boundary
+Native value-returning and out-ref overload pairs normally share one result-plus-output C route;
+operators become named functions. Required outputs are checked before mutation. Routes using
+native IEEE arithmetic can succeed with NaN or infinity: zero-vector/quaternion normalization,
+zero float divisors and singular matrix inversion do not acquire a C-only finite-value check.
+Explicit packed-vector validation is described below.
 
-The strict C17 and C++23 header translation tests assert the exposed sizes, field offsets and
-numeric ordinals. These values have no handles, allocation or thread affinity. Passing an
-unrecognized numeric identity to a future fallible operation will be rejected by that operation;
-declaring the identity itself does not advertise renderer support.
+Text size/copy routes return UTF-8 byte counts excluding a terminator. Insufficient capacity
+reports the required count without writing a partial string. Array copies similarly protect the
+destination array on capacity refusal, but their separate required-count output can change.
+Earlier pointer, identity, index or handle failures can occur before that count is assigned;
+“always reports the count” is not a universal rule.
 
-The generated coverage inventory maps source types, directly represented fields/properties and
-enum identities to this foundation. Later headers map constructors, named constants, methods,
-operators, collections, intersections, transforms and packed conversions explicitly rather than
-inferring them from binary layout compatibility.
+Bulk vector transforms take source/destination element counts, indices and a length. Invalid
+pointers/windows return `CNA_RESULT_INVALID_ARGUMENT` before writes; counts not representable
+as native `size_t` return `CNA_RESULT_OVERFLOW`. An empty range permits null zero-count arrays.
+The loop reads and writes in increasing index order without staging the source. Overlapping
+ranges therefore have sequential aliasing behavior: writing forward into a later source element
+changes what a subsequent iteration reads. Use separate arrays when original-source semantics
+are needed.
 
-## Point and Rectangle operations
+Hash routes expose the current native hash behavior. Vector2/3/4, Quaternion, Matrix and CurveKey
+regressions cover equal hashes for both zero signs while retaining nonzero float bit patterns.
+Hash results should not be used as persistent resource identities. General output/error rules are
+in [`ERRORS.md`](ERRORS.md) and [`ABI_VERSIONING.md`](ABI_VERSIONING.md).
 
-`math.h` completes the public Point and Rectangle families. POD initialization represents their
-constructors; `cna_point_get_zero` and `cna_rectangle_get_empty` represent both named constants and
-their property getters. Named operations replace C++ operators and overloads use descriptive
-suffixes. The out-result forms in the C++ surface share the same C function as their value-returning
-counterparts because every fallible C function already uses an output pointer.
+## Point, Rectangle and MathHelper
 
-The implementation performs integer addition, subtraction and multiplication through unsigned
-bit patterns, preserving unchecked 32-bit wraparound without triggering C++ signed-overflow
-undefined behavior. Point division reports `CNA_RESULT_INVALID_ARGUMENT` for a zero component and
-`CNA_RESULT_OVERFLOW` for `INT32_MIN / -1`; the output remains unchanged. Rectangle containment
-uses half-open right and bottom edges, touching rectangles do not intersect, and no-overlap
-intersection returns the canonical empty rectangle.
+`math.h` provides initialization, named constants, arithmetic/property operations, comparisons,
+hashes and text for Point and Rectangle. Integer add/subtract/multiply and Rectangle boundary
+calculations use defined unsigned-bit arithmetic for unchecked 32-bit wraparound.
+Point division rejects a zero divisor component with `CNA_RESULT_INVALID_ARGUMENT` and
+`INT32_MIN / -1` with `CNA_RESULT_OVERFLOW`, preserving the result on either refusal.
 
-Point and Rectangle strings use the native formats and the standard count/copy contract: byte
-counts exclude a terminator, insufficient capacity writes no prefix, and the required count is
-still returned.
+Rectangle point containment uses half-open right/bottom edges; touching positive-area rectangles
+do not intersect. No-overlap intersection returns the empty rectangle. Native empty-state
+semantics test all four fields against zero rather than treating every zero-area rectangle as
+the named Empty value.
 
-## MathHelper
+MathHelper maps to `cna_math_*`, with eight `CNA_MATH_*` constants and result-plus-output
+operations for interpolation, bounds, distance, angle conversion/wrapping and epsilon comparison.
+Native NaN/infinity and comparison-order behavior is preserved.
+`cna_math_closest_msaa_power` handles the nonnegative Int32 domain with unsigned operations:
+zero/one map to zero, and larger values map to the largest power of two at or below the input.
+Negative input is invalid and leaves the result unchanged.
 
-The stateless MathHelper class maps to the `cna_math_*` prefix rather than an artificial C object.
-Its eight public scalar constants are exact `CNA_MATH_*` float macros, and its 15 callable members
-use the usual result-plus-output convention. Interpolation, clamp, distance, degree/radian, angle
-wrap and epsilon comparisons delegate to the canonical CNA implementation, including its NaN and
-infinity behavior.
+## Vectors, Quaternion and Matrix
 
-`cna_math_closest_msaa_power` accepts the meaningful nonnegative sample-count domain. It computes
-the largest power of two at or below the input with unsigned operations, including the complete
-positive `int32_t` range; one maps to zero because it is not multisampling. A negative input returns
-`CNA_RESULT_INVALID_ARGUMENT` and preserves the caller's output instead of entering the native
-helper's signed-shift/overflow edge case.
+`vectors.h` exposes Vector2/3/4 construction, named constants, arithmetic, interpolation,
+normalization, comparisons, hash and text; Vector3 includes direction constants and cross products.
+Transforms accept a matrix or quaternion, with normal transforms for Vector2/3 and explicitly
+typed Vector2/3/4 single-value inputs for Vector4. Bulk ranges follow the aliasing rules above.
 
-## Vector operations
+`quaternion.h` exposes component/vector constructors, Identity, arithmetic, conjugation,
+normalization/inversion, concatenation, axis-angle/matrix/yaw-pitch-roll factories and linear/
+spherical interpolation. In-place conjugation and normalization are separate mutation routes.
 
-`vectors.h` provides the complete Vector2, Vector3 and Vector4 surfaces. Constructors and named constants become
-initialization/get operations; value-returning and out-ref native overload pairs collapse to one
-fallible C result-plus-output operation. Named C operations also represent every arithmetic
-operator. Vector3 additionally exposes all XNA direction constants and cross products. Float
-division retains canonical IEEE infinity/NaN behavior, including zero divisors,
-and zero-vector normalization likewise follows the native result rather than inventing validation.
+`matrix.h` exposes zero/16-component construction, Identity, six direction properties plus
+translation, determinant/decomposition, arithmetic, transpose/inversion, quaternion transforms,
+comparisons, hash/text and billboard/view/projection/rotation/scale/shadow/reflection/world
+factories. Nullable vector pointers represent optional billboard forward vectors. Perspective
+factory argument exceptions map to `CNA_RESULT_INVALID_ARGUMENT` before result assignment.
 
-Matrix and quaternion transformations support single values and raw-array ranges; Vector2/3 also
-provide normal transforms, while Vector4 accepts explicitly typed Vector2/3/4 single-value inputs.
-The bulk form takes source/destination counts, indices and a length, validates the complete range
-before writing anything, and permits the same sequential aliasing behavior as the native indexed
-loop. A zero-length operation accepts null zero-count arrays. No `std::vector` layout crosses the C
-ABI.
+Decomposition returns its native Boolean through `out_decomposed`, independently of the C result.
+All scale/rotation/translation outputs are required and written after a completed native call.
+A native false result retains scale/translation and supplies Identity rotation. Singular scale
+does not invariably mean false: the zero matrix returns true with zero scale/translation and NaN
+rotation, as the current XNA-compatible regression requires. Callers needing finite rotation must
+check it separately.
 
-## Quaternion operations
+## Geometry and bounding volumes
 
-`quaternion.h` exposes both constructors, Identity, member and static arithmetic, named operator
-equivalents, axis-angle/rotation-matrix/yaw-pitch-roll factories, concatenation, inversion and
-normalized linear or spherical interpolation. Value-returning and out-ref native overloads share
-one fallible result-plus-output C operation. Normalization and inversion preserve canonical IEEE
-behavior rather than introducing a C-only zero-length rejection.
+`geometry.h` exposes construction, comparisons, hashes, text, transforms and applicable
+containment/intersection overloads for Plane, Ray, BoundingBox, BoundingSphere and BoundingFrustum.
+Plane additionally has dot products and normalization. Boxes and spheres have merge and
+point-array factories; spheres also have box/frustum factories and maximum-axis-scale matrix
+transformation.
 
-Quaternion strings follow the same exact UTF-8 count/copy contract as the vector surfaces.
+Optional ray results use two required outputs: `out_hit` and `out_distance`. A miss is a
+successful query with false and zero. Both pointers are checked before either is written.
+Box/frustum corner copies preserve native order and require eight entries, named by
+`CNA_BOUNDING_BOX_CORNER_COUNT` and `CNA_BOUNDING_FRUSTUM_CORNER_COUNT`. After argument validation,
+undersized destinations receive the required count and no partial corner array.
+Point-array factories validate the pointer/count byte range before copying; an empty set is invalid
+and leaves the result unchanged.
 
-## Matrix operations
+Frustum equality uses the defining matrix. The C adapter treats equal matrix values as the same
+frustum for self-containment. Geometry predicates inherit the current measured XNA behavior;
+[`xna-fna-behavior-decisions.md`](../xna-fna-behavior-decisions.md) records the reference policy
+and geometry evidence.
 
-`matrix.h` exposes zero and 16-component construction, Identity, the seven XNA direction and
-translation properties, decomposition/determinant, exact equality/hash/string routes, all
-billboard/rotation/view/projection/scale/shadow/translation/reflection/world factories and every
-arithmetic or quaternion-transform operation. Matrices stay row-major and use the fixed-layout
-`CNA_Matrix` value directly.
+Both `cna_ray_intersects_frustum` and `cna_bounding_frustum_intersects_ray` support outside-origin
+entry clipping. A contained origin, including the boundary, returns a hit at zero; an outside
+ray can hit or miss according to its plane interval. The direction is not normalized, so the
+result is a ray parameter: with an identity frustum, origin `(0,0,-3)` and direction `(0,0,2)`
+hit at 1.5. Parallel-plane thresholds remain native behavior. There is no current
+unimplemented-origin/`NOT_SUPPORTED` branch.
 
-Nullable `CNA_Vector3` pointers represent the optional billboard forward vectors. Native argument
-exceptions from perspective factories become `CNA_RESULT_INVALID_ARGUMENT` without changing the
-output. Decomposition reports its native Boolean separately while returning scale/Identity
-rotation/translation even for singular scale; singular inversion retains canonical IEEE
-non-finite components.
+## Curve values and owned collections
 
-## Plane and ray operations
+`CNA_CurveKey` is a 20-byte value containing position, value, tangents and continuity.
+`cna_curve_key_*` provides construction, property access/mutation, clone, comparison and
+equality/hash. Consumed keys must have recognized continuity. Float fields retain native behavior,
+including the current position comparison result of 1 when either operand is NaN.
 
-`geometry.h` begins with complete Plane and Ray surfaces. Plane construction, dot products,
-normalization, box/sphere/frustum classification and matrix/quaternion transforms use fixed-layout
-values and fallible outputs. Ray construction, equality/hash/string and box/sphere/plane/frustum
-intersection are likewise value-only operations.
+Independent collections use `CNA_CurveKeyCollectionHandle`. Add orders by position; replacing a
+key with a different position removes/reinserts it. Equal-position adds retain insertion order.
+Clone creates an independent collection. Copy-to overwrites at the destination index and reports
+the collection key count, rather than the final destination length, once its argument and handle
+checks pass. Insufficient capacity writes no partial key range.
 
-Native `std::optional<float>` ray distances cross the ABI as `out_hit` plus `out_distance`. A miss
-is a successful query with `CNA_FALSE` and a deterministic zero distance; both outputs are required
-and validated before either is written.
+`CNA_CurveHandle` supports creation, deep clone, constant-state queries, pre/post-loop modes,
+evaluation and all single/both-tangent variants. Unknown loop/tangent identities and invalid key
+indices are refused through the normal error contract.
 
-## BoundingBox operations
+Each `cna_curve_get_keys` result is a separately owned mutable collection view. It retains the
+native curve after the original curve handle is destroyed; edits through any view affect the same
+curve's evaluation. Destroy every returned collection handle independently. These handles do not
+require a game.
 
-`geometry.h` exposes complete BoundingBox construction, containment and intersection overloads,
-equality/hash/string routes and factories from points, spheres or merged boxes. Ray intersections
-reuse the explicit `out_hit` plus deterministic-distance convention above.
+## Color and packed vectors
 
-`CNA_BOUNDING_BOX_CORNER_COUNT` fixes the eight-corner contract. Corner copying always reports the
-required count, rejects insufficient capacity without writing a prefix and preserves the canonical
-native corner order. Point-array construction validates the complete byte count before copying;
-an empty point set is invalid and leaves the caller's output unchanged. No C++ collection layout
-crosses the ABI.
+`CNA_Color` is four RGBA bytes; native packed values use AABBGGRR. `color.h` exposes byte/int/float
+and vector constructors, channel/packed representation through POD fields and packed mutation,
+Vector3/4 conversion, normal/debug text, comparisons/hash, Lerp, multiplication and
+non-premultiplied conversion. Constructor clamping and packed-vector truncation remain distinct
+native operations. Integer premultiplication uses unchecked 32-bit product bits before division
+by 255, avoiding signed-overflow UB in the adapter.
 
-## BoundingSphere operations
+`named_colors.h` provides 141 `CNA_COLOR_*` value expressions. The strict-C suite independently
+checks their packed values, and C17/C++23 header builds check their aggregate use.
 
-`geometry.h` exposes complete BoundingSphere construction, matrix transformation, containment and
-intersection overloads, equality/hash/string routes and factories from boxes, frusta, point arrays
-or merged spheres. Matrix transformation preserves CNA's maximum-axis scale rule, including
-nonuniform transforms. Ray intersections use the same explicit hit-plus-distance convention.
+The 17 `CNA_Packed*` aliases are raw 8/16/32/64-bit unsigned storage. `packed_vectors.h` selects
+the format for pack/unpack and equality/inequality through `CNA_PackedVectorFormat`; the generic
+carrier is `uint64_t`. Zero/raw initialization represents default/raw constructors. Narrow
+formats reject high bits on unpack/comparison with `CNA_RESULT_OUT_OF_RANGE`, and undefined
+formats are invalid.
 
-Point-array construction uses the checked raw-array contract: the complete element count is
-validated before copying, an empty set is invalid and failures leave the output unchanged. Box,
-frustum and merge factories operate entirely on fixed-layout values; no native collection or
-cached frustum representation crosses the ABI.
+Integer-backed packing rejects non-finite components it consumes; unused components are ignored.
+Alpha8 consumes W, two-component formats consume X/Y, Bgr565 consumes X/Y/Z and four-component
+formats consume all channels. The three half formats accept IEEE special values.
+The `cna_half_*` helpers expose float/binary32-bit-pattern to binary16 conversion and binary16
+to float conversion directly.
 
-## BoundingFrustum operations
+## Vertex values, declarations and bindings
 
-`CNA_BoundingFrustum` keeps its defining matrix as its complete value identity. `geometry.h`
-provides construction, all six derived clipping planes, containment/intersection operations,
-equality/hash/string routes and all eight corners through the fixed
-`CNA_BOUNDING_FRUSTUM_CORNER_COUNT` plus an atomic caller-capacity copy. Equal matrix values are
-treated as the same frustum value for self-containment.
+`vertex_values.h` defines seven built-in `VertexPosition*` PODs matching packed GPU streams,
+including byte-packed color/blend indices. Their layouts do not match the native polymorphic
+objects. `CNA_VertexType` selects the active `CNA_VertexValue` union member for default,
+equality/inequality, hash and text routes. Parameterized values use aggregate initialization.
+Every built-in default is all-zero, including transparent packed-zero color for
+VertexPositionColor.
 
-Ray intersections preserve the canonical CNA/FNA behavior: origins inside the frustum succeed at
-distance zero and disjoint origins report no hit. The native boundary-origin branch is explicitly
-unimplemented; the exception barrier maps it to `CNA_RESULT_NOT_SUPPORTED` and leaves both outputs
-unchanged. This is a reported capability boundary, not an omitted API route.
+Stride and element-copy routes expose built-in declarations without a native interface pointer.
+`CNA_VertexElement` is a 16-byte offset/format/usage/usage-index value. Its value operations
+validate format and usage identities; structural declaration checks are stricter.
 
-## CurveKey operations
+`vertex_resources.h` exposes standalone declarations through owned
+`CNA_VertexDeclarationHandle` values. The empty extension has zero stride/no elements.
+Array creation requires at least one element and computes the stride or accepts an explicit
+positive stride. The adapter checks identities, nonnegative offsets/usage indices and computed
+Int32 stride overflow. Native validation additionally enforces four-byte stride/offset alignment,
+elements within stride, no overlap and unique usage/index pairs. Invalid creation leaves the
+output handle invalid. Queries and destruction retain creation-thread affinity; declaration
+destruction calls native Dispose and releases the handle.
 
-`curve.h` defines `CNA_CurveKey` as a caller-owned 20-byte value containing position, value,
-incoming/outgoing tangents and the stable continuity identity. Its three constructors, all
-property routes, clone, position comparison, equality/operators and hash behavior delegate to the
-canonical CurveKey implementation through `cna_curve_key_*` operations.
+`CNA_VertexBufferBinding` is a 16-byte buffer-token/vertex-offset/instance-frequency descriptor.
+`{CNA_INVALID_HANDLE, 0, 0}` is the default. `cna_vertex_buffer_binding_init` checks only a
+nonzero token and nonnegative integers; it does not look up or retain a buffer.
+`cna_graphics_device_set_vertex_buffers` performs live resource, disposal and device checks
+when consuming bindings. Vertex buffers and submission already exist; see
+[`VERTEX_BUFFERS.md`](VERTEX_BUFFERS.md) and [`GRAPHICS_DEVICE.md`](GRAPHICS_DEVICE.md).
 
-Every operation consuming a key validates its continuity identity. Unknown values fail before
-mutating outputs; float values retain native IEEE behavior, including the current CNA NaN position
-comparison result.
+## Validation evidence
 
-## CurveKeyCollection operations
-
-An independent collection is owned through `CNA_CurveKeyCollectionHandle`. Handles validate type,
-generation and creation thread; destruction invalidates the generation. Ordered add and indexed
-replacement delegate to the native collection, including repositioning a replacement whose
-position changes. Clone produces an independent collection.
-
-Count/get and `cna_curve_key_collection_copy_to` replace C++ aliases, indexers and iterator routes.
-Copy-to accepts a caller capacity and destination index, always reports the collection key count
-once the handle is valid, and writes nothing unless the full range fits. All input keys are checked
-for a recognized continuity value before collection mutation.
-
-## Curve operations
-
-`CNA_CurveHandle` owns the canonical native curve and validates its type, generation and creation
-thread. Creation, deep cloning, constant-state queries, pre/post-loop properties, evaluation and
-all four tangent overloads delegate to `Curve`. Unknown loop and tangent identities, invalid key
-indices and invalid handles fail through the normal C error contract without partial output.
-
-`cna_curve_get_keys` maps both native key-reference properties to a mutable
-`CNA_CurveKeyCollectionHandle` view. Each returned view must be destroyed separately, retains the
-curve even if its original handle is destroyed, and exposes the complete collection API above;
-mutations through the view immediately affect evaluation. Strict-C coverage exercises all five
-loop modes, all tangent overloads, clone independence and retained-view lifetime.
-
-## Color value operations
-
-The existing four-byte `CNA_Color` remains the C value identity; its `r`, `g`, `b` and `a` fields
-directly map the native channel properties. `color.h` adds every constructor, AABBGGRR packed-value
-round-trip, Vector3/Vector4 conversion, exact normal/debug string count and copy, equality/hash,
-Lerp, non-premultiplied conversion, multiplication and packed-vector mutation route.
-
-Constructor clamping and packed-vector truncation delegate to the canonical implementation.
-Integer premultiplication reproduces FNA's unchecked 32-bit multiplication with defined unsigned
-arithmetic before division, avoiding signed-overflow undefined behavior at the C boundary. String
-copies are caller-capacity operations and never partially write. `named_colors.h` exposes all 141
-named colors as directly usable `CNA_COLOR_*` value
-expression. Their RGBA channels are compiled in strict C17 and C++23, and the strict-C suite
-independently verifies every canonical AABBGGRR packed value.
-
-## PackedVector operations
-
-`packed_vectors.h` assigns stable `CNA_PackedVectorFormat` identities to all 17 concrete formats.
-The generic `cna_packed_vector_pack` and `cna_packed_vector_unpack` operations combine that format
-with the fixed-width raw aliases, covering component/vector constructors, `PackFromVector4`,
-`ToVector4`, Alpha8's scalar alpha route, HalfSingle's scalar route and HalfVector2's Vector2 route
-without exposing a C++ interface object. Default and raw constructors are the zero/raw C values.
-Equality and inequality use the same format-tagged representation.
-
-Inputs and outputs remain caller-owned. Unpack and comparison reject bits above an 8-, 16- or
-32-bit format's real storage width and never truncate silently. Integer-backed formats reject a
-non-finite component only when that component is actually consumed, preventing undefined native
-float-to-integer conversion; the three half formats preserve IEEE NaN, infinity and signed zero.
-The three `cna_half_*` helpers expose the native float, binary32-bit-pattern and binary16 conversion
-routes directly. Strict-C tests cover exact packed bits and unpacked values for every format,
-half special values, format/width validation, equality and failure atomicity; C17/C++23 header
-tests freeze all format ordinals.
-
-## Built-in vertex values
-
-`vertex_values.h` defines fixed-layout PODs for all seven built-in `VertexPosition*` values. Their
-field order and sizes match the canonical packed GPU streams rather than CNA's polymorphic C++
-object layouts. `CNA_VertexType` selects the active `CNA_VertexValue` union member for generic
-default, equality/inequality, hash and exact UTF-8 count/copy operations. Parameterized native
-constructors collapse to normal C aggregate initialization; the default operation preserves the
-native white color of `VertexPositionColor` and zero defaults elsewhere.
-
-`cna_vertex_type_get_stride` and `cna_vertex_type_copy_elements` replace both static declaration
-properties and the `IVertexType` route without exporting a polymorphic object. The returned
-declarations describe the actual packed GPU streams, including byte-packed color and blend-index
-channels. Element copies always report the required count and never write a partial declaration.
-Unknown vertex, format or semantic identities fail before output mutation. Strict-C tests exercise
-every operation and exact native string/declaration under both configured backends; C17/C++23
-assertions freeze all identities, sizes and field offsets.
-
-## Vertex declarations and bindings
-
-`vertex_resources.h` owns standalone `VertexDeclaration` instances through
-`CNA_VertexDeclarationHandle`. Creation copies the caller's element array and supports the native
-empty, computed-stride and explicit-stride forms; the two native explicit-stride container
-overloads intentionally share one C array route. Stride, exact type-name and caller-capacity
-element queries require the creation thread. Handles validate generation and kind, and explicit
-destruction makes stale reuse fail predictably.
-
-`CNA_VertexBufferBinding` is a 16-byte caller-owned descriptor containing a buffer handle, vertex
-offset and instance frequency. `{CNA_INVALID_HANDLE, 0, 0}` represents the native default value.
-`cna_vertex_buffer_binding_init` validates the parameterized constructor's nonzero token and
-nonnegative integers without retaining anything. Because owned vertex buffers arrive in C6, token
-kind, generation, game and thread are deliberately revalidated by any later operation that
-consumes the descriptor; structural initialization alone is not a resource-validity claim.
+The focused C suites are MathValuesSmoke, MathValueHashSmoke, VectorSmoke, QuaternionSmoke,
+MatrixSmoke, GeometrySmoke, CurveSmoke, ColorSmoke, PackedVectorSmoke, VertexValueSmoke,
+VertexResourceSmoke and VertexBufferSmoke, registered with the `CApi_` prefix.
+They cover the documented value/handle boundary, including IEEE cases, sequential transform
+aliasing, retained curve views, exact packed/default values, frustum entry rays, malformed inputs
+and capacity/handle/thread failures. C17/C++23 header builds assert ABI identities/layouts.
+The current audit uses the private SDLGPU runner; this is not a fresh cross-renderer or sanitizer
+claim. Renderer draw support remains separate from CPU value operations.

@@ -35,6 +35,18 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API math/3D-value contract reconciliation (2026-11-01):
+  `docs/c-api/MATH_AND_3D_VALUES.md` is now a current value, geometry, curve and vertex contract
+  rather than the accumulated CBIND-035 implementation plan. It records implemented outside-origin
+  frustum ray clipping and non-unit ray parameters, all-zero built-in vertex defaults, and the zero
+  matrix's successful decomposition with NaN rotation. Public geometry/matrix Doxygen is corrected
+  accordingly. The page distinguishes POD lifetime from temporary native allocation, qualifies
+  required-count output timing, documents sequential bulk-transform aliasing, retained curve views
+  and declaration validation, and links the implemented vertex-buffer/binding path. Current native
+  IEEE and signed-zero hash behavior remain explicit. All selected math, geometry, curve, color,
+  packed/vertex, ABI and C17/C++23 header targets build; all 15 focused tests pass through the
+  private SDLGPU runner, and all nine coverage, generation, limitation, export and release gates
+  pass. Public ABI and runtime implementation are unchanged.
 - C API input-contract reconciliation (2026-11-01):
   `docs/c-api/INPUT_SNAPSHOTS.md` now covers the current input families and their value, handle
   and callback lifetimes. It distinguishes C capture from platform polling, consuming relative
