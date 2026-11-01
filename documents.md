@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 138 reviewed, 12 updated incidentally and awaiting their own audit, and 27 not yet
+Summary: 139 reviewed, 12 updated incidentally and awaiting their own audit, and 26 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -174,7 +174,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/web-emscripten-graphics-limitations.md`](docs/web-emscripten-graphics-limitations.md)
 - ✅ **REVIEWED** — [`docs/webgl2-renderer.md`](docs/webgl2-renderer.md)
 - ✅ **REVIEWED** — [`docs/webgpu-renderer.md`](docs/webgpu-renderer.md)
-- ⬜ **PENDING** — [`docs/windows-visual-studio.md`](docs/windows-visual-studio.md)
+- ✅ **REVIEWED** — [`docs/windows-visual-studio.md`](docs/windows-visual-studio.md)
 - ✅ **REVIEWED** — [`docs/xma-encoder-backend.md`](docs/xma-encoder-backend.md)
 - ⬜ **PENDING** — [`docs/xna-4-enumerator-reference.md`](docs/xna-4-enumerator-reference.md)
 - ⬜ **PENDING** — [`docs/xna-4-runtime-member-coverage-baseline.md`](docs/xna-4-runtime-member-coverage-baseline.md)

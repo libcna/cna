@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Windows-IDE documentation reconciliation (2026-11-01): the guide now describes the overridable
+  Sharp Runtime root, source archive/submodule boundary, C++23 toolset requirement, static Windows
+  module composition versus ELF DSO policy, limited preset feature set/two-job budgets, MSVC GUI
+  entrypoint and configured-payload deployment scope. Preset inheritance, CI filters and source
+  contracts are checked; the Windows preset validator passes. Related local configuration probes
+  were already validated during this pass. No native Windows/IDE execution, queried remote CI
+  result, relocated Windows-SDK or new hardware qualification, implementation or ABI change.
 - FNA-reference harness documentation reconciliation (2026-11-01, Task 480): the guide separates
   current value/effect modes, selected-category comparison and genuine-XNA authority. It corrects
   target gates, unselected root fields, dictionary/numeric/category limits, version/provenance
