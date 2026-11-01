@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API shared-boundary documentation reconciliation (2026-11-01): `OWNERSHIP.md`,
+  `SHARP_RUNTIME_BOUNDARY.md` and `STRINGS_AND_BUFFERS.md` now distinguish owned views, callback
+  loans, independent devices, native disposal and release. They remove the nonexistent generic
+  future/operation-handle mapping and universal event-cleanup assumptions, replace the obsolete
+  level-zero-only texture boundary, and correct SpriteCommand minimum structure size, fixed array
+  stride and non-finite-value behavior. Copy-probe costs, output-count timing, mutable-query races
+  and empty-buffer exceptions are explicit. The six selected existing test targets build; all
+  nine ownership/runtime/content/texture/UTF-8/boundary/header tests pass through the private
+  SDLGPU runner. Local links and inventory are checked; no public ABI or runtime code changes.
 - C API networking-contract reconciliation (2026-11-01): `docs/c-api/NET.md` now describes the
   four-byte color round trip, absent property defaults, diagnostic retention and independently
   owned advertised properties. It distinguishes caller-owned roster/sender views from callback

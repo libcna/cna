@@ -1,84 +1,93 @@
 # CNA C API Ownership and Lifetime
 
-Every handle and pointer parameter has one documented ownership category. A public declaration is
-incomplete until its Doxygen documentation names the category.
+Ownership belongs to the route that supplies a handle or pointer. A handle's typedef or numeric
+value does not tell the caller whether to destroy it. The declarations and family contracts must
+state the ownership, validity window and matching release operation.
 
-| Category | Rule |
+## Ownership categories
+
+| Category | Caller obligation |
 |---|---|
-| Owned | Caller receives a live handle and must release it exactly once before runtime shutdown. |
-| Borrowed | Caller may use it only for the documented call/callback duration and must not retain or release it. |
-| Retained | CNA takes an additional reference or copied value; caller keeps its own ownership unless documentation says transfer. |
-| Transferred | CNA consumes caller ownership on successful return; failure leaves caller ownership unchanged. |
-| Callback context | Caller owns `void* context` and keeps it valid until successful unregister/destruction completes. |
-| Caller buffer | Caller owns input/output storage for the entire call; CNA never stores it unless an API explicitly says it copies/retains. |
+| Owned handle | Release once with the family's destroy, close or unsubscribe route. Copying its bits does not acquire another reference. |
+| Owned view handle | Release once even though the native object belongs to another object. The view's documented retention/parent-release rules apply. |
+| Borrowed token or pointer | Use only within its documented validity window; do not destroy it or extend its lifetime by saving its bits. |
+| Retained input | CNA keeps a documented reference or value copy; the caller still owns its original handle. |
+| Transferred input | Apply only where a declaration explicitly consumes ownership; do not infer transfer from a successful setter. |
+| Callback context | Keep the function and caller-owned context valid for the documented invocation or registration lifetime. |
+| Caller buffer | Keep storage valid for the call. CNA copies or retains data only as the individual route documents. |
 
-## Parent and child resources
+There is no public generic retain/release route and no public runtime handle. Successful typed
+release normally invalidates that registry entry immediately; a repeated release returns
+`CNA_RESULT_INVALID_HANDLE`. A failed destroy normally preserves the handle, but game shutdown
+can complete and return `CNA_RESULT_CALLBACK`; see [ERRORS.md](ERRORS.md).
 
-Some CNA resources are logically tied to a parent, such as graphics resources to a graphics device
-or content-loaded values to a content manager. The C mapping names that rule per family. A child
-must either retain the required parent internally or fail with `CNA_RESULT_INVALID_STATE` after its
-parent is disposed; it must never become an unchecked dangling C++ pointer.
+## Parents, devices and aliases
 
-The initial runtime adapter permits one C-owned game. `cna_game_destroy` is its owned-handle release
-operation: it invalidates the game only after exit/unload notification and native disposal complete.
-C code remains responsible for explicit release before shutdown so release failures are observable
-and leak tests remain meaningful.
+The process permits one C-owned game and multiple independently owned graphics devices.
+`cna_game_get_graphics_device` lends a game device during a callback or before the first run;
+`cna_graphics_device_create` returns an owned independent device. The loan windows are defined in
+[RENDERERS_AND_CAPABILITIES.md](RENDERERS_AND_CAPABILITIES.md#borrowed-graphics-device-handle).
 
-An owned C `Texture2D` remains valid after the lifecycle callback that creates it, even though the
-graphics-device handle used for creation is callback-scoped. The texture remains a child of the
-active game. `cna_game_destroy` returns `CNA_RESULT_INVALID_STATE` without starting shutdown while
-any owned C graphics child is live; callers must destroy those children first. Texture destruction
-performs canonical `Dispose`, releases its generation-checked handle and makes a second destroy a
-deterministic `CNA_RESULT_INVALID_HANDLE`.
+A graphics resource created through a loan can survive that callback. It remains a tracked game
+child and must be released before the game. A resource created on an independent device instead
+belongs to that device and does not block destruction of an unrelated game. Destroy device
+resources before their device. Same-device checks use creating-device identity, not merely the fact
+that two objects belong to one process.
 
-An owned C `SpriteBatch` follows the same game-child rule. A successful bulk submission retains
-each referenced texture until `cna_sprite_batch_end` flushes successfully, so destroying such a
-texture returns `CNA_RESULT_INVALID_STATE`. Destroying the batch during an active interval is the
-explicit recovery path: it cancels unflushed deferred commands, releases texture references and
-invalidates the batch handle. Immediate-mode commands already sent to the renderer cannot be
-undone. Texture commands are rejected unless texture and batch belong to the same game.
+Family adapters enforce parent retention, release guards and native disposal; the handle registry
+itself does not encode a universal parent graph. Do not assume that every child is deep-copied,
+that a parent token remains valid while native state is retained, or that every view blocks parent
+release. Current exceptions and defects are recorded in [handoff.md §5](../../handoff.md#5-known-bugs-and-limitations).
 
-An owned `CNA_SkinnedModelEXTHandle` may retain complete same-device render bundles consisting of
-a VertexBuffer, IndexBuffer, ModelMeshPart and optional Texture2D. The caller still owns each
-original handle, but typed destroy and generic graphics-resource disposal fail while a live model
-part retains the resource. Replace-by-name attach, explicit part removal, model move replacement
-and final model destruction release the corresponding retained references. Indexed mesh-part
-queries return a new owned alias; optional texture queries return the existing handle whose
-lifetime remains protected by the model.
+Representative rules are:
 
-An owned C `ContentManager` is created from a callback-scoped graphics device but survives that
-callback as a game child. It must be destroyed before the game. Each successful typed content load
-returns a separate owned C resource handle; that handle remains valid after manager `Unload` or
-destruction and keeps its own child-before-game obligation. Manager unload/destruction clears its
-native cache but never implicitly releases handles already issued to C.
+| Family | Lifetime rule |
+|---|---|
+| Texture2D / SpriteBatch | Device-bound objects survive a game callback. Submitted textures are retained until a successful End or batch destruction cancels deferred work; already submitted immediate rendering cannot be undone. |
+| Effect descendants | Collection/parameter/technique/pass views are independently owned handles retaining the effect resource; each needs its own release. |
+| Model graph | Caller-created graph objects and published content-owned tokens have different destruction rights. A loaded Model's child resource tokens must not be destroyed separately. |
+| SkinnedModelEXT parts | Attached buffers, mesh part and optional texture remain caller-owned but cannot be destroyed/disposed while retained. A part query can return a new owned alias; an optional texture query returns the protected existing token. |
+| ContentManager | Every returned C handle needs cleanup after Unload. Loaded textures, fonts, sounds and videos remain usable; loaded effects and model resources are natively disposed. A valid token does not guarantee continued drawing. |
+| SoundEffect / instance | Release instances before their effect, and game-owned audio objects before the game. Mixer state retains no caller PCM buffer after creation. |
+| Network roster / receive sender | Each returned view handle must be destroyed and blocks its session's release. Callback gamer tokens are temporary loans. Standalone gamer and copied-machine factories have the weaker parent-lifetime boundary documented in NET.md. |
+| Storage | Close streams before containers, then containers before devices. These resources do not require a game. |
 
-An owned C `SoundEffect` copies PCM bytes during creation and is scoped as a child of the active
-game. Each `SoundEffectInstance` is an explicit child of both the effect and game. Destroy all
-instances before the effect, then destroy the effect before the game. Instance destruction
-detaches the native mixer track and invalidates the C handle; the mixer retains no user C pointer.
+The detailed sources of truth are [EFFECTS.md](EFFECTS.md), [MODELS.md](MODELS.md),
+[CONTENT.md](CONTENT.md), [AUDIO.md](AUDIO.md), [NET.md](NET.md) and [STORAGE.md](STORAGE.md).
+Ordinary handle calls use their creation thread unless a documented exception or opt-in dispatch
+applies; see [CALLBACKS_AND_THREADING.md](CALLBACKS_AND_THREADING.md).
 
-## Values, strings and arrays
+## Values, arrays and caller contexts
 
-POD input values are copied on entry. String views and arrays are borrowed only for the duration of
-the function call unless a declaration explicitly uses a retained/copying API. Returned scalar and
-POD values are written to caller-owned out parameters. Returned text and arrays follow the query and
-copy protocol in [`STRINGS_AND_BUFFERS.md`](STRINGS_AND_BUFFERS.md), never an undocumented native
-allocator ownership rule.
+POD values cross by value or caller-owned output storage; the adapter may allocate native scratch
+storage internally. Input string/array storage is borrowed for the call unless explicitly retained.
+Output text and arrays use [STRINGS_AND_BUFFERS.md](STRINGS_AND_BUFFERS.md).
 
-## Services, events and callbacks
+Opaque caller object/context pointers remain caller-owned unless an explicit release callback
+contract says otherwise. Model owned-resource contexts, for example, require a context/callback
+pair or neither; release follows the last shared resource bundle, which can outlive one Model
+handle. A generic C tag stores only a token and never manages its lifetime.
 
-An event subscription returns an owned registration handle. Destroying that registration removes
-the callback and synchronizes with any documented in-flight invocation before the call returns.
-Destroying its source detaches every registration. That is the one exception to the parent and child
-ordering above: a live registration does not block destroying its source, so a subscriber can
-observe the source's own disposal. The registration handle stays the caller's to release exactly
-once, before or after the source is gone; releasing it afterwards succeeds and detaches nothing
-([`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md)). A callback receives
-borrowed CNA handles only; it may request supported state changes but may not retain them without a
-separate documented retain operation.
+## Events and disposal
 
-## Disposal mapping
+An owned registration handle has its own release obligation. Source retention and destruction
+behavior differ by event family: some keep the source alive, some use weak references, and static
+events belong to the process. Game/window subscriptions do not block game destruction; they become
+detached and their registration handles may be released afterwards. Follow each family's rule
+instead of assuming universal automatic cleanup or synchronization.
 
-Where a public CNA C++ type implements `System::IDisposable`, its C API mapping exposes an explicit
-release/destroy path. Where it is a C++ value type, it maps to a POD value/copy operation instead.
-The C surface does not require applications to understand C++ RAII or Sharp Runtime disposal.
+A callback-only handle or pointer is valid only during invocation. Copy needed values before
+returning; retaining its numeric token does not turn it into an owned view. Callback functions must
+return normally, and their contexts must remain alive while callbacks can still run.
+
+Native `Dispose` and C handle release are separate concepts. A permitted generic graphics-resource
+dispose leaves its handle available for disposal queries and typed cleanup, while invalidating
+native rendering state. Some families expose disposal without release; others combine both.
+A native value may still use a C handle when identity, mutation or enumeration requires it.
+The C API does not require the caller to reproduce C++ RAII or Sharp Runtime ownership rules.
+
+## Verification boundary
+
+`CApi_HandleRegistry`, `CApi_StressSmoke`, lifecycle/teardown tests and the family smoke tests
+exercise distinct lifetime rules. Registry stale-token tests alone do not establish every native
+parent/disposal contract.

@@ -1,26 +1,34 @@
 # Sharp Runtime Boundary for the CNA C API
 
-Sharp Runtime remains an internal C++ dependency of CNA. A C consumer includes only `CNA/C/*.h`,
-links the CNA C API library and does not include Sharp Runtime headers or depend on a Sharp Runtime
-binary ABI.
+Sharp Runtime is a native C++ implementation dependency. A C consumer includes `CNA/C/*.h` and
+links the C API through its documented build target or installed library dependencies; it does not
+include Sharp Runtime headers or depend on Sharp Runtime's C++ object layout. This does not imply
+that a static C build has no transitive native link dependencies.
 
-| Native implementation concept | C API mapping |
+| Native concept | Current C representation |
 |---|---|
-| `System::String` / `std::string` | `CNA_StringView` input; UTF-8 size/copy output. |
-| `System::Exception` / `std::exception` | `CNA_Result` plus `CNA_ErrorInfo` and UTF-8 diagnostic copy. |
-| `List<T>` / `std::vector<T>` / span | Pointer plus fixed-width count, or count/query/copy collection API. |
-| Dictionary/map | Explicit UTF-8 lookup and key/value enumeration APIs. |
-| `System::TimeSpan`, date/time | Fixed ticks/duration/timestamp POD values with explicit epoch/unit. |
-| `System::IO::Stream` | CNA stream callback table or CNA stream handle, never a native pointer. |
-| `Task<T>` / future | CNA operation handle with explicit poll/cancel/result/callback contract. |
-| Delegate/event | C function pointer, context pointer and registration handle. |
-| `Memory<T>` / managed buffer | Caller-owned pointer and fixed-width count/capacity. |
-| `System::Object` hierarchy | Typed/generation-checked CNA handle and explicit type query/cast function. |
+| String | `CNA_StringView` input and UTF-8 size/copy output. |
+| Exception | `CNA_Result`, per-thread `CNA_ErrorInfo` and diagnostic text; documented supplemental payloads use separate query routes. |
+| List/vector/span | Pointer and fixed-width count, count/copy, indexed access or a typed collection/enumerator handle. |
+| Dictionary | Explicit lookup/enumeration or a documented opaque foreign-object value; no native map layout. |
+| TimeSpan/date-time | Fixed-width ticks/duration/timestamp values with the route's explicit unit and epoch. |
+| Stream | A typed C storage-stream handle where exposed; other routes consume/produce caller-owned encoded bytes or paths. No Sharp Runtime stream pointer. |
+| Begin/End asynchronous operation | A family-specific completion route/callback. Networking/storage routes wait and complete synchronously at the C boundary; Guide operations follow their documented native completion behavior. No general future/poll/cancel operation-handle API exists. |
+| Delegate/event | Typed C callback plus context; subscriptions use explicit registration handles where supported. |
+| Buffer/memory | Caller-owned pointer and fixed-width count/capacity, or a documented callback-scoped borrow. |
+| Object hierarchy | POD when value semantics suffice; otherwise typed, generation-checked handles with only the family-specific type/base operations actually exported. |
 
-The adapter performs these conversions once on the CNA native side. A C caller must never recreate
-Sharp Runtime ownership, exception, task, delegate, collection or string-layout rules. A Sharp
-Runtime internal refactor that does not change CNA behavior must not change this C ABI.
+No public generic kind-query, object cast or runtime-operation API should be inferred from the
+native hierarchy. An opaque foreign pointer explicitly supplied/received by a caller is also not
+permission to pass a `System::Object*` across the boundary.
 
-The C header gate rejects `System::`, `SharpRuntime`, `std::`, `namespace`, `class`, `template`,
-references, `throw` and other C++-only surface tokens. A real C compiler is the authoritative test
-that the public ABI boundary is clean.
+Conversions and exception handling live on the native adapter side. C callers need not recreate
+Sharp Runtime collection, task, delegate, exception or string-layout rules. Internal refactors
+that preserve the documented C behavior must preserve its ABI.
+
+`modules/c-api/cmake/CheckPublicHeaders.cmake` screens public headers for C++-only constructs.
+The strict C17 and C++23 header targets and ABI layout assertions complement that token gate:
+a text scan alone is not proof of a valid C declaration or a compatible binary layout.
+
+See [ABI_VERSIONING.md](ABI_VERSIONING.md), [OWNERSHIP.md](OWNERSHIP.md),
+[ERRORS.md](ERRORS.md) and [STRINGS_AND_BUFFERS.md](STRINGS_AND_BUFFERS.md).

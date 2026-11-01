@@ -1,101 +1,112 @@
 # CNA C API Strings, Buffers and Collections
 
-## UTF-8 strings
+## UTF-8 input
 
-All text at the ABI boundary is UTF-8. The public string view is:
+Text at the ABI boundary uses UTF-8:
 
-```text
+```c
 typedef struct CNA_StringView {
     const char* data;
     uint64_t byte_length;
 } CNA_StringView;
 ```
 
-`data == NULL` is permitted only with `byte_length == 0`; a non-null empty string is also valid.
-The byte sequence is not NUL-terminated by contract and CNA never reads beyond `byte_length`.
-Input text must be valid UTF-8 scalar-value encoding. APIs whose semantic value is a path, asset
-name, window title or identifier additionally reject embedded U+0000 with
-`CNA_RESULT_ENCODING`; consumers must not rely on C-string truncation.
+A null pointer is valid only with zero length; a non-null empty string is valid too. CNA reads the
+explicit byte range, without requiring a terminator. Input must encode valid Unicode scalar
+values. Paths, asset names, window titles and identifiers generally reject embedded U+0000 with
+`CNA_RESULT_ENCODING`; each declaration states whether it permits it.
 
-CNA converts UTF-8 to/from its native string representation at the boundary. No `wchar_t`, locale
-encoding, `System::String`, `std::string` storage or temporary pointer becomes part of the public
-ABI.
+Views borrow caller storage for the call. Routes that retain a logical name/path copy its bytes;
+they do not retain the caller's pointer. No `wchar_t`, locale encoding, native string layout or
+temporary native string pointer is an output contract.
 
-## Caller-owned output
+## Size and copy
 
-Returned variable-size content uses two calls: a size query followed by a copy. For example:
+Text and copied arrays normally offer a size/count query followed by a copy into caller storage.
+Counts name bytes or typed elements explicitly. Text counts exclude a terminator, and ordinary
+copy routes do not append one. Allocate an extra byte and append it yourself when a C-string
+consumer needs one.
 
-```text
-CNA_Result cna_<object>_get_<value>_size(CNA_Handle object, uint64_t* out_bytes);
-CNA_Result cna_<object>_copy_<value>(CNA_Handle object,
-                                     void* destination,
-                                     uint64_t capacity,
-                                     uint64_t* out_bytes);
-```
+For the shared copy protocol:
 
-The size result counts bytes, not an implied terminator. Text-copy functions may offer a separate
-documented NUL-terminating convenience variant only if its required capacity and behavior are
-unambiguous. The base copy operation returns raw UTF-8 bytes.
+| Input/capacity | Result |
+|---|---|
+| Null required count output | `CNA_RESULT_INVALID_ARGUMENT`. |
+| Null destination, nonzero capacity | `CNA_RESULT_INVALID_ARGUMENT`. |
+| Null destination, zero capacity, nonempty result | `CNA_RESULT_BUFFER_TOO_SMALL`, required count reported. |
+| Valid destination with insufficient capacity | `CNA_RESULT_BUFFER_TOO_SMALL`, required count reported, no partial data write. |
+| Zero-size result and zero capacity | Success, count zero; null destination allowed. |
+| Sufficient capacity | Success and the complete result, without changing the unused suffix. |
 
-For a null destination with nonzero capacity, CNA returns `CNA_RESULT_INVALID_ARGUMENT`. For a null
-destination and zero capacity, the function reports the required count and returns
-`CNA_RESULT_BUFFER_TOO_SMALL` unless the required count is zero. On insufficient capacity CNA does
-not write a partial logical element and returns the full required count. The API never allocates an
-output buffer on behalf of a C caller in the initial ABI.
+This table describes the size/copy protocol, not every operation taking a pointer and count.
+Required-count timing on other failures is route-specific: argument, handle, thread or native
+failure may occur before the count is known or written. A capacity probe can allocate or perform
+native work, such as image encoding; it is not necessarily a cheap metadata query.
 
-## Bulk data
+A query and a copy are separate observations. Mutable collections, files and service state may
+change between them, so handle a new required count and retry where appropriate. Indexed listings
+can have their own snapshot/refresh rule. CNA writes caller storage; it does not return a buffer
+that the caller must free with an undocumented native allocator.
 
-Binary resource transfer uses a pointer plus `uint64_t` element/byte count. Typed APIs state both
-the element type and whether their count is bytes or elements. Null with a zero count is valid;
-null with a nonzero count is `CNA_RESULT_INVALID_ARGUMENT`. All multiplication, offset and native
-size conversion is checked; values unrepresentable by the native implementation return
-`CNA_RESULT_OVERFLOW`.
+## Bulk transfer and ranges
 
-Texture uploads, readback, vertices, indices, audio samples and sprite commands transfer ranges in
-bulk. The C API must not require a C program to perform one native transition per element.
+Binary/typed data uses a pointer plus fixed-width count/capacity. Read each declaration's units:
+bytes, pixels, samples, vertices and elements are not interchangeable. Nullable-empty buffers are
+common, but not universal: packet receive requires positive byte capacity, while typed buffer
+transfers have their own validated zero-window no-op rules.
 
-The initial `Texture2D` transfer route accepts an exact width-times-height array of `CNA_Color`
-values for Color-format mip level zero. The adapter converts each independently laid out C value;
-it never reinterprets the C array as C++ `Color`. Readback reports the required pixel count, writes
-nothing when capacity is insufficient and performs one canonical `Texture2D::GetData` call after
-capacity validation. Other surface formats and mip/sub-rectangle transfers remain unavailable in
-this initial slice and return the documented argument or not-supported result rather than silently
-changing representation.
+Adapters check native size conversions and range arithmetic and report
+`CNA_RESULT_OVERFLOW` when a requested size cannot be represented. Native `Int32` limits still
+apply to many transfers even though the C count is `uint64_t`. A nonempty input must point to
+the complete readable range, and a destination must actually hold its claimed capacity.
 
-`cna_sprite_batch_submit_many` accepts a contiguous array of versioned `CNA_SpriteCommand` POD
-values and crosses the C ABI once for the whole array. The adapter checks the complete array,
-including every handle, structure version, effect mask and finite floating-point field, before
-native submission begins. Version 1 has a fixed `sizeof(CNA_SpriteCommand)` stride and therefore
-requires that exact `struct_size` on every element; a later larger element layout will use an
-explicit stride or a new submission entry point rather than ambiguous pointer arithmetic. The
-adapter copies each command into native `Rectangle`, `Vector2`, `Color` and SpriteBatch values;
-neither the caller's array nor any C layout is retained. Native deferred queues hold their texture
-resources through `End`, not the caller's command storage.
+The adapter converts independently declared C values into native values; identical-looking
+layouts do not authorize casting C arrays to C++ objects. Scratch allocation, native rendering and
+I/O can still fail after validation. Failure atomicity beyond the documented output-buffer
+guarantee is specific to each operation.
 
-Keyboard pressed-key enumeration follows the same count/copy rule. A 256-bit POD snapshot is the
-source, keys are emitted in ascending numeric order, and insufficient capacity reports the exact
-count without writing a prefix. Repeated per-key checks are local snapshot operations rather than
-repeated calls into the platform input backend.
+### Textures and graphics buffers
 
-Full backbuffer readback first reports logical width-times-height capacity and writes only after an
-exact native read succeeds. The adapter stages canonical `Color` values and converts them to
-`CNA_Color`; a too-small destination or renderer `NOT_SUPPORTED` result leaves every caller pixel
-unchanged.
+The convenience `cna_texture2d_set_data_rgba8` / `get_data_rgba8` routes transfer a full
+level-zero image as `CNA_Color` elements. The separate `set_data_rgba8_bytes` route takes raw
+RGBA8 bytes. These are no longer the whole texture surface: versioned transfers support mip
+levels, rectangles and typed format identities. Cube/3D textures and vertex/index buffers have
+their own face/volume/window descriptors. See [TEXTURES.md](TEXTURES.md),
+[TEXTURE_VOLUMES.md](TEXTURE_VOLUMES.md), [VERTEX_BUFFERS.md](VERTEX_BUFFERS.md) and
+[INDEX_BUFFERS.md](INDEX_BUFFERS.md) for alignment, format, range and renderer restrictions.
 
-Content root directories and asset names are copied UTF-8 views with embedded NUL rejected. Root
-output uses byte count/copy without a terminator and performs no partial write. Asset paths remain
-inside the native content manager; no filesystem-path or stream object is returned to C.
+Readback stages native values and copies them only after the documented checks/native read succeed.
+Backbuffer color readback reports logical width-times-height capacity and preserves caller pixels
+on insufficient capacity or an unsupported native read.
 
-## Collections
+### Sprite commands
 
-No `std::vector`, Sharp Runtime collection, iterator or container pointer crosses the boundary.
-Public collection APIs use one of these patterns:
+`cna_sprite_batch_submit_many` takes a contiguous `CNA_SpriteCommand` array with a fixed stride
+of `sizeof(CNA_SpriteCommand)` for this ABI. Each element must declare at least that size and
+version 1; a larger `struct_size` does not change the array stride or authorize passing an array
+of some other structure type.
 
-- count + copy into a caller-owned typed array;
-- lookup by UTF-8 name or fixed ID returning an owned/borrowed handle;
-- indexed query returning one POD/handle;
-- explicit enumeration handle when a live snapshot is too large to copy.
+The adapter resolves the whole command array, checks texture/device relationships and rejects
+unknown effect bits before native submission. Non-finite rotation, origin and layer depth are
+passed through under the native XNA behavior. It copies command values and retains the referenced
+textures for the active interval; it does not retain the caller's command array. A native
+submission failure can still occur after preflight. See [GRAPHICS_RESOURCES.md](GRAPHICS_RESOURCES.md).
 
-The documentation for every collection states snapshot versus live semantics, mutation behavior,
-element ownership and thread affinity. Dictionary-like APIs expose lookup/key enumeration rather
-than a native dictionary layout.
+### Input snapshots
+
+Keyboard pressed-key output comes from a copied 256-bit snapshot, in ascending numeric order.
+Insufficient capacity reports the full count without writing a prefix. Local snapshot queries do
+not poll a platform device. Other input snapshots follow their own capture/consumption rules in
+[INPUT_SNAPSHOTS.md](INPUT_SNAPSHOTS.md).
+
+## Collections and borrows
+
+Collections use count/copy, indexed POD/handle access, name/ID lookup or explicit enumerators.
+Each family specifies whether it observes live values or a snapshot and whether a returned handle
+is a new owned view, an existing protected token or a callback-only loan. A pointer into a borrowed
+video frame or callback payload is not a size/copy result and follows its shorter validity window.
+
+No native collection, iterator or allocator layout crosses the ABI.
+`CnaCApiOutput.hpp` implements the shared copy helpers; `CApi_BoundaryDetail` and
+`CApi_Utf8Oracle` test boundary/encoding rules, while resource and collection smoke tests cover
+their individual range and lifetime contracts.
