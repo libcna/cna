@@ -1,13 +1,19 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 176 reviewed, 1 updated incidentally and awaiting its own audit, and 0 not yet
-independently reviewed.
+Summary: 177 reviewed, 0 awaiting an audit, and 0 in progress.
 
-This file tracks the current documentation cleanup. A pending status does not imply that a
-document is incorrect; it means that it has not yet had an independent factual review against
-current source code, tests and `handoff.md` during the 2026-10-31 to 2026-11-01 pass.
-Keep this inventory and future updates in English.
+The 2026-10-31 to 2026-11-01 documentation cleanup is complete. Every listed page received an
+independent factual review against its owning sources, tests and recorded evidence. A completed
+review does not establish universal runtime, device or external-consumer qualification; each page
+retains its evidence boundaries. Current defects and limitations remain in `handoff.md` §5.
+Keep this inventory and future updates in English. A future pending status means a new review is
+needed, not that the document is necessarily incorrect.
+
+Completion checks: all 177 tracked Markdown files occur exactly once below. The topical index in
+`docs/README.md` links all 138 other top-level pages, and `docs/c-api/README.md` links its 37
+contract subpages. Across all docs pages and this inventory, 1,270 local Markdown links have no
+missing paths or heading anchors. Historical snapshots and proposals remain identified as such.
 
 ## Status definitions
 
@@ -29,9 +35,11 @@ Yes. Two pages underwent two separate reconciliations over these two days:
 | `docs/basiceffect-support.md` | factual corrections in Tasks 885/886 | full rewrite from a Phase 42 log into a current contract | partially duplicated; the second pass was deeper and is now complete |
 | `docs/alphatesteffect-support.md` | correction of fog/null-texture history | full rewrite from a Phase 43 log into a current contract | partially duplicated; the second pass was deeper and is now complete |
 
-Other repeated edits did not repeat the same work:
+Other repeated edits did not repeat the same work (counts below record the earlier incidental
+updates, before the final index reconciliation):
 
-- `docs/README.md` was changed 28 times as a running index; its own complete audit is still pending.
+- `docs/README.md` received 28 incidental updates as a running index before its own complete audit.
+  That audit is now complete and the topical index covers every top-level page.
 - `docs/graphics-renderer-feature-matrix.md` was changed seven times: once in its own audit and
   subsequently during related renderer/capability corrections.
 - `docs/task-id-index.md` received six incidental routing updates before its own complete audit.
@@ -51,7 +59,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 
 ## `docs/`
 
-- 🟡 **PENDING — updated incidentally** — [`docs/README.md`](docs/README.md)
+- ✅ **REVIEWED** — [`docs/README.md`](docs/README.md)
 - ✅ **REVIEWED** — [`docs/alphatesteffect-support.md`](docs/alphatesteffect-support.md)
 - ✅ **REVIEWED** — [`docs/android-graphics-limitations.md`](docs/android-graphics-limitations.md)
 - ✅ **REVIEWED** — [`docs/apple-platforms.md`](docs/apple-platforms.md)

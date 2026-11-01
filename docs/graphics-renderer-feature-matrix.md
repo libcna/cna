@@ -152,7 +152,7 @@ HEADLESS's acceptance remains non-rasterizing and therefore makes no presentatio
 - queries and effects:
   [`occlusionquery-support.md`](occlusionquery-support.md),
   [`fx-compiled-effects.md`](fx-compiled-effects.md) and the five stock-effect support pages listed
-  in [`README.md`](README.md#graphics--per-effect--per-feature-support-matrices).
+  in [`README.md`](README.md#graphics-apis-and-effects).
 
 Historical campaign matrices, fixed follow-up lists and dated test-count snapshots were removed
 from this page during the 2026-10-31 reconciliation. They remain available in Git history; current

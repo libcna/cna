@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Documentation cleanup complete (2026-11-01, DOCS-177): all 177 tracked docs Markdown pages have their
+  own review recorded in the English documents.md inventory. The final docs/README.md audit
+  replaces July currency/scope notices with a topical index covering all 138 other top-level
+  pages; the C API index covers all 37 nested contract pages. Descriptions distinguish current
+  contracts, generated declaration/map checks, historical evidence and unimplemented proposals;
+  the feature matrix's incoming section link is updated. Across docs and documents.md, all
+  1,270 local links resolve to existing paths/Markdown anchors. Current and frozen runtime-member
+  reports render exactly from their retained JSON, and the current JSON matches the fresh full
+  audit from this pass. Related builds, private renderer/content/runtime tests and nine pipeline
+  metadata gates are recorded in the entries below; no new runtime change or platform
+  qualification accompanies this final index work. Findings remain in §5.
 - Historical task-index reconciliation (2026-11-01, XNA-MEMBER-001/002): all 133 deleted
   plans are represented and quoted deletion dates agree with Git history. The index separates
   plan retirement from feature completion and current qualification, corrects the a-0001 versus
