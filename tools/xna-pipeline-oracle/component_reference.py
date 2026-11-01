@@ -6,7 +6,7 @@ The parity report answers *is it there*. This answers the question somebody port
 actually asks: **what does this importer accept, what does this processor produce, what are its
 properties called, what do they default to, and how do I spell all of that in C++.**
 
-Every column comes from a file that was measured rather than typed:
+Columns combine measured inventory with maintained CNA annotations:
 
   * `content-pipeline-api.json` -- the reflection oracle's reading of the genuine XNA Game Studio
     4.0 Refresh assemblies: the importers, the extensions each declares, the processors, and every
@@ -16,9 +16,8 @@ Every column comes from a file that was measured rather than typed:
   * `content-pipeline-inputs.json` -- the per-extension route: which CNA importer and processor a
     source of that extension reaches, and the fixture that proves it.
 
-Nothing here is hand-maintained, so nothing here can drift from the measurement without the gate
-saying so. `--check` is that gate: it regenerates the document and compares it byte for byte with
-the committed one, exactly as the parity report's own check does.
+The map notes and input-route records are maintained by hand. `--check` catches document drift
+from those inputs; it does not execute the recorded tests or prove every semantic annotation.
 
 Usage:
     component_reference.py --inventory A.json --map M.json --inputs I.json --output D.md [--check]
@@ -48,11 +47,15 @@ This is the *what does it do* reference. Three companions answer the neighbourin
 * [`xna-content-pipeline-parity-report.md`](xna-content-pipeline-parity-report.md) -- the parity
   matrix: every public type and member, with its status.
 
-**How to read the status column.** `EXACT_EQUIVALENT` means the same name, members and observable
-behaviour. `SEMANTIC_EQUIVALENT` means C++ cannot spell it identically but every capability is
-there, and the note says how. `HOST_SUBSTITUTION` means a Microsoft-host mechanism was replaced by
-a CNA one. There is no `MISSING` row in this document, and the parity gate is what keeps it that
-way.
+**How to read the status column.** These are the maintained parity map's classifications:
+`EXACT_EQUIVALENT` claims matching names/members/behaviour; `SEMANTIC_EQUIVALENT` records a C++
+mapping with its explanation; `HOST_SUBSTITUTION` records a replacement for a Microsoft-host
+mechanism. The generator checks annotations and document freshness, not universal behavioural
+equivalence. Test and differential evidence have the scope stated by their owning reports.
+
+This page describes the XNA-shaped components. The native CLI has additional extensions and
+different default route names/policies; see [content-pipeline.md](content-pipeline.md).
+Required tools, installed fonts and media dependencies can limit an otherwise registered route.
 """
 
 
@@ -69,7 +72,7 @@ def cell(text):
 
 
 def code(text):
-    return "`%s`" % cell(text) if text else "--"
+    return "`%s`" % cell(text) if text is not None and text != "" else "--"
 
 
 def short(full):
@@ -103,8 +106,8 @@ def member(pmap, full, key, declaring=None):
 def extensions_section(inventory, pmap, inputs, out):
     out.append("## 1. Source extensions\n")
     out.append("Every file extension a built-in XNA importer declares, and what a source with that "
-               "extension reaches in CNA. The importer is selected by extension exactly as XNA "
-               "selects it; the processor named here is the one the importer's "
+               "extension reaches through the XNA component mapping. The processor named here "
+               "is the one the importer's "
                "`DefaultProcessor` asks for, which a `.contentproj` item's `<Processor>` or a "
                "`.cna-content.json` asset's `processor` field overrides.\n")
     out.append("| Extension | XNA importer | Default processor | CNA importer | CNA processor | Fixture |")
@@ -118,8 +121,9 @@ def extensions_section(inventory, pmap, inputs, out):
             code(xna.get("defaultProcessor")), code(cna.get("importer")),
             code(cna.get("processor")), code(cna.get("fixture"))))
     out.append("")
-    out.append("%d extensions, all IMPLEMENTED and TESTED. The matrix that records the tests and "
-               "fixtures behind each row is section 9 of the parity report.\n"
+    out.append("%d declared extensions. The maintained input matrix records implementation/test "
+               "status, fixtures and named cases in section 9 of the parity report. A route/fixture "
+               "record is not proof that every file or feature combination imports faithfully.\n"
                % len(rows))
 
 
@@ -127,7 +131,8 @@ def importers_section(inventory, pmap, out):
     out.append("## 2. Importers\n")
     out.append("`Cached` is XNA's `CacheImportedData`: whether the build is allowed to cache the "
                "imported object graph between builds. The two model importers declare it and the "
-               "other eight do not.\n")
+               "other eight do not. This is descriptor metadata, not a promise that CNA's CLI "
+               "persists an imported object graph; its compiled-output cache is separate.\n")
     out.append("| Importer | Display name | Extensions | Produces | Cached | Status |")
     out.append("|---|---|---|---|---|---|")
     for imp in inventory["importers"]:
@@ -151,13 +156,16 @@ def importers_section(inventory, pmap, out):
 def processors_section(inventory, pmap, out):
     out.append("## 3. Processors and their properties\n")
     out.append("A processor property is set from item metadata named `ProcessorParameters_<Name>` "
-               "in a `.contentproj`, from an asset's `parameters` object in a "
-               "`.cna-content.json`, or directly on the C++ object through the accessor in the "
-               "last column. `Configurable` is whether "
+               "in a `.contentproj`, or directly through the C++ accessor in the last column. "
+               "Native `.cna-content.json` parameters follow the selected native component's "
+               "contract; XNA property names are not universally native parameter names. "
+               "`Configurable` is whether "
                "XNA's own designer offered the property; a non-configurable one is still settable "
                "in code. `XNA default` is the value a freshly constructed processor answered when "
                "the oracle read it, and the same values are asserted against a freshly constructed "
-               "CNA processor by `XnaProcessorDefaultsTests.cpp`.\n")
+               "CNA processor by `XnaProcessorDefaultsTests.cpp`. False values are explicit; "
+               "`null` is the measured XNA value (EffectProcessor.Defines maps it to an empty "
+               "C++ string), while `--` means absent/empty table metadata.\n")
     for proc in inventory["processors"]:
         full = proc["type"]
         row = entry(pmap, full)
@@ -181,7 +189,9 @@ def processors_section(inventory, pmap, out):
         for prop in proc["properties"]:
             m = member(pmap, full, "property:" + prop["name"], prop.get("declaringType"))
             out.append("| `%s` | %s | %s | %s | %s | %s |" % (
-                cell(prop["name"]), code(short(prop["type"])), code(prop.get("defaultValue")),
+                cell(prop["name"]), code(short(prop["type"])),
+                code("null" if "defaultValue" in prop and prop["defaultValue"] is None
+                     else prop.get("defaultValue")),
                 "yes" if prop.get("configurable") else "no",
                 code(short(prop.get("declaringType"))), code(m.get("cna"))))
         out.append("")
@@ -198,8 +208,16 @@ def counts_section(inventory, inputs, out):
     out.append("| processor properties | %d |" % counts["processorProperties"])
     out.append("| extensions with a CNA route | %d |" % len(inputs["extensions"]))
     out.append("")
-    out.append("The denominators are frozen (`inventory_freeze.py`), so a regeneration that found "
-               "one importer fewer would fail rather than quietly renumber this table.\n")
+    out.append("The separate `inventory_freeze.py` gate pins the inventory's recorded assembly "
+               "identities, counts and accepted file digests. This generator uses that inventory; "
+               "it does not rediscover installed assemblies or execute the input tests.\n")
+    out.append("## 5. Current limits and evidence\n")
+    out.append("Defaults cover the 47 recorded properties, not all processor behaviour. "
+               "Media/encoder qualification is in [xna-content-pipeline-media.md]"
+               "(xna-content-pipeline-media.md). Font search/configuration and the reproduced "
+               "external-font cache gap are in [content-pipeline.md](content-pipeline.md) and "
+               "[handoff.md](../handoff.md). Regenerating this page does not close those defects "
+               "or rerun the historical Microsoft XNA observations.\n")
 
 
 def build(inventory, pmap, inputs):

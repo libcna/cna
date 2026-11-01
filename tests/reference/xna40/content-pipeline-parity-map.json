@@ -604,7 +604,7 @@
    "status": "SEMANTIC_EQUIVALENT",
    "cna": "Microsoft::Xna::Framework::Content::Pipeline::FbxImporter",
    "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ModelImporters.hpp",
-   "note": "the node graph is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). Measured against the genuine importer over a corpus written for this repository (tests/reference/xna40/model, cases fbx/*). One recorded divergence, deliberately in CNA's favour: XNA carries FBX SDK 2011.3.1 and refuses every document of version 7400 or above -- which is every FBX a current tool writes -- and CNA reads those too.",
+   "note": "The node graph uses shared_ptr reference semantics and the descriptor is exposed by static Attribute(). The repository-authored FBX corpus has genuine-importer comparisons (tests/reference/xna40/model, fbx/*). XNA's FBX SDK 2011.3.1 rejects the measured 7400-and-newer cases; CNA accepts supported newer forms. This does not imply coverage of every FBX SDK feature or file version; parser/importer limits and corpus witnesses remain authoritative.",
    "members": {
     "constructor:.ctor()": {
      "status": "EXACT_EQUIVALENT",
@@ -2965,7 +2965,7 @@
    "status": "SEMANTIC_EQUIVALENT",
    "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::FontDescriptionProcessor",
    "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp",
-   "note": "Rasterizes through the canonical CNA::Content::Pipeline::RasterizeFontDescription and resolves the font the way the canonical importer does, which is a filename match rather than a family-table lookup -- so a font installed under another filename is not found where XNA would find it. The refusals are XNA's own, measured (fontprocessor/description_missing_font, /description_no_characters, /description_null).",
+   "note": "Rasterizes through CNA::Content::Pipeline::RasterizeFontDescription. Current resolution tries project-local font files/family metadata, configured directories, CNA_FONT_PATH and installed families, with style selection; it is no longer filename-only. The named missing-font/no-character/null refusals remain measured (fontprocessor/description_missing_font, /description_no_characters, /description_null). The native configured-font cache gap and process-global search configuration are documented in docs/content-pipeline.md and handoff.md.",
    "members": {
     "constructor:.ctor()": {
      "status": "EXACT_EQUIVALENT",
@@ -2983,7 +2983,7 @@
    "status": "SEMANTIC_EQUIVALENT",
    "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::FontTextureProcessor",
    "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp",
-   "note": "Defaults and character mapping are measured (processor/FontTextureProcessor, fontprocessor/texture_character_for_index, /texture_first_character_set). The XNA-shaped processor fa\u00e7ade still exposes no SpriteFontContent fields for direct comparison, but the registered `.contentproj` route (`XNAPP-139`) writes an XNB that can be compared: three ordinary sheets match genuine XNA byte-for-byte, while no-glyph and non-magenta-border sheets reproduce XNA's refusals. A valid 32-bit BMP of the same pixel sheet also produced the same reference XNB in the SAMPLE-090 current-head analysis.",
+   "note": "Defaults and character mapping have recorded witnesses (processor/FontTextureProcessor, fontprocessor/texture_character_for_index, /texture_first_character_set). SpriteFontContent has no additional public XNA fields, but CNAEXT Data() exposes its canonical atlas/glyph/spacing data. The registered .contentproj route (XNAPP-139) also permits XNB comparison: three recorded ordinary sheets match genuine XNA bytes, while no-glyph/non-magenta-border witnesses reproduce its refusals. The SAMPLE-090 analysis recorded the same reference output for a valid 32-bit BMP of the pixel sheet; these are named witnesses, not an all-image guarantee.",
    "members": {
     "constructor:.ctor()": {
      "status": "EXACT_EQUIVALENT",
@@ -3555,7 +3555,7 @@
    "status": "SEMANTIC_EQUIVALENT",
    "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessor",
    "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/TextureProcessor.hpp",
-   "note": "Every default and every step is measured (processor/TextureProcessor and textureprocessor/*): the colour key runs first, then the resize, then the premultiply, then the mipmaps, and the format last; NoChange keeps the bitmap type the texture arrived with, and DxtCompressed picks Dxt1 unless a pixel is partly transparent.",
+   "note": "The recorded processor/TextureProcessor and textureprocessor/* witnesses cover defaults and colour-key, resize, premultiply, mip and format policies in that order. NoChange retains the input bitmap type; DxtCompressed selects Dxt1 unless a pixel is partly transparent. Those finite measurements do not establish equivalence for every image/format/parameter combination.",
    "members": {
     "constructor:.ctor()": {
      "status": "EXACT_EQUIVALENT",

@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Generated Content Pipeline component-reference reconciliation (2026-11-01, XNAPP-320):
+  component_reference.py no longer hides nine measured false defaults as empty cells and renders
+  EffectProcessor.Defines' measured null explicitly, with its existing empty-C++-string mapping.
+  Generator prose distinguishes map/freshness checks from execution, native versus XNA parameter
+  names, CacheImportedData metadata versus output caching, and frozen metadata versus rediscovery.
+  Four shared notes correct family/style font search, CNAEXT SpriteFontContent::Data, finite FBX
+  comparisons and texture-policy witness scope; both generated reference/parity documents are
+  regenerated. The parity report still awaits its separate full audit in documents.md.
+  Existing content-pipeline targets build; 133/133 selected component/default/font/texture/model/
+  media/importer cases pass privately on OPENGLES3/dummy audio, as do all nine metadata/parity/
+  freshness/default/virtual/whitespace gates. Independent checks preserve all 47 property rows,
+  nine false values and explicit null/zero rendering; links/inventory pass. Measured denominator,
+  statuses, runtime API/wire and existing external qualification remain unchanged.
 - Content Pipeline guide reconciliation (2026-11-01, CP-063/XNAPP-021/255/281/320): native
   coordinator versus XNA façade, nested BuildAsset/BuildAndLoadAsset, DDS/image/media routes,
   PCM8/16/schema-2 output, probed metadata, output-format overrides, CMake CONTENT_PROJECT/XNB

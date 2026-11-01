@@ -16,15 +16,19 @@ This is the *what does it do* reference. Three companions answer the neighbourin
 * [`xna-content-pipeline-parity-report.md`](xna-content-pipeline-parity-report.md) -- the parity
   matrix: every public type and member, with its status.
 
-**How to read the status column.** `EXACT_EQUIVALENT` means the same name, members and observable
-behaviour. `SEMANTIC_EQUIVALENT` means C++ cannot spell it identically but every capability is
-there, and the note says how. `HOST_SUBSTITUTION` means a Microsoft-host mechanism was replaced by
-a CNA one. There is no `MISSING` row in this document, and the parity gate is what keeps it that
-way.
+**How to read the status column.** These are the maintained parity map's classifications:
+`EXACT_EQUIVALENT` claims matching names/members/behaviour; `SEMANTIC_EQUIVALENT` records a C++
+mapping with its explanation; `HOST_SUBSTITUTION` records a replacement for a Microsoft-host
+mechanism. The generator checks annotations and document freshness, not universal behavioural
+equivalence. Test and differential evidence have the scope stated by their owning reports.
+
+This page describes the XNA-shaped components. The native CLI has additional extensions and
+different default route names/policies; see [content-pipeline.md](content-pipeline.md).
+Required tools, installed fonts and media dependencies can limit an otherwise registered route.
 
 ## 1. Source extensions
 
-Every file extension a built-in XNA importer declares, and what a source with that extension reaches in CNA. The importer is selected by extension exactly as XNA selects it; the processor named here is the one the importer's `DefaultProcessor` asks for, which a `.contentproj` item's `<Processor>` or a `.cna-content.json` asset's `processor` field overrides.
+Every file extension a built-in XNA importer declares, and what a source with that extension reaches through the XNA component mapping. The processor named here is the one the importer's `DefaultProcessor` asks for, which a `.contentproj` item's `<Processor>` or a `.cna-content.json` asset's `processor` field overrides.
 
 | Extension | XNA importer | Default processor | CNA importer | CNA processor | Fixture |
 |---|---|---|---|---|---|
@@ -47,11 +51,11 @@ Every file extension a built-in XNA importer declares, and what a source with th
 | `.x` | `XImporter` | `ModelProcessor` | `Microsoft::Xna::Framework::Content::Pipeline::XImporter` | `ModelProcessor` | `tests/assets/xna40/model/quad_textured.x, tests/assets/xna40/model/surface.png` |
 | `.xml` | `XmlImporter` | -- | `Microsoft::Xna::Framework::Content::Pipeline::XmlImporter` | `PassThroughProcessor(<the type the document declares>)` | `tests/assets/xna40/source/probe.xml, tests/assets/xna40/source/xml_int.xml, tests/assets/xna40/source/xml_vector3.xml, tests/assets/xna40/source/xml_curve.xml, tests/assets/xna40/source/xml_dictionary.xml, tests/assets/xna40/source/xml_rectangles.xml` |
 
-18 extensions, all IMPLEMENTED and TESTED. The matrix that records the tests and fixtures behind each row is section 9 of the parity report.
+18 declared extensions. The maintained input matrix records implementation/test status, fixtures and named cases in section 9 of the parity report. A route/fixture record is not proof that every file or feature combination imports faithfully.
 
 ## 2. Importers
 
-`Cached` is XNA's `CacheImportedData`: whether the build is allowed to cache the imported object graph between builds. The two model importers declare it and the other eight do not.
+`Cached` is XNA's `CacheImportedData`: whether the build is allowed to cache the imported object graph between builds. The two model importers declare it and the other eight do not. This is descriptor metadata, not a promise that CNA's CLI persists an imported object graph; its compiled-output cache is separate.
 
 | Importer | Display name | Extensions | Produces | Cached | Status |
 |---|---|---|---|---|---|
@@ -67,7 +71,7 @@ Every file extension a built-in XNA importer declares, and what a source with th
 | `XmlImporter` | XML Content - XNA Framework | `.xml` | `Object` | no | SEMANTIC_EQUIVALENT |
 
 * **EffectImporter** -- the effect is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute().
-* **FbxImporter** -- the node graph is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). Measured against the genuine importer over a corpus written for this repository (tests/reference/xna40/model, cases fbx/*). One recorded divergence, deliberately in CNA's favour: XNA carries FBX SDK 2011.3.1 and refuses every document of version 7400 or above -- which is every FBX a current tool writes -- and CNA reads those too.
+* **FbxImporter** -- The node graph uses shared_ptr reference semantics and the descriptor is exposed by static Attribute(). The repository-authored FBX corpus has genuine-importer comparisons (tests/reference/xna40/model, fbx/*). XNA's FBX SDK 2011.3.1 rejects the measured 7400-and-newer cases; CNA accepts supported newer forms. This does not imply coverage of every FBX SDK feature or file version; parser/importer limits and corpus witnesses remain authoritative.
 * **FontDescriptionImporter** -- the description is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute().
 * **Mp3Importer** -- the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). Everything the genuine importer answers for the corpus is reproduced: the format is the decoder's own -- 16-bit PCM at 44100 whatever the source rate, with only the channel count surviving -- the duration is the whole decoded stream truncated to whole milliseconds, encoder delay and padding included, and both loop fields are 0.
 * **TextureImporter** -- the texture is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute().
@@ -79,7 +83,7 @@ Every file extension a built-in XNA importer declares, and what a source with th
 
 ## 3. Processors and their properties
 
-A processor property is set from item metadata named `ProcessorParameters_<Name>` in a `.contentproj`, from an asset's `parameters` object in a `.cna-content.json`, or directly on the C++ object through the accessor in the last column. `Configurable` is whether XNA's own designer offered the property; a non-configurable one is still settable in code. `XNA default` is the value a freshly constructed processor answered when the oracle read it, and the same values are asserted against a freshly constructed CNA processor by `XnaProcessorDefaultsTests.cpp`.
+A processor property is set from item metadata named `ProcessorParameters_<Name>` in a `.contentproj`, or directly through the C++ accessor in the last column. Native `.cna-content.json` parameters follow the selected native component's contract; XNA property names are not universally native parameter names. `Configurable` is whether XNA's own designer offered the property; a non-configurable one is still settable in code. `XNA default` is the value a freshly constructed processor answered when the oracle read it, and the same values are asserted against a freshly constructed CNA processor by `XnaProcessorDefaultsTests.cpp`. False values are explicit; `null` is the measured XNA value (EffectProcessor.Defines maps it to an empty C++ string), while `--` means absent/empty table metadata.
 
 ### EffectProcessor
 
@@ -92,7 +96,7 @@ XNA compiles in-process with D3DX; CNA drives the one effect compiler this repos
 | Property | Type | XNA default | Configurable | Declared by | CNA |
 |---|---|---|---|---|---|
 | `DebugMode` | `EffectProcessorDebugMode` | `EffectProcessorDebugMode.Auto` | yes | `EffectProcessor` | `getDebugModeProperty() / setDebugModeProperty()` |
-| `Defines` | `String` | -- | yes | `EffectProcessor` | `getDefinesProperty() / setDefinesProperty()` |
+| `Defines` | `String` | `null` | yes | `EffectProcessor` | `getDefinesProperty() / setDefinesProperty()` |
 
 ### FontDescriptionProcessor
 
@@ -100,7 +104,7 @@ XNA compiles in-process with D3DX; CNA drives the one effect compiler this repos
 
 `Microsoft::Xna::Framework::Content::Pipeline::Processors::FontDescriptionProcessor`, declared in `modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp`.
 
-Rasterizes through the canonical CNA::Content::Pipeline::RasterizeFontDescription and resolves the font the way the canonical importer does, which is a filename match rather than a family-table lookup -- so a font installed under another filename is not found where XNA would find it. The refusals are XNA's own, measured (fontprocessor/description_missing_font, /description_no_characters, /description_null).
+Rasterizes through CNA::Content::Pipeline::RasterizeFontDescription. Current resolution tries project-local font files/family metadata, configured directories, CNA_FONT_PATH and installed families, with style selection; it is no longer filename-only. The named missing-font/no-character/null refusals remain measured (fontprocessor/description_missing_font, /description_no_characters, /description_null). The native configured-font cache gap and process-global search configuration are documented in docs/content-pipeline.md and handoff.md.
 
 No properties.
 
@@ -110,7 +114,7 @@ No properties.
 
 `Microsoft::Xna::Framework::Content::Pipeline::Processors::FontTextureProcessor`, declared in `modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp`.
 
-Defaults and character mapping are measured (processor/FontTextureProcessor, fontprocessor/texture_character_for_index, /texture_first_character_set). The XNA-shaped processor façade still exposes no SpriteFontContent fields for direct comparison, but the registered `.contentproj` route (`XNAPP-139`) writes an XNB that can be compared: three ordinary sheets match genuine XNA byte-for-byte, while no-glyph and non-magenta-border sheets reproduce XNA's refusals. A valid 32-bit BMP of the same pixel sheet also produced the same reference XNB in the SAMPLE-090 current-head analysis.
+Defaults and character mapping have recorded witnesses (processor/FontTextureProcessor, fontprocessor/texture_character_for_index, /texture_first_character_set). SpriteFontContent has no additional public XNA fields, but CNAEXT Data() exposes its canonical atlas/glyph/spacing data. The registered .contentproj route (XNAPP-139) also permits XNB comparison: three recorded ordinary sheets match genuine XNA bytes, while no-glyph/non-magenta-border witnesses reproduce its refusals. The SAMPLE-090 analysis recorded the same reference output for a valid 32-bit BMP of the pixel sheet; these are named witnesses, not an all-image guarantee.
 
 | Property | Type | XNA default | Configurable | Declared by | CNA |
 |---|---|---|---|---|---|
@@ -133,7 +137,7 @@ Measured against a build context that records what it is asked to build (materia
 | `DefaultEffect` | `MaterialProcessorDefaultEffect` | `MaterialProcessorDefaultEffect.BasicEffect` | yes | `MaterialProcessor` | `getDefaultEffectProperty() / setDefaultEffectProperty()` |
 | `GenerateMipmaps` | `Boolean` | `True` | yes | `MaterialProcessor` | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty()` |
 | `PremultiplyTextureAlpha` | `Boolean` | `True` | yes | `MaterialProcessor` | `getPremultiplyTextureAlphaProperty() / setPremultiplyTextureAlphaProperty()` |
-| `ResizeTexturesToPowerOfTwo` | `Boolean` | -- | yes | `MaterialProcessor` | `getResizeTexturesToPowerOfTwoProperty() / setResizeTexturesToPowerOfTwoProperty()` |
+| `ResizeTexturesToPowerOfTwo` | `Boolean` | `False` | yes | `MaterialProcessor` | `getResizeTexturesToPowerOfTwoProperty() / setResizeTexturesToPowerOfTwoProperty()` |
 | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.DxtCompressed` | yes | `MaterialProcessor` | `getTextureFormatProperty() / setTextureFormatProperty()` |
 
 ### ModelProcessor
@@ -150,15 +154,15 @@ the scene it is given is transformed in place and the model it answers holds sha
 | `ColorKeyEnabled` | `Boolean` | `True` | yes | `ModelProcessor` | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty(bool)` |
 | `DefaultEffect` | `MaterialProcessorDefaultEffect` | `MaterialProcessorDefaultEffect.BasicEffect` | yes | `ModelProcessor` | `getDefaultEffectProperty() / setDefaultEffectProperty(MaterialProcessorDefaultEffect)` |
 | `GenerateMipmaps` | `Boolean` | `True` | yes | `ModelProcessor` | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty(bool)` |
-| `GenerateTangentFrames` | `Boolean` | -- | yes | `ModelProcessor` | `getGenerateTangentFramesProperty() / setGenerateTangentFramesProperty(bool)` |
+| `GenerateTangentFrames` | `Boolean` | `False` | yes | `ModelProcessor` | `getGenerateTangentFramesProperty() / setGenerateTangentFramesProperty(bool)` |
 | `PremultiplyTextureAlpha` | `Boolean` | `True` | yes | `ModelProcessor` | `getPremultiplyTextureAlphaProperty() / setPremultiplyTextureAlphaProperty(bool)` |
 | `PremultiplyVertexColors` | `Boolean` | `True` | yes | `ModelProcessor` | `getPremultiplyVertexColorsProperty() / setPremultiplyVertexColorsProperty(bool)` |
-| `ResizeTexturesToPowerOfTwo` | `Boolean` | -- | yes | `ModelProcessor` | `getResizeTexturesToPowerOfTwoProperty() / setResizeTexturesToPowerOfTwoProperty(bool)` |
+| `ResizeTexturesToPowerOfTwo` | `Boolean` | `False` | yes | `ModelProcessor` | `getResizeTexturesToPowerOfTwoProperty() / setResizeTexturesToPowerOfTwoProperty(bool)` |
 | `RotationX` | `Single` | `0` | yes | `ModelProcessor` | `getRotationXProperty() / setRotationXProperty(Single)` |
 | `RotationY` | `Single` | `0` | yes | `ModelProcessor` | `getRotationYProperty() / setRotationYProperty(Single)` |
 | `RotationZ` | `Single` | `0` | yes | `ModelProcessor` | `getRotationZProperty() / setRotationZProperty(Single)` |
 | `Scale` | `Single` | `1` | yes | `ModelProcessor` | `getScaleProperty() / setScaleProperty(Single)` |
-| `SwapWindingOrder` | `Boolean` | -- | yes | `ModelProcessor` | `getSwapWindingOrderProperty() / setSwapWindingOrderProperty(bool)` |
+| `SwapWindingOrder` | `Boolean` | `False` | yes | `ModelProcessor` | `getSwapWindingOrderProperty() / setSwapWindingOrderProperty(bool)` |
 | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.DxtCompressed` | yes | `ModelProcessor` | `getTextureFormatProperty() / setTextureFormatProperty(TextureProcessorOutputFormat)` |
 
 ### ModelTextureProcessor
@@ -175,7 +179,7 @@ Mipmapped and DXT-compressed by default, which is the only difference from the t
 | `ColorKeyEnabled` | `Boolean` | `True` | no | `ModelTextureProcessor` | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty()` |
 | `GenerateMipmaps` | `Boolean` | `True` | no | `ModelTextureProcessor` | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty()` |
 | `PremultiplyAlpha` | `Boolean` | `True` | yes | `TextureProcessor` | `getPremultiplyAlphaProperty() / setPremultiplyAlphaProperty()` |
-| `ResizeToPowerOfTwo` | `Boolean` | -- | no | `ModelTextureProcessor` | `getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()` |
+| `ResizeToPowerOfTwo` | `Boolean` | `False` | no | `ModelTextureProcessor` | `getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()` |
 | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.DxtCompressed` | no | `ModelTextureProcessor` | `getTextureFormatProperty() / setTextureFormatProperty()` |
 
 ### PassThroughProcessor
@@ -224,9 +228,9 @@ The texture processor's defaults exactly (measured, processor/SpriteTextureProce
 |---|---|---|---|---|---|
 | `ColorKeyColor` | `Color` | `Color:{R:255 G:0 B:255 A:255}` | no | `SpriteTextureProcessor` | `getColorKeyColorProperty() / setColorKeyColorProperty()` |
 | `ColorKeyEnabled` | `Boolean` | `True` | no | `SpriteTextureProcessor` | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty()` |
-| `GenerateMipmaps` | `Boolean` | -- | no | `SpriteTextureProcessor` | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty()` |
+| `GenerateMipmaps` | `Boolean` | `False` | no | `SpriteTextureProcessor` | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty()` |
 | `PremultiplyAlpha` | `Boolean` | `True` | yes | `TextureProcessor` | `getPremultiplyAlphaProperty() / setPremultiplyAlphaProperty()` |
-| `ResizeToPowerOfTwo` | `Boolean` | -- | no | `SpriteTextureProcessor` | `getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()` |
+| `ResizeToPowerOfTwo` | `Boolean` | `False` | no | `SpriteTextureProcessor` | `getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()` |
 | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.Color` | no | `SpriteTextureProcessor` | `getTextureFormatProperty() / setTextureFormatProperty()` |
 
 ### TextureProcessor
@@ -235,15 +239,15 @@ The texture processor's defaults exactly (measured, processor/SpriteTextureProce
 
 `Microsoft::Xna::Framework::Content::Pipeline::Processors::TextureProcessor`, declared in `modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/TextureProcessor.hpp`.
 
-Every default and every step is measured (processor/TextureProcessor and textureprocessor/*): the colour key runs first, then the resize, then the premultiply, then the mipmaps, and the format last; NoChange keeps the bitmap type the texture arrived with, and DxtCompressed picks Dxt1 unless a pixel is partly transparent.
+The recorded processor/TextureProcessor and textureprocessor/* witnesses cover defaults and colour-key, resize, premultiply, mip and format policies in that order. NoChange retains the input bitmap type; DxtCompressed selects Dxt1 unless a pixel is partly transparent. Those finite measurements do not establish equivalence for every image/format/parameter combination.
 
 | Property | Type | XNA default | Configurable | Declared by | CNA |
 |---|---|---|---|---|---|
 | `ColorKeyColor` | `Color` | `Color:{R:255 G:0 B:255 A:255}` | yes | `TextureProcessor` | `getColorKeyColorProperty() / setColorKeyColorProperty()` |
 | `ColorKeyEnabled` | `Boolean` | `True` | yes | `TextureProcessor` | `getColorKeyEnabledProperty() / setColorKeyEnabledProperty()` |
-| `GenerateMipmaps` | `Boolean` | -- | yes | `TextureProcessor` | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty()` |
+| `GenerateMipmaps` | `Boolean` | `False` | yes | `TextureProcessor` | `getGenerateMipmapsProperty() / setGenerateMipmapsProperty()` |
 | `PremultiplyAlpha` | `Boolean` | `True` | yes | `TextureProcessor` | `getPremultiplyAlphaProperty() / setPremultiplyAlphaProperty()` |
-| `ResizeToPowerOfTwo` | `Boolean` | -- | yes | `TextureProcessor` | `getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()` |
+| `ResizeToPowerOfTwo` | `Boolean` | `False` | yes | `TextureProcessor` | `getResizeToPowerOfTwoProperty() / setResizeToPowerOfTwoProperty()` |
 | `TextureFormat` | `TextureProcessorOutputFormat` | `TextureProcessorOutputFormat.Color` | yes | `TextureProcessor` | `getTextureFormatProperty() / setTextureFormatProperty()` |
 
 ### VideoProcessor
@@ -268,4 +272,8 @@ the video is a shared pointer, which is the lifetime a .NET reference gives it. 
 | processor properties | 47 |
 | extensions with a CNA route | 18 |
 
-The denominators are frozen (`inventory_freeze.py`), so a regeneration that found one importer fewer would fail rather than quietly renumber this table.
+The separate `inventory_freeze.py` gate pins the inventory's recorded assembly identities, counts and accepted file digests. This generator uses that inventory; it does not rediscover installed assemblies or execute the input tests.
+
+## 5. Current limits and evidence
+
+Defaults cover the 47 recorded properties, not all processor behaviour. Media/encoder qualification is in [xna-content-pipeline-media.md](xna-content-pipeline-media.md). Font search/configuration and the reproduced external-font cache gap are in [content-pipeline.md](content-pipeline.md) and [handoff.md](../handoff.md). Regenerating this page does not close those defects or rerun the historical Microsoft XNA observations.
