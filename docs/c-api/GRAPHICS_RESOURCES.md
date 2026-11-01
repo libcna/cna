@@ -43,10 +43,12 @@ For a game-owned resource it uses the game's existing borrowing window: during a
 before the first run until the first callback returns. The resource outlives that borrowed handle.
 The getter does not transfer device ownership.
 
-The current getter resolves only game owners; independently created device handles are not
-recovered through this route. The measured owned-device failure and its cause are recorded in
-[`handoff.md` §5](../../handoff.md#5-known-bugs-and-limitations). Keep the original owned device
-handle when creating resources on one.
+For a resource created on an independently owned device, the getter returns that exact existing
+device handle. It verifies the native device identity and does not acquire another ownership
+reference or convert the device into a game loan. The caller must keep the device alive while
+using its resources. `CApi_OwnedGraphicsDeviceSmoke` verifies two distinct resource/device pairs,
+queries the surviving pair after the other device is destroyed, and rejects a destroyed resource
+without publishing a device handle. The regression fails before CNA-FIX-D17 and passes after it.
 
 ### Names and tags
 

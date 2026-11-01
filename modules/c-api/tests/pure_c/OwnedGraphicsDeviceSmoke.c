@@ -86,10 +86,21 @@ int main(void)
         CNA_FALSE, {0U, 0U, 0U}, CNA_SURFACE_FORMAT_COLOR
     };
     CNA_Handle texture_on_first = CNA_INVALID_HANDLE;
+    CNA_Handle texture_on_second = CNA_INVALID_HANDLE;
     CNA_Handle batch_on_second = CNA_INVALID_HANDLE;
     if (cna_texture2d_create(first, &texture_info, &texture_on_first) != CNA_RESULT_SUCCESS ||
+        cna_texture2d_create(second, &texture_info, &texture_on_second) != CNA_RESULT_SUCCESS ||
         cna_sprite_batch_create(second, &batch_on_second) != CNA_RESULT_SUCCESS) {
         return 6;
+    }
+
+    CNA_Handle resource_device = CNA_INVALID_HANDLE;
+    if (cna_graphics_resource_get_graphics_device(texture_on_first, &resource_device) !=
+            CNA_RESULT_SUCCESS || resource_device != first ||
+        cna_graphics_resource_get_graphics_device(texture_on_second, &resource_device) !=
+            CNA_RESULT_SUCCESS || resource_device != second) {
+        (void)fprintf(stderr, "resource device query did not preserve its standalone owner\n");
+        return 12;
     }
 
     /*
@@ -128,10 +139,18 @@ int main(void)
     }
     CNA_Bool second_alive = CNA_TRUE;
     if (cna_graphics_device_get_is_disposed(second, &second_alive) != CNA_RESULT_SUCCESS ||
-        second_alive != CNA_FALSE) {
+        second_alive != CNA_FALSE ||
+        cna_graphics_resource_get_graphics_device(texture_on_second, &resource_device) !=
+            CNA_RESULT_SUCCESS || resource_device != second) {
         return 10;
     }
+    resource_device = UINT64_MAX;
+    if (cna_graphics_resource_get_graphics_device(texture_on_first, &resource_device) !=
+            CNA_RESULT_INVALID_HANDLE || resource_device != CNA_INVALID_HANDLE) {
+        return 13;
+    }
     if (cna_sprite_batch_destroy(batch_on_second) != CNA_RESULT_SUCCESS ||
+        cna_texture2d_destroy(texture_on_second) != CNA_RESULT_SUCCESS ||
         cna_graphics_device_destroy(second) != CNA_RESULT_SUCCESS) {
         return 11;
     }

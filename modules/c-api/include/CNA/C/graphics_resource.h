@@ -26,14 +26,14 @@ typedef void (*CNA_GraphicsResourceDisposingCallback)(
     void* context);
 
 /**
- * @brief Gets a borrowed graphics device for a game-owned resource.
+ * @brief Gets the graphics device associated with a resource without transferring ownership.
  *
  * A resource with no native device returns success and CNA_INVALID_HANDLE. A game-owned resource
- * uses the game's callback or pre-run borrowing window. This route currently resolves game owners
- * only; it does not recover independently owned device handles.
+ * uses the game's callback or pre-run borrowing window. A resource created on an independently
+ * owned device returns that existing device handle; the caller still owns its lifetime.
  *
  * @param resource Graphics-resource handle.
- * @param out_graphics_device Receives a valid borrowed device handle or invalid handle.
+ * @param out_graphics_device Receives the associated device handle or invalid handle.
  * @return A CNA result code; failure leaves @p out_graphics_device invalid.
  */
 CNA_C_API CNA_Result cna_graphics_resource_get_graphics_device(

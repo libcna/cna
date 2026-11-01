@@ -42,6 +42,7 @@ using CNA::C::Detail::LookupHandle;
 using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::OcclusionQueryResource;
+using CNA::C::Detail::OwnedGraphicsDevice;
 using CNA::C::Detail::ReadText;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::RenderTargetCubeResource;
@@ -286,6 +287,15 @@ template<typename TCallable>
     if (resource.parentGame == CNA_INVALID_HANDLE) {
         return NotSupported(
             "The resource's graphics-device owner cannot be represented by a C handle.");
+    }
+    std::shared_ptr<OwnedGraphicsDevice> owned;
+    if (GetRuntimeHandles().Get(resource.parentGame, ObjectKind::OwnedGraphicsDevice, &owned) ==
+        CNA_RESULT_SUCCESS) {
+        if (owned->value.get() != resource.value->getGraphicsDeviceProperty()) {
+            return InternalError("The resource and owned graphics-device owners disagree.");
+        }
+        *outGraphicsDevice = resource.parentGame;
+        return CNA_RESULT_SUCCESS;
     }
     CNA_Handle borrowedHandle = CNA_INVALID_HANDLE;
     if (const CNA_Result result = BorrowGameGraphicsDevice(

@@ -29,8 +29,8 @@ The dedicated type-name count/copy routes deliberately return `CNA_INDEX_BUFFER_
 (`Microsoft.Xna.Framework.Graphics.IndexBuffer`) for **both** kinds. Use the snapshot's `dynamic`
 field to distinguish them. Count/copy uses UTF-8 bytes without a terminator and does not partially
 write an undersized destination. Generic GraphicsResource name, string, tag, device, disposal and
-Disposing-subscription routes accept either kind; their shared rules and the owned-device getter
-defect are documented in [`GRAPHICS_RESOURCES.md`](GRAPHICS_RESOURCES.md).
+Disposing-subscription routes accept either kind; their shared ownership and device-query rules
+are documented in [`GRAPHICS_RESOURCES.md`](GRAPHICS_RESOURCES.md).
 
 ## Caller windows and buffer offsets
 

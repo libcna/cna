@@ -143,9 +143,13 @@
       "id": "CNA-FIX-D17",
       "source_section": "5.1 Defects",
       "summary": "`cna_graphics_resource_get_graphics_device` fails for a valid resource created on an independently owned C device.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Resolve standalone owner tokens to their existing device handle and verify native pointer identity; preserve game borrowing and invalid output on failure.",
+      "evidence": [
+        "OwnedGraphicsDeviceSmoke regression fails before fix; passes after fix for two independent devices and stale/surviving resources.",
+        "OPENGLES3 private run: OwnedGraphicsDeviceSmoke, GraphicsResourceSmoke, IndexBufferSmoke and VertexBufferSmoke all pass.",
+        "SDLGPU private run: OwnedGraphicsDeviceSmoke and GraphicsResourceSmoke both pass; neither takes the device-creation-unavailable branch."
+      ]
     },
     {
       "id": "CNA-FIX-D18",

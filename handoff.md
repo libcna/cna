@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D17 (2026-11-01): the generic resource-device query now resolves an independently
+  owned device token and checks its native identity before returning the existing handle. Game
+  borrowing and device-less declarations retain their behavior. The strict-C regression fails
+  before the fix, then verifies two distinct resource/device pairs, the surviving pair after the
+  other device is destroyed and stale-resource output invalidation. Four focused C suites pass
+  on OPENGLES3; the owned-device and generic-resource suites pass on SDLGPU, all privately.
+  Public contract comments match; no ownership transfer, ABI signature/layout change or stub.
 - CNA-FIX-D12/D16 (2026-11-01): both C buffer info snapshots now expose their native dynamic
   ContentLost flag instead of constant false. Strict-C regressions fail before the fix and pass
   after it on OPENGLES3 and SDLGPU through the private runner. Each covers two loss/reupload
@@ -1904,16 +1911,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   output sentinel. Player/device/game cleanup succeeds. `CApi_VideoSmoke` checks continued player
   state after original-handle release, but not this getter transition; no permanent regression
   test covers it yet. Keep the original Video handle while relying on association queries.
-- `cna_graphics_resource_get_graphics_device` fails for a valid resource created on an independently
-  owned C device. `CnaCApiGraphicsResource.cpp` passes the resource's owner token unconditionally
-  to `BorrowGameGraphicsDevice`; that token is an owned-device handle on this path, so the game
-  lookup returns `CNA_RESULT_INVALID_HANDLE` and the device output remains invalid. Measured on
-  2026-11-01 with a strict-C probe through the private SDLGPU runner: create a 64×64 owned Reach
-  device, create its 1×1 Texture2D, then query the generic resource device; result is 2
-  (`INVALID_HANDLE`), output 0, while `get_is_disposed` succeeds with false and both typed destroys
-  succeed. Game-callback and device-less declaration paths are covered by `CApi_GraphicsResourceSmoke`;
-  this owned-device path has no permanent regression test yet. Keep the original owned device
-  handle as the current workaround.
 - `GraphicsDeviceManager::setPreferredBackBufferWidthProperty` and
   `setPreferredBackBufferHeightProperty` accept zero and negative values. FNA rejects `value <= 0`
   with `ArgumentOutOfRangeException("value", "BackBufferWidth and BackBufferHeight must be greater
