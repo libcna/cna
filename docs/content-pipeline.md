@@ -1,42 +1,31 @@
 # CNA Content Pipeline
 
-> Status: implemented and extended pipeline, updated 2026-08-30. The command-line build/clean
-> workflows and built-in byte-compatibility guarantees described here are supported behavior. The
-> custom C++ component API is explicitly experimental. CNB container 1.0 and the existing built-in
-> CNB schemas remain frozen.
+The build-time engine imports authoring files, processes canonical CPU data and publishes compiled
+content. Default output is [CNB](cnb-format.md); `--format xnb` selects
+[XNB](xnb-interoperability.md). A route without a writer for the requested format fails explicitly.
+Effect bytecode and generic intermediate XML do not gain a CNB schema by changing an option.
 
-The CNA Content Pipeline is the build-time system that turns authoring files into compiled
-content. It is inspired by XNA 4.0's Importer -> Processor -> Writer separation, but it uses
-CNA-native C++23 components and the existing codecs instead of CLR reflection or MSBuild.
+This page documents `CNA::Content::Pipeline` and the `cna-content` coordinator. The XNA-shaped
+C++ API in `Microsoft::Xna::Framework::Content::Pipeline` is a façade over that same engine,
+with importers/processors, intermediate XML, serialization and task/project adapters; see
+[the API contract](xna-content-pipeline-compat-api.md) and
+[migration guide](xna-content-pipeline-migration.md).
 
-It has **two output formats**, selected per build with `--format`:
+Native extension/embedding interfaces remain experimental. CNB container and asset schemas have
+separate versions; [cnb-format.md](cnb-format.md) owns their contracts. Component cache versions
+are not wire-schema versions, and not every built-in output is schema 1.
 
-- **CNB**, CNA's own compiled format, described in this document. The default.
-- **XNB**, the XNA 4.0 compiled format, described in
-  [`docs/xnb-interoperability.md`](xnb-interoperability.md).
+The pipeline compiles; ContentManager loads runtime content. XNB reader identities belong to
+compatibility input/output, not native CNB reader tables. Selection, dependency tracking,
+incremental decisions and publication share the coordinator. Processors can inspect output format,
+platform/profile where an implemented policy requires it; changing just the writer is not always
+sufficient.
 
-The importer, the processor and the canonical content value are the same for both; only the
-serializer differs. Everything in this document about component selection, parameters,
-dependencies, the manifest, incremental builds and publication applies to both formats. XNB reader
-tables are consulted at the compatibility-source boundary and produced by the XNB writer; they
-never enter native CNB.
-
-XNB output has its own container options: `--xnb-platform`, `--xnb-version`, `--xnb-profile`,
-`--xnb-reader-names` and `--xnb-compress none|lzx|lz4`. **`lzx` is the compression Microsoft XNA
-4.0 itself produced** and the only compressed form an XNA 4.0 runtime loads; `lz4` is a
-later-ecosystem extension and is refused on an XNA 4.0 target platform. Every one of these options
-is part of the build fingerprint, so changing one rebuilds the affected artifacts instead of
-reporting them unchanged. `docs/xnb-interoperability.md` §2.1.1 records exactly what the LZX
-encoder emits and what it does not.
-
-These three terms describe separate layers:
-
-- **CNA Content Pipeline** imports source data, processes it, records dependencies, chooses
-  components, builds incrementally, and publishes artifacts.
-- **CNB** is CNA's native compiled runtime content format.
-- **ContentManager** loads CNB into runtime objects.
-
-CNB is an output of the Content Pipeline; CNB is not the Content Pipeline itself.
+XNB options include `--xnb-platform`, `--xnb-version`, `--xnb-profile`, `--xnb-reader-names`
+and `--xnb-compress none|lzx|lz4`, and enter build identity. XNA 4.0 loads LZX, while LZ4 is an
+extended-ecosystem option refused for XNA targets. Xbox output is refused unless
+`--xnb-allow-unverified-xbox` requests the unqualified route. Header identifiers alone do not
+prove target payload compatibility; see [xnb-interoperability.md](xnb-interoperability.md).
 
 ## Quick start
 
@@ -135,7 +124,8 @@ Every other refusal stays a refusal in both modes, because an impossible request
 whoever asked: a build with no DXT encoder, a texture whose dimensions block compression cannot
 take, a malformed source. The XNA task façade
 (`Microsoft::Xna::Framework::Content::Pipeline::Tasks::BuildContent`) selects `--xna-compatible`
-for itself, so a `.contentproj` that builds under XNA builds through it.
+for itself. Supported projects therefore use XNA's leniency; this does not run arbitrary CLR
+components, project tasks or every possible source feature in C++.
 
 After a valid manifest has established ownership, all unchanged pipeline-owned compiled and
 deployment files can be removed without scanning the output tree:
@@ -144,8 +134,9 @@ deployment files can be removed without scanning the output tree:
 cna-content clean Content
 ```
 
-Clean preserves manual files, source files, changed former outputs, directories, and anything not
-proven by the manifest. The persistent `.cna-content.lock` coordination file remains so later build
+Clean leaves manual/source files and directories alone. Changed former outputs or unsafe owned
+candidates make preflight fail before deletion; they are not silently discarded or reported as
+successful cleanup. The persistent `.cna-content.lock` coordination file remains so later build
 and clean processes continue to serialize safely for that output root.
 
 Runtime loading remains the existing ContentManager API:
@@ -204,8 +195,9 @@ importer answers “what pixels are in this source?”; a texture processor answ
 pixels become runtime Texture2D content?”; the writer answers “which authoritative CNB codec emits
 the compiled representation?”
 
-No pipeline component constructs a GraphicsDevice, opens an audio device, creates a window, reads
-back GPU data, or initializes a renderer. XNB float/ADPCM SoundEffect conversion can call SDL3's
+Built-in compilation paths use CPU data without constructing a GraphicsDevice, opening playback
+devices/windows, reading back GPU data or initializing a graphics renderer. Registered C++
+components are trusted code; the API is not an OS sandbox. XNB float/ADPCM SoundEffect conversion can call SDL3's
 in-memory WAVE decoder when that audio backend is compiled, but does not initialize SDL video/audio
 subsystems or open a device. Model import uses CPU-side canonical data and temporary authoring
 intermediates, not runtime Model objects.
@@ -222,12 +214,13 @@ intermediates, not runtime Model objects.
 | `ContentTypeWriter<T>` | `ContentTypeWriter` adapter over one existing typed CNB encoder, with bounded named outputs |
 | `ContentTypeReader<T>` | existing typed CNB decoder plus `CnbLoaderRegistry` |
 | `ExternalReference<T>` | CNB XREF for runtime references; separate records for build inputs |
-| XNB | a validated compatibility source for explicitly supported built-in roots; output is ordinary CNB |
-| MGCB/MSBuild | `cna-content` plus the thin `cna_add_content()` CMake helper |
+| XNB | compatibility source and optional compiled output, separate from native CNB |
+| XNA project/tasks | bounded .contentproj/BuildContent adapters over the coordinator |
+| CMake | cna_add_content() delegates to the CLI |
 
-CNA deliberately does not copy assembly discovery, reflection-driven processor properties,
-assembly-qualified type names, CLR generic names, XNB reader tables, XNA platform bytes, or
-`.contentproj`/MSBuild machinery.
+The native CNB route does not use CLR assembly loading/reflection. The XNA façade explicitly
+registers C++ types/properties/writers and handles compatibility names, reader tables and platform
+bytes needed by XNB. It reads the supported project subset, without running arbitrary MSBuild.
 
 ## Importers
 
@@ -261,13 +254,14 @@ Imported values preserve source semantics where that distinction is meaningful:
 
 ```text
 PNG/JPEG/etc. -> ImportedImage -> CnbTextureData
-WAV           -> ImportedSound -> CnbSoundEffectData
+WAV           -> ImportedSound -> ProcessedSoundEffect
 glTF          -> ImportedModelDocument -> ProcessedModelBundle
 ```
 
 `ImportedImage` contains validated RGBA8 pixels and dimensions before texture policy. `ImportedSound`
 preserves whether accepted PCM samples were unsigned 8-bit or signed little-endian 16-bit until the
-processor performs the exact Pcm16 conversion. `ImportedModelDocument` is an owned lifetime seam
+processor creates width-preserving ProcessedSoundEffect data. Its CNB writer emits schema 2 for
+PCM8/16. The WAV importer rejects wider/non-PCM sources; compressed-source import is separate. `ImportedModelDocument` is an owned lifetime seam
 over CNA's existing canonical glTF-to-CNJ interpretation, avoiding a second glTF parser while the
 shared importer is migrated further in memory. `ProcessedModelBundle` always carries one primary
 `CnbModelData` and can additionally carry canonical Model, Texture2D, and AnimationClip values for
@@ -295,7 +289,7 @@ bool, signed 64-bit integer, unsigned 64-bit integer, double, UTF-8 string
 Unknown, mistyped, non-finite, or invalid values are rejected by the selected processor. Every
 effective parameter participates in the build fingerprint. Library callers set parameters on
 `ContentBuildRequest`; the optional strict `.cna-content.json` maps the same typed values into CLI
-builds. `TextureProcessor` accepts the string parameter `colorKey` in `R,G,B` decimal form, the
+builds. `TextureProcessor` accepts decimal `colorKey` in `R,G,B` or `R,G,B,A` form, the
 string parameter `textureFormat`, and the booleans `generateMipmaps`, `premultiplyAlpha` and
 `resizeToPowerOfTwo`. They apply in one documented order -- **colour key, resize, premultiply, mip
 chain, block compression** -- and `premultiplyAlpha` **defaults to `true`**, exactly as XNA 4.0's
@@ -308,10 +302,11 @@ would corrupt them). An explicit parameter beats both.
 For `Texture2D`, requested DXT compression writes the chosen DXT representation alone to XNB and
 writes the matching `Bc1`, `Bc2` or `Bc3` representation followed by the processed `Rgba8` fallback
 to CNB. A pass-through compressed DDS preserves its source blocks in the same preferred position.
-`SongProcessor` accepts `streamReference` and `name` strings plus a `durationMs` u64. `ModelProcessor`
-accepts the opt-in boolean `generateChildAssets` for glTF only. Texture2D CNJ
-can also author its existing color-key field. `VideoProcessor` requires u64 `width`/`height` and
-f64 `framesPerSecond`; `streamReference`, u64 `durationMs`, and u64 `soundtrackType` are optional.
+`SongProcessor` accepts streamReference/name strings and durationMs u64; `ModelProcessor`
+accepts generateChildAssets for glTF only. Texture2D CNJ can author its color-key field.
+Video parameters include u64 width/height/durationMs/soundtrackType, f64 framesPerSecond and
+streamReference. Registered probes can supply frame metadata; parameters override it. Without
+usable probe data, dimensions/rate must be supplied.
 
 ### ContentProcessorContext
 
@@ -326,9 +321,12 @@ path or runtime XREF. The target must be another primary node discovered in the 
 additional outputs do not become implicit source nodes. Shared dependencies execute once, complete
 before their dependents publish, and propagate failures and effective fingerprint changes.
 
-The pipeline still does not expose an XNA-style `BuildAsset`/`BuildAndLoadAsset` operation that
-returns a dependency's runtime object during processing. Current processors declare the edge; the
-orchestrator schedules and fingerprints it after the writer has produced the in-memory result.
+These graph edges differ from the XNA façade's implemented BuildAsset/BuildAndLoadAsset.
+The bridge uses the active pipeline for nested import/process/build work. BuildAndLoadAsset
+returns processed content, not a GraphicsDevice-backed runtime object. BuildAsset contributes
+compiled nested outputs/references to the containing node, sharing its ownership/publication
+rather than creating independent primary graph nodes. A context outside an active pipeline refuses
+these operations.
 
 ## Content Type Writers and CNB codecs
 
@@ -375,24 +373,24 @@ versions match the bytes their authoritative encoders emit.
 
 ## Runtime reader mapping
 
-CNA does not add a redundant `ContentTypeReader` hierarchy. The conceptual XNA reader role is
-already fulfilled by:
+Native CNB dispatch uses:
 
 ```text
 Decode*FromCnb() + CnbLoaderRegistry + ContentManager
 ```
 
-Built-in CNB loaders remain unchanged. A custom asset registers its custom-range asset ID,
-canonical type name, and loader through `ContentManager::RegisterCnbLoaderEXT<T>()`.
+Custom CNB assets register their ID/type/loader through ContentManager::RegisterCnbLoaderEXT.
+The separate XNB path does have XNA's ContentTypeReader hierarchy and registry; see
+[xnb-content-pipeline-support.md](xnb-content-pipeline-support.md).
 
 ## Built-in routes
 
 | Source | Importer | Imported type | Processor | Writer/output |
 |---|---|---|---|---|
-| `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tga`, `.gif`, `.psd`, `.hdr`, `.pic`, `.pnm` | `CNA.ImageImporter/1` | `ImportedImage` | `CNA.TextureProcessor/4` | `CNA.Texture2DContentWriter/2` |
-| `.wav` | `CNA.WavImporter/1` | `ImportedSound` | `CNA.SoundEffectProcessor/1` | `CNA.SoundEffectContentWriter/1` |
-| `.mp3`, `.ogg`, `.oga`, `.qoa`, `.flac`, `.opus`, `.aac`, `.wma` | `CNA.SongImporter/2` | `ImportedSongSource` | `CNA.SongProcessor/2` | `CNA.SongContentWriter/1` |
-| `.mp4`, `.ogv`, `.webm`, `.mkv`, `.avi`, `.mov` | `CNA.VideoImporter/2` | `ImportedVideoSource` | `CNA.VideoProcessor/2` | `CNA.VideoContentWriter/1` |
+| `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tga`, `.gif`, `.psd`, `.hdr`, `.pic`, `.pnm`, `.dds`, `.dib`, `.pfm`, `.ppm` | `CNA.ImageImporter/1` | ImportedImage, or DDS cube/volume value | TextureProcessor/4 or matching cube/volume processor | matching native texture writer |
+| `.wav` | `CNA.WavImporter/2` | `ImportedSound` | `CNA.SoundEffectProcessor/3` | `CNA.SoundEffectContentWriter/2` (schema 2) |
+| `.mp3`, `.ogg`, `.oga`, `.qoa`, `.flac`, `.opus`, `.aac`, `.wma` | `CNA.SongImporter/3` | `ImportedSongSource` | `CNA.SongProcessor/2` | `CNA.SongContentWriter/1` |
+| `.wmv`, `.mp4`, `.ogv`, `.webm`, `.mkv`, `.avi`, `.mov` | `CNA.VideoImporter/2` | `ImportedVideoSource` | `CNA.VideoProcessor/2` | `CNA.VideoContentWriter/1` |
 | `.gltf`, `.glb` | `CNA.GltfImporter/3` | `ImportedModelDocument` | `CNA.ModelProcessor/4` | `CNA.ModelContentWriter/4` |
 | `.cnj` Texture2D | `CNA.CnjImporter/1` | `ImportedImage` | same texture processor | same Texture2D writer |
 | `.cnj` SoundEffect | `CNA.CnjImporter/1` | `ImportedSound` | same sound processor | same SoundEffect writer |
@@ -407,10 +405,18 @@ canonical type name, and loader through `ContentManager::RegisterCnbLoaderEXT<T>
 | `.fxb` | `CNA.CompiledEffectImporter/1` | `ImportedCompiledEffect` | `CNA.CompiledEffectProcessor/1` | `CNA.XnbEffectWriter/1` (`--format xnb` only) |
 | `.fx` | `CNA.EffectSourceImporter/1` | `ImportedEffectSource` | `CNA.EffectSourceProcessor/1` | `CNA.XnbEffectWriter/1` (`--format xnb` only) |
 
-DDS is currently a contained TextureCube CNJ sidecar, not a direct default route. `.wav` remains
-the unambiguous SoundEffect route; it is not also registered as Song. `.ogg` remains the
-unambiguous Song route even though FNA's legacy Video reader can probe one; ordinary Video formats
-use the non-colliding route above.
+The stock compiler also registers .x/.fbx through CNA.XImporter/CNA.FbxImporter and
+CNA.XnaModelProcessor. Generic .xml uses XmlImporter plus registered-type pass-through processing/
+XNB serialization; see [components](xna-content-pipeline-components.md) for XNA-facing names.
+
+DDS selects 2D/cube/volume by its header. WAV defaults to SoundEffect; explicit
+CNA.WavSongImporter is registered by name only. MP3/WMA default to Song; explicit
+CNA.CompressedSoundImporter requests SoundEffect decoding when a build-time decoder is available.
+Ogg defaults to Song, avoiding automatic route ambiguity.
+
+The table gives native CNB writer identities where applicable; XNB selects its corresponding
+CNA.Xnb*Writer. FontDescriptionImporter includes configured font-search paths in its version;
+the effect-source processor includes compiler identity and Debug-default policy.
 
 ### Effects: `.fxb` and `.fx`
 
@@ -419,7 +425,8 @@ converge on one processed type and one writer, so nothing downstream can tell th
 
 * **`.fxb` is already-compiled bytecode.** The importer checks that the file begins with an Effect
   Framework 9.1 signature (optionally behind XNA 4.0's own wrapper token) and refuses anything
-  else. **No compiler is involved**, so this route always works.
+  else. It needs no source compiler, but malformed bytecode or an incompatible output format
+  still fails; recognizing a signature is not runtime shader qualification.
 * **`.fx` is source**, and needs an external `fxc`-compatible compiler. CNA does not embed an HLSL
   compiler and will not; the importer resolves and records the `#include` tree (so a changed header
   rebuilds the effects that include it) and the processor drives the compiler across a process
@@ -437,12 +444,13 @@ compatibility payload as CNB's native contract.
 
 ```
 cna-content build Content -o bin --format xnb \
-    --fx-compiler "C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Utilities\bin\x86\fxc.exe" \
+    --fx-compiler "/path/to/DirectX-SDK/fxc.exe" \
     --fx-compiler-launcher wine
 ```
 
 `--fx-compiler-launcher` names a program to run the compiler *through*; `wine` is the ordinary
-choice on a non-Windows build machine. Each option has the highest precedence in its own order:
+choice on a non-Windows build machine. Use the host filesystem path to the executable;
+on native Windows, use its native path and omit the Wine launcher. Each option resolves independently:
 
 | Rank | Compiler | Launcher |
 |---|---|---|
@@ -469,10 +477,10 @@ Processor parameters are the ordinary generic ones — `profile` (`reach`/`hidef
 `debug` — set per asset in `.cna-content.json` like any other processor's. Each participates in
 the fingerprint, so changing one rebuilds.
 
-**Not verified against a genuine Microsoft `fxc`.** None exists in the environment this was
-written in. The route's own tests substitute the compiler, or drive a project-owned stand-in
-across a real process boundary; neither is a claim about `fxc` compatibility
-(`XNAP-A4`).
+Tests exercise compiler discovery/fingerprinting/failure using substitutes and real process
+boundaries, and a committed genuine fx_2_0 binary covers compiled input. This audit did not run
+a new Microsoft fxc compilation. Genuine XNA evidence and its limits belong in
+[xnb-interoperability.md](xnb-interoperability.md) and the differential reports.
 
 ### glTF scenes and generated children
 
@@ -511,7 +519,7 @@ Generated names must retain the converter's source-stem prefix and pass ordinary
 containment. Colliding skin or animation names after filename sanitization are rejected before a
 file can overwrite another. Cross-node/primary collisions are rejected by the existing output
 reservation pass. The whole bundle remains one graph node: its children share one fingerprint,
-staging transaction, manifest owner, rebuild decision, and garbage-collection lifetime. This mode
+staging run, manifest owner, rebuild decision, and garbage-collection lifetime. This mode
 improves deployability and reuse by `ContentManager`; it does not claim cache isolation between a
 Model and its extracted texture/clip children. CP-060 measured the proposed split and retained this
 policy. A valid external PNG pixel edit changed only the generated Texture2D bytes, but the
@@ -525,18 +533,16 @@ conversion work.
 
 ### Streaming Song and Video sources
 
-`SongImporter` and `VideoImporter` never decode or buffer the media payload. They validate that the
-primary source is non-empty, retain its canonical source path and normalized root-relative stream
-reference, and rely on the normal primary-source fingerprint for byte dependency tracking. Their
-processors produce only `CnbSongData`/`CnbVideoData`, record the media path as a runtime reference
-with unconstrained asset type, and register the same source/path pair as a deployment-support file.
-Their writers still delegate only to the existing media encoders. This keeps build dependencies,
-runtime XREFs, compiled CNB outputs and deployment artifacts distinct while preserving bounded
-compiler memory and HEADLESS operation.
+Streaming routes keep source media external. SongImporter can probe duration; VideoImporter can
+probe dimensions, frame rate, duration and soundtrack. The stock compiler registers FFmpeg
+build-time probes/decoders when available, separately from the runtime Video backend.
 
-Duration cannot be inferred without introducing a media decoder into the build tool, so it defaults
-to zero (unknown). The optional display name defaults empty, which makes the runtime use the asset
-name. Both can be authored per asset:
+Processors emit metadata, register build dependencies/runtime references, and request deployment
+copies. Copying streams bytes rather than buffering the whole file; metadata probing and compressed
+SoundEffect decoding have different resource costs. Song duration uses an explicit parameter,
+then probed/imported duration, otherwise zero. Name uses its parameter/imported value or remains
+empty, allowing the runtime to use the asset name.
+Both can be authored per asset:
 
 ```json
 {
@@ -548,8 +554,9 @@ name. Both can be authored per asset:
 }
 ```
 
-Video frame dimensions and rate cannot safely default, so the route refuses to build until they are
-configured. Duration remains zero when unknown, and soundtrack type defaults to `0` (Music):
+Video dimensions/rate must come from a probe or explicit parameters. When probing fails,
+supplying all three permits metadata-only compilation. Parameters override probe values;
+unknown duration stays zero and absent soundtrack defaults to 0 (Music):
 
 ```json
 {
@@ -585,12 +592,12 @@ Default selection is a three-step route:
 ```text
 lowercase source extension -> importer
 actual imported stable type -> processor
-processed stable type       -> writer
+processed stable type + output format -> writer
 ```
 
 Each component also has a stable name for explicit selection. Duplicate stable names are rejected
-at registration. Multiple components may declare the same route, but default resolution then fails
-with a sorted ambiguity diagnostic; registration order and “last registered wins” never decide the
+at registration. Multiple default-eligible components may declare the same route, but resolution then fails
+with a sorted ambiguity diagnostic; name-only routes do not enter automatic extension selection; registration order and “last registered wins” never decide the
 result. Explicit selection must name a registered component compatible with the route.
 
 The registry must be fully configured before builds and is permanently frozen when a coordinator
@@ -599,7 +606,9 @@ invocation when more than one worker is selected.
 
 ## Optional per-asset configuration
 
-The convention-only command remains the default. Configuration exists for content-affecting
+The convention-only command remains the default. `--only-configured-assets` makes the asset
+list exclusive instead of using it as overrides over directory discovery; .contentproj builds
+select that policy automatically. Configuration exists for content-affecting
 choices that cannot be inferred safely, including processor parameters and the metadata needed by
 streaming media routes. The version-1 format is strict and deliberately contains no project-wide
 build system:
@@ -648,7 +657,9 @@ logical-name override changes CNB metadata and, for directory builds, the relati
 must obey the same safe CNB logical-name rules. A single-file build keeps its explicitly supplied
 output path.
 
-Importer, processor, and writer fields are optional stable component-name overrides. Unknown or
+Root and per-asset `outputFormat` fields accept "cnb" or "xnb": an asset override wins over
+the root default, which wins over the CLI default. The selected output path/extension follows that
+effective format. Importer, processor, and writer fields are optional stable component-name overrides. Unknown or
 route-incompatible names fail at selection. `parameters` is an object keyed by parameter name. Each
 value has an explicit `type`: `bool`, `i64`, `u64`, `f64`, or `string`. Boolean/string values use
 their corresponding JSON primitive; integer and floating-point values use strings so exact values
@@ -718,10 +729,10 @@ distinct from a generated output registered for deployment.
 - effective parameters;
 - sorted categorized build dependencies;
 - sorted runtime references;
-- sorted non-CNB deployment files, bounded to 256 files;
+- separately deployed support files, bounded to 256 files;
 - ordered info/warning messages;
-- complete primary CNB bytes and stable output asset identity;
-- zero or more explicitly named additional CNB outputs, bounded to 256 outputs total.
+- complete primary compiled bytes and stable output identity, for the selected container;
+- explicitly named additional compiled outputs, bounded to 256 outputs total.
 
 An optional `ContentBuildLogger` receives messages with source, logical asset, stage, component, and
 severity while the result also records them for tests and future build integration.
@@ -742,7 +753,8 @@ It does not use mtimes to decide correctness. A fingerprint includes:
 - importer, processor, and writer stable names and versions;
 - every selected writer asset ID, canonical type name, schema version, and codec name/version;
 - typed processor parameters;
-- CNB container version;
+- selected output format and bound container/writer options, including XNB platform/profile/
+  version/compression/reader-name policy, plus the CNB container version;
 - every owned compiled-output logical identity/type and deployment source/destination identity.
 
 Each compiled output's path, type ID, type name, schema version, and SHA-256 are stored separately.
@@ -756,8 +768,15 @@ manifest; changed output set; changed
 component version; changed parameter; or changed dependency forces the owning node to rebuild.
 Identical effective inputs and intact outputs produce `SKIP`. Runtime XREF records are outputs
 rather than independent inputs; the source/dependency/component inputs that produced them are
-fingerprinted. Dependency correctness comes before incremental speed: a component that cannot
-report a complete dependency set must make the node rebuild, never let it be skipped on a guess.
+fingerprinted. Dependency correctness requires a complete recorded input set.
+
+**Known font-cache gap:** project-local font files resolved through the dependency context are
+hashed, but configured/system font discovery currently reads the selected font without enrolling
+its bytes. Changing --font-directory changes importer identity; replacing a font within the same
+directory can leave a stale SKIP. A temporary 2026-11-01 probe swapped two valid fonts at the same
+configured path: the warm build retained the first CNB, while a cold build produced different
+bytes. Use project-local dependency-resolved fonts for reliable invalidation, or explicitly clear
+the affected cache state after a font replacement; the defect remains in handoff §5.1.
 
 Primary sources, file dependencies, generated-file dependencies, and existing output verification
 are hashed in 1 MiB chunks. Hashing therefore uses bounded memory and accepts individual files above
@@ -780,10 +799,10 @@ separately versioned schemas for the same runtime asset; each compiled output re
 schema it emitted. The decomposition stores canonical SHA-256 domains
 for primary bytes; source-dependency identities and bytes; content-dependency identities and
 effective fingerprints; typed parameters; writer schema/codec declarations; compiled-output and
-runtime-XREF definitions; and deployment definitions. It stores no prose, timestamp, temporary
-path, RTTI name, or absolute host path. Aliased source/deployment identities persist as separate
-`sourceRoot` and root-relative path fields; physical directory mappings never enter the manifest
-or CNB. Version 7 introduced the aliased source identities and current reason-state decomposition,
+runtime-XREF definitions; and deployment definitions. It stores no timestamp or RTTI name in these domains. Aliased source/deployment identities persist as separate
+`sourceRoot` and root-relative path fields; those named-root physical mappings do not enter CNB or these persisted source identities.
+This is not a universal claim that the manifest has no host paths: configured font-search paths
+enter FontDescriptionImporter's component version and therefore its cache identity. Version 7 introduced the aliased source identities and current reason-state decomposition,
 but cannot represent multiple schemas for one asset identity under its declaration rule. Versions
 1 through 9 are rejected as incompatible and cause a safe rebuild; there is no ambiguous
 in-place migration. An incompatible/corrupt manifest grants no deletion authority, so its existing
@@ -812,8 +831,8 @@ only after deterministic scheduling has completed. It classifies:
 The bounded per-domain hashes can identify a changed dependency domain but intentionally do not
 duplicate every dependency digest merely to name one leaf. Aggregate direct/effective mismatch
 fallbacks remain explicit defensive reasons for a future unknown input rather than being reported
-as a fabricated source change. Manifest v7 and earlier produce one broad incompatible-format
-reason on their first rebuild; subsequent v8 builds have the precise persisted domains.
+as a fabricated source change. Incompatible older manifests produce a broad incompatible-format reason; subsequent v10 builds
+have the current persisted domains.
 
 ## Multi-output nodes and ownership
 
@@ -823,7 +842,8 @@ with their own safe logical names and asset type IDs. The total is capped at 256
 validation, ownership, and publication work.
 
 The primary output keeps the CLI-selected path, including a custom path in a single-file build.
-Each additional output maps deterministically to `<output-root>/<logical-name>.cnb`. Before any
+Each additional compiled output maps beneath the output root using its logical name and the
+selected container extension. Format-specific writers can reject unsupported child kinds. Before any
 artifact from a node is published, the CLI reserves all of its logical names and canonical paths.
 It also pre-reserves every discovered primary node, so a generated child cannot shadow another
 source asset. Duplicate names, duplicate paths, absolute names, traversal, and output-root escapes
@@ -894,12 +914,15 @@ manifest is not replaced.
 
 ## Bounded deterministic scheduling
 
-The registry is protected during configuration and permanently read-only once a coordinator
-accepts it. A concurrency regression invokes sixteen independent `ContentPipeline::Build()` calls
-through one frozen registry and verifies their distinct results. The built-in component audit found
-no component-owned mutable state: contexts, dependency collectors, parser data and codec inputs are
-per invocation. cgltf receives per-call options/data; the vendored stb decoder uses thread-local
-failure/configuration state.
+The registry is configured before freeze. A regression invokes sixteen independent Build calls
+through one frozen registry. Contexts/dependency collectors/parser data are per invocation;
+cgltf uses per-call data and stb has thread-local decoder settings.
+
+This is not general concurrent host reconfiguration support. Font search directories currently live
+in a process-global vector: RegisterBuiltInContentPipeline calls SetFontSearchDirectoriesEXT,
+while importer Identity/import read it without a lock or registry-local snapshot. Keep that
+configuration fixed while builds run. Independently configuring different embedded compilers
+concurrently needs a separate synchronization/isolation correction (handoff §5.2).
 
 Filesystem staging is also reservation based. Model/glTF intermediates claim a directory with an
 exclusive create, and the one atomic publication helper claims sibling temporary files with the
@@ -921,8 +944,8 @@ launching worker tasks.
 Changed nodes first run a no-publication preparation pass so their complete output/edge topology is
 known before cycle validation and scheduling. Prepared output bytes are placed in a private,
 owner-only staging directory through the same atomic writer used everywhere else, then released
-from memory. Thus retained cold-build memory is bounded by the active worker count rather than the
-number of discovered assets. Before final publication, staged size and SHA-256 are checked against
+from memory. This avoids retaining all prepared asset bytes at once. Peak build memory still depends on the
+largest active imports/encodes and their intermediates; worker count is not a fixed byte budget. Before final publication, staged size and SHA-256 are checked against
 the prepared manifest record.
 
 Compiler staging lives under the private versioned system-temporary parent
@@ -970,8 +993,10 @@ cross-machine guarantee or correctness threshold.
 ## Determinism and publication
 
 Directory discovery is sorted by the UTF-8 logical name. Registries use ordered maps/sets and never
-serialize RTTI. CNB bytes and fingerprints do not contain timestamps, absolute temporary paths,
-random values, PIDs, pointers, memory addresses, or temporary file names.
+serialize RTTI. Built-in output bytes avoid timestamps, temporary-file identities, PIDs, pointers and RTTI.
+Determinism assumes identical source/dependency bytes, component/tool/font/codec versions and
+processing settings. Font-search configuration can intentionally put host paths in component
+identity; arbitrary custom components must enforce their own deterministic output contract.
 
 Writers finish every CNB image in memory. The CLI then calls the one shared audited atomic publisher
 from `tools/common/CnaToolAtomicWrite.hpp` for the primary output followed by additional outputs.
@@ -997,11 +1022,13 @@ that was not committed.
 
 ## Paths and security
 
-Every build has an explicit source root. Primary sources, sidecars, generated dependencies, glTF
-external buffers/images, and CNJ references are containment checked. Absolute authored references,
+Every build has an explicit source root. The built-in source/sidecar/dependency resolvers check
+containment for their supported paths, including glTF buffers/images and CNJ references. Absolute authored references,
 `..` escapes, and canonical symlink escapes are rejected. There is no implicit outside-root opt-in.
-The only outside-root read capability is a named `sourceRoots` mapping plus an authored
-`@alias/path` dependency resolution. Canonical source/external/output roots cannot overlap, and an
+For dependency-context authored references, outside-root reads require named sourceRoots plus
+@alias/path. Build services have separate access: font discovery reads configured/environment/
+installed directories, and an external compiler/encoder runs as the host user. Those paths are
+not sandboxed by sourceRoots; the font cache gap is documented above. Canonical source/external/output roots cannot overlap, and an
 external root grants no write, publication, clean, GC, or staging-scavenger authority.
 
 On Windows, `cna-content` uses `wmain(int, wchar_t**)` and constructs native
@@ -1023,8 +1050,9 @@ compiles and links the complete `cna_content` library, stock `cna-content.exe`, 
 example. MinGW's Unicode-console startup option is target-local to those two `wmain` executables.
 Wine 10 executes both: the stock tool builds through a native `Zażółć/曲線` output path and produces
 a Curve CNB byte-identical to Linux, while the custom tool publishes its primary and generated
-reply outputs. This is MinGW compile/link plus Wine execution, not a native Windows or MSVC test;
-those verification gaps remain explicit. Existing direct glTF producer and pinned Model-byte
+reply outputs. That observation is MinGW compile/link plus Wine execution. The separately recorded native MSVC
+checkpoint below covers its own narrower revision/selection; it does not turn the Wine run into
+native evidence. Existing direct glTF producer and pinned Model-byte
 equivalence tests remain unchanged.
 
 ## Custom extensions
@@ -1133,7 +1161,7 @@ supported built-in XNB
 | `Texture2DReader` | Texture2D | Color and DXT1/3/5, level zero or full mip chain; DXT normalizes to Rgba8 |
 | `SpriteFontReader` | SpriteFont | built-in Texture2D/List nested graph and every font field; atlas follows texture limits |
 | `SoundEffectReader` | SoundEffect | PCM8/16; float32 and MS/IMA ADPCM when the SDL3 decoder is compiled; loops/rate/channels preserved |
-| `Texture3DReader` | Texture3D | Color and DXT1/3/5, all declared levels, normalized to Rgba8 |
+| `Texture3DReader` | Texture3D | Color with its declared levels; the shared decoder rejects compressed volume formats, and other legal native volume formats cannot preserve their identity in the CNB conversion |
 | `TextureCubeReader` | TextureCube | Color and DXT1/3/5, six faces and all declared levels, normalized to Rgba8 |
 | `CurveReader` | Curve | all loop/key/tangent/continuity fields |
 | `SongReader` | Song | path/duration metadata plus contained external media dependency/XREF |
@@ -1188,27 +1216,31 @@ or alternate manifest. Unsupported XNB means a diagnostic and no published artif
 
 ## Configuration, profiles, parallelism, and CMake
 
-The initial command still works without a project file. The optional strict per-asset JSON format
-described above supplies only proven selection/parameter/logical-name needs; it is not a
-`.cnaproj`, `.contentproj`, profile system, or second build graph.
+Native builds work without a project file, with optional typed per-asset JSON configuration.
+A supported XNA project can also be built directly:
 
-There is no platform ID or target profile in CNB processing. CP-061 audited every built-in route:
-images and embedded atlases use portable Rgba8, WAV uses Pcm16, authored DDS/XNB representations
-are preserved or losslessly normalized, Model/Curve/Animation encode source semantics, and Song/
-Video copy their exact media with portable metadata. There is no shader compiler or target-specific
-texture/audio transcode. CNB chunk compression is a codec choice, not a platform identity, while
-renderer selection is a runtime concern. A profile would therefore carry no implemented policy and
-is not exposed in configuration, fingerprints, CMake, CNB, or the API. If a future processor gains
-a real output policy, its explicit parameter can use the existing typed fingerprint contract first;
-a cross-cutting profile is justified only after more than a label is shared.
+```bash
+cna-content build Content/MyGameContent.contentproj -o Content/bin
+```
 
-One route now looks at the container it is building for, and only that far: a `.spritefont`'s glyph
-atlas is block-compressed to DXT3 when the build is producing an `.xnb`, because XNA's own
-`FontDescriptionProcessor` hands the writer a DXT3 atlas -- measured over seven descriptions at
-five sizes (`XNAPP-182`). A `.cnb` keeps the lossless 8-bit
-atlas: that container is CNA's own and nothing about it obliges a 2010 memory budget. The
-difference is not marginal, 16 KB against 128 KB for a 95-glyph font, which is why it is reproduced
-rather than left as a divergence.
+The project adapter reads supported platform/profile/compression/component/parameter properties
+and copies supported Content/None items, using the same coordinator with XNA-compatible leniency.
+The CLI supports explicit platform/profile/compression overrides for a project;
+[cna_add_content](#configuration-profiles-parallelism-and-cmake) deliberately rejects those
+conflicting helper arguments with CONTENT_PROJECT.
+
+CNB has no encoded platform/profile header, but the build environment exposes target platform,
+profile and configuration to processors. XNB texture restrictions, font-atlas compression and
+effect compilation already use implemented format/environment policy. For example, .spritefont
+XNB output uses a DXT3 atlas, while native CNB keeps lossless RGBA data. Direct texture routes can
+request DXT as well. This is not a universal assertion that all processors are target-neutral.
+
+Service options include `--fx-compiler`/`--fx-compiler-launcher`,
+`--xma-encoder`/`--xma-encoder-launcher`/repeated `--xma-encoder-arg`,
+repeated `--font-directory` and `--build-configuration`. The latter defaults to Release for
+ordinary builds and follows a project's Configuration unless explicitly overridden; it supplies
+EffectProcessor's Auto debug policy. Source/encoder availability and XMA qualification remain
+bounded; see [xma-encoder-backend.md](xma-encoder-backend.md).
 
 Build-graph scheduling is serial and deterministic unless `--workers` opts into bounded concurrent
 execution. Registries are configured explicitly and frozen before discovery. Built-in components
@@ -1227,7 +1259,8 @@ cna_add_content(
 add_dependencies(MyGame MyGameContent)
 ```
 
-`SOURCE_DIR` and optional `CONFIG_FILE` are resolved relative to the caller's source directory;
+`SOURCE_DIR` and `CONTENT_PROJECT` are alternatives; the latter must name a .contentproj file.
+Those paths and optional `CONFIG_FILE` resolve relative to the caller's source directory;
 `OUTPUT_DIR` is relative to its binary directory. `CONFIG_FILE` must exist at configure time and is
 passed to the CLI, whose canonical source-root containment check remains authoritative. `WORKERS`
 is optional, strictly accepts 1 through 64, and defaults to the CLI-compatible serial value 1.
@@ -1237,7 +1270,20 @@ pipeline's byte-hashed manifest performs the correct per-asset no-op decisions. 
 does not duplicate configuration parsing, source discovery, dependency hashing, graph/cache logic,
 or publication. `QUIET` forwards quiet output.
 
-Projects that need the optional settings can add them without changing the convention-only flow:
+For SOURCE_DIR builds, the helper also accepts FORMAT cnb|xnb, XNA_COMPATIBLE, and
+XNB_PLATFORM/XNB_PROFILE/XNB_COMPRESS when FORMAT is xnb. With CONTENT_PROJECT it refuses FORMAT,
+those XNB overrides, CONFIG_FILE and XNA_COMPATIBLE because the project supplies them; this is
+stricter than the CLI's override interface. Examples:
+
+```cmake
+cna_add_content(
+    TARGET MyLegacyContent
+    CONTENT_PROJECT Content/MyGameContent.contentproj
+    OUTPUT_DIR Content
+)
+```
+
+Projects that need per-asset JSON settings can add them to the convention-only flow:
 
 ```cmake
 cna_add_content(
@@ -1281,95 +1327,56 @@ No `cna_add_game()` convenience layer is defined yet.
 
 ## Verification and current limitations
 
-The final post-XNB checkpoint built the complete HEADLESS Debug configuration and reran the broad
-compatibility boundary on the finished implementation:
+The 2026-11-01 documentation audit rebuilt `cna_content_tool` (executable `cna-content`),
+`cna_custom_content_compiler_example`, `CnaContentTests` and the real CMake integration
+fixtures in the existing `cmake-build-multi/` tree, plus `CnaContentPipelineTests`, then exercised
+the native pipeline, CLI, configuration, manifest, media/texture operations, compiled-effect and
+XNB-output selections:
+**264 cases, 263 passed and one opt-in >2 GiB file-hash case skipped**. A separate XNA façade
+selection passed all **38** project/task/source/texture cases. Temporary probes also confirm
+strict unknown-parameter refusal after a lenient build and reproduce the configured-font cache
+defect above.
 
-- the passing boundary ran 1,535 tests: 1,527 passed and eight opt-in/external-fixture cases
-  skipped. An unfiltered run separately reproduced exactly the three known HEADLESS runtime
-  TextureCube/Texture3D storage failures; no pipeline regression was hidden in the exclusion;
-- independent selections passed CNB 371/371, CNJ 137 with two fixture skips, XNB pipeline/runtime
-  readers 221 with four HEADLESS skips, glTF/Model 608 with three external-fixture skips, and all 11
-  frozen CNB golden vectors;
-- a rebuilt combined ASan+UBSan configuration passed 1,537 tests with eight skips and no report;
-  91 concurrency-relevant tests passed under TSan with only the large-file case skipped and no
-  report;
-- the opt-in sparse 2 GiB+1-byte streaming-hash test passed in 30.0 seconds without storing a
-  repository fixture;
-- both CMake integration fixtures and all nine generated C-API consistency gates pass. The
-  inventory remains 549 headers and 9,332 symbols, with 501 experimental pipeline declarations
-  planned under open `CBIND-117` and no Content Pipeline C ABI export;
-- focused symbol inspection confirms the XNB audio decoder object references only SDL's in-memory
-  WAVE load/conversion functions, not SDL initialization, device-open, graphics-device, window, or
-  runtime ContentManager load paths. HEADLESS is an execution/ownership invariant, not a claim that
-  every transitive shared library is absent from a monolithic link.
+Run window/device-capable tests through the private runner even when a selected case is CPU-only:
 
-LeakSanitizer cannot run the subprocess-heavy selection in the current `ptrace` environment, so
-the successful ASan+UBSan run used `detect_leaks=0` and is not leak evidence. CP-062's narrow
-`windows-latest` workflow subsequently passed on a real native Windows/MSVC runner; the exact
-evidence is recorded below. Cycle preflight now uses an explicit visit stack: a 4,096-node
-acyclic chain builds with four workers and the same graph closed into a 4,096-node cycle retains
-deterministic diagnostics without replacing the prior manifest.
+```bash
+cmake --build cmake-build-multi \
+  --target cna_content_tool CnaContentTests --parallel 4
+tools/platform/run_gpu_tests_private.sh --exec \
+  env CNA_GRAPHICS_RENDERER=OPENGLES3 SDL_AUDIODRIVER=dummy \
+  cmake-build-multi/CnaContentTests --gtest_filter='*ContentPipeline*:*ContentBuild*'
+```
 
-Multi-file publication is recoverable, not a portable filesystem transaction. Prepared cold
-outputs can temporarily consume disk space comparable to the compiled output set, and an abrupt
-termination may leave an owner-only staging directory. The next build repairs digest/manifest
-mismatches; CP-042 also scavenges valid abandoned version-1 staging trees conservatively. Legacy
-or malformed/incompletely initialized trees are left for manual inspection. CP-043 collects only
-obsolete files proven by a valid prior manifest and matching digest; it never performs an output
-tree or extension scan.
-Song and Video CNBs retain streaming XREFs, while the compiler now deploys the referenced media as
-separately fingerprinted/owned support files without embedding it in CNB.
+The command is a useful focused selection, not the exact broader filter behind the count above.
+Tests cover worker 1/2/4 determinism, source/deployment ownership, graph/cycle decisions,
+incremental explanations, no-op bytes, partial publication recovery and clean.
+The opt-in hash case requires `CNA_RUN_LARGE_FILE_TESTS=1`.
 
-The representative scheduler benchmark again proved complete-tree equality between workers 1 and
-4 over 128 mixed assets and a 97-node shared graph. A separate 1,024-output cleanup benchmark
-preflighted and removed about 480 MiB of manifest-owned compiled data in 7.05 seconds while leaving
-the persistent lease marker. These are host-specific measurements, not compatibility thresholds.
-MinGW links both Unicode-entry-point compiler executables, and Wine 10 exercises stock/custom build
-plus clean through a non-ASCII path. The native-MSVC workflow builds `cna-content` and
-`CnaContentTests` in a HEADLESS configuration, runs CPU pipeline/codec/manifest/XNB coverage,
-and directly probes Unicode paths, explanations, workers 1/4, clean, manifest v8 and deterministic
-rebuild bytes.
+CP-062 recorded native Windows/MSVC run 33309632114 on
+`83807bef64990541e7d41274c11b9562e49112cc`: 177 passes and one large-file skip, plus its Unicode
+CLI lifecycle and then-current manifest-v8 rebuild checks. It is historical revision-specific
+evidence, not a fresh test of today's manifest v10. Earlier ASan/UBSan and TSan closeouts are in
+Git history; no new sanitizer campaign was run for this documentation edit, and runs with
+LeakSanitizer disabled do not establish leak freedom.
 
-Native run `33309632114` passed on commit
-`83807bef64990541e7d41274c11b9562e49112cc`. GitHub runner 2.336.0 used the
-`windows-2025-vs2026` image, Visual Studio environment 18.9.1, MSVC tools 14.51.36231 and Windows
-SDK 10.0.26100.0 in x64 Debug. Both targets built; 177 of 178 tests in 18 suites passed with only
-the opt-in sparse >2 GiB hash gate skipped; the complete Unicode CLI lifecycle passed with
-manifest v8 and byte-identical rebuild output. Earlier failed runs identified and led to narrow
-fixes for multi-config SDL installation, a C4456 warning in the pinned sharp-runtime parser's five
-consumers, Windows null-device spelling, and equivalent short/long deployment paths. This native
-MSVC result complements rather than replaces the separate MinGW compile/link and Wine execution
-evidence.
+Multi-file publication is recoverable per-artifact replacement, not one filesystem transaction.
+Staging consumes disk space and abrupt termination can leave owner-marked trees; conservative
+scavenging does not delete malformed/legacy trees. Ownership-proven cleanup never scans output
+extensions to invent deletion authority.
 
-### Final continuation verification
-
-The CP-063 closeout rebuilt the complete normal HEADLESS configuration and both real CMake content
-fixtures. Its broad content/CNB/CNJ/XNB/glTF boundary passed 1,430 tests and skipped eight
-opt-in/external-fixture cases after excluding exactly three independently reproduced, previously
-documented HEADLESS renderer storage-adapter failures (two TextureCube loads and one Texture3D
-load). The 14 schema-1 and Model-schema-2 golden/conformance tests pass, as does the opt-in
-streaming-hash test over a sparse file larger than 2 GiB.
-
-A freshly rebuilt combined ASan+UBSan selection passes 187 tests with the large-file test skipped
-and no sanitizer report. Leak detection is disabled because this runner explicitly rejects LSan
-under `ptrace`, so this is not LeakSanitizer evidence. The rebuilt TSan configuration passes 108
-tests with the same opt-in skip and no race report. All nine C-API gates pass; the generated
-inventory remains 551 headers and 9,485 declarations, including 654 experimental Content Pipeline
-declarations still planned under `CBIND-117`. No C route, export, or ABI version changes.
-
-Final inspection found no new staging residue, output-tree scanning, deletion authority outside a
-valid compatible manifest, physical external-root identity in build state, second publisher, CNB
-schema-1 change, or existing golden-byte change. Workers 1/2/4 determinism, explanation ordering,
-graph/cycle diagnostics, atomic recovery, deployment ownership, orphan GC, and clean are covered by
-the passing normal and sanitizer CLI boundaries. The native MSVC workflow result above closes the
-previously open Windows compiler/runtime verification action.
+Build-time and runtime modules are physically separate: `modules/content/` owns the canonical
+core/codecs and `modules/content-pipeline/` owns build-only XNA components and services.
+`CNA::ContentCompiler` links that build-time boundary. C ABI policy/inventory belongs in
+[the C API coverage policy](c-api/COVERAGE.md); the owner excludes build-time pipeline
+declarations from the runtime C-binding denominator (CBIND-117). Historical header/symbol counts
+and “open missing pipeline bindings” are not current requirements.
 
 ## Stability summary
 
 **Stable/frozen:**
 
-- CNB container 1.0, built-in schema-1 bytes, asset IDs, chunk IDs, CRC behavior, and existing
-  typed encoders/decoders;
+- CNB container 1.0 and documented per-asset wire versions, IDs/chunks/CRC and typed codecs;
+  SoundEffect's current writer uses schema 2 while its decoder retains schema 1;
 - Model schema 2's separately versioned wire contract, independent golden vector, and schema-1/
   schema-2 runtime dispatch; schema 1 itself and its existing producer bytes are unchanged;
 - the rule that built-in writers reuse those encoders;
@@ -1398,14 +1405,14 @@ previously open Windows compiler/runtime verification action.
 
 **Future:**
 
-- reconsider target profiles only after an implemented output policy cannot be represented clearly
-  by the existing per-asset typed parameters;
+- a new cross-cutting native-CNB target profile only if existing typed policy cannot represent
+  a measured need; current XNB/XNA profiles already have implemented processor policy;
 - reconsider independently scheduled glTF children only if a materially larger measured workload
   justifies a generated-source graph contract and supplies stable per-child dependency partitions;
 - stable machine-readable build-decision output, if an IDE/build integration contract justifies a
   separately versioned format;
-- whether the experimental layer deserves its own physical/CMake module, once its link closure and
-  consumer set are measured;
+- further link-closure refinement only if measured consumers/dependencies justify it; the
+  build-only ContentPipelineBuild module already exists;
 - whether built-in authoring formats beyond the context-resolved CNJ/XNB/custom seams need explicit
   external-root reference syntax. glTF's shared converter validates and opens URIs before the
   pipeline context sees them, so it must not claim the named-source-root capability without a
@@ -1447,7 +1454,8 @@ rediscovered:
 - **Global self-registering components.** Static-initialization order, test isolation,
   registration-order selection and concurrency all argue against it.
 - **Writers that rebuild CNB chunks.** The typed CNB encoders are authoritative, without exception.
-- **A new `ContentTypeReader` hierarchy.** The runtime capability already exists and works.
+- **A second native CNB reader hierarchy.** CNB already has typed codec/loader dispatch; XNB's
+  separate compatibility ContentTypeReader hierarchy remains intentional.
 - **Inferring source dependencies from XREFs.** Source reads and runtime loads have different
   semantics.
 - **Timestamp-only incremental builds.** They cannot answer whether the effective inputs changed.

@@ -35,6 +35,18 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Content Pipeline guide reconciliation (2026-11-01, CP-063/XNAPP-021/255/281/320): native
+  coordinator versus XNA façade, nested BuildAsset/BuildAndLoadAsset, DDS/image/media routes,
+  PCM8/16/schema-2 output, probed metadata, output-format overrides, CMake CONTENT_PROJECT/XNB
+  arguments, physical module separation and runtime C ABI exclusions replace outdated claims.
+  Manifest/font-path and fixed-service concurrency boundaries are explicit; old sanitizer/Windows
+  counts remain historical rather than current qualification. Compiler/custom compiler/content/
+  façade targets and CMake fixtures build; privately on OPENGLES3/dummy audio, the native selection
+  passes 263/264 with one opt-in large-file skip, and the project/task/source/texture selection
+  passes 38/38. Temporary probes confirm warm strict parameter refusal and reproduce stale cached
+  fonts after a same-path external font replacement (§5.1); global font-search reconfiguration is
+  source-inspected (§5.2). Links/inventory pass. No runtime/ABI fix, permanent new regressions,
+  new native-Windows or sanitizer campaign.
 - glTF conformance reconciliation (2026-11-01, GLTF-002/007/008/015/403/458): the guide
   separates dated project milestones/framebuffer reports from current numeric witnesses, fixes
   withdrawn mesh-node compensation, tangent fallback/authored-tangent exceptions, L5 layouts/index
@@ -1601,6 +1613,17 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- Content Pipeline font discovery can reuse stale compiled SpriteFont bytes. A project-local
+  font resolved through the dependency context is tracked, but FontDescriptionImporter records
+  configured/system-discovered font paths only in the imported description, without enrolling the
+  selected file as a byte-hashed dependency. --font-directory changes its version string; replacing
+  a font inside that same directory does not. On 2026-11-01, a temporary ProbeFont.ttf was swapped
+  from DejaVuSans to DejaVuSansCondensed: the warm build returned SKIP and retained CNB SHA-256
+  9d96ccbd890a7d6cba5e952eef3ad3e57f6e94dae1a07cba27fcf9405cd75c81, while a cold build produced
+  27ad76ff933cfccb2578e2850cfbf1d42c14fbd7d429d921e7276665fd1b5f4e. The manifest lists only
+  probe.spritefont as a dependency. Evidence is /tmp/cna-doc-content-font-cache-oti6bvxi;
+  source is content-pipeline/src/SpriteFontContentPipeline.cpp. No permanent regression or
+  invalidation correction was added during the documentation audit.
 - glTF unlit material selection can still sample occlusion: ExtractMesh selects DualTextureEffect
   for an unskinned/uncoloured non-PBR material with base-colour and occlusion images, including
   KHR_materials_unlit. ApplyUnlitMaterialEXT keeps both textures, although the extension requires
@@ -1753,6 +1776,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- Embedded Content Pipeline hosts must keep font-search configuration fixed while builds run.
+  ConfiguredFontDirectories in content-pipeline/src/SpriteFontContentPipeline.cpp is a process-
+  global vector; SetFontSearchDirectoriesEXT assigns it without synchronization, and importer
+  Identity/import read it without registry-local snapshots. RegisterBuiltInContentPipeline invokes
+  that setter. A frozen component registry therefore does not isolate two concurrently configured
+  embedded compilers or make mid-build font reconfiguration safe. Source-inspected 2026-11-01;
+  existing fixed-registry worker tests are narrower, and no dedicated race test/fix was added.
 - scripts/gltf-renderer-parity.sh compares normalized GTest result lines and does not reliably
   propagate each underlying process failure. Both renderer runs can fail with matching outputs
   and the script can return zero; its marker/source-policy companion tests also do not prove
