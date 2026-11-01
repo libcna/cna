@@ -8,10 +8,11 @@ native file dialogs, tray icon, message boxes and camera capture. The real XNA s
 ## Build and layout
 
 - CMake option `CNA_DEVICES` (OFF by default) defines the `CNA_DEVICES` compile definition.
-  Every header under `CNA/Devices/` is wrapped in `#ifdef CNA_DEVICES`, so with the option off the
-  module compiles to nothing.
+  Headers/implementations under `CNA/Devices/` are guarded by `#ifdef CNA_DEVICES`.
+  With it off the CMake target remains registered, but the guarded API is absent.
 - Module `modules/devices-ext/` (target `cna_devices_ext`, alias `CNA::DevicesExt`). It depends on
-  runtime, graphics, core and math, never on the XNA devices base (`docs/physical-modules.md`).
+  runtime, graphics, core, math and the platform contract, never on the XNA devices base
+  ([physical-modules.md](physical-modules.md)).
 - Tests: `modules/devices-ext/tests/CNA/Devices/`, built as `CnaDevicesExtTests`. The
   `devices-asan`, `devices-ubsan` and `devices-tsan` presets in `CMakePresets.json` build with
   `CNA_DEVICES=ON`.
@@ -25,9 +26,9 @@ native file dialogs, tray icon, message boxes and camera capture. The real XNA s
   `IPlatformDialogs`, `IPlatformTray`, `IPlatformCamera`, …). The module links no native library
   and includes no SDL header; SDL3 is the default platform implementation behind those services
   (`docs/platform-abstraction.md`).
-- **Support is reported, never faked.** A capability that a platform may lack exposes
-  `getIsSupportedProperty()`. Headless and terminal platforms report false rather than doing
-  nothing silently.
+- **Query the selected service.** Optional dialogs, tray and camera expose support probes.
+  Clipboard uses false/empty results without a service; generic system information can be unknown.
+  A support probe is not proof of hardware, permission or a running desktop host.
 - **Tests never reach a real dialog, tray or camera.** They install a canned platform
   (`CannedDialogPlatform`, `CannedTrayPlatform`, `CannedCameraPlatform` through
   `ScopedCurrentPlatform`, under `modules/platform/tests/CNA/Platform/`). The public classes have
@@ -39,16 +40,25 @@ native file dialogs, tray icon, message boxes and camera capture. The real XNA s
 
 | Class | What it does | Availability and caveats |
 |---|---|---|
-| `PowerInfo` | Power state, battery percent, seconds remaining (static). | All platforms; desktops without a battery report `NoBattery`; -1 when unknown. |
-| `Locale` | Preferred locales (language, country) in user order. | All platforms. |
+| `PowerInfo` | Power state, battery percent, seconds remaining (static). | SDL reports native state, including NoBattery where known. Headless/terminal StandardSystemInfo returns Unknown; unknown percent/seconds are -1. |
+| `Locale` | Preferred locales (language, country) in user order. | Provider result; the generic headless/terminal implementation returns an empty list. |
 | `Clipboard` | Get/set/has text. | Main thread only. On Web it needs a user-gesture context and returns false/empty otherwise. |
 | `UrlLauncher` | `Open(url)` through the platform's external-URL service. | Desktop shell, mobile intent or browser; false when nothing could handle it. |
-| `SystemInfo` | Logical CPU cores, system RAM in MB. | All platforms. SIMD flags are deliberately not exposed. |
+| `SystemInfo` | Logical CPU cores, system RAM in MB. | SDL supplies native queries; generic system RAM is zero and core count can be unknown/zero. SIMD flags are not exposed. |
 | `DisplayInfo` | Content scale and safe area of the game's own `GameWindow`. | Read-only over the existing window; never creates one. |
-| `FileDialog` | Asynchronous open-file, save-file and open-folder dialogs. | Windows, Linux, macOS and Android; not iOS or Web. Non-modal. Cancel and error both deliver an empty list. |
+| `FileDialog` | Asynchronous open-file, save-file and open-folder dialogs. | Native SDL desktop/Android route; support query excludes iOS/Web. Non-modal. Normal cancel/error results are empty; see the callback limitation below. |
 | `SystemTray` | One tray icon with a flat menu, owned by the instance. | Desktop only. |
-| `MessageBox` | `ShowSimple` and `Show` with custom buttons. Synchronous: it blocks the calling thread. | Every desktop, mobile and web platform; not headless or terminal. |
-| `Camera` | Enumerates cameras, opens the first one and polls RGBA8 frames into a `Texture2D` (`TryAcquireFrame` once per frame). States: `NotSupported`, `Closed`, `Opening`, `Denied`, `Ready`, `Lost`. | Wherever the platform has a camera provider. Web needs HTTPS and a user gesture. Design: `docs/cna-devices-camera-design.md`. |
+| `MessageBox` | `ShowSimple` and `Show` with custom buttons. Synchronous: it blocks the calling thread. | Requires the platform dialog capability. Unsupported/native PlatformException gives no-op for ShowSimple and -1 for Show. A capability bit does not qualify every OS dialog implementation. |
+| `Camera` | Enumerates cameras, opens the first and polls RGBA8 into a correctly sized caller-owned Texture2D. | Provider/permission dependent; Closed is defined but not returned, and SDL removal/revocation is not tracked after Ready. See [camera contract](cna-devices-camera-design.md). |
+
+An unavailable file-dialog service invokes the callback immediately with an empty result, so the
+API is not guaranteed to complete asynchronously. Native completion may use a provider thread;
+marshal application work as needed. If the provider throws PlatformException after the callback
+has been moved into the request, the wrapper catches it without completing that callback. There
+is therefore no unconditional exactly-once completion guarantee on provider rejection.
+
+These are wrapper/source boundaries, not physical-device qualification on every SDL target.
+Use [devices-build.md](devices-build.md) and the dedicated camera contract for tested scope.
 
 `MessageBox.Show` marks the first custom button as the Return default and the last as the
 Escape default (both keys choose index zero for one button). These are native-provider hints:
@@ -77,8 +87,8 @@ Reopen one only for a concrete need.
 - **Microphone and touch-device enumeration.** XNA `Microphone` and `TouchPanel` cover them.
 - **Raw HID (`SDL_hidapi`).** A whole low-level, security-sensitive subsystem with no consumer.
 - **OpenXR/VR.** A renderer-level runtime integration, not a device wrapper.
-- **Dynamic library loading.** Forbidden in practice on iOS and unavailable in static Emscripten
-  builds, which leaves only a desktop niche.
+- **Dynamic library loading.** Outside this device-wrapper scope; platform restrictions and
+  static builds require a separate design if a concrete consumer needs it.
 - **Asynchronous file I/O.** Not a device capability; it would belong to a separate `CNA::IO`.
 - **Multi-monitor enumeration, process control and pen-device queries.** Rejected by the owner as
   not a fit for the project.
@@ -88,3 +98,7 @@ Reopen one only for a concrete need.
 The layer was built on 2026-07-07 as `DEVICES-CNA-000`..`012`; their plan,
 `plans/plan_cna_devices.md`, was deleted on 2026-10-28, and it and the original analysis that
 proposed the layer, the root `noxna_devices.md`, are in Git history only.
+
+Audit verification (2026-11-01): CnaDevicesExtTests builds with CNA_DEVICES=ON in the existing
+UBSan tree; all 56 tests pass on a private display. Dialog/tray/camera behavior uses canned
+platform services, with no physical camera or interactive desktop-dialog qualification.

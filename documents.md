@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 105 reviewed, 12 updated incidentally and awaiting their own audit, and 60 not yet
+Summary: 109 reviewed, 12 updated incidentally and awaiting their own audit, and 56 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -79,14 +79,14 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/depthstencilstate-support.md`](docs/depthstencilstate-support.md)
 - ⬜ **PENDING** — [`docs/development-environment.md`](docs/development-environment.md)
 - ✅ **REVIEWED** — [`docs/devices-android.md`](docs/devices-android.md)
-- ⬜ **PENDING** — [`docs/devices-api-coverage.md`](docs/devices-api-coverage.md)
+- ✅ **REVIEWED** — [`docs/devices-api-coverage.md`](docs/devices-api-coverage.md)
 - ✅ **REVIEWED** — [`docs/devices-build.md`](docs/devices-build.md)
-- ⬜ **PENDING** — [`docs/devices-event-contract.md`](docs/devices-event-contract.md)
-- ⬜ **PENDING** — [`docs/devices-ext.md`](docs/devices-ext.md)
+- ✅ **REVIEWED** — [`docs/devices-event-contract.md`](docs/devices-event-contract.md)
+- ✅ **REVIEWED** — [`docs/devices-ext.md`](docs/devices-ext.md)
 - ✅ **REVIEWED** — [`docs/devices-hardware-checklist.md`](docs/devices-hardware-checklist.md)
 - ✅ **REVIEWED** — [`docs/devices-native-backend-design.md`](docs/devices-native-backend-design.md)
 - ✅ **REVIEWED** — [`docs/devices-thread-safety.md`](docs/devices-thread-safety.md)
-- ⬜ **PENDING** — [`docs/devices_sensor_hardware_qa_template.md`](docs/devices_sensor_hardware_qa_template.md)
+- ✅ **REVIEWED** — [`docs/devices_sensor_hardware_qa_template.md`](docs/devices_sensor_hardware_qa_template.md)
 - ⬜ **PENDING** — [`docs/diagnostics-benchmark.md`](docs/diagnostics-benchmark.md)
 - ⬜ **PENDING** — [`docs/diagnostics.md`](docs/diagnostics.md)
 - ✅ **REVIEWED** — [`docs/directx9-renderer.md`](docs/directx9-renderer.md)

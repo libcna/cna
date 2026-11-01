@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Device documentation reconciliation (2026-11-01): the API matrix replaces closed campaign
+  findings with current declarations, protected Dispose(bool), environment/keyboard support,
+  normalized attitude, tilt-aware compass and bounded timestamp/fusion claims. The event contract
+  closes its obsolete Android silent-catch finding and distinguishes per-instance/worker catches
+  from propagating direct C++ injection, including aborted remaining handlers. The extension page
+  qualifies generic system-info defaults, capability probes and file-dialog callback rejection;
+  the hardware report template now covers all 19 numbered checklist sections and evidence scope.
+  Focused UBSan targets build; on private displays Devices passes 484/488 with four unsupported
+  hardware skips, and DevicesExt passes all 56. No new Android/physical-device/TSan qualification,
+  implementation or ABI changes. Archive references are distinguished from freshly retrieved
+  Microsoft SensorBase.Start and SensorReadingEventArgs.SensorReading pages.
 - Camera documentation reconciliation (2026-11-01): `docs/cna-devices-camera-design.md`
   replaces the historical proposal with the implemented platform/session ownership, first-device
   selection, cached state and RGBA upload contracts. It records that Closed is not returned,
@@ -1267,6 +1278,12 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- Native FileDialog moves its callback into the platform request, then suppresses a thrown
+  PlatformException without completing the callback. Normal cancellation/native error callbacks
+  and the absent-service route deliver an empty result, but provider rejection can leave a
+  caller waiting. Found by source inspection on 2026-11-01 in devices-ext/src/FileDialog.cpp;
+  the canned tests do not inject this throwing-provider transition. No runtime fix or physical
+  dialog failure reproduction is claimed (`docs/devices-ext.md`).
 - `cna_vertex_buffer_get_info` hard-codes `is_content_lost = CNA_FALSE`, although native
   DynamicVertexBuffer notification sets its loss flag and raises ContentLost, and subsequent
   nonempty uploads clear it. Found by source inspection on 2026-11-01 during the vertex-buffer
