@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Framework.Design documentation reconciliation (2026-11-01): current module/registration
+  boundaries are explicit, including the concrete-header hook versus a base-only include.
+  The original IL audit is separated from fresh metadata/source evidence. Local genuine XNA
+  assembly metadata confirms thirteen public converter types and three non-public descriptor
+  helpers; the focused Design target builds and all 25 tests pass on the private runner.
+  Culture, invalid input, descriptor mutation/reconstruction and protected members are covered.
+  No new complete IL/PropertyGrid/reflection qualification, API or implementation changes.
 - Video/XMA documentation reconciliation (2026-11-01): the FFmpeg page corrects the shared
   VIDEO/MEDIA_PIPELINE detection gate, enabled shared-runtime link claims, URI refusal order and
   target policy versus upstream possibility. The XMA page bounds codec/licensing assertions to

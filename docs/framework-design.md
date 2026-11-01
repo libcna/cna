@@ -2,8 +2,8 @@
 
 ## Status and inventory
 
-CNA implements the complete public XNA 4.0
-`Microsoft.Xna.Framework.Design` namespace as the opt-in `CNA::Design` module:
+CNA implements the public types of XNA 4.0's `Microsoft.Xna.Framework.Design` namespace
+in the opt-in `CNA::Design` module (target `cna_design`, source under `modules/design/`):
 
 | XNA type | Properties exposed, in order | String input |
 |---|---|---|
@@ -27,12 +27,16 @@ CNA likewise keeps descriptor implementations internal.
 
 ## Reference audit
 
-The public inventory, inheritance, constructor signatures, conversion flags,
+The original audit's public inventory, inheritance, constructor signatures, conversion flags,
 property order, and converter IL were recovered from a local Microsoft XNA 4.0
 `Microsoft.Xna.Framework.dll`. FNA was used as a secondary source for type names
 and value construction, but its Design source still contains incomplete
 descriptor and `InstanceDescriptor` paths, so it was not treated as the behavior
 oracle for this namespace.
+
+The 2026-11-01 cleanup independently rechecks local assembly type metadata: thirteen public
+Design converters and three non-public descriptor helpers agree with the current header
+inventory. It also checks current sources/tests; it does not repeat every original IL comparison.
 
 The audit established several easy-to-miss XNA rules:
 
@@ -55,10 +59,12 @@ contains `Translation` plus all sixteen fields, while `CreateInstance` and the
 ## Architecture
 
 `CNA::Design` depends on `CNA::Math` and SharpRuntime's `ComponentModel` module.
-The generic registry remains in SharpRuntime and has no CNA dependency. Linking
-and using a Design header pulls a once-only registration translation unit that
-associates all twelve XNA value types with converter factories and ordered
-descriptor collections. Applications do not call a registration API.
+The generic registry remains in SharpRuntime and has no CNA dependency. Including a concrete
+converter header (or the Design umbrella) references an inline initialization hook, which pulls
+the once-only registration translation unit when linked with the module. It associates twelve
+XNA value types with converter factories; the converters supply the ordered descriptors.
+The MathTypeConverter base header alone does not install that hook. Applications do not call a
+registration API.
 
 The module is not part of the `CNA` runtime umbrella. Tools that need it link:
 
@@ -100,4 +106,13 @@ Within those representation boundaries, no conversion, descriptor, or
 reconstruction difference is known in the implemented XNA 4.0 Framework.Design
 surface. Exact localized CLR exception text is not reproduced. Visual Studio
 PropertyGrid UI, CodeDOM serialization, and arbitrary runtime reflection are
-outside this module's scope.
+outside this module's scope. Public/protected shape includes MathTypeConverter's
+propertyDescriptions and supportStringConvert fields, checked through a derived test converter;
+this does not turn them into public game properties.
+
+## Verification
+
+On 2026-11-01, CnaDesignTests builds in the existing multi-renderer tree and all 25 tests pass
+through the private runner: converter discovery, culture/invalid input, descriptor editing,
+constructor reconstruction and the protected surface. No Visual Studio PropertyGrid or arbitrary
+reflection integration was run, and no public API or implementation was changed.

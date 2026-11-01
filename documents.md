@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 115 reviewed, 12 updated incidentally and awaiting their own audit, and 50 not yet
+Summary: 116 reviewed, 12 updated incidentally and awaiting their own audit, and 49 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -70,7 +70,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - 🟡 **PENDING — updated incidentally** — [`docs/cnb-format.md`](docs/cnb-format.md)
 - ⬜ **PENDING** — [`docs/cnb-mmap-measurements.md`](docs/cnb-mmap-measurements.md)
 - ⬜ **PENDING** — [`docs/cnj-format.md`](docs/cnj-format.md)
-- ⬜ **PENDING** — [`docs/consoles.md`](docs/consoles.md)
+- 🔵 **IN PROGRESS** — [`docs/consoles.md`](docs/consoles.md)
 - ⬜ **PENDING** — [`docs/content-pipeline-benchmark.md`](docs/content-pipeline-benchmark.md)
 - 🟡 **PENDING — updated incidentally** — [`docs/content-pipeline.md`](docs/content-pipeline.md)
 - ✅ **REVIEWED** — [`docs/cross-renderer-parity-fixtures.md`](docs/cross-renderer-parity-fixtures.md)
@@ -97,7 +97,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ⬜ **PENDING** — [`docs/fna-reference-harness.md`](docs/fna-reference-harness.md)
 - ✅ **REVIEWED** — [`docs/fna3d-parity-report.md`](docs/fna3d-parity-report.md)
 - ✅ **REVIEWED** — [`docs/fna3d-renderer.md`](docs/fna3d-renderer.md)
-- ⬜ **PENDING** — [`docs/framework-design.md`](docs/framework-design.md)
+- ✅ **REVIEWED** — [`docs/framework-design.md`](docs/framework-design.md)
 - ⬜ **PENDING** — [`docs/fx-bytecode-fuzzing.md`](docs/fx-bytecode-fuzzing.md)
 - ⬜ **PENDING** — [`docs/fx-compiled-effects.md`](docs/fx-compiled-effects.md)
 - 🟡 **PENDING — updated incidentally** — [`docs/gamer-services-known-limitations.md`](docs/gamer-services-known-limitations.md)
