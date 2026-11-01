@@ -1,136 +1,117 @@
-# FNA reference harness: how to regenerate reference data
+# FNA reference harness
 
-Written as the closing documentation task for Phase 53 (Tasks 471-480, "FNA comparison harness").
-This phase built a way to check CNA's own C++ implementation against the real, running FNA
-implementation — not just FNA's source code — for API surfaces that don't need a live
-`GraphicsDevice`.
+Current source/build contract checked on 2026-11-01. Phase 53 (Tasks 471–480) introduced the
+non-rendering value comparison; FX-005 later added compiled-effect reflection/state/pixel modes.
+The old Phase 53 environment blockers are historical, not current dependency detection.
 
-## Why this exists
+FNA remains the normal readable implementation reference. A running FNA comparison is useful
+independent evidence, but measured Microsoft XNA 4.0 behavior wins where it disagrees; record those
+decisions in [the behavior ledger](xna-fna-behavior-decisions.md).
 
-Reading FNA's C# source and re-implementing it in C++ is this project's normal porting workflow
-(`CLAUDE.md`'s "Behavior Fidelity" section). But a hand read-and-transcribe pass can still get a
-formula, an enum's numeric values, or a bit-packing layout subtly wrong — and a second hand
-re-derivation (e.g. `tests/PackedVectorGolden.md`'s own Python re-implementation, Task 197) can
-make the exact same mistake the first pass did, since both are just careful reading of the same
-source.
+## Components and scope
 
-This harness instead *runs* the real FNA.dll (built from this project's own documented "Source
-Reference" checkout, `CLAUDE.md`) and dumps its actual output as JSON, then dumps CNA's own C++
-output in the same shape, and diffs the two automatically. Agreement is a genuine, independent
-confirmation; disagreement is either a real CNA bug or a real, previously-wrong assumption — Task
-479's own first real run found one of each (see below).
+| Component | Role |
+|---|---|
+| tools/fna-reference | C# developer probe running the chosen FNA.dll |
+| tools/cna-reference/CnaReferenceDump.cpp | Native cna_reference_dump producing the mirrored value categories |
+| scripts/compare-fna-reference.py | Selected-category, FNA-to-CNA JSON comparison |
+| tools/xna-oracle and tests/reference/xna40 | Separate genuine-XNA probes/evidence |
 
-## The three pieces
+This developer probe is not a language binding. It does not expose CNA to managed applications.
 
-```
-tools/fna-reference/     — C# console app, references the real FNA.dll, emits JSON
-tools/cna-reference/     — C++ console app (cna_reference_dump), mirrors the same categories
-scripts/compare-fna-reference.py — diffs the two JSON outputs key-for-key
-```
+The default three compared categories are:
 
-### 1. Build the local FNA reference checkout (one-time, or after a submodule reset)
+| Category | Current value coverage |
+|---|---|
+| NonRenderingApis | 21 graphics enums and 16 state presets |
+| PackedVector | 17 packed-vector types and selected input/output cases |
+| Viewport | Five Project/Unproject cases, including two nonidentity-camera points |
 
-```bash
-cd /rv/data/library/github.com/FNA-XNA/FNA
-git submodule update --init lib/FAudio lib/FNA3D lib/SDL2-CS lib/SDL3-CS lib/Theorafile lib/dav1dfile
-xbuild FNA.csproj /p:Configuration=Debug
-```
+The FNA generator also emits assembly version, MathHelper and Color smoke values; the CNA dump
+does not mirror those root sections and the comparator defaults do not select them. This is not
+an exhaustive test of every method, input, exception, preset mutation or GPU behavior.
 
-Produces `bin/Debug/FNA.dll`, which `tools/fna-reference/FnaReference.csproj` references by
-absolute `HintPath`. Needs `mono`/`xbuild` (this sandbox has no `dotnet` CLI/NuGet, so
-`FnaReference.csproj` is deliberately old-style `ToolsVersion=4.0`, matching FNA's own
-`FNA.csproj` exactly).
+## Building and generating values
 
-### 2. Generate the FNA-side reference values
+Use an existing FNA checkout outside CNA, or clone one there once. No project-wide absolute
+location is required. Record its revision, assembly version, managed-source dependencies and build
+configuration with the output. Initialize the submodules referenced by that checkout's .csproj;
+the current managed source list includes SDL2-CS, SDL3-CS, FAudio, Theorafile and dav1dfile.
 
-```bash
-cd tools/fna-reference
-xbuild FnaReference.csproj /p:Configuration=Debug
-mono bin/Debug/FnaReference.exe /tmp/fna-reference-values.json
+```sh
+FNA_REFERENCE_ROOT=/path/to/FNA
+xbuild "$FNA_REFERENCE_ROOT/FNA.csproj" /p:Configuration=Debug
 ```
 
-### 3. Generate the CNA-side reference values
+The harness is an old-style ToolsVersion=4.0/x86 C# project. Mono/xbuild is the documented route;
+this does not imply dotnet/NuGet are absent from the machine or that the probe is an SDK project.
 
-```bash
-cmake --build cmake-build-debug --target cna_reference_dump
-./cmake-build-debug/cna_reference_dump /tmp/cna-reference-values.json
+Before building, set the FNA Reference's HintPath in tools/fna-reference/FnaReference.csproj to
+the resulting FNA.dll. The project still hardcodes the old
+/rv/data/library/github.com/FNA-XNA/FNA/bin/Debug/FNA.dll location: that is a current harness
+configuration limitation, not the checkout policy. Private=true copies the chosen assembly next
+to the probe.
+
+```sh
+xbuild tools/fna-reference/FnaReference.csproj /p:Configuration=Debug
+mono tools/fna-reference/bin/Debug/FnaReference.exe /tmp/fna-reference-values.json
+cmake --build cmake-build-multi --target cna_reference_dump --parallel 8
+tools/platform/run_gpu_tests_private.sh --exec \
+  cmake-build-multi/cna_reference_dump /tmp/cna-reference-values.json
+python3 scripts/compare-fna-reference.py \
+  /tmp/fna-reference-values.json /tmp/cna-reference-values.json
 ```
 
-`cna_reference_dump` is a normal CMake target (built whenever `CNA_BUILD_EXAMPLES` is on, any
-graphics renderer) — no special setup needed beyond a normal CNA build.
+The native target requires CNA_BUILD_EXAMPLES and is excluded for Android/Emscripten. Its ordinary
+value mode needs no GraphicsDevice; the private runner is the safe default for developer execution.
+Neither generator nor the full external comparison is registered as CTest. A normal CNA build
+alone does not install/build the managed/native FNA reference dependencies.
 
-### 4. Compare
+## Comparator meaning and limits
 
-```bash
-python3 scripts/compare-fna-reference.py /tmp/fna-reference-values.json /tmp/cna-reference-values.json
+Every selected FNA dictionary leaf must exist and match on the CNA side. Extra CNA keys are
+ignored to allow CNAEXT entries. --category is repeatable and --tolerance defaults to an absolute
+1e-4; numeric comparison also converts integers to Python float, while strings compare exactly.
+The packed 64-bit cases use hexadecimal strings.
+
+The script is not a general schema/finite-number validator or an API-completeness audit. A requested
+category absent from the FNA JSON emits a warning and is skipped; the command fails for no
+compared categories, but can pass if some other categories were compared. Inspect the reported
+category list. Large integer/nonfinite numeric inputs outside the trusted generators' expected
+shape require stronger checks than this comparator supplies.
+
+A passing value set proves agreement for its chosen assembly, cases and tolerance. It does not
+override a measured XNA disagreement or imply that unselected categories were checked.
+
+## Compiled-effect modes
+
+Program.cs also accepts these modes, each with a directory of .fxb inputs and optional output:
+
+```text
+--effects        reflection
+--effect-states  public device state after exact pass application
+--effect-pixels  bounded render-target samples for each pass
 ```
 
-Prints `PASS`/`FAIL` plus a per-key breakdown of any mismatch. The comparison is one-directional:
-every key on the FNA side must exist and match on the CNA side; CNA-only keys (real CNAEXT
-extensions, e.g. `PrimitiveType.PointListEXT`) are not reported as mismatches. Float comparisons
-use an absolute tolerance (`--tolerance`, default `1e-4`).
+They use native FNA3D/SDL and need a compatible library built for the selected FNA checkout,
+not whichever FNA3D binary CNA currently uses. Reflection constructs the FNA object graph through
+its internal parser/reflection route while creating a native device; it is not a pure managed/
+no-device mode. State and pixel modes check FNA3D_LinkedVersion against the assembly-derived
+expected version before executable operations. Matching version alone is not provenance proof.
 
-Neither the FNA-side app nor the CNA-side tool is registered as a `ctest` — the full comparison
-needs `mono`/`xbuild` and a locally-built `FNA.dll`, which isn't guaranteed on every machine that
-builds CNA. This is a manually-invoked developer verification workflow, not an automated
-regression gate.
+Run all native/window modes through the private runner with explicit library search paths.
+The tool README contains mode details, but its original Phase 53 status paragraphs are historical.
+Do not overwrite committed reference JSON incidentally during a documentation audit.
+See [compiled effects](fx-compiled-effects.md) for the runtime boundary and genuine-XNA exceptions.
 
-## What's covered today
+## Historical findings and current verification
 
-| Category | FNA-side generator | CNA-side dump | Needs `GraphicsDevice`? |
-|---|---|---|---|
-| Enums (21 Graphics-namespace enums) | `NonRenderingApiReference.cs` (Task 472) | `DumpEnums()` | No |
-| State presets (`BlendState`/`DepthStencilState`/`RasterizerState`/`SamplerState`, 16 presets) | `NonRenderingApiReference.cs` (Task 472) | `DumpStatePresets()` | No |
-| `PackedVector` (all 17 types) | `PackedVectorReference.cs` (Task 473) | `DumpPackedVector()` | No |
-| `Viewport.Project`/`Unproject` | `ViewportReference.cs` (Task 476) | `DumpViewport()` | No |
-| `BasicEffect` defaults/lighting | — | — | Yes — **DEFERRED**, see below |
-| `SpriteFont.MeasureString` | — | — | Yes — **DEFERRED**, see below |
-| Reference screenshots (SpriteBatch/BasicEffect) | — | — | Yes — **DEFERRED**, see below |
+The first campaign found harness precision/omission bugs and an IndexElementSize mismatch.
+Task 921 corrected CNA to SixteenBits=0/ThirtyTwoBits=1. This history is not a substitute for a
+fresh full comparison.
 
-## Why some categories are still missing
-
-`BasicEffect`'s only constructor is `BasicEffect(GraphicsDevice device)` (Task 474) —
-`GraphicsDevice`'s own constructor calls the native `FNA3D_CreateDevice` P/Invoke, which needs a
-real, pre-built `libFNA3D.so`. This sandbox doesn't have one, and building it turned out to be a
-substantially larger undertaking than everything else in this phase: `FNA3D` has its own nested,
-separately-uninitialized `MojoShader` git submodule (one layer deeper than the 6 top-level FNA
-submodules already fixed for Task 471), plus unresolved SDL2/SDL3 linkage. `SpriteFont`'s
-constructor is additionally `internal`, reachable only through real compiled `.xnb` content via
-`ContentManager` — an even larger prerequisite. Reference screenshots need the same live
-`GraphicsDevice` plus a real render+present+readback cycle. All deferred with the exact blockers
-documented in graphics Tasks 474/475/477/478, not attempted blind or silently skipped. Those
-blockers no longer hold -- FNA3D is now built and pinned -- and current graphics behaviour is measured
-against the real XNA 4.0 runtime instead (`tools/xna-oracle/`, `tests/reference/xna40/`).
-
-## Adding a new category
-
-1. **FNA side**: add a new `<Category>Reference.cs` file to `tools/fna-reference/` (see
-   `ViewportReference.cs` for the smallest example), add it to `FnaReference.csproj`'s
-   `<Compile>` list and to `Program.cs`'s assembled root `JsonWriter`.
-2. **CNA side**: add a matching `Dump<Category>()` function to
-   `tools/cna-reference/CnaReferenceDump.cpp`, using the exact same key names and input values as
-   the C# side (the comparison script matches by key path, not by position).
-3. **Compare**: pass `--category <Category>` to `scripts/compare-fna-reference.py`, or add it to
-   the script's own `DEFAULT_CATEGORIES` list if it should always be checked.
-
-If the new category needs a `GraphicsDevice` on the FNA side, it hits the same native `FNA3D`
-build blocker as Tasks 474/475/477/478 above — check `tools/fna-reference/README.md`'s own status
-section before starting.
-
-## What Task 479's first real run found
-
-Running the comparison for the first time found and fixed 3 bugs in the new harness itself before
-finding anything real: `JsonWriter.hpp`'s `Add(double)` used `ostringstream`'s default
-6-significant-digit precision (silently truncating large packed-value integers and sub-millimeter
-float differences); the first draft of the state-preset dump omitted `BlendState.BlendFactor` and
-all 4 state classes' inherited `GraphicsResource.Name`/`IsDisposed` properties; and the first draft
-of the `SurfaceFormat` enum dump omitted 7 real `*EXT`-suffixed members present in this sandbox's
-FNA build (version 26.5.0.0) but not yet added to the C++ side.
-
-After fixing those, the comparison found exactly one genuine divergence: `IndexElementSize`'s
-numeric values did not match FNA at the time (`SixteenBits=0`/`ThirtyTwoBits=1` in FNA, `16`/`32` in
-CNA — see graphics Task 921). **Fixed by Task 921 on 2026-07-09** — CNA now
-uses `SixteenBits=0`/`ThirtyTwoBits=1` too; re-running this comparison today would find no
-divergence here. Every other compared value — all 21 enums, all 16 state presets, all 17
-`PackedVector` types, and all 5 `Viewport` cases — matches the real, running FNA implementation
-exactly.
+On 2026-11-01 cna_reference_dump builds and emits valid JSON containing the 21/16/17/5 coverage
+above and those corrected enum values. Mono, xbuild and dotnet are installed; a local FNA source
+checkout exists elsewhere, but the hardcoded DLL path, a built reference DLL and its managed
+submodule sources are absent. No fresh running-FNA comparison, native effect probe, screenshot
+qualification or C++/C ABI change is claimed by this audit.

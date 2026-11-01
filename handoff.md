@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- FNA-reference harness documentation reconciliation (2026-11-01, Task 480): the guide separates
+  current value/effect modes, selected-category comparison and genuine-XNA authority. It corrects
+  target gates, unselected root fields, dictionary/numeric/category limits, version/provenance
+  checks and obsolete environment blockers. The remaining hardcoded managed-project HintPath is
+  explicit rather than presented as checkout policy. The native target builds and freshly emits
+  valid 21-enum/16-preset/17-packed-type/5-viewport JSON with corrected IndexElementSize values.
+  Local FNA source and Mono/xbuild/dotnet exist, but the reference DLL/managed submodule inputs are
+  absent; no fresh running-FNA/native-effect comparison, implementation or ABI change is claimed.
 - glTF performance/retrospective reconciliation (2026-11-01, GLTF-433/460): current CPU-time
   estimators, ASan-scaled ceilings, value-copy/cache sharing and per-command parsing replace old
   timing/identity claims. Accessor totals are logical dense bytes, multiple unpacked arrays can
