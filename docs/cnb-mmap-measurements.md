@@ -1,102 +1,124 @@
-# Memory-mapped `.cnb` access: what the benchmark said, and why the answer was "no"
+# Memory-mapped `.cnb` access: the CNBF-108 measurement and decision
 
-`CNBF-108`. Measured 2026-08-27 on the development machine (AMD, NVMe,
-Debian 13, gcc `-O2`). Reproduction recipe in §5.
+`CNBF-108`. Historical 2026-08-27 record (`21ceccfe1`), development machine: AMD, NVMe,
+Debian 13, GCC `-O2`. The exact 32 MiB input, complete commands and raw run logs are not retained
+with this page. The committed exploratory probe can measure new inputs; it does not by itself
+reproduce these numbers or validate a production CNB load.
 
-The task was: *"The `alignment` field and 16-byte geometry alignment exist for it. But a
-`VertexBuffer` usually still has to be uploaded CPU→GPU, so mmap is not automatically zero-copy to
-the GPU. Benchmark before implementing."*
+The campaign selected hardware CRC-32C before changing document ownership to mmap. That was a
+priority decision for the measured workload, not proof that mmap can never help. No mapped
+`CnbDocument` storage path is currently implemented; `ParseFile` owns a vector of file bytes.
 
-The benchmark did not merely fail to justify mmap. **It found that the thing mmap would optimise
-was not the bottleneck**, and pointed at something twelve times larger.
+## 1. Historical component measurements
 
----
+The original page describes a 32 MiB file with eight 4 MiB RGBA payloads:
 
-## 1. What a `.cnb` load actually spends its time on
+| Step | Recorded time | Derived throughput |
+|---|---:|---:|
+| Read the whole file into an allocated buffer | 7.02 ms | 4560 MiB/s |
+| `mmap` and touch one byte per 4096-byte interval | 2.31 ms | 13,850 MiB/s of mapped extent, not bytes actually read by the loop |
+| `mmap`/unmap without touching data | 0.005 ms | No payload-read or validation measurement |
+| CRC-32C, portable byte-table fold | 62.51 ms | 512 MiB/s |
+| CRC-32C, SSE4.2 fold | 3.28 ms | 9756 MiB/s |
 
-Measured on a 32 MiB `.cnb` (eight 4 MiB `Rgba8` texture payloads), median of five runs:
+The old prose called this a median of five runs. The committed `TimeMs` actually returns the
+**minimum of three** invocations and contains no outer five-run aggregation. Without raw logs the
+table's claimed median cannot be reconstructed. Its printed "MB/s" uses bytes/1,048,576, hence
+MiB/s here.
 
-| step | time | throughput |
-|---|---|---|
-| read the whole file (what `ParseFile` does) | 7.02 ms | 4560 MB/s |
-| `mmap` + touch every page | 2.31 ms | 13 850 MB/s |
-| `mmap` alone, never touched | 0.005 ms | *not a load — nothing was read* |
-| **verify CRC-32C, table implementation** | **62.51 ms** | **512 MB/s** |
-| verify CRC-32C, SSE4.2 | 3.28 ms | 9756 MB/s |
+The read loop copies every byte; the mapped loop only accesses one byte per hardcoded 4096-byte
+interval. It forces sparse page touches, not a complete scan/CRC/upload. CRC timings separately
+scan the already-read vector as one buffer, while production parsing checks the header, table and
+individual stored chunks. These component timings are not interchangeable full-parser workloads.
 
-**Verifying the file cost nine times more than reading it.** Every chunk's CRC is checked at parse
-(`docs/cnb-format.md` §4), and CNB's implementation was a byte-at-a-time table — correct, portable,
-and about 512 MB/s.
+## 2. What supported the original priority
 
-## 2. The comparison that decided it
+Subtracting the recorded component times gives:
 
-| change | saves |
-|---|---|
-| memory-mapping instead of reading | **4.71 ms** |
-| folding the same CRC in hardware | **59.23 ms** |
+| Candidate change | Estimated component saving |
+|---|---:|
+| Read → mapped sparse touches | 4.71 ms |
+| Table → hardware CRC | 59.23 ms |
 
-The CRC win is **12.6×** the mmap win, on the same file, for a change that touches one function
-instead of the container's whole ownership model.
+The second difference is about 12.6 times the first. This supported accelerating CRC first on that
+host. It does not measure a mapped parser with the **new** fast CRC, include allocation in the read
+timer, prove a permanent bottleneck, or establish a universal upper bound on mmap's benefit.
 
-The `mmap`-alone row is why this needed measuring rather than reasoning. Mapping a 32 MiB file
-takes 5 µs, which looks like the entire load has disappeared. It has not: nothing has been read.
-The bytes arrive on the first touch, and CNB touches all of them immediately, because it verifies
-them.
+The historical end-to-end `cna_tool_cnb_info` record reports 20 runs including startup:
 
-## 3. The decision
+| Configuration | Recorded time per run |
+|---|---:|
+| Before, table CRC | 127.3 ms |
+| After, hardware CRC | 19.8 ms |
 
-**`CNBF-108` is not implemented, and should not be.** Not "deferred": the measurement says it is
-the wrong optimisation, and that conclusion is stable in a way a schedule is not.
+The ratio is about 6.4×. The source now has the corresponding fast CRC path, but this audit did not
+recreate those binaries/runs or profile the remaining 19.8 ms. The component differences alone
+cannot allocate all end-to-end time to reading or checksum work.
 
-What was implemented instead is hardware CRC-32C — SSE4.2 on x86, the ARMv8 CRC32 extension on
-aarch64 — detected **at runtime**, so one binary still runs on a machine without the instruction.
-The polynomial, the seed and every produced value are unchanged; all four golden vectors are still
-byte-identical, and a test proves the hardware path agrees with the table at every input length
-modulo 8 and at every resume point.
+## 3. Current parser and checksum contract
 
-End to end, through `cna_tool_cnb_info` on the same 32 MiB file, 20 runs each, including process
-startup:
+`CnbDocument::ParseFile` stats the file, enforces its file-size limit, reads it into owned bytes,
+then parses it. Parsing validates header/table and every stored chunk CRC before eager
+decompression and metadata/external-reference decoding. Compressed chunks retain both stored and
+expanded buffers. Mmap would need an explicit ownership/lifetime/error model and would not
+automatically eliminate decompression buffers or GPU uploads.
 
-| | per run |
-|---|---|
-| before (table CRC) | **127.3 ms** |
-| after (hardware CRC) | **19.8 ms** |
+Production `CnbCrc32c.cpp` keeps the portable table and dispatches to hardware where available:
+x86 checks SSE4.2 through CPUID; Linux aarch64 checks HWCAP_CRC32; Apple arm64 selects its CRC path;
+other unsupported detection paths retain the table. This is distinct from the spike's unconditional
+x86-64 hardware call. No architecture-wide assertion that every x86-64 CPU has SSE4.2 is needed
+for the runtime dispatch contract.
 
-**6.4× faster**, and the remaining time is now dominated by actually reading the file — which is
-where mmap's 4.7 ms would apply, and would still be the smaller half of a much smaller number.
+The polynomial, initial/final inversion and continuation meaning remain unchanged. Current tests
+cover four known answers, lengths 0–64 and selected larger awkward lengths, ten split points of a
+4096-byte buffer and selected bit flips. They compare the selected dispatch path with the table;
+a pass on x86 does not execute the ARM implementation or force every fallback configuration.
 
-## 4. What would change the answer
+## 4. When to measure again
 
-Recorded so a future reader can tell whether this conclusion still holds rather than re-deriving it:
+- A different CPU or a target without CRC instructions changes checksum cost. A portable
+  slicing implementation is a candidate to benchmark, not a measured replacement specified here.
+- Different asset sizes, many small loads, cold/cache-hot reads, pressure or repeated reuse can
+  change the balance. Even eager CRC must read bytes, but it does not logically require copying
+  them into an owning vector.
+- A lazy/partial reader would need a separate validation contract: current parse success means all
+  stored chunks were checked. Changing when validation happens changes when corruption is reported.
+- Cross-process reuse would need measured memory and lifetime behavior. `MAP_SHARED` controls
+  update visibility/writeback; `MAP_PRIVATE` is copy-on-write. Those flag names alone are not an
+  N-fold memory-saving measurement ([Linux mmap manual](https://man7.org/linux/man-pages/man2/mmap.2.html)).
 
-* **A target without a CRC instruction.** On such a platform verification is back at ~512 MB/s and
-  dominates again — but the fix there is a slicing-by-8 table fold, not mmap.
-* **Loading only part of a file.** mmap's real advantage is not reading what you never touch. CNB
-  verifies every chunk at parse, so today nothing is untouched. A future mode that verified lazily,
-  per chunk, would change that — and would be trading the format's corruption guarantee for it,
-  which is a different decision from this one.
-* **Sharing one asset between processes.** `MAP_SHARED` costs one copy of the pages instead of N.
-  Nothing in CNA does this today.
+These are conditions for a future proposal, not a new implementation plan or a reversal of the
+original task disposition.
 
-## 5. Reproducing it
+## 5. Probe recipe and limits
 
 ```bash
+mkdir -p build-probe
 ccache g++ -O2 -std=c++23 -o build-probe/cnbf108-measure \
     spikes/cnb-mmap-spike/measure.cpp
-./build-probe/cnbf108-measure <a real .cnb>
+./build-probe/cnbf108-measure path/to/recorded-input.cnb
 ```
 
-Numbers are **warm-cache**: dropping the page cache needs privileges the probe does not assume, and
-it says so rather than pretending. That biases *against* the conclusion, not for it — a cold cache
-would make the read slower and the CRC's share of the total smaller, so the CRC's dominance here is
-the conservative case.
+This is a POSIX/GNU-style standalone probe, not a CMake target or CNB parser. On x86-64 it invokes
+SSE4.2 without runtime detection, so use a suitable host. It does not robustly check open/read/mmap
+failures, empty files or exact read counts; success alone does not validate the input or measurements.
 
-## 6. A benchmark bug worth remembering
+The `DropCaches` function is defined but **never called**. Runs reuse page cache and vector data,
+are ordered rather than interleaved, and make no cold-cache guarantee. Do not infer a one-sided
+bias from that: cache state can change read, mapping and CRC comparisons. Record file hashes,
+versions, affinity/load, repetition summaries and cache controls for a new benchmark; this audit
+does not drop the machine's shared page cache.
 
-The first run reported CRC-32C at **0.000 ms for 32 MiB** — roughly 1.6 × 10⁹ MB/s. The compiler
-had removed the call, because its result was discarded.
+## 6. Benchmark result consumption
 
-Had that gone unnoticed, the conclusion would have been the exact opposite of the truth:
-"verification is free, so the read is everything, so implement mmap." The fix is a one-line
-`asm volatile("" : : "r,m"(value) : "memory")` barrier, and the lesson is that an implausibly good
-benchmark number is a bug report about the benchmark.
+The historical first attempt reported 0.000 ms CRC because the unused result could be optimized
+away. The retained probe feeds CRC results to an `asm volatile` compiler barrier and compares its
+table/hardware outputs. This protects that local operation from elimination, not the completeness
+or statistical validity of the entire benchmark.
+
+## 7. Current verification
+
+The 2026-11-01 audit checked the probe, owned/eager parser, runtime dispatch and regression scope.
+The content target builds and all 23 selected compression/known-answer/hardware-table CRC tests
+pass privately with HEADLESS on the current x86 host. No new mmap implementation, original
+32 MiB timing replay, cold-cache run, ARM or multi-process qualification is claimed.

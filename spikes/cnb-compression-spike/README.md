@@ -1,37 +1,28 @@
-# CNB chunk compression measurement
+# CNBF-105 compression probe
 
-`CNBF-105`. The probe that decided whether CNB should have a codec at all.
+This standalone exploratory program compares byte buffers using zstd levels 1/3/9/19 and zlib-6.
+It does not parse/extract CNB files. The [historical measurement record](../../docs/cnb-compression-measurements.md)
+contains the 2026-08-27 table and its limitations; the original payloads/raw samples are not retained
+here.
 
-## What it proved
+The listed zstd-3 compressed/raw ratios were 51.1% for one photograph, 26.8% for audio and 15.1%
+for vertex bytes: approximately 49%, 73% and 85% **saved**, respectively. These are sample payload
+ratios, not universal file/installed-size or load-time wins. The serial I/O break-even model is
+conditional on actual throughput and omitted costs. The CNB writer's codec remains opt-in.
 
-Running it on real content (a photograph, real 16-bit audio, real interleaved `f32` geometry)
-showed that zstd level 3 takes **51 %** off a `Texture2D` `Rgba8` payload, **27 %** off
-`SoundEffect` `Pcm16` and **15 %** off `Model` vertex bytes — and that decompression runs at
-0.9–2.0 GB/s, so compression only *saves load time* on storage slower than 456–1469 MB/s. The
-development machine reads at 2.5 GB/s, where it makes loading slower.
-
-That split — size always wins, time only sometimes — is what produced the design: the codec exists,
-is off by default, and is chosen per chunk.
-
-Full numbers, break-even arithmetic and the reproduction recipe are in
-`docs/cnb-compression-measurements.md`.
-
-## It also caught a bad fixture
-
-The first run used the repository's own image fixture as the "photograph" and reported 0.6 % — a
-160× saving. That fixture is a synthetic placeholder with 405 unique colours; two other image
-fixtures are a single colour. The tell was that zstd-3 produced a *larger* output than zstd-1:
-non-monotonic ratios across levels mean the input is degenerate, not that the codec is strange.
-
-## Building it
+A synthetic fixture initially produced a much smaller ratio. Inspect representative source
+content before quoting performance results; non-monotonic sizes across levels alone do not prove
+an input is degenerate.
 
 ```bash
+mkdir -p build-probe
 ccache g++ -O2 -std=c++23 -o build-probe/cnbf105-measure \
     spikes/cnb-compression-spike/measure.cpp -lzstd -lz
-./build-probe/cnbf105-measure <payload files...>
+./build-probe/cnbf105-measure path/to/photo.payload path/to/audio.payload
 ```
 
-It links only zstd and zlib — no CNA — because it measures codecs against byte buffers, and the
-payloads are extracted from real `.cnb` files beforehand. Binaries build into `build-probe/` and
-are gitignored; this source is not, because the finding is only as good as the method that
-produced it.
+Use the shared cache and retain input hashes/codec versions. Timers report adaptive mean iteration
+cost (≥50 ms or the repetition ceiling); they do not compute an outer median. Compression includes
+scratch allocation, decompression reuses a buffer. Missing/empty input and codec/round-trip errors
+can still leave exit zero, so inspect diagnostics and use production regression tests for
+correctness. The probe is not an arbitrary-input validator or an end-to-end loader benchmark.

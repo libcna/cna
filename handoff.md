@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNB measurement reconciliation (2026-11-01, CNBF-105/108): both records retain historical
+  tables with provenance/missing raw inputs, correct MiB/s, codec comparison/savings arithmetic
+  and actual adaptive-mean versus minimum-of-three probe methods, and replace universal NVMe/
+  size/mmap conclusions with bounded workload/model statements. Parser ownership, stored CRC,
+  eager expansion and current writer policy are source-checked; related CNB-spec paragraphs and
+  spike READMEs are reconciled without completing the spec's own pending audit. The content target
+  builds and all 23 compression/known-answer/hardware-table CRC cases pass privately with HEADLESS
+  and zstd on the x86 host. Linux mmap and Zstandard primary specifications support the semantic
+  corrections. No spike/old-payload timing replay, cold-cache/ARM/multiprocess qualification,
+  implementation or ABI change.
 - Build-performance documentation reconciliation (2026-11-01, COMP-001–010): dated tables retain
   their original scope, while current policy now names AUTO linker selection, optional focused
   groups versus the full CTest inventory, private display recipes, declared audit-cache inputs,
@@ -1625,6 +1635,12 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- CNB's retained measurement spikes are exploratory, not input/correctness validators: codec
+  errors/mismatches or skipped missing payloads may return zero, and the mmap probe uses sparse
+  4096-byte touches, weak I/O checks and an unconditional x86 SSE4.2 call. Original payload hashes/
+  raw timing samples are absent. Production CRC tests compare selected dispatch against the table,
+  not every forced hardware/fallback architecture (source audit 2026-11-01,
+  `docs/cnb-compression-measurements.md`, `docs/cnb-mmap-measurements.md`).
 - The clean-build benchmark driver selects broad feature profiles but does not pin
   CNA_SHARED_LIBRARY/platform/every dependency revision or new option; BUILD_SHARED_LIBS=OFF
   does not select a static CNA umbrella. Its selected cache report also omits that runtime mode.

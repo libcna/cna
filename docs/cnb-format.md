@@ -411,18 +411,20 @@ header alone, and different platforms can make different choices about the same 
 **The original justification for having no codec was wrong, and is recorded here rather than
 quietly deleted.** It read: *"most of what a game ships is already compressed (PNG, Ogg)"*. True of
 the source files, false of what CNB stores — a PNG becomes raw `Rgba8` at compile time and an Ogg
-becomes raw `Pcm16`, so CNB is exactly where the data is *not* compressed. Measured on real
-content (`docs/cnb-compression-measurements.md`), zstd level 3 gives:
+becomes raw `Pcm16` on those decoded routes. Current standalone Texture2D also has BC variants;
+the old raw-payload observation is not every schema's encoding. The historical 2026-08-27 samples
+and simplified serial I/O model ([measurement details](cnb-compression-measurements.md)) give:
 
 | payload | ratio | break-even device read speed |
 |---|---|---|
-| `Rgba8` photograph | 51 % | 456 MB/s |
-| `Pcm16` audio | 27 % | 1469 MB/s |
-| `f32` vertex data | 15 % | 1073 MB/s |
+| `Rgba8` photograph | 51 % | 456 MiB/s |
+| `Pcm16` audio | 27 % | 1469 MiB/s |
+| `f32` vertex data | 15 % | 1073 MiB/s |
 
-So the size saving is large and unconditional, while the *load-time* saving exists only below those
-read speeds — on desktop NVMe (2.5 GB/s measured) compression makes loading slower. Hence the
-design: the codec exists, defaults to off, and is chosen per chunk.
+These payload ratios and modeled thresholds do not predict every file, storage device or
+end-to-end load: actual corpus, CRC/copy/allocation, package/transport compression and I/O overlap
+matter. The retained design is an optional codec, off by default for writing, with per-chunk
+storage decisions. No universal NVMe slowdown or fixed distribution/install saving is claimed.
 
 **A compressed chunk cannot be read by a CNA older than the codec.** Every reader written before a
 codec landed rejects a non-zero `compression`, so enabling it raises the minimum runtime version
@@ -1200,11 +1202,11 @@ A type can be fully readable at runtime and still have no supported way to *prod
   embedded SpriteFont atlases remain `Rgba8`-only.
 * ~~Chunk compression (§8).~~ **Implemented** — Zstandard, codec 2, opt-in per chunk and off by
   default, available when CNA is built with libzstd. See §8.
-* Memory-mapped, zero-copy chunk access. **Measured and rejected**, not pending: mmap would save
-  4.7 ms of a 32 MiB load while the CRC verification it cannot avoid cost 62.5 ms, so the effort
-  went into hardware CRC-32C instead and made the same load 6.4× faster. See
-  `docs/cnb-mmap-measurements.md`, including what would change the answer. The `alignment` field
-  keeps its meaning regardless.
+* Memory-mapped chunk storage is not implemented. The original CNBF-108 campaign closed in favor
+  of hardware CRC-32C, based on one historical 32 MiB workload; it did not prove mmap can never
+  help. The probe's sparse touches, minimum-of-three timing and missing original inputs limit
+  that conclusion. See [the measurement record](cnb-mmap-measurements.md). The alignment field
+  keeps its meaning and mapped file storage would not itself remove decompression/GPU copies.
 * A package format bundling many assets (`.cnapak`, `CNBF-107`). That would be a different format
   and a separate project; one `.cnb` stays one logical asset (Appendix A, D8).
 * **Load time** has never been measured, and no claim is made about it. What was measured is the
