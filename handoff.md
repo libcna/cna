@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Location proposal reconciliation (2026-11-01): the scope guard defers to the owner's 2026-10-25
+  AOSP-only/provider-placement/event-thread decisions, removes obsolete CNA-local System paths
+  and names the real compass test seam. The proposal separates planned services from current
+  source, corrects explicit-interface PropertyChanged, removes zero-cost/rate/universal-provider
+  claims and restricts optional ABI planning to native C routes. The owner's LOC-11 merge trigger
+  is preserved; implementation has not started. CNA/Sharp Runtime sources confirm the service and
+  compatibility types are absent, current compass TrueHeading still equals MagneticHeading,
+  existing runtime prerequisites and local links are checked, and Microsoft API references are
+  consulted. Documentation only; no location implementation, binding, build or hardware claim.
 - Device documentation reconciliation (2026-11-01): the API matrix replaces closed campaign
   findings with current declarations, protected Dispose(bool), environment/keyboard support,
   normalized attitude, tilt-aware compass and bounded timestamp/fusion claims. The event contract

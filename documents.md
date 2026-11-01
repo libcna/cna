@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 109 reviewed, 12 updated incidentally and awaiting their own audit, and 56 not yet
+Summary: 111 reviewed, 12 updated incidentally and awaiting their own audit, and 54 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -130,8 +130,8 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/installed-cpp-sdk.md`](docs/installed-cpp-sdk.md)
 - ⬜ **PENDING** — [`docs/keyboard-device-emulation.md`](docs/keyboard-device-emulation.md)
 - ⬜ **PENDING** — [`docs/link-size-architecture.md`](docs/link-size-architecture.md)
-- ⬜ **PENDING** — [`docs/location-future-plan.md`](docs/location-future-plan.md)
-- ⬜ **PENDING** — [`docs/location-proposal.md`](docs/location-proposal.md)
+- ✅ **REVIEWED** — [`docs/location-future-plan.md`](docs/location-future-plan.md)
+- ✅ **REVIEWED** — [`docs/location-proposal.md`](docs/location-proposal.md)
 - ✅ **REVIEWED** — [`docs/maintainer-study-guide.md`](docs/maintainer-study-guide.md)
 - ✅ **REVIEWED** — [`docs/migration-guide.md`](docs/migration-guide.md)
 - ⬜ **PENDING** — [`docs/model-content-pipeline-support.md`](docs/model-content-pipeline-support.md)

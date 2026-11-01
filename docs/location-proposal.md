@@ -1,6 +1,8 @@
 # Location (GPS) for CNA: a proposal
 
-**Status: proposal with the owner's decisions taken (2026-10-25); nothing implemented.** It
+**Status: proposal with the owner's decisions taken (2026-10-25); nothing implemented,
+rechecked 2026-11-01.** No Location capability/service or GeoCoordinate/GeoCoordinateWatcher
+implementation exists in CNA or the local Sharp Runtime checkout. It
 replaces the five-line TODO that used to be this file, and it extends
 [`location-future-plan.md`](location-future-plan.md), which records where location
 support belongs and why. The decisions are listed at the end; the sections below already follow
@@ -13,9 +15,9 @@ A game asks for the device's position through the API Windows Phone 7 games used
 `PositionChanged`. The .NET types live in Sharp Runtime, beside the rest of `System.*`. The position
 itself comes from a new platform service, `IPlatformLocation`, with one backend per operating
 system: Android's `LocationManager`, Apple's Core Location, Windows' `Geolocator`, GeoClue on Linux
-and the browser's Geolocation API. Nothing reaches a GPS chip directly. Every one of these systems
-already fuses satellite, Wi-Fi and cell data, and a game should take the operating system's answer
-and its permission model with it.
+and the browser's Geolocation API. These are proposed integrations, not implemented platform services
+or qualified host support. The design consumes the operating system's available position and
+permission model; it does not assume every provider has satellite, Wi-Fi and cell data.
 
 ## Why not `Location : SensorBase<LocationReading>`
 
@@ -36,13 +38,15 @@ rate. `docs/location-future-plan.md` records that decision, and the devices plan
 
 ## The API a game sees
 
-The surface below is the .NET Framework 4 `System.Device.Location` as Microsoft documents it.
-Windows Phone 7 shipped the same types; before implementation, check the archived Windows Phone
-reference for any member it lacked, the way `Microsoft::Devices::Sensors` was checked.
+The surface below is a planning summary of Microsoft's
+[GeoCoordinateWatcher](https://learn.microsoft.com/en-us/dotnet/api/system.device.location.geocoordinatewatcher)
+and [GeoCoordinate](https://learn.microsoft.com/en-us/dotnet/api/system.device.location.geocoordinate?view=netframework-4.8.1)
+references. It is not a complete declaration/visibility matrix. Before implementation, verify the
+archived Windows Phone member set and behavior separately from the desktop .NET Framework API.
 
 | Type | Members |
 |---|---|
-| `GeoCoordinateWatcher` (`IDisposable`, `IGeoPositionWatcher<GeoCoordinate>`, `INotifyPropertyChanged`) | constructors `()` and `(GeoPositionAccuracy)`; `DesiredAccuracy`, `MovementThreshold` (metres), `Permission`, `Position`, `Status`; `Start()`, `Start(bool suppressPermissionPrompt)`, `TryStart(bool, TimeSpan)`, `Stop()`, `Dispose()`; events `PositionChanged`, `StatusChanged`, `PropertyChanged` |
+| `GeoCoordinateWatcher` (`IDisposable`, `IGeoPositionWatcher<GeoCoordinate>`, `INotifyPropertyChanged`) | constructors `()` and `(GeoPositionAccuracy)`; `DesiredAccuracy`, `MovementThreshold` (metres), `Permission`, `Position`, `Status`; `Start()`, `Start(bool suppressPermissionPrompt)`, `TryStart(bool, TimeSpan)`, `Stop()`, `Dispose()`; public PositionChanged/StatusChanged; PropertyChanged through its explicit interface in the desktop reference |
 | `GeoCoordinate` (`IEquatable<GeoCoordinate>`) | constructors `()`, `(lat, lon)`, `(lat, lon, alt)`, `(lat, lon, alt, hAcc, vAcc, speed, course)`; `Latitude`, `Longitude`, `Altitude`, `HorizontalAccuracy`, `VerticalAccuracy`, `Speed`, `Course`, `IsUnknown`; static `Unknown`; `GetDistanceTo`; equality on latitude and longitude only; `ToString` |
 | `GeoPosition<T>` | `Location`, `Timestamp` (`DateTimeOffset`) |
 | `GeoPositionChangedEventArgs<T>`, `GeoPositionStatusChangedEventArgs` | `Position`; `Status` |
@@ -66,7 +70,7 @@ watcher.Start();
 ```
 
 `CivicAddress` and `CivicAddressResolver` (street addresses from coordinates) are left out: they
-need a geocoding service, and nothing in a game depends on them.
+need separate reverse-geocoding integration and have no identified consumer in this scope.
 
 ## Where the code lives
 
@@ -76,8 +80,9 @@ the platform part is kept out of it. The split (decision 1):
 - **Sharp Runtime, a new `device-location` component**: the types above, `GeoCoordinate`'s
   validation and `GetDistanceTo`, the watcher's state machine, movement-threshold filtering, and a
   narrow seam, `System::Device::Location::Detail::IGeoPositionProvider`, that something else fills.
-  Without a provider a watcher behaves as .NET does on a machine without location: `Status` is
-  `Disabled` and `Position` is unknown. What the types build on is already there:
+  The proposed no-provider behavior is Disabled status and unknown Position; verify exception,
+  permission and event details during LOC-1 rather than treating that sketch as full .NET parity.
+  Existing prerequisites include
   `System::DateTimeOffset` in `core` and `INotifyPropertyChanged` in `component-model`.
 - **CNA**: the `IPlatformLocation` platform service and its backends, and the small adapter that
   installs a provider over it when a `Game` starts.
@@ -88,7 +93,8 @@ was rejected.
 
 ## The platform service
 
-SDL3 has no location API, so the backends cannot come from SDL. They sit inside the platform
+The pinned SDL3 tree has no location service, so these providers cannot come from its device API.
+They would sit inside the platform
 implementations, like the JNI calls `Sdl3SystemServices` already makes on Android. The contract
 follows the rules in `docs/platform-abstraction.md`:
 
@@ -103,12 +109,12 @@ follows the rules in `docs/platform-abstraction.md`:
 
 | Host | Backend | Notes |
 |---|---|---|
-| Android | `android.location.LocationManager` through JNI | Android has no NDK location API, and a `LocationListener` has to be a Java object, so the app template gains one small Java helper class. `ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION` are runtime permissions (SDL3's `SDL_RequestAndroidPermission`). AOSP only (decision 4): no Google fused provider, so every Android device works the same, with or without Google Play services. |
+| Android | `android.location.LocationManager` through JNI | AOSP only (decision 4), with no Google Play services dependency. Plan a small platform Java helper and explicit runtime permission handling; recheck SDK/permission and approximate-location behavior during LOC-5. This does not guarantee identical providers/fixes on every device. |
 | iOS, macOS | Core Location (`CLLocationManager`) in Objective-C++ | Needs the usage-description keys in `Info.plist` and, on macOS, an app bundle. When-in-use authorisation only. |
 | Windows | `Windows.Devices.Geolocation.Geolocator` | Usable from desktop applications, subject to the system's location privacy setting. It needs C++/WinRT, so it is built with MSVC or clang-cl only; a MinGW build reports `PlatformCapability::Location` as false (decision 3). The older COM Location API is deprecated and not used. |
 | Linux desktop | GeoClue 2 over D-Bus | An optional dependency, detected like the other optional ones. GeoClue asks for the application's desktop ID; sandboxed (Flatpak) builds go through the xdg-desktop-portal location portal. |
 | Linux with a GPS receiver | `gpsd` | The one route that really is "via GPS": kiosks, vehicles, single-board computers. Not planned (decision 5); added only for a concrete need. |
-| Browser | `navigator.geolocation` | Secure contexts (HTTPS) only, and the browser asks the user. |
+| Browser | `navigator.geolocation` | Subject to secure-context, permission and embedding policy. Check the actual target/browser contract during LOC-6. |
 | Tests | a fake provider and a recorded-track replay (GPX or NMEA) | Deterministic positions, permission refusals and signal loss without hardware. |
 
 ## Events, threads and lifecycle
@@ -116,9 +122,10 @@ follows the rules in `docs/platform-abstraction.md`:
 - **Which thread raises the events.** CNA's sensors raise theirs on whatever thread the operating
   system calls back on (`docs/devices-event-contract.md`). Location does the opposite (decision 2):
   fixes are queued and `PositionChanged` and `StatusChanged` are raised on the game thread before
-  the next `Update`. Fixes arrive about once a second, so queueing costs nothing, and game code that
-  handles them mutates game state without locking. LOC-1 still records what Windows Phone 7 did, so
-  the difference is documented, not discovered.
+  the next `Update`. Native arrival rate is provider-dependent; implementation must define bounded
+  queue/coalescing, cancellation and teardown behavior. Game-thread delivery avoids making event
+  handlers mutate game state from a native provider thread. LOC-1 still records the WP7 behavior
+  and any intentional deviation; no measured WP7 event-thread result is claimed here.
 - **Movement threshold.** The shared Sharp Runtime layer applies `MovementThreshold` with
   `GetDistanceTo`, so every backend filters the same way whatever the operating system offers.
 - **`TryStart(bool, TimeSpan)` blocks.** On the game thread it stalls a frame for up to its timeout,
@@ -143,11 +150,11 @@ work: through a narrow, optional `Detail::IDeclinationSource` that evaluates the
 Model (public domain) for the current position and date, with no new public member on `Compass`.
 It is a follow-up, not part of the first delivery.
 
-## C API and bindings
+## Native C API boundary
 
-The C API would gain a `geo` route family once the C++ surface is stable. CNA.NET has no real
-`System.Device.Location` to rely on: the namespace exists only in .NET Framework, not in .NET 5 and
-later, so its Windows Phone compatibility layer would provide the types itself over the C API.
+A future native C API route family can be scoped after the C++ surface is stable, with explicit
+session ownership, callback cancellation and error/permission contracts. No geo routes exist now.
+Language-specific bindings are outside the current approved planning boundary.
 
 ## Tests
 
@@ -174,7 +181,7 @@ later, so its Windows Phone compatibility layer would provide the types itself o
 | LOC-7 | Linux GeoClue backend. |
 | LOC-8 | Core Location backend; needs the Apple machine. |
 | LOC-9 | Windows `Geolocator` backend (MSVC/clang-cl). |
-| LOC-10 | Optional: compass declination, C API routes, CNA.NET. |
+| LOC-10 | Optional, separately scoped: compass declination and native C API routes. |
 | LOC-11 | Merge this proposal (`docs/location-proposal.md`) and `docs/location-future-plan.md` into one `docs/location.md`. |
 
 ## Decisions (owner, 2026-10-25)
