@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Model-loading documentation reconciliation (2026-11-01, Tasks 431–439/916): the guide now
+  scopes the runtime contract and native helpers, stream/cache/lower-tier resolution, both CNB
+  schemas, stored roots/bounds, limited tag shapes, sharing and unload ownership. It corrects
+  the rigid-only Model claim and describes Model versus SkinnedModelEXT and animation/draw
+  responsibilities. Current FNA also copies by Bones.Count, so the obsolete CHECKLIST oversized-
+  array deviation is removed. Graphics/content targets build; 111 runtime/collection and 40
+  selected loader/shape/ownership cases pass privately on OPENGLES3. No new genuine-XNA/all-route
+  pixel qualification, native implementation or ABI change.
 - Content-pipeline benchmark reconciliation (2026-11-01, CP-028/XNAP-93/XNAPP-301): the page
   separates dated timing records from current harness evidence, defines file-digest scope, fresh
   output versus cold caches, p95/provenance limits and node-level workers. It corrects inferred

@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 150 reviewed, 12 updated incidentally and awaiting their own audit, and 15 not yet
+Summary: 151 reviewed, 12 updated incidentally and awaiting their own audit, and 14 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -134,7 +134,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/location-proposal.md`](docs/location-proposal.md)
 - ✅ **REVIEWED** — [`docs/maintainer-study-guide.md`](docs/maintainer-study-guide.md)
 - ✅ **REVIEWED** — [`docs/migration-guide.md`](docs/migration-guide.md)
-- ⬜ **PENDING** — [`docs/model-content-pipeline-support.md`](docs/model-content-pipeline-support.md)
+- ✅ **REVIEWED** — [`docs/model-content-pipeline-support.md`](docs/model-content-pipeline-support.md)
 - ✅ **REVIEWED** — [`docs/occlusionquery-support.md`](docs/occlusionquery-support.md)
 - ✅ **REVIEWED** — [`docs/opengl33-renderer.md`](docs/opengl33-renderer.md)
 - ✅ **REVIEWED** — [`docs/physical-modules.md`](docs/physical-modules.md)
