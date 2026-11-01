@@ -1,7 +1,7 @@
 # Stav dokumentace v `docs/`
 
-Inventura: 2026-11-01. Rozsah: všech 178 aktuálně verzovaných souborů `docs/**/*.md`.
-Souhrn: 50 zpracovaných, 22 podpůrně aktualizovaných čekajících na vlastní audit a 106 dosud
+Inventura: 2026-11-01. Rozsah: všech 177 aktuálně verzovaných souborů `docs/**/*.md`.
+Souhrn: 50 zpracovaných, 22 podpůrně aktualizovaných čekajících na vlastní audit a 105 dosud
 samostatně nezpracovaných.
 
 Tento soubor sleduje současný dokumentační úklid. Stav neříká, že čekající dokument je nutně
@@ -45,8 +45,8 @@ Další vícenásobné změny nebyly stejnou prací dvakrát:
 
 Odstraněné historické soubory (`graphics-ext-scope-reduction.md`,
 `xna_culling_compatibility_audit.md`, `xna_depth_occlusion_compatibility_audit.md`,
-`graphicsdevice-fna-audit.md`, `graphicsresource-fna-audit.md` a `fx-bytecode-support-plan.md`) už
-nejsou součástí aktuálního inventáře.
+`graphicsdevice-fna-audit.md`, `graphicsresource-fna-audit.md`, `fx-bytecode-support-plan.md` a
+`webgpu-design-notes.md`) už nejsou součástí aktuálního inventáře.
 
 ## `docs/`
 
@@ -171,7 +171,6 @@ nejsou součástí aktuálního inventáře.
 - ✅ **ZPRACOVÁNO** — [`docs/viewport-displaymode-adapter-support.md`](docs/viewport-displaymode-adapter-support.md)
 - ✅ **ZPRACOVÁNO** — [`docs/web-emscripten-graphics-limitations.md`](docs/web-emscripten-graphics-limitations.md)
 - ✅ **ZPRACOVÁNO** — [`docs/webgl2-renderer.md`](docs/webgl2-renderer.md)
-- ⬜ **ČEKÁ** — [`docs/webgpu-design-notes.md`](docs/webgpu-design-notes.md)
 - ✅ **ZPRACOVÁNO** — [`docs/webgpu-renderer.md`](docs/webgpu-renderer.md)
 - ⬜ **ČEKÁ** — [`docs/windows-visual-studio.md`](docs/windows-visual-studio.md)
 - ⬜ **ČEKÁ** — [`docs/xma-encoder-backend.md`](docs/xma-encoder-backend.md)

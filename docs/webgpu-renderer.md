@@ -177,8 +177,7 @@ targets. Line and point primitives are unchanged because they have no polygon in
 An edge shared by two triangles is emitted twice. Depth bias is dropped for the expanded line draw
 because WebGPU forbids polygon depth bias on line topology. `SpriteBatch::Begin` still follows XNA:
 a null rasterizer argument selects its default solid state, so pass a wireframe state to `Begin`
-when sprite outlines are wanted. More rationale is in
-[`webgpu-design-notes.md`](webgpu-design-notes.md).
+when sprite outlines are wanted.
 
 ## Textures, formats and render targets
 
@@ -377,7 +376,8 @@ here; CTest registration and the shared corpus files are the moving inventory.
   portable push constants.
 - Immutable pipelines and bind groups are cached by every state that affects them. Transient
   vertex/uniform buffers use bounded pools; SpriteBatch uses retained buffers rather than creating
-  one native object per draw.
+  one native object per draw. Pool reuse needs no explicit fence because writes and prior draws use
+  the same FIFO device queue, while WebGPU keeps submitted resources alive through their use.
 - The ordered replay stream is the single authority for draw, clear, query and target-transition
   ordering. A later state mutation cannot retroactively change an earlier command.
 - WebGPU's `VertexElementFormat::Color` maps to normalized RGBA bytes, not a nonexistent BGRA
@@ -385,7 +385,5 @@ here; CTest registration and the shared corpus files are the moving inventory.
 - Fullscreen, input and window policy remain in the shared platform layer; the renderer consumes a
   surface and a presentation rectangle.
 
-The rationale for the durable API choices is in
-[`webgpu-design-notes.md`](webgpu-design-notes.md). Historical implementation checkpoints belong to
-Git history; current behavior belongs here, in the focused subsystem pages and in the executable
-tests.
+Historical implementation checkpoints belong to Git history; current behavior and the rationale
+for durable choices belong here, in the focused subsystem pages and in the executable tests.

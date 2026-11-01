@@ -35,8 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- WebGPU design-notes retirement (2026-11-01): the 68-line `docs/webgpu-design-notes.md` duplicate
+  is deleted after its five topics were checked against the implementation and the reconciled
+  renderer contract. It incorrectly left the implemented transient-buffer pool as future work,
+  attributed WebGPU's edge-expansion wireframe to EasyGL, and called callback pumping the only
+  native/browser difference. Wireframe, callback/Asyncify behavior, vertex-color mapping and
+  platform ownership already live in `docs/webgpu-renderer.md`; the only useful extra rationale,
+  why FIFO queue ordering makes transient-buffer reuse safe without an explicit fence, was folded
+  into that page. Both incoming links were removed and the documentation inventory now covers the
+  remaining 177 tracked pages.
 - WebGPU renderer-document reconciliation (2026-11-01): the 1,662-line `WEBGPU-1`..`209` campaign
-  diary is replaced by a 391-line current native/browser contract with the required precise parity
+  diary is replaced by a 389-line current native/browser contract with the required precise parity
   statement and an explicit limitations section. It removes contradictory historical claims about
   opaque-white classic null textures, unimplemented render-target mips and semantic layouts,
   Texture2D-only block compression and an all-clear limitations list. The page now delegates moving
