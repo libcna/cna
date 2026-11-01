@@ -35,6 +35,21 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Installed C API consumer contract reconciliation (2026-11-01):
+  `docs/c-api/CONSUMING.md` now matches the package actually emitted by `CNACApi`. The installed
+  consumer gate is scoped to native ELF and Mach-O trees rather than every build; Windows has
+  header-only evidence here and Emscripten uses its separate Wasm artifact. The guide no longer
+  calls the callback the only legal graphics-device loan window, assumes every package carries a
+  static archive, calls the renderer-independent example headless, or repeats a stale full-install
+  size. Its non-CMake ELF command now supplies an executable RUNPATH: the former `-L`-only command
+  linked but could not find `libcna_c_api.so` at startup. Vendored SDL and wgpu-native are separated
+  from system-selected FFmpeg, curl, Opus, zstd and shaderc dependencies, and the static target's
+  resolved/partly absolute external closure is explicitly qualified to a producer-compatible
+  machine. The documented export-map paths now point to `modules/c-api/cmake/`. The standalone
+  example requests the `CApi` package component explicitly, and the installed-consumer script no
+  longer embeds an obsolete 113 MB measurement. A fresh SDLGPU static archive exposes all 3,213 C
+  routes, the package installs, and shared plus static `hello_cna` both build and run through the
+  private consumer test; export, ABI-baseline and prose-count gates pass with them.
 - C API ABI/versioning contract reconciliation (2026-11-01):
   `docs/c-api/ABI_VERSIONING.md` now separates its historical release ledger from the current
   contract, records the current 98 generated `CNA_Bool` routes, and describes the actual `0.x`

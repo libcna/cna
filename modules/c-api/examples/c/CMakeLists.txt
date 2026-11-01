@@ -21,7 +21,7 @@ project(cna_c_examples LANGUAGES C)
 # installed CNAConfigVersion.cmake accepts any same-major version at or above the requested one.
 # The number below stays at the version this example was written against on purpose -- raising it
 # with every additive minor would turn a compatibility test into a restatement of today's value.
-find_package(CNA 0.1 CONFIG REQUIRED)
+find_package(CNA 0.1 CONFIG REQUIRED COMPONENTS CApi)
 
 add_executable(hello_cna hello_cna.c)
 

@@ -36,8 +36,8 @@ function(cna_run_step description)
     set(cna_last_output "${_out}" PARENT_SCOPE)
 endfunction()
 
-# Only the C API component: the full install is 113 MB of SDL and GoogleTest headers a C consumer
-# has no use for, and staging it would misrepresent what the package is.
+# Only the C API component: a full install also carries unrelated C++ SDK, tool and dependency
+# material a C-only consumer does not need, and staging it would misrepresent what the package is.
 cna_run_step("Installing the CNACApi component"
     ${CMAKE_COMMAND} --install "${CNA_BUILD_DIR}" --component CNACApi --prefix "${_stage}")
 

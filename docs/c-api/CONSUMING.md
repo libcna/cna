@@ -4,7 +4,10 @@ Everything else under `docs/c-api/` describes what the ABI *is*. This describes 
 is not part of this repository gets hold of it, and it is written against a mechanism that is
 tested rather than one that sounds right: `CApi_InstalledConsumer` installs the package, configures
 `modules/c-api/examples/c` as a standalone project that knows nothing but a prefix path, builds it
-and runs it, on every build of this repository.
+and runs it in applicable native ELF and Mach-O test trees. It exercises the shared target and,
+when that tree built it, the static target. Windows currently has header-compilation evidence but
+no equivalent installed-package execution gate; Emscripten produces the separately documented
+WebAssembly artifact rather than this CMake package.
 
 ## The example
 
@@ -13,7 +16,7 @@ call, it does the eight things a first CNA program has to do:
 
 1. check the ABI version before anything else;
 2. create a game with C callbacks;
-3. borrow the graphics device, which is legal only inside a callback;
+3. borrow the graphics device inside a callback, one of the scopes in which that loan is legal;
 4. ask the renderer what it can do instead of assuming;
 5. use the count-then-copy idiom every string in this ABI uses;
 6. read the diagnostic after a deliberate failure — twice, because an argument error and a handle
@@ -27,16 +30,21 @@ It is built at **C99**, the floor the public headers are held to, with `-Wall -W
 ## Building against an installed CNA
 
 ```sh
+cmake --build <cna-build-dir> --parallel 8
 cmake --install <cna-build-dir> --component CNACApi --prefix /opt/cna
 ```
 
-The `CNACApi` component contains the C ABI library, its runtime dependencies, the public C headers,
-and the CMake package (plus the optional static archive). With `CNA_SHARED_LIBRARY=ON` it also
-ships `libcna.so`, shared with C++ consumers; do not deploy the C adapter without that runtime.
-Keep the adapter and runtime from the same build; the C ABI version is not a promise of binary
-compatibility between arbitrary C++ runtime builds.
-Installing without `--component` installs the whole project — 113 MB of SDL and
-GoogleTest headers a C consumer has no use for.
+`cmake --install` does not build missing artifacts, so build the tree first. The `CNACApi` component
+contains the native C ABI library, public C headers, CMake package and CNA-built runtime libraries,
+plus the static archive when that tree supports and enables it. External system dependencies remain
+external, as described below. With `CNA_SHARED_LIBRARY=ON` it also ships `libcna.so`, shared with
+C++ consumers; do not deploy the C adapter without that runtime. Keep the adapter and runtime from
+the same build: the C ABI version is not a promise of binary compatibility between arbitrary C++
+runtime builds. Installing without `--component` also installs unrelated C++ SDK, tool and
+dependency material that a C-only consumer does not need.
+
+This section describes native packages. For Emscripten use
+[`WASM_ARTIFACT.md`](WASM_ARTIFACT.md); that build intentionally installs no `CNAConfig.cmake`.
 
 Then, in a project that has never heard of this repository:
 
@@ -44,7 +52,7 @@ Then, in a project that has never heard of this repository:
 cmake_minimum_required(VERSION 3.20)
 project(my_game LANGUAGES C)
 
-find_package(CNA 0.1 CONFIG REQUIRED)
+find_package(CNA 0.1 CONFIG REQUIRED COMPONENTS CApi)
 
 add_executable(my_game main.c)
 target_link_libraries(my_game PRIVATE CNA::CApi)
@@ -78,12 +86,22 @@ The library is a plain shared object with C linkage and no C++ in its interface,
 system can consume it:
 
 ```sh
-cc -std=c99 -I/opt/cna/include main.c -L/opt/cna/lib -lcna_c_api -o my_game
+cc -std=c99 -I/opt/cna/include main.c -L/opt/cna/lib \
+  -Wl,-rpath,/opt/cna/lib -lcna_c_api -o my_game
 ```
+
+That example is the ELF spelling. `-L` is only a link-time search path; without the executable
+RUNPATH (or a system loader configuration) the program will build but `libcna_c_api.so` will not be
+found when it starts. The CMake target supplies the corresponding runtime search path automatically.
+Other build systems must reproduce both the platform's link and loader settings. For the static
+archive, prefer consuming the generated CMake target: its configuration-specific external link
+closure is deliberately more than a single `-l` flag.
 
 ## Shared and static
 
-The package ships **both**, and they export the same names.
+Every native package ships `CNA::CApi`. A Unix tree also ships `CNA::CApiStatic` when Python is
+available and `CNA_C_API_BUILD_STATIC=ON` (the default); current Windows packages do not generate
+that archive. The two targets expose the same callable C ABI.
 
 ```cmake
 target_link_libraries(my_game PRIVATE CNA::CApi)        # the shared library
@@ -91,15 +109,17 @@ target_link_libraries(my_game PRIVATE CNA::CApiStatic)  # the static C adapter a
 ```
 
 `CNA::CApiStatic` defines `CNA_C_API_STATIC` for you, which is what makes the export macro expand
-to nothing; nothing else about your source changes. The same `hello_cna.c` is built both ways from
-the installed package and run, on every build of this repository, so the two halves cannot drift.
+to nothing; nothing else about your source changes. `CApi_InstalledConsumer` builds and runs the
+same `hello_cna.c` both ways whenever the archive is present, and reports the static half as skipped
+when the tree deliberately disabled it.
 
 The shared library keeps its symbol set honest with a version script
-(`cmake/CnaCApiExports.map`) and `--exclude-libs,ALL` on ELF, and with ld64's exported-symbols list
-(`cmake/CnaCApiExports.darwin.txt`) on macOS: `cna_*` and nothing else, 3,213 names pinned by
-`tools/c-api/abi_baseline.json`. `CApi_Exports` checks the built library on both. The archive has no such mechanism available to it, which is why
-a static CNA was refused for a long time — `ar`-ing the C API together with every CNA module and
-Sharp Runtime would publish tens of thousands of C++ symbols into your program.
+(`modules/c-api/cmake/CnaCApiExports.map`) and `--exclude-libs,ALL` on ELF, and with ld64's
+exported-symbols list (`modules/c-api/cmake/CnaCApiExports.darwin.txt`) on macOS: `cna_*` and
+nothing else, 3,213 names pinned by `tools/c-api/abi_baseline.json`. `CApi_Exports` checks the built
+library with the matching platform tool. The archive has no such linker mechanism available to it,
+which is why a static CNA was refused for a long time — `ar`-ing the C API together with every CNA
+module and Sharp Runtime would publish tens of thousands of C++ symbols into your program.
 
 So the archive is not simply `ar`'d together. The whole closure is partially linked into **one
 relocatable object**, every symbol that is not part of the ABI is localized, and the build **fails**
@@ -108,12 +128,16 @@ statics in inline and template code), which cannot be localized because their un
 makes them correct. Those are mangled C++ names no C program can collide with, and the build fails
 if a symbol of any other binding appears, so the exception cannot widen quietly.
 
-A static consumer links the archive plus SDL3 and, in a build with the `WEBGPU` renderer,
-wgpu-native (both shipped in the package), and the usual `stdc++ m pthread dl`; when
-`CNA_ENABLE_VIDEO=AUTO/ON` selected the optional backend, it also links FFmpeg from the system.
-The `CNA::CApiStatic` target carries the resolved set for you. On macOS the
-same archive is made with ld64's partial link (`ld -r -all_load`) and `nmedit -s`, and its interface
-is `c++` plus the frameworks and dylibs the closure links -- see [macOS](#macos).
+A static consumer links the archive plus the exact external closure of the producing build. That
+normally includes the C++ runtime and platform libraries, the packaged SDL libraries and, for a
+`WEBGPU` build, packaged wgpu-native. Configuration-selected system libraries can include FFmpeg,
+libcurl, Opus, zstd and, on Linux SDLGPU builds with custom `ShaderEffect` support, shaderc.
+`CNA::CApiStatic` carries the resolved set from the producing link line. Some system entries are
+recorded as absolute paths, so the installed static package is qualified on a machine compatible
+with the one that produced it; it is not a claim that those external libraries were bundled or that
+the archive is freely portable between distributions. On macOS the same archive is made with
+ld64's partial link (`ld -r -all_load`) and `nmedit -s`, and its interface is `c++` plus the
+frameworks and dylibs the closure links -- see [macOS](#macos).
 
 The static C archive always embeds the runtime, including when built alongside shared CNA.
 It does not depend on `libcna.so`. Do not combine that encapsulated static runtime with a separate
@@ -121,23 +145,26 @@ C++ CNA runtime and expect shared state; use `CNA::CApi` with `CNA_SHARED_LIBRAR
 C/C++ process. Both link orders are protected by `CApi_SharedRuntimeCFirst` and
 `CApi_SharedRuntimeCppFirst`.
 
-Building the archive can be turned off per build tree with `-DCNA_C_API_BUILD_STATIC=OFF`: it is a
-few hundred megabytes in a debug build and is rewritten whenever the library relinks. Where it is
-off, the consumer test says so by name rather than testing half a package in silence.
+Building the archive can be turned off per build tree with `-DCNA_C_API_BUILD_STATIC=OFF`: a debug
+archive is large and is rewritten whenever the library relinks. Where it is off, the consumer test
+says so by name rather than testing half a package in silence.
 
 ## Native dependencies
 
-The C API's dependency closure carries `DT_NEEDED` entries for SDL3 and SDL3_mixer. It additionally
-carries FFmpeg entries only when `CNA_ENABLE_VIDEO=AUTO/ON` selected `cna_video_ffmpeg`; an `OFF`
-build has no FFmpeg dependency.
+The dynamic dependency closure is configuration-dependent. In a shared-runtime build,
+`libcna_c_api.so` depends on `libcna.so`; the latter carries renderer, platform, audio, content and
+other selected system dependencies. A static-runtime adapter carries those edges itself. Inspect
+the produced library (`readelf -d`, `otool -L` or the platform equivalent) rather than assuming a
+fixed list from the renderer name alone.
 
-**The SDL3 libraries ship with the package.** This project builds them, so the `CNACApi` component
-installs them into the same directory as `libcna_c_api.so`, whose `INSTALL_RPATH` is `$ORIGIN`. The
-result is that an installed CNA needs **no environment variable of any kind**: it links without
-`-rpath-link` and runs without `LD_LIBRARY_PATH`. `CApi_InstalledConsumer` passes neither, which is
-how that claim stays true — a regression fails a test instead of surprising a consumer.
-In a shared-runtime build, `libcna.so` has its own `$ORIGIN` install path too: ELF RUNPATH does
-not propagate from the C adapter to its dependencies.
+**CNA-built SDL3 and SDL3_mixer ship with the package.** When CNA uses its vendored SDL build, the
+`CNACApi` component installs those libraries beside `libcna_c_api.so` and `libcna.so`. A tree
+configured with `CNA_USE_SYSTEM_SDL=ON` instead leaves SDL as a system dependency. The installed CNA
+libraries use `$ORIGIN` on ELF; the imported `CNA::CApi` target also gives the executable a path to
+the package library directory. Consequently the tested CMake consumer needs neither `-rpath-link`
+nor `LD_LIBRARY_PATH` for the package-owned libraries. `CApi_InstalledConsumer` passes neither.
+Both CNA shared libraries need their own `$ORIGIN` entry because ELF RUNPATH does not propagate
+from one dependency to the next.
 
 **wgpu-native ships too, when the `WEBGPU` renderer is compiled in.** CNA's build chooses that
 binary itself — the pinned, checksum-verified wgpu-native release it fetches, or the one
@@ -147,6 +174,13 @@ installs `libwgpu_native.so` beside `libcna_c_api.so` (`wgpu_native.dll` beside 
 Windows), and `CNA::CApiStatic` links that installed copy. The official release has no SONAME, so
 the runtime's `DT_NEEDED` entry is the file name `libwgpu_native.so`: keep that name when you
 deploy it.
+
+**Other selected libraries remain system dependencies.** Depending on the producing configuration,
+these can include the toolchain C++ runtime and platform libraries, libcurl, Opus, zstd, FFmpeg and
+shaderc. The package does not claim to bundle them merely because its CMake target supplies the
+link information. The dynamic package resolves their sonames through the system loader; the static
+target records the producing build's resolved link closure. Install the same enabled features on
+the deployment machine, or turn optional features off when configuring CNA.
 
 **When enabled, FFmpeg does not ship in the package.** `libavcodec`, `libavformat`, `libavutil` and
 `libswresample` come from the distribution, and copying a distribution's binaries into this package
@@ -161,21 +195,24 @@ Configure `-DCNA_ENABLE_VIDEO=OFF` to omit that dependency while keeping the ent
 available. File-backed creation and playback then return `CNA_RESULT_NOT_SUPPORTED`, while declared
 metadata remains usable. `AUTO` is the default; see [../video-backend.md](../video-backend.md).
 
-The example runs headless. Set `SDL_VIDEODRIVER=dummy` where there is no display, exactly as this
-repository's own tests do.
+The example creates a game and graphics device, so it is not renderer-independently headless.
+`SDL_VIDEODRIVER=dummy` is suitable for `HEADLESS`, `SOFTWARE` and `STUB`; windowed or GPU
+renderers need a compatible display. CNA's test suite runs such consumers through the private
+Weston/Xwayland runner rather than the owner's desktop.
 
 ## macOS
 
 Everything above holds on macOS (Apple silicon, macOS 13.3 or newer); each mechanism has its
-Mach-O spelling. `CApi_InstalledConsumer` installs, builds and runs the package there too, shared
-and static, so these statements are tested rather than described.
+Mach-O spelling. `CApi_InstalledConsumer` is registered there and installs, builds and runs the
+shared package plus the static target when enabled. This is local native-platform evidence; the
+repository currently has no macOS C API CI job.
 
 - **The library** is `libcna_c_api.dylib`. Its install name is `@rpath/libcna_c_api.dylib`, and its
   Mach-O compatibility and current versions are the ABI's `MAJOR.MINOR.0` and
   `MAJOR.MINOR.PATCH`, so dyld refuses an older minor than the one a program was linked against.
   It exports `_cna_*` and nothing else, through ld64's exported-symbols list
-  (`cmake/CnaCApiExports.darwin.txt`); `CApi_Exports` reads that back with `nm -gU`.
-- **SDL3 ships beside it**, and the library's `LC_RPATH` is `@loader_path` -- `$ORIGIN`'s meaning
+  (`modules/c-api/cmake/CnaCApiExports.darwin.txt`); `CApi_Exports` reads that back with `nm -gU`.
+- **Vendored SDL3 ships beside it**, and the library's `LC_RPATH` is `@loader_path` -- `$ORIGIN`'s meaning
   for dyld. `find_package(CNA)` gives your program an rpath to the package's `lib` directory, so
   nothing needs a `DYLD_*` variable; the consumer test reads the installed dylib's load commands to
   keep it that way.
