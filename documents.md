@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 125 reviewed, 12 updated incidentally and awaiting their own audit, and 40 not yet
+Summary: 127 reviewed, 12 updated incidentally and awaiting their own audit, and 38 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -140,8 +140,8 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/physical-modules.md`](docs/physical-modules.md)
 - ✅ **REVIEWED** — [`docs/platform-abstraction.md`](docs/platform-abstraction.md)
 - ✅ **REVIEWED** — [`docs/platform-entrypoint-audit.md`](docs/platform-entrypoint-audit.md)
-- ⬜ **PENDING** — [`docs/platform-input-notes.md`](docs/platform-input-notes.md)
-- ⬜ **PENDING** — [`docs/platform-input-seam-mapping.md`](docs/platform-input-seam-mapping.md)
+- ✅ **REVIEWED** — [`docs/platform-input-notes.md`](docs/platform-input-notes.md)
+- ✅ **REVIEWED** — [`docs/platform-input-seam-mapping.md`](docs/platform-input-seam-mapping.md)
 - ⬜ **PENDING** — [`docs/platform-performance.md`](docs/platform-performance.md)
 - ✅ **REVIEWED** — [`docs/platform-renderer-boundary.md`](docs/platform-renderer-boundary.md)
 - ✅ **REVIEWED** — [`docs/platform-renderer-sdl-audit.md`](docs/platform-renderer-sdl-audit.md)

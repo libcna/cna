@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Platform-input documentation reconciliation (2026-11-01, PLAT-77): the seam map now records
+  all eight removed duplicate adapters, current global-pointer/enumeration/rich-haptic contracts,
+  platform-neutral legacy names and the single owning event path. Platform notes correct lazy
+  controller startup, touch enumeration/fallback, cursor-description ownership, browser branches,
+  SDL3 mapping API spelling and GUID formatting. Wayland global-read success is distinguished
+  from useful desktop coordinates; native OS/device claims are bounded by evidence. Focused
+  targets build; all 84 selected input bridge/gamepad tests and the native translation/warp filter
+  pass on private displays. MDN browser references and pinned SDL headers are checked (SDL wiki
+  retrieval timed out). No new physical-device or non-Linux qualification, implementation or ABI
+  changes.
 - Entrypoint/lifecycle documentation reconciliation (2026-11-01, PLAT-54/PLAT-29): obsolete
   entrypoint findings are replaced by the current platform header, Android/iOS public SDL edge,
   MSVC GUI mainCRTStartup helper and optional SDL3main target behavior. SDL lifecycle now records

@@ -1,244 +1,113 @@
-# Platform-specific input notes
+# Platform-specific input behavior
 
-> **Related input docs (INP-0003):** [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+This page describes current CNA paths and their evidence limits, reconciled on 2026-11-01.
+SDL3 is the default graphical provider; HEADLESS and TERMINAL implement different capability
+subsets. A source branch or canned test does not qualify every OS, compositor or physical device.
 
-CNA's input runs on SDL3, so most platform differences are SDL's, surfaced through the XNA-style
-API. This page collects the ones that affect observable input behavior. Items marked **verified**
-were confirmed directly during the input work (see the cited task); the rest are documented SDL3 /
-OS platform behavior that CNA inherits.
+See [input architecture](input-backend.md), [FNA decisions](input-fna-fidelity.md),
+[member parity](input-member-parity-matrix.md), [build/test](input-build-and-test.md) and
+[manual results](input-manual-verification-results.md).
 
-See also [`docs/input-backend.md`](input-backend.md) (architecture) and
-[`docs/demo-input-checklist.md`](demo-input-checklist.md) (manual verification).
+## Desktop pointer behavior
 
----
+Sdl3Mouse deliberately distinguishes native video drivers:
 
-## Linux / X11
+| Driver/target | Current CNA behavior and evidence boundary |
+|---|---|
+| x11, windows, cocoa | Snapshot position/buttons use global desktop state converted to window coordinates. CNA suppresses SDL warp-to-relative emulation unless the host already set that hint. Historical X11/XWayland landing checks do not qualify native Windows/macOS behavior. |
+| wayland | Uses window-relative input and a virtual warp anchor. SetPosition can produce the requested XNA coordinate without moving the visible OS cursor. Historical Task 783 observed global readback as zero on its compositor; this is not a universal numeric result for all future drivers. |
+| Emscripten | Also enables the virtual warp anchor; browser pointer-lock and canvas policy still control native capture/motion. |
+| Other drivers | Use the service's ordinary window-relative path; no blanket global-pointer or warp guarantee follows. |
 
-- **Mouse warp & global position work.** `Mouse::SetPosition` (`SDL_WarpMouseInWindow`) is
-  pixel-exact, and `SDL_GetGlobalMouseState` returns real coordinates. **Verified** in task 783
-  (under `SDL_VIDEODRIVER=x11`, incl. XWayland: `SetPosition(x,y)` warps to exactly
-  `windowPos + (x,y)`, and relative mode genuinely no-ops the warp).
-- Keyboard, text input/IME, gamepad hotplug/rumble, and touch (on touch-capable X inputs) all
-  behave as the SDL3 backend provides.
+SetPosition maps renderer logical game coordinates through the registered window transform,
+including scale and letterbox offsets, into platform logical client units. It is a no-op in
+relative mode. Entering relative mode clears the virtual anchor and old relative displacement.
+Mouse.GetState in relative mode consumes accumulated displacement; absolute state reads do not.
 
-## Wayland
+The SDL3 global-position wrapper currently returns success whenever video is initialized; it
+does not detect whether the compositor supplied a useful global position. Do not interpret a
+successful TryGetGlobalPosition as proof of desktop-coordinate availability on Wayland.
+Capture/global-warp status also depends on the native operation.
 
-- **Global cursor position is restricted.** `SDL_GetGlobalMouseState` silently returns `(0, 0)`
-  regardless of real cursor movement — Wayland's compositor security model forbids querying the
-  global pointer position outside your own surface. **Verified** in task 783 (this environment's
-  ambient session; forcing `SDL_VIDEODRIVER=x11`/XWayland restores real values). This is a Wayland
-  platform restriction, **not** a CNA bug. CNA's `Mouse::GetState()` reports *window-local* logical
-  coordinates from motion events, which are unaffected.
-- **The operating-system cursor still cannot be warped reliably.** Wayland only lets an
-  application move the pointer under compositor-defined conditions, so the SDL request may be
-  rejected, clamped or emulated. CNA preserves XNA's window-local `Mouse::SetPosition` contract
-  with a virtual anchor: an idle pointer reads back at the requested position, and later physical
-  movement is translated relative to it. This supports authentic XNA recenter-every-frame input
-  loops without pretending that the compositor moved the visible cursor. **Relative mouse mode**
-  (`IsRelativeMouseModeEXT`, backed by `SDL_SetWindowRelativeMouseMode` → Wayland pointer lock)
-  remains the appropriate explicit pointer-lock path and clears the virtual anchor.
+MouseCursor stock objects are lazy platform-neutral descriptions, not persistent SDL handles.
+The selected IPlatformMouse creates and retains the active native cursor when applied. Creating a description
+before video startup is valid; applying it still depends on service/video/cursor support.
+There is no owner-independent native cursor to carry across a platform switch.
 
-## Windows
+## Keyboard layouts and text
 
-- **XInput controllers report no USB vendor/product**, so `GamePad::GetGUIDEXT` returns the literal
-  `"xinput"` (vs. an 8-hex `vendor+product` string on Linux, where the real IDs are exposed).
-  **Verified** by the GUID-format fix/tests in task 816, which mirror FNA's own `xinput`/hex/Valve
-  logic.
-- Mouse warp, global position, scroll wheel, text input/IME (including the Windows IME composition
-  window), and gamepad rumble/trigger-rumble/light-bar are all provided by the SDL3 Windows backend.
+FNA_KEYBOARD_USE_SCANCODES=1 selects physical-position bindings; the environment choice is cached,
+with explicit internal test overrides. Default keycode mode follows layout-produced symbols.
+Native SDL values are translated to CNA KeyCode/Scancode at the edge, then to XNA Keys.
 
-## macOS
+XNA Keys cannot represent arbitrary composed Unicode. CNA drops unmapped keycodes rather than
+adding Keys::None (DEC-16); selected Nordic/OEM fallbacks remain in the mapping table.
+GetKeyFromScancodeEXT and key/scancode name helpers use the selected keyboard service. There
+are XNA values with no physical scancode; do not assume this conversion is bijective.
 
-- **Mouse warp & global position work** through the SDL3 Cocoa backend, like X11 — `Mouse::SetPosition`
-  (`SDL_WarpMouseInWindow`) and `SDL_GetGlobalMouseState` return real values, so warp-landing readback is
-  feasible (unlike Wayland). Relative mouse mode uses Cocoa's associated-cursor / warp suppression.
-- **System cursors** map to the OS theme glyphs; exact pixels are chosen by macOS (as on every platform).
-- Not headless-verifiable in CI here (the CI matrix is Linux); treat macOS specifics as manual-gated.
+Use TextInputEXT for committed Unicode/composition rather than reconstructing text from
+Keyboard.GetState. Software keyboard availability, visibility, IME presentation and physical
+keyboard attachment are provider/OS questions. Android/iOS can have attached keyboards/mice;
+neither platform should be described as inherently touch-only.
 
-## Android
+## Touch and mobile
 
-- **Touch is the primary input.** The touch device is only reported as connected *after the first
-  touch* — CNA sets `TouchPanel::TouchDeviceExists` on the first `SDL_EVENT_FINGER_DOWN`, matching
-  FNA's "Windows/Android only notices a touch screen once it's touched" comment (task 712). So
-  `TouchPanel::GetCapabilities().IsConnected` may be false until the user first touches the screen.
-- **Keyboard is the on-screen (software) keyboard.** `TextInputEXT::StartTextInput` /
-  `StopTextInput` show/hide it; `IsScreenKeyboardShown` reports its state. There is generally no
-  physical keyboard, so raw `Keyboard::GetState()` key coverage is limited to what the OS delivers.
-- A diagnostic keyboard-event log path exists behind `#ifdef __ANDROID__` in `SdlInputBridge`
-  (audited in task 822: it only logs via `SDL_Log`, and is compiled out entirely off-Android — no
-  behavior change on other platforms).
-- Mouse and gamepad support depend on attached hardware and the SDL3 Android backend.
+TouchPanel.GetCapabilities queries IPlatformInputDevices.HasDevice(Touch) on each call, then uses
+the sticky TouchDeviceExists flag and live event touches as fallbacks. It may report connected
+before first interaction if enumeration already knows the device; first touch is not a universal
+Android prerequisite. The compatibility maximum is four when connected, independent of the
+larger internal tracked-touch capacity.
 
-## iOS
+Touch events carry their client size for normalized-to-window conversion before the renderer
+transform. High-density/native canvas dimensions must not be confused with logical client units.
+Mobile focus/background reaction belongs to Game's lifecycle policy; it is not a second input
+event queue. See [renderer/event boundary](platform-renderer-boundary.md).
 
-- **Touch-only, no system cursor.** Like Android, touch is primary and there is no mouse cursor, so
-  `Mouse::SetPosition` / warp and global cursor position are not meaningful.
-- **On-screen keyboard** via `StartTextInput`/`StopTextInput`; `IsScreenKeyboardShown` reports it.
-- Gamepad support (MFi / Bluetooth controllers) depends on the SDL3 iOS backend.
+## Browser
 
----
+Input uses SDL3's Emscripten driver and the same PlatformEvent visitor, regardless of whether
+graphics selects WEBGL2, WEBGPU or a CPU path. CNA also has deliberate Emscripten branches such
+as virtual mouse warps; the old claim of no browser-specific input behavior was too broad.
 
-## Browser / Emscripten (WebAssembly)
+- Browsers can reserve keyboard shortcuts; a missing DOM key event cannot be reconstructed by CNA.
+- Pointer lock has user-engagement and browser escape rules. Relative mode requests can be
+  refused or revoked; see [MDN Pointer Lock](https://developer.mozilla.org/en-US/docs/Web/API/Pointer_Lock_API).
+- An already-connected gamepad can become visible only after button/axis interaction, depending
+  on browser policy/focus. This is not a universal requirement to press a button on every
+  connection; see [MDN Gamepad API](https://developer.mozilla.org/en-US/docs/Web/API/Gamepad_API/Using_the_Gamepad_API).
+- Controller rumble, LEDs, sensors, touchpads, IME and multitouch require their actual browser/
+  device capability. Contract presence and native desktop tests do not qualify them.
+- CNA's exception ABI/link policy is shared with the browser build; see
+  [browser platform limits](web-emscripten-graphics-limitations.md). Do not add conflicting local exception flags.
 
-CNA builds for Emscripten (EasyGL backend = WebGL 2 / OpenGL ES 3.0). Input flows through SDL3's
-Emscripten backend, which maps browser DOM events into the same `PlatformInputBridge::ProcessEvent`
-path used everywhere else, so no browser-specific input code exists in CNA. Browser-specific behavior:
+## Gamepads, joysticks, haptics and sensors
 
-- **Exceptions are enabled.** Several input paths throw (`TouchCollection`/`TouchPanel::SetFinger` →
-  `std::out_of_range`, `TouchPanel::ReadGesture` → `System::InvalidOperationException`). Emscripten disables
-  C++ exception catching by default (an uncaught throw aborts the whole runtime), so CNA compiles/links with
-  `-fexceptions -sNO_DISABLE_EXCEPTION_CATCHING=1` (`CMakeLists.txt`) — these input exceptions unwind
-  normally instead of aborting the page.
-- **Keyboard:** the browser reserves some key combos (Ctrl+W/T/N, some F-keys) that never reach the app;
-  keycode vs scancode behaves as elsewhere, but the physical layout depends on the browser/OS.
-- **Mouse:** relative mouse mode maps to the Pointer Lock API, which **requires a user gesture** to engage
-  (a click) and can be exited by the browser (Esc); `Mouse::SetPosition`/warp is limited by pointer-lock
-  rules. Wheel deltas still normalize to the XNA 120-unit notch.
-- **Touch:** browser touch events map to `FINGER_DOWN/MOTION/UP`; multi-touch works on touch-capable
-  devices. High-DPI touch scaling depends on the canvas CSS size vs backing store (device pixel ratio).
-- **GamePad:** via the browser Gamepad API — controllers are **not visible until the user presses a button**
-  on them (a browser privacy gate), so `GAMEPAD_ADDED` may arrive late; rumble/LED/sensor support depends on
-  the browser and is typically absent.
-- **Text/IME:** SDL routes composition through a hidden DOM input; `StartTextInput`/`StopTextInput` toggle it.
+SDL3 supplies native controller mappings; CNA does not maintain a duplicate device database.
+Use SDL3's SDL_AddGamepadMappingsFromFile or SDL_GAMECONTROLLERCONFIG at the SDL integration
+edge when needed, not the removed SDL2 GameController spelling. Sdl3GamepadControls translates
+the resulting standard controls; unmapped hardware may still be usable through raw joysticks.
 
----
+GetGUIDEXT emits xinput when vendor and product are both zero, otherwise a little-endian
+vendor/product hex string, with Valve model overrides for Xbox/PS4/PS5. This formatting rule is
+not restricted to Windows and does not prove that zero IDs uniquely identify an XInput device.
+Canned GUID tests qualify formatting, not Steam Input routing or native actuation.
 
-## Cross-cutting
+Mapped gamepads and raw joysticks publish independent snapshots. Startup is lazy on first
+controller query; subsequent Game pumps update both once the shared subsystem is initialized.
+Repeated raw reads preserve that publication's trackball deltas, unlike consuming relative mouse
+reads. DeviceId, not enumeration position, is the haptic/joystick correlation identity.
 
-- **`SetPosition` on a scaled window** (all platforms): `Mouse::SetPosition` converts the caller's
-  logical coordinates to window space before `SDL_WarpMouseInWindow` (INPUT-MOUSE-002 (decision a-0001)),
-  through the selected renderer's own transform, for example:
-  - **EasyGL** — `IGraphicsRenderer::TransformLogicalToWindow`, which is **offset-aware**: it
-    maps through `EasyGLSurfaceState::GetDefaultViewportRect()`, the same rectangle the GL
-    viewport is set from, so a centred letterbox subtracts its bars before scaling. That is what
-    the default `Letterbox` presentation needs, and it is also correct under
-    `FixedHeightDynamicWidth`, where the rectangle is the whole drawable and the offsets are zero.
-    (This bullet used to say EasyGL had no offset and did not need one; that stopped being true
-    when the renderer gained its own `GetDefaultViewportRect()` override.)
+Both simple and rich haptics are platform-owned; a HapticDevice retains its client subsystem
+reference until disposal. SDL3's retained discovery reference keeps native IDs alive but does
+not retain every client effect. Host sensor polling opens/reads/closes per call, whereas
+platform SensorEvent streams and Microsoft::Devices sessions have separate contracts.
+See [seam mapping](platform-input-seam-mapping.md) and [SDL lifecycle](platform-sdl-lifecycle-audit.md).
 
-  The conversion is unit-tested; the OS-cursor *landing* pixel is verifiable only where global-mouse
-  readback works (X11, not Wayland — see the Wayland section).
-- **Keyboard layouts** (all platforms): `Keyboard::GetKeyFromScancodeEXT` translates a physical key
-  position to the character the *current* layout produces. Set `FNA_KEYBOARD_USE_SCANCODES=1`
-  (read once at startup) for layout-independent physical-position key bindings. 40 XNA `Keys`
-  (IME/browser/media/ChatPad/OEM) have no SDL scancode and cannot map — see the list in
-  `SdlInputBridge.cpp`'s `try_convert_keys_to_sdl_scancode` (task 819).
+## Qualification boundary
 
-### Non-US keyboard layouts (INPUT-KBD-014)
-
-CNA's key mapping mirrors FNA exactly (verified byte-for-byte: INPUT-KBD-009 keycodes, INPUT-KBD-010
-scancodes). How a non-US layout behaves depends on the mode:
-
-- **Keycode mode (default).** SDL delivers the keycode = the symbol the key produces on the *active*
-  layout, so the mapping is inherently layout-dependent. A key that produces an ASCII letter/digit/OEM
-  symbol maps to the matching XNA `Keys`. On a German QWERTZ board the physical `Z` position produces
-  `y`, so it reports `Keys::Y` (you get the letter on the keycap, not the US position).
-- **Scancode mode (`FNA_KEYBOARD_USE_SCANCODES=1`).** The physical position maps to the US-equivalent
-  XNA `Keys` regardless of layout, so bindings stay put across layouts.
-
-**Mapping gap — accented / non-ASCII keys have no XNA `Keys`.** XNA's `Keys` enum is US-centric, so any
-key whose keycode is a non-ASCII Unicode codepoint has no XNA value. In keycode mode CNA **drops** such a
-key (it never enters the pressed set — the DEC-16 policy; FNA maps it to `Keys.None` and adds it, which
-CNA deliberately avoids). Confirmed dropped: German `ä ö ü ß`, French `é è à ç`, Czech `ě š č`. This is
-a fundamental XNA limitation, not a CNA bug — games needing these must read `TextInputEXT` (which delivers
-the composed Unicode text), not `Keyboard`. Exceptions: a few Nordic keys whose *physical position* is a
-US OEM key still map to that OEM key (e.g. the codepoints for `æ`/`ø` resolve to `Keys::OemQuotes` /
-`Keys::OemSemicolon`), matching FNA. Tested by `NonUsLayoutAccentedKeysAreUnmappedInKeycodeMode`.
-- **Horizontal scroll wheel is a CNAEXT/EXT extension** (all platforms): XNA 4.0 `MouseState` exposes
-  only the vertical `ScrollWheelValue`, so `event.wheel.x` has no strict-XNA property to route to.
-  N-005 (2026-07-17/P1-018) added `MouseState::getHorizontalScrollWheelValueEXTProperty()`: `wheel.x`
-  is scaled to the same 120-unit notch and surfaced there, deliberately excluded from
-  `Equals`/`GetHashCode`/`ToString`/`==`/`!=` so those stay byte-identical to FNA. See DEC-18 in
-  `docs/input-fna-fidelity.md`'s Mouse section.
-- **Input is main-thread only** (all platforms): SDL requires event pumping on the video/window
-  thread; see [`docs/input-backend.md`](input-backend.md) §6.
-- **Cursor creation needs `SDL_INIT_VIDEO`** (INPUT-MOUSE-020, all platforms): stock cursors are lazy
-  function-local statics (Meyer's singleton) built on first access — deliberately *not* static-init time,
-  so `SDL_CreateSystemCursor` runs after `SDL_Init(SDL_INIT_VIDEO)`. Without a video subsystem SDL returns
-  a null cursor handle; CNA wraps it gracefully (the handle is null, `Mouse::SetCursor` becomes a no-op,
-  no crash), and the headless cursor tests `GTEST_SKIP` (INPUT-BUILD-008) rather than fail. Under the SDL
-  `dummy` video driver real cursors cannot be created either — CI runs them under Xvfb+x11.
-
-### Cursor & warp caveats — platform matrix (INPUT-MOUSE-022)
-
-| Platform | `SetPosition` warp | Global pos (`SDL_GetGlobalMouseState`) | Warp-landing readback | Relative mode |
-|----------|--------------------|----------------------------------------|-----------------------|---------------|
-| Linux / X11 (incl. XWayland) | ✅ works | ✅ real values | ✅ testable | ✅ warp no-op |
-| Linux / Wayland | ✅ virtual XNA coordinate; OS cursor remains compositor-controlled | ❌ returns `(0,0)` | ❌ not readable | ✅ pointer-lock |
-| Windows | ✅ works | ✅ real values | ✅ (manual) | ✅ |
-| macOS | ✅ works | ✅ real values | ✅ (manual) | ✅ |
-| Android / iOS | n/a (touch, no cursor) | n/a | n/a | n/a |
-
-Legend: ✅ works / ❌ unavailable / ⚠️ constrained. The X11 row is the only one machine-verified in CI
-(Xvfb+x11); Windows/macOS warp-landing and all real-hardware relative-capture are **manual-only**
-(INPUT-MOUSE-023 tracks the dated manual run). See the per-platform sections above for the details behind
-each cell.
-
-### Gamepad backend & mapping (INPUT-GAMEPAD-031/033/036/037)
-
-- **SDL is the mapping authority (INPUT-GAMEPAD-033).** CNA consumes SDL3's `SDL_Gamepad` abstraction, so
-  the physical device → standard-layout (A/B/X/Y, DPad, two sticks, two triggers, shoulders, start/back,
-  guide) normalization is done by SDL's bundled **`gamecontrollerdb`** mapping table plus SDL's built-in
-  entries. CNA does **not** ship or parse its own mapping DB; a device SDL cannot map is simply not
-  reported as a gamepad. `SDL_GameControllerAddMappingsFromFile`/env (`SDL_GAMECONTROLLERCONFIG`) can add
-  mappings at the SDL layer without any CNA change. `Sdl3GamepadControls` is the single CNA-owned
-  SDL-layout translation point. Its native axis/button mapping is pinned by
-  `Sdl3EventMapperTests.GamepadAxesMapToCnaVocabularyAndBridgeNumerics` and
-  `EverySupportedGamepadButtonMapsToCnaVocabulary`; `GamePadMappingTest.EveryButtonMapsToItsXnaFlag`
-  then pins the platform-to-XNA boundary through whole canned snapshots.
-- **Joystick type → `GamePadType` (INPUT-GAMEPAD-031).** When a device first occupies a stable player
-  slot, `Sdl3Gamepad` caches its `SDL_JoystickType` as `GamepadKind`; public `GamePad` maps that CNA-owned
-  enum to XNA's `GamePadType`. `GamepadDeviceMetadataUsesOnlyContractEnums` pins the SDL edge and
-  `GamePadPlatformTest.CapabilitiesMapEveryCategoryWithoutNativeQueries` pins the public edge.
-- **Steam Input / virtual controllers (INPUT-GAMEPAD-036).** Valve controllers report the Steam vendor id
-  `0x28de`; matching FNA, CNA remaps the re-exposed controller to a fixed GUID (`xinput` for Xbox-emulated,
-  `4c05c405`/`4c05e60c` for PS4/PS5 — the public `GamePad` GUID path, mirroring
-  `SDL3_FNAPlatform.cs:2193-2210`).
-  Steam Input commonly presents a **virtual Xbox 360 controller**; the real device is then hidden behind
-  it, so CNA sees the virtual pad (this is expected, not a bug). Verified without native hardware by
-  `GamePadPlatformTest.GuidFormattingCoversXinputHexPaddingAndValveOverrides`.
-- **Per-platform specifics (INPUT-GAMEPAD-037)** are in the platform sections above: Linux/X11 hotplug+rumble,
-  Windows XInput `"xinput"` GUID + rumble/trigger-rumble/light-bar, Android/iOS depend on attached hardware /
-  the SDL backend. Real-hardware actuation across vendors (Xbox/PS/Switch/generic/BT) is manual-gated
-  (INPUT-GAMEPAD-035).
-
-### Raw joystick snapshots (PLAT-83)
-
-- **Raw and mapped views remain distinct.** A wheel/HOTAS can expose arbitrary device-ordered axes,
-  buttons, POV hats and trackballs through `IPlatformJoystick` even when SDL also maps the same
-  hardware into a four-slot `IPlatformGamepad`. Neither view derives its state from the other.
-- **One publish per frame.** `Game` acquires the shared gamepad/joystick subsystem before frame one,
-  drains native events, then calls `IPlatformJoystick::Update()` once. Public `Joysticks::GetStateEXT`
-  therefore cannot consume a trackball delta twice or observe axes from a different native instant
-  than buttons. Trackball deltas are zero when SDL reports no motion during that publication.
-- **Hotplug identity is platform-owned.** `JoystickInfo::id`, `DeviceEvent::device` and the haptic
-  joystick correlation use the same `DeviceId`. SDL3 maps its instance id at the native edge; no
-  public or platform header exposes `SDL_JoystickID` or `SDL_Joystick*`.
-
-### Standalone haptics (PLAT-84)
-
-- **Stable ids, not enumeration positions.** `IPlatformHaptics::GetHaptics()` returns ascending
-  `DeviceId` descriptors. Cached rumble handles are keyed by that id and retired when enumeration
-  no longer contains it, so removing device A cannot make A's cached handle masquerade as the new
-  device at index zero.
-- **The simple subset is platform-owned.** Standalone enumeration, rumble capability,
-  initialization, play and stop cross `IPlatformHaptics`. `HapticDevice` keeps the selected
-  platform's haptic-subsystem reference until `Dispose`, and the SDL3 platform closes its cached
-  handles before releasing the final subsystem reference.
-- **The rich effect model is platform-owned.** `IPlatformHapticDevice` creates/updates/runs
-  arbitrary constant, periodic, condition, ramp, left-right and custom effects from CNA-owned
-  descriptors. SDL3 converts them at its edge; the duplicate internal backend is gone and the
-  public `HapticDevice` contains no native handle.
-
-### Host motion sensors (PLAT-85)
-
-- **Static reads keep the old lifetime shape.** `CNA::Input::Sensors` acquires
-  `PlatformSubsystem::Sensor`, opens the selected `IPlatformSensors` kind, reads, closes it and
-  releases the subsystem on every call. It does not cache a service pointer or started flag across
-  calls; either would outlive the ambient platform that supplied it.
-- **Teardown order is explicit.** A started sensor closes before its subsystem reference is
-  released. SDL3 also deactivates any cached service handles before the platform's last sensor
-  reference reaches zero, so destruction cannot close a stale native pointer.
-- **Polling and events are separate contracts.** Public accelerometer/gyroscope helpers stay
-  on-demand. `SensorEvent` independently preserves an event stream's stable id, six values and
-  sensor-clock timestamp for general platform consumers; the input bridge intentionally ignores it.
+Native event pumping and mutable input/session operations follow the selected platform's thread
+rules; public snapshot APIs do not grant blanket cross-thread safety. Synthetic input tests,
+private X11/Wayland runs and manual physical-device runs are different evidence classes.
+Apple CI now exists, but its build/bundle smoke is not a complete macOS/iOS input qualification.
+Windows/macOS landing, physical relative capture, mobile keyboards and multi-vendor controller/
+sensor/haptic behavior require the dated manual evidence recorded by the input/device checklists.
