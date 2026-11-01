@@ -1,5 +1,8 @@
 # Removed renderers
 
+Status: reconciled with Git history, the configure-time and run-time retired-identity tables and
+the C ABI on **2026-11-01**.
+
 Renderer identities CNA no longer carries. CNA intentionally maintains a curated renderer set:
 a renderer is added only when it provides meaningful platform coverage, compatibility value,
 architectural value, or a capability not reasonably covered by the existing set, and one that
@@ -17,8 +20,8 @@ stencil in `TwoSidedStencilTests.cpp`, missing textures in `StockEffectNullTextu
 `tools/xna-oracle/scenes/null-texture/`, channel expansion in `tools/xna-oracle/`, test
 display isolation in `cmake/TestDisplayPolicy.cmake` and `tools/platform/`). What git does *not*
 preserve is the third-party project each renderer wrapped, so every entry records the exact
-dependency it was pinned to. That pairing — CNA's code in
-git history, the dependency's coordinates here — is the archive.
+dependency coordinate it used, or explicitly says when the checkout was never pinned. That
+pairing — CNA's code in git history, the dependency's coordinates here — is the archive.
 
 Standalone probes for retired renderers were also removed from the current `spikes/` tree. Their
 measured conclusions remain in the historical plans and entries below; Git history retains their
@@ -32,37 +35,49 @@ removal commit is a specification to port forward, not a patch to apply. Expect 
 remains" column and its validation runs describe the renderer set as it stood that day; several of
 the identities named there as covering a retired renderer (`DIRECTX11`, `DIRECTX12`, `VULKAN`,
 `METAL`, `SDL_RENDERER`, `GDI`, `CANVAS`, `OPENGLES2`, `WEBGL1`, `OPENGL4`, ...) were retired
-themselves later. The current set is the 10 identities in `cmake/RendererIdentities.cmake`
-(`docs/renderer-registry.md`), and the most recent section names what covers each platform today.
+themselves later. The current set and implementation mapping belong to
+[`renderer-registry.md`](renderer-registry.md); current platform coverage and qualification belong
+to that renderer's document and `handoff.md`, not to the dated coverage columns below.
 `plans/plan_renderer_cleanup.md`, which the older sections cite for their `RRC-` task records, was
 deleted on 2026-10-11 and survives in Git history; the 2026-10-13 retirement's ledger is
 preserved below and in the report snapshot at commit `a37bb07ba`.
 
 ## Retired identity values
 
-A retired identity's C ABI value (`CNA_GRAPHICS_RENDERER_*`, `modules/c-api/include/CNA/C/graphics.h`)
-is **permanently reserved**: it is never assigned to another renderer, and surviving identities are
-never renumbered to close the gap. The next new identity takes value **52**. The same table lives in
-`cmake/RendererIdentities.cmake` (which refuses these names at configure time, naming the value),
-in `RetiredGraphicsRenderers` (`modules/core/include/CNA/Internal/RetiredGraphicsRenderers.hpp`,
-the run-time copy: it makes `CNA_GRAPHICS_RENDERER`, `GraphicsRendererSelection::SetPreferred` and
-the C API's by-name route say a name was retired, with its reserved value, rather than unknown, and
-the C API's numeric routes refuse a retired value as retired rather than as an ordinary invalid
-one) and in `scripts/check_renderer_identities.py` (which fails if a value or a name is reused, or
-if any two of the three tables disagree).
+A retired identity's numeric C ABI value was once published as a `CNA_GRAPHICS_RENDERER_*`
+constant and is **permanently reserved**: it is never assigned to another renderer, and surviving
+identities are never renumbered to close the gap. The retired constants themselves are no longer
+published as selectable identities; `modules/c-api/include/CNA/C/graphics.h` lists the gaps in the
+`CNA_GRAPHICS_RENDERER_MAXIMUM` contract. The next new identity takes value **52**.
+
+The table is repeated in `cmake/RendererIdentities.cmake` for configure-time refusal and in
+`RetiredGraphicsRenderers` (`modules/core/include/CNA/Internal/RetiredGraphicsRenderers.hpp`) for
+run-time diagnostics. `GraphicsRendererSelection`, the environment route and
+`cna_graphics_renderer_set_preferred_by_name_ext` identify retired names and their reserved values;
+numeric C routes return `CNA_RESULT_INVALID_ARGUMENT` with the same retired-specific diagnostic.
+The predicate `cna_graphics_renderer_try_parse_name_ext` deliberately treats a retired name as
+unrecognized instead of selecting it. `scripts/check_renderer_identities.py` holds both code
+tables and the table below to the pinned values and fails on reuse, disagreement or resurrection.
+
+`SDL_GPU` is not a retired identity and therefore has no separate reserved value: it is a refused
+former spelling of the live `SDLGPU` identity. `SDL_RENDERER` is the distinct retired 2D renderer
+whose value is 1.
+
+Campaign headings retain the date used by their task record. The `Removed` column below records
+the actual commit date; `RRC-018` and `RRC-035` landed just after midnight on the following day.
 
 | Value | Identity | Removed |
 |---:|---|---|
-| 1 | `SDL_RENDERER` | 2026-10-13 |
-| 2 | `OPENGLES2` | 2026-10-06 |
-| 5 | `WEBGL1` | 2026-10-06 |
+| 1 | `SDL_RENDERER` | 2026-10-14 |
+| 2 | `OPENGLES2` | 2026-10-07 |
+| 5 | `WEBGL1` | 2026-10-07 |
 | 7 | `BGFX` | 2026-09-17 |
 | 8 | `VULKAN` | 2026-10-13 |
 | 10 | `MAGNUM` | 2026-09-17 |
 | 14 | `DIRECTX11` | 2026-10-13 |
-| 15 | `DIRECTX12` | 2026-10-06 |
+| 15 | `DIRECTX12` | 2026-10-07 |
 | 16 | `DIRECT2D` | 2026-09-27 |
-| 17 | `CANVAS` | 2026-10-06 |
+| 17 | `CANVAS` | 2026-10-07 |
 | 18 | `HTML_DOM` | 2026-09-28 |
 | 19 | `SKIA` | 2026-08-30 |
 | 20 | `BLEND2D` | 2026-09-17 |
@@ -96,21 +111,24 @@ if any two of the three tables disagree).
 | 51 | `RLGL` | 2026-09-17 |
 
 The C ABI went to `0.28.0` for the 2026-09-17 retirement, to `0.31.0` for the 2026-09-27 one, to
-`0.33.0` for the 2026-09-28 one, to `0.45.0` for the 2026-10-06 one and to `0.48.0` for the
-2026-10-13 one (`docs/c-api/ABI_VERSIONING.md`).
+`0.33.0` for the 2026-09-28 one, to `0.45.0` for the 2026-10-06 campaign and to `0.48.0` for the
+2026-10-13 campaign. These are historical milestones, not the current ABI version; the current
+version and full sequence belong to [`c-api/ABI_VERSIONING.md`](c-api/ABI_VERSIONING.md).
 
 ## The 2026-10-13 retirement
 
 An owner decision, final: CNA stops maintaining its own native Vulkan, Direct3D 11 and Metal
 renderers and SDL's 2D renderer (`RRC-030`..`RRC-039`, with a remediation series continuing from
-`RRC-040` through `RRC-054`). `SDLGPU` is CNA's
-modern native path -- CNA maps XNA 4.0 onto SDL's `SDL_GPU` API, and SDL owns the Vulkan, Direct3D 12 and Metal
-backends underneath it. None of the four is aliased to `SDLGPU` or to anything else: each name is
+`RRC-040` through `RRC-054`; the `SDL_RENDERER` removal landed after midnight on 2026-10-14).
+`SDLGPU` is CNA's modern native path -- CNA maps XNA 4.0 onto SDL's `SDL_GPU` API, and SDL owns the
+Vulkan, Direct3D 12 and Metal backends underneath it. None of the four is aliased to `SDLGPU` or to
+anything else: each name is
 refused at configure time by name and value, and at run time (`CNA_GRAPHICS_RENDERER`,
 `GraphicsRendererSelection::SetPreferred`, the C API's by-name route) with a message that says it
-was retired. CNA keeps 10 public renderer identities over 8 implementation families; C ABI 0.48.0.
+was retired. At the close-out checkpoint CNA had 10 public renderer identities over 8
+implementation families, and the retirement had advanced the C ABI to 0.48.0.
 
-| Identity | C ABI | Reason | Coverage that remains |
+| Identity | C ABI | Reason | Coverage recorded at retirement |
 |---|---:|---|---|
 | `VULKAN` | 8 | A second, hand-written native Vulkan backend beside SDLGPU's. | `SDLGPU` (SDL's Vulkan backend on Linux and Android), `WEBGPU` (wgpu's), `FNA3D` through SDLGPU. |
 | `DIRECTX11` | 14 | A native Direct3D 11 backend, with the shared `D3DCommon` core and its offline HLSL. | `SDLGPU` (SDL's Direct3D 12 backend), `DIRECTX9`, `FNA3D` (its own D3D11 and SDLGPU drivers). |
@@ -172,12 +190,14 @@ Wine. The complete dated matrix and intermediate failure counts remain in Git hi
 ## The 2026-10-06 retirement
 
 An owner decision to reduce CNA's renderer scope and maintenance burden: `DIRECTX12`, `CANVAS`,
-`OPENGLES2` and `WEBGL1` were removed (`RRC-018`). None is replaced and none is aliased to a
-surviving identity: each name is refused at configure time, by name and with its value, and at run
-time like any unknown name. CNA keeps 14 public renderer identities over 12 implementation
-families; EasyGL implements three of them (`OPENGLES3`, `OPENGL33`, `WEBGL2`).
+`OPENGLES2` and `WEBGL1` were removed by `1cac65958` (`RRC-018`, committed just after midnight on
+2026-10-07). None is replaced and none is aliased to a surviving identity. At that checkpoint each
+name was refused at configure time and treated like any unknown name at run time; `RRC-040` later
+added the retired-specific run-time diagnostics described above. CNA then had 14 public renderer
+identities over 12 implementation families; EasyGL implemented three of them (`OPENGLES3`,
+`OPENGL33`, `WEBGL2`).
 
-| Identity | C ABI | Reason | Coverage that remains |
+| Identity | C ABI | Reason | Coverage recorded at retirement |
 |---|---:|---|---|
 | `DIRECTX12` | 15 | A second modern Direct3D renderer next to `DIRECTX11`, never validated beyond WARP and vkd3d-proton. | At the time `DIRECTX11` (retired 2026-10-13) and `DIRECTX9` for Windows; `SDLGPU` and `FNA3D` reach Direct3D 12 through their own drivers. |
 | `CANVAS` | 17 | A GPU-free browser 2D path (`canvas.getContext('2d')`), 2D only. | `WEBGL2` and `WEBGPU` in the browser. |
@@ -219,10 +239,11 @@ the complete DirectX11 parity corpus, a real OpenGL ES 3.0 device.
 
 An owner decision to reduce CNA's maintenance surface for long-term human development: `GDI`,
 `HTML_DOM`, `SVG_DOM` and `OPENGL4` were removed in `261cb5f7f` (`RRC-015`), and the reduced
-Software build that existed only for `GDI` in `590ac27c8` (`RRC-016`). None is replaced. CNA keeps
-18 public renderer identities over 14 implementation families; EasyGL implements five of them.
+Software build that existed only for `GDI` in `590ac27c8` (`RRC-016`). None is replaced. CNA then
+had 18 public renderer identities over 14 implementation families; EasyGL implemented five of
+them.
 
-| Identity | C ABI | Reason | Coverage that remains |
+| Identity | C ABI | Reason | Coverage recorded at retirement |
 |---|---:|---|---|
 | `GDI` | 40 | Windows-specific duplicate 2D path: Software's CPU 2D rasterizer presented through Win32 GDI. | The full CPU `SOFTWARE` renderer for deterministic/reference rasterization; `DIRECTX9`/`11`/`12`, `SDL_RENDERER` and `SDLGPU` for Windows presentation. |
 | `HTML_DOM` | 18 | Specialized browser DOM/CSS 2D path (pooled `<div>` sprites). | `CANVAS`, `WEBGL1`/`WEBGL2` and `WEBGPU` in the browser. |
@@ -255,7 +276,7 @@ renderer, example and benchmark targets build, and each renderer runs in headles
 ## The 2026-09-27 retirement
 
 An intentional, permanent scope reduction (`RRC-012`): `DIRECT2D`,
-`FREEDIRECT` and `PORTABLEGL` were removed in one commit, found with `git log --grep=RRC-012`, leaving
+`FREEDIRECT` and `PORTABLEGL` were removed in commit `0f96ea703`, leaving
 22 public renderer identities over 18 implementation families. None of the three was replaced, and
 each was already covered by a renderer that stayed (`GDI` was itself retired on 2026-09-28):
 
@@ -441,9 +462,9 @@ through `Magnum::GL`.
 
 **What it proved.** The CPU-raster-plus-platform-presentation shape: a premultiplied Blend2D
 backbuffer handed to `IPlatformSurfacePresenter`, including on the `TERMINAL` platform, where it was
-the renderer the terminal integration test ran. **Consequence to know about:** no surviving renderer
-requests a surface presenter, so the `TERMINAL` platform's CI leg now builds `SOFTWARE`
-(the renderer curation's findings).
+the renderer the terminal integration test ran. At the 2026-09-17 checkpoint no surviving renderer
+requested a surface presenter, so the terminal CI leg moved to `SOFTWARE`; `85ee25b8c` (`TCR-2`)
+gave `SOFTWARE` the presenter seam on 2026-09-18 and made that route functional again.
 
 ### DIRECTX1, DIRECTX2, DIRECTX3, DIRECTX5, DIRECTX6, DIRECTX7, DIRECTX8
 

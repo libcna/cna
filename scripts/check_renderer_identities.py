@@ -316,6 +316,38 @@ def cmake_retired():
     return {name: int(value) for name, value in re.findall(r"([A-Z][A-Z0-9_]*)=(\d+)", stripped)}
 
 
+def documented_retired_identities():
+    """docs/removed-renderers.md's current reserved-value table, as (name, value) pairs."""
+    path = os.path.join(REPO, "docs", "removed-renderers.md")
+    text = open(path, encoding="utf-8").read()
+    section = re.search(
+        r"^## Retired identity values\s*$\n(.*?)(?=^## )", text, re.M | re.S)
+    if not section:
+        sys.exit("cannot locate the retired identity values section in docs/removed-renderers.md")
+    return [(name, int(value)) for value, name in re.findall(
+        r"^\|\s*(\d+)\s*\|\s*`([A-Z][A-Z0-9_]*)`\s*\|", section.group(1), re.M)]
+
+
+def check_retired_document_table():
+    """The historical archive must publish the exact retired names and reserved values."""
+    pairs = documented_retired_identities()
+    names = [name for name, _value in pairs]
+    problems = []
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        problems.append(f"the reserved-value table lists {duplicates} more than once.")
+    documented = dict(pairs)
+    if documented != RETIRED_IDENTITIES:
+        missing = sorted((name, value) for name, value in RETIRED_IDENTITIES.items()
+                         if documented.get(name) != value)
+        unexpected = sorted((name, value) for name, value in documented.items()
+                            if RETIRED_IDENTITIES.get(name) != value)
+        problems.append(
+            "the reserved-value table disagrees with the canonical retired table: missing or "
+            f"different {missing}, unexpected {unexpected}.")
+    return problems
+
+
 def c_api_identity_table():
     """The identity->enum pairs of RendererIdentities[] in modules/c-api/src/CnaCApiCoreExt.cpp."""
     path = os.path.join(REPO, "modules", "c-api", "src", "CnaCApiCoreExt.cpp")
@@ -594,6 +626,13 @@ def main():
         ok = False
         print("The run-time retired-renderer list diverges from the retired table:")
         for problem in runtime_retired:
+            print(f"  - {problem}")
+
+    retired_document = check_retired_document_table()
+    if retired_document:
+        ok = False
+        print("docs/removed-renderers.md diverges from the retired identity table:")
+        for problem in retired_document:
             print(f"  - {problem}")
 
     vocabulary = check_renderer_vocabulary()

@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Removed-renderer archive reconciliation (2026-11-01): `docs/removed-renderers.md` remains the
+  historical record for all 41 retired identities, but now separates its current permanent-value
+  contract from dated coverage and validation evidence. It clarifies that retired constants are
+  unpublished while their numbers stay reserved, distinguishes the refused former `SDL_GPU`
+  spelling from the retired `SDL_RENDERER` identity, and states the different retired-name
+  behaviour of selection routes and the C `try_parse` predicate. Actual commit dates replace the
+  campaign dates in five `Removed` rows, the missing `RRC-012` and `RRC-018` removal hashes are
+  explicit, and the stale post-BLEND2D surface-presenter claim now records `SOFTWARE`'s next-day
+  `TCR-2` successor. The identity gate now parses the document's complete reserved-value table and
+  rejects any missing, duplicated, renumbered or resurrected entry; the C ABI smoke pins a retired
+  name as unrecognized by `try_parse`. Its target builds, and all 69 identity/configuration tests,
+  seven private-display runtime diagnostics, the private-display C ABI smoke and the ABI-header
+  baseline pass.
 - Renderer-registry documentation reconciliation (2026-11-01): the former informal overview is
   replaced by the exact ten-identity/eight-family contract across C++, the stable gapped C ABI,
   CMake selection and the generated runtime registry. It now records every identity's category,

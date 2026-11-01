@@ -430,7 +430,7 @@ static int validate_renderer_selection(void)
         return (fprintf(stderr, "SEL ARM %d\n", 5), 0);
     }
 
-    /* A name parses to its identity; an unrecognized one is an answer, not a failure. */
+    /* A live name parses; an unknown or retired one is unrecognized, which is an answer. */
     if (cna_graphics_renderer_try_parse_name_ext(view("HEADLESS"), &parsed, &recognized) !=
             CNA_RESULT_SUCCESS ||
         recognized != CNA_TRUE || parsed != CNA_GRAPHICS_RENDERER_HEADLESS ||
@@ -438,6 +438,9 @@ static int validate_renderer_selection(void)
             CNA_RESULT_SUCCESS ||
         recognized != CNA_TRUE ||
         cna_graphics_renderer_try_parse_name_ext(view("NOT_A_RENDERER"), &parsed, &recognized) !=
+            CNA_RESULT_SUCCESS ||
+        recognized != CNA_FALSE || parsed != CNA_GRAPHICS_RENDERER_UNKNOWN ||
+        cna_graphics_renderer_try_parse_name_ext(view("VULKAN"), &parsed, &recognized) !=
             CNA_RESULT_SUCCESS ||
         recognized != CNA_FALSE || parsed != CNA_GRAPHICS_RENDERER_UNKNOWN ||
         cna_graphics_renderer_try_parse_name_ext(view("HEADLESS"), 0, &recognized) !=
