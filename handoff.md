@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Installed C++ SDK documentation reconciliation (2026-11-01): `docs/installed-cpp-sdk.md`
+  replaces the obsolete Sharp Runtime version example with the actual modular-export requirement,
+  records the separate combined static C archive build prerequisite, and documents the installed
+  Emscripten helper boundary. `CnaInstalledCppPackage` passes in the current shared multi-renderer
+  Linux tree: SDK build, install, relocation, configuration and runtime/C-only/C++/mixed-consumer
+  checks complete in about two minutes. The producer has C_API_BUILD_STATIC=OFF, so the static C
+  archive prerequisite is source-inspected rather than qualified by that run. Current evidence is
+  distinguished from earlier static-SDK and cross-platform campaign results. Links pass; no runtime
+  implementation or ABI changes.
 - Browser boundary/lifetime documentation reconciliation (2026-11-01):
   `docs/browser-network-readiness.md` separates the accepted unavailable browser transport from
   historical SAMPLE-104 acceptance, corrects the Android libcurl exception and removes an implied

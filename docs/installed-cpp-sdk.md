@@ -6,9 +6,10 @@ or enable installation in embedded Sharp Runtime builds unless the CNA SDK is
 explicitly requested. The SDK uses the actual renderer/platform/module selection
 of its producer; installing does not enable unavailable modules.
 
-The Sharp Runtime checkout must include its modular install support (published
-`next` at `1dc8785b` or a compatible descendant). An older checkout declaring the
-same 0.1.0 version is not sufficient evidence of that support.
+The Sharp Runtime checkout must provide modular installation and the exported Headers target.
+CNA checks that support in addition to its configured Sharp Runtime version requirement;
+matching a product version alone is insufficient. Current product versions and dependency
+requirements come from the root CMake configuration, not a historical SDK campaign pin.
 
 ## Build and install
 
@@ -31,9 +32,13 @@ It does not require building every example or test. For multi-configuration
 generators, use the same `--config` for build and install. Install into a fresh
 prefix when changing the module set; an install does not remove older components.
 
+If `CNA_C_API_BUILD_STATIC=ON`, also build `cna_c_api_static` before installing the CNACApi
+component. The SDK aggregate currently depends on the ordinary C adapter, not that combined static
+archive target. Installing only CNACpp/SharpRuntime does not publish the C adapter component.
+
 The **whole prefix** can then be moved. Headers have separate module include roots,
 so linking `CNA::Math` does not accidentally expose Graphics or System.Xml headers.
-Private compiled dependencies and their needed headers travel with the SDK.
+Bundled compiled dependencies and their needed headers travel with the SDK.
 System dependencies remain system dependencies: install the development packages
 required by the producer's configuration (for example FFmpeg, FreeType, Zlib,
 Curl, Opus, nlohmann-json, Zstd or shaderc). Their paths are discovered on the
@@ -81,6 +86,18 @@ unknown optional components remain not found. `QUIET` discovery of an unavailabl
 dependency reports `CNA_FOUND=FALSE` with `CNA_NOT_FOUND_MESSAGE`, not an unconditional
 configuration error.
 
+### Emscripten boundary
+
+The source-build aliases `CNA::EmscriptenExceptionAbi`, `CNA::EmscriptenAsyncify` and their
+`CNA::EmscriptenAbi` composition are distinct. The installed SDK currently exports only the
+exception-ABI target. It does not provide the other two imported targets, so the source-build
+blocking `Game::Run()` link recipe is not an installed-SDK validation. Final Emscripten executables
+must establish their own qualified blocking-loop/host-frame policy; see
+[emscripten-mainloop-game-lifetime.md](emscripten-mainloop-game-lifetime.md).
+
+The generated C API Wasm library uses its separate host-driven, non-Asyncify artifact contract in
+[c-api/WASM_ARTIFACT.md](c-api/WASM_ARTIFACT.md); it is not the native CMake package.
+
 ### Version contract
 
 The existing `CNAConfigVersion.cmake` version remains the **C ABI version**
@@ -110,7 +127,12 @@ Failed artifacts are retained. Successful test-owned artifacts are removed;
 run `python3 tools/build/check_installed_cpp_package.py --build-dir <build>
 --keep-artifacts` to retain them. No caller-owned source/build/prefix is deleted.
 
-Campaign validation currently covers native Linux shared and static SDKs. Static
+The 2026-11-01 documentation audit reran `CnaInstalledCppPackage` successfully in
+`cmake-build-multi`: the current shared Linux SDK builds, installs, relocates and passes its
+runtime/configuration/consumer checks. That producer has `CNA_C_API_BUILD_STATIC=OFF`; this run
+does not cover the combined static C archive install prerequisite above.
+
+Earlier campaign validation covers native Linux shared and static SDKs. Static
 SDK validation has C API disabled and does **not** claim mixed static C/C++ adapter
 identity. MinGW's export/configure graph (DirectX9 and SDL_shadercross/SPIRV-Cross
 included) is checked, but a relocated Windows SDK runtime has not yet been tested.
