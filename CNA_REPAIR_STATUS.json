@@ -32,9 +32,14 @@
       "id": "CNA-FIX-D03",
       "source_section": "5.1 Defects",
       "summary": "XNB DateTime writing emits getTicksProperty() only (content/src/Xnb/XnbBuiltInWriters.cpp), and DateTimeReader masks the top Kind bits and constructs DateTime(ticks).",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Preserve DateTime Kind; encode local values as UTC ticks and restore them through the receiving local zone, following measured Microsoft XNA over FNA. Use the existing Sharp Runtime TimeZone component privately.",
+      "evidence": [
+        "Genuine Microsoft XNA 4.0 compiler and isolated runtime reader measured under Wine in UTC+2: Local writes UTC ticks and converts back on read; undefined Kind 3 throws ArgumentException. The committed oracle/runner reproduces all three fixture files byte-for-byte and records actual loaded assembly hashes.",
+        "Four native regression groups fail before correction. All seven focused cases pass after it in each of UTC+2, UTC and New York; the complete 313-case selected XNB native suite passes privately with dummy audio.",
+        "Eight provenance/pipeline metadata gates pass with the new artifacts staged. All docs local links and fences pass; the broken command/duplicated tail in the interoperability guide is corrected.",
+        "No new Sharp Runtime implementation, stub or public C ABI change. Conversion retains Sharp Runtime timezone limits; the measurement does not qualify ambiguous DST identity or native Windows execution."
+      ]
     },
     {
       "id": "CNA-FIX-D04",

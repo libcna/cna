@@ -17,6 +17,7 @@
 // System::Decimal, which does. Every compiler with native __int128 therefore compiled this file
 // and MSVC, which has none, did not: Win32 native validation WINNATIVE-0009.
 #include "System/Collections/Generic/OrderedDictionary.hpp"
+#include "System/TimeZone.hpp"
 
 // System::Decimal genuinely is guarded: sharp-runtime provides it only where it has native 128-bit
 // integers, and the DecimalReader identity and writer below are registered under the same
@@ -188,7 +189,7 @@ namespace CNA::Internal::Xnb
     template<> XnbReaderIdentity XnbBuiltInReaderIdentity<System::DateTime>()
     {
         return SystemIdentity("Microsoft.Xna.Framework.Content.DateTimeReader", "System.DateTime",
-                              XnbNameEvidence::DerivedRule);
+                              XnbNameEvidence::Xna40Fixture);
     }
 
     template<> XnbReaderIdentity XnbBuiltInReaderIdentity<Microsoft::Xna::Framework::Vector2>()
@@ -371,10 +372,12 @@ namespace CNA::Internal::Xnb
         AddFunctionWriter<System::DateTime>(registry, false,
             [](XnbWriter& output, const System::DateTime& value)
             {
-                // The top two bits carry DateTimeKind. System::DateTime does not model it, so CNA
-                // writes Unspecified (0) rather than inventing a kind the value never had; the
-                // reader masks the field out for exactly the same reason.
-                output.WriteUInt64(static_cast<std::uint64_t>(value.getTicksProperty()));
+                const auto kind = value.getKindProperty();
+                const auto ticks = kind == System::DateTimeKind::Local
+                    ? value.ToUniversalTime(System::TimeZone::CurrentTimeZone()).getTicksProperty()
+                    : value.getTicksProperty();
+                output.WriteUInt64(static_cast<std::uint64_t>(ticks) |
+                                   (static_cast<std::uint64_t>(kind) << 62));
             });
     }
 

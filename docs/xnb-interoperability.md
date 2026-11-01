@@ -267,7 +267,8 @@ which is why they are not the default.
 | `Boolean`, `Byte`, `SByte`, `Int16`, `UInt16`, `Int32`, `UInt32`, `Int64`, `UInt64`, `Single`, `Double` | matching `…Reader` | ✅ | ✅ | — |
 | `Char` | `CharReader` (UTF-8 encoded; a lone surrogate is refused) | ✅ | ✅ | — |
 | `String` | `StringReader` (7-bit-encoded UTF-8 byte length; invalid UTF-8 is refused) | ✅ | ✅ | — |
-| `TimeSpan`, `DateTime` | matching `…Reader` | ✅ ticks | — | TimeSpan writes ticks. The current DateTime writer writes only ticks and the reader discards Kind bits, although Sharp Runtime now models Kind. Tick round trips do not establish UTC/local/Unspecified fidelity; see handoff §5.1. |
+| `TimeSpan` | `TimeSpanReader` | ✅ ticks | — | — |
+| `DateTime` | `DateTimeReader` | ✅ ticks and Kind | — | `golden` for all three Kinds; local payloads carry UTC ticks and are converted to the receiving local zone. See §13 for measured scope. |
 | `Decimal` | `DecimalReader` | ✅ | — | Four Int32 words — lo, mid, hi, flags — behind `SHARP_RUNTIME_HAS_NATIVE_INT128`; see below. |
 | `Vector3`, `Matrix`, `Rectangle` | matching `…Reader` | ✅ | ✅ | — |
 | `Vector2`, `Vector4`, `Quaternion`, `Color`, `Point`, `Plane`, `BoundingBox`, `BoundingSphere`, `Ray` | matching `…Reader` | ✅ | — | The independent parser has no decoder for these yet; that is a gap in the parser, not in the writer. |
@@ -388,7 +389,7 @@ Stated plainly, because a gap named is worth more than a gap rounded up.
 | **Windows Phone runtime qualification** | The `m` header and target-specific Compact Framework reader qualifiers can be written and have retained compiler/name witnesses. No working Phone runtime/device run is recorded; shared Windows payload paths do not establish complete Phone semantics. |
 | **Array-valued effect parameters** | An `EffectMaterial` parameter that is `float[]`, `int[]` or `Matrix[]` is not written. Which reader instantiation XNA writes for one — `ArrayReader` or `ListReader`, over which element type — is not established by any fixture available here, and a guess would produce a file that loads into the wrong shape rather than one that fails to load. CNA's **reader** applies them if some other producer writes them. |
 | **`Decimal`** | Conditional on Sharp Runtime's native 128-bit integer support, on the read side too. |
-| **DateTime Kind preservation** | Current XNB writing/reading preserves ticks but discards UTC/local Kind, although Sharp Runtime supports it. The existing round trips do not qualify that state; handoff §5.1 records the open defect. |
+| **Local-time conversion scope** | DateTime uses Sharp Runtime’s current-zone conversions. The genuine-XNA fixture measurement uses a fixed UTC+2 winter date; ambiguous DST identity and native Windows behavior are not qualified by that measurement. |
 
 ---
 
@@ -659,8 +660,12 @@ otherwise select a different display):
 ```bash
 tools/platform/run_gpu_tests_private.sh --exec env -u CNA_XNA40_DISPLAY \
     ctest --test-dir cmake-build-multi \
-    -R '^XnaPipelineGenuineRuntime(Interop|InteropLzx|BuiltFamilies) Running it found three defects
-nothing else could: the LZX encoder's missing end-of-stream trailer, which the runtime needs
+    -R '^XnaPipelineGenuineRuntime(Interop|InteropLzx|BuiltFamilies)$' \
+    --output-on-failure -j1
+```
+
+The recorded device is HiDef because XNA refuses a `Texture3D` under Reach. Running it found
+three defects nothing else could: the LZX encoder's missing end-of-stream trailer, which the runtime needs
 (`LzxEncoderTest.EveryCompressedPayloadEndsWithTheTrailerXnaRequires`), and two in the built
 families, among them an unqualified `VideoReader` name (`XNAPP-281`). All three pass as of
 2026-10-29.
@@ -693,45 +698,22 @@ families, among them an unqualified `VideoReader` name (`XNAPP-281`). All three 
 
 ## 13. Current verification
 
-Reconciled on 2026-11-01 against writer/identity/canonical data, processing and manifest contracts,
-the independent parser, retained compiler fixtures and genuine-runtime harness adapters/wrappers.
+The 2026-11-02 DateTime repair preserves Unspecified/UTC/Local Kind and converts Local
+payloads through UTC using Sharp Runtime’s current zone. The retained genuine-XNA compiler
+fixtures reproduce byte for byte, and the isolated genuine reader measurement under Wine
+confirms the Local conversion and invalid-Kind refusal. Seven focused cases pass in each of
+UTC+2, UTC and New York; all 313 selected XNB native cases pass privately with dummy audio.
+The local-zone behavior deliberately follows measured XNA rather than FNA’s direct Local
+construction; see [the decision ledger](xna-fna-behavior-decisions.md). This does not qualify
+ambiguous DST identity or native Windows execution.
+
+The earlier 2026-11-01 documentation pass reconciled writer/identity/canonical data, processing
+and manifest contracts, the independent parser, retained compiler fixtures and genuine-runtime
+harness adapters/wrappers.
 Existing native content/pipeline targets build. The related selected XNB/reader/writer/manifest
 run passes 456 cases, with eight LZX decoder/differential/fuzz cases; five XML source-route cases
 also pass privately, including comparisons with retained target-specific compiler output.
 All 16 uncompressed/LZX fixture files parse independently and match their explicit expectation
 manifests, and nine pipeline metadata gates pass. These are finite native/fixture checks: no new
-Microsoft runtime, real-fxc, Phone/Xbox device or sanitizer campaign was run. The DateTime Kind
-finding is source-inspected and remains open, with no runtime fix/new Kind regression in this edit.
- \
-    --output-on-failure -j1
-```
-
-The recorded device is HiDef because XNA refuses a `Texture3D` under Reach. Running it found three defects
-nothing else could: the LZX encoder's missing end-of-stream trailer, which the runtime needs
-(`LzxEncoderTest.EveryCompressedPayloadEndsWithTheTrailerXnaRequires`), and two in the built
-families, among them an unqualified `VideoReader` name (`XNAPP-281`). All three pass as of
-2026-10-29.
-
-## 12. Design decisions
-
-* **`XnbByteWriter` rather than `System::IO::BinaryWriter`.** XNB writing needs an in-memory body
-  that the header is prepended to, and a UTF-8 `charcs` overload `BinaryWriter` does not have;
-  `CnbByteWriter` set the precedent of a CNA-owned deterministic writer beside sharp-runtime's
-  reader.
-* **`<FontName>` is a font family, and the reproducible routes come first.** XNA asks Windows to
-  resolve the family through GDI+, so the same `.spritefont` builds differently on different
-  machines, and not at all without the font. CNA looks, in order, for a font file of that name
-  beside the description (`Console`, `Console.ttf`, `Console.otf`, `Console.ttc`); a font file
-  beside it whose own family table answers the name the way Windows matches it (`Peric.ttf` is
-  the Pericles family; `XNASWEEP-100`/`105`); the directories a build passes with
-  `--font-directory`, then `CNA_FONT_PATH`; and only then the installed fonts, which warns that
-  the build now depends on what this machine has installed.
-* **Build-time components live in `modules/content-pipeline/`.** FreeType, the block-compression
-  encoder and any future importer stay out of the link closure of a game that only loads content:
-  `cna_content_pipeline` is linked by `cna_content_compiler` and nothing else, so the dependency
-  graph enforces the boundary (`CnaXnbDependencyBoundary`).
-* **Block compression is reached through a callable.** `cna_content` declares the encoder's shape
-  (`TextureBlockEncoder`) and never links one; `cna_content_pipeline` supplies it. A registry
-  without an encoder builds every uncompressed texture and refuses a compressed `textureFormat`
-  with a message naming the configuration that would provide one, rather than quietly writing
-  uncompressed pixels.
+Microsoft runtime, real-fxc, Phone/Xbox device or sanitizer campaign was run in that documentation
+review. The later DateTime repair and its measured scope are recorded above.

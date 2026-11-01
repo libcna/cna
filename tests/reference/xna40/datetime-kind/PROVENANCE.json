@@ -1,0 +1,45 @@
+{
+  "task": "CNA-FIX-D03",
+  "measured_at": "2026-11-02",
+  "runtime": "Microsoft.Xna.Framework 4.0.0.0, PublicKeyToken=842cf8be1de50553",
+  "host": "Existing Wine/.NET 4 prefix on Linux; genuine Microsoft assemblies, not Linux Mono",
+  "producer": "Genuine ContentCompiler.Compile invoked through reflection; Windows/Reach/uncompressed",
+  "timezone_environment": "Etc/GMT-2",
+  "reported_windows_zone": "Kaliningrad Standard Time",
+  "input_ticks": 639040752000000000,
+  "input_calendar": "2026-01-15T12:00:00",
+  "payloads": {
+    "datetime_0.xnb": {
+      "kind": "Unspecified",
+      "ticks": 639040752000000000
+    },
+    "datetime_1.xnb": {
+      "kind": "Utc",
+      "ticks": 639040752000000000
+    },
+    "datetime_2.xnb": {
+      "kind": "Local",
+      "ticks": 639040680000000000
+    }
+  },
+  "reader_probe": {
+    "input_ticks": 639040752000000000,
+    "unspecified_ticks": 639040752000000000,
+    "utc_ticks": 639040752000000000,
+    "local_ticks": 639040824000000000,
+    "undefined_kind_3": "System.ArgumentException"
+  },
+  "sha256": {
+    "datetime_2.xnb": "ee4a574765fabf1cad51a63eaf0c73a5370369914d6a26e571cc7a1371955295",
+    "datetime_0.xnb": "c401e64e55a0663aa980a80a130ba6a970da45b863e9d560291096e685ad2676",
+    "datetime_1.xnb": "f96b6a332f43b1bacee7792c3423b1cd433e8e2df8ad65bcf4cbae44caf54a84"
+  },
+  "assemblies_sha256": {
+    "Microsoft.Xna.Framework.dll": "8b7aa4c4939f243b21432747281cc8aacdcda56191a16d9eaa036b4136cf0da4",
+    "Microsoft.Xna.Framework.Content.Pipeline.dll": "1ea481da62eb9e66bad8589df83f173725e62d22362801e1264cd02347721c69"
+  },
+  "source": "tools/xna-pipeline-oracle/datetime/DateTimeOracle.cs",
+  "qualification": "Black-box compiler output and isolated genuine runtime reader invocation under Wine. No native Windows, browser, DST-ambiguity or full pipeline graph claim.",
+  "runtime_assembly_location": "C:\\windows\\Microsoft.Net\\assembly\\GAC_32\\Microsoft.Xna.Framework\\v4.0_4.0.0.0__842cf8be1de50553\\Microsoft.Xna.Framework.dll",
+  "reproduction": "CNA_XNA40_REFERENCES=/path/to/xna/assemblies bash tools/xna-pipeline-oracle/datetime/run-datetime-oracle.sh /tmp/xna-datetime-output"
+}

@@ -14,6 +14,7 @@ target_link_libraries(cna_content PUBLIC cna_graphics_core cna_audio cna_media c
 # public constructor, so the component is PUBLIC.
 cna_link_sharp_runtime(cna_content PUBLIC Core.Base IO Resources)
 cna_link_sharp_runtime(cna_content PRIVATE Security.Cryptography)
+cna_link_sharp_runtime(cna_content PRIVATE TimeZone)
 # CNJ CNB-70 (Phase 13D): CNA::Internal::GltfImport::GltfImportCore (used by both
 # ContentManager.cpp's GltfModelTypeReader and tools/gltf_to_cnj) needs cgltf.h.
 # CNJ CNB-88 (Phase 14E): RemapOcclusionImageForDualTextureEXT needs

@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D03 (2026-11-02): XNB DateTime preserves Kind and stores/restores Local
+  through UTC ticks, using Sharp Runtime’s existing current-zone conversion. Actual Microsoft
+  compiler output and isolated reader invocations under Wine measure the Local conversion and
+  refusal of Kind 3; the committed oracle reproduces three fixtures byte for byte and records
+  loaded assembly hashes. This measured XNA-over-FNA decision is in the permanent ledger. Four
+  regression groups fail before the fix; afterwards seven focused cases pass in each of UTC+2,
+  UTC and New York, all 313 selected native XNB cases pass, and eight provenance/metadata gates
+  pass, privately. The TimeZone component is linked privately; no runtime stub or public C ABI
+  change. Both XNB guides match; the writer guide’s broken command/duplicated tail is repaired,
+  and all docs links/fences validate. No ambiguous-DST or native Windows qualification is claimed.
 - CNA-FIX-D11 (2026-11-02): all three native FileDialog wrappers retain shared
   once-only completion state and return an empty result on provider PlatformException rejection.
   Results delivered before rejection are preserved; late/duplicate callbacks are ignored and an
@@ -1870,13 +1880,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-- XNB DateTime writing emits getTicksProperty() only (content/src/Xnb/XnbBuiltInWriters.cpp),
-  and DateTimeReader masks the top Kind bits and constructs DateTime(ticks). Sharp Runtime now
-  stores DateTimeKind (#1941), so their comments blaming an absent runtime capability are stale:
-  UTC/local Kind is lost even though the value can represent it. Source-inspected 2026-11-01;
-  TimeSpanAndDateTimeRoundTripThroughTheReader and DateTimeReaderExtractsTicksMaskingOutKindBits
-  assert ticks only, not Kind. Both XNB guides now state the gap. No runtime correction/new Kind
-  regression or fresh Microsoft DateTime binary measurement was added during this docs task.
 - ModelEffectCollection::Enumerator::getCurrentProperty and
   GamerCollection<T>::GamerCollectionEnumerator::getCurrentProperty throw InvalidOperationException
   when hasCurrent_ is false (before start/after end/reset). Original Microsoft XNA Graphics IL

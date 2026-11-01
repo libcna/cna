@@ -3,10 +3,9 @@
 // XNAP-10/11/12/14/15/16/17/20/21/22/40/41/45: the `.xnb` serializer
 // core and its built-in primitive, framework and collection writers.
 //
-// The strongest test in this file is GoldenXna40ListOfStringsIsByteIdentical: CNA writes the same
-// List<string> the genuine Microsoft XNA 4.0 Content Pipeline wrote into the committed fixture and
-// the two files must be byte for byte the same. Everything else here is round-tripped through
-// CNA's own independent reader, which shares no code with the writer.
+// Golden List<string> and DateTime cases compare complete files with genuine Microsoft compiler
+// output. DateTime also checks decoded Kind and local-time conversion; the other value tests
+// round-trip through CNA's independent reader.
 
 #include <cstdint>
 #include <any>
@@ -46,6 +45,7 @@
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/TimeZone.hpp"
 
 using namespace CNA::Internal::Xnb;
 using Microsoft::Xna::Framework::Content::ContentReader;
@@ -817,15 +817,36 @@ TEST_F(XnbWriterTest, ADecimalRoundTripsAllFourWordsIncludingScaleAndSign)
 
 TEST_F(XnbWriterTest, TimeSpanAndDateTimeRoundTripThroughTheReader)
 {
-    // Both are stored as a single Int64 of 100-nanosecond ticks. DateTime's top two bits carry
-    // .NET's DateTimeKind, which System::DateTime does not model, so the writer emits Unspecified
-    // and the reader must read back exactly the tick count that went in.
     const System::TimeSpan span = System::TimeSpan::FromSeconds(1.5);
     EXPECT_EQ(LoadedXnb(WriteXnbAsset(span)).ReadAsset<System::TimeSpan>().getTicksProperty(), span.getTicksProperty());
 
     const System::DateTime moment(630822816000000000LL);
     EXPECT_EQ(LoadedXnb(WriteXnbAsset(moment)).ReadAsset<System::DateTime>().getTicksProperty(),
               moment.getTicksProperty());
+}
+
+TEST_F(XnbWriterTest, DateTimeKindsMatchGenuineXnaCompilerFixtures)
+{
+    constexpr SharpRuntime::longcs wallTicks = 639040752000000000LL;
+    constexpr SharpRuntime::longcs localPayloadUtcTicks = 639040680000000000LL;
+    const auto local = System::DateTime(localPayloadUtcTicks, System::DateTimeKind::Utc)
+        .ToLocalTime(System::TimeZone::CurrentTimeZone());
+    const System::DateTime values[] = {
+        System::DateTime(wallTicks, System::DateTimeKind::Unspecified),
+        System::DateTime(wallTicks, System::DateTimeKind::Utc), local};
+    XnbFileOptions options;
+    options.graphicsProfile = XnbGraphicsProfile::Reach;
+    options.readerNameStyle = XnbReaderNameStyle::Xna40;
+    for (int kind = 0; kind < 3; ++kind)
+    {
+        SCOPED_TRACE(kind);
+        const auto fixture = ReadFixture("tests/reference/xna40/datetime-kind/datetime_" +
+                                         std::to_string(kind) + ".xnb");
+        EXPECT_EQ(WriteXnbAsset(values[kind], options, "datetime"), fixture);
+        const auto read = LoadedXnb(fixture).ReadAsset<System::DateTime>();
+        EXPECT_EQ(read.getTicksProperty(), values[kind].getTicksProperty());
+        EXPECT_EQ(read.getKindProperty(), values[kind].getKindProperty());
+    }
 }
 
 TEST_F(XnbWriterTest, ACurveRoundTripsWithEveryKeyField)

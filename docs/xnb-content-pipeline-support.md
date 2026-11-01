@@ -62,7 +62,7 @@ requirements. "Full" is not a guarantee for every possible XNB object graph or p
 | Primitives (`Byte`/`SByte`/`Int16`/`UInt16`/`Int32`/`UInt32`/`Int64`/`UInt64`/`Single`/`Double`/`Boolean`/`Char`/`String`) | ✅ Full | |
 | Math (`Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `Plane`, `Point`, `Rectangle`, `BoundingBox`, `BoundingSphere`, `BoundingFrustum`, `Ray`) | ✅ Full | |
 | `Decimal`/`TimeSpan` | ✅ field/tick decoding | Decimal is conditional on Sharp Runtime's native Int128 support; neither uses a lossy double shortcut. |
-| `DateTime` | ✅ ticks; Kind not preserved | The XNB reader masks out Kind and constructs an Unspecified value, despite current Sharp Runtime supporting Kind. The writer also writes ticks only; this is an open XNB limitation in handoff §5.1. |
+| `DateTime` | ✅ ticks and Kind | Unspecified/UTC retain ticks and Kind. Local payloads carry UTC ticks and are converted through Sharp Runtime’s current zone; undefined Kind 3 is refused. Genuine-XNA compiler fixtures and reader observations are retained under `tests/reference/xna40/datetime-kind/`. |
 | `Curve` | ✅ Full | |
 | `Texture2DReader` | ✅ all 20 classic XNA formats | All 17 uncompressed formats preserve the serialized format and exact mip bytes. DXT1/3/5 blocks stay compressed when the active renderer supports exact compressed transfer; other renderers software-decode them to `Color`, matching FNA's backend-capability fallback. A non-power-of-two DXT texture under Reach takes the same `Color` path: the genuine Platformer `Fonts/Hud.xnb` is a 128×132 Dxt3 atlas that XNA loads under Reach, while the public `Texture2D` constructor still refuses Reach NPOT DXT (`SAMPLE-013`) |
 | `Texture3DReader` | ✅ all 15 legal XNA HiDef volume formats | Preserves the serialized uncompressed format and each mip's exact bytes; DXT1/3/5 are correctly refused because XNA excludes compressed volume textures. Reader tests cover synthetic streams, format bytes and a depth-dominant mip chain; CNA also writes volume fixtures. Distinguish these self-authored witnesses from an independently produced Microsoft volume asset |
@@ -352,7 +352,7 @@ payload's semantic validity, external dependencies or the active renderer's capa
 | LZ4 compression | ✅ MonoGame's raw-block XNB representation is supported; generic LZ4 frames are intentionally not an XNB format |
 | Generic collection readers for an unregistered `T` combination | ❌ Not supported — each closed combination needs its own explicit registration |
 | `SoundEffect` XMA2 and unknown codecs | ❌ Not supported — see the audio support matrix above |
-| `DateTime` Kind | ❌ UTC/local Kind is discarded by the current XNB read/write path; existing tick-only round trips do not qualify Kind fidelity. |
+| Local-time conversion scope | DateTime delegates to Sharp Runtime’s current-zone conversion. The genuine-XNA measurement covers a fixed UTC+2 winter date; ambiguous DST identity and native Windows are not qualified by it. |
 | Ecosystem identifiers outside the accepted whitelist, including `'b'`/`'5'`/`'O'`/`'S'`/`'V'` | ❌ Rejected by the current CNA/FNA-compatible header policy; header acceptance alone would not establish payload or platform support. |
 
 ## Test fixture corpus
@@ -369,7 +369,14 @@ repo — see the "Platform support" and "Custom readers" sections above for what
 
 ## Current verification
 
-Reconciled on 2026-11-01 against typed/lazy registration, reader/reference dispatch, reflective
+On 2026-11-02, the DateTime Kind/local-UTC repair passes seven focused cases in each of
+UTC+2, UTC and New York, and all 313 selected XNB reader/writer/container cases pass privately
+with dummy audio. Three committed DateTime files reproduce byte for byte from the genuine XNA
+compiler; an isolated genuine reader measurement under Wine confirms the local conversion and
+undefined-Kind refusal. See [the writer guide](xnb-interoperability.md#13-current-verification)
+for the exact measurement boundary and [the XNA/FNA decision](xna-fna-behavior-decisions.md).
+
+The earlier 2026-11-01 documentation pass reconciled typed/lazy registration, reader/reference dispatch, reflective
 builders, media/manifest routes, container limits and the retained fixture metadata. The existing
 `CnaContentTests` target builds; 456 selected XNB/reader/reflective/manifest/ownership cases plus
 eight LZX decoder/differential/fuzz cases passed privately on OPENGLES3/dummy audio. The LZX

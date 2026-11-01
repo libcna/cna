@@ -49,24 +49,16 @@ namespace CNA::Internal::Xnb
     class DateTimeReader : public ContentTypeReader<System::DateTime>
     {
     public:
-        DateTimeReader() : ContentTypeReader<System::DateTime>("System.DateTime") {}
+        /** @brief Creates a reader for System.DateTime values. */
+        DateTimeReader();
     protected:
         /**
-         * @brief FNA's DateTimeReader: reads a UInt64, masking out the top 2 bits as
-         *        `DateTimeKind` and the rest as ticks.
-         *
-         * Deviation: `DateTimeKind` is parsed but discarded -- `System::DateTime` is documented
-         * `Status: Partial` and does not store/track `DateTimeKind` at all (a pre-existing
-         * sharp-runtime limitation, not a `.xnb`-specific one; fixing it would mean adding a new
-         * field and touching every existing `DateTime` constructor, out of scope for this reader).
+         * @brief Reads ticks and Kind, restoring local values from UTC payload ticks.
+         * @param input Reader positioned at the encoded value.
+         * @param existingInstance Ignored existing value.
+         * @return The decoded DateTime in its encoded kind.
          */
-        System::DateTime Read(ContentReader& input, std::optional<System::DateTime>) override
-        {
-            const uint64_t value = input.ReadUInt64();
-            constexpr uint64_t kindMask = uint64_t{3} << 62;
-            const int64_t ticks = static_cast<int64_t>(value & ~kindMask);
-            return System::DateTime(ticks);
-        }
+        System::DateTime Read(ContentReader& input, std::optional<System::DateTime> existingInstance) override;
     };
 
     /** @brief Registers Decimal/TimeSpan/DateTime readers above under their real FNA canonical names. Idempotent. */

@@ -10,6 +10,8 @@
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "System/IO/BinaryWriter.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/TimeZone.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentReader;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
@@ -90,7 +92,7 @@ TEST_F(DecimalDateTimeReaderTest, TimeSpanReaderRoundTrips)
     EXPECT_EQ(ts.getTicksProperty(), 123456789LL);
 }
 
-TEST_F(DecimalDateTimeReaderTest, DateTimeReaderExtractsTicksMaskingOutKindBits)
+TEST_F(DecimalDateTimeReaderTest, DateTimeReaderPreservesUtcKindAndTicks)
 {
     const uint64_t ticks = 636000000000000000ULL; // an arbitrary real-looking tick count
     const uint64_t kind = 1ULL; // DateTimeKind.Utc, packed into the top 2 bits
@@ -102,4 +104,24 @@ TEST_F(DecimalDateTimeReaderTest, DateTimeReaderExtractsTicksMaskingOutKindBits)
         "Microsoft.Xna.Framework.Content.DateTimeReader", *reader);
 
     EXPECT_EQ(dt.getTicksProperty(), static_cast<int64_t>(ticks));
+    EXPECT_EQ(dt.getKindProperty(), System::DateTimeKind::Utc);
+}
+
+TEST_F(DecimalDateTimeReaderTest, DateTimeReaderConvertsLocalPayloadFromUtc)
+{
+    constexpr std::uint64_t ticks = 639040752000000000ULL;
+    auto reader = MakeReader([](auto& w) { w.Write(ticks | (std::uint64_t{2} << 62)); });
+    const auto read = ReadViaRegisteredReader<System::DateTime>(
+        "Microsoft.Xna.Framework.Content.DateTimeReader", *reader);
+    const auto expected = System::DateTime(static_cast<SharpRuntime::longcs>(ticks), System::DateTimeKind::Utc)
+        .ToLocalTime(System::TimeZone::CurrentTimeZone());
+    EXPECT_EQ(read.getKindProperty(), System::DateTimeKind::Local);
+    EXPECT_EQ(read.getTicksProperty(), expected.getTicksProperty());
+}
+
+TEST_F(DecimalDateTimeReaderTest, DateTimeReaderRejectsUndefinedKind)
+{
+    auto reader = MakeReader([](auto& w) { w.Write(std::uint64_t{3} << 62); });
+    EXPECT_THROW((void)ReadViaRegisteredReader<System::DateTime>(
+        "Microsoft.Xna.Framework.Content.DateTimeReader", *reader), System::ArgumentException);
 }
