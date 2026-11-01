@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 168 reviewed, 7 updated incidentally and awaiting their own audit, and 2 not yet
+Summary: 169 reviewed, 7 updated incidentally and awaiting their own audit, and 1 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -178,7 +178,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/xma-encoder-backend.md`](docs/xma-encoder-backend.md)
 - ⬜ **PENDING** — [`docs/xna-4-enumerator-reference.md`](docs/xna-4-enumerator-reference.md)
 - ✅ **REVIEWED** — [`docs/xna-4-runtime-member-coverage-baseline.md`](docs/xna-4-runtime-member-coverage-baseline.md)
-- ⬜ **PENDING** — [`docs/xna-4-runtime-member-coverage.md`](docs/xna-4-runtime-member-coverage.md)
+- ✅ **REVIEWED** — [`docs/xna-4-runtime-member-coverage.md`](docs/xna-4-runtime-member-coverage.md)
 - ✅ **REVIEWED** — [`docs/xna-content-pipeline-compat-api.md`](docs/xna-content-pipeline-compat-api.md)
 - ✅ **REVIEWED** — [`docs/xna-content-pipeline-components.md`](docs/xna-content-pipeline-components.md)
 - ✅ **REVIEWED** — [`docs/xna-content-pipeline-final-audit.md`](docs/xna-content-pipeline-final-audit.md)

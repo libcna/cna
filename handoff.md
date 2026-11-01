@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Current runtime member-report reconciliation (2026-11-01, XNA-MEMBER-002): a fresh
+  Microsoft XML/DLL/Clang audit reproduces the stored JSON exactly: 331/331 types, 3627/3627
+  members, no AST errors, zero missing/review entries, the same 164 represented baseline gaps.
+  All per-entry behavior_assessed flags remain false. Generated prose now explains declaration
+  classifications, overlapping subset counts, HEADLESS/four-worker AST scope, local input/tool
+  prerequisites and the CLI's type-only exit-status check (§5.2). Only Markdown rendering changed;
+  classifier logic, stored JSON and frozen baseline rendering remain unchanged. The 22 audit-tool
+  regressions pass from the adjacent baseline audit; no new behaviour/renderer qualification.
 - Runtime member-baseline documentation reconciliation (2026-11-01, XNA-MEMBER-001): the
   generated page clearly labels its 3463/3627 representation and 164 gaps as the frozen pre-fix
   snapshot, links current coverage and explains how to render retained evidence without rerunning
@@ -1884,6 +1892,11 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp. Existing bitmap
   tests construct Vector3 bitmaps, so they do not qualify an unwarmed fresh-process factory path.
   No new cold-process probe/registration change was added during the API-guide cleanup.
+- tools/audit_xna_runtime_surface.py returns failure for missing types, but its final return
+  does not reject missing/review member counts by itself. Source-inspected on 2026-11-01; the
+  fresh full run has no such gaps, so this is a checker-use limitation rather than a current
+  representation deficit. Inspect member counts, AST errors and JSON findings as well as status.
+  No CLI hardening or synthetic missing-member fixture was added during the documentation audit.
 - XnaPipelineFinalAuditIsGreen is an evidence-metadata gate, not current runtime qualification.
   It joins maintained parity counts/status flags, checks paths and TEST/add_test source patterns,
   and executes the processor-default annotation checker. Source matchers do not preprocess C++ or
