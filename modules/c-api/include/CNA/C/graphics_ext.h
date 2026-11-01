@@ -26,7 +26,7 @@ CNA_C_API CNA_Result cna_graphics_ext_is_available(CNA_Bool* out_available);
 /** @brief Fixed-width identity of an ASCII post-process quantization mode. */
 typedef uint32_t CNA_AsciiQuantizeMode;
 
-/** @brief Luminance-ranked glyphs with a fixed white foreground and no background fill. */
+/** @brief Luminance-ranked white glyphs on an opaque black background. */
 #define CNA_ASCII_QUANTIZE_MODE_BLACK_WHITE UINT32_C(0)
 /** @brief Luminance-ranked glyphs tinted by the cell's own averaged color. */
 #define CNA_ASCII_QUANTIZE_MODE_COLOR UINT32_C(1)
@@ -75,8 +75,8 @@ typedef CNA_Handle CNA_AsciiPostProcessEffectHandle;
 /**
  * @brief One image-based light: the three textures a PBR shader needs, and how bright they are.
  *
- * A caller fills this and hands it to an effect. The textures are **borrowed**; the structure
- * records them and never owns them.
+ * The init and validity routes operate on this descriptor. Its texture handles are borrowed:
+ * the structure records them without retaining, releasing or binding them to an effect.
  */
 typedef struct CNA_ImageBasedLightEXT {
     /** @brief Size of this caller-provided structure in bytes. */
@@ -106,12 +106,14 @@ CNA_C_API CNA_Result cna_image_based_light_ext_init(CNA_ImageBasedLightEXT* out_
 /**
  * @brief Reports whether the light is complete enough to shade with.
  *
- * All three textures must be present and the mip count at least one: `irradiance` and
- * `prefiltered_specular` live TextureCube (or RenderTargetCube) handles, `brdf_lut` a live
+ * All three textures must be present, the mip count at least one and intensity non-negative:
+ * `irradiance` and `prefiltered_specular` live TextureCube (or RenderTargetCube) handles,
+ * `brdf_lut` a live
  * Texture2D (or RenderTarget2D) handle. A live handle of any other kind is not present and makes
  * the light invalid rather than being an argument error. A light that is *nearly* complete is the
  * failure this answers: it does not look like a mismatch, it looks like a scene lit slightly
- * wrong.
+ * wrong. The predicate checks registered handle kinds and these scalar conditions; it does not
+ * verify texture contents, actual mip-chain length, common device ownership or finite intensity.
  *
  * @param light The light.
  * @param out_valid Receives the answer.
@@ -125,13 +127,15 @@ CNA_C_API CNA_Result cna_image_based_light_ext_is_valid(
 /**
  * @brief Creates an owned CRT display-emulation effect.
  *
- * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param graphics_device Owned or valid borrowed graphics-device handle.
  * @param out_effect Receives an owned effect handle on success.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the extension layer or the
- * renderer's shader support is absent, or a documented argument/handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the extension layer is absent or
+ * the renderer refuses creation, or a documented argument/handle/thread/native failure.
  *
- * The result is an ordinary `CNA_EffectHandle`: every `cna_effect_*` operation — clone, dispose,
- * apply, type name, parameters — accepts it.
+ * The result is an ordinary `CNA_EffectHandle`: the shared clone, dispose, apply, type-name and
+ * reflection routes accept it.
+ * Creation alone does not prove shader execution. Inspect @ref cna_shader_effect_is_valid and
+ * the device's source-execution capability before relying on rendered output.
  */
 CNA_C_API CNA_Result cna_crt_effect_create(
     CNA_Handle graphics_device,
@@ -247,10 +251,10 @@ CNA_C_API CNA_Result cna_crt_effect_set_mask_type(
 /**
  * @brief Creates an owned color-depth-reduction effect.
  *
- * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param graphics_device Owned or valid borrowed graphics-device handle.
  * @param out_effect Receives an owned effect handle on success.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the extension layer or the
- * renderer's shader support is absent, or a documented argument/handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the extension layer is absent or
+ * the renderer refuses creation, or a documented argument/handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_depth_effect_create(
     CNA_Handle graphics_device,
@@ -305,14 +309,15 @@ CNA_C_API CNA_Result cna_depth_effect_set_dither_mode(
 /**
  * @brief Creates an owned ASCII post-process effect.
  *
- * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param graphics_device Owned or valid borrowed graphics-device handle.
  * @param out_effect Receives an owned ASCII effect handle on success.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the extension layer is absent, or
  * a documented argument/handle/thread/native failure.
  *
  * This is not a shader `Effect` and is not accepted by the `cna_effect_*` routes: it performs its
- * own read-back, quantization and draw pass. It is a child of the active game and must be
- * destroyed before @ref cna_game_destroy.
+ * own read-back, quantization and draw pass. On a game's device it is a game child and must be
+ * destroyed before @ref cna_game_destroy; on an independently owned device, release it before
+ * destroying that device.
  */
 CNA_C_API CNA_Result cna_ascii_post_process_effect_create(
     CNA_Handle graphics_device,
@@ -410,10 +415,10 @@ CNA_C_API CNA_Result cna_ascii_post_process_effect_get_last_grid_dimensions(
 CNA_C_API CNA_Result cna_ascii_post_process_effect_destroy(
     CNA_AsciiPostProcessEffectHandle effect);
 
-/** @brief The fewest segments a debug sphere or cone is drawn with. */
+/** @brief The fewest segments used for each debug-sphere ring. */
 #define CNA_DEBUG_DRAW_MIN_SEGMENTS 4
 
-/** @brief The most segments a debug sphere or cone is drawn with. */
+/** @brief The most segments used for each debug-sphere ring. */
 #define CNA_DEBUG_DRAW_MAX_SEGMENTS 128
 
 /**
@@ -424,9 +429,9 @@ CNA_C_API CNA_Result cna_ascii_post_process_effect_destroy(
  * @ref cna_debug_draw_set_depth_tested chooses which list the following lines go into.
  *
  * **@ref cna_debug_draw_begin resets that choice to depth-tested and clears both lists.** Setting
- * it before `begin` is therefore lost; set it after. Nothing here refuses -- there are no throws in
- * the canonical class at all -- so the contracts worth knowing are about *when* state is reset
- * rather than about what is rejected.
+ * it before `begin` is therefore lost; set it after. The C boundary validates handles, pointer
+ * inputs and canonical booleans. Native allocation and rendering failures are translated into
+ * C result codes.
  */
 typedef CNA_Handle CNA_DebugDrawHandle;
 
@@ -435,8 +440,9 @@ typedef CNA_Handle CNA_DebugDrawHandle;
  *
  * @param graphics_device The device to draw with.
  * @param out_debug Receives the renderer; invalid on failure.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid device or null
- * output, `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_INVALID_HANDLE` for an invalid device, `CNA_RESULT_NOT_SUPPORTED` without
+ * CNA_CNAEXT, or another documented thread/native failure.
  */
 CNA_C_API CNA_Result cna_debug_draw_create(
     CNA_Handle graphics_device, CNA_DebugDrawHandle* out_debug);
@@ -466,7 +472,8 @@ CNA_C_API CNA_Result cna_debug_draw_begin(
  * @brief Draws both line lists and closes the frame.
  *
  * **Idempotent**: ending a frame that is not open does nothing and succeeds, so a caller does not
- * have to track whether it opened one. The device's depth-stencil state is restored afterwards.
+ * have to track whether it opened one. On success the device's depth-stencil state is restored;
+ * other draw state, including the vertex-buffer binding, is not saved and restored.
  *
  * @param debug The renderer.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without CNA_CNAEXT, or an error.
@@ -617,7 +624,7 @@ CNA_C_API CNA_Result cna_debug_draw_get_line_count(
  *
  * @param debug The renderer.
  * @param depth_tested Which list to copy; a non-canonical byte is refused.
- * @param destination The array, or null to ask for the count.
+ * @param destination The array, or null with zero capacity to ask for the count.
  * @param capacity How many vertices it holds.
  * @param out_count Receives the number of vertices, which is twice the number of lines in that
  * list.

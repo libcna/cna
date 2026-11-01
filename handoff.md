@@ -35,6 +35,18 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API standalone graphics-extension contract reconciliation (2026-11-01):
+  `docs/c-api/GRAPHICS_EXT.md` now records build availability, owned-device/game-child lifetimes,
+  CRT/depth controls and shader-execution limits, ASCII readback and opaque output, DebugDraw's
+  begin/clear/end and vertex-copy rules, and the always-built IBL descriptor. IBL completeness
+  checks registered texture kinds, a positive mip count and non-negative intensity; it does not
+  prove texture contents, actual mip count, common ownership or finite intensity. Public Doxygen
+  corrects BlackWhite's opaque black fill, the IBL predicate, owned/pre-run device inputs,
+  DebugDraw's invalid-device result and the obsolete no-failure claim; depth-state restoration is
+  qualified to successful draws. The selected C ABI/header and ASCII targets build; all seven
+  focused C API tests and both native ASCII pixel/3D-source probes pass through the private SDLGPU
+  runner with `CNA_CNAEXT=ON`. All nine coverage, generation, limitation, export and release gates
+  pass. The page keeps renderer pixel evidence separate from the C smoke's accepted refusals.
 - C API graphics-device contract reconciliation (2026-11-01):
   `docs/c-api/GRAPHICS_DEVICE.md` now describes the current device surface and removes a duplicated
   frame-control/buffer-binding section. It corrects default Viewport to all-zero fields including
