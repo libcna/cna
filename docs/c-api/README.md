@@ -2,50 +2,24 @@
 
 ## Status
 
-The native C API is experimental. Its initial `0.1.0` shared library and public C17 headers provide
-the ABI/error substrate plus a HEADLESS-tested `Game` lifecycle slice
-(`CNA_GameTime`, clear, UTF-8 title and callback-scoped graphics-device capability discovery) plus
-complete `Texture`/`Texture2D` construction, properties, typed mip/rectangle transfer and
-PNG/JPEG memory/file routes, owned Texture3D/TextureCube creation and complete
-volume/face/mip/region transfer contracts, POD-array `SpriteBatch` submission,
-complete graphics-state descriptors, display/adapter/presentation snapshots, owned render targets
-and caller-built SpriteFonts, fixed-layout 3D math/geometry values, complete MathHelper,
-Point/Rectangle and complete Vector2/Vector3/Vector4/Quaternion/Matrix/Plane/Ray/bounding-volume
-operations, complete CurveKey/Curve/CurveKeyCollection evaluation and mutation, packed storage and
-complete PackedVector conversion/equality plus Color operations/named values, all seven built-in
-vertex POD values with equality/hash/text and canonical declaration queries, owned standalone
-vertex declarations, owned static/dynamic vertex buffers with complete typed/raw transfer and
-fixed vertex-buffer binding descriptors, owned static/dynamic 16/32-bit index buffers with
-complete transfer semantics, the common graphics-resource
-name/tag/device/disposal/event contract, core draw/buffer/vertex
-identities, effect parameter class/type and value/texture identities, immutable annotation
-metadata/collections, mutable parameters with all scalar/array/string/texture overloads and stable
-nested collection views, owned techniques/passes with stable collection aliases, non-pointer
-identities, annotation/pass nesting and canonical Apply dispatch, owned base/material/source-shader/
-stock-sprite effects with cloning, current collections, exact source/type strings, shader uniforms,
-textures and world/view/projection matrices, complete BasicEffect material/fog/lighting/texture
-state and stable standalone/nested directional lights, complete AlphaTestEffect,
-DualTextureEffect, EnvironmentMapEffect and 72-bone SkinnedEffect state, plus ColorMatrixEffect and
-both PBR extensions with seven retained texture slots and bounded skinning palettes, stable model
-bones/hierarchies, model mesh parts and game-child meshes with retained resource associations,
-live effect/part views, mesh snapshots and top-level models with copied bone transforms, complete
-morph-target descriptors/data, blending, track evaluation and retained mesh-part upload, plus
-point-in-time keyboard, mouse, gamepad and touch snapshots. An
-owned `ContentManager` adds UTF-8 root/path/key and cache control, built-in loader registration, graphics-device get/set, manifest and reader-usage snapshots and format-preserving Texture2D, TextureCube and SoundEffect load routes,
-with an owned compiled-asset reader over a storage stream and the process-wide type-reader
-registry alongside it. Networking contributes the session identity enumerations, the
-quality-of-service value, owned session-property lists with enumerators, owned packet read and
-write buffers, owned network gamers and machines, the seven event descriptions, owned discovered
-sessions with their read-only collection and the owned session object with its rosters, state,
-gamer management, all ten event subscriptions and the
-discovery, join and invited-join routes; owned
-PCM16 sound effects add explicit instance playback/control plus a real native playback-availability
-probe. The complete storage module adds owned storage devices, containers and file streams with
-count/copy directory and file listings and synchronous equivalents of the canonical fake-async
-selector and container pairs. Exact support is recorded in [`COVERAGE.md`](COVERAGE.md) and
-omissions in [`LIMITATIONS.md`](LIMITATIONS.md). It is not complete public CNA coverage. The contract in
-this directory is binding on implementation; [`RELEASE_GATE.md`](RELEASE_GATE.md) records when its
-measured release criteria are complete.
+The native C API is experimental at **ABI 0.52.0**. Its native library exports **3,213** `cna_*`
+symbols through **60** public headers. Those headers have a measured C99 floor and compile as C++11
+or later; the ABI uses fixed-width C representations rather than exposing CNA's C++ ABI.
+
+The generated coverage inventory currently accounts for **8,134** runtime-scope public C++
+declarations: **7,033 implemented**, **15 partially mapped**, **633 planned** and **453 not
+applicable**. The experimental release verdict is therefore **Not ready**: the only unmet release
+criterion is the 633 declarations that still need a C-native mapping or reviewed disposition.
+These values are summaries, not a second status ledger; [`COVERAGE.md`](COVERAGE.md),
+[`LIMITATIONS.md`](LIMITATIONS.md) and [`RELEASE_GATE.md`](RELEASE_GATE.md) are generated and remain
+the sources of truth.
+
+Native consumers install the `CNACApi` component and link `CNA::CApi`; supported Unix builds may
+also provide `CNA::CApiStatic`. The installed shared and static consumers are exercised in
+applicable native test trees. Emscripten instead produces the ESM plus WebAssembly package described
+in [`WASM_ARTIFACT.md`](WASM_ARTIFACT.md). Start with [`CONSUMING.md`](CONSUMING.md) for a complete
+C99 program and with [`LIMITATIONS.md`](LIMITATIONS.md) before deciding whether the current surface
+covers an application's needs.
 
 ## Purpose
 
@@ -56,14 +30,15 @@ It lives in this repository and evolves atomically with the CNA modules it adapt
 C program → CNA C API → CNA C++ → native platform
 ```
 
-Sharp Runtime is a native C++ implementation dependency. It is never a C API dependency or a
-public C type.
+Sharp Runtime is a native C++ implementation dependency. A C consumer never includes its headers,
+links its targets separately or receives one of its types across the ABI.
 
-## Complete public-API coverage
+## Public-API coverage accounting
 
-The finished C API must cover every public CNA C++ type, constructor, property, method overload,
-operator, constant and event. C does not have C++ classes, overloads, exceptions, templates or
-inheritance, so coverage uses a documented C-native equivalent:
+Every public declaration in a runtime module must receive an explicit disposition: implemented by
+a tested C-native mapping, partially mapped with an approved boundary, planned under a live owner,
+or not applicable for a recorded reason. C does not have C++ classes, overloads, exceptions,
+templates or inheritance, so callable coverage uses these representations:
 
 | C++ concept | C API representation |
 |---|---|
@@ -152,29 +127,24 @@ campaign chronology belongs in Git history, not in a second status document.
 - Headers include only standard C headers and use no C++ or Sharp Runtime spelling.
 - Every public declaration receives a Doxygen block in its `.h` header.
 
-The exact modules and headers are defined in the implementation plan. The current header split is
-`abi.h`, `core.h`, `core_ext.h`, `runtime.h`, `graphics.h`, `graphics_state.h`, `display.h`, `render_target.h`,
-`sprite_font.h`, `graphics_resource.h`, `math_values.h`, `math.h`, `vectors.h`, `quaternion.h`, `matrix.h`, `geometry.h`,
-`curve.h`, `color.h`, `packed_vectors.h`, `graphics3d.h`, `effects.h`, `models.h`, `vertex_values.h`,
-`vertex_resources.h`, `index_resources.h`, `texture.h`, `texture_volume.h`, `input.h`, `content.h`,
-`input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `input_text.h`, `input_touch.h`,
-`input_haptics.h`, `input_devices.h`, `input_joystick.h`, `content_readers.h`, `storage.h`, `gamer_services.h`,
-`net.h`, `net_gamers.h`, `net_sessions.h`, `graphics_device.h`, `graphics_ext.h`, `named_colors.h`, `audio.h`,
-`xact.h`, `media.h`, `media_library.h`, `media_player.h`, `video.h`, `sensors.h`, `devices.h`,
-`runtime_components.h`, `runtime_window.h` and `runtime_graphics_manager.h`;
-later family headers follow as coverage requires.
+The authoritative header set is `modules/c-api/include/CNA/C/*.h`; it currently contains 60 files,
+with `cna.h` as the umbrella. The compatibility gate discovers that directory and compiles every
+header independently, so a new family cannot be hidden by a manually maintained list here.
 
 ## Supported configurations
 
-The C API shares CNA's compile-time renderer selection. It does not add a second renderer
-selection mechanism. A C program can query the selected renderer, graphics features, touch-device
-connection and native audio-playback availability. An unsupported operation returns
-`CNA_RESULT_NOT_SUPPORTED` instead of silently changing behavior.
+The C API uses CNA's renderer registry and selection state; it does not maintain a parallel
+renderer mechanism. A single-renderer build exposes one identity, while a multi-renderer build can
+enumerate its compiled identities, select a preferred renderer and report the renderer that
+actually created the device. Programs query capabilities, detailed features, numeric limits and
+per-format support from the active borrowed graphics device rather than inferring them from an
+identity. [`RENDERERS_AND_CAPABILITIES.md`](RENDERERS_AND_CAPABILITIES.md) defines those distinctions.
 
-The automated vertical slice runs with HEADLESS for deterministic state and honest unsupported
-readback behavior. On a renderer that can read its backbuffer back, the same strict-C source
-verifies exact texture, SpriteBatch, clear and backbuffer pixels rather than inferring rendering
-correctness from calls.
+Runtime evidence is configuration-specific. `HEADLESS` is the deterministic lifecycle/state and
+honest-refusal control, not proof that drawing works. Pixel, presentation and other native-renderer
+claims require focused observations on a capable renderer. Unsupported optional behavior returns
+`CNA_RESULT_NOT_SUPPORTED`; [`COMPATIBILITY.md`](COMPATIBILITY.md) records exactly what the header
+matrix proves and deliberately does not promote that evidence into renderer or platform coverage.
 
 ## Hard boundaries
 
@@ -182,43 +152,44 @@ The C API must not expose:
 
 - C++ class pointers, references, exceptions, RTTI, templates, `std::*` or compiler-specific ABI;
 - `System::*`, Sharp Runtime object layouts, streams, tasks, exceptions, delegates or collections;
-- renderer-private native objects such as SDL windows, graphics devices or native API handles;
+- renderer implementation objects or native graphics-device ownership. The versioned borrowed
+  native-window descriptor is a narrow interop exception, not a renderer object exposed as API;
 - hidden ownership, C++ containers, locale-dependent strings or implicit allocator rules.
 
-See the sibling contract documents for ABI versioning, handles, ownership, errors, text/buffers,
-callbacks/threading, renderer capability reporting, [graphics resources](GRAPHICS_RESOURCES.md),
-[graphics device values and identities](GRAPHICS_DEVICE.md),
-[graphics extensions](GRAPHICS_EXT.md),
-[effect metadata](EFFECTS.md),
-[models and animation](MODELS.md),
-[textures](TEXTURES.md),
-[3D and cube textures](TEXTURE_VOLUMES.md),
-[vertex buffers](VERTEX_BUFFERS.md),
-[index buffers](INDEX_BUFFERS.md),
-[math and 3D values](MATH_AND_3D_VALUES.md), [input snapshots](INPUT_SNAPSHOTS.md) and the Sharp
-Runtime boundary. The owned content/cache
-contract is in [`CONTENT.md`](CONTENT.md), and the `.cnb` container -- its identities, checksums,
-read limits and chunk compression, and which parts of the format are not bound yet -- is in
-[`CNB.md`](CNB.md); the device/container/stream ownership and fake-async
-contract is in [`STORAGE.md`](STORAGE.md); the networking values, packet buffers and
-join-failure contract are in [`NET.md`](NET.md). The
-[audio ownership/control contract](AUDIO.md) defines the PCM and mixer-thread boundary; the
-media identities, songs, the library catalog and their ownership contract are in
-[`MEDIA.md`](MEDIA.md); the sensor timestamp, reading and device contract is in
-[`DEVICES.md`](DEVICES.md), which also covers vibration, the host services and the camera; the
-component callback model, the game's component collection and the limits of the service container
-are in [`GAME_COMPONENTS.md`](GAME_COMPONENTS.md); the gamer-services identities and routes, and what
-they answer with and without a CNA service, are in [`GAMER_SERVICES.md`](GAMER_SERVICES.md).
-[`COVERAGE.md`](COVERAGE.md) is the source-to-C status summary and tells maintainers how to produce
-the full implementation record; the compilers, language
-modes and build configurations the ABI is actually put through — and the ones it is not — are in
-[`COMPATIBILITY.md`](COMPATIBILITY.md); how the surfaces that read caller-supplied bytes are
-covered, and what makes their oracle worth trusting, is in [`FUZZING.md`](FUZZING.md). If you are
-here to *use* this ABI rather than to build it, start at [`CONSUMING.md`](CONSUMING.md), which
-carries the installation, the CMake package and a complete C program to copy, and then
-[`LIMITATIONS.md`](LIMITATIONS.md), which answers the question the coverage inventory cannot: what
-is **not** here, grouped by the reason, so you can tell whether any of it stands in your way.
-[`RELEASE_GATE.md`](RELEASE_GATE.md) records whether this ABI may be published at all, measured on
-every run rather than written down once. How the routes are implemented — generated from
-`modules/c-api/spec/`, around hand-written helpers where a route has real logic, and how to add
-either kind — is in [`GENERATED_ROUTES.md`](GENERATED_ROUTES.md).
+## Document map
+
+### Consumer contracts
+
+| Question | Contract |
+|---|---|
+| How do I install, link and run it? | [`CONSUMING.md`](CONSUMING.md) |
+| What is missing or deliberately narrower? | [`LIMITATIONS.md`](LIMITATIONS.md) |
+| What may change between ABI versions? | [`ABI_VERSIONING.md`](ABI_VERSIONING.md) |
+| What owns a handle or resource, and when does it die? | [`HANDLES.md`](HANDLES.md), [`OWNERSHIP.md`](OWNERSHIP.md) |
+| How are failures reported? | [`ERRORS.md`](ERRORS.md) |
+| How do text, buffers and callbacks cross the boundary? | [`STRINGS_AND_BUFFERS.md`](STRINGS_AND_BUFFERS.md), [`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md) |
+| How do renderer selection and capability queries work? | [`RENDERERS_AND_CAPABILITIES.md`](RENDERERS_AND_CAPABILITIES.md) |
+| Why do no Sharp Runtime types cross the ABI? | [`SHARP_RUNTIME_BOUNDARY.md`](SHARP_RUNTIME_BOUNDARY.md) |
+
+### Subsystem contracts
+
+| Area | Contracts |
+|---|---|
+| Graphics resources and devices | [`GRAPHICS_RESOURCES.md`](GRAPHICS_RESOURCES.md), [`GRAPHICS_DEVICE.md`](GRAPHICS_DEVICE.md), [`GRAPHICS_EXT.md`](GRAPHICS_EXT.md) |
+| Effects, models and animation | [`EFFECTS.md`](EFFECTS.md), [`MODELS.md`](MODELS.md) |
+| Textures and buffers | [`TEXTURES.md`](TEXTURES.md), [`TEXTURE_VOLUMES.md`](TEXTURE_VOLUMES.md), [`VERTEX_BUFFERS.md`](VERTEX_BUFFERS.md), [`INDEX_BUFFERS.md`](INDEX_BUFFERS.md) |
+| Values and input | [`MATH_AND_3D_VALUES.md`](MATH_AND_3D_VALUES.md), [`INPUT_SNAPSHOTS.md`](INPUT_SNAPSHOTS.md) |
+| Content and storage | [`CONTENT.md`](CONTENT.md), [`CNB.md`](CNB.md), [`STORAGE.md`](STORAGE.md) |
+| Network and services | [`NET.md`](NET.md), [`GAMER_SERVICES.md`](GAMER_SERVICES.md), [`GAME_COMPONENTS.md`](GAME_COMPONENTS.md) |
+| Audio, media and devices | [`AUDIO.md`](AUDIO.md), [`MEDIA.md`](MEDIA.md), [`DEVICES.md`](DEVICES.md) |
+
+### Maintainer evidence
+
+| Evidence | Document |
+|---|---|
+| Generated source-to-C accounting | [`COVERAGE.md`](COVERAGE.md) |
+| Header compilers and language modes | [`COMPATIBILITY.md`](COMPATIBILITY.md) |
+| Byte-facing oracle and fuzz boundary | [`FUZZING.md`](FUZZING.md) |
+| Measured experimental release verdict | [`RELEASE_GATE.md`](RELEASE_GATE.md) |
+| Generated versus hand-written route implementation | [`GENERATED_ROUTES.md`](GENERATED_ROUTES.md) |
+| Native WebAssembly package | [`WASM_ARTIFACT.md`](WASM_ARTIFACT.md) |

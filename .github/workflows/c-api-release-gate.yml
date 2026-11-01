@@ -7,10 +7,10 @@
 #   * a criterion recorded as blocked that has quietly become met -- the failure mode a release gate
 #     actually dies of, because nobody re-reads a document that says "not yet".
 #
-# The gate currently reports NOT READY, and correctly so: every mechanical criterion is met, and two
-# packaging questions await a decision no implementer may make alone. That is the gate working. This
-# job therefore passes while the verdict stands, and fails the moment the record and the reality
-# stop matching.
+# The gate currently reports NOT READY, and correctly so: runtime-scope declarations remain planned.
+# That is the gate working. This job therefore passes while the declared criterion and the
+# measurement agree, and fails the moment the record, generated evidence or landing-page summary
+# stops matching.
 
 name: C API release gate
 
@@ -30,6 +30,7 @@ on:
       - 'docs/c-api/**'
       - 'modules/c-api/CMakeLists.txt'
       - 'modules/c-api/examples/**'
+      - '.github/workflows/c-api-release-gate.yml'
   workflow_dispatch:
 
 concurrency:
@@ -69,9 +70,8 @@ jobs:
       - name: Print the verdict
         run: python3 tools/c-api/check_release_gate.py --run
 
-      # The direction that matters. A criterion recorded as blocked that has quietly become met is
-      # how a project ships something it had decided not to ship, so the job proves the check
-      # catches it rather than assuming so.
+      # A stale declaration must not overrule the measurement. Mark the open coverage criterion as
+      # met in only the declaration and require the gate to reject the disagreement.
       - name: Prove the gate rejects a decision recorded in only one place
         run: |
           set -euo pipefail
@@ -100,6 +100,35 @@ jobs:
 
       - name: Confirm the tree was restored
         run: git diff --exit-code -- tools/c-api/release_gate.json
+
+      - name: Prove the gate rejects a stale landing-page snapshot
+        run: |
+          set -euo pipefail
+          cp docs/c-api/README.md /tmp/c-api-readme.md.orig
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          path = Path("docs/c-api/README.md")
+          text = path.read_text(encoding="utf-8")
+          matches = list(re.finditer(r"\*\*([0-9,]+) planned\*\*", text))
+          if len(matches) != 1:
+              raise SystemExit("the README planned-count sentence this check perturbs has moved")
+          match = matches[0]
+          count = int(match.group(1).replace(",", ""))
+          stale = f"**{count - 1:,} planned**"
+          path.write_text(text[:match.start()] + stale + text[match.end():], encoding="utf-8")
+          PY
+          status=0
+          python3 tools/c-api/check_release_gate.py --check || status=$?
+          cp /tmp/c-api-readme.md.orig docs/c-api/README.md
+          if [ "$status" -eq 0 ]; then
+            echo "::error::the release gate accepted a stale README coverage count" >&2
+            exit 1
+          fi
+          echo "the gate rejected the stale landing-page snapshot, as it must"
+
+      - name: Confirm the landing page was restored
+        run: git diff --exit-code -- docs/c-api/README.md
 
       - name: Verify regeneration is deterministic
         run: |

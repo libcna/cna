@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API landing-page reconciliation (2026-11-01):
+  `docs/c-api/README.md` is now a current entry point rather than a hand-maintained inventory of
+  the initial ABI 0.1.0 slice. It records ABI 0.52.0, 3,213 exports, 60 C99/C++11-compatible public
+  headers and the generated 8,134-symbol disposition (7,033 implemented, 15 partial, 633 planned,
+  453 not applicable), with the experimental verdict honestly **Not ready** while planned rows
+  remain. The old C17/HEADLESS vertical-slice narrative and 60-name header list are gone; renderer
+  evidence now distinguishes the deterministic HEADLESS refusal control from real-renderer proof,
+  the native-window interop descriptor is acknowledged as the narrow exception to the no-native-
+  object boundary, and a compact document map replaces the closing wall of prose. The landing-page
+  ABI, header count, coverage tuple and verdict are now checked by `CApiReleaseGate`; its CI job has
+  a negative stale-README test, and `CApiDocExportCounts` now watches the README export count too.
+  Six focused coverage/compatibility/limitations/export/release/ABI CTests pass, all relative links
+  resolve, and the existing generated reports remain unchanged and current.
 - Installed C API consumer contract reconciliation (2026-11-01):
   `docs/c-api/CONSUMING.md` now matches the package actually emitted by `CNACApi`. The installed
   consumer gate is scoped to native ELF and Mach-O trees rather than every build; Windows has

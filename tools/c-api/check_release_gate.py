@@ -35,6 +35,7 @@ LIMITATIONS_PATH = TOOLS / "limitations.json"
 ABI_BASELINE_PATH = TOOLS / "abi_baseline.json"
 DOC_DIR = REPO_ROOT / "docs" / "c-api"
 DOC_PATH = DOC_DIR / "RELEASE_GATE.md"
+README_PATH = DOC_DIR / "README.md"
 C_API_DIR = REPO_ROOT / "modules" / "c-api"
 ABI_HEADER_PATH = C_API_DIR / "include" / "CNA" / "C" / "abi.h"
 
@@ -289,6 +290,81 @@ def release_name(declaration: dict) -> str:
     return template.format(abi_version=abi_version())
 
 
+def readme_status_disagreements(evaluation: dict) -> list[str]:
+    """Keep the hand-written landing-page snapshot tied to the generated evidence."""
+    if not README_PATH.exists():
+        return [f"{README_PATH.relative_to(REPO_ROOT)} is missing"]
+
+    disagreements: list[str] = []
+    coverage_path = DOC_DIR / "COVERAGE.md"
+    if not coverage_path.exists():
+        return [f"{coverage_path.relative_to(REPO_ROOT)} is missing"]
+
+    readme = README_PATH.read_text(encoding="utf-8")
+    coverage = coverage_path.read_text(encoding="utf-8")
+
+    documented_abi = re.search(r"experimental at \*\*ABI (\d+\.\d+\.\d+)\*\*", readme)
+    current_abi = abi_version()
+    if documented_abi is None:
+        disagreements.append("README.md has no current experimental ABI identity")
+    elif documented_abi.group(1) != current_abi:
+        disagreements.append(
+            f"README.md says ABI {documented_abi.group(1)}, but abi.h says {current_abi}")
+
+    documented_headers = re.search(r"symbols through \*\*([0-9,]+)\*\* public headers", readme)
+    current_headers = len(list((C_API_DIR / "include" / "CNA" / "C").glob("*.h")))
+    if documented_headers is None:
+        disagreements.append("README.md has no public-header count")
+    elif int(documented_headers.group(1).replace(",", "")) != current_headers:
+        disagreements.append(
+            f"README.md says {documented_headers.group(1)} public headers, "
+            f"but the include directory has {current_headers}")
+
+    generated_snapshot = re.search(
+        r"Snapshot: \*\*([0-9,]+) headers\*\*, \*\*([0-9,]+) symbols\*\*, "
+        r"\*\*([0-9,]+) implemented\*\*, \*\*([0-9,]+) partial\*\*, "
+        r"\*\*([0-9,]+) planned\*\*, \*\*([0-9,]+) not applicable\*\*",
+        coverage,
+    )
+    documented_snapshot = re.search(
+        r"coverage inventory currently accounts for \*\*([0-9,]+)\*\* runtime-scope public C\+\+\s+"
+        r"declarations: \*\*([0-9,]+) implemented\*\*, \*\*([0-9,]+) partially mapped\*\*, "
+        r"\*\*([0-9,]+) planned\*\* and \*\*([0-9,]+) not\s+applicable\*\*",
+        readme,
+    )
+    if generated_snapshot is None:
+        disagreements.append("COVERAGE.md has no generated snapshot")
+    elif documented_snapshot is None:
+        disagreements.append("README.md has no coverage snapshot")
+    else:
+        generated_values = tuple(
+            int(value.replace(",", "")) for value in generated_snapshot.groups()[1:])
+        documented_values = tuple(
+            int(value.replace(",", "")) for value in documented_snapshot.groups())
+        if documented_values != generated_values:
+            disagreements.append(
+                f"README.md coverage {documented_values} disagrees with "
+                f"COVERAGE.md {generated_values}")
+
+    expected_verdict = "Ready" if evaluation["ready"] else "Not ready"
+    documented_verdict = re.search(r"release verdict is therefore \*\*(Ready|Not ready)\*\*", readme)
+    if documented_verdict is None:
+        disagreements.append("README.md has no experimental release verdict")
+    elif documented_verdict.group(1) != expected_verdict:
+        disagreements.append(
+            f"README.md says {documented_verdict.group(1)}, but the measured verdict is "
+            f"{expected_verdict}")
+
+    if re.search(r"the only unmet release\s+criterion", readme):
+        failed = [result for result in evaluation["results"] if result["state"] == NOT_MET]
+        blocked = [result for result in evaluation["results"] if result["state"] == BLOCKED]
+        if len(failed) != 1 or failed[0]["id"] != "coverage-closed" or blocked:
+            disagreements.append(
+                "README.md calls coverage the only unmet criterion, but the measured gate differs")
+
+    return disagreements
+
+
 
 def render(evaluation: dict) -> str:
     declaration = evaluation["declaration"]
@@ -398,6 +474,13 @@ def main() -> int:
         for entry in evaluation["disagreements"]:
             print(f"  {entry}", file=sys.stderr)
         print("Update tools/c-api/release_gate.json, or fix what regressed.", file=sys.stderr)
+        return 1
+
+    readme_disagreements = readme_status_disagreements(evaluation)
+    if readme_disagreements:
+        print("docs/c-api/README.md disagrees with the measured C API status:", file=sys.stderr)
+        for entry in readme_disagreements:
+            print(f"  {entry}", file=sys.stderr)
         return 1
 
     current = DOC_PATH.read_text(encoding="utf-8") if DOC_PATH.exists() else ""

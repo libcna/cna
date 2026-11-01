@@ -440,9 +440,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         # release gate actually dies of -- one recorded as blocked that has quietly become met,
         # because nobody re-reads a document that says "not yet".
         #
-        # It currently reports NOT READY, and correctly: every mechanical criterion is met, and two
-        # packaging questions await a decision that no implementer may make alone. That is the gate
-        # working, not the gate failing, so the test passes while the verdict stands.
+        # It currently reports NOT READY, and correctly: runtime-scope declarations remain planned.
+        # That is the gate working, not the gate failing, so the test passes while the
+        # declared criterion and the measurement agree.
         add_test(NAME CApiReleaseGate
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_release_gate.py" --check)
@@ -468,8 +468,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         #
         # A generated probe reports what the compiler *actually* laid out -- every struct size,
         # alignment and field offset, every scalar typedef's width, every constant's value -- and it
-        # is held against tools/c-api/abi_baseline.json. Additions are permitted and re-recorded; a
-        # moved field, a changed value or a vanished export is named as an ABI break.
+        # is held against tools/c-api/abi_baseline.json. Compatible additions are re-recorded after
+        # review; growing an existing struct, moving a field, changing a value or removing an export
+        # is named as an ABI break.
         #
         # The header half needs no build, so it runs here for the same reason the coverage matrix
         # does: gating it on the C API being enabled would mean the ordinary build -- the one most

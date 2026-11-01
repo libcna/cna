@@ -3,8 +3,8 @@
 """Hold the prose export counts against the measured one.
 
 ``abi_baseline.json`` records how many `cna_*` symbols the library actually exports, and a gate
-already fails when that number changes without review. Three *sentences* repeat the same number in
-`docs/c-api/` and in `limitations.json`, and no gate read them: they said **2,720** for months while
+already fails when that number changes without review. Several *sentences* repeat the same number
+in `docs/c-api/` and in `limitations.json`, and no gate read them: they said **2,720** for months while
 the baseline measured 2,838, were corrected by hand on 2026-08-17, and went stale again at the very
 next slice that added exports. C API task CBIND-064 recorded that as "nothing prevents it happening
 again". This is the thing that prevents it.
@@ -29,6 +29,7 @@ BASELINE_PATH = Path(__file__).resolve().parent / "abi_baseline.json"
 # Files whose prose repeats the count. Generated files are included on purpose: a generator that
 # copies a stale number out of its own source is exactly as wrong as a hand-written one.
 SEARCH_PATHS = (
+    "docs/c-api/README.md",
     "docs/c-api/ABI_VERSIONING.md",
     "docs/c-api/CONSUMING.md",
     "docs/c-api/LIMITATIONS.md",
