@@ -2,19 +2,26 @@
 
 ## Scope
 
-The CBIND-034 surface is declared by `graphics_state.h`, `display.h`, `render_target.h` and
-`sprite_font.h`, all included by `CNA/C/cna.h`. It maps the complete public CNA families for
-graphics state values, sampler collections, display modes/adapters, presentation parameters,
-render targets and SpriteFont without exposing a C++ object, collection or renderer pointer.
-CBIND-035C3 adds the shared `GraphicsResource` contract in `graphics_resource.h` for every
-currently supported resource handle.
+This page covers the shared resource, state, display, render-target and font boundary. The public
+headers are all included by `CNA/C/cna.h`:
 
-The completed Texture/Texture2D construction, typed-transfer and encoded-image contract is
+| Header | Contract |
+|---|---|
+| `graphics_resource.h` | Shared names, tags, disposal, device queries and disposing subscriptions. |
+| `graphics_state.h` | Copied blend/depth/rasterizer/sampler descriptors and SpriteBatch state/effect begin. |
+| `display.h` | Display modes, adapter enumeration, format negotiation and presentation parameters. |
+| `render_target.h` | Owned targets, subresource bindings, applied properties and content-loss events. |
+| `sprite_font.h` | Owned fonts, copied glyph tables, texture retention and measurement. |
+
+The Texture/Texture2D construction, typed-transfer and encoded-image contract is
 documented separately in [`TEXTURES.md`](TEXTURES.md).
 The Texture3D/TextureCube handle and region-transfer contract is documented in
 [`TEXTURE_VOLUMES.md`](TEXTURE_VOLUMES.md).
 Effect resources and their transitive descendant-view lifetime are documented in
 [`EFFECTS.md`](EFFECTS.md).
+Device ownership, frame control and capability queries are in
+[`GRAPHICS_DEVICE.md`](GRAPHICS_DEVICE.md) and
+[`RENDERERS_AND_CAPABILITIES.md`](RENDERERS_AND_CAPABILITIES.md).
 
 All extensible inputs and outputs begin with `struct_size` and `struct_version`. Version one
 callers initialize both fields before a query; preset/value initializers fill the complete output.
@@ -22,94 +29,163 @@ Fixed-width identities and layouts are frozen by both C17 and C++23 compile-time
 
 ## Common graphics-resource contract
 
-Texture2D, Texture3D, TextureCube, RenderTarget2D, RenderTargetCube, VertexDeclaration,
-VertexBuffer, IndexBuffer and Effect handles
-support the generic `cna_graphics_resource_*` operations. A wrong-kind or stale handle is rejected before the native
-object is touched. Standalone declarations report an invalid graphics-device handle; game-owned
-resources return the same borrowed device handle only during an active lifecycle callback. The
-borrow expires with that callback.
+Texture2D, Texture3D, TextureCube, RenderTarget2D, RenderTargetCube, VertexDeclaration, VertexBuffer,
+IndexBuffer, Effect and OcclusionQuery handles support the generic `cna_graphics_resource_*`
+operations. The resolver checks handle kind, generation and thread ownership before reading the
+native resource. SpriteFont, SpriteBatch, ASCII and DebugDraw handles do not become generic
+graphics resources merely because they use a device.
+
+### Device identity
+
+`cna_graphics_resource_get_graphics_device` returns `CNA_RESULT_SUCCESS` with
+`CNA_INVALID_HANDLE` when the native resource has no device, as with a standalone declaration.
+For a game-owned resource it uses the game's existing borrowing window: during a callback, or
+before the first run until the first callback returns. The resource outlives that borrowed handle.
+The getter does not transfer device ownership.
+
+The current getter resolves only game owners; independently created device handles are not
+recovered through this route. The measured owned-device failure and its cause are recorded in
+[`handoff.md` §5](../../handoff.md#5-known-bugs-and-limitations). Keep the original owned device
+handle when creating resources on one.
+
+### Names and tags
 
 Names are validated length-delimited UTF-8. Count/copy operations return exact bytes without an
 implicit terminator and never write a partial result. `ToString` returns the name when nonempty and
-the native fully qualified type name otherwise. The C tag is a fixed 64-bit opaque token stored in
-the validated handle registry; it deliberately does not expose or mutate the native
-`System::Object* Tag`, and it resets when a handle slot is released and reused.
+the native fully qualified type name otherwise. The C tag is a fixed 64-bit opaque token stored
+per handle in the registry, with zero as its default. It does not expose or mutate native
+`System::Object* Tag`. Different C aliases of the same native resource have separate C tags, and
+releasing/reusing a registry slot resets its token.
 
-Explicit disposal keeps the C handle alive so callers may query `is_disposed`; repeated disposal
-is a successful no-op. Typed destroy operations dispose before releasing their handle. A disposing
-subscription owns a separate registration handle and invokes its caller-owned function/context
-synchronously after native `IsDisposed` becomes true, matching XNA/C++.
-This corrects the former C timing contract (owner approval, 2026-10-23); no ABI changes. Unsubscription remains valid after the
-resource itself is destroyed. Resource operations and subscriptions retain the creation-thread
-rule.
+### Disposal and retention
+
+`cna_graphics_resource_dispose` keeps the C handle alive so callers may query `is_disposed` and
+then release it through its typed destroy route. When disposal is permitted, repeated native
+disposal is a successful no-op. The generic route returns `CNA_RESULT_INVALID_STATE` for a
+non-disposable borrowed view or a resource retained by an active C API owner. This includes
+Texture2D resources held by a SpriteBatch or font, textures held by effects, resources held by
+skinned-model bundles and render targets held by a render-target scope. Native disposal also
+rejects a target that is still bound. Generic disposal cannot bypass those lifetime guards.
+
+A disposing subscription owns a separate registration handle and invokes its caller-owned
+function/context synchronously after native `IsDisposed` becomes true. It does not keep the source
+alive or block source destruction. The registration remains releasable after the resource is gone;
+a second unregister returns `CNA_RESULT_INVALID_HANDLE`. These routes retain owner-thread checks;
+the opt-in foreign-thread service and callback rules are defined in
+[`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md).
 
 ## Graphics state values
 
 `CNA_BlendState`, `CNA_DepthStencilState`, `CNA_RasterizerState` and `CNA_SamplerState` are copied
 POD descriptors. Their `cna_*_state_init` functions materialize the native default and named XNA
 presets. A caller may then change fields and use the matching graphics-device get/set operation.
-Sampler operations address one of 16 pixel or vertex slots with `CNA_ShaderStage`.
+Sampler operations select a stage with `CNA_ShaderStage`. Pixel samplers expose 16 slots; vertex
+samplers expose four in HiDef and none in Reach. Unknown stages and indices at or above the
+16-slot storage maximum return `CNA_RESULT_INVALID_ARGUMENT`; a vertex index within storage but
+outside the profile's active range returns `CNA_RESULT_OUT_OF_RANGE`.
 
 Preset initialization is renderer-independent and may run on any thread. Applying/querying a
-device state requires the callback-scoped graphics-device handle on the game creation thread.
-Native renderer limitations are returned through the ordinary exception barrier; a backend may
-reject a state it cannot represent. `cna_sprite_batch_begin_with_states` maps the state-bearing
-Begin overload while Effect and transform-matrix variants remain assigned to CBIND-035.
+device state requires a valid owned or borrowed device handle under the normal owner-thread
+rules. Descriptor validation checks versions, defined enum values, canonical booleans, reserved
+bytes and applicable numeric fields before applying state. Native renderer limitations pass
+through the exception barrier. The detailed state behavior is maintained in the native
+blend/depth/rasterizer/sampler documentation.
+
+`cna_sprite_batch_begin_with_states` accepts explicit state descriptors.
+`cna_sprite_batch_begin_with_effect` additionally accepts an optional effect and transform;
+`CNA_INVALID_HANDLE` selects the stock effect and a null transform selects identity. The full
+SpriteBatch boundary is in
+[`RENDERERS_AND_CAPABILITIES.md`](RENDERERS_AND_CAPABILITIES.md#spritebatch-state-boundary).
 
 ## Display, adapters and presentation
 
 `CNA_DisplayMode` and `CNA_PresentationParameters` are value snapshots. Display modes support
 initialization and equality. Adapter collections use count/copy APIs, optional SurfaceFormat
-filtering and index-based metadata/string/profile/format queries. No C++ iterator or string is
-retained. Description and device-name copies contain exactly the reported UTF-8 byte count and no
-implicit terminator.
+filtering and index-based metadata/string/profile/format queries. Adapter enumeration accepts an
+owned game handle even before its first callback, or a valid device handle; the adapter index is
+a point-in-time enumeration index. Format negotiation reports both the selected color/depth/MSAA
+values and whether they exactly match the request. Description and device-name copies contain
+exactly the reported UTF-8 byte count and no implicit terminator.
 
-Presentation initialization uses native defaults; clone deliberately executes CNA's native Clone
-behavior. A device set preserves CNA's already-owned native window internally. Native monitor and
-window handles never cross this ABI: their query functions zero the output and return
-`CNA_RESULT_NOT_SUPPORTED`. Adapter refresh is also a callable limitation while a C-owned game is
-active because CNA's current device retains an adapter pointer that refresh would invalidate.
+Presentation initialization uses XNA's native defaults: a 0×0 backbuffer, fullscreen true, Color
+format, no depth/stencil attachment and no MSAA. Set dimensions and windowed mode explicitly when
+creating an independent windowed device. Clone executes native `Clone`, rather than copying C
+bytes. Setting presentation parameters preserves the device's existing native window; use the
+device reset or manager apply-changes routes for their respective reconfiguration workflows.
+
+The two legacy routes in `display.h`, `cna_graphics_adapter_get_native_monitor_handle` and
+`cna_graphics_device_get_native_window_handle`, zero their scalar output and return
+`CNA_RESULT_NOT_SUPPORTED` after resolving a valid context. Native interop is separately available
+through `cna_game_window_get_native_handle_ext` and `cna_game_window_get_native_window_ext` in
+`runtime_window.h`; see [`GAME_COMPONENTS.md`](GAME_COMPONENTS.md#the-game-window).
+`cna_graphics_adapters_refresh` also refuses a valid device with `CNA_RESULT_NOT_SUPPORTED`, because
+refresh would invalidate the adapter reference retained by that device.
 
 ## Render targets
 
-RenderTarget2D and RenderTargetCube use owned game-child handles. Creation records requested color,
-depth, multisample and usage values; the info query returns native applied properties. A
-RenderTarget2D handle is also accepted by the existing Texture2D info/data/SpriteBatch routes,
-matching native inheritance. A cube handle is not a Texture2D; it is accepted by the TextureCube
-routes.
+RenderTarget2D and RenderTargetCube use owned device-child handles. On a game's device they block
+game destruction until released; on an independent device, release them before that device.
+Creation takes requested color, depth, multisample and usage values; the info query returns native
+applied properties. A RenderTarget2D handle is also accepted by the Texture2D info/data/SpriteBatch
+routes, matching native inheritance. A cube handle is not a Texture2D; it is accepted by the
+TextureCube routes.
 
-The active binding array is replaced atomically only after every handle, parent game, subresource,
-dimension and applied sample count passes validation and CNA accepts the native transition. Count
-and copy return the C binding snapshot; zero bindings restore the backbuffer. A bound target cannot
-be destroyed. Every target must be unbound and destroyed before its game.
+The C binding snapshot is committed only after every handle, device owner and subresource is
+resolved and native `SetRenderTargets` accepts the transition, including its dimension/MSAA and
+other compatibility checks. Count/copy report this C-maintained snapshot; native-only bindings
+are not synthesized into handles. Zero bindings restore the backbuffer. A bound target cannot be
+disposed or destroyed; unbind it and release any retained references first.
+
+For a 2D binding, `array_slice != 0` returns `CNA_RESULT_NOT_SUPPORTED`, and the unused cube face
+must be positive X. For a cube binding, array slice must be zero and the face must be defined;
+invalid values return `CNA_RESULT_INVALID_ARGUMENT`.
 
 Creation may succeed when the selected renderer constructs the CNA object but has no actual target
-storage. `CNA_RenderTargetInfo.renderer_available` then returns false and binding reports
-`CNA_RESULT_NOT_SUPPORTED`. A renderer whose API can really lose and recreate its device raises a
-render target's `ContentLost` event and sets `is_content_lost`; renderer families without that
-failure mode leave subscriptions valid but silent. A caller-initiated device reset is not a
-content-loss notification. Successfully binding the target again clears its loss flag because the
-application is about to repopulate it. Renderer-pointer extensions are represented only by
-`renderer_available`; no native pointer is disclosed.
+storage. `CNA_RenderTargetInfo.renderer_available` reports whether the native target-renderer
+object exists; it does not by itself prove rasterization or pixel correctness. A missing target
+renderer makes binding return `CNA_RESULT_NOT_SUPPORTED`.
+
+Native content-loss notification sets `is_content_lost` and raises `ContentLost`. It can come from
+renderer loss/recovery or the explicit `cna_graphics_device_notify_content_lost_resources_ext`
+route. An ordinary caller-initiated reset does not itself mean content loss. A successful native
+target transition to the resource clears its loss flag because the caller takes responsibility
+for repopulating it. Rebinding the identical target set is a native no-op; it does not reset a
+custom viewport/scissor or clear a newly signaled loss flag. The registration handle remains
+releasable after target destruction. Native target behavior and pixel evidence are in
+[`rendertarget-support.md`](../rendertarget-support.md).
 
 ## Sprite fonts
 
-`cna_sprite_font_create` copies an exact-stride glyph table containing rectangles, one UTF-16 code
-unit and `CNA_Vector3` kerning per glyph. It retains the caller-owned Texture2D or RenderTarget2D;
-the texture handle cannot be destroyed until every font retaining it is destroyed. The font itself
-is an owned game child and must be destroyed before the game.
+`cna_sprite_font_create` copies a fixed-stride `CNA_SpriteFontGlyph` array containing atlas and
+cropping rectangles, one UTF-16 code unit and `CNA_Vector3` kerning per glyph. It validates element
+headers, reserved fields and finite kerning/spacing. It retains the caller-owned Texture2D or
+RenderTarget2D; generic disposal and typed destruction of the atlas are refused while a font holds
+it. A font inherits the texture's device owner; on a game's device the font is also a game child.
 
-Characters are exposed through count/copy semantics. Default character, line spacing and spacing
-remain mutable. `cna_sprite_font_measure_utf8` validates and copies length-delimited UTF-8 before
-calling native measurement; it covers both native String and StringBuilder overload semantics.
-Malformed UTF-8 returns `CNA_RESULT_ENCODING`, and a fallback character not present in the font
-returns `CNA_RESULT_INVALID_ARGUMENT`.
+Characters and full glyph records have separate count/copy routes; capacities are in elements and
+short arrays are not partially written. Default character, line spacing and spacing remain
+mutable. The public fallback setter rejects a character absent from the font; construction
+preserves the supplied fallback under native content-constructor semantics. A later unresolved
+character lookup returns `CNA_RESULT_INVALID_ARGUMENT`.
 
-## Verified configurations
+`cna_sprite_font_measure_utf8` validates and copies length-delimited UTF-8 before native
+measurement. Malformed text returns `CNA_RESULT_ENCODING`. Native StringBuilder measurement
+delegates to the same string algorithm, so no separate mutable builder handle is needed. Text
+submission through SpriteBatch is declared in `graphics.h`; content-loaded fonts are covered in
+[`CONTENT.md`](CONTENT.md). Native measurement and encoding details are in
+[`spritefont-support.md`](../spritefont-support.md).
 
-`GraphicsSurfaceSmoke.c` and `GraphicsResourceSmoke.c` are strict C17 and run unchanged against
-HEADLESS. They cover common names, tags, device identity,
-disposal events and lifetime, state presets and device round trips, SpriteBatch state application,
-display/adapter/presentation snapshots, Texture2D/SpriteFont retention, render-target creation and
-binding/refusal, stale handles, parent ordering and wrong-thread access. HEADLESS is the explicit
-unsupported-storage control.
+## Verification boundary
+
+`CApi_GraphicsResourceSmoke` covers names, C tags, standalone declarations, callback device
+identity, disposal timing, registration lifetime, stale/wrong-kind handles and wrong-thread
+refusals. `CApi_GraphicsSurfaceSmoke` covers state presets/device round trips, adapter queries
+before the first callback, display/presentation snapshots, SpriteBatch begin variants, font
+retention/measurement and target binding/refusal. Effect-parameter, skinned-model and render-target
+lifetime tests cover additional retention guards. Generated route, ABI and header checks
+supplement these semantic tests.
+
+Renderer-dependent branches accept their documented refusal, so a passing C smoke test does not
+establish every state's visual effect or target pixels. HEADLESS is a lifecycle/refusal control;
+real rendering evidence belongs to the native subsystem tests. Current defects are recorded only
+in [`handoff.md` §5](../../handoff.md#5-known-bugs-and-limitations).

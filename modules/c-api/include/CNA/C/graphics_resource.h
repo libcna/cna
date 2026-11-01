@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-/** @brief C-owned opaque metadata token associated with a graphics resource. */
+/** @brief C-owned opaque metadata token stored per resource handle, independently of native Tag. */
 typedef uint64_t CNA_GraphicsResourceTag;
 
 /** @brief Owned handle for one graphics-resource event subscription. */
@@ -26,13 +26,14 @@ typedef void (*CNA_GraphicsResourceDisposingCallback)(
     void* context);
 
 /**
- * @brief Gets the callback-scoped graphics device that owns a resource.
+ * @brief Gets a borrowed graphics device for a game-owned resource.
  *
- * A standalone resource returns success and CNA_INVALID_HANDLE. A device-owned resource returns
- * its existing borrowed handle only while the parent game is inside a lifecycle callback.
+ * A resource with no native device returns success and CNA_INVALID_HANDLE. A game-owned resource
+ * uses the game's callback or pre-run borrowing window. This route currently resolves game owners
+ * only; it does not recover independently owned device handles.
  *
  * @param resource Graphics-resource handle.
- * @param out_graphics_device Receives a borrowed callback-scoped device handle or invalid handle.
+ * @param out_graphics_device Receives a valid borrowed device handle or invalid handle.
  * @return A CNA result code; failure leaves @p out_graphics_device invalid.
  */
 CNA_C_API CNA_Result cna_graphics_resource_get_graphics_device(
@@ -139,7 +140,9 @@ CNA_C_API CNA_Result cna_graphics_resource_set_tag(
  * @brief Explicitly disposes a graphics resource without releasing its C handle.
  *
  * @param resource Graphics-resource handle.
- * @return A CNA result code. Repeated disposal is a successful no-op.
+ * @return A CNA result code; `CNA_RESULT_INVALID_STATE` for a non-disposable borrowed view,
+ * an actively retained resource or a bound target. When disposal is permitted, repeated native
+ * disposal is a successful no-op.
  */
 CNA_C_API CNA_Result cna_graphics_resource_dispose(CNA_Handle resource);
 

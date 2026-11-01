@@ -17,7 +17,7 @@ typedef uint16_t CNA_Char16;
 
 /** @brief Defines one glyph in a caller-built SpriteFont atlas. */
 typedef struct CNA_SpriteFontGlyph {
-    /** @brief Size of this array element in bytes; version one requires exact current size. */
+    /** @brief Declared element size; must cover the current layout. Array stride is sizeof(CNA_SpriteFontGlyph). */
     uint32_t struct_size;
     /** @brief Version of this array element. */
     uint32_t struct_version;
@@ -78,14 +78,15 @@ typedef struct CNA_SpriteFontInfo {
 } CNA_SpriteFontInfo;
 
 /**
- * @brief Creates an owned game-child SpriteFont from a texture and complete glyph table.
+ * @brief Creates an owned SpriteFont from a texture and complete glyph table.
  *
  * @param create_info Versioned texture, glyph and layout configuration.
  * @param out_sprite_font Receives an owned SpriteFont handle on success.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/memory failure.
  *
  * The glyph table is copied. The source texture remains owned by the caller and cannot be
- * destroyed until this SpriteFont is destroyed.
+ * disposed or destroyed until this SpriteFont is destroyed. The font inherits the texture's
+ * device owner and is a game child when the texture belongs to a game.
  */
 CNA_C_API CNA_Result cna_sprite_font_create(
     const CNA_SpriteFontCreateInfo* create_info,

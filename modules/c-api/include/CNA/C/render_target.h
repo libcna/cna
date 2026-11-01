@@ -126,13 +126,12 @@ typedef struct CNA_RenderTargetInfo {
     int32_t multi_sample_count;
     /** @brief Content preservation policy. */
     CNA_RenderTargetUsage usage;
-    /** @brief True from the moment a renderer reports a real device reset until this target is
-     * next bound for rendering, which is when the caller takes ownership of its contents again.
-     * Binding is the boundary rather than a later draw: a target bound with the default
-     * `CNA_RENDER_TARGET_USAGE_DISCARD_CONTENTS` has already had its previous contents discarded.
-     * False on the renderer families that cannot lose a device, which is most of them. */
+    /** @brief True after native content-loss notification until a successful target transition
+     * binds it for rendering. Notification may follow renderer loss/recovery or an explicit call
+     * to cna_graphics_device_notify_content_lost_resources_ext. Rebinding the unchanged target set
+     * is a no-op; an ordinary reset alone is not a content-loss notification. */
     CNA_Bool is_content_lost;
-    /** @brief Whether the active backend created real bindable render-target storage. */
+    /** @brief Whether a native target-renderer object exists; this alone does not prove pixels. */
     CNA_Bool renderer_available;
     /** @brief Reserved bytes; returned as zero. */
     uint8_t reserved[2];
@@ -303,12 +302,10 @@ typedef void (*CNA_RenderTargetContentLostCallback)(
 /**
  * @brief Subscribes to a render target's ContentLost event.
  *
- * Raised when a renderer reports that it lost and recreated its device, which destroys the
- * contents of default-pool resources. **Only a renderer family whose API can lose a device reports
- * that**, `DIRECTX9` among them. The rest never lose a device, so they never raise this, and a
- * subscription on them is valid and simply silent. A caller-initiated
- * `cna_graphics_device_reset*` does not raise it either: the event means a renderer really lost
- * content, not that a reset happened.
+ * Raised on native content-loss notification, whether after renderer loss/recovery or an explicit
+ * cna_graphics_device_notify_content_lost_resources_ext call. A caller-initiated
+ * `cna_graphics_device_reset*` alone does not raise it. On a renderer without device loss, a
+ * subscription remains valid and is silent unless explicitly notified.
  *
  * The callback and context remain caller-owned until unsubscription or render-target destruction.
  *
@@ -335,6 +332,13 @@ CNA_C_API CNA_Result cna_render_target_subscribe_content_lost(
 CNA_C_API CNA_Result cna_render_target_unsubscribe_content_lost(
     CNA_RenderTargetEventRegistrationHandle registration);
 
+/**
+ * @brief Disposes and releases an owned 2D or cube render target.
+ *
+ * @param render_target Owned render-target handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` while the target is bound or retained,
+ * or a documented handle/thread/native failure. A second destroy returns `CNA_RESULT_INVALID_HANDLE`.
+ */
 CNA_C_API CNA_Result cna_render_target_destroy(CNA_Handle render_target);
 
 #ifdef __cplusplus

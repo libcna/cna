@@ -35,6 +35,18 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API shared graphics-resource/surface contract reconciliation (2026-11-01):
+  `docs/c-api/GRAPHICS_RESOURCES.md` now covers the current resource, state, display, target and font
+  boundary. It adds OcclusionQuery to the generic resource kinds, per-handle C tags, disposal
+  retention guards, pre-run borrowing, profile-limited vertex samplers and the implemented
+  effect/transform SpriteBatch begin. Legacy display-handle refusals are separated from supported
+  GameWindow interop; adapter refresh remains refused. Render-target documentation now recognizes
+  explicit content-loss notification and unchanged-binding no-ops, and font documentation records
+  copied glyph data, atlas retention and constructor/setter fallback differences. Matching public
+  Doxygen is corrected. A strict-C probe confirmed the independently owned resource-device getter
+  defect recorded in §5.1; no implementation fix is included. Resource/surface, lifetime, effect,
+  model, device and ABI targets build; all 11 focused C API tests pass through the private SDLGPU
+  runner and all nine coverage, generation, limitation, export and release gates pass.
 - C API standalone graphics-extension contract reconciliation (2026-11-01):
   `docs/c-api/GRAPHICS_EXT.md` now records build availability, owned-device/game-child lifetimes,
   CRT/depth controls and shader-execution limits, ASCII readback and opaque output, DebugDraw's
@@ -1050,6 +1062,16 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- `cna_graphics_resource_get_graphics_device` fails for a valid resource created on an independently
+  owned C device. `CnaCApiGraphicsResource.cpp` passes the resource's owner token unconditionally
+  to `BorrowGameGraphicsDevice`; that token is an owned-device handle on this path, so the game
+  lookup returns `CNA_RESULT_INVALID_HANDLE` and the device output remains invalid. Measured on
+  2026-11-01 with a strict-C probe through the private SDLGPU runner: create a 64×64 owned Reach
+  device, create its 1×1 Texture2D, then query the generic resource device; result is 2
+  (`INVALID_HANDLE`), output 0, while `get_is_disposed` succeeds with false and both typed destroys
+  succeed. Game-callback and device-less declaration paths are covered by `CApi_GraphicsResourceSmoke`;
+  this owned-device path has no permanent regression test yet. Keep the original owned device
+  handle as the current workaround.
 - `GraphicsDeviceManager::setPreferredBackBufferWidthProperty` and
   `setPreferredBackBufferHeightProperty` accept zero and negative values. FNA rejects `value <= 0`
   with `ArgumentOutOfRangeException("value", "BackBufferWidth and BackBufferHeight must be greater

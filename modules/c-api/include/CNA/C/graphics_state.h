@@ -454,6 +454,8 @@ CNA_C_API CNA_Result cna_graphics_device_set_rasterizer_state(
 /**
  * @brief Gets one entry from a pixel- or vertex-shader sampler collection.
  *
+ * Pixel samplers expose 16 slots; vertex samplers expose four in HiDef and none in Reach.
+ *
  * @param graphics_device Callback-scoped graphics-device handle.
  * @param stage `CNA_SHADER_STAGE_PIXEL` or `CNA_SHADER_STAGE_VERTEX`.
  * @param slot Sampler slot in the range zero through `CNA_MAX_SAMPLERS - 1`.
@@ -468,6 +470,8 @@ CNA_C_API CNA_Result cna_graphics_device_get_sampler_state(
 
 /**
  * @brief Replaces one entry in a pixel- or vertex-shader sampler collection.
+ *
+ * Pixel samplers expose 16 slots; vertex samplers expose four in HiDef and none in Reach.
  *
  * @param graphics_device Callback-scoped graphics-device handle.
  * @param stage `CNA_SHADER_STAGE_PIXEL` or `CNA_SHADER_STAGE_VERTEX`.
