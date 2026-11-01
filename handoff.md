@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API model/animation contract reconciliation (2026-11-01): `docs/c-api/MODELS.md` now covers
+  the current model graph, content-owned resource tokens, owned views and device lifetime, including
+  independently owned/pre-run device inputs. It removes obsolete next-slice and repeated
+  HEADLESS/sanitizer claims, replaces the stale morph stride list with the shared layout boundary,
+  and adds tangent/flat-normal controls, import reports, cameras, skins, material variants, content
+  tags and scene-clip target spaces. Array count timing, adapter collection identity and the
+  loaded-resource disposal/token boundaries are explicit. Public owned-context Doxygen now requires
+  paired context/callback values and follows shared-bundle release timing. All selected model,
+  morph, animation, content and ABI targets plus C17/C++23 header checks build; all 12 focused
+  tests pass through the private SDLGPU runner, and all nine coverage, generation, limitation,
+  export and release gates pass. Public ABI and runtime implementation are unchanged.
 - C API media-contract reconciliation (2026-11-01): `docs/c-api/MEDIA.md` now describes owned
   catalog/queue view handles, explicit view destruction, real thumbnail generation/fallbacks,
   cleared absent-relation outputs, disposal-query exceptions and queue path/name copies rather

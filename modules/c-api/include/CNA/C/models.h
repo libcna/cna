@@ -940,9 +940,11 @@ CNA_C_API CNA_Result cna_model_set_tag(
 /**
  * @brief Replaces the model-owned C resource bundle.
  * @param model Model handle.
- * @param context Opaque context retained until replacement or model destruction.
- * @param release Required release callback when @p context is non-null; null clears the bundle.
+ * @param context Opaque context retained by the native shared resource bundle; null to clear.
+ * @param release Release callback; context and callback must either both be non-null or both null.
  * @return A CNA result code.
+ * @note Replacement/clearing releases the model's reference; the callback runs when the bundle's
+ *       last native owner releases it.
  */
 CNA_C_API CNA_Result cna_model_set_owned_resources(
     CNA_ModelHandle model,
