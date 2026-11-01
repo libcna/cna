@@ -111,9 +111,12 @@
       "id": "CNA-FIX-D13",
       "source_section": "5.1 Defects",
       "summary": "C API network-event injection validates `CNA_NetworkEventInfo.reliable` as an ordinal in 0..4, rejecting the valid `Chat` flag combinations 5, 6 and 7.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Both network event-injection routes reuse ValidateSendOptions and accept defined bit combinations instead of the 0..4 ordinal range.",
+      "evidence": [
+        "CApi_NetSmoke fails before fix and after session-only fix; passes after correcting both extension routes on private OPENGLES3.",
+        "Both routes exercise flags 0..7; unknown bits 8, 0x100 and UINT32_MAX are refused. Local payloads round-trip and rejected events leave the queue empty."
+      ]
     },
     {
       "id": "CNA-FIX-D14",

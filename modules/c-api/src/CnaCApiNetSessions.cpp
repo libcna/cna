@@ -558,6 +558,17 @@ template<typename TCallable>
         outGamer);
 }
 
+[[nodiscard]] CNA_Result ValidateSendOptions(const CNA_SendDataOptions options)
+{
+    constexpr CNA_SendDataOptions defined =
+        CNA_SEND_DATA_OPTIONS_RELIABLE | CNA_SEND_DATA_OPTIONS_IN_ORDER | CNA_SEND_DATA_OPTIONS_CHAT;
+    if ((options & ~defined) != 0) {
+        return InvalidArgument(
+            "The requested options set a bit that is not a SendDataOptions flag.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
 [[nodiscard]] CNA_Result NetworkSessionSendNetworkEventExt(
     const CNA_NetworkSessionHandle sessionHandle,
     const CNA_NetworkEventInfo* const eventInfo)
@@ -568,10 +579,13 @@ template<typename TCallable>
         return result;
     }
     if (eventInfo->type > CNA_NETWORK_EVENT_TYPE_STATE_CHANGE ||
-        eventInfo->reliable > CNA_SEND_DATA_OPTIONS_CHAT ||
         eventInfo->state > CNA_NETWORK_SESSION_STATE_ENDED ||
         eventInfo->reason > CNA_NETWORK_SESSION_END_REASON_DISCONNECTED) {
         return InvalidArgument("The network event description names an unknown identity.");
+    }
+    if (const CNA_Result result = ValidateSendOptions(eventInfo->reliable);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     if (eventInfo->packet == nullptr && eventInfo->packet_byte_count != 0U) {
         return InvalidArgument("The network event payload is invalid.");
@@ -1479,17 +1493,6 @@ using Microsoft::Xna::Framework::Net::SendDataOptions;
     return BorrowNetworkGamer(handle, outGamer);
 }
 
-[[nodiscard]] CNA_Result ValidateSendOptions(const CNA_SendDataOptions options)
-{
-    constexpr CNA_SendDataOptions defined =
-        CNA_SEND_DATA_OPTIONS_RELIABLE | CNA_SEND_DATA_OPTIONS_IN_ORDER | CNA_SEND_DATA_OPTIONS_CHAT;
-    if ((options & ~defined) != 0) {
-        return InvalidArgument(
-            "The requested options set a bit that is not a SendDataOptions flag.");
-    }
-    return CNA_RESULT_SUCCESS;
-}
-
 [[nodiscard]] CNA_Result CopyPayload(
     const uint8_t* const data,
     const uint64_t count,
@@ -1806,10 +1809,13 @@ using Microsoft::Xna::Framework::Net::SendDataOptions;
         return result;
     }
     if (eventInfo->type > CNA_NETWORK_EVENT_TYPE_STATE_CHANGE ||
-        eventInfo->reliable > CNA_SEND_DATA_OPTIONS_CHAT ||
         eventInfo->state > CNA_NETWORK_SESSION_STATE_ENDED ||
         eventInfo->reason > CNA_NETWORK_SESSION_END_REASON_DISCONNECTED) {
         return InvalidArgument("The network event description names an unknown identity.");
+    }
+    if (const CNA_Result result = ValidateSendOptions(eventInfo->reliable);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
     }
     if (eventInfo->packet == nullptr && eventInfo->packet_byte_count != 0U) {
         return InvalidArgument("The network event payload is invalid.");

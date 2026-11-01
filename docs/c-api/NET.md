@@ -280,12 +280,14 @@ and then stops or resumes the gamer's voice to that remote gamer. `SendPartyInvi
 `CNA_RESULT_INVALID_STATE`, the canonical refusal, while the gamer's CNA service party has fewer
 than two people, and otherwise invites the rest of the party to the current online session.
 
+Both event-injection extensions validate `CNA_NetworkEventInfo.reliable` as a SendDataOptions
+bitmask, matching the ordinary send routes. All combinations of Reliable, InOrder and Chat
+(0..7) are accepted; bits outside that set return `CNA_RESULT_INVALID_ARGUMENT`. CNA-FIX-D13's
+strict-C regression covers both extension routes, payload round trips and refusal without queue
+mutation for unknown bits.
+
 ## Extension limitations
 
-- `cna_network_session_send_network_event_ext` and
-  `cna_local_network_gamer_enqueue_packet_ext` currently accept `event_info.reliable` only in
-  0..4. Unlike the ordinary send routes, they reject valid `CHAT` combinations 5, 6 and 7 with
-  `CNA_RESULT_INVALID_ARGUMENT`. This is an adapter validation limitation.
 - Standalone `cna_network_gamer_create` and `cna_local_network_gamer_create_ext` store the supplied
   session token/native pointer without retaining the session. The local factory also borrows its
   signed-in gamer. Keep those inputs alive until the standalone gamer is destroyed; these factories

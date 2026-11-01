@@ -35,6 +35,11 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D13 (2026-11-01): session-event and local-packet injection now share the ordinary
+  send routes' defined-bit validation. All eight Reliable/InOrder/Chat combinations are accepted;
+  unknown bits are refused. Strict-C tests fail with both original ordinal checks and still fail
+  after correcting only the session route; with both corrected they pass, including payload
+  round trips and unchanged queue state after three unknown-bit cases. No public ABI change.
 - CNA-FIX-D02 (2026-11-01): content-manager creation/destruction counts only game owner
   tokens, using the existing owner-kind check. Both standalone constructor routes no longer block
   an unrelated game's teardown, and destroying a standalone manager cannot decrement a live
@@ -1887,12 +1892,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   caller waiting. Found by source inspection on 2026-11-01 in devices-ext/src/FileDialog.cpp;
   the canned tests do not inject this throwing-provider transition. No runtime fix or physical
   dialog failure reproduction is claimed (`docs/devices-ext.md`).
-- C API network-event injection validates `CNA_NetworkEventInfo.reliable` as an ordinal in 0..4,
-  rejecting the valid `Chat` flag combinations 5, 6 and 7. Both
-  `NetworkSessionSendNetworkEventExt` and `LocalNetworkGamerEnqueuePacketExt` contain this check;
-  the six ordinary send routes correctly use a defined-bit mask. Found by source inspection on
-  2026-11-01 during the `docs/c-api/NET.md` audit. No permanent regression test covers these
-  extension combinations yet; ordinary SendData is the supported flag-combination path.
 - Standalone C network-gamer factories do not retain their session or, for a local gamer, its
   signed-in gamer. `NetworkGamerResource` owns the gamer but stores only the session token, and
   native gamer state holds raw pointers. Source inspection during the 2026-11-01 networking

@@ -1015,6 +1015,22 @@ static int validate_session_events(const CNA_NetworkSessionHandle session)
         cna_network_session_update(session) != CNA_RESULT_SUCCESS) {
         return 0;
     }
+    for (uint32_t options = 0U; options != 8U; ++options) {
+        event.reliable = options;
+        if (cna_network_session_send_network_event_ext(session, &event) != CNA_RESULT_SUCCESS ||
+            cna_network_session_update(session) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+    static const uint32_t invalid_options[] = {8U, 0x100U, UINT32_MAX};
+    for (size_t i = 0U; i != sizeof(invalid_options) / sizeof(invalid_options[0]); ++i) {
+        event.reliable = invalid_options[i];
+        if (cna_network_session_send_network_event_ext(session, &event) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+    }
+    event.reliable = CNA_SEND_DATA_OPTIONS_RELIABLE;
     event.type = UINT32_C(9);
     if (cna_network_session_send_network_event_ext(session, &event) !=
         CNA_RESULT_INVALID_ARGUMENT) {
@@ -1432,6 +1448,32 @@ static int validate_local_gamer_packets(const CNA_NetworkGamerHandle local)
         return 0;
     }
 
+    for (uint32_t options = 0U; options != 8U; ++options) {
+        event.reliable = options;
+        if (cna_local_network_gamer_enqueue_packet_ext(local, &event) != CNA_RESULT_SUCCESS ||
+            cna_local_network_gamer_receive_data(local, buffer, UINT64_C(4), &sender, &received) !=
+                CNA_RESULT_SUCCESS || received != 4U || memcmp(buffer, payload, 4U) != 0 ||
+            cna_local_network_gamer_get_is_data_available(local, &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_FALSE) {
+            return 0;
+        }
+        if (sender != CNA_INVALID_HANDLE &&
+            cna_network_gamer_destroy(sender) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+    static const uint32_t invalid_options[] = {8U, 0x100U, UINT32_MAX};
+    for (size_t i = 0U; i != sizeof(invalid_options) / sizeof(invalid_options[0]); ++i) {
+        event.reliable = invalid_options[i];
+        if (cna_local_network_gamer_enqueue_packet_ext(local, &event) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            cna_local_network_gamer_get_is_data_available(local, &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_FALSE) {
+            return 0;
+        }
+    }
+    event.reliable = CNA_SEND_DATA_OPTIONS_RELIABLE;
+
     /* A packet that does not fit after the offset is refused and stays queued. */
     memcpy(buffer, untouched, sizeof(buffer));
     if (cna_local_network_gamer_enqueue_packet_ext(local, &event) != CNA_RESULT_SUCCESS ||
@@ -1591,7 +1633,7 @@ static int validate_local_gamers(
         cna_local_network_gamer_enable_send_voice(local, CNA_INVALID_HANDLE, CNA_TRUE) ==
             CNA_RESULT_INVALID_ARGUMENT &&
         cna_local_network_gamer_send_party_invites(local) == CNA_RESULT_INVALID_STATE &&
-        validate_local_gamer_packets(local) && validate_local_gamer_sends(local);
+        CNA_TEST_STAGE(validate_local_gamer_packets(local)) && validate_local_gamer_sends(local);
     if (!ok || cna_network_gamer_destroy(local) != CNA_RESULT_SUCCESS) {
         return 0;
     }
@@ -1874,7 +1916,7 @@ static int validate_sessions(void)
     }
 
     const int ok = validate_session_state(session) && validate_session_rosters(session) &&
-        validate_session_events(session) && validate_session_remote_gamers(session) &&
+        CNA_TEST_STAGE(validate_session_events(session)) && validate_session_remote_gamers(session) &&
         validate_session_subscriptions(session) && validate_local_gamers(session, signed_in);
     if (!ok) {
         (void)cna_network_session_destroy(session);
