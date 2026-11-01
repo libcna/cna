@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Link-size documentation reconciliation (2026-11-01, LINK-032/040): the guide scopes unused
+  feature elimination to tested static composition, distinguishes shared-runtime deployment and
+  mixed-consumer ordering, corrects public registry-query installation and current size/IPO/
+  compressed-effect options, and treats the audit helper as an extraction model rather than a
+  complete linker. Historical byte tables are dated/provenanced, not current size limits. All six
+  static footprint consumers build; six symbol gates and three isolated CMake runtime/export
+  policy tests pass (9/9) in the Linux Debug multi tree. No fresh Mobile Eggbert/size campaign,
+  browser/Windows or all-linker full-runtime qualification, implementation or ABI change.
 - Skinned-model documentation reconciliation (2026-11-01, Task 11.3/11.5): the page distinguishes
   the independent container from Model's current skinning support, owned resources from public
   descriptors, count-only attachment checks, palette target space, sampling order and the separate

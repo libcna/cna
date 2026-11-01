@@ -1,18 +1,22 @@
 # What a CNA program contains: link boundaries and size
 
-CNA *supports* glTF, Draco, avatars, the system Guide, media, video, microphones, XNB, CNB,
-every platform and every renderer. That does not mean every CNA program *contains* them. Each
-CNA module is a static archive; a static link copies an archive member into the executable only
-when something already in the executable references a symbol it defines. A feature a program does
-not use is not referenced, so it is not linked. This document is how CNA keeps that true, and how
-to check it.
+CNA has optional glTF/Draco, avatars, Guide, media, capture, content, platform and renderer
+subsystems. A statically composed consumer can leave unused families out. Archive extraction
+works at object-file granularity: any unresolved symbol, including a virtual table or a weak
+standard-library definition, can bring the rest of that member's dependencies along. The boundaries
+below and the representative footprint gates keep those accidental references under control.
+
+This applies to static module composition. The `CNA` umbrella can instead use `libcna.so`, which
+deliberately includes the enabled runtime closure; a small executable then does not imply a small
+total deployment. Section garbage collection and LTO are separate from archive extraction, and
+a dependency graph or a passing sample is not a universal promise for every caller/linker/toolchain.
 
 | Question | Answer |
 |---|---|
-| Does the default build still support everything? | Yes. No feature is disabled, stubbed or moved behind a flag by this design. |
-| Does a 2D game pay for glTF, Draco, avatars or MediaPlayer? | No, unless it calls them (`LinkFootprint_2DGame` checks it). |
+| Does this design itself disable features? | No. Actual availability still depends on enabled modules, selected renderer/platform, dependencies and their documented limits. |
+| Can a 2D game omit glTF, Draco, avatars and MediaPlayer? | Yes, with the static composition and calls represented by `LinkFootprint_2DGame`; a shared umbrella or an explicit registry query has a broader closure. |
 | Does a game that uses them get them? | Yes. `LinkFootprint_FullFeatures` checks a representative set (glTF, the Model reader, Draco where built, avatars and the catalog, the system Guide, media, capture, streaming audio, cube and volume textures); the full test suite exercises the rest. |
-| Do I need to switch features off to get a small game? | No. Options exist for build time and deployment, not for correctness of the closure. |
+| Must optional features be disabled to keep the tested static closure small? | No. Source boundaries are tested with those features built; shared/static deployment, optimization and dependency choices still affect total size. |
 
 ## Why programs used to contain everything
 
@@ -62,10 +66,10 @@ dependency is not real.
 
 Each file at a boundary says so in a short `Link boundary:` comment, so that nobody merges it back.
 
-This work changed CNA's C++ ABI (new virtual functions on `IPlatform`, `Effect`, `Texture` and the
-render targets): rebuild C++ consumers against this revision (CHANGELOG.md). Source compatibility
-was kept, except that an `IPlatform` implementation overrides `GetCameraService()` and
-`GetTrayService()` instead of `GetCamera()` and `GetTray()`.
+The original LINK campaign changed CNA's C++ ABI (new virtual functions on `IPlatform`, `Effect`,
+`Texture` and render targets). Consumers crossing those historical revisions need a rebuild;
+this documentation recheck adds no new ABI change. An `IPlatform` implementation supplies
+`GetCameraService()`/`GetTrayService()` rather than overriding the non-virtual public accessors.
 
 ## How to add a feature without growing every game
 
@@ -75,10 +79,11 @@ was kept, except that an `IPlatform` implementation overrides `GetCameraService(
   instantiates), or by installation (below).
 - **Declare what an API promises, install it when it is needed.** `Game` once registered every
   `.xnb` reader and `ContentManager` every `.cnb` loader. Now they declare the built-ins
-  registered; a type's reader is installed by its first load; the registries answer `IsRegistered`
-  and type names from the declaration, and install everything only when asked for a reader or
-  loader object by hand -- in their own translation units, so only a program that asks links
-  everything. The load path uses lookups that never install anything. Removal and
+  registered; a type's reader is installed by its first load. The narrow load path uses the
+  registered family without installing unrelated ones. Public by-name XNB queries
+  (`IsRegistered`, `CreateReader`, `RemoveTypeCreatorEXT`) live in their own translation unit
+  and first install declared readers; explicitly asking them can therefore link every family.
+  CNB's public `Find`/`ResolveForDocument` likewise install declared loaders when needed. The load path uses lookups that never install anything. Removal and
   re-registration keep their old meaning: once everything is installed a load installs nothing,
   so a removed reader stays removed until the built-ins are registered again (a new `Game`, a
   new `ContentManager` or `RegisterBuiltinLoaders()` for `.cnb` loaders). The registries'
@@ -125,18 +130,19 @@ was kept, except that an `IPlatform` implementation overrides `GetCameraService(
 
 ## Build options
 
-These change what is *built* or how it is optimized. None is needed to keep an unused feature out
-of a program.
+These choose build availability, optimization and deployment. The representative static probes
+keep unrelated families out without disabling those families; the shared umbrella intentionally
+has a larger runtime closure.
 
 | Option | Default | Effect |
 |---|---|---|
 | `CNA_ENABLE_GAMER_SERVICES` | `CNA_ENABLE_NET`'s value | Builds GamerServices (Guide, profiles, avatars). A Guide-only game can build without networking. |
 | `CNA_ENABLE_NET` | ON | Builds `CNA_Net` and ENet; requires GamerServices. |
-| `CNA_OPTIMIZE_FOR_SIZE` | OFF | GCC/Clang: compiles CNA with `-ffunction-sections -fdata-sections` and gives every program that links CNA `--gc-sections` (`-dead_strip` on Apple). MSVC (`/Gy`, `/OPT:REF`) and wasm-ld already collect unreferenced code in Release. |
-| `CNA_ENABLE_IPO` | OFF | LTO for CNA's Release targets. |
-| `CNA_SHARED_LIBRARY` | ON on native Linux | Links the runtime into `libcna.so` with every subsystem in it -- the development trees' choice, to stop 800 test executables each carrying a copy. A size-oriented deployment links CNA statically (`OFF`); a program that links module targets (`CNA::Runtime`, `CNA::GamerServices`) is static either way. |
+| `CNA_OPTIMIZE_FOR_SIZE` | OFF | Non-MSVC native GCC/Clang: per-function/data sections and a propagated `--gc-sections` (`-dead_strip` on Apple) final-link option. It does not itself choose `-Os`/`-Oz`. MSVC Release and wasm-ld already have their own dead-stripping defaults. |
+| `CNA_ENABLE_IPO` | OFF | IPO/LTO on CNA-owned artifacts in Release, RelWithDebInfo and MinSizeRel, after a compiler support check. Refused with sanitizers, cross/Emscripten builds or a packaged static C API. |
+| `CNA_SHARED_LIBRARY` | ON for supported native non-Apple Unix GNU/Clang configurations with CMake ≥3.30; OFF otherwise | The `CNA` umbrella links its enabled runtime closure WHOLE_ARCHIVE into `libcna.so` for development/relink efficiency. Module-only consumers remain static. Mixing an umbrella/shared consumer with explicit modules is handled by the shared-runtime ordering/exclusion policy to avoid duplicate singleton state. The C adapter can fold Net/GamerServices into that DSO too. An unsupported explicit ON is refused. |
 | `CNA_CXX_RUNTIME_LINKAGE` | AUTO | How the programs that link CNA link the C++ runtime. AUTO reads each program's flags and those of the targets it links, per configuration; `STATIC`/`SHARED` decide instead, for a runtime AUTO cannot read ("Linker independence"). |
-| `CNA_ENABLE_DRACO`, `CNA_ENABLE_VIDEO` | ON / AUTO | Whether the decoder is built at all; a program that does not load models or video does not link it regardless. |
+| `CNA_ENABLE_DRACO`, `CNA_ENABLE_VIDEO` | ON except Emscripten / AUTO | Decoder build availability. A static consumer represented by the narrow footprint can omit an unused family; the shared umbrella, central queries or other references can include it. |
 
 A size-oriented Release consumer: `-DCMAKE_BUILD_TYPE=MinSizeRel` (or Release)
 `-DCNA_SHARED_LIBRARY=OFF -DCNA_OPTIMIZE_FOR_SIZE=ON`, optionally `-DCNA_ENABLE_IPO=ON`.
@@ -150,8 +156,10 @@ target_link_libraries(MyGame PRIVATE CNA::Runtime)            # Game, graphics, 
 target_link_libraries(MyGame PRIVATE CNA::GamerServices)      # only if it uses the Guide
 ```
 
-`CNA::Runtime` brings the selected renderer and platform. What the game then contains follows from
-what it calls; `tests/link_footprint/footprint_2d_game.cpp` is a complete example.
+`CNA::Runtime` brings the selected renderer and platform. Its static reference closure depends on
+the calls, virtual tables and implementation dependencies, not only the list of module archives.
+`tests/link_footprint/footprint_2d_game.cpp` is the representative consumer. Do not additionally
+link the shared `CNA` umbrella when the goal is to inspect this static-only closure.
 
 ## Checking a binary
 
@@ -164,8 +172,10 @@ what it calls; `tests/link_footprint/footprint_2d_game.cpp` is a complete exampl
   and then `tools/link_audit/why_linked.py game.map --why X`, which prints the chain of references
   that pulled X in (`--top 40`/`--modules` rank what costs the most). Relinking with a different
   linker only to get a map can hide the problem: an extraction may happen with one linker and not
-  another (see "Linker independence"). `tools/link_audit/link_closure.py` lists *every*
-  reference into a member, so a cut can be planned against all of them.
+  another (see "Linker independence"). `tools/link_audit/link_closure.py` models references among
+  the supplied objects/archives, grouping archives and choosing the first definer for each symbol.
+  It can expose alternative references a first-extraction map hides, but does not model every DSO,
+  link-order, LTO or garbage-collection rule; the actual link remains authoritative.
 - **Regression gates.** `LinkFootprint_2DGame` fails if a 2D game links any of the subsystem
   families it does not use (the list is in the CMake file); `LinkFootprint_GamerServicesGame` pins
   what the same game with a `GamerServicesComponent` contains (the system Guide and avatars, and
@@ -174,16 +184,21 @@ what it calls; `tests/link_footprint/footprint_2d_game.cpp` is a complete exampl
   cut a used feature, not a test of every CNA feature;
   `LinkFootprint_CapabilityQuery` fails if asking whether a camera or a tray is supported links
   either service, and `LinkFootprint_CameraOnly`/`_TrayOnly` if using one links the other
-  (`cmake/Tests/LinkFootprint.cmake`, `scripts/check_link_footprint.py`). The module probes
-  (`ModuleLinkClosure_*`) pin which archives each module's consumer links.
+  (`cmake/Tests/LinkFootprint.cmake`, `scripts/check_link_footprint.py`). These consumers are
+  built and inspected with the toolchain's `nm`, never run: the checks match defined/imported
+  symbol names against selected required/forbidden patterns, with no absolute byte ceiling or
+  transitive DSO-size accounting. They require tests and GamerServices, exclude Emscripten/Android,
+  and require a usable toolchain `nm` for cross builds; camera/tray probes additionally need SDL3.
+  No Python/tool means absent/skipped gates according to the configured conditions, not a pass.
+  Module probes (`ModuleLinkClosure_*`) instead inspect generated link lines for archive patterns.
 
 ## Linker independence
 
-GNU ld, lld and mold must extract the same archive members. They differ in one case that matters
-to CNA: a symbol that a shared library needs, defined both by a not-yet-extracted archive member
-and by another shared library. From C++20 on, libstdc++ no longer declares `std::string`'s members
-instantiated in its shared library, so every CNA object carries weak copies of the ones it uses,
-and libstdc++ exports them weakly too. mold resolves such a symbol to whichever file comes first on
+The LINK-032/040 campaign aimed to make GNU ld, lld and mold retain the same tested family closure.
+Its recorded Linux/GCC-14 configuration exposed a symbol needed by a shared library and defined
+both by an unextracted archive member and another shared library: CNA objects emitted weak
+`std::string` definitions that libstdc++ also exported. The numerical examples below are that
+2026-10-12 campaign's observations, not current cross-linker size guarantees. mold resolves such a symbol to whichever file comes first on
 the command line, and the compiler driver names the C++ runtime last. In a multi-renderer build,
 `libshaderc.so` needs `std::string::_M_erase`; mold extracted `GamerServicesBackend.cpp.o`, the
 first member of the first CNA archive that defines it, and the 2D game linked the service client,
@@ -197,13 +212,16 @@ defines is then the shared runtime's, and no archive member is extracted for it 
 extracted for a CNA symbol may still supply one, which links nothing more: in the multi-renderer
 2D probe mold resolves libshaderc's `_M_erase` to `GuideStyle.cpp.o`, which the game links anyway
 (`GuideContent.cpp.o` uses its styles). With the option mold extracts the members lld does in that
-probe (11,740,248 bytes stripped with mold, 11,704,960 with lld, 11,709,040 with GNU ld), and every
-footprint gate passes with each linker. GNU ld and lld link the same members with or without it. A
+probe (11,740,248 bytes stripped with mold, 11,704,960 with lld, 11,709,040 with GNU ld), and the
+then-current footprint gates passed with each linker. GNU ld and lld linked the same members
+with or without it in that experiment. A
 program that names CNA's archives on a hand-written link line instead of linking its targets does
 not get it.
 
 The option is only for a shared runtime, as lld and mold would let a shared runtime named first
-replace a static one. It is decided for each program in each configuration, in this order:
+replace a static one. On applicable ELF GNU/Clang links (excluding Android), with an implicitly detected stdc++ or c++
+runtime, it is decided for each program in each configuration in this order. This option selects
+ordering; `STATIC`/`SHARED` here do not themselves select the C++ runtime to link:
 
 1. `-DCNA_CXX_RUNTIME_LINKAGE=SHARED` gives every program the option and `STATIC` gives none,
    whatever their flags say. This is how a runtime that `AUTO` cannot read is declared.
@@ -251,19 +269,22 @@ footprint gate passing).
 
 ## Built-in avatar catalog: embedded, not a separate pack
 
-An external `avatar_catalog` pack was considered and not adopted. The catalog is now its own
-library that only avatar code references, so a program that does not draw avatars no longer
-contains it, which was the defect. A game with a `GamerServicesComponent` does draw them: its
+An external `avatar_catalog` pack was considered and not adopted. The catalog is its own library,
+referenced by avatar code; the representative static 2D probe omits it. A shared umbrella that
+includes avatar users can carry it even when a particular application does not draw an avatar. A game with a `GamerServicesComponent` does draw them: its
 players open the system Guide with Home or the Guide button, and its panels show their avatars,
 drawn from the baseline catalog v3 (22.3 MB deflated at revision 5; the 30 MB measured above, on
 2026-10-12, also held the development catalogs 1 and 2, no longer shipped). Keeping it embedded preserves single-file deployment and
 offline avatars for programs that do use them. External packs already exist for catalog *updates*
 (`installedCatalogRoot()`, `CNA_GAMER_SERVICES_CATALOGS_DIR`), verified by size and SHA-256.
 
-## Measurements
+## Historical measurements
 
-Mobile Eggbert, Linux x86-64, OPENGLES3, GCC 14, mold. "Before" is CNA 3ee6ae3c8, "after" is
-this work; the game's source is the same in both.
+The following 2026-10-12 LINK-040 record (introduced in `e842e7473`) is Mobile Eggbert on Linux
+x86-64, OPENGLES3, GCC 14 and mold. "Before" is CNA `3ee6ae3c8`; "after" means that campaign's
+remediated tree, not today's HEAD. The record states that the game source was unchanged.
+The original binaries/maps and complete build command lines are not retained here, so the tables
+are historical observations rather than reproducible current size limits.
 
 | Debug executable | Before | After |
 |---|---:|---:|
@@ -287,21 +308,33 @@ code it describes; the stripped size is what ships.
 | `.rodata` | 93,635 | 74,595 |
 | `.data` | 8,144 | 3,504 |
 
-Neither build contains a symbol of the avatar catalog, `AvatarRenderer`, the glTF importer,
+The historical record reports neither build contained a symbol of the avatar catalog, `AvatarRenderer`, the glTF importer,
 cgltf, Draco, `MediaPlayer`, `Microphone`, `Microsoft::Xna::Framework::Net`, ENet, libcurl,
 `TextureCube`, `Texture3D`, `RenderTargetCube`, the camera, the tray, `CnbWriter` or the Headless
 and Terminal platforms; its shared-library dependencies are SDL3, SDL3_mixer, zstd
-and the C/C++ runtime. The footprint consumers stay within the same bounds with
-`CNA_ENABLE_NET=OFF`, and the browser 2D demo (wasm, linking the whole `CNA` target)
-contains none of them either.
+and the C/C++ runtime. The recorded campaign also checked the footprint with
+`CNA_ENABLE_NET=OFF` and a wasm 2D demo linking `CNA`. Those are historical configurations;
+the current native gate run below does not requalify a browser or every dependency set.
 
 ## What a 2D game still contains, and why
 
-The largest members of the 2D consumer are the renderer, image decoding, the device, `Game`,
-sharp-runtime's strings and the Guide UI that `ShowMarketplace` and the message box draw. Two more
-items can be linked without being used; removing either takes more than a module boundary:
+In the recorded 2D consumer the large members were the renderer, image decoding, the device,
+`Game`, Sharp Runtime strings and dialog/marketplace Guide UI. These smaller historical couplings
+explain why archive-family separation alone is not an exact per-method size promise:
 
 | Linked | Size | Through |
 |---|---|---|
 | sharp-runtime's `Decimal` | ~30 KB | `System::IO::BinaryReader::ReadDecimal` is virtual, as in .NET, and every content read goes through a `BinaryReader`-derived `ContentReader`, so its vtable names it; dropping it would mean making `ReadDecimal` non-virtual |
-| MojoShader, the renderer's compiled-effect support and MojoShader's SPIR-V profile | ~420 KB (EasyGL) | **only in a build that opts into compiled XNA effects** (`CNA_<RENDERER>_COMPILED_EFFECTS`, all OFF by default; Mobile Eggbert's default build contains none of it). Such a build gives every renderer that support, and EasyGL's sprite renderer prepares XNA's SpriteEffect for custom-effect batches. Keeping it out of such a build's 2D games would mean installing each renderer's compiled-effect factory on the first `Effect`, and configuring MojoShader's profiles per build |
+| MojoShader and compiled-effect support | ~420 KB in the old EasyGL measurement | EasyGL's opt-in compiled path prepares SpriteEffect for custom batches. Current support is renderer-specific: EasyGL/SDLGPU/WEBGPU/SOFTWARE/DIRECTX9 options default OFF, FNA3D has it inherently, HEADLESS/STUB do not. One renderer's option does not enable every other renderer. Profiles and actual closure are build-dependent; see [compiled effects](fx-compiled-effects.md). |
+
+## Current verification
+
+The 2026-11-01 audit checked archive composition, deferred shared-runtime ordering, size/IPO/runtime
+options, content registry and platform-service boundaries, and both audit scripts. In the existing
+Linux Debug multi-renderer tree (GNU C++, actual final links using Mold; size optimization and IPO
+OFF), all six static footprint
+consumers build and all six symbol gates pass. The isolated CMake tests `CnaCxxRuntimeLinkage`,
+`CnaSharedRuntimeLinkage` and `CnaBuildSupportExport` pass too (9/9 total). The consumers are not run
+and no device is opened. These checks establish their selected symbol/link-policy contracts;
+they do not reproduce Mobile Eggbert's size tables, the static-runtime placement experiments,
+browser/Windows builds or every linker's full-CNA extraction set.
