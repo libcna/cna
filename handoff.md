@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Detailed renderer-capability-profile documentation reconciliation (2026-11-01): the original
+  implementation/task narrative is replaced by the current device-scoped C++ and C ABI contract.
+  The page now distinguishes the legacy summary from the cached detailed snapshot, documents all
+  four support states (including that `Restricted` is false for bool convenience queries), the
+  eight current limits and retired ordinal gaps, the two per-format masks and their three common
+  classified usages, exact cache invalidation points, diagnostic-report schema and buffer rules,
+  and the different invalid-identity behavior of C++ and C. `CnaTests`, the SDLGPU C API smoke
+  target and the multi-renderer test target build. On private displays, all seven
+  `RendererCapabilityProfileTest` cases, `CApi_GraphicsDeviceSmoke` and the four LOD/PBR,
+  multisample-mask and render-target-readback `CrossRendererContractTest` cases pass.
 - WebGPU design-notes retirement (2026-11-01): the 68-line `docs/webgpu-design-notes.md` duplicate
   is deleted after its five topics were checked against the implementation and the reconciled
   renderer contract. It incorrectly left the implemented transient-buffer pool as future work,

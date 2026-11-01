@@ -1,99 +1,145 @@
 # Detailed renderer capability profiles
 
-Status: implemented as `MOD-2203` on 2026-08-22; numeric inventory extended by `MOD-2220`
-and detailed format plumbing by `MOD-2221` on 2026-09-08.
+Status: reconciled with the C++ API, profile builder, renderer boundary, C ABI and executable
+contract tests on **2026-11-01**.
 
-CNA has two capability-discovery levels. `GraphicsCapability` remains the small compatibility
-summary used by existing code. `RendererCapabilityProfile` is the detailed, immutable snapshot for
-tools, diagnostics, renderer selection and code that must distinguish closely related promises.
-It is a CNA extension, not part of XNA 4.0.
+`CNA::RendererCapabilityProfile` is CNA's detailed, read-only snapshot of the active
+`GraphicsDevice`. It is a CNA extension, not XNA 4.0 API. Use it when the older
+`CNA::GraphicsCapability` summary is too broad: the profile separates atomic feature contracts,
+numeric limits and per-`SurfaceFormat` usages.
 
-## Why the catalog is small rather than an arbitrary large number
+The answer belongs to the selected device, graphics profile, native adapter/driver and current
+presentation state. A renderer name or the project-wide
+[`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md) is useful orientation,
+but neither is a substitute for querying the live device.
 
-The detailed enum is append-only, but an entry is added only when CNA can define an observable
-contract and classify it from an audited renderer query. The catalog holds 33 atomic features:
-the 17 legacy capabilities, separated source acceptance/execution, shadows, image-based lighting,
-six shader dialects, `Texture3D` sampling, base-instance drawing, the sampler mip level-of-detail
-bias, `PbrEffect` and `SkinnedPbrEffect` shading, the multisample mask and render-target readback.
-The three of 32-34 (CNA-DEMOS-ISSUE-006) describe state a renderer accepts either way: where
-unsupported, the bias has no effect and the PBR effects draw an untextured, unlit fallback.
-`MultiSampleMask` (35, CNA-DEMOS DC-R2) is Restricted on SDLGPU, which applies only a mask keeping
-every sample or none and refuses any other. `RenderTargetReadback` (36, a museum finding) is
-Unsupported on HEADLESS and STUB, where `Texture2D.GetData` on a render target throws
-`NotSupportedException`. `CrossRendererContractTest` exercises each of the five on every
-compiled-in renderer and requires the reported answer to match the pixels. Reserving or publishing
-hundreds of guessed identities would turn "unsupported" into a mixture of absent, unaudited and
-not-yet-defined behavior.
+## Query layers
 
-Ordinals are never reused. The four identities that described the retired modern GPU layer
-(`ComputeShaders` 18, `ComputeImageBinding` 19, `IndirectDrawing` 20, `GpuTimers` 23) were removed
-with that layer (MRT, 2026-10-13); their numbers are permanently reserved, so
-every surviving feature keeps the value it had and the C ABI constants did not move. The same holds
-for the retired limit ordinals and the three retired storage format-usage bits below.
+`GraphicsDevice` exposes two related layers:
 
-Every current feature is classified as one of:
+- `SupportsCapability(CNA::GraphicsCapability)` is the compact compatibility query used by
+  existing CNA code. In particular, `MultipleRenderTargets` and `Texture3D` also respect the
+  device's `GraphicsProfile`.
+- `GetRendererCapabilityProfileEXT()` returns the cached detailed snapshot. Convenience methods
+  query the same snapshot: `GetRendererFeatureSupportEXT()`,
+  `SupportsRendererFeatureEXT()`, `GetRendererLimitEXT()`,
+  `GetRendererSurfaceFormatSupportEXT()` and `GetRendererCapabilityReportEXT()`.
 
-- `Unknown`: not audited or probed; callers must not interpret this as rejection;
-- `Unsupported`: the complete contract is unavailable;
-- `Supported`: the complete documented contract is available;
-- `Restricted`: only the subset named by the accompanying English note is available.
+The detailed catalog deliberately splits promises that a renderer may answer differently. For
+example, accepting a `ShaderEffect` object is separate from executing its supplied source;
+`Texture3D` storage/transfer is separate from shader sampling; and the six source dialects are
+reported independently.
 
-The current profile builder maps every initial feature explicitly, so a live profile has no
-`Unknown` feature answers. New enum entries default to `Unknown` until their mapping is added.
+## Feature catalog and support states
 
-## Admission rule for new graphics findings
+`CNA::AllRendererFeatures()` is the canonical enumerable list. The current catalog contains 33
+defined identities:
 
-A new graphics finding belongs in `handoff.md` §5 when it is a defect, or in the owning renderer's
-document when it is a deliberate capability boundary. A silent wrong result on a supported path
-is never accepted as a boundary: the renderer must implement the behaviour or refuse the request
-deterministically before native submission. A regression test must assert whichever answer the
-renderer gives.
+| Ordinals | Contracts |
+|---|---|
+| 0-17 | the 17 legacy capability mappings plus the separate `ShaderEffectSourceExecution` contract |
+| 21-22 | `ShadowSampling`, `ImageBasedLighting` |
+| 24-29 | desktop GLSL, GLSL ES, Vulkan GLSL, HLSL, MSL and WGSL source dialects |
+| 30-36 | `Texture3DSampling`, `BaseInstanceDrawing`, sampler LOD bias, PBR and skinned-PBR shading, `MultiSampleMask`, render-target readback |
 
-## Three independent sections
+Ordinals 18, 19, 20 and 23 belonged to the retired compute/indirect/timer layer. They remain
+reserved and are not returned by `AllRendererFeatures()`. Existing ordinals are append-only and
+must never be reordered or reused.
 
-`GraphicsDevice::GetRendererCapabilityProfileEXT()` returns one cached snapshot containing:
+Every feature has one `RendererFeatureSupport` value:
 
-1. atomic feature classifications and optional qualifications;
-2. numeric limits with a separate `known` flag;
-3. per-`SurfaceFormat` `knownUsages` and `supportedUsages` masks.
+| State | Meaning |
+|---|---|
+| `Unknown` | The contract has not been classified. Do not interpret it as support or rejection. |
+| `Unsupported` | The complete contract is unavailable; its feature note defines refusal, no effect or fallback. |
+| `Supported` | The complete documented contract is available. |
+| `Restricted` | Only the explicitly documented subset is available. Read the feature note before use. |
 
-The two format masks are intentional. For example, a missing `Sampled` bit in `knownUsages` means
-that this support path has not been classified; it does not mean the format cannot be sampled.
-`supportedUsages` is always a subset of `knownUsages`.
+`SupportsRendererFeatureEXT()` and `RendererCapabilityProfile::Supports()` return `true` only for
+`Supported`; `Restricted` deliberately returns `false`. The current live-device builder assigns
+every defined feature explicitly, so a built profile has no `Unknown` feature entries. A default
+profile and invalid or reserved identities remain `Unknown`.
 
-The limit section consolidates the existing texture and vertex-stream queries and has
-append-only identities for the uniform-buffer byte range, per-stage sampled textures, vertex
-bindings/attributes, colour attachments and the uniform-buffer offset alignment. A zero is the
-explicit unsupported/unimplemented result; the separate `known` bit remains available for a
-renderer that cannot classify a value.
+Some contracts need feature-specific interpretation:
 
-The common format boundary covers texture storage, sampling, linear filtering, render-target and
-blend attachment use, transfer source/destination, mipmapping, multisampling and `Color`-shaped
-transfer. A renderer returns separate known and supported masks
-for one `SurfaceFormat`; its audited facts override the three older framework classifications for
-the same bits, while every omitted bit remains unknown. The false-by-default renderer hook therefore
-cannot turn native availability into an accidental CNA promise. Renderer-specific values and format
-facts are populated only by their owning rollout rows rather than inferred from renderer names.
+- unsupported `SamplerLevelOfDetailBias` is accepted but has no sampling effect;
+- unsupported `PbrEffectShading` or `SkinnedPbrEffectShading` uses the documented untextured,
+  unlit fallback;
+- `MultiSampleMask` may be `Restricted`: SDLGPU applies all-samples and no-samples masks and
+  refuses other partial masks;
+- unsupported `RenderTargetReadback` makes `Texture2D::GetData` on a render target throw
+  `System::NotSupportedException`.
 
-## English limitations and complete report
+These are observable contracts, not maturity labels or performance estimates. A silent wrong
+result on a claimed supported path is a defect; it is not a capability restriction.
 
-`IGraphicsRenderer::GetAdditionalLimitationsTextEXT()` lets an implementation append stable
-English qualifications that do not fit a structured identity. The common profile also supplies
-cross-renderer caveats, including feature-combination, device-reconstruction, emulation,
-performance and driver-evidence boundaries.
+## Numeric limits
 
-`GraphicsDevice::GetRendererCapabilityReportEXT()` generates one long English report from the
-same cached structured facts. It lists all features, all limits, all 27 current surface formats and
-the additional limitations. The text is diagnostic output, not a machine protocol: applications
-must branch on the enum, value and masks, never parse report sentences.
+`CNA::AllRendererLimits()` enumerates the eight defined limits:
 
-The snapshot is invalidated and rebuilt when the native renderer is reconstructed or an applied
-presentation change can affect capabilities.
+- `MaxTextureDimension` and `MaxVertexStreams`;
+- `MaxUniformBufferBytes` and `MaxSampledTexturesPerShaderStage`;
+- `MaxVertexInputBindings` and `MaxVertexInputAttributes`;
+- `MaxColorAttachments` and `MinUniformBufferOffsetAlignment`.
+
+Each query returns `RendererLimitValue { known, value }`. Consumers must inspect `known` before
+using `value`; an unknown query returns `{false, 0}`. Zero in a known result is a real classified
+value and commonly means that the corresponding facility is unavailable. All eight defined limits
+are classified by the current live-device builder.
+
+Limit ordinals 2-10, 12, 13, 15, 19 and 21 are retired and permanently reserved. Ordinal 21 lies
+at the former end of the range rather than below the current C++ `Count`. The canonical enumerable
+list therefore matters more than walking every integer below `Count`.
+
+## Surface-format usage masks
+
+For each of the 27 current `SurfaceFormat` values, `RendererFormatSupport` carries two masks:
+
+- `knownUsages` says which usage questions have a classified answer;
+- `supportedUsages` says which classified usages are supported and is always a subset of
+  `knownUsages`.
+
+A missing known bit means **unknown**, not unsupported. `IsKnown()` tests the first condition;
+`Supports()` is true only when the requested bits are both known and supported.
+
+The defined usage bits are `TextureStorage`, `Sampled`, `Filterable`, `RenderTarget`, `Blendable`,
+`TransferSource`, `TransferDestination`, `Mipmapped`, `Multisample` and `ColorTransfer`. Bits 5-7
+belonged to retired storage-image usages and remain reserved.
+
+The common profile builder always classifies `TextureStorage`, `RenderTarget` and `ColorTransfer`
+for every current format through the same framework verdicts used by resource construction and
+transfer. A renderer may add audited facts through `GetSurfaceFormatUsageSupportEXT()`; for bits it
+marks known, its answer overrides the common verdict. Every other omitted bit remains unknown.
+Native API availability alone is not enough: the implemented CNA path must also satisfy the usage
+contract.
+
+Adding a `SurfaceFormat` requires extending the profile's format/name catalog. A compile-time check
+currently pins the contiguous range from `Color` (0) through `UShortEXT` (26).
+
+## Snapshot lifetime and report
+
+The detailed profile is built lazily on the first query and cached by `GraphicsDevice`. Repeated
+queries return the same const object until CNA invalidates it. Invalidation occurs when:
+
+- a device reset applies presentation formats or a possibly clamped MSAA count;
+- `SetGraphicsProfileEXT()` changes Reach/HiDef policy;
+- the native renderer is created, reconstructed or destroyed.
+
+The next query builds a fresh snapshot. A caller that must retain the old observation across one
+of those operations should copy the value rather than retain the device-owned reference.
+
+`IGraphicsRenderer::GetAdditionalLimitationsTextEXT()` supplies stable qualitative notes that do
+not fit a structured field. The generated English report contains profile schema 3, renderer name,
+all defined features, all defined limits, all 27 formats and the combined limitations text.
+`GetRendererCapabilityReportEXT()` returns that cached report.
+
+The report is diagnostic text, not a machine protocol. Applications must branch on the structured
+feature, limit and format queries and must not parse report wording, ordering or punctuation.
 
 ## C ABI
 
-The C ABI deliberately does not enlarge `CNA_GraphicsCapabilityFlags`, which is a published
-64-bit value. It exposes a separate append-only identity space and individual queries:
+The C ABI keeps the published `CNA_GraphicsCapabilityFlags` summary unchanged and exposes the
+detailed model through individual calls on a callback-scoped borrowed graphics-device handle:
 
 - `cna_graphics_device_get_renderer_feature_support_ext`;
 - `cna_graphics_device_get_renderer_limit_ext`;
@@ -101,16 +147,32 @@ The C ABI deliberately does not enlarge `CNA_GraphicsCapabilityFlags`, which is 
 - `cna_graphics_device_get_capability_report_size_ext` and
   `cna_graphics_device_copy_capability_report_ext`.
 
-The report follows the existing two-call byte-buffer convention. Its size excludes a terminator,
-copying is all-or-nothing, and the function does not append a terminator.
+The C feature and limit constants use the same append-only ordinals as C++. Reserved or
+out-of-range feature/limit identities return `CNA_RESULT_INVALID_ARGUMENT`; they do not return an
+`Unknown` value. An unavailable but defined feature is a successful query returning
+`CNA_RENDERER_FEATURE_SUPPORT_UNSUPPORTED`. Invalid surface-format values and null required output
+pointers are also invalid arguments.
 
-## Extension rules
+The report uses CNA's two-call UTF-8 byte-buffer convention. The size excludes a terminator. Copy
+is all-or-nothing, writes no terminator and reports the required size with
+`CNA_RESULT_BUFFER_TOO_SMALL` when capacity is insufficient.
 
-- Append feature and limit identities; never reorder or reuse a numeric value.
-- Define a feature as one observable contract. Split two promises when a renderer can truthfully
-  answer them differently.
-- Default new renderer queries to false or unknown, never permissive success.
-- Add structured fields before prose when the fact is enumerable or numeric.
-- Keep prose in English and stable enough for diagnostics, but do not make it parseable API.
-- Add C/C++ ordinal tests and map every live renderer answer before changing `Unknown` to another
-  state.
+The complete C-facing renderer-selection and borrowed-handle contract is in
+[`c-api/RENDERERS_AND_CAPABILITIES.md`](c-api/RENDERERS_AND_CAPABILITIES.md).
+
+## Extension and verification rules
+
+- Add only an observable contract that the renderer boundary can classify. Split promises that a
+  renderer can truthfully answer differently.
+- Append feature, limit and usage identities; never reorder or reuse published values.
+- Prefer a structured feature, number or mask over prose when callers can safely branch on it.
+- Default new renderer hooks conservatively and map every defined identity in the profile builder.
+- Keep the C constants, mapping functions and ordinal/static assertions synchronized with C++.
+- Extend `RendererCapabilityProfileTest` for catalog, snapshot, limit, mask and report behavior;
+  extend the pure-C `GraphicsDeviceSmoke` for C ABI ranges and buffer semantics.
+- For a rendering claim, add a real-renderer observation. `CrossRendererContractTest` currently
+  compares reported LOD bias, PBR/skinned-PBR shading, multisample-mask and render-target-readback
+  answers with observed output or deterministic refusal in multi-renderer builds.
+
+Current defects belong only in [`handoff.md` section 5](../handoff.md#5-known-bugs-and-limitations);
+finished implementation history remains in Git.

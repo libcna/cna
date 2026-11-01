@@ -1,7 +1,7 @@
 # Stav dokumentace v `docs/`
 
 Inventura: 2026-11-01. Rozsah: všech 177 aktuálně verzovaných souborů `docs/**/*.md`.
-Souhrn: 50 zpracovaných, 22 podpůrně aktualizovaných čekajících na vlastní audit a 105 dosud
+Souhrn: 51 zpracovaných, 22 podpůrně aktualizovaných čekajících na vlastní audit a 104 dosud
 samostatně nezpracovaných.
 
 Tento soubor sleduje současný dokumentační úklid. Stav neříká, že čekající dokument je nutně
@@ -148,7 +148,7 @@ Odstraněné historické soubory (`graphics-ext-scope-reduction.md`,
 - ✅ **ZPRACOVÁNO** — [`docs/rasterizerstate-support.md`](docs/rasterizerstate-support.md)
 - ⬜ **ČEKÁ** — [`docs/releasing.md`](docs/releasing.md)
 - ⬜ **ČEKÁ** — [`docs/removed-renderers.md`](docs/removed-renderers.md)
-- ⬜ **ČEKÁ** — [`docs/renderer-capability-profiles.md`](docs/renderer-capability-profiles.md)
+- ✅ **ZPRACOVÁNO** — [`docs/renderer-capability-profiles.md`](docs/renderer-capability-profiles.md)
 - ⬜ **ČEKÁ** — [`docs/renderer-registry.md`](docs/renderer-registry.md)
 - ✅ **ZPRACOVÁNO** — [`docs/rendertarget-support.md`](docs/rendertarget-support.md)
 - ✅ **ZPRACOVÁNO** — [`docs/runtime-renderer-selection.md`](docs/runtime-renderer-selection.md)
