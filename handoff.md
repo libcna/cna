@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API generated-routes maintainer-guide reconciliation (2026-11-01):
+  `docs/c-api/GENERATED_ROUTES.md` now matches the generator's actual conversion and test
+  boundaries. It corrects the claim that every `result` parameter is passed unconverted (only its
+  text inputs are; structures and booleans still follow conversion and `raw` rules), distinguishes
+  dedicated from shared semantic helpers, and qualifies required/optional outputs and
+  feature-disabled stubs. The workflow no longer claims that `CApiRouteTestCoverage` enforces a
+  hand-written semantic test: regenerated `GeneratedRoutesSmoke.c` names the route automatically,
+  so that gate is a name census and the family test remains required evidence. The current census
+  is 3,213 declarations: 3,205 generated routes from 56 specs into 56 includes plus the generated
+  contract test, and exactly the seven error queries plus `cna_get_abi_version` remain manual.
+  Generated drift, five generator regressions, route-name coverage, Boolean drift, declared exports
+  and the release gate pass; the generated strict-C contract test passes through the private SDLGPU
+  runner.
 - C API game-runtime and components contract reconciliation (2026-11-01):
   `docs/c-api/GAME_COMPONENTS.md` now describes the complete current game, component, window,
   graphics-device-manager and borrowed-content-manager boundary instead of the earlier

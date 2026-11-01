@@ -1,7 +1,7 @@
 # Stav dokumentace v `docs/`
 
 Inventura: 2026-11-01. Rozsah: všech 177 aktuálně verzovaných souborů `docs/**/*.md`.
-Souhrn: 73 zpracovaných, 17 podpůrně aktualizovaných čekajících na vlastní audit a 87 dosud
+Souhrn: 74 zpracovaných, 17 podpůrně aktualizovaných čekajících na vlastní audit a 86 dosud
 samostatně nezpracovaných.
 
 Tento soubor sleduje současný dokumentační úklid. Stav neříká, že čekající dokument je nutně
@@ -206,7 +206,7 @@ Odstraněné historické soubory (`graphics-ext-scope-reduction.md`,
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/FUZZING.md`](docs/c-api/FUZZING.md)
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/GAMER_SERVICES.md`](docs/c-api/GAMER_SERVICES.md)
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/GAME_COMPONENTS.md`](docs/c-api/GAME_COMPONENTS.md)
-- ⬜ **ČEKÁ** — [`docs/c-api/GENERATED_ROUTES.md`](docs/c-api/GENERATED_ROUTES.md)
+- ✅ **ZPRACOVÁNO** — [`docs/c-api/GENERATED_ROUTES.md`](docs/c-api/GENERATED_ROUTES.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/GENERATION_AUDIT.md`](docs/c-api/GENERATION_AUDIT.md)
 - 🟡 **ČEKÁ — podpůrně aktualizováno** — [`docs/c-api/GRAPHICS_DEVICE.md`](docs/c-api/GRAPHICS_DEVICE.md)
 - 🟡 **ČEKÁ — podpůrně aktualizováno** — [`docs/c-api/GRAPHICS_EXT.md`](docs/c-api/GRAPHICS_EXT.md)

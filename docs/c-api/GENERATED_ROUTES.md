@@ -1,14 +1,14 @@
 # Maintaining the C API routes
 
 Every `cna_*` function is declared in a hand-written public header under
-`modules/c-api/include/CNA/C/`, and its definition — the C boundary — is **generated** from one
-spec line. A mechanically regular route (a property read or write, a command, a value computation,
-a text size/copy pair) is generated whole. A route with real semantics — a creation that publishes
-and counts, an event subscription, a bulk transfer — is a generated boundary around a
-**hand-written helper** named after it, so the boundary rules are written once and the helper holds
-only the logic. Only the error-record queries (`cna_error_*`), which must read the record without
-touching it, and `cna_get_abi_version`, which returns a number rather than a `CNA_Result`, are
-written whole by hand (`CnaCApi.cpp`).
+`modules/c-api/include/CNA/C/`. With exactly eight exceptions, its definition — the C boundary — is
+generated from one spec line. A mechanically regular route (a property read or write, a command, a
+value computation, a text size/copy pair) is generated whole. A route with real semantics — a
+creation that publishes and counts, an event subscription, a bulk transfer — normally uses a
+generated boundary around a dedicated or shared **hand-written helper**, so the boundary rules are
+written once and the helper holds only the logic. The seven error-record queries (`cna_error_*`),
+which must read the record without touching it, and `cna_get_abi_version`, which returns a number
+rather than a `CNA_Result`, are the eight functions written wholly by hand in `CnaCApi.cpp`.
 
 TOML and Python are **development/generation-time tooling only**. Python 3.11+ reads the specs
 and writes ordinary C++ definitions. The compiler consumes the committed `.inc` files through
@@ -47,7 +47,7 @@ implement are in [`ERRORS.md`](ERRORS.md), [`HANDLES.md`](HANDLES.md),
 | Question | Answer |
 |---|---|
 | How do I add a simple C property? | Declare it in the header, add one spec line, regenerate — [below](#adding-a-simple-route). |
-| How do I add a complex hand-written function? | Write its logic as a helper in `src/CnaCApi<Family>.cpp` and add one `result` line for it — [Complex routes](#complex-routes). |
+| How do I add a complex route? | Write its logic as a dedicated or shared helper in `src/CnaCApi<Family>.cpp` and add one `result` line for it — [Complex routes](#complex-routes). |
 | Where do C/C++ conversions live? | `ToNative`/`ToC` and the enum and value checks in `src/CnaCApiMarshal.hpp`. |
 | Where are handles defined? | Handle types in the public headers; the kinds (`ObjectKind`) and the registry in `src/CnaCApiDetail.hpp`; the contract in [`HANDLES.md`](HANDLES.md). A new kind is one `ObjectKind` value plus a lookup in its family. |
 | How do I specify ownership? | `CreateHandle`/`ReleaseHandle` publish and release; who owns what is in [`OWNERSHIP.md`](OWNERSHIP.md). A destroy with nothing to undo is a `release` spec line; one with bookkeeping is a [helper](#complex-routes). |
@@ -74,8 +74,9 @@ implement are in [`ERRORS.md`](ERRORS.md), [`HANDLES.md`](HANDLES.md),
    cna_basic_effect_set_alpha = { call = "object->setAlphaProperty(value)" }
    ```
 
-3. Run `python3 tools/c-api/generate_routes.py`, build, and add a test that calls the route
-   (`CApiRouteTestCoverage` fails otherwise).
+3. Run `python3 tools/c-api/generate_routes.py`, build, and add a hand-written semantic test that
+   calls the route. `GeneratedRoutesSmoke.c` automatically names a newly generated route, so
+   `CApiRouteTestCoverage` alone cannot prove this semantic test exists.
 
 A spec line is a C++ expression evaluated in the family's `.cpp` file, so it may use that file's
 using-declarations and helpers. The route kinds are:
@@ -88,7 +89,7 @@ using-declarations and helpers. The route kinds are:
 | `size` | `([first,] args..., uint64_t* out_bytes)` | byte count of the text the expression yields |
 | `copy` | `([first,] args..., char* destination, uint64_t capacity, uint64_t* out_bytes)` | the size-then-copy protocol (`CopyText`; `CopyBytes` for a `uint8_t*` destination) |
 | `release` | `(handle)` | look up, run the statement (`true` for none), release the handle: a destroy with no bookkeeping |
-| `result` | anything | look up if the group has a lookup, then return the expression, a `CNA_Result`: the route is a call into a hand-written helper |
+| `result` | anything | look up if the group has a lookup, then return the `CNA_Result` expression; normally a call into a dedicated or shared hand-written helper |
 
 The generator takes the signature from the header and the conversions from the C types:
 
@@ -97,8 +98,8 @@ The generator takes the signature from the header and the conversions from the C
   `CNA_FALSE` or `CNA_TRUE`, then available as `bool`; a `CNA_StringView` is read by `ReadText`
   into a `std::string` and refused with `CNA_RESULT_ENCODING` unless it is UTF-8 (a route that
   also forbids an embedded NUL lists the parameter in `refuse_nul = ["name"]`); a lookup's own
-  parameters and a `result` route's parameters are passed unconverted; every other parameter is
-  passed as declared;
+  parameters and a `result` route's text inputs are passed unconverted; every other parameter is
+  passed or converted according to its type and the group's `raw` setting;
 - the result is converted by the output's type: `ToC` for a marshaled struct, `ToCBool` for
   `CNA_Bool`, `static_cast` for an enumeration or a number; any other C structure is assigned as
   the expression builds it (`MapInfo(object)`). Handle outputs are never a `value` or `get`: they
@@ -162,16 +163,19 @@ Game-driving, destruction and dispatch-control groups use this policy because th
 requires the caller itself to be the game thread. The lookup still validates thread ownership;
 this policy does not permit a foreign caller to run the operation locally.
 
-Every generated route checks in one fixed order: a null
-output is refused with `CNA_RESULT_INVALID_ARGUMENT` first (for `copy`, a null `out_bytes` or a
-null destination with a capacity; for `versioned`, a structure of the wrong size or version; for
-`result`, every non-const `out_*` pointer not listed in `optional`, and a handle
-output is then set to `CNA_INVALID_HANDLE`), `CNA_Bool` inputs next, then the
-`invalid_if` conditions and `validate` calls, then text inputs, then the lookup (and `other`'s),
-whose own result is returned when it refuses, then the `require` calls. So a call with two faults always reports the null output.
+Every feature-enabled generated body checks in one fixed order: a null required output is refused
+with `CNA_RESULT_INVALID_ARGUMENT` first (for `copy`, a null `out_bytes` or a null destination with
+a capacity; for `versioned`, a structure of the wrong size or version; for `result`, every
+non-const `out_*` pointer not listed in `optional`, and a handle output is then set to
+`CNA_INVALID_HANDLE`), `CNA_Bool` inputs next, then the `invalid_if` conditions and `validate`
+calls, then text inputs, then the lookup (and `other`'s), whose own result is returned when it
+refuses, then the `require` calls. Thus a null required output wins over a later fault. A
+compiled-out feature instead returns its configured unavailable result and only clears supplied
+handle outputs.
 
-A `result` route keeps its real work in a hand-written helper of the family's `.cpp` — publishing
-a child handle, filling an info structure, copying an array — and the spec line only calls it:
+A `result` route normally keeps its real work in a hand-written helper of the family's `.cpp` —
+publishing a child handle, filling an info structure, copying an array — and the spec line only
+calls it. The helper may be shared where several routes genuinely implement the same operation:
 
 ```toml
 cna_effect_material_create = { result = "CreateEffectHandle(std::make_shared<EffectMaterial>(*object->value), object->parentGame, out_effect)" }
@@ -234,23 +238,23 @@ cna_sound_bank_create = { result = "SoundBankCreate(engine, filename, out_sound_
 cna_model_get_camera_ext = { result = "ModelGetCameraExt(model, index, out_camera)", optional = ["out_camera"] }
 ```
 
-The generated half does the boundary work the helper then never repeats: the exception barrier,
-the refusal of a null `out_*` output, clearing a handle output to `CNA_INVALID_HANDLE` before the
-helper runs, and the `CNA_Bool` check. `raw = true` passes structures and `CNA_Bool` values to the
-helper as the caller passed them, and a `CNA_StringView` reaches a `result` helper unread, so the
-helper's parameter list is exactly the header's. An output the caller may leave null — "pass null
-if you do not need it" in the header, or an output that is only required with a capacity — is
-listed in `optional`; the generated half then does not refuse it, clears it only when it is a
-handle output the caller gave, and leaves the rest to the helper.
+The generated half supplies boundary work the helper should not repeat: the exception barrier,
+the refusal of a null required `out_*` output, clearing a handle output to `CNA_INVALID_HANDLE`
+before the helper runs, and the `CNA_Bool` check. `raw = true` passes structures and `CNA_Bool`
+values to the helper as the caller passed them, and a `CNA_StringView` reaches a `result` helper
+unread, so the helper's parameter list is exactly the header's. An output the caller may leave null
+— "pass null if you do not need it" in the header, or an output that is only required with a
+capacity — is listed in `optional`; the generated half then does not refuse it, clears it only when
+it is a handle output the caller gave, and leaves the rest to the helper.
 Some existing entries use `optional` to delegate mandatory-output checks to a shared helper;
 the public header and helper still determine whether null is actually accepted. For new routes,
 leave unconditional required-output checks in the generated shell. If removing a helper's check,
 first remove the corresponding `optional` exemption and regenerate in the same change.
 
 A helper reads its own text: `ReadText` under the UTF-8 rule, or `RelativePath`/`ReadImportPath`
-when the text is a path, which has rules of its own. A helper that exists only with an optional module goes in a `[helpers_<module>]` group with
-`feature` and `unavailable`, so the build without the module answers through the generated half
-and needs no hand-written stub.
+when the text is a path, which has rules of its own. A helper that exists only with an optional
+module goes in a `[helpers_<module>]` group with `feature` and `unavailable`, so the build without
+the module answers through the generated half and needs no hand-written stub.
 
 Write the helper like the ones around it: bad arguments refused with `InvalidArgument` (or a named
 refusal), handles resolved through the family's lookups, conversions through `ToNative`/`ToC`,
@@ -266,7 +270,8 @@ python3 tools/c-api/generate_routes.py --check  # fail if a generated file is st
 python3 tools/c-api/generate_routes.py --list   # every generated route and its kind
 ```
 
-`--check` runs as the CTest test `CApiGeneratedRoutesCurrent` and in the
+`--check` prints the live generated-route and output-file counts; use that output rather than a
+number copied into prose. It runs as the CTest test `CApiGeneratedRoutesCurrent` and in the
 `c-api-generated-routes` workflow. Generation is deterministic and needs only Python 3.11+.
 The generator regression tests run with `python3 tools/c-api/test_generate_routes.py`
 (`CApiRouteGeneratorTests` in CTest). They recover missing outputs in an isolated source tree,
@@ -275,11 +280,12 @@ After editing a spec or helper, regenerate, inspect the diff, build and test, th
 editable sources and their generated outputs together. Recovery never needs AI: the same command
 recreates all route outputs from the checked-in headers, specs, marshal header and owning files.
 
-The same run writes `GeneratedRoutesSmoke.c` (CTest `CApi_GeneratedRoutesSmoke`), which holds every
-generated route to the contracts above: a null output is refused, a null, wrong-kind or destroyed
-handle answers `CNA_RESULT_INVALID_HANDLE` and leaves handle outputs invalid, and each value text
-pair keeps the size-then-copy protocol. What a route computes is tested by the family's own
-hand-written smoke test.
+The same run writes `GeneratedRoutesSmoke.c` (CTest `CApi_GeneratedRoutesSmoke`). It probes every
+generated route's applicable mechanical contracts: required-output validation, invalid/stale/
+wrong-kind handles where lookup is reached, cleared handle outputs, versioned headers and eligible
+value-text size/copy pairs. Earlier argument refusals and compiled-out features are accepted where
+their contract requires them. What a route computes must be covered by a family's hand-written
+semantic test; the generated test is not that evidence.
 
 ## Changing the generator
 
@@ -304,6 +310,8 @@ preserve the record even on failure. Update the documented manual exception list
 when the public surface changes. Do not add a second definition beside a generated one.
 
 The generated contract test supplements the hand-written semantic tests. Its invalid-handle
-probes sometimes accept an earlier argument refusal or a compiled-out feature; such a result
-does not prove handle lookup ran. `CApiRouteTestCoverage` measures name references in tests,
-including generated tests, not behavioral coverage. Review the family's semantic tests as well.
+probes sometimes accept an earlier argument refusal or a compiled-out feature; such a result does
+not prove handle lookup ran. `CApiRouteTestCoverage` measures name references in tests, including
+generated tests, not behavioral coverage. Regenerating `GeneratedRoutesSmoke.c` therefore makes a
+new generated route satisfy that name census automatically; review and extend the family's
+semantic tests as part of the same change.
