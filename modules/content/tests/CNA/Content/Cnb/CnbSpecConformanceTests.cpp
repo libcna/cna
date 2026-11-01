@@ -148,12 +148,13 @@ TEST(CnbSpecConformanceTest, TheDocumentedAssetTypeIdentifiersMatchTheImplementa
     // CNBF-121: three statements the document got wrong before CNBF-105's
     // compression landed, or asserted the opposite of. Pinned here so they cannot drift back.
     ExpectSpecContains(spec, "0 = none, 2 = Zstandard");
-    ExpectSpecContains(spec, "the chunk's **logical** size; equal to `storedSize` exactly when");
+    ExpectSpecContains(spec, "the chunk's **logical** size; must equal `storedSize` when");
+    ExpectSpecContains(spec, "A compressed chunk can also have equal lengths.");
     ExpectSpecContains(spec, "| `compression` naming a codec this build implements | **accept**");
     ExpectSpecContains(spec,
                        "That does not make a compressed file inspectable without the codec.");
     ExpectSpecContains(spec, "| 5 | `Model` | **versions 1 and 2**");
-    ExpectSpecContains(spec, "| 8 | `SoundEffect` | **version 2**");
+    ExpectSpecContains(spec, "| 8 | `SoundEffect` | **versions 1 and 2**, writer uses 2");
     ExpectSpecContains(spec, "| 9 | `Song` | **version 1**");
     ExpectSpecContains(spec, "| 10 | `Video` | **version 1**");
     ExpectSpecContains(spec, "| 6 | `AnimationClip` | **version 1**");

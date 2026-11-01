@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 152 reviewed, 12 updated incidentally and awaiting their own audit, and 13 not yet
+Summary: 153 reviewed, 11 updated incidentally and awaiting their own audit, and 13 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -67,7 +67,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/cna-devices-camera-design.md`](docs/cna-devices-camera-design.md)
 - ✅ **REVIEWED** — [`docs/cnaext-engine-layer.md`](docs/cnaext-engine-layer.md)
 - ✅ **REVIEWED** — [`docs/cnb-compression-measurements.md`](docs/cnb-compression-measurements.md)
-- 🟡 **PENDING — updated incidentally** — [`docs/cnb-format.md`](docs/cnb-format.md)
+- ✅ **REVIEWED** — [`docs/cnb-format.md`](docs/cnb-format.md)
 - ✅ **REVIEWED** — [`docs/cnb-mmap-measurements.md`](docs/cnb-mmap-measurements.md)
 - ✅ **REVIEWED** — [`docs/cnj-format.md`](docs/cnj-format.md)
 - ✅ **REVIEWED** — [`docs/consoles.md`](docs/consoles.md)

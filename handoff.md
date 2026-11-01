@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNB-format reconciliation (2026-11-01, CNBF-001/003/105/114/115/121): the specification
+  separates generic container parsing from asset decoding/runtime construction, bounds its
+  conformance/determinism claims, corrects SoundEffect v1/v2 support, equal compressed lengths,
+  24 TiB arithmetic, actual region sorting, glTF policy conditions, sidecar endianness, mip rules
+  and dated measurement scope. Read limits are not a decoded-memory budget, and --refs does not
+  escape embedded newlines (§5.2); a one-reference independent sample reproduces the latter.
+  The two obsolete text expectations are corrected in CnbSpecConformanceTests. Content/inspector
+  targets build, all 423 CNB tests pass privately on OPENGLES3 with dummy audio, the independent
+  golden generator verifies Model-v2 length/hash, and links/inventory checks pass. No wire/runtime
+  implementation or ABI change, large allocation stress, or new cross-platform qualification.
 - CNJ-format reconciliation (2026-11-01, CNB-3/32/37/110): the guide corrects stream/cache/literal
   resolution, manifest-relative sourceFile versus root-relative sidecars, cached assets versus
   raw file reads, writing/dependency limits, custom version-1 dispatch and load shapes. It scopes
@@ -1670,6 +1680,15 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- CNB read limits cap serialized/logical chunk sizes and individual counts, not peak decoded
+  memory. DecodeAnimationClipFromCnb allows overlapping key ranges and copies every track's
+  slice into a separate vector, so many tracks sharing a long range can amplify decoded memory
+  beyond a small constant multiple of the encoded keys. No aggregate decoded-key budget exists.
+  CnbLogicalNameProblem also accepts embedded NUL/newlines, while cna_tool_cnb_info --refs prints
+  raw names separated by newlines; that listing is ambiguous for otherwise accepted newline names.
+  Source-inspected 2026-11-01 (`docs/cnb-format.md`); a small independently encoded one-reference
+  file reproduced the two-line --refs output. No large allocation stress run or runtime change
+  was made during the documentation audit.
 - CNB's retained measurement spikes are exploratory, not input/correctness validators: codec
   errors/mismatches or skipped missing payloads may return zero, and the mmap probe uses sparse
   4096-byte touches, weak I/O checks and an unconditional x86 SSE4.2 call. Original payload hashes/

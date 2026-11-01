@@ -2,17 +2,21 @@
 
 **Status: implemented.** This document describes the bytes the implementation in
 `modules/content/{include/CNA/Content/Cnb,src/Cnb}` actually reads and writes, not an aspiration.
-`modules/content/tests/CNA/Content/Cnb/CnbSpecConformanceTests.cpp` fails if the two drift apart:
-every constant in §3, §4 and §7 below is asserted against the code, and §14's hex dump is
-regenerated and byte-compared.
+`modules/content/tests/CNA/Content/Cnb/CnbSpecConformanceTests.cpp` checks selected documented
+constants, schema strides, identifiers and contract phrases against the implementation, and
+regenerates §14's example bytes. These gates supplement source review; they do not mechanically
+validate every sentence, table offset or future compatibility claim in this document.
 
 * **What is frozen.** The container byte format (§3–§6), the asset-type identifier ranges and a
-  custom type's serialized identity (§7) and every implemented schema version are v1-stable: a
-  `.cnb` written today stays readable by a future CNA, and new behaviour arrives as a new schema
-  version (§11.2). Two neighbouring things are deliberately **not** promised: the C++ custom-loader
-  API (`CnbLoaderRegistry`) may still change shape, and the producers' and the inspector's command
-  lines are not a compatibility interface — except `cna_tool_cnb_info --refs`' one-name-per-line
-  output, which is meant for build scripts.
+  custom type's serialized identity (§7) and every implemented schema version are v1-stable:
+  future implementations should retain readers for these versions rather than reinterpret their
+  bytes. Loading still requires the relevant codec, asset loader, renderer capabilities and
+  suitable limits; a wire-format promise does not install those dependencies. New behaviour
+  arrives as a new schema version (§11.2). Two neighbouring things are deliberately **not**
+  promised: the C++ custom-loader API (`CnbLoaderRegistry`) may still change shape, and the
+  producers' and the inspector's command lines are not a compatibility interface — except
+  `cna_tool_cnb_info --refs`' one-name-per-line
+  output, which is meant for build scripts using line-safe names (see §5.1).
 * The design decisions behind the container, with the alternatives each one rejected, are
   Appendix A; the numbered invariants the reader enforces are §12.2.
 * The engineering record, `CNBF-001`..`CNBF-123` and the hardening rows `CNBF-H001`..`H020`
@@ -48,9 +52,9 @@ reusable assets left external.
   file is a different format and a different project.
 * CNB is not an interchange format. glTF, PNG and WAV are how content arrives; `.cnj` is how it is
   edited; `.cnb` is how it ships.
-* CNB is not `.xnb` and shares no code with it. It has no assembly-qualified type names, no
-  reflection, no reader-version negotiation, no shared-resource fixup protocol and no platform
-  identifier byte.
+* CNB has a different wire format from `.xnb`: no assembly-qualified type names, reflection,
+  reader-version negotiation, shared-resource fixup protocol or platform identifier byte.
+  Their producers can share canonical data and conversion helpers; this is not code isolation.
 * The per-chunk checksums detect **accidental** corruption. CNB has no authenticity story and must
   never be presented as having one: anyone who can rewrite a chunk can rewrite its checksum.
 
@@ -132,15 +136,16 @@ Exactly 64 bytes at offset 0. Every field is naturally aligned within the header
 | 44 | 4 | `headerChecksum` (`u32`) | CRC-32C of bytes `[0, 44)` |
 | 48 | 16 | `reserved` | must be all zero |
 
-The trailing `0x1A` of the magic is a DOS end-of-file byte, which stops `type`/`cat` from spilling
-binary into a terminal — the same trick PNG uses.
+The trailing `0x1A` is the historical DOS text end-of-file marker. It helps identify the signature
+as binary; modern tools such as Linux `cat` do not stop there or protect a terminal from the rest
+of the file.
 
 `headerChecksum` covers everything before it, including `tocChecksum`, and is verified **before any
 offset in the header is used for arithmetic**. A corrupt header is precisely the case in which the
 offsets cannot be believed.
 
-`fileSize` must equal the real file length. This one check closes every "the file declares more
-bytes than it has" attack at the door.
+`fileSize` must equal the real file length. This checks the overall length declaration; individual
+offsets, products and ranges still need their own overflow and end-of-file checks.
 
 ---
 
@@ -155,15 +160,16 @@ aligned within an entry.
 | 4 | 4 | `flags` (`u32`) | bit 0 = `Mandatory`; every other bit must be 0 |
 | 8 | 8 | `offset` (`u64`) | absolute file offset of the chunk's stored bytes |
 | 16 | 8 | `storedSize` (`u64`) | bytes the chunk occupies in the file |
-| 24 | 8 | `uncompressedSize` (`u64`) | the chunk's **logical** size; equal to `storedSize` exactly when `compression` is 0. Their sum across every chunk is bounded by `maxTotalUncompressedSize` (§12) |
-| 32 | 4 | `checksum` (`u32`) | CRC-32C of the chunk's **stored** bytes, so corruption is caught before anything reaches a decompressor |
+| 24 | 8 | `uncompressedSize` (`u64`) | the chunk's **logical** size; must equal `storedSize` when `compression` is 0. A compressed chunk can also have equal lengths. The sum of logical sizes is bounded by `maxTotalUncompressedSize` (§12) |
+| 32 | 4 | `checksum` (`u32`) | CRC-32C of the chunk's **stored** bytes; a mismatch is rejected before decompression |
 | 36 | 4 | `compression` (`u32`) | 0 = none, 2 = Zstandard; see §8 |
 | 40 | 4 | `alignment` (`u32`) | power of two, at most `maxChunkAlignment` (§12, default 4096); `offset % alignment == 0` |
 | 44 | 4 | `reserved` (`u32`) | must be 0 |
 
-Entries **must** be sorted by ascending `offset`. That makes overlap detection one linear pass and
-makes writing deterministic by construction, and it means a reader never has to sort
-attacker-controlled data before any bound is known.
+Entries **must** be sorted by ascending `offset`. The writer emits chunks in this order. The
+current reader additionally sorts a bounded region list containing the header, TOC and non-empty
+chunks to validate their partition (§4.1); TOC ordering alone does not prove non-overlap or make
+an arbitrary producer deterministic.
 
 ### 4.1 Layout invariant
 
@@ -205,8 +211,8 @@ stable under any such insertion. A schema declares which of *its* chunk types ar
 
 ### 5.1 Container-defined chunks
 
-These two are understood by every reader, whatever the asset type, and are always emitted before a
-schema's own chunks.
+These two are understood by the generic container reader, whatever the asset type. `CnbWriter`
+emits them before a schema's own chunks; the parser does not require that relative order.
 
 **`CMET` — at most one. Type identity and provenance.**
 
@@ -226,9 +232,10 @@ Whether this chunk is optional depends on the asset type, and the difference is 
   A reader must refuse a custom-typed file that carries no name, and must refuse one whose name
   disagrees with the name its loader was registered under. A writer must refuse to produce either.
 
-Both halves of that rule are implemented: `CnbLoaderRegistry::ResolveForDocument` enforces it on
-read and `CnbWriter::Build` enforces it on write, so a custom file that could never be loaded
-cannot be produced in the first place.
+`CnbLoaderRegistry::ResolveForDocument` enforces the read-side name match and `CnbWriter::Build`
+checks the custom file's name/hash identity on write. Successful writing does not establish that
+a consumer has registered that loader or supports its payload schema. Generic container parsing
+alone does not resolve the loader.
 
 `contentName` never decides identity; a loader reads it only to place `XREF` names (below).
 
@@ -257,6 +264,11 @@ still run afterwards; this is defence in depth, so a compiled file can never han
 input to the resolver in the first place. Sharing the rule is what stops a writer producing a file
 its own reader refuses — the reader used to be alone in applying it.
 
+The generic logical-name validator does not reject embedded NUL or newline characters. Thus
+`cna_tool_cnb_info --refs` writes raw names and delimiters, not an escaped, lossless listing for
+every accepted string. Build scripts using that line-oriented output must restrict authored names
+accordingly; blindly feeding it to shell word splitting also loses spaces and other shell syntax.
+
 `XREF` is marked `Mandatory` on purpose: a reader that could not see the names an asset depends on
 would load a visibly incomplete asset and say nothing.
 
@@ -281,8 +293,21 @@ not bump the container version, and a container change does not invalidate a sch
 | unknown chunk type **without** `Mandatory` | skip silently |
 | `compression` naming a codec this build implements | **accept**, and expand the chunk at parse time |
 | `compression` naming a codec this build does not implement | reject, naming the codec |
-| `assetSchemaVersion` outside `[1, max for that type]` | reject |
+| `assetSchemaVersion` unsupported by that type's decoder | reject |
 | duplicate of a schema-declared singleton chunk | reject |
+
+This table describes the combined container and asset-loading contract. `CnbDocument::Parse()`
+checks container fields, codec availability, stored checksums, expansion, `CMET` and `XREF`.
+It requires a nonzero asset type and schema version but does not know each asset's supported
+versions or chunk set. The selected asset decoder calls `RequireAsset`,
+`RequireMandatoryChunksUnderstood` and singleton/table checks. Unknown optional chunks are ignored
+semantically, but still undergo generic bounds, codec and checksum validation. An inspector that
+only parses the container has not established that the asset will load.
+
+The schema tables state the canonical writers' flags and alignments. Reader strictness is not
+uniform: for example, the Curve decoder requires both known chunks but does not require their
+`Mandatory` bit to be set. The Model-v2 decoder checks the required flags and exact declared
+alignments. Presence checks and unknown-mandatory checks alone do not enforce every table entry.
 
 Accepting a higher minor version while rejecting an unknown *mandatory chunk* is what makes
 additive evolution possible: a newer writer that adds data an older reader can safely ignore marks
@@ -336,7 +361,7 @@ Precisely, as implemented by `CnbLoaderRegistry::ResolveForDocument`, in this or
 | 5 | `Model` | **versions 1 and 2**, §11 |
 | 6 | `AnimationClip` | **version 1**, §10 |
 | 7 | `Curve` | **version 1**, §9 |
-| 8 | `SoundEffect` | **version 2**, §18 |
+| 8 | `SoundEffect` | **versions 1 and 2**, writer uses 2, §18 |
 | 9 | `Song` | **version 1**, §19 |
 | 10 | `Video` | **version 1**, §19 |
 | 11 | `Effect` | reserved, not implemented |
@@ -388,9 +413,10 @@ that codec" rather than "the file is broken". `IsCnbCompressionSupported()` is t
 whether a given build has a codec is not something a consumer should learn from a macro.
 
 For a compressed chunk, `storedSize` is the compressed length, `uncompressedSize` is the expanded
-length, and `checksum` covers the **stored** bytes — so a corrupt file is caught before anything
-reaches a decompressor. `uncompressedSize` is checked against `maxChunkSize` (§12) **before any
-allocation**, which is what stops a few kilobytes of hostile input from asking for gigabytes, and
+length, and `checksum` covers the **stored** bytes — so a stored checksum mismatch is caught before
+decompression. This is accidental-corruption detection, not authentication. `uncompressedSize` is
+checked against `maxChunkSize` (§12) **before allocating the expanded chunk buffer**; the aggregate
+logical-size check runs before decompression too. The input file and TOC storage already exist, and
 the stream must expand to exactly `uncompressedSize`: a shorter expansion would leave the tail of
 the buffer as zeroes that later code reads as data.
 
@@ -524,8 +550,9 @@ game-supplied effects as external references so `ContentManager`'s cache keeps w
 | `MLIT` | mandatory | ≤ 1 | punctual lights |
 | `MCAM` | optional | ≤ 1 | the scene's glTF cameras; a reader that predates it skips it |
 
-Geometry gets 16-byte alignment because it is the data a future memory-mapped reader would address
-in place, and 16 is the widest vector load any CNA target uses.
+Geometry chunks declare 16-byte alignment as a wire-layout convention suitable for a future
+mapped reader. This does not guarantee the address alignment of a copied/decompressed buffer,
+or eliminate decoding and GPU upload copies.
 
 **`MDLH` — 24 bytes.**
 
@@ -539,11 +566,13 @@ u32 lightCount
 u32 animationCount
 ```
 
-Flag bit 1 records a property of the content, not a source-format version: a model imported from
-glTF expects the importer's lighting rig applied to every effect, including its "no light was
-declared, so light it by default" fallback, whereas a hand-authored model expects XNA's own
-defaults where `BasicEffect` starts unlit. The two look visibly different, so which applies has to
-travel with the asset rather than be guessed from whether any lights are present.
+Flag bit 1 selects CNA's glTF material/lighting policy. For a lit material, effects implementing
+`IEffectLights` receive up to three imported directional lights, or `EnableDefaultLighting()` when
+the imported list is empty. An explicitly unlit material skips that rig; an effect without the
+lighting interface cannot receive it. The policy also supplies the glTF white base-color texture
+where needed. Legacy hand-authored models without the flag retain their effects' defaults. The
+CNJ compiler derives the flag from `cnjVersion >= 2`; it must travel with the compiled model rather
+than be inferred from whether `MLIT` is present.
 
 **`MSTR`.** `u32 count`, then `count` `String`s. Every name in the schema is a `u32` index into
 this table; `0xFFFFFFFF` means "no string".
@@ -561,9 +590,9 @@ strictly less than the bone's own index. This is not a tidiness rule and it is n
 `Model::CopyAbsoluteBoneTransformsTo` composes world transforms in a single ascending pass, reading
 `dest[parentIndex]` as it goes; a bone whose parent came later would be composed against a slot not
 yet written and would place its geometry somewhere it does not belong — quietly, without an error.
-Requiring the order also makes a cycle structurally impossible. Both source formats already specify
-it (`.cnj` bone arrays are documented parent-before-child, and `SkinningData::SkeletonHierarchy` is
-documented topological), so nothing that can be authored today is refused by stating it here.
+Requiring the order also makes a cycle structurally impossible. This matches the documented CNJ
+bone order and topological `SkinningData::SkeletonHierarchy` convention; it does not imply that
+every hand-authored CNJ document already satisfies the compiler's checks.
 
 **`MMSH`** — three sections, in order:
 
@@ -958,16 +987,19 @@ producer policy remains schema 1; adding schema 2 did not change their existing 
 
 ## 12. Error handling and limits
 
-Every malformed-input failure is a
-`Microsoft::Xna::Framework::Content::ContentLoadException`, the same type the rest of CNA's content
-subsystem throws, so a game's existing `catch` keeps working.
+Explicit container and schema validation failures use
+`Microsoft::Xna::Framework::Content::ContentLoadException`, with file/chunk context. This is not a
+promise to translate allocation failure, every custom loader exception or every later runtime/GPU
+failure into that type.
 
 The container-level `CMET` and `XREF` chunks are decoded during parsing rather than on first use,
-so a parsed document is immutable and every accessor is a plain `const` read. A malformed `CMET`,
-or an `XREF` naming a path outside the content root, is therefore a **parse** failure — reported
-when the file is opened rather than at whichever later call happened to touch it first.
+so a parsed document is immutable and accessors do not lazily decode those chunks. A malformed
+`CMET` or syntactically unsafe `XREF` name is therefore a **parse** failure. Actual filesystem
+resolution/containment, dependency existence and expected asset types are checked later by loaders;
+the container parser has no content root or dependency filesystem to inspect.
 
-`CnbReadLimits` bounds every count-driven read before anything is allocated. The limits are held
+`CnbReadLimits` supplies bounds for file/chunk sizes and count-driven schema reads before their
+corresponding allocations. It is not an accounting allocator (§12.1). The limits are held
 **by value** by both `CnbDocument` and `CnbByteReader`: they are a small trivially-copyable struct,
 and `Parse(bytes, name, CnbReadLimits{})` is the natural call, so retaining the caller's address
 would make lifetime the caller's problem for no benefit. The process-wide defaults:
@@ -997,13 +1029,13 @@ after an enormous allocation.
 
 `maxTotalUncompressedSize` bounds something no per-item limit can: the sum of every chunk's
 **logical** (post-decompression) size. `maxChunkSize` caps one chunk and `maxChunkCount` caps how
-many there are, so without an aggregate their product — 24 PiB at the defaults — is what a reader
-would be willing to allocate for a file holding a few kilobytes of individually legal compressed
-frames. Every chunk counts toward the sum, compressed or not, so the invariant reads the same way
+many there are, so their product alone would permit 24 TiB of logical chunk data at the defaults.
+The aggregate prevents a compressed file from requesting that much expansion. Every chunk counts
+toward the sum, compressed or not, so the invariant reads the same way
 whatever a file's codecs are; for a wholly uncompressed file the sum is bounded by `maxFileSize`
 regardless, because chunks do not overlap. The sum is accumulated with `CheckedAdd` while the table
-of contents is read and compared to the ceiling **before any chunk's bytes are allocated or handed
-to a decompressor**. The default is deliberately larger than `maxFileSize`, so compression can
+of contents is read and compared to the ceiling **before expanded chunk buffers are allocated or
+handed to a decompressor**. The input file is already owned. The default is deliberately larger than `maxFileSize`, so compression can
 genuinely expand a file rather than be cancelled out by this bound.
 
 ### 12.0 The writer applies the same limits
@@ -1022,37 +1054,38 @@ that reachable rather than theoretical: a highly compressible document serialize
 expands to a great deal, so it can sit far inside `maxFileSize` while its aggregate logical size is
 over `maxTotalUncompressedSize`. Build time is where that has to be found. Together with the
 external-reference name rule and the container-chunk rule (§13), this is what makes the guarantee
-whole: **whatever `Build()` accepts under a limit set, `Parse()` loads under the same one.**
+whole at the container level: `Build()` applies the constraints needed by `Parse()` under the same
+limits and codec availability. It does not validate arbitrary caller-supplied schema chunk bytes;
+successful container parsing is not successful asset decoding or runtime construction.
 
 ### 12.1 What the limits do and do not guarantee
 
 Stated plainly, because the difference matters to anyone deciding whether these bounds are enough
 for their situation.
 
-**They do guarantee** that no single count, length or offset read from a file can cause an
-allocation, a read or an arithmetic operation that the file's own size does not justify. Every
-count is checked against its configured ceiling *and* against how many elements could physically
-fit in the bytes that remain, before anything is reserved.
+**They bound serialized sizes, logical chunk expansion and individual counts.** Checked arithmetic
+and remaining-byte checks prevent the corresponding reads/reservations from trusting an arbitrary
+unbounded count. `ReadCount(elementSize)` checks the physically remaining bytes when
+`elementSize != 0`; asset codecs additionally validate their table products and index ranges.
 
-**They do not constitute a total memory budget.** The limits are per-item, not a running account,
-and CNB deliberately does not implement an accounting allocator. Two consequences follow, and both
-are properties of the format rather than oversights:
+**They do not constitute a total memory budget.** The aggregate tracks logical chunk bytes, not
+every allocation made while loading an asset:
 
-* A file bounded by `maxFileSize` can decode to **more** memory than its own size. That is inherent
-  to a compiled format: 16-bit indices widen to 32-bit for morph normal recomputation, a
-  `CnbModelPart` is a much larger object than its 56-byte descriptor row, and a string table row is
-  a `std::string`. The expansion is bounded and proportional — a small multiple, not unbounded —
-  because every array's element count is tied to bytes actually present in the file.
-* Nothing bounds the number of `.cnb` files a program loads at once. That is `ContentManager`'s
-  concern and the application's, not the container's.
+* The owned input file, expanded chunks, decoded CPU objects, string storage, intermediate copies
+  and runtime/GPU resources can coexist. Their total is not `maxTotalUncompressedSize`.
+* Reused serialized ranges can be copied more than once. For example, §10 allows tracks to share
+  key ranges, and `DecodeAnimationClipFromCnb()` copies each track's keys into its own vector.
+  Separate bounded track/key counts do not prove a small constant memory multiple: many tracks
+  can name the same long range. No aggregate decoded-key allocation budget is enforced there.
+* Nothing in these limits bounds the number of files an application loads simultaneously.
 
-An application with a hard memory ceiling should therefore set `CnbReadLimits::maxFileSize` from
-that ceiling with headroom, rather than assuming the per-item limits add up to one.
+An application with a hard memory ceiling needs limits appropriate to its asset corpus and control
+of total decoded resources; reducing `maxFileSize` alone is not a complete memory-budget policy.
 
 Two counts additionally carry a **schema-level** ceiling, because their in-memory footprint is many
 times their encoded size and the generic array limit alone would still allow an unreasonable
-allocation. Both match the ceilings `ContentManager`'s own `.cnj` readers already apply, so nothing
-a `.cnj` can express is refused:
+allocation. These are explicit CNB schema limits, independent of what an editable JSON document
+could describe:
 
 | count | ceiling |
 |---|---|
@@ -1064,9 +1097,10 @@ A `Model`'s part count is bounded by a stronger check still: it must equal the n
 
 ### 12.2 The invariants, numbered
 
-The complete list `CnbDocument::Parse()` enforces, in the order it checks them. Each has its own
-negative test in `CnbContainerTests.cpp`, which builds a *valid* file and then breaks exactly that
-one thing, so "the reader rejected it" can never be confused with "the fixture was never valid".
+Stable reference numbers for the combined container/schema contract, **not execution order**.
+`CnbContainerTests.cpp` and the hardening, compression, registry and per-schema tests exercise
+these checks. `Parse()` performs container checks and decodes `CMET`/`XREF`; checks involving a
+particular asset's chunk set, version, tables or indices require that asset's decoder.
 
 1. file ≥ 64 bytes and ≤ `limits.maxFileSize`
 2. magic == `43 4E 42 1A`
@@ -1077,25 +1111,26 @@ one thing, so "the reader rejected it" can never be confused with "the fixture w
 7. `chunkCount <= limits.maxChunkCount`
 8. `tocOffset >= 64`, `tocOffset + 48*chunkCount` computed overflow-safe, `<= fileSize`
 9. `tocChecksum` matches CRC-32C of the TOC bytes
-10. per entry: `compression` names a codec this build implements; `storedSize ==
-    uncompressedSize` when that codec is `None`; `alignment` is a power of two in `[1, 4096]`;
-    `reserved == 0` (since `CNBF-105`, which implemented Zstandard as codec 2; before it every
-    non-zero codec was rejected)
+10. per entry: four printable identifier bytes, no unknown chunk flag bits, `compression` names
+    an implemented codec; `storedSize == uncompressedSize` for `None`; `alignment` is a power of
+    two at most `limits.maxChunkAlignment`; `reserved == 0`
 11. per entry: `offset + storedSize` overflow-safe and `<= fileSize`; `offset % alignment == 0`;
-    `storedSize <= limits.maxChunkSize`
+    both `storedSize` and `uncompressedSize` at most `limits.maxChunkSize`
 12. TOC sorted by ascending `offset`
 13. header, TOC and all non-empty chunk ranges are pairwise disjoint and, together with zero-filled
     gaps, cover `[0, fileSize)` (§4.1, including its tolerated end-of-file zero padding)
 14. every chunk's `checksum` matches CRC-32C of its stored bytes
-15. every chunk carrying `Mandatory` must be understood by the reader
-16. `assetTypeId != 0`; `assetSchemaVersion` within the reader's supported range for that type
-17. schema-declared singleton chunks appear exactly once
+15. every chunk carrying `Mandatory` must be understood by the selected asset decoder; generic
+    parsing alone cannot decide that
+16. `Parse()` requires `assetTypeId != 0` and `assetSchemaVersion != 0`; the asset decoder checks
+    that type and its supported schema versions, and dispatch checks custom type identity (§7)
+17. required schema singleton chunks appear exactly once; optional singletons at most once
 18. every `String` length ≤ `limits.maxStringBytes`, is well-formed UTF-8 (no overlong forms, no
     surrogates, no > U+10FFFF), and fits inside its chunk
 19. every count × element-size product is computed overflow-safe and must match the chunk's exact
     remaining length where the schema says so
-20. every intra-file index (TOC index, string index, `XREF` index, bone parent, track key range) is
-    range-checked before use
+20. container accessors check TOC indices; schema decoders check their string/`XREF`/bone indices
+    and track ranges before use; schema-1 bones are parent-before-child
 21. the sum of every chunk's `uncompressedSize` is computed overflow-safe and is at most
     `limits.maxTotalUncompressedSize` (since `CNBF-114`)
 22. every `XREF` logical name is non-empty, well-formed UTF-8, relative, `/`-separated and free of
@@ -1105,7 +1140,9 @@ one thing, so "the reader rejected it" can never be confused with "the fixture w
 
 ## 13. Determinism
 
-Given identical inputs, `CnbWriter` produces byte-identical output. It reads no clock, no random
+Given identical ordered inputs, limits, options and codec implementation, `CnbWriter` produces
+byte-identical output. No promise is made that different zstd library versions emit identical
+compressed bytes. It reads no clock, no random
 source, no pointer value and no environment; chunks are emitted in the order the schema encoder
 adds them; the table of contents is written in that same order, which is also ascending-offset
 order; alignment gaps are zero-filled; string and material tables intern in first-seen order. The
@@ -1129,8 +1166,8 @@ it agrees with the specification as an independent reader understood it.
 ## 14. An annotated example
 
 The smallest useful file: a `Curve` with no keys, no metadata and no external references. 172
-bytes. `CnbSpecConformanceTests.cpp` regenerates this and byte-compares it against the dump below,
-so the document cannot drift from the implementation.
+bytes. `CnbSpecConformanceTests.cpp` builds this shape and checks its offsets/bytes; the displayed
+CRC fields remain placeholders. This example and the tests must be kept aligned during source review.
 
 ```text
 offset  bytes                                            meaning
@@ -1209,13 +1246,11 @@ A type can be fully readable at runtime and still have no supported way to *prod
   keeps its meaning and mapped file storage would not itself remove decompression/GPU copies.
 * A package format bundling many assets (`.cnapak`, `CNBF-107`). That would be a different format
   and a separate project; one `.cnb` stays one logical asset (Appendix A, D8).
-* **Load time** has never been measured, and no claim is made about it. What was measured is the
-  property CNB was built for: compiling a glTF-derived `.cnj` Model into one `.cnb` takes it from
-  four or five files and opens per load to one or two. **Byte size** is not a measured win on small
-  assets — on fixtures of a handful of vertices the 64-byte header, 48 bytes per chunk and the
-  368-byte material record dominate, and two of five such fixtures grew. On a geometry-dominated
-  model the geometry chunks are the bytes the sidecars held, so the difference converges to the
-  JSON descriptor that is no longer there; that larger measurement has not been taken.
+* No general load-time advantage is established. The original small-fixture campaign counted
+  fewer files/opens; two of its five tiny assets grew because fixed container/material overhead
+  dominated. Later [pipeline benchmark records](content-pipeline-benchmark.md) include larger
+  Model byte sizes and timed CNB build scenarios. Those are dated pipeline measurements, not a
+  runtime loading comparison across storage devices, renderers or compressed/uncompressed files.
 
 ### 15.1 Four different meanings of "supported"
 
@@ -1241,9 +1276,9 @@ DXT decompression were already pure CPU work, so they moved into
 same decoder. A compiled cube map holds decompressed `Rgba8`, which is what the runtime path
 produces anyway.
 
-`Video`'s producer cannot invent metadata: duration, frame size and frame rate would need a
-multimedia decoder CNA does not expose headlessly, so they are **required arguments** rather than
-values guessed from the file.
+`Video`'s source CLI requires duration, frame size and frame rate as explicit arguments; it does
+not probe them from the media. This is that producer's contract, not a claim that no headless
+media decoder exists elsewhere in CNA.
 
 ### 15.2 What produces what
 
@@ -1252,7 +1287,7 @@ values guessed from the file.
 | `cna_tool_cnj_to_cnb` | a `.cnj` document and its sidecars | `Curve`, `AnimationClip`, `Model`, `Texture2D`, `Texture3D`, `TextureCube`, `SpriteFont`, `SoundEffect` |
 | `cna_tool_gltf_to_cnb` | `.gltf`/`.glb` | `Model.cnb`, byte-identical to the two-step route |
 | `cna_tool_source_to_cnb` | PNG/JPEG/… , DDS, WAV, and media files | `Texture2D`/`TextureCube`/`SoundEffect`/`Song`/`Video` `.cnb` |
-| `cna_tool_cnb_info` | any `.cnb` | nothing; inspects and validates |
+| `cna_tool_cnb_info` | `.cnb` with codecs available in that build | nothing; validates the container/metadata/XREF and reports it, without decoding every asset schema or loading dependencies |
 
 `cna_tool_gltf_to_cnb` still stages a `.cnj` and its sidecars in a temporary directory it removes,
 compiled from `gltf_to_cnj.cpp` itself, so the two routes share one interpretation of glTF and a
@@ -1262,9 +1297,10 @@ dozen call sites, so hoisting them changes the `.cnj` path — the very referenc
 `CnbModelEquivalenceTest` compares the `.cnb` path against — and doing both at once would change
 the oracle and the thing under test together. No output depends on it.
 
-The compiler's own readers of the `.clip.bin`, `.skeleton.bin` and `_morph.bin` sidecars assume
-little-endian, where the runtime `.cnj` readers use the host's native order. That is identical on
-every target CNA supports and is recorded as a difference rather than an accident.
+The compiler reads `.clip.bin`, `.skeleton.bin` and `_morph.bin` fields as little-endian. Runtime
+clip reading now uses the shared little-endian byte reader too; runtime skeleton/morph paths still
+contain native-layout copies. The supported little-endian targets agree for these producers,
+but this is not a portable native-sidecar ABI or a replacement for CNB's explicit wire encoding.
 
 Every one of them is **headless and deterministic**: no `GraphicsDevice`, no audio device, no
 clock, no randomness. Given identical source bytes, options and logical name, each produces
@@ -1306,7 +1342,12 @@ A `TextureCube` additionally requires `width == height`, because a cube face is 
 
 Mip level *n* has dimensions `max(1, width >> n)` × `max(1, height >> n)` × `max(1, depth >> n)`.
 Each dimension floors at 1 independently, so an 8×4 texture's chain is 8×4, 4×2, 2×1, 1×1 — the
-height reaches 1 two levels before the width does.
+height reaches 1 one level before the width does.
+
+The generic texture codec checks `mipCount` in 1…16 and the exact payload size of every declared
+level. It does not require a complete chain or forbid additional 1×1 tail levels. Runtime texture
+construction/upload has its own mip and renderer constraints; schema decoding alone does not
+prove that an arbitrary declared chain can be uploaded.
 
 ### 16.2 `TEXR`, 24 bytes per descriptor
 
@@ -1345,11 +1386,9 @@ producer capability without changing the schema version.
 
 ### 16.4 `CnbTextureFormat`
 
-The `format` field is **not** a `SurfaceFormat` value. `SurfaceFormat`'s enumerators carry no
-explicit numbers, so inserting one — an ordinary thing to do to an XNA-shaped enum — would renumber
-everything after it and silently change the meaning of every file already written. A file format
-cannot be hostage to the declaration order of a runtime enum, so CNB has its own frozen numbering
-and an explicit mapping that has to be edited deliberately.
+The `format` field is **not** a `SurfaceFormat` value. CNB has its own frozen numbering and an
+explicit mapping; changing a runtime enum must not reinterpret existing files. The table reserves
+identifiers beyond the currently writable/uploadable CNB subset (§15).
 
 | id | name | unit bytes | `SurfaceFormat` |
 |---|---|---|---|
@@ -1569,7 +1608,7 @@ only one that can refuse it — and it would otherwise divide badly inside a pla
 `durationMs` is a `u32` on the wire but is bounded at `0x7FFFFFFF` on both sides, because `Song`'s
 and `Video`'s constructors take a signed 32-bit millisecond count: a larger value would arrive
 negative and every later `Duration`/`PlayPosition` comparison would read backwards. `INT32_MAX`
-milliseconds is about 24.8 days, so nothing real is refused.
+milliseconds is about 24.8 days; longer media durations cannot be represented by this schema field.
 
 ---
 
@@ -1597,28 +1636,26 @@ descriptor table).
 
 §3 has the byte table. Design points:
 
-* magic is `43 4E 42 1A` — `"CNB"` plus `0x1A` (DOS EOF), which stops `type`/`cat` mid-file and is
-  the same trick PNG uses;
-* every multi-byte field is naturally aligned inside the header, so a zero-copy reader could
-  overlay it on a little-endian host;
+* magic is `43 4E 42 1A` — `"CNB"` plus the historical DOS text EOF marker; it does not stop
+  modern binary-copy tools such as Linux `cat`;
+* every multi-byte field is naturally aligned inside the header's byte layout; the current reader
+  decodes fields rather than overlaying a C++ struct whose ABI/padding might differ;
 * `headerChecksum` (CRC-32C of bytes `[0,44)`) and `tocChecksum` (CRC-32C of the TOC bytes) are
   verified **before any offset in them is trusted**;
 * 16 reserved bytes, required to be zero, so a v1 reader rejects a file using a field it cannot see;
-* `fileSize` must equal the real file size — the check that stops every "declared length larger
-  than the file" attack at the door (`.xnb` had to gain exactly this check after the fact,
-  `XNB-43`).
+* `fileSize` must equal the real file size, in addition to separate checked range/product tests
+  (`XNB-43` recorded the analogous XNB whole-file check).
 
 ### D3 — 48-byte TOC entry, TOC ordered by offset
 
 `{ type:u32, flags:u32, offset:u64, storedSize:u64, uncompressedSize:u64, checksum:u32,
 compression:u32, alignment:u32, reserved:u32 }`. All naturally aligned. TOC entries **must** be
-sorted by ascending `offset`, which makes overlap detection a single linear pass and makes writing
-deterministic by construction. The reader's region partition (§4.1) then subsumes overlap,
+sorted by ascending `offset`. The current reader also sorts the bounded header/TOC/chunk region
+list (§4); its region partition (§4.1) then subsumes overlap,
 past-the-end, trailing-junk and hidden-padding checks in one invariant.
 
 **Rejected:** TOC at end-of-file (single-pass streaming writing is irrelevant — CNB files are built
-in memory), and an unordered TOC (would need O(n log n) sorting inside the reader on
-attacker-controlled data before any bound is known).
+in memory), and an unordered TOC (an additional ordering freedom without a useful producer benefit).
 
 ### D4 — Duplicate chunk types are legal; chunks are referenced by per-type ordinal
 
@@ -1636,12 +1673,11 @@ enforces that. The identifier rules themselves are §5.
 
 ### D5 — CRC-32C, not CRC-32
 
-Both are a 1 KiB table and ~40 lines; neither adds a dependency. CRC-32C (Castagnoli, reflected
-poly `0x82F63B78`) is chosen because it has a strictly better minimum Hamming distance over the
-payload sizes CNB actually stores and because SSE4.2 and the ARMv8 CRC32 extension accelerate it
-without changing a byte of the format. The implementation folds in software everywhere and, where
-the instruction is detected at run time, in hardware (`CNBF-108-crc`); every path produces
-identical output. Known-answer test: `"123456789"` ⇒ `0xE3069283`.
+CRC-32C uses the Castagnoli polynomial (reflected `0x82F63B78`). The implementation has a portable
+table path and architecture-specific acceleration (`CNBF-108-crc`) where enabled/available:
+x86 SSE4.2, Linux ARM capability checks and the Apple ARM platform assumption. This does not
+change file bytes. The host-selected path is checked against the portable table; this Linux x86
+run does not qualify every architecture. Known answer: `"123456789"` ⇒ `0xE3069283`.
 
 Checksums detect **accidental** corruption only; CNB has no authenticity story and must not be
 presented as having one.
@@ -1653,7 +1689,8 @@ weaker on short chunks).
 ### D6 — `u32` asset type ids
 
 The original proposal suggested `u64`. `u32` is used instead: it keeps the header at 64 bytes with
-room to spare, and 2³¹ custom ids is far more than a content pipeline will ever mint. §7 has the
+room to spare, and leaves 2³¹ possible custom identifiers. This is a finite hash space, not a
+uniqueness guarantee; §7 has the
 ranges. A custom id is `FNV-1a-32(name) | 0x80000000`, i.e. 31 usable bits; collision behaviour is
 enforced rather than hoped for, by the loader registry and the `CMET` canonical name (§7).
 
@@ -1674,8 +1711,11 @@ tidied).
   table of contents is read and before any chunk is decoded — so a compressed file cannot be
   inspected at all without its codec. (Until `CNBF-105` added Zstandard as codec 2, this read
   "`compression != 0` ⇒ reject".)
-* `assetSchemaVersion` outside `[1, maxSupportedForThatType]` ⇒ reject.
+* `assetSchemaVersion` unsupported by the selected asset decoder ⇒ reject.
 * Duplicate of a schema-declared singleton chunk ⇒ reject.
+
+The generic container parser and selected asset decoder divide these responsibilities as §6 and
+§12.2 describe; parsing alone does not check an unknown schema's mandatory chunks or version.
 
 ### D8 — One `.cnb` = one logical asset; external references stay external
 
@@ -1711,8 +1751,9 @@ The `.cnj` Model reader interleaved JSON parsing with runtime `Model` constructi
 Option 1 then followed in two steps: the part effect and material state became
 `BuildPartEffectEXT`, and `CNBF-100` gave all three front-ends — `.cnj`, `.cnb` and the runtime
 glTF reader — one neutral `ModelPartGeometryEXT` and one `BuildModelMeshPartGeometryEXT()`, with
-`CnbSharedModelBuilderTests` counting the construction steps in the source so a duplicate cannot
-regrow. One asymmetry is kept on purpose: a `.cnb` supplies its primitive count, already
+`CnbSharedModelBuilderTests` counting selected construction steps in the source. This is a
+structural regression gate, not a proof of semantic equivalence or absence of all duplication.
+One asymmetry is kept on purpose: a `.cnb` supplies its primitive count, already
 cross-checked against the topology by the decoder (`CNBF-H012`). `SkinnedModelEXT` is a different
 asset type and keeps its own path.
 
@@ -1720,10 +1761,10 @@ asset type and keeps its own path.
 bone hierarchy, per-part geometry (vertex bytes + declared stride/count, index bytes + declared
 element size/count, primitive topology), part→mesh grouping and parent-bone attachment, the stock
 effect selection, the full PBR scalar set, per-slot sampler state, texture/effect external
-references, morph targets incl. the tangent deltas and the weight track, the skeleton (all four
-matrix blocks), embedded animation clips, and punctual lights. Material *variants* and the glTF
-import report stay out (§11.1): both are authoring or diagnostic concerns rather than runtime
-geometry, and the compiler refuses the former by name rather than dropping it silently.
+references, morph targets incl. tangent deltas and the weight track, skeleton bind/inverse-bind
+matrices, optional root prefixes and parent hierarchy, embedded animation clips, punctual lights
+and optional cameras. Runtime material *variants* are unsupported by this schema and refused by
+the compiler rather than dropped. The diagnostic import report also stays out (§11.1).
 
 ### D10 — Asset types, and the order they came in
 
