@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Terminal-platform documentation reconciliation (2026-11-01, PLAT-140/TCR-2): the feasibility
+  proposal becomes a current provider contract with the actual CPU presenter, independent
+  platform quantizer, capability/null-service table, requested versus resized virtual dimensions,
+  Kitty flags 15, timed legacy key release, cell mouse limits, session leases/restoration and
+  measured diff budget. Full redraw/blocking-write and unrecoverable-exit limits replace universal
+  speed/restoration promises. The existing platform target builds; private Terminal suites pass
+  116/117, with only the inherited-stdin-TTY preservation case skipped for lack of stdin TTY.
+  Pseudo-TTY signal/terminate restoration runs. End-to-end terminal demo registration is checked
+  in source, not newly built/run; no remote/emulator/Windows qualification or implementation change.
 - Platform-performance report reconciliation (2026-11-01, PLAT-120): all eight table rows match
   the retained JSON and all sixteen stored verdicts agree with the current noise-floor rule.
   The page distinguishes pooled percentiles from paired-run deltas, regression detection from

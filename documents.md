@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 128 reviewed, 12 updated incidentally and awaiting their own audit, and 37 not yet
+Summary: 129 reviewed, 12 updated incidentally and awaiting their own audit, and 36 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -146,7 +146,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/platform-renderer-boundary.md`](docs/platform-renderer-boundary.md)
 - ✅ **REVIEWED** — [`docs/platform-renderer-sdl-audit.md`](docs/platform-renderer-sdl-audit.md)
 - ✅ **REVIEWED** — [`docs/platform-sdl-lifecycle-audit.md`](docs/platform-sdl-lifecycle-audit.md)
-- ⬜ **PENDING** — [`docs/platform-terminal-analysis.md`](docs/platform-terminal-analysis.md)
+- ✅ **REVIEWED** — [`docs/platform-terminal-analysis.md`](docs/platform-terminal-analysis.md)
 - ✅ **REVIEWED** — [`docs/rasterizerstate-support.md`](docs/rasterizerstate-support.md)
 - ✅ **REVIEWED** — [`docs/releasing.md`](docs/releasing.md)
 - ✅ **REVIEWED** — [`docs/removed-renderers.md`](docs/removed-renderers.md)
