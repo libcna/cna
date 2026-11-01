@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 88 reviewed, 14 updated incidentally and awaiting their own audit, and 75 not yet
+Summary: 91 reviewed, 14 updated incidentally and awaiting their own audit, and 72 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -227,7 +227,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/c-api/SHARP_RUNTIME_BOUNDARY.md`](docs/c-api/SHARP_RUNTIME_BOUNDARY.md)
 - ✅ **REVIEWED** — [`docs/c-api/STORAGE.md`](docs/c-api/STORAGE.md)
 - ✅ **REVIEWED** — [`docs/c-api/STRINGS_AND_BUFFERS.md`](docs/c-api/STRINGS_AND_BUFFERS.md)
-- ⬜ **PENDING** — [`docs/c-api/TEXTURES.md`](docs/c-api/TEXTURES.md)
-- ⬜ **PENDING** — [`docs/c-api/TEXTURE_VOLUMES.md`](docs/c-api/TEXTURE_VOLUMES.md)
-- ⬜ **PENDING** — [`docs/c-api/VERTEX_BUFFERS.md`](docs/c-api/VERTEX_BUFFERS.md)
+- ✅ **REVIEWED** — [`docs/c-api/TEXTURES.md`](docs/c-api/TEXTURES.md)
+- ✅ **REVIEWED** — [`docs/c-api/TEXTURE_VOLUMES.md`](docs/c-api/TEXTURE_VOLUMES.md)
+- ✅ **REVIEWED** — [`docs/c-api/VERTEX_BUFFERS.md`](docs/c-api/VERTEX_BUFFERS.md)
 - ✅ **REVIEWED** — [`docs/c-api/WASM_ARTIFACT.md`](docs/c-api/WASM_ARTIFACT.md)

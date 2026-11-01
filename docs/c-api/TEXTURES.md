@@ -2,14 +2,15 @@
 
 ## Scope
 
-`texture.h` completes the C-native mapping of the public `Texture` and `Texture2D` declarations.
-It extends the earlier level-zero slice without changing those entry points. Texture objects
+`texture.h` exposes common `Texture` queries and `Texture2D` creation/transfer/encoding operations;
+`graphics.h` also contains the full-image Color convenience routes. Texture objects
 remain validated, creation-thread-affine handles; no C++ object, renderer pointer, weak pointer or
 Sharp Runtime stream crosses the ABI.
 
-Texture2D handles may be standalone or game children. Default, file-only and CPU-only factories
-create standalone handles and report an invalid owning graphics device. Device, file-with-device,
-RGBA8 and encoded-memory factories create game children that must be destroyed before their game.
+Default, file-only and CPU-only factories create standalone handles without an owning device.
+Device, file-with-device, RGBA8 and encoded-memory factories accept an owned device or a valid
+game-device loan, including its pre-run window. Release them before that device/game. They may
+survive the callback that creates them; independently owned device resources are not game children.
 RenderTarget2D continues to satisfy the common Texture/Texture2D query and transfer routes because
 that is its native inheritance relationship.
 
@@ -17,7 +18,8 @@ that is its native inheritance relationship.
 
 `cna_texture_get_info` returns the native format and allocated mip-level count. The static helper
 family exposes block area, format-unit byte size, pixel-store alignment, destination element-size
-validation and the renderer/profile-aware creation gate for every stable SurfaceFormat identity.
+validation for every stable SurfaceFormat identity. `cna_texture_validate_format` is deliberately
+the renderer-independent Color-only base gate; the device-aware format query is separate.
 Outputs are assigned only after argument and handle validation.
 
 Width, height and bounds remain in the existing `cna_texture2d_get_info` snapshot. Exact native
@@ -35,11 +37,11 @@ must cover `start_index + element_count`.
 
 The fixed data identities map as follows:
 
-| C data identity | Caller element representation | Native format contract |
+| C data identity | Caller element representation | Typical format/use |
 |---|---|---|
 | `COLOR` | `CNA_Color` | Color-compatible RGBA-shaped format |
 | `BGR565`, `BGRA5551`, `BGRA4444` | Matching 16-bit `CNA_Packed*` value | Matching packed format |
-| `BYTE` | `uint8_t` | ByteEXT or a renderer-supported compressed block stream |
+| `BYTE` | `uint8_t` | ByteEXT, byte views of larger texels, or supported compressed blocks |
 | `NORMALIZED_BYTE2`, `NORMALIZED_BYTE4` | Matching `CNA_Packed*` value | Matching packed format |
 | `RGBA1010102`, `RG32`, `RGBA64`, `ALPHA8` | Matching `CNA_Packed*` value | Matching packed format |
 | `SINGLE` | `float` | Single |
@@ -47,10 +49,17 @@ The fixed data identities map as follows:
 | `HALF_SINGLE`, `HALF_VECTOR2`, `HALF_VECTOR4` | Matching `CNA_Packed*` value | Matching half format; HalfVector4 also maps HdrBlendable |
 | `USHORT` | `uint16_t` | UShortEXT |
 
-An uncompressed region requires `width * height` elements. A compressed byte transfer requires
-the exact padded block count multiplied by the format block size. Range, mip and rectangle checks
-run before the native operation. Readback first reports the exact region requirement; insufficient
-capacity writes no destination prefix. Conversions use byte copies rather than assuming caller
+These identities describe element representations, not a general pixel-format conversion service.
+Native element-size divisibility and transfer restrictions determine compatibility; an uncompressed
+region can use smaller elements that evenly divide a texel. For example, a Color region requires
+four BYTE elements per texel, and BYTE upload/readback round-trips its RGBA bytes. A compressed byte
+transfer requires the padded block count multiplied by the format block size. Range, mip and rectangle checks
+run before the native operation. `element_count` may exceed the required region count; unused
+caller elements are preserved. Too small a descriptor count is `CNA_RESULT_INVALID_ARGUMENT`,
+while insufficient function-level array capacity is `CNA_RESULT_BUFFER_TOO_SMALL`. Readback reports
+the requirement once the region can be computed, including the too-small descriptor-count failure;
+earlier descriptor/handle failures can leave that output untouched. Failed readback writes no
+destination prefix. Conversions use byte copies rather than assuming caller
 alignment or C/C++ object-layout equivalence.
 
 `cna_texture2d_set_data_rgba8_bytes` is the direct C form of the native `SetDataRGBA` route. It
@@ -58,7 +67,8 @@ accepts exactly `width * height * 4` caller-owned RGBA8 bytes for level zero; si
 failure leaves the texture unchanged.
 
 Surface-format creation and successful typed transfer remain native-renderer capabilities.
-HEADLESS currently creates Color textures only and exercises higher mip uploads.
+HEADLESS's native creation path is Color-only; support on other renderers must be queried rather
+than inferred from an enum's existence.
 
 ## Images, files and streams
 
@@ -71,15 +81,23 @@ reports the complete encoded size and performs no partial write. File outputs ac
 length-delimited UTF-8 paths and invoke the matching native filename overload. The file-only and
 file-with-device constructors cover both native path constructors.
 
+A size probe encodes the image too; size and copy can each allocate and encode. Input image bytes
+and output paths are not retained after the call. Encoding/decoding failures retain their ordinary
+argument, I/O, allocation or renderer results rather than guaranteeing an image on every platform.
+
+## Retention and disposal
+
+SpriteBatch intervals, fonts, effect parameters, models and render-target scopes can retain a
+Texture2D and block typed destruction. Release those relationships first. Generic disposal leaves
+the handle available for disposal queries and typed cleanup; it does not release its parent child
+count. A RenderTarget2D uses its concrete render-target destroy route. See
+[GRAPHICS_RESOURCES.md](GRAPHICS_RESOURCES.md) and [OWNERSHIP.md](OWNERSHIP.md).
+
 ## Evidence
 
-`TextureSmoke.c` is compiled as strict C17 and runs unchanged under HEADLESS. It
-covers all 27 format helpers/creation gates, dispatch and rejection for all 18 data identities,
-successful Color full/rectangle transfers, HEADLESS mip transfer, every public factory/query/encoding route, PNG/JPEG signatures and file round-trips, both decoded
-resize modes, storage/type text, capacity atomicity and invalid/stale/wrong-kind/wrong-thread
-handles. The same strict-C test now also runs on EasyGL OPENGLES3, where native-supported non-Color
-formats pass the device-aware creation gate. `ContentSmoke.c` independently proves exact two-level
-`NormalizedByte2` format and payload preservation through the XNB content route on that renderer.
-C17 and C++23 assertions freeze every new public structure and identity endpoint. The same focused
-test passes under ASan+UBSan; LeakSanitizer is disabled only in the ptrace-constrained test
-environment where the leak checker itself cannot attach.
+`CApi_TextureSmoke` is strict C17. It checks format helpers, transfer identity dispatch, Color and
+BYTE views, mip/rectangle/caller windows, factories, PNG/JPEG round trips and resize modes, plus
+capacity and handle failures. `CApi_ContentSmoke` supplies a separate compiled-content path.
+Actual non-Color successes depend on the renderer/profile exercised. C17/C++23 header targets pin
+public layouts and identities; historical results from other renderers or sanitizers are not a
+substitute for the current run.

@@ -144,11 +144,11 @@ typedef struct CNA_TextureCubeTransfer {
 } CNA_TextureCubeTransfer;
 
 /**
- * @brief Creates a game-owned Texture3D when the selected renderer supports volume storage.
+ * @brief Creates an owned Texture3D when the selected renderer supports volume storage.
  *
- * @param graphics_device Callback-scoped graphics-device handle.
+ * @param graphics_device Owned device or valid game-device loan, including before the first run.
  * @param create_info Versioned dimensions, mip and format configuration.
- * @param out_texture Receives an owned game-child handle.
+ * @param out_texture Receives an owned handle; release it before its device/game.
  * @return A CNA result code; unsupported renderers return NOT_SUPPORTED.
  */
 CNA_C_API CNA_Result cna_texture3d_create(
@@ -249,11 +249,11 @@ CNA_C_API CNA_Result cna_texture3d_set_data_bytes(
     uint64_t data_byte_count);
 
 /**
- * @brief Creates a game-owned TextureCube.
+ * @brief Creates an owned TextureCube.
  *
- * @param graphics_device Callback-scoped graphics-device handle.
+ * @param graphics_device Owned device or valid game-device loan, including before the first run.
  * @param create_info Versioned size, mip and format configuration.
- * @param out_texture Receives an owned game-child handle.
+ * @param out_texture Receives an owned handle; release it before its device/game.
  * @return A CNA result code; creation may succeed even when face storage is unavailable.
  */
 CNA_C_API CNA_Result cna_texturecube_create(
@@ -264,10 +264,10 @@ CNA_C_API CNA_Result cna_texturecube_create(
 /**
  * @brief Decodes DDS cube-map bytes through the native stream factory.
  *
- * @param graphics_device Callback-scoped graphics-device handle.
+ * @param graphics_device Owned device or valid game-device loan, including before the first run.
  * @param dds_data Caller-owned complete DDS payload.
  * @param dds_byte_count Payload size in bytes.
- * @param out_texture Receives an owned game-child handle.
+ * @param out_texture Receives an owned handle; release it before its device/game.
  * @return A CNA result code; unsupported cube storage returns NOT_SUPPORTED.
  */
 CNA_C_API CNA_Result cna_texturecube_create_from_dds_memory(

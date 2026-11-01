@@ -1,79 +1,96 @@
 # C VertexBuffer Contract
 
-## Scope and ownership
+## Creation, device and metadata
 
-`vertex_resources.h` maps the complete public `VertexBuffer` and `DynamicVertexBuffer` surface to
-an owned, generation/type/thread-validated `CNA_VertexBufferHandle`. A successful create call
-produces a game child that survives the lifecycle callback but must be destroyed before its game.
-The callback-scoped graphics-device handle is accepted only during that callback.
+`vertex_resources.h` maps static and dynamic buffers to the same owned
+`CNA_VertexBufferHandle` kind. Creation accepts either an independently owned device or a valid
+game-device loan, including the pre-run window. A buffer survives a callback but must be destroyed
+before its owning game/device. The renderer must advertise the ThreeD capability.
 
-`CNA_VertexBufferCreateInfo` selects a copied `VertexDeclaration`, nonnegative logical capacity,
-`BufferUsage` and static/dynamic kind. An invalid declaration is reserved for CNA's static
-empty-declaration constructor and therefore requires `BufferUsage.None`. The declaration handle
-may be destroyed immediately after successful buffer creation because the native buffer owns its
-own value copy.
+`CNA_VertexBufferCreateInfo` requires a positive fixed vertex capacity, valid usage and a canonical
+Boolean dynamic flag. It copies the supplied declaration, so that declaration handle may then be
+destroyed. A zero declaration token selects the static empty-declaration extension and requires
+`BufferUsage.None`; it cannot create a dynamic buffer.
 
-The versioned info snapshot reports capacity, usage, dynamic identity, inert content-loss state,
-renderer presence, stride and declaration-element count. Declaration elements and the exact
-native type name use count/copy operations; renderer objects and native pointers never cross the
-C ABI. Generic GraphicsResource name, tag, device, disposal and Disposing-event operations accept
-the vertex-buffer handle.
+The info snapshot reports capacity, usage, dynamic identity, renderer presence and declaration
+stride/element count. Both static and dynamic handles use the dedicated base type-name routes'
+`Microsoft.Xna.Framework.Graphics.VertexBuffer` name, even though the native dynamic type has its
+own name. Declaration elements use count/copy. No renderer or native object pointer is exposed.
 
-## Typed and raw transfer
+The C info field `is_content_lost` is currently hard-coded false. This does not describe the native
+dynamic state: device content-loss notification sets the native flag and raises `ContentLost`,
+and a nonempty write clears it. The C snapshot defect is recorded in
+[handoff.md §5.1](../../handoff.md#51-defects).
 
-`CNA_VertexBufferTransfer` selects one of all seven `CNA_VertexType` values and a window in the
-caller's typed C array. `cna_vertex_buffer_set_data` converts that window to native values before
-calling the matching overload. `cna_vertex_buffer_get_data` reads into native scratch storage and
-copies into the requested destination window only after complete success, so capacity, WriteOnly
-and native failures never partially modify caller memory.
+## Typed array transfers
 
-For both directions `start_index` is an index in the caller array. Upload replaces the buffer from
-native destination vertex zero, matching CNA's current overloads. Readback begins at native
-buffer vertex zero and writes at the caller start index, matching the documented XNA overload
-contract without exposing CNA's internal CPU-shadow representation. A zero-element window is a
-validated no-op and may use a null pointer with zero capacity.
+`CNA_VertexBufferTransfer` selects one of the seven built-in layouts, options and a window in the
+caller's array. `start_index` indexes that array; it is not a buffer-side offset. Capacity must cover
+`start_index + element_count`, and typed counts must fit native Int32. A too-small caller array
+returns `CNA_RESULT_BUFFER_TOO_SMALL`.
 
-`SetDataOptions.None`, `Discard` and `NoOverwrite` are accepted by the four native dynamic
-overloads for PositionColor, PositionColorTexture, PositionNormalTexture and PositionTexture.
-Non-None options on a static buffer or one of the three CNA extension vertex types return
-`CNA_RESULT_NOT_SUPPORTED`. Raw upload takes an explicit byte capacity, vertex count and positive
-stride; a nonempty declaration requires the native stride to match.
+Upload converts the selected C values and writes a prefix beginning at native vertex zero.
+It preserves the remaining fixed-capacity shadow unless Discard is selected; unwritten bytes are
+zero. Typed readback begins at native vertex zero and writes at the caller's start index. Native
+scratch storage and conversion complete before caller memory is changed. WriteOnly buffers
+refuse nonempty reads, and data operations on a disposed buffer return `CNA_RESULT_INVALID_STATE`.
 
-## Windowing the buffer itself
+A zero-element typed transfer is a no-op after handle, disposal, descriptor, capacity and
+option validation; a null pointer is allowed with zero capacity. Readback requires
+`CNA_SET_DATA_NONE`. Its count output reports the requested transfer count after descriptor
+processing, including some descriptor/capacity failures; earlier handle/disposal failures leave it
+untouched. It is not a query for the buffer's full capacity.
 
-`start_index` above indexes the **caller's array**, so every route named so far replaces the
-buffer's whole contents. `cna_vertex_buffer_set_data_raw_at` is the one that does not: its
-`buffer_offset_in_bytes` indexes **the buffer**, which is what XNA's `offsetInBytes` overload
-means and what a particle system or a streaming terrain needs -- rewrite one slice per frame,
-leave the rest as it was. The offset must fall on a vertex boundary, the window must fit inside
-the buffer's capacity, and bytes no upload has ever written read as zero.
+For dynamic typed uploads, None, Discard and NoOverwrite are implemented for PositionColor,
+PositionColorTexture, PositionNormalTexture and PositionTexture. Non-None options on static
+buffers or the other three extension layouts return `CNA_RESULT_NOT_SUPPORTED`.
+Options are discrete identities, not combinable flags.
 
-**The deviation is about cost, not about result.** No renderer contract in this project takes a
-destination offset -- `SetData(data, count, stride)` replaces whole-buffer contents in every
-renderer family -- so the window is composed on the CPU shadow and the whole buffer is
-re-uploaded. The bytes end up exactly where XNA puts them; the transfer is not smaller.
+## Raw bytes and buffer-side windows
 
-`cna_vertex_buffer_get_data_raw` is the readback counterpart, and closes an asymmetry: typed
-readback names one of the seven built-in layouts, so a buffer *written* with a custom layout
-through `cna_vertex_buffer_set_data_raw` could be filled and never read, though the shadow held
-the bytes either way. It reads a window at a buffer-side byte offset and refuses a WriteOnly
-buffer exactly as the typed routes do.
+The raw routes describe contiguous bytes representing `vertex_count` vertices at a positive
+`vertex_stride`. The source/destination byte capacity must cover their product. Native validation
+checks stride/declaration compatibility and logical buffer bounds. Typed C++ layout equivalence is
+not assumed.
 
-## Events, disposal and evidence
+| Route | Buffer origin / options |
+|---|---|
+| `cna_vertex_buffer_set_data_raw` | Writes from buffer byte zero with None behavior. |
+| `cna_vertex_buffer_set_data_raw_at` | Writes at `buffer_offset_in_bytes`. |
+| `cna_vertex_buffer_get_data_raw` | Reads at `buffer_offset_in_bytes`, including custom layouts. |
+| `cna_vertex_buffer_set_data_raw_with_options` | Dynamic-only prefix upload with explicit options. |
+| `cna_vertex_buffer_set_data_raw_at_with_options` | Dynamic-only window upload with explicit options. |
 
-`cna_vertex_buffer_subscribe_content_lost` retains a callback/context registration for a dynamic
-buffer. CNA's `IsContentLost` property is currently always false and `ContentLost` is never
-raised, but the registration and unregistration lifetime is fully represented. A distinct event
-handle kind prevents confusion with GraphicsResource Disposing registrations, and a registration
-may be released after its buffer is destroyed.
+Buffer-side offsets must fit Int32 and fall on vertex boundaries; windows must fit the declared
+capacity. Zero-count raw transfers retain their own range/stride validation. Explicit-options raw
+routes require a dynamic buffer even when options is None.
 
-Explicit generic disposal keeps the C handle and immutable metadata alive while releasing the
-renderer; subsequent data operations return `CNA_RESULT_INVALID_STATE`. Typed destruction then
-invalidates the handle generation and releases the game-child ownership count.
+None and NoOverwrite preserve bytes outside the uploaded prefix/window; Discard zeros the entire
+shadow before copying. NoOverwrite is a caller synchronization promise, not automatic hazard
+tracking. The native in-use guard refuses None writes to a currently bound buffer; explicit
+dynamic Discard and NoOverwrite bypass that guard.
 
-`VertexBufferSmoke.c` is strict C17. Under HEADLESS it covers all seven value layouts, count and window overloads, all four dynamic option routes, raw
-upload, WriteOnly refusal, copied declarations, type/metadata queries, event separation, disposal,
-capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths. On a renderer that advertises no
-3D capability the same suite verifies atomic `CNA_RESULT_NOT_SUPPORTED` creation instead of
-inventing a buffer. C17/C++23 header checks freeze the version-one descriptor layout, and the
-focused successful flow also runs under ASan+UBSan.
+CNA composes updates on its CPU shadow and sends the complete fixed-capacity buffer to the renderer.
+A small window therefore has whole-buffer GPU upload cost. Readback uses that shadow, not a GPU
+synchronization/readback operation.
+
+## Events and release
+
+`cna_vertex_buffer_subscribe_content_lost` accepts a dynamic buffer and returns an owned
+registration. It receives explicit device content-loss notifications; a static-buffer subscription
+returns `CNA_RESULT_NOT_SUPPORTED`. Destroy the registration with its matching unsubscribe route.
+Its weak native source reference permits unsubscription after buffer destruction.
+
+A ModelMeshPart can retain the buffer; typed destroy and generic graphics-resource disposal then
+return `CNA_RESULT_INVALID_STATE`. Remove the retention first. A permitted generic dispose leaves
+the handle and metadata available while releasing native renderer state; typed destroy releases the
+C registry entry and owning game/device child count.
+
+## Verification
+
+`CApi_VertexBufferSmoke` covers built-in layouts, dynamic/raw options, offsets, prefix preservation,
+declaration copies, disposal and invalid/stale/kind/thread refusals. Its existing event assertions
+cover subscription lifetime and an initial false loss state, not a notification-to-info transition.
+`CApi_GraphicsDeviceSmoke` and model/lifetime tests cover related device and resource use.
+C17/C++23 header targets check ABI layout. Renderer refusals are capability-dependent; a run on one
+renderer is not evidence for all renderer implementations.

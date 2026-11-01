@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API texture/vertex-buffer contract reconciliation (2026-11-01): `TEXTURES.md`,
+  `TEXTURE_VOLUMES.md` and `VERTEX_BUFFERS.md` now cover owned/pre-run devices, typed element-size
+  views, BYTE/Color round trips, count-output timing, volume/cube constructor versus DDS format
+  boundaries, and concrete destroy/retention rules. Vertex documentation corrects positive fixed
+  capacity, prefix preservation, Discard zeroing, dynamic raw options, whole-buffer upload cost
+  and CPU-shadow readback. The native ContentLost event is distinguished from the C info snapshot's
+  constant-false defect in §5.1. Matching header comments are corrected with all non-comment bytes
+  preserved. All selected resource/device/effect/model and C17/C++23 header targets build; all nine
+  focused tests pass through the private SDLGPU runner and all nine C API static gates pass.
+  Historical renderer/sanitizer claims are replaced with the current verification boundary;
+  runtime implementation and public ABI are unchanged.
 - C API storage-contract reconciliation (2026-11-01): `docs/c-api/STORAGE.md` now states that
   indexed listings are freshly enumerated and unordered, completion callbacks can precede output
   publication/final failure, and zero-length I/O still validates handles but bypasses native
@@ -1165,6 +1176,12 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- `cna_vertex_buffer_get_info` hard-codes `is_content_lost = CNA_FALSE`, although native
+  DynamicVertexBuffer notification sets its loss flag and raises ContentLost, and subsequent
+  nonempty uploads clear it. Found by source inspection on 2026-11-01 during the vertex-buffer
+  documentation audit. `CApi_VertexBufferSmoke` checks the initial false value and registration
+  lifetime, not notification-to-info propagation; no permanent C regression covers that transition.
+  Consumers can use the loss callback but cannot query the true flag through this C snapshot.
 - C API network-event injection validates `CNA_NetworkEventInfo.reliable` as an ordinal in 0..4,
   rejecting the valid `Chat` flag combinations 5, 6 and 7. Both
   `NetworkSessionSendNetworkEventExt` and `LocalNetworkGamerEnqueuePacketExt` contain this check;

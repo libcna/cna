@@ -64,7 +64,7 @@ typedef struct CNA_VertexBufferInfo {
     CNA_BufferUsage buffer_usage;
     /** @brief True when this handle owns a DynamicVertexBuffer. */
     CNA_Bool dynamic;
-    /** @brief Dynamic content-loss state; currently always false. */
+    /** @brief Currently false; the C snapshot does not yet expose native dynamic loss state. */
     CNA_Bool is_content_lost;
     /** @brief True while the native renderer allocation is present. */
     CNA_Bool has_renderer;
@@ -219,12 +219,12 @@ CNA_C_API CNA_Result cna_vertex_buffer_binding_init(
     CNA_VertexBufferBinding* out_binding);
 
 /**
- * @brief Creates a game-owned static or dynamic vertex buffer.
+ * @brief Creates an owned static or dynamic vertex buffer on a graphics device.
  *
  * An invalid declaration selects CNA's static empty-declaration constructor and requires
  * `dynamic == CNA_FALSE` plus `buffer_usage == CNA_BUFFER_USAGE_NONE`.
  *
- * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param graphics_device Owned device or valid game-device loan, including before the first run.
  * @param create_info Versioned creation configuration.
  * @param out_vertex_buffer Receives the owned buffer handle.
  * @return A CNA result code; failure leaves @p out_vertex_buffer invalid.

@@ -1,59 +1,76 @@
 # C Texture3D and TextureCube Contract
 
-## Scope
+## Creation and identity
 
-`texture_volume.h` completes the C-native mapping of the public `Texture3D` and `TextureCube`
-declarations. Both are creation-thread-affine, game-owned `CNA_Handle` resources. Their inherited
-Texture and GraphicsResource state is available through the existing generic operations; C++
-objects, renderer pointers and Sharp Runtime streams remain behind the ABI.
+`texture_volume.h` exposes owned, generation/kind/thread-validated Texture3D and TextureCube
+handles. Creation accepts an independently owned device or a valid game-device loan, including
+before the first run. Release resources before the owning device/game. They are not necessarily
+game children.
 
-Version-one creation accepts the native Color format. Another known SurfaceFormat returns
-`CNA_RESULT_NOT_SUPPORTED`; an unknown numeric identity is invalid. Dimensions must be positive,
-fit native `int` limits and produce a representable complete level-zero element count. Texture3D
-creation additionally preserves the native `GraphicsCapability::Texture3D` gate.
+The ordinary creation descriptors currently accept Color only; another known SurfaceFormat returns
+`CNA_RESULT_NOT_SUPPORTED`, and an unknown identity is invalid. Positive dimensions and complete
+level-zero element counts must fit the adapter's native Int32 boundary. Native profile, dimension,
+format and renderer gates apply too: volume textures require HiDef and Texture3D support.
+
+Common Texture queries and applicable GraphicsResource operations accept both types. A
+RenderTargetCube also satisfies cube query/transfer operations, but its concrete handle must be
+released with `cna_render_target_destroy`. Common disposal and device-query limitations are in
+[GRAPHICS_RESOURCES.md](GRAPHICS_RESOURCES.md).
 
 ## Texture3D transfers
 
-`CNA_Texture3DTransfer` selects a mip level, an exclusive-bound box and a caller-array window.
-The mip dimensions halve independently to a minimum of one texel. Validation completes before
-native access: the level and box must be in range, `element_count` must cover the box, and the
-caller capacity must cover `start_index + element_count`.
+`CNA_Texture3DTransfer` selects a mip level, exclusive box bounds and a window in a caller
+`CNA_Color` array. Each mip dimension halves to a minimum of one. The box must be nonempty and
+inside that mip; `element_count` must cover its voxel count, and caller capacity must cover
+`start_index + element_count`.
 
-`cna_texture3d_set_data` and `cna_texture3d_get_data` map all Color overloads. Only the exact box
-voxel count is copied; unused array prefix and tail elements are not read or written. Readback
-uses native scratch storage and copies to the caller only after complete success.
-`cna_texture3d_set_data_bytes` is the direct form of `SetDataPointerEXT`; for the current Color
-contract its byte count must equal four times the requested voxel count.
+Set/Get transfer the exact box, preserving unused caller prefix/tail values. Readback stages native
+Color values and copies only after success. It reports the box requirement after descriptor
+validation and before checking the caller array, so earlier descriptor/handle failures need not
+write the count.
 
-HEADLESS reports no real volume storage. Its C creation route therefore returns
-`CNA_RESULT_NOT_SUPPORTED` with an invalid output handle instead of manufacturing a usable
-Texture3D. Renderers that advertise the capability remain responsible for accepting or explicitly
-refusing each mip/box operation.
+`cna_texture3d_set_data_bytes` maps the native pointer extension for that box. It requires a
+non-null source, exactly four bytes per voxel, an Int32-representable byte count and
+`start_index == 0`. The descriptor's array element-count field is not used by this byte route;
+box/mip validation still applies.
+
+HEADLESS does not provide volume storage; its creation path returns
+`CNA_RESULT_NOT_SUPPORTED` with an invalid output token. A renderer capability is a preflight,
+not a promise that every profile, size, format and mip/box operation will succeed.
 
 ## TextureCube transfers and DDS
 
-TextureCube creation may succeed even when the backend has no cube-map storage, matching CNA's
-native construction contract. `CNA_TextureCubeTransfer` selects one of all six cube faces, a mip
-level, an optional rectangle and a caller-array window. Set/Get calls then either transfer the
-complete region or return `CNA_RESULT_NOT_SUPPORTED`; failed readback never changes the caller's
-destination. A RenderTargetCube handle is accepted by the query and transfer routes because it is
-a native TextureCube subclass, but only `cna_render_target_destroy` may release that concrete
-handle.
+The cube descriptor selects one of six faces, mip level, optional rectangle and caller-array
+window. Current C Set/Get routes use `CNA_Color`; they do not expose the native generic byte or
+packed-format cube overloads. Capacity, region and format validation precede caller-output writes,
+and failed readback preserves caller memory. Required-count publication follows descriptor
+validation, as for Texture3D.
 
-`cna_texturecube_create_from_dds_memory` copies a complete caller-owned DDS payload into a native
-MemoryStream for the duration of `DDSFromStreamEXT`. No stream object crosses the ABI. Decoding
-still fails with `NOT_SUPPORTED` when the selected renderer cannot store all decoded faces.
+Native cube construction can succeed without a usable renderer allocation on some paths; subsequent
+face transfers then return `CNA_RESULT_NOT_SUPPORTED`. Do not infer storage from successful handle
+creation alone.
 
-## Ownership and verification
+`cna_texturecube_create_from_dds_memory` borrows the encoded bytes during the call and decodes via
+a native MemoryStream. It can preserve a DDS format beyond the ordinary Color-only constructor.
+The selected renderer must support the decoded faces/mips. The C Color transfer routes remain
+subject to native format compatibility; a DDS-created handle does not add a raw compressed-transfer
+route.
 
-Successful Texture3D and TextureCube factories create game children that must be destroyed before
-the game. Typed destroy validates the exact concrete kind, invalidates the generation-tagged
-handle and rejects stale, wrong-kind and wrong-thread use. Explicit generic disposal keeps the C
-handle alive for disposal-state queries until typed destruction.
+## Retention and release
 
-`TextureVolumeSmoke.c` is strict C17 and runs unchanged under HEADLESS. It covers
-all six faces, full/mip/rectangle validation, array capacity and atomicity, exact native type text,
-DDS input, common Texture and GraphicsResource routes, RenderTargetCube inheritance, disposal,
-parent order and invalid/stale/wrong-kind/wrong-thread failures. C17 and C++23 compile-time
-assertions freeze every version-one descriptor size and offset; ASan+UBSan covers the same runtime
-contract.
+Effect texture parameters retain volume/cube resources and block typed destruction until the
+parameter reference is cleared or released. Generic resource disposal has corresponding retention
+guards. Typed destroy checks the concrete resource kind and releases its owning game/device
+dependency. Content-created cube handles also follow the content manager's load/disposal contract
+in [CONTENT.md](CONTENT.md).
+
+Explicit generic disposal leaves the C token available for disposal queries and final typed
+cleanup; it does not promise usable renderer storage afterwards.
+
+## Verification
+
+`CApi_TextureVolumeSmoke` covers face/box/mip validation, capacity and output preservation, DDS,
+generic queries, RenderTargetCube inheritance, disposal and lifetime failures. Unsupported renderer
+paths are asserted rather than reported as successful storage. The C17/C++23 header targets pin
+descriptor sizes and offsets. These checks must be interpreted for the renderer actually run;
+historical HEADLESS or sanitizer results do not establish all current GPU paths.
