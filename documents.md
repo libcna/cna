@@ -1,7 +1,7 @@
 # Stav dokumentace v `docs/`
 
-Inventura: 2026-11-01. Rozsah: všech 177 aktuálně verzovaných souborů `docs/**/*.md`.
-Souhrn: 74 zpracovaných, 17 podpůrně aktualizovaných čekajících na vlastní audit a 86 dosud
+Inventura: 2026-11-01. Rozsah: všech 176 aktuálně verzovaných souborů `docs/**/*.md`.
+Souhrn: 74 zpracovaných, 17 podpůrně aktualizovaných čekajících na vlastní audit a 85 dosud
 samostatně nezpracovaných.
 
 Tento soubor sleduje současný dokumentační úklid. Stav neříká, že čekající dokument je nutně
@@ -45,8 +45,8 @@ Další vícenásobné změny nebyly stejnou prací dvakrát:
 
 Odstraněné historické soubory (`graphics-ext-scope-reduction.md`,
 `xna_culling_compatibility_audit.md`, `xna_depth_occlusion_compatibility_audit.md`,
-`graphicsdevice-fna-audit.md`, `graphicsresource-fna-audit.md`, `fx-bytecode-support-plan.md` a
-`webgpu-design-notes.md`) už nejsou součástí aktuálního inventáře.
+`graphicsdevice-fna-audit.md`, `graphicsresource-fna-audit.md`, `fx-bytecode-support-plan.md`,
+`webgpu-design-notes.md` a `c-api/GENERATION_AUDIT.md`) už nejsou součástí aktuálního inventáře.
 
 ## `docs/`
 
@@ -207,7 +207,6 @@ Odstraněné historické soubory (`graphics-ext-scope-reduction.md`,
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/GAMER_SERVICES.md`](docs/c-api/GAMER_SERVICES.md)
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/GAME_COMPONENTS.md`](docs/c-api/GAME_COMPONENTS.md)
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/GENERATED_ROUTES.md`](docs/c-api/GENERATED_ROUTES.md)
-- ⬜ **ČEKÁ** — [`docs/c-api/GENERATION_AUDIT.md`](docs/c-api/GENERATION_AUDIT.md)
 - 🟡 **ČEKÁ — podpůrně aktualizováno** — [`docs/c-api/GRAPHICS_DEVICE.md`](docs/c-api/GRAPHICS_DEVICE.md)
 - 🟡 **ČEKÁ — podpůrně aktualizováno** — [`docs/c-api/GRAPHICS_EXT.md`](docs/c-api/GRAPHICS_EXT.md)
 - 🟡 **ČEKÁ — podpůrně aktualizováno** — [`docs/c-api/GRAPHICS_RESOURCES.md`](docs/c-api/GRAPHICS_RESOURCES.md)

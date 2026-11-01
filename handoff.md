@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Historical C API generation-audit retirement (2026-11-01):
+  the 402-line `docs/c-api/GENERATION_AUDIT.md` snapshot from `CBIND-AUDIT-001` was removed from
+  live documentation. Its October 12 counts, ABI version, 123-test inventory, Wine/DXVK results and
+  retired DIRECTX11 limitation described one completed campaign and had drifted from the current
+  3,213-route surface; later edits had also blurred the meaning of a fixed audit record. No active
+  obligation was lost: the current maintenance contract is `docs/c-api/GENERATED_ROUTES.md`, handle
+  generation exhaustion is in `docs/c-api/HANDLES.md`, and the original report and fixes remain
+  recoverable with `git show 3ee6ae3c8:docs/c-api/GENERATION_AUDIT.md`. Generation, ABI, export,
+  documentation-count and release gates remain green after the removal.
 - C API generated-routes maintainer-guide reconciliation (2026-11-01):
   `docs/c-api/GENERATED_ROUTES.md` now matches the generator's actual conversion and test
   boundaries. It corrects the claim that every `result` parameter is passed unconverted (only its
@@ -993,7 +1002,7 @@ runtime. CI: `general-tests-ci.yml` runs the unfiltered suite for
 | Compiled XNA effects per renderer | `docs/fx-compiled-effects.md` §10 |
 | Platform contract | `docs/platform-abstraction.md` |
 | API-surface coverage | `docs/xna-4-runtime-member-coverage.md` (generated) |
-| C API generation maintenance model and 2026-10-12 audit | `docs/c-api/GENERATED_ROUTES.md`, `docs/c-api/GENERATION_AUDIT.md` |
+| C API generation maintenance model | `docs/c-api/GENERATED_ROUTES.md` |
 | Deliberate deviations from FNA/XNA | `CHECKLIST.md`, `docs/xna-fna-behavior-decisions.md` |
 | GamerServices / Net / Avatar boundary | `docs/gamer-services-known-limitations.md` |
 | Why is a subsystem in (or out of) an executable? Link boundaries, size options, footprint gates | `docs/link-size-architecture.md` |
