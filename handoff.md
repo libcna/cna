@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Platform-performance report reconciliation (2026-11-01, PLAT-120): all eight table rows match
+  the retained JSON and all sixteen stored verdicts agree with the current noise-floor rule.
+  The page distinguishes pooled percentiles from paired-run deltas, regression detection from
+  equivalence, historical llvmpipe from hardware/current-host performance and aggregate reports
+  from missing raw runs. Neither recorded old revision resolves in the current object database;
+  exact old-tree reproduction is therefore not claimed. Re-run instructions use private displays
+  and explicit scene/device settings. Source/report inspection only; no new timing campaign,
+  implementation or artifact changes.
 - Platform-input documentation reconciliation (2026-11-01, PLAT-77): the seam map now records
   all eight removed duplicate adapters, current global-pointer/enumeration/rich-haptic contracts,
   platform-neutral legacy names and the single owning event path. Platform notes correct lazy
