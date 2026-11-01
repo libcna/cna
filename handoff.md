@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API content contract reconciliation (2026-11-01):
+  `docs/c-api/CONTENT.md` now describes the complete current manager surface rather than the former
+  three-loader slice: all nine typed/foreign producers, their independent versus cache-disposed
+  ownership, game-manager borrowing/copying, roots and manifests, low-level ContentReader and
+  process-wide type-reader behavior, caller XNB/CNB/CNJ loaders, reflective readers, object
+  dictionaries and Model tags. The remaining absent typed manager routes are Song, Texture3D,
+  Curve and standalone AnimationClip. The generated coverage mapping and `LIMITATIONS.md` now name
+  that same boundary. `content.h` no longer calls native `ResourceContentManager` a placeholder:
+  its two-argument native form is implemented, while the C factory must use the no-resource form
+  because `System::Resources::ResourceManager` has no C representation, so C-created resource
+  managers still return IO on load. All six focused SDLGPU C API tests pass through the private
+  runner: ContentSmoke, ContentReaderSmoke, ContentModelEffectSmoke, ContentExceptionSmoke,
+  VideoSmoke and RuntimeGameSmoke; both generated coverage checks are current.
 - C API CNB contract reconciliation (2026-11-01):
   `docs/c-api/CNB.md` is now a current ownership, authoring, loading and error contract instead of
   the chronological `CBIND-106`–`CBIND-111` implementation narrative. It records the active read-

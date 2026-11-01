@@ -2838,8 +2838,8 @@
       "kinds": [
         "class"
       ],
-      "mapping": "owned game-child ContentManager `CNA_Handle` with UTF-8 root, resolved asset path and normalized cache key count/copy, builtin-loader registration, service-provider presence, graphics-device get/set, the manifest and `.xnb` reader-usage snapshots, three typed load routes and explicit unload/destroy",
-      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
+      "mapping": "owned game-child or game-borrowed ContentManager `CNA_Handle` with UTF-8 root, resolved asset path and normalized cache key count/copy, builtin-loader registration, service-provider presence, graphics-device get/set, manifest and `.xnb` reader-usage snapshots, dedicated typed/foreign load routes, caller CNJ loader registration and explicit unload/destroy",
+      "tests": "strict-C ContentSmoke, ContentReaderSmoke, ContentModelEffectSmoke, ContentExceptionSmoke, VideoSmoke and RuntimeGameSmoke cover creation, borrowing/copying, roots and paths, manifests, all typed/foreign producers, cache and unload ownership, reader registration, parent ordering, stale handles and thread refusal",
       "status": "implemented",
       "task": "CBIND-036B1",
       "approved_symbols": [
@@ -2870,13 +2870,13 @@
       "kinds": [
         "method"
       ],
-      "mapping": "`cna_content_manager_load_texture2d`, `_load_texture_cube`, `_load_sound_effect`, `_load_sprite_font` and `cna_content_manager_load_effect` cover the canonical specializations of this template, and `cna_content_manager_load_foreign_ext` covers an asset whose root reader the caller registered. The generic `Load<T>` has no C route of its own, and the reason is narrower than *C cannot name an arbitrary C++ type*, because C can name `CNA::Content::ForeignContentObjectEXT`. What it cannot do is make the canonical template instantiate at a type chosen at runtime, so the set of instantiations is fixed when this library is compiled: the typed routes above are that set, and the foreign route is how a caller's own type joins it without a new instantiation. A further canonical asset type needs its own typed C route",
-      "tests": "real UTF-8 fixture, cache, unload and pixel tests plus extension-less resolution and the unsupported/IO refusals for cube and sound assets in `ContentSmoke.c`, a `.cnj` SpriteFont fixture loaded as a font plus its atlas with the destroy-order rule asserted, a `.cnj` stock-effect fixture loaded as an ordinary effect handle, and a hand-assembled `.xnb` whose root reader is a caller-registered one",
+      "mapping": "Dedicated routes cover `Texture2D`, `TextureCube`, `SoundEffect`, `SpriteFont`, `Effect`, `Model`, `Video` and a root `Dictionary<string, object>`; `cna_content_manager_load_foreign_ext` covers an asset produced by a caller-registered XNB, CNB or CNJ loader. The generic `Load<T>` has no C route of its own, and the reason is narrower than *C cannot name an arbitrary C++ type*, because C can name `CNA::Content::ForeignContentObjectEXT`. What it cannot do is make the canonical template instantiate at a type chosen at runtime, so the set of native instantiations is fixed when this library is compiled. A further canonical asset type needs its own typed C route",
+      "tests": "strict-C content tests cover real UTF-8 fixtures, caching, unload, typed Texture2D/TextureCube/SoundEffect/SpriteFont/Effect/Model/Video/ObjectDictionary loads, wrong-root-type refusals, the font/atlas destroy order and caller-registered XNB, CNB and CNJ loaders",
       "status": "partial",
       "task": "CBIND-074",
       "limitation": {
         "kind": "c-cannot-name-a-type",
-        "reports_through": "`cna_content_manager_load_texture2d`, `_load_texture_cube` and `_load_sound_effect` load the canonical specializations; a further asset type needs its own typed route, which is an addition rather than a redesign",
+        "reports_through": "Dedicated routes load Texture2D, TextureCube, SoundEffect, SpriteFont, Effect, Model, Video and ObjectDictionary assets; `cna_content_manager_load_foreign_ext` reaches caller-registered XNB, CNB and CNJ types. Song, Texture3D, Curve and a standalone AnimationClip still need typed routes",
         "approval": "approved by the project owner on 2026-08-16 (CBIND-044)"
       },
       "approved_symbols": [
@@ -6181,8 +6181,8 @@
       "kinds": [
         "function"
       ],
-      "mapping": "`cna_content_manager_load_texture2d`, `cna_content_manager_load_texture_cube` and `cna_content_manager_load_sound_effect`. Each returns an independently owned handle that uses the normal typed operations for that resource and outlives manager unload or destruction",
-      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
+      "mapping": "`cna_content_manager_load_sound_effect`, which returns a distinct independently owned handle because the native specialization deliberately does not cache SoundEffect values",
+      "tests": "`ContentSmoke.c` covers extension-less resolution, ownership and unsupported/IO failures; `ContentExceptionSmoke.c` verifies exception metadata for the typed route",
       "status": "implemented",
       "task": "CBIND-036B1",
       "approved_symbols": [

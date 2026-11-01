@@ -2682,7 +2682,7 @@ CNA_C_API CNA_Result cna_skinning_data_set_skeleton_root_name_ext(
 /**
  * @brief Loads a `Model` from a compiled `.xnb` asset.
  *
- * @param content_manager The content manager.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param asset_name The asset name, without extension.
  * @param out_model Receives the owned model handle.
  * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_IO` for a missing or malformed asset and for one whose

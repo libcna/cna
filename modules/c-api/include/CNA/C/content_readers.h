@@ -899,7 +899,7 @@ typedef CNA_Handle CNA_ObjectDictionaryHandle;
 /**
  * @brief Loads an asset whose root object is a `Dictionary<string, object>`.
  *
- * @param content_manager The content manager.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param asset_name The asset name, without extension.
  * @param out_dictionary Receives the new dictionary handle.
  * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_IO` for a missing or malformed asset and for one whose

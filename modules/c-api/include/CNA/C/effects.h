@@ -1248,7 +1248,7 @@ CNA_C_API CNA_Result cna_effect_create_compiled(
 /**
  * @brief Loads an Effect asset as an owned effect handle.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param asset_name UTF-8 logical asset name, with or without its extension.
  * @param out_effect Receives an owned effect handle on success, destroyed with
  *        `cna_effect_destroy`. Failure leaves it `CNA_INVALID_HANDLE`.

@@ -46,7 +46,7 @@ CNA_C_API CNA_Result cna_content_manager_create(
 /**
  * @brief Gets the UTF-8 byte count of a content manager's root directory.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param out_bytes Receives the exact byte count without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/argument failure.
  */
@@ -57,7 +57,7 @@ CNA_C_API CNA_Result cna_content_manager_get_root_directory_size(
 /**
  * @brief Copies a content manager's complete UTF-8 root directory.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param destination Caller-owned bytes, or null only when @p capacity is zero.
  * @param capacity Capacity of @p destination in bytes.
  * @param out_bytes Receives the exact byte count without a terminator.
@@ -73,7 +73,7 @@ CNA_C_API CNA_Result cna_content_manager_copy_root_directory(
 /**
  * @brief Sets the UTF-8 root directory while the content manager has no cached assets.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param root_directory UTF-8 root directory copied during this call; an empty root is valid.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when assets are cached, or a documented
  * encoding/handle/thread/native failure.
@@ -90,7 +90,7 @@ CNA_C_API CNA_Result cna_content_manager_set_root_directory(
 /**
  * @brief Unloads all assets cached by a content manager.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
  *
  * Loaded Effects and a loaded Model's effects, buffers and content-owned textures are disposed,
@@ -104,7 +104,7 @@ CNA_C_API CNA_Result cna_content_manager_unload(CNA_Handle content_manager);
 /**
  * @brief Loads a Texture2D asset through the native content pipeline.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param asset_name Non-empty UTF-8 logical asset name copied during this call.
  * @param out_texture Receives a new independently owned Texture2D handle on success.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` for a content-load failure,
@@ -133,16 +133,15 @@ CNA_C_API CNA_Result cna_content_manager_load_texture2d(
  * same reason as `cna_content_manager_create`, and the resulting handle uses every other
  * `cna_content_manager_*` operation unchanged.
  *
- * **Every load through it fails today, and that is inherited rather than introduced here.** The
- * canonical embedded-resource stream is a declared placeholder in CNA: there is no .NET assembly
- * for it to read resources out of, and nothing has yet decided what a native application's
- * embedded-resource store should be. A load therefore returns `CNA_RESULT_IO` naming the
- * placeholder, rather than returning empty data that a caller would mistake for an empty asset.
+ * **Every load through a manager created by this C route fails today.** CNA's native
+ * `ResourceContentManager` can read a `System::Resources::ResourceManager`, but that Sharp Runtime
+ * object has no C representation and this constructor therefore uses the canonical no-resource
+ * form. A load returns `CNA_RESULT_IO` explaining that no resource family was supplied.
  *
  * The route is published anyway so the canonical type has a name in C and so this paragraph has
  * somewhere to live -- a consumer reaching for it deserves to learn that here rather than from a
- * failing load. A consumer that needs embedded assets today should implement that store itself,
- * above this ABI, where its host platform already has one.
+ * failing load. A consumer that needs embedded assets today should use an ordinary content manager
+ * or implement its host's embedded-resource store above this ABI.
  */
 CNA_C_API CNA_Result cna_content_manager_create_resource(
     CNA_Handle graphics_device,
@@ -152,7 +151,7 @@ CNA_C_API CNA_Result cna_content_manager_create_resource(
 /**
  * @brief Loads a WAV asset as an owned sound effect.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param asset_name UTF-8 logical asset name, with or without its extension.
  * @param out_sound_effect Receives an owned sound-effect handle on success.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` for a missing or undecodable asset,
@@ -171,7 +170,7 @@ CNA_C_API CNA_Result cna_content_manager_load_sound_effect(
 /**
  * @brief Loads a DDS asset as an owned cube texture.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param asset_name UTF-8 logical asset name, with or without its extension.
  * @param out_texture Receives an owned cube-texture handle on success.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` for a missing or undecodable asset,
@@ -191,7 +190,7 @@ CNA_C_API CNA_Result cna_content_manager_load_texture_cube(
 /**
  * @brief Loads a SpriteFont asset, reporting both the font and its glyph atlas.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param asset_name UTF-8 logical asset name, with or without its extension.
  * @param out_sprite_font Receives an **owned** SpriteFont handle on success, destroyed with
  *        `cna_sprite_font_destroy`.
@@ -225,7 +224,7 @@ CNA_C_API CNA_Result cna_content_manager_load_sprite_font(
 /**
  * @brief Loads a compiled asset whose root reader was registered by the caller.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param asset_name UTF-8 logical asset name, with or without its extension.
  * @param out_object Receives the opaque object the caller's reader produced. This ABI does not
  *        own it: it is neither dereferenced nor freed here, and its lifetime is whatever the
@@ -270,7 +269,7 @@ typedef CNA_Result (*CNA_CnjLoaderCallback)(
 /**
  * @brief Registers a loader for one `"type"` value in a `.cnj` descriptor.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param type_name The descriptor's `"type"` string this loader handles, copied during the call.
  *        Must not be empty.
  * @param callback Non-null loader.
@@ -308,7 +307,7 @@ CNA_C_API CNA_Result cna_content_manager_register_cnj_loader_ext(
 /**
  * @brief Gets the UTF-8 byte count of the resolved filesystem path for an asset name.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param asset_name UTF-8 logical asset name.
  * @param out_bytes Receives the byte count without a terminator.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_ENCODING` for invalid UTF-8, or a documented
@@ -322,7 +321,7 @@ CNA_C_API CNA_Result cna_content_manager_get_asset_path_size(
 /**
  * @brief Copies the resolved filesystem path for an asset name without a terminator.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param asset_name UTF-8 logical asset name.
  * @param destination Caller-owned destination, or null only when @p capacity is zero.
  * @param capacity Destination capacity in bytes.
@@ -343,7 +342,7 @@ CNA_C_API CNA_Result cna_content_manager_copy_asset_path(
 /**
  * @brief Gets the UTF-8 byte count of the normalized cache key for an asset name.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param asset_name UTF-8 logical asset name.
  * @param out_bytes Receives the byte count without a terminator.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_ENCODING` for invalid UTF-8, or a documented
@@ -357,7 +356,7 @@ CNA_C_API CNA_Result cna_content_manager_get_normalized_key_size(
 /**
  * @brief Copies the normalized cache key for an asset name without a terminator.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param asset_name UTF-8 logical asset name.
  * @param destination Caller-owned destination, or null only when @p capacity is zero.
  * @param capacity Destination capacity in bytes.
@@ -377,7 +376,7 @@ CNA_C_API CNA_Result cna_content_manager_copy_normalized_key(
 /**
  * @brief Re-registers the built-in asset type readers on a content manager.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
  *
  * Creation already performs this registration; the call is idempotent and exists so a C consumer
@@ -388,7 +387,7 @@ CNA_C_API CNA_Result cna_content_manager_register_builtin_loaders(CNA_Handle con
 /**
  * @brief Gets whether a content manager was constructed with a service provider.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param out_has_service_provider Receives `CNA_TRUE` when a service provider is present.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
@@ -406,7 +405,7 @@ CNA_C_API CNA_Result cna_content_manager_get_has_service_provider(
 /**
  * @brief Gets the graphics device a content manager loads GPU resources with.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param out_graphics_device Receives the borrowed graphics-device handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the borrowed device handle is no
  * longer in scope, or a documented argument/handle/thread failure.
@@ -418,7 +417,7 @@ CNA_C_API CNA_Result cna_content_manager_get_graphics_device(
 /**
  * @brief Sets the graphics device a content manager loads GPU resources with.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param graphics_device Callback-scoped borrowed graphics-device handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure. The device
  * must belong to the same game as the content manager.
@@ -476,7 +475,7 @@ typedef struct CNA_ContentReaderUsageInfo {
 /**
  * @brief Rescans the content root and rebuilds the manifest snapshot.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
  *
  * The manifest is a point-in-time snapshot; a file added afterwards is not visible until this is
@@ -487,7 +486,7 @@ CNA_C_API CNA_Result cna_content_manager_refresh_content_manifest(CNA_Handle con
 /**
  * @brief Gets the number of manifest entries.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param out_count Receives the entry count.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  */
@@ -498,7 +497,7 @@ CNA_C_API CNA_Result cna_content_manager_get_manifest_entry_count(
 /**
  * @brief Gets one manifest entry's fixed description.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param index Zero-based manifest entry index.
  * @param out_entry Caller-provided versioned structure to receive the description.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an out-of-range index, or a
@@ -515,7 +514,7 @@ CNA_C_API CNA_Result cna_content_manager_get_manifest_entry(
 /**
  * @brief Copies one manifest entry's root-relative logical path without a terminator.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param index Zero-based manifest entry index.
  * @param destination Caller-owned destination, or null only when @p capacity is zero.
  * @param capacity Destination capacity in bytes.
@@ -533,7 +532,7 @@ CNA_C_API CNA_Result cna_content_manager_copy_manifest_relative_path(
 /**
  * @brief Copies one native loose-file extension of a manifest entry without a terminator.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param index Zero-based manifest entry index.
  * @param extension_index Zero-based index into that entry's native extensions.
  * @param destination Caller-owned destination, or null only when @p capacity is zero.
@@ -553,7 +552,7 @@ CNA_C_API CNA_Result cna_content_manager_copy_manifest_native_extension(
 /**
  * @brief Copies one `.xnb` reader name of a manifest entry without a terminator.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param index Zero-based manifest entry index.
  * @param name_index Zero-based index into that entry's reader names.
  * @param destination Caller-owned destination, or null only when @p capacity is zero.
@@ -573,7 +572,7 @@ CNA_C_API CNA_Result cna_content_manager_copy_manifest_xnb_reader_name(
 /**
  * @brief Gets the number of distinct `.xnb` reader names in the usage summary.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param out_count Receives the reader-name count.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
@@ -587,7 +586,7 @@ CNA_C_API CNA_Result cna_content_manager_get_xnb_reader_usage_count(
 /**
  * @brief Gets one reader-usage row's fixed description.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param index Zero-based index into the name-sorted usage summary.
  * @param out_usage Caller-provided versioned structure to receive the description.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an out-of-range index, or a
@@ -601,7 +600,7 @@ CNA_C_API CNA_Result cna_content_manager_get_xnb_reader_usage(
 /**
  * @brief Copies one reader-usage row's reader name without a terminator.
  *
- * @param content_manager Owned content-manager handle.
+ * @param content_manager Owned or game-borrowed content-manager handle.
  * @param index Zero-based index into the name-sorted usage summary.
  * @param destination Caller-owned destination, or null only when @p capacity is zero.
  * @param capacity Destination capacity in bytes.

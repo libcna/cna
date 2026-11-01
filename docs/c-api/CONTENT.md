@@ -1,270 +1,195 @@
-# CNA C API Content Contract
+# CNA C API content contract
 
 ## Scope
 
-The content surface owns a native `ContentManager` and exposes three approved typed load routes:
-`Texture2D`, `TextureCube` and `SoundEffect`. The C API does not attempt to express the C++
-`Load<T>` template and never accepts a runtime type name, C++ type identifier, service-provider
-pointer, path object or stream object.
+The C content surface exposes the native `ContentManager` without trying to spell its C++
+`Load<T>` template. Each supported native result type has a dedicated load route, while content
+produced by a caller-registered reader uses one opaque foreign-object route. No C++ type identifier,
+Sharp Runtime service provider or filesystem object crosses the ABI.
 
-Alongside loading, the manager exposes its resolved asset path and normalized cache key, built-in
-loader registration, service-provider presence, graphics-device get/set and the content manifest
-and `.xnb` reader-usage snapshots. `cna_content_manager_create_resource` produces the same owned
-handle backed by the canonical `ResourceContentManager`.
+The public declarations are divided by the type they return:
 
-The compiled-asset reader pipeline is covered too, in `CNA/C/content_readers.h`: an owned
-`CNA_ContentReaderHandle` over a storage stream, an owned `CNA_ContentTypeReaderHandle`, and the
-process-wide type-reader registry. See *The compiled-asset reader pipeline* below for what that
-surface can and cannot express.
+| Asset/result | C route | Declared in | Lifetime after manager unload |
+|---|---|---|---|
+| `Texture2D` | `cna_content_manager_load_texture2d` | `CNA/C/content.h` | usable; destroy explicitly |
+| `TextureCube` | `cna_content_manager_load_texture_cube` | `CNA/C/content.h` | usable; destroy explicitly |
+| `SoundEffect` | `cna_content_manager_load_sound_effect` | `CNA/C/content.h` | usable; destroy explicitly |
+| `SpriteFont` and atlas | `cna_content_manager_load_sprite_font` | `CNA/C/content.h` | usable; destroy font before atlas |
+| `Effect` | `cna_content_manager_load_effect` | `CNA/C/effects.h` | disposed; handle remains for cleanup |
+| `Model` | `cna_content_manager_load_model` | `CNA/C/models.h` | native resources disposed; handle remains for inspection and cleanup |
+| `Video` | `cna_content_manager_load_video` | `CNA/C/video.h` | usable; destroy explicitly |
+| `Dictionary<string, object>` | `cna_content_manager_load_object_dictionary_ext` | `CNA/C/content_readers.h` | owned dictionary handle remains valid |
+| caller-defined object | `cna_content_manager_load_foreign_ext` | `CNA/C/content.h` | caller-owned pointer; must outlive the manager cache |
 
-`cna_content_manager_create` accepts the callback-scoped graphics-device handle so the resulting
-manager is tied to the same active game and device. Creation therefore occurs during a lifecycle
-callback, but the owned manager survives that callback. It must be destroyed on the game creation
-thread before the parent game.
+There is no dedicated C content-manager load route for `Song`, `Texture3D`, `Curve` or a standalone
+`AnimationClip`. Adding one of those is an additive typed binding, not a redesign of `Load<T>`.
+The generic CNB container and codec boundary is documented separately in [`CNB.md`](CNB.md).
 
-## Roots and asset names
+## Manager creation and ownership
 
-The root directory and logical asset name are UTF-8 string views copied during each call. Embedded
-NUL scalar values and invalid UTF-8 are rejected. The root may be empty; an asset name may not.
-Root-directory output uses the normal byte count/copy protocol and never appends a terminator or
-writes a partial string.
+`cna_content_manager_create` takes a callback-scoped borrowed graphics-device handle. The resulting
+manager is an owned game child that survives the callback, remains owner-thread-affine and must be
+destroyed before its parent game. Its root string is copied. CNA constructs both C-created and
+game-owned managers without an `IServiceProvider`; `cna_content_manager_get_has_service_provider`
+therefore reports `CNA_FALSE`, while GPU content uses the explicitly associated graphics device.
+The device setter accepts only a device belonging to the same game.
 
-The strict-C regression creates and loads an actual fixture whose filename contains valid UTF-8,
-in addition to rejecting malformed and embedded-NUL names. Missing assets deterministically map to
-`CNA_RESULT_IO` without returning a resource handle, preserving the canonical
-`Microsoft.Xna.Framework.Content.ContentLoadException` identity in error metadata.
+`cna_game_get_content_manager_ext` instead returns the stable borrowed handle for the game's value
+member. It accepts all ordinary content-manager operations, cannot be destroyed and becomes invalid
+with the game. `cna_game_set_content_manager_ext` copies the source manager into that value member:
+the source remains independently owned, later source changes do not reach the game, and an existing
+borrowed handle continues to address the game's manager.
 
-Changing the root directory matches XNA and the native C++ property: any assignment is refused
-while assets are cached, even assigning the current root again. The call returns
-`CNA_RESULT_INVALID_STATE`, retains `System.InvalidOperationException` in error metadata, and
-leaves the root and cache unchanged. Call `cna_content_manager_unload` before assigning a root
-after loading assets. Independently owned C resource handles remain usable across that unload.
-With an empty cache, the root string is copied during the call and subsequent loads use it.
+### ResourceContentManager boundary
 
-The earlier C contract allowed changing roots while retaining old cache entries. The owner
-explicitly selected XNA/C++ compatibility for ISSUE-039/103 on 2026-10-20; this is a deliberate
-contract correction, not a promise to preserve that former behavior.
+`cna_content_manager_create_resource` creates the canonical `ResourceContentManager` shape and the
+same owned C handle, but the C constructor cannot receive a Sharp Runtime
+`System::Resources::ResourceManager`. It therefore uses CNA's no-resource constructor. Shared
+manager operations work, but every asset load through this C-created resource manager currently
+returns `CNA_RESULT_IO` explaining that no resource family was supplied.
 
-## Texture ownership and cache behavior
+The native two-argument `ResourceContentManager` is implemented and can load binary resources;
+the missing part is specifically a C representation or producer for its `ResourceManager`. A C
+consumer needing embedded data must currently use an ordinary content manager or provide its host
+resource store above the ABI.
 
-`cna_content_manager_load_texture2d` delegates resolution, decoding and caching to the canonical
-native `ContentManager::Load<Texture2D>`. It preserves the dimensions, mip chain, surface format
-and payload selected by that native reader; the C layer does not convert a non-Color result to
-RGBA8. Each successful call returns a new owned C Texture2D handle, even when the native manager
-satisfies the load from its strong XNA-style asset cache. Handles for the same cached asset share
-the underlying texture resource while retaining independent C-handle lifetime.
+## Roots, names, paths and cache keys
 
-The returned C texture is an independently owned game child. It remains valid after
-`cna_content_manager_unload` or `cna_content_manager_destroy` and uses the same query, typed
-mip/rectangle transfer, SpriteBatch and destroy functions as a directly created C texture. It must
-be destroyed before the parent game. Destroying or unloading the content manager does not
-implicitly destroy issued C resource handles.
+Roots and logical asset names are copied UTF-8 string views. Invalid UTF-8 and embedded NUL values
+are rejected. A root may be empty; a load's asset name may not. String outputs use the standard
+size/copy protocol, omit the terminator and never perform a partial write.
 
-The preserved native result can still be Color when the native content policy deliberately
-decompresses a source format for a backend that cannot use its stored representation. That is a
-native reader/backend decision, not a C-layer conversion.
+Changing the root matches the native XNA-compatible property: any assignment is refused with
+`CNA_RESULT_INVALID_STATE` while the cache is nonempty, including assigning the existing value.
+The refusal preserves both root and cache. Call `cna_content_manager_unload` first; independently
+transferred C handles survive that unload according to the table above.
 
-`cna_content_manager_unload` disposes recorded native assets and clears the cache.
-Destroy performs the same native disposal and releases the manager handle. Loaded
-Effects and a loaded Model's effects, buffers and content-owned textures follow
-XNA/C++ ownership: retained C handles remain inspectable and require cleanup, but
-applying a disposed Effect or drawing its Model returns `CNA_RESULT_INVALID_STATE`.
-Independently transferred Texture2D, TextureCube, SpriteFont and SoundEffect handles
-retain the lifetime described below.
+`cna_content_manager_copy_asset_path` reports the root joined with the logical name whether or not
+the file exists. `cna_content_manager_copy_normalized_key` reports the cache identity, which folds
+backslashes to forward slashes and case; names with the same normalized key address the same cache
+entry.
 
-This corrects the former blanket promise that every loaded C resource remained
-usable. The owner approved XNA/C++ Effect/Model disposal semantics on 2026-10-23
-while reviewing CNA-DEMOS-ISSUE-011. No C ABI signature or handle layout changes.
+## Typed loads and disposal
 
-## Failures and unavailable types
+The load routes delegate selection, decoding and caching to the native content pipeline. Missing,
+malformed or wrongly typed content normally returns `CNA_RESULT_IO`; renderer or platform feature
+refusals return `CNA_RESULT_NOT_SUPPORTED` where the route documents one. Invalid arguments,
+encoding, handles and threads retain their ordinary results. Native exceptions never cross the ABI.
 
-Missing, unreadable or undecodable assets return `CNA_RESULT_IO` with a per-thread diagnostic. This
-includes an XNB surface format that CNA's native Texture2D reader does not implement. A native
-profile or renderer capability refusal surfaced as `System::NotSupportedException` returns
-`CNA_RESULT_NOT_SUPPORTED`. Argument, UTF-8, handle and thread failures retain their standard C API
-results. No native exception crosses the ABI.
+Texture2D and TextureCube handles preserve the native resource format and mip data. A cache hit
+still produces a new C handle over the cached resource. SoundEffect is deliberately uncached, so
+every successful call owns a distinct sound. SpriteFont returns two owned handles because both the
+font and glyph atlas must be reachable; the font retains the atlas and must be destroyed first.
+Video loading reads compiled metadata without requiring the optional decoder until playback; see
+[`MEDIA.md`](MEDIA.md).
 
-Songs, models and 3D textures still have no typed C load route. Each needs its own
-load function and ownership contract, because C cannot name the C++ type the generic `Load<T>` is
-instantiated with. Fonts are no longer on that list -- see `cna_content_manager_load_sprite_font`
-below. Video is no longer on it either: `cna_content_manager_load_video` is documented with the
-rest of the video surface in [`MEDIA.md`](MEDIA.md). An asset of a type CNA does not know at all is
-reachable through `cna_content_manager_load_foreign_ext`, described under *Readers a caller
-supplies*.
+Effect supports compiled `.xnb`, stock-effect `.cnj` and custom-source `.cnj` assets. Model resolves
+`.xnb`, `.cnb` and direct `.gltf`/`.glb` sources. Both follow native cache disposal: unloading or
+destroying the manager disposes a loaded Effect and a Model's effects, buffers and content-owned
+textures. Retained handles remain allocated and must be cleaned up, but applying the Effect or
+drawing the Model returns `CNA_RESULT_INVALID_STATE`. A retained Model remains inspectable; child
+handles it publishes are model-owned and must not be destroyed separately.
 
-## Typed loads beyond Texture2D
+One Model limitation is format-specific: a direct glTF load publishes skins and skeletons, while a
+CNB model currently returns an empty skin collection even when its `MSKL` chunk carries a skeleton.
+That defect is `BINDFIX-035` in [`../xna-fna-behavior-decisions.md`](../xna-fna-behavior-decisions.md).
 
-`cna_content_manager_load_texture_cube` and `cna_content_manager_load_sound_effect` map the
-canonical `Load<TextureCube>` route and CNA's `Load<SoundEffect>` specialization. TextureCube uses
-the same strong XNA-style asset cache as Texture2D; SoundEffect remains deliberately uncached
-because CNA models its per-owner disposal cascade with move-only ownership. Every successful C call
-returns an independently owned handle, and handles for one cached cube share its underlying texture
-resource. Both routes resolve an extension-less asset name through their reader's extension list.
+## Manifest and XNB reader usage
 
-Their failure results differ, and the difference is canonical rather than a C-layer choice: a cube
-asset that cannot be decoded or does not exist returns `CNA_RESULT_IO`, and a backend without cube
-storage returns `CNA_RESULT_NOT_SUPPORTED`, while the canonical sound loader reports a missing or
-unreadable audio file — and an absent audio device — as `CNA_RESULT_NOT_SUPPORTED`. Branch on the
-result, not on the renderer or on an assumed audio device.
+`cna_content_manager_refresh_content_manifest` rescans the content root. The first query builds the
+snapshot lazily; later filesystem changes are invisible until another refresh. Each logical entry
+reports its relative path, whether `.xnb` and `.cnj` forms exist, its loose native extensions and
+the reader names found in its XNB type table. Malformed XNB reader inventories are skipped rather
+than aborting the whole scan, and compressed XNB containers use the bounded native decoder.
 
-`cna_content_manager_load_sprite_font` maps `Load<SpriteFont>`, which reads both the `.xnb` font
-container and CNA's own `.cnj` font descriptor, so a consumer never has to parse either to obtain a
-font this ABI accepts. It is the one loader with **four** parameters: a SpriteFont is a font *and*
-the texture it draws from, and both have to be nameable — the font for measuring, layout and
-`cna_sprite_batch_draw_string`, the atlas for a consumer that places glyphs itself from
-`cna_sprite_font_copy_glyphs`. Both handles are owned, and the atlas refuses to be destroyed while
-the font lives, which is the same ordering rule `cna_sprite_font_create` already imposes.
+The native manifest comes from an unordered map, so entry order is unspecified but stable until a
+rebuild. The reader-usage summary aggregates file counts and current registry presence. Because the
+native summary is unordered and recomputed, the C API sorts it by reader name before indexed access.
 
-`cna_content_manager_load_effect` maps `Load<Effect>` -- the route an XNA game's
-`ContentManager.Load<Effect>` takes -- and reads all three shapes CNA supports: a compiled `.xnb`
-Effect asset, a `.cnj` descriptor naming one of the stock effects, and a `.cnj` descriptor carrying
-custom shader source. It is declared in `CNA/C/effects.h` rather than here, beside the rest of the
-effect surface, because that is where its `CNA_EffectHandle` return type lives. Which of the three
-shapes an asset is decides which failures are possible, so branch on the result rather than on the
-file name: only the compiled shape depends on
-`CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`.
+## ContentReader and ContentTypeReader
 
-One failure is worth naming because it used to be reported wrongly: an `.xnb` whose root reader
-produces a **different type** than the loader wants answers `CNA_RESULT_IO` naming the mismatch.
-The canonical read reports that by failing an unbox, which is not a `runtime_error`, so it
-previously reached the exception barrier's catch-all and surfaced as `CNA_RESULT_INTERNAL` — an
-honest "this asset is not that type" reported as a fault inside CNA.
+`CNA/C/content_readers.h` exposes the lower compiled-XNB reader layer. An owned
+`CNA_ContentReaderHandle` wraps a readable storage stream positioned after the container header and
+optionally borrows a content manager for external references. It exposes the asset name, version,
+platform, fixed XNA value reads, type-reader initialization, shared-resource completion, collection
+and decoded-byte bounds checks, and an exact-byte read whose capacity refusal consumes no input.
 
-## Manifest and reader-usage snapshots
+The reader borrows the stream, so closing the stream while the reader lives returns
+`CNA_RESULT_INVALID_STATE`. Destroying the reader closes the native stream; the storage handle still
+has to be released separately, and its close is idempotent. A new reader over that file needs a
+fresh stream.
 
-`cna_content_manager_refresh_content_manifest` rescans the content root; the query routes build the
-manifest lazily when it has never been built. Both the manifest and the `.xnb` reader-usage summary
-are exposed as a count plus indexed accessors, with the fixed `CNA_ContentManifestEntryInfo` and
-`CNA_ContentReaderUsageInfo` structures carrying the scalar fields and separate UTF-8 count/copy
-routes carrying every string.
+`CNA_ContentTypeReaderHandle` exposes a reader's target type name, version, supported-version test,
+initialization, in-place capability and untyped dispatch. The process-wide type-reader registry can
+be queried, cleared, asked to create a reader, or extended with a caller callback table. A caller
+registration owns an explicit handle and unregistering it frees the name; duplicate registration is
+refused so a live handle can never silently refer to somebody else's factory. Callback reader
+instances and their borrowed `CNA_ContentReaderHandle` live only for the load in progress.
 
-The canonical manifest is built from an unordered map, so entry order is unspecified but stable
-until the manifest is rebuilt. The canonical reader-usage summary is both unordered *and*
-recomputed on every call, so the C routes sort it by reader name; without that an index could name
-a different row between the count call and the copy call that follows it.
+The known-unsupported built-in set is currently empty. The hook remains idempotent for future
+recognized formats, and `cna_known_unsupported_content_type_reader_create` can still construct an
+explicit reader that always refuses compiled platform shader bytecode.
 
-## Paths, keys and the service provider
+### Where native type erasure stops
 
-`cna_content_manager_copy_asset_path` reports where an asset would be read from — the root joined
-with the asset name — whether or not a file exists there. `cna_content_manager_copy_normalized_key`
-reports the cache key the manager would use, which folds backslashes to forward slashes and lowers
-the case; two names with the same key address the same cache entry.
+`cna_content_reader_read_object_tag` and `cna_content_type_reader_read_untyped` execute native
+type-erased dispatch but can return only whether a value was produced. They cannot return an
+arbitrary `std::any` to C. Typed `ReadObject<T>`, `ReadRawObject<T>`, `ReadSharedResource<T>`,
+`ReadAsset<T>` and `ReadExternalReference<T>` therefore have no generic C form.
 
-`System::IServiceProvider` is a Sharp Runtime object and is a hard ABI boundary, so the two
-service-provider constructors are reachable from C only with a null provider.
-`cna_content_manager_get_has_service_provider` therefore reports presence only, and always
-`CNA_FALSE` for a manager created through this API; a C-created manager resolves GPU work through
-the graphics device set on it instead.
+Caller-defined objects are different because their representation is already an opaque `void*`.
+That pointer is never dereferenced, copied or freed by CNA, and is returned through the foreign or
+reflective-object routes described below.
 
-## The compiled-asset reader pipeline
+## Caller-defined readers
 
-`cna_content_reader_create` builds an owned reader over an owned, readable `CNA_StorageStreamHandle`
-and an optional content-manager handle — the canonical reader accepts a null manager, and a C
-consumer that only reads fixed values never needs one. The reader then offers the canonical fixed
-reads (matrix, quaternion, the three vector widths, color, bounding sphere), the type-reader-table
-and shared-resource passes, both bounds checks and a capacity-checked exact-byte read.
+There are three registration scopes:
 
-Two lifetime rules follow from the canonical types rather than from the binding:
+- `cna_content_type_reader_manager_register` installs an XNB reader process-wide and returns an
+  owned registration handle that can unregister it.
+- `cna_cnb_loader_registry_register` installs a custom CNB loader process-wide; its full contract is
+  in [`CNB.md`](CNB.md).
+- `cna_content_manager_register_cnj_loader_ext` installs a named CNJ loader on one manager. The
+  manager owns the registration and the native surface has no unregister operation.
 
-- the reader borrows the stream, so `cna_storage_stream_close` is refused with
-  `CNA_RESULT_INVALID_STATE` while a reader is alive; and
-- destroying the reader **closes** that stream, matching the binary-reader contract the canonical
-  reader derives from. The stream handle stays valid and is still released with
-  `cna_storage_stream_close`, which is idempotent; a second reader over the same file needs a
-  freshly opened stream.
+`cna_content_manager_load_foreign_ext` is the common cached producer for all three. The file carries
+the dispatch identity, so the call needs no runtime type argument. A second load of the same key
+returns the same opaque pointer without rerunning the loader. The caller owns that pointer and must
+keep it alive while the manager may still return it; unload drops the cache but does not free the
+object. An unregistered or refusing loader fails the load instead of guessing a type.
 
-`cna_content_reader_read_bytes_exact` checks the destination capacity before it touches the stream,
-so a `CNA_RESULT_BUFFER_TOO_SMALL` refusal consumes nothing and the caller does not have to seek
-back.
+### Reflective XNB readers
 
-### Type readers and the registry
+The reflective builder maps XNA's template reader into C callbacks and offsets. The caller supplies
+an object factory, then declares members in wire order as fixed fields, named enums or custom field
+callbacks. Fixed kinds cover Boolean, Single, Double, Int32, UInt32, Int64, Byte, Vector2/3/4,
+Matrix, Quaternion, Color and TimeSpan. Canonical-name helpers publish the exact registry keys for
+the reflected type and its enums.
 
-The canonical `ContentTypeReaderManager` is entirely static, so its C routes are free functions and
-no handle is invented for an object that holds no state. `cna_content_type_reader_manager_create_reader`
-reports an unregistered canonical name as `CNA_RESULT_NOT_SUPPORTED` rather than returning a null
-handle. `cna_content_type_reader_manager_clear_type_creators` empties the process-wide registry and
-is genuinely destructive; `cna_content_register_known_unsupported_xnb_readers` restores the
-placeholder registrations.
+Registration has no undo because the native reflective registration has none, and the first reader
+registered under a canonical name wins. Use value-shaped registration for a root object and
+reference-shaped registration for nested collections or `Model.Tag`; choosing the value shape for
+a reference-shaped Model tag makes the Model load fail. Objects returned by the factory remain
+caller-owned.
 
-**The known-unsupported set is currently empty.** Its one entry was the general `EffectReader`,
-which the compiled Effect Framework work replaced with a reader that really decodes compiled
-effects, registered by an internal entry point with no C form. The published hook remains the
-registry's extension point and stays idempotent; today it registers nothing. A caller that needs a
-recognized-but-unsupported reader builds one directly with
-`cna_known_unsupported_content_type_reader_create`, which is unaffected.
+## Object dictionaries and Model tags
 
-An owned `CNA_ContentTypeReaderHandle` exposes the target type name, the type version, both
-version-support answers, the in-place-deserialization capability and the post-table initialization
-step.
+An XNB `Dictionary<string, object>` is reachable either as a root asset through
+`cna_content_manager_load_object_dictionary_ext` or from a loaded Model's content tag. The owned
+dictionary handle preserves its managed runtime identity and stable key order. Each entry can be
+described before reading it, including scalar versus array and element count.
 
-### Where type erasure stops
+The C layer names Boolean, Int32, Single, Double, String, Vector2/3/4, Matrix, Quaternion, Color,
+BoundingSphere, BoundingBox and caller-reflective foreign objects. Fixed-layout scalars and arrays
+copy into caller buffers; strings and foreign pointers use dedicated routes. An unknown entry stays
+inspectable through a diagnostic C++ type name, but that toolchain spelling is not an ABI identity.
+An absent key or wrong requested kind returns `CNA_RESULT_INVALID_ARGUMENT` with the error message
+distinguishing the native key-not-found and invalid-cast cases.
 
-`cna_content_reader_read_object_tag` and `cna_content_type_reader_read_untyped` run the canonical
-operations and report only whether an object was produced. The canonical return type is a
-type-erased C++ object, and C has no representation for it, so the value cannot be handed back. A
-placeholder reader for a recognized-but-unsupported asset type is the one case where nothing is
-lost: it always refuses, and its canonical diagnostic reaches the caller as `CNA_RESULT_IO`.
+## Verification
 
-Everything else in the pipeline is a C++-only extension point and has no C route at all: the typed
-`ReadObject<T>` / `ReadRawObject<T>` / `ReadSharedResource<T>` / `ReadAsset<T>` /
-`ReadExternalReference<T>` templates, `ContentTypeReader<T>` and `LooseFileContentTypeReader<T>`.
-Each needs C to name an arbitrary C++ type, so the C API adds a typed load route per asset type
-rather than an untyped one.
-
-## Readers a caller supplies
-
-Registration is **not** on that list, though it reads as if it should be. A C caller cannot write a
-`ContentTypeReader<T>`, but it does not have to: `cna_content_type_reader_manager_register` takes a
-versioned callback table — a per-file instance factory, a read callback, an optional per-instance
-destructor — and an owned registration handle, and the adapter wraps that table in a canonical
-reader. Downstream, nothing can tell the difference.
-
-Three properties are worth knowing before using it.
-
-**The read callback returns `CNA_Result`**, unlike `CNA_GameComponentCallbacks`, which returns
-`void`. A component that fails has a next frame to recover in; a half-read asset does not. A
-refusing read fails the whole load, and the message carries the code the callback returned.
-
-**The `CNA_ContentReaderHandle` it receives is callback-scoped.** It answers every ordinary
-`cna_content_reader_*` route while the callback runs, is invalidated before the callback returns,
-and refuses `cna_content_reader_destroy` from inside — the reader belongs to the load in progress.
-
-**Registration refuses a name that is already taken**, where the canonical `AddTypeCreator`
-silently ignores a repeat. Silence is right for a built-in registering itself twice through two
-static-initialisation paths and wrong here: the caller would hold a live handle whose factory is
-never called, and would find out only from assets deserialising into the wrong type.
-`cna_content_type_reader_manager_unregister` frees the name again.
-
-What such a reader produces is an opaque `void*` — `CNA::Content::ForeignContentObjectEXT` on the
-C++ side — that this ABI never dereferences and never frees; the reader that made it owns it.
-`cna_content_manager_load_foreign_ext` is the route that reaches one, and the only one: the typed
-loaders each name a C++ type this ABI knows, and a custom content type is by definition not one of
-them. The asset's own type-reader table decides which reader runs, so the route needs no type
-argument.
-
-Two consequences of it being an ordinary load. It is **cached** by asset name like any other asset,
-so a second call answers the same pointer without re-reading the file and the object must outlive
-the manager's cache — `cna_content_manager_unload` drops it. The route reaches three caller-defined
-forms: a compiled `.xnb` reader, a custom `.cnb` loader registered in the process-wide CNB registry,
-or a `.cnj` loader registered on this manager. Loose unregistered files still fail rather than
-being guessed into an unrelated type.
-
-## CNB content and custom loaders
-
-CNA has a second compiled content format beside `.xnb`: **CNB** (`CNA::Content::Cnb`,
-`docs/cnb-format.md`), a CNA-native container with its own schemas for textures, sprite fonts,
-sound effects, media, curves, animation clips and models, its own compiler front ends
-(`cna_tool_source_to_cnb`, `cna_tool_cnj_to_cnb`, `cna_tool_gltf_to_cnb`) and its own
-`ContentManager` tier.
-
-The C API exposes the complete generic container, typed codecs for every implemented schema except
-Model schema 2, source importers, CNJ compilation and the process-wide loader registry; see
-[`CNB.md`](CNB.md) for the precise boundary. The reserved Effect identifier has no native CNB
-schema. Model schema 2 can be loaded as a runtime Model but has no `CNA_CnbModelDataHandle`
-authoring/inspection representation.
-
-`ContentManager::RegisterCnbLoaderEXT` needs no second C route: it is a typed C++ wrapper over the
-same process-wide registry reached by `cna_cnb_loader_registry_register`. After registering a
-custom loader, `cna_content_manager_load_foreign_ext` performs the ordinary cached manager load and
-returns the opaque pointer produced by the callback. Built-in CNB assets use the corresponding
-typed content-manager route where one is exposed.
+The principal strict-C regressions are `CApi_ContentSmoke`, `CApi_ContentReaderSmoke`,
+`CApi_ContentModelEffectSmoke`, `CApi_ContentExceptionSmoke`, `CApi_VideoSmoke` and the game-content
+coverage in `CApi_RuntimeGameSmoke`. They cover typed and foreign loads, UTF-8 names, caching,
+root changes, unload/disposal, manifests, custom and reflective readers, object dictionaries,
+Model tags, stream lifetime and game manager borrowing/copying.
