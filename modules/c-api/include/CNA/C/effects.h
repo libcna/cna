@@ -1215,14 +1215,16 @@ CNA_C_API CNA_Result cna_effect_create_empty(
  *
  * Support is a renderer property, not a property of this ABI, and
  * `cna_graphics_device_supports_capability` with `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`
- * answers it for the running build. It is true for the `FNA3D` renderer always, and for the
- * `SDLGPU` and EasyGL-family (`OPENGLES3`, `OPENGL33`, `WEBGL2`) renderers when
- * their build option is on -- the effect runtime is a fetched dependency
- * those families do not otherwise need, so the capability never claims more than the binary
- * actually contains. Every other renderer identity reports false and refuses the bytecode rather
- * than quietly drawing with a stock shader, because a silent fallback makes a porting bug look
- * like an art bug. `docs/fx-compiled-effects.md` is the full matrix, including which limitations
- * are renderer-wide and which are specific to compiled effects.
+ * answers it for the running build. It is true for the `FNA3D` renderer always. The `SDLGPU`,
+ * EasyGL-family (`OPENGLES3`, `OPENGL33`, `WEBGL2`), `WEBGPU`, `SOFTWARE` and `DIRECTX9`
+ * renderers report it when their respective `CNA_SDLGPU_COMPILED_EFFECTS`,
+ * `CNA_EASYGL_COMPILED_EFFECTS`, `CNA_WEBGPU_COMPILED_EFFECTS`,
+ * `CNA_SOFTWARE_COMPILED_EFFECTS` or `CNA_DIRECTX9_COMPILED_EFFECTS` build option is on. Those
+ * opt-in runtimes add dependencies the renderer does not otherwise need, so the capability never
+ * claims more than the binary actually contains. Every other case reports false and refuses the
+ * bytecode rather than quietly drawing with a stock shader, because a silent fallback makes a
+ * porting bug look like an art bug. `docs/fx-compiled-effects.md` is the full matrix, including
+ * which limitations are renderer-wide and which are specific to compiled effects.
  *
  * ### Failures
  *

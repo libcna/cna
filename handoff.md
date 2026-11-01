@@ -35,6 +35,18 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API effects contract reconciliation (2026-11-01):
+  `docs/c-api/EFFECTS.md` is now a current reflection, lifetime, construction, stock-effect and
+  material-extension contract instead of an implementation-era narrative with eight repeated test
+  transcripts. It corrects the false claim that an invalid handle clears the current technique,
+  documents all seven PBR texture slots and the later material properties, records that only
+  SOFTWARE currently applies ColorMatrixEffect through SpriteBatch, and adds ShaderEffect compile
+  diagnostics plus the tightly packed vec3/mat4 array rules. Public compiled-effect Doxygen now
+  names the WEBGPU, SOFTWARE and DIRECTX9 opt-ins as well as FNA3D, SDLGPU and EasyGL. Generated
+  coverage evidence no longer claims unverified HEADLESS, OPENGLES3 and sanitizer runs, and its
+  stale five-slot clone statement is corrected to seven. All 13 selected targets build; all 11
+  effect, generated-route, graphics-extension and ABI C tests pass through the private SDLGPU
+  runner; route generation, route-test coverage, coverage, limitations and export-count gates pass.
 - C API devices and sensors contract reconciliation (2026-11-01):
   `docs/c-api/DEVICES.md` now separates the always-built sensor/vibration surface from the optional
   `CNA_DEVICES` host services, names the two still-planned accelerometer keyboard-emulation members
