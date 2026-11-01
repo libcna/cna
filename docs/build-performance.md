@@ -2,16 +2,23 @@
 
 ## Purpose
 
-CNA has a large, modular C++ build: renderer selection, optional backends, the C API, tests, demo
+CNA has a large, modular C++ build: renderer selection, optional subsystems, the C API, tests, demo
 applications, and the sibling Sharp Runtime can make a full integration configuration substantially
 larger than a focused edit needs to be. This document defines the supported fast paths without
 changing the coverage expected from CI and release configurations.
 
-## Accepted results at a glance
+## Retained historical results at a glance
 
-These measurements deliberately separate clean compilation, incremental work, configuration,
-linking, and cache behavior. Compile-command counts are structural scope evidence only; they are
-not presented as elapsed-time improvements.
+The COMP-001–010 measurements below mostly date to 2026-08-28/29; the shared-runtime record is
+2026-09-21. They describe the then-current tree/toolchains and are retained from the completed
+campaign (including `78afd08ab`), not rerun timings or current graph/test counts. Source partitions,
+dependencies, defaults and tests have changed since. Historical STUB/sandbox failures are disclosed
+outcomes, not passing qualification.
+
+These records separate clean compilation, incremental work, configuration, linking and cache
+behavior. Compile-command counts are structural scope evidence, not elapsed-time improvements.
+Current verification is listed at the end; reproduce a comparable measurement only with an
+explicitly matched configuration.
 
 | Area | Retained measured result | Default or disable path |
 | --- | --- | --- |
@@ -21,7 +28,7 @@ not presented as elapsed-time improvements.
 | Header hygiene | The controlled `ContentReader.hpp` consumer frontend fell 24.5%; seven-header parse count fell 30.6%. | Retained source cleanup; no compiler-mode dependency. |
 | Fast debug | Controlled content compilation fell 9.7% and the build tree fell 47.2% with line tables. | `CNA_DEBUG_INFO=FULL` is default; `dev-fast-debug` opts in. |
 | Clean-CI unity | Four-job core/math clean closure fell 25.6%; a one-source rebuild regressed 5.7%. | Default `CNA_ENABLE_UNITY_BUILD=OFF`; `unit-unity` is leaf-only. |
-| Final linking | Large Debug `CnaTests` link fell 90.9% with LLD and 89.9% with Mold versus GNU ld. | `CNA_LINKER=DEFAULT`; `AUTO`, `LLD`, and `MOLD` are explicit alternatives. |
+| Final linking | Large Debug `CnaTests` link fell 90.9% with LLD and 89.9% with Mold versus GNU ld. | `CNA_LINKER=AUTO` by default; `DEFAULT` keeps the toolchain linker, while `LLD`/`MOLD` request one explicitly. |
 | Shared runtime | A Debug `VULKAN;OPENGL33` tree (2026-09-21, renderer since retired) fell from 87 GB to 5.4 GB; a test executable from ~104 MB to 0.5–0.9 MB; a renderer `.cpp` edit relinked 29 targets (~1.7 GB) instead of ~800 (~83 GB), and a rebuilt `libcna.so` relinks none. | `CNA_SHARED_LIBRARY=ON` is the default on native ELF GNU/Clang with CMake ≥ 3.30; `-DCNA_SHARED_LIBRARY=OFF` restores the static link. |
 | ccache | A public-header rebuild recovered 23/23 compile edges as direct hits in 0.36 s, with no preprocessed hits or eviction. | `CNA_USE_CCACHE=OFF`; CNA never changes global sloppiness/direct-mode policy. |
 | Complete clean build | At 12 jobs GCC took 10:44 and Clang 10:05 for all 1,929 compile edges (2026-08-29, before the shared machine's 8-job limit); this is the post-optimization machine baseline, not an improvement inferred from command counts. | Use a focused profile for normal edits; keep complete GCC/Clang integration in CI. |
@@ -32,13 +39,17 @@ compilation-speed feature.
 
 ## Presets
 
-All new performance-oriented presets use Ninja and write `compile_commands.json`.
+The performance-oriented presets use Ninja and write `compile_commands.json`. They select STUB,
+rather than a rendering qualification configuration. On a fresh cache they omit GamerServices
+through the NET-dependent default, but do not explicitly override a pre-existing
+`CNA_ENABLE_GAMER_SERVICES=ON`, platform choice or every optional tool/extension switch. Inspect
+the effective cache when reusing a directory; a preset is not a reset of unspecified cache values.
 
 | Preset | Intended use | Deliberately omitted |
 | --- | --- | --- |
 | `dev` | Fast local code/edit/link loop; builds `cna_tool_cnb_info` | Tests, demos, C API, networking, FFmpeg, Draco |
 | `dev-fast-debug` | Same edit loop with line-table-only debug information | Same as `dev`; local-variable/type debugger detail |
-| `unit` | Portable complete unit-test suite; builds `CnaTests` | Demos, C API, networking, FFmpeg, Draco |
+| `unit` | Aggregate unit-test executable; builds `CnaTests` | Demos, C API, networking, FFmpeg, Draco |
 | `unit-pch` | Opt-in content-test PCH pilot; builds `CnaContentTests` | Same as `unit`; PCH is limited to the content test object group |
 | `unit-unity` | Opt-in clean-CI core/math unity pilot | Same as `unit`; unity is limited to core/math libraries and focused test objects |
 | `release-modules` | Optimized module/content-tool validation | Tests, demos, C API, networking, FFmpeg, Draco |
@@ -52,7 +63,7 @@ cmake --build --preset dev --parallel 8
 
 cmake --preset unit
 cmake --build --preset unit --parallel 8
-./cmake-build-unit/CnaTests
+tools/platform/run_gpu_tests_private.sh --exec ./cmake-build-unit/CnaTests
 ```
 
 ### Focused unit-test executables
@@ -70,16 +81,22 @@ cmake --build --preset unit-math --parallel 8
 SDL_AUDIODRIVER=dummy ./cmake-build-unit/CnaMathTests
 
 cmake --build --preset unit-content --parallel 8
-SDL_AUDIODRIVER=dummy ./cmake-build-unit/CnaContentTests
+tools/platform/run_gpu_tests_private.sh --exec env SDL_AUDIODRIVER=dummy ./cmake-build-unit/CnaContentTests
 ```
 
-The available focused targets are `CnaAudioTests`, `CnaContentTests`, `CnaCoreTests`,
-`CnaDevicesTests`, `CnaDevicesExtTests`, `CnaGamerServicesTests`, `CnaGraphicsTests`,
-`CnaGraphicsExtTests`, `CnaInputModuleTests`, `CnaIntegrationTests`, `CnaMathTests`,
-`CnaMediaTests`, `CnaNetTests`, `CnaPlatformModuleTests`, `CnaRendererTests`,
-`CnaRuntimeTests`, and `CnaStorageTests`. The `unit-core`, `unit-math`, `unit-content`, and
-`unit-graphics` build presets are shortcuts; use `cmake --build cmake-build-unit --target <target>`
-for the other modules.
+Depending on enabled modules/test groups, the focused targets are `CnaAudioTests`,
+`CnaContentTests`, `CnaContentPipelineTests`, `CnaCoreTests`, `CnaDesignTests`,
+`CnaDiagnosticsTests`, `CnaDevicesTests`, `CnaDevicesExtTests`, `CnaGamerServicesTests`,
+`CnaGraphicsTests`, `CnaGraphicsExtTests`, `CnaInputModuleTests`, `CnaInspectorTests`,
+`CnaIntegrationTests`, `CnaMathTests`, `CnaMediaTests`, `CnaNetTests`, `CnaPhoneTests`,
+`CnaPlatformModuleTests`, `CnaRendererTests`, `CnaRuntimeTests` and `CnaStorageTests`.
+The `unit-core`, `unit-math`, `unit-content` and `unit-graphics` build presets are shortcuts;
+use `cmake --build cmake-build-unit --target <target> --parallel 8` for others.
+
+`CnaTests` aggregates enabled GoogleTest groups. It is not every CTest-registered executable,
+configuration check, C API smoke, reference oracle or renderer example; build the required separate
+targets before selecting those CTest entries. Run any window/GPU-capable selection through the
+private runner shown above, including STUB configurations whose fixtures can still create windows.
 
 On the 2026-08-28 reference STUB/GCC configuration, Ninja reported the following compile-command
 graph sizes. These are structural measurements, not elapsed-time promises:
@@ -97,7 +114,7 @@ across the split (8,102 output lines). A focused `CnaMathTests` build ran all 84
 the STUB configuration's content suite retains three existing GPU-capability failures for 3D/cube
 textures and is not evidence for those renderer-dependent cases.
 
-With a warm ccache and 12-way Ninja parallelism on the same machine, touching
+In that historical pre-limit run, with a warm ccache and 12-way Ninja parallelism, touching
 `MathHelperTests.cpp` and rebuilding took 0.24 s through `CnaMathTests` versus 0.84 s through
 `CnaTests` (71% less wall time). A forced final link took 0.20 s versus 0.75 s (73% less). The full
 target retains the same 1,126 compile commands as before the split, and its graph contains no
@@ -111,10 +128,12 @@ they include.
 
 `CNA_CONFIGURE_AUDIT_CACHE=ON` (the default) caches only successful platform ratchet,
 non-production SDL, and hot-path audit results under the current build directory's `CMakeFiles/`.
-The key is a SHA-256 content fingerprint of every source/header the audits inspect, their scripts
-and budgets, the Python version, and the exact command. File additions, removals, content changes,
-strict-mode changes, or audit implementation changes therefore invalidate the result. Failed
-audits are never cached, and a fresh CI build directory always executes every audit.
+The key is a SHA-256 fingerprint of the declared module source/header inputs, listed scripts and
+budgets, helper implementation, Python version and exact command. File additions/removals and
+changes within that declared set, including strict-mode command changes, invalidate it. New
+transitive script/data inputs must be added explicitly; this is not automatic dependency discovery.
+Failed audits are never cached. A fresh directory executes enabled audits when their scripts and
+Python are available; disabled or unavailable checks are not evidence of a cache hit or pass.
 
 All three audits share one fingerprint pass over the module tree. Set
 `-DCNA_CONFIGURE_AUDIT_CACHE=OFF` to force execution during every configure, or run the existing
@@ -129,7 +148,7 @@ unchanged configure time fell from 4.39–4.72 s to 0.83–0.84 s (about 82% les
 configuration took 1.26 s. A changed audit input still runs the complete checks; forcing the cache
 off took 3.99 s on the same machine.
 
-The source glob behavior is unchanged. Adding a temporary module `.cpp` produced Ninja's
+In the original cache qualification, adding a temporary module `.cpp` produced Ninja's
 `GLOB mismatch`, regenerated CMake, refreshed the audits, compiled the new object, and removing it
 regenerated again. A temporary forbidden `SDL_CreateWindow` reference invalidated the cache and
 made configuration fail at the strict ratchet gate, proving that caching does not weaken the
@@ -145,7 +164,7 @@ consumers or third-party targets, and has a dedicated preset:
 ```sh
 cmake --preset unit-pch
 cmake --build --preset unit-content-pch --parallel 8
-SDL_AUDIODRIVER=dummy ./cmake-build-unit-pch/CnaContentTests
+tools/platform/run_gpu_tests_private.sh --exec env SDL_AUDIODRIVER=dummy ./cmake-build-unit-pch/CnaContentTests
 ```
 
 ccache's safe defaults do not fully support PCH reuse. The documented ccache PCH path requires
@@ -251,17 +270,18 @@ builds were 0.14 s versus 0.13 s.
 The first full clean-closure samples varied in the opposite direction (104.94 s full, 126.72 s line
 tables, 166.84 s split) as the host load changed, so they are disclosed but not used as the accepted
 speed metric. Split DWARF provided no meaningful controlled compile gain and made the total tree
-larger, so it has no preset. Both modes remain selectable for other machines. The line-table tool
-contains 18,922 decoded source-line rows and runs normally; Clang 19.1.7 also builds and runs the
-same preset with `-gline-tables-only`.
+larger, so it has no preset. Both modes remain selectable for other machines. The measured line-table tool
+contained 18,922 decoded source-line rows and ran normally; Clang 19.1.7 also built and ran that
+preset with `-gline-tables-only`.
 
 ## Shared runtime library
 
 `CNA_SHARED_LIBRARY` (Vulkan parity VKPAR-0017) links the CNA runtime into one shared
 library, `libcna.so`, instead of statically into every executable that links `CNA`.
 
-**Why.** Every test and example is its own executable. Linked statically, each carried the whole
-engine: measured on `cmake-build-vulkan` (Debug, 2026-09-21), 798 executables at ~104 MB each —
+**Why.** The historical integration tree had hundreds of separate test/example executables.
+Its static configuration repeated a broad runtime/debug closure: measured on
+`cmake-build-vulkan` (Debug, 2026-09-21), 798 executables at ~104 MB each —
 `.debug_*` ≈ 77 MB, `.strtab`/`.symtab` ≈ 17.5 MB, `.text` 7 MB — 83 GB in total, and one edit to a
 renderer `.cpp` relinked all of them, writing ~83 GB. On a machine whose SSD wear the repository
 rules exist to limit, that is the dominant cost of an edit–build–test cycle.
@@ -273,9 +293,11 @@ inter-module dependencies otherwise cause. `CNA` then gives consumers `libcna.so
 **compile-only** usage requirements of the archives (`$<COMPILE_ONLY:...>`), and the libraries those
 archives depend on that are not inside `libcna.so` (SDL, X11, wgpu-native, sharp-runtime, ...).
 `cmake/SharedRuntimeLibrary.cmake` holds the closure walk; "CNA-owned" means a non-imported target
-whose `SOURCE_DIR` is under `modules/`. The CNA archives therefore never appear on a consumer's link
-line, so a module edit does not relink consumers, and `CMAKE_LINK_DEPENDS_NO_SHARED` keeps a rebuilt
-`libcna.so` from relinking them either.
+whose `SOURCE_DIR` is under `modules/`. The umbrella avoids passing that complete static closure
+as final link inputs. Mixed explicit-module dependencies can still appear transitively; the DSO
+ordering/exclusion policy below prevents extraction of a second runtime. Direct static-only
+consumers retain archive relinks, while `CMAKE_LINK_DEPENDS_NO_SHARED` avoids relinking an umbrella
+consumer solely because `libcna.so` was rebuilt. Actual relink fan-out depends on the consumer graph.
 
 **Measured**, same machine and configuration (`VULKAN` was retired on 2026-10-13; the figures stand
 as recorded):
@@ -289,9 +311,11 @@ as recorded):
 | Relinked by a rebuilt `libcna.so` | — | 0 |
 | Full suite, private display | `Vulkan_*` 319 passed / 51 failed | `Vulkan_*` 319 passed / 51 failed |
 
-The 29 targets that still relink are the ones that link module archives directly on purpose:
-`CnaTests` and the per-module `Cna*Tests`, the content tools and fuzzers, and the `probe_*`
-link-closure checks, which exist to test the static closure.
+The recorded 29 targets are the then-current direct archive consumers, not a current target list.
+Today `CnaTests` links the `CNA` umbrella; most focused groups/tools/probes use module composition,
+while `CnaRendererTests` uses the umbrella dependency for renderer-state identity. Consult the
+generated link lines rather than applying the old count to today's graph. The symbol-footprint
+probes deliberately remain static-only ([link boundaries](link-size-architecture.md)).
 
 **One copy of everything.** A symbol defined both in `libcna.so` and in an executable would give it
 two copies of that code and of its static state. Naming the `CNA` interface first alone does not
@@ -301,17 +325,19 @@ link dependencies and excludes direct module archives already contained in that 
 `--no-as-needed` link feature retains this early DSO even when the application's first CNA
 reference comes from a later static framework; the previous linker state is restored immediately.
 Module-only consumers do not inherit this shared-target interface and remain static.
-Checked with `nm` on the built binaries: the only symbols defined in both are
-`R_X86_64_COPY` relocations — the ELF mechanism by which an executable holds the single live copy
-of a data object a shared library defines (`BlendState::Opaque` and similar) — and no strong
-duplicate remains.
+The original `nm` investigation recorded only copy-relocated public data
+(`R_X86_64_COPY`, such as `BlendState::Opaque`) rather than independently live strong copies.
+That is historical binary evidence. Current mixed-consumer and C API runtime-identity tests protect
+the relevant singleton contracts, rather than proving every future consumer's symbol table.
 
-**Scope.** Native ELF with GNU/Clang and CMake ≥ 3.30 only; that is also the default there. Windows
-DLLs would need export annotations CNA does not carry, and an Emscripten `SHARED` library is a side
-module, so those builds keep the static link, as does anything configured with
-`-DCNA_SHARED_LIBRARY=OFF`. The C API (`modules/c-api`) links the module archives directly, not
-`CNA`, so its shared library stays self-contained either way. Switching an existing build directory
-recompiles it once, because the archives that go into `libcna.so` need `-fPIC`.
+**Scope.** The policy enables this by default only for native non-Apple Unix GNU/Clang with
+CMake ≥3.30, excluding Android, Emscripten and cross compilation. Other toolchains keep the static
+runtime; an unsupported explicit ON is refused. Windows has a separately exported C API, but no
+equivalent whole-C++ runtime DSO policy. In shared-runtime mode the shared C API routes its runtime
+state through `libcna.so`, with Net/GamerServices included there when the adapter needs them;
+it is not an independent self-contained second runtime. The packaged static C API has its own
+archive-combination path. Switching mode can require recompilation for PIC; reuse the configured
+variant instead of repeatedly toggling it.
 
 The shared-mode minimum is higher than CNA's overall CMake minimum: CMake 3.30
 added the link-feature deduplication needed by cyclic `WHOLE_ARCHIVE` archives.
@@ -330,7 +356,7 @@ groups of at most three files so repeated anonymous helpers such as `FloatHash` 
 the eight core sources form one verified group. Focused tests use batches of at most eight files.
 Several math tests independently call their tolerance `kEps`, so the generated unity wrapper uses
 CMake's per-source unique identifier to rename that internal symbol only during unity compilation.
-Normal source files and public API remain unchanged.
+The pilot does not rewrite normal source files or public APIs.
 
 The dedicated preset is intended for a clean, constrained CI worker, not the normal edit loop:
 
@@ -354,7 +380,7 @@ from 7.51 s to 1.65 s (78.0%). A one-source `Vector3.cpp` edit was slightly wors
 (0.19/0.20 s) and no-op builds (0.13 s each) were unchanged. These tradeoffs are why unity remains
 opt-in and why the preset documents four-way clean CI rather than replacing `unit`.
 
-All 63 core and 840 math tests pass with GCC 14.2.0 and Clang 19.1.7. The same suites pass under
+The recorded 63 core and 840 math tests passed with GCC 14.2.0 and Clang 19.1.7, and under
 GCC AddressSanitizer; leak detection alone was disabled because the execution sandbox runs under
 ptrace, while address/ODR instrumentation remained active. Third-party targets, other modules,
 cross-builds, Emscripten, installed consumers, and ordinary presets are unaffected.
@@ -365,14 +391,15 @@ The CMake targets distinguish requirements imposed on a consumer from CNA's priv
 
 | Target | Visibility | Responsibility |
 | --- | --- | --- |
-| `CNA::BuildConfig` | Public | C++23 and preprocessor/build facts a public header or ABI requires, including the selected renderer and feature macros. |
+| `CNA::BuildConfig` | Public | C++23, public build/ABI facts, final-link section collection and applicable runtime-first ordering. |
 | `CNA::ProjectOptions` | Private to CNA-owned targets | Non-ABI compiler policy, currently deterministic MSVC UTF-8 source decoding. |
 | `CNA::DebugInfoOptions` | Private to CNA-owned targets and Sharp Runtime | Optional Debug-only line-table or split-DWARF policy. |
 | `CNA::Instrumentation` | Private to CNA-owned targets and Sharp Runtime | Sanitizer compile/link options. |
 | `CNA::EmscriptenExceptionAbi` | Public where required, private internally | The JS-lowered C++ exception ABI shared by CNA, Sharp Runtime, and final artifacts. |
 | `CNA::EmscriptenAsyncify` | Final application executables only | Blocking/sleep support for application-style `Game::Run()` loops. |
 | `CNA::EmscriptenAbi` | Compatibility composition | Both interfaces above for application targets that used the former combined contract. |
-| `CNA::LinkerOptions` | Private to CNA-owned targets | An explicitly selected native fast linker. |
+| `CNA::LinkerOptions` | Private to CNA-owned targets | The native fast linker selected by AUTO or an explicit request. |
+| `CNA::SizeOptions` | Private to CNA-owned targets and Sharp Runtime | Optional per-function/data sections; final-link collection propagates through BuildConfig. |
 
 New warning, diagnostic, sanitizer, linker, coverage, or profiling flags belong in the narrowest
 appropriate layer. Do not add routine policy to `CMAKE_CXX_FLAGS`, `CMAKE_C_FLAGS`, or a global
@@ -385,8 +412,10 @@ families, so treating warnings as errors stays a target-local decision, as
 ## ccache
 
 `CNA_USE_CCACHE=ON` is the default when `ccache` is available. CNA invokes it with
-`CCACHE_BASEDIR` set to `CNA_CCACHE_BASEDIR`, which defaults to the common parent of the CNA and
-Sharp Runtime source directories. This makes source paths stable across their separate build trees.
+`CCACHE_BASEDIR` set to `CNA_CCACHE_BASEDIR`. Its initial default is a nonempty environment
+`CCACHE_BASEDIR`, otherwise CNA's parent directory; an explicit/cache value persists on reconfigure.
+A nonempty custom compiler launcher is preserved. Choose the same containing base for all
+participating source/worktree paths to normalize them consistently.
 It also makes `__FILE__` relative to the build directory, so a test must never locate its
 fixtures through `std::filesystem::path(__FILE__)`; `tests/support/CNA/TestSupport/TestPaths.hpp`
 finds the repository root from the working directory instead (COMP-010).
@@ -463,8 +492,10 @@ during real GPU setup are driver leaks reproduced without any CNA code; run GL t
 `LSAN_OPTIONS=suppressions=tools/platform/lsan_x11_mesa.supp`, whose entries each name the program
 and byte count that proved them. No CNA production code works around them.
 
-Sanitizer configurations are native GNU/Clang builds only. They are diagnostics, not release
-artifacts, and cannot be combined with `CNA_ENABLE_IPO`.
+The instrumentation option requires a GNU/Clang-family compiler (AppleClang included), rejects
+MSVC/Emscripten, and checks the named incompatible pairs; it does not prequalify every compiler,
+sanitizer or cross target. The native diagnostic presets are not release artifacts and cannot be
+combined with `CNA_ENABLE_IPO`.
 
 ## Linker selection and IPO/LTO
 
@@ -521,16 +552,17 @@ All variants reused identical object files.
 | Executable size | 158,008 B | **153,064 B** | 167,800 B |
 | Startup median | 2.0 ms | 1.9 ms | 2.1 ms |
 
-Both fast linkers exceed the 20% acceptance threshold. LLD won the large Debug test link and used
-less memory than Mold; Mold won the small Release link. `AUTO` remains probe-based and prefers
-Mold, a good general local choice, with LLD equally recommended when large Debug links dominate.
+Both fast linkers exceeded the campaign's 20% acceptance threshold. LLD won that large Debug
+test link and used less memory than Mold; Mold won the small Release link. `AUTO` remains
+probe-based and prefers Mold; measure the relevant current target before deriving a local choice
+from these old samples.
 GNU ld remains a valid dependency-free fallback. All three `CnaTests` binaries ran the same 7,427
 tests and produced an identical normalized result set: 6,868 passed, 490 skipped, and the same 69
 baseline STUB/sandbox failures. Every Release tool emitted the expected usage output.
 
-The accompanying minimal probe also verifies three policy edges: one build directory can switch
-from Mold to LLD without a stale cached program path, an explicitly unavailable linker fails with
-an actionable diagnostic, and cross-build `AUTO` contributes no linker option.
+The accompanying historical minimal probe verified three policy edges: switching from Mold to
+LLD without a stale cached path, refusing an unavailable explicit linker with a useful diagnostic,
+and leaving cross-build `AUTO` without a linker option.
 
 `CNA_ENABLE_IPO=ON` enables CMake IPO/LTO only for supported native `Release`, `RelWithDebInfo`, or
 `MinSizeRel` CNA-owned targets after `CheckIPOSupported` succeeds. It is off by default because it
@@ -557,27 +589,32 @@ separately; it is not the main Ninja parallelism limit.
 ### CI trend report and structural guard
 
 `tools/build/check_build_performance_policy.py` resolves preset inheritance and fails
-deterministically if the focused `dev`, `unit`, or `release-modules` closures regain tests,
-examples, the C API, or optional backends. It also verifies that PCH, unity, and IPO remain opt-in
+when the named focused presets lose their required cache values (for tests, examples, the C API
+and selected optional subsystems). This is a preset/source-text guard, not a resolved CMake graph,
+binary dependency or timing test. It also verifies that PCH, unity, and IPO remain opt-in
 and rejects routine project policy expressed through global `CMAKE_C_FLAGS`, `CMAKE_CXX_FLAGS`,
 linker flags, `add_compile_options()`, or `add_link_options()`. An exception is one exact line in
 one named file, listed with its reason in the checker, and one whose line has gone fails as stale.
-There are four: the sanitizer flags passed to the standalone C API consumer's own configure;
-Emscripten's whole-module `-pthread` (AM4-240); the runtime-first link option's read -- never a
-write -- of a program directory's C++ and linker flags (LINK-043); and the `CnaCxxRuntimeLinkage`
-fixture's probe projects, whose programs choose their C++ runtime through a toolchain file and
-directory-wide options on purpose (LINK-054).
+The exact-line exceptions cover standalone installed-C-API consumer instrumentation, whole-module
+Emscripten `-pthread`, runtime-linkage flag reads, and deliberate runtime-choice fixture settings.
+Two whole-file exceptions are script-only SDL toolchain/fingerprint data readers. Toolchain and
+lowercase `tests` directories are excluded from that source scan. The checker rejects stale named
+exceptions, but does not parse all CMake semantics or arbitrary external project code.
 
 The general Linux workflow records the actual configure and build commands with `/usr/bin/time`,
 keeps the Ninja build log, and runs `tools/build/report_build_performance.py` after the build. Its
 uploaded `build-performance-report.json` contains:
 
-- configure/build wall time and GNU-time maximum RSS (the reproducible clean-build driver uses the
-  stricter aggregate process-tree RSS measurement);
+- supplied configure/build wall time and GNU-time maximum RSS (the clean-build driver instead
+  samples an aggregate process tree; these are different estimators, not directly interchangeable);
 - complete graph command and compile counts;
-- compile and link edges actually observed in that fresh build's Ninja log;
+- compile/link edges recognized from the supplied Ninja console progress descriptions; these are
+  not a parse of `.ninja_log` and depend on its standard English output format;
 - selected artifact sizes; and
-- direct/preprocessed ccache hits, misses, uncacheable reasons, cleanups, and cache size.
+- the active cache's current direct/preprocessed hits, misses, selected uncacheable reasons,
+  cleanups and size. These are cumulative counters, not automatically computed phase deltas.
+  CI zeroes them before its build; on a shared developer cache, record before/after without resetting
+  other sessions' statistics.
 
 These values are retained as a 30-day CI artifact for trend inspection. Shared-runner timing has no
 hard pass/fail threshold; only machine-independent preset and policy invariants are enforced.
@@ -600,7 +637,8 @@ asks for those counters. Linux peak RSS is the sampled sum of the complete proce
 the outer CMake/Ninja process. Schema 2 also records load average before and after each measured
 phase.
 
-The three profiles select these reproducible closures:
+The driver currently selects these broad profiles. Command counts in this table belong to the
+2026-08-29 record, not today's graph:
 
 | Profile | Target | Configuration and enabled closure | Commands / compilations |
 | --- | --- | --- | ---: |
@@ -610,8 +648,11 @@ The three profiles select these reproducible closures:
 
 All profiles disable PCH, unity, IPO, Draco, and the configure-audit cache. The `dev` and `unit`
 profiles also disable examples, the C API, CNAEXT, compiled effects, networking, and video. The
-`legacy` profile intentionally reproduces the complete former `cmake-build-debug` closure and uses
-an existing FNA3D checkout for reproducible MojoShader sources. The 2026-08-29 reference used GCC
+`legacy` profile approximates the former broad `cmake-build-debug` feature selection and can reuse
+an explicitly supplied FNA3D checkout for MojoShader. The driver sets `BUILD_SHARED_LIBS=OFF` but
+does not pin `CNA_SHARED_LIBRARY`, platform, dependency revisions or every new feature option;
+current defaults can therefore change its closure. A new run is not an exact reconstruction of
+the old configuration. Preserve the actual cache/dependency identities alongside its report. The 2026-08-29 reference used GCC
 14.2.0, Clang 19.1.7, Mold 2.37.1, CMake 3.31.6, Ninja 1.12.1, ccache 4.11.2, full debug
 information, and a 16-logical-CPU/30-GiB host. Each of the 18 points had its own initially empty
 cache. Times are single observed runs on a shared host, so the table is a machine baseline, not a
@@ -631,7 +672,7 @@ Focused no-op builds took 0.15–0.34 s; complete no-op builds took 0.39–1.00 
 configure phases took 7.90–8.92 s. Cold-cache counters matched the compile graph: 483 misses for
 `dev`, 1,125 misses plus one intra-build preprocessed hit for `unit`, and 1,929 misses for the
 complete profile. There were no direct hits because each isolated cache began empty; the subsequent
-no-op invoked no compiler. The current complete graph has one additional non-compile asset-copy
+no-op invoked no compiler. The final campaign graph had one additional non-compile asset-copy
 edge compared with the earliest GCC points, after the benchmark exposed and fixed a parallel copy
 race; all six complete measurements contain the same 1,929 compiler calls.
 
@@ -645,7 +686,7 @@ record, not settings to use. GCC was fastest for the focused
 `dev` and `unit` closures, while Clang used less disk and usually less memory below saturation.
 Keep both compilers in CI rather than declaring one universal winner.
 
-With the owner's approval, reproduce a point at the current limit. Each run creates its own
+With the owner's approval for a clean benchmark, measure a current point at the job limit. Each run creates its own
 `build-probe/cmake-build-benchmark-*` directory:
 
 ```sh
@@ -666,8 +707,12 @@ python3 tools/build/benchmark_clean_build.py --owner-approved \
   --fna3d-source /path/to/FNA3D --parallel 8 --linker MOLD
 ```
 
-The 2026-08-29 rows above were measured with `--ccache isolated`; a `--ccache off` run reports no
-ccache counters but compiles the same graph cold.
+The 2026-08-29 rows above used `--ccache isolated`; a new `--ccache off` run reports no cache
+counters and performs uncached compilation for its actual current graph. An empty cache does not
+make filesystem/OS page caches cold, and a 20 ms sum-of-RSS sampler can miss short peaks and count
+shared resident pages more than once. The driver records the source revision, tool versions and
+selected cache fields, but does not itself run the built test suites or capture every dependency
+revision, source modification or configuration input. Keep that evidence separately.
 
 ## Deferred techniques
 
@@ -677,6 +722,18 @@ they can make clean builds faster while harming incremental rebuilds, portabilit
 or XNA numerical behaviour.
 
 A generic PGO campaign waits for a deterministic workload that represents real client applications.
-A C++ modules migration is not a build-speed shortcut: toolchains, dependency scanning, package
-consumption and cross-compiles need a separate design first. Any measured experiment becomes a
+A C++ modules migration needs a separate design covering toolchains, dependency scanning, package
+consumption and cross-compiles. Any measured experiment becomes a
 default only after it meets its acceptance threshold on both native GCC and Clang builds.
+
+## Current verification
+
+The 2026-11-01 documentation audit checked current preset inheritance, test-group mappings,
+compiler/debug/instrumentation/linker/IPO policy, configure-cache inputs, shared C/C++ runtime
+composition, CI wiring and measurement helpers. The build-performance policy checker passes.
+The existing focused `cna_tool_cnb_info` target builds, and the report helper emits valid current
+graph/artifact JSON with no invented timing inputs. The related runtime-first/shared-runtime/export
+configuration tests and six footprint gates also pass in this pass (9/9; see
+[link-size verification](link-size-architecture.md#current-verification)). No full clean rebuild,
+cache reset, PCH/unity/IPO/sanitizer/compiler matrix or fresh timing campaign was needed or run;
+the historical tables above do not become current benchmark results through this source audit.

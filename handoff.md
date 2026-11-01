@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Build-performance documentation reconciliation (2026-11-01, COMP-001–010): dated tables retain
+  their original scope, while current policy now names AUTO linker selection, optional focused
+  groups versus the full CTest inventory, private display recipes, declared audit-cache inputs,
+  shared C/C++ runtime identity, environment/cache-based ccache defaults and instrumentation scope.
+  The guide describes console-edge parsing/cumulative counters and clean-driver profile/provenance/
+  sampled-RSS limits. The policy checker passes, the focused content tool builds and the report
+  helper emits valid existing-graph JSON without timing inputs. Related nine link-policy gates
+  already pass in this pass. No clean/PCH/unity/IPO/sanitizer/compiler/timing campaign, global cache
+  changes, implementation or ABI change.
 - Link-size documentation reconciliation (2026-11-01, LINK-032/040): the guide scopes unused
   feature elimination to tested static composition, distinguishes shared-runtime deployment and
   mixed-consumer ordering, corrects public registry-query installation and current size/IPO/
@@ -1616,6 +1625,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- The clean-build benchmark driver selects broad feature profiles but does not pin
+  CNA_SHARED_LIBRARY/platform/every dependency revision or new option; BUILD_SHARED_LIBS=OFF
+  does not select a static CNA umbrella. Its selected cache report also omits that runtime mode.
+  New runs do not exactly reproduce the August size/graph/timing matrix without supplemental
+  provenance. RSS is a sampled process-tree sum; the CI report's cache counts are cumulative and
+  its executed-edge counts parse console descriptions (source audit 2026-11-01,
+  `docs/build-performance.md`).
 - SkinnedModelEXT attachment verifies bone count only, leaving joint order/bind-pose/device
   compatibility to callers; its sampler also assumes palette-space, time-ordered keys without
   checking AnimationClipEXT::TargetSpace. The shared raw .clip.bin reader reserves from
