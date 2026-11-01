@@ -1,109 +1,163 @@
-# AlphaTestEffect exactness support matrix
+# `AlphaTestEffect` current contract
 
-Phase 43 (graphics Tasks 371–380) audited and pixel-verified `AlphaTestEffect`
-conformance against FNA. This document records those findings and the later exactness work that
-superseded two of the phase's original assumptions. Current-state reconciliation: 2026-10-31.
+Current-state reconciliation: 2026-11-01.
 
----
+`AlphaTestEffect` is XNA's textured stock effect for rejecting fragments by their fully composed
+alpha. This page describes the behavior that callers and renderer implementations may rely on now.
+It is not a chronology of the implementation campaign that established the behavior.
 
-## 1. Property/default audit (Tasks 371–372)
+## Sources of truth
 
-Task 371 audited all 8 `AlphaTestEffect` properties and `OnApply()`'s alpha-comparison logic
-line-by-line against FNA's `AlphaTestEffect.cs` — **verify-only, zero bugs found**, unlike Task
-361's `BasicEffect` opener. Every default matched exactly (`FogEnabled`/`VertexColorEnabled=false`,
-`World`/`View`/`Projection=Identity`, `DiffuseColor=Vector3.One`, `Alpha=1`, `FogStart=0`,
-`FogEnd=1`, `AlphaFunction=CompareFunction.Greater`, `ReferenceAlpha=0`, unclamped), the 8-case
-`AlphaTest` switch statement matched FNA's literal-for-literal (including the `0.5/255` comparison
-tolerance and the `eqNe` shader-index side effect), and `Clone()`'s field list matched FNA's clone
-constructor. The audit also confirmed (not a bug, correctly deferred) that `FillGpuDrawParams()`
-never forwards any fog fields at all — squarely Task 378's scope, not this task's.
-
-Task 371 found **zero existing test coverage** for `AlphaTestEffect`. Task 372 wrote
-`modules/graphics/tests/Microsoft/Xna/Framework/Graphics/AlphaTestEffectTests.cpp` from scratch
-(mirroring Task 362's `BasicEffectTests.cpp` style): the original 27 tests covered all 8 property
-defaults, a setter round-trip per property, `Clone()` and `GetTypeName()`. The current fixture has
-30 ordinary cases plus 16 parameterized reference-scaling cases. It additionally covers texture
-ownership, clone ownership and an explicitly unclamped `ReferenceAlpha`. No new bug was found by
-the original default audit — it was pure test-authoring.
-
-## 2. CompareFunction pixel coverage (Tasks 373–375)
-
-Task 373 extended Task 190's EasyGL boundary-only coverage (which only ever tested the exact
-`alpha==reference` point) with a genuine 3-point sweep (`64/255` below, `128/255` at, `192/255`
-above a fixed `reference=128`) across all 8 `CompareFunction` values — 24 assertions, each
-function's below/at/above signature re-derived independently from FNA's `OnApply()` switch and
-confirmed unique, giving the sweep real discriminating power beyond a single boundary point.
-**24/24 PASS, zero bugs** — EasyGL's comparison logic was already fully correct.
-
-## 3. Reference-alpha scaling (Task 376)
-
-Tasks 371/373 had already established the `referenceAlpha/255.0f` scaling was correct, but neither
-exercised multiple *reference* values or true out-of-range inputs directly. Task 376 added a
-parameterized, GPU-independent unit test (`::testing::Values(-10, 0, 1, 64, 128, 254, 255, 300)`)
-calling `FillGpuDrawParams()` directly and checking the `alphaTest` vec4 output for both of FNA's
-switch-case shapes (`Greater`-style and `Equal`-style). 16 parameterized assertions, all matched
-within `1e-6` tolerance, confirmed the scaling stays unclamped for out-of-range inputs (matching
-FNA's own unclamped `int referenceAlpha` field). 17 new tests total, zero bugs found.
-
-## 4. Vertex color × diffuse interaction (Task 377)
-
-FNA's `AlphaTestEffect.fx` multiplies vertex color into `Diffuse` *before* the alpha-test `clip()`
-runs — meaning `VertexColorEnabled` affects not just RGB tinting but whether the alpha test passes
-at all, since the comparison runs against the fully-combined alpha, not material alpha alone.
-
-**EasyGL: correct**, confirmed by
-`modules/renderers/easygl/examples/easygl_alphatest_vertexcolor_diffuse_test.cpp`, using two
-`CompareFunction::Greater` reference thresholds chosen so "combined alpha used" and
-"diffuse-alpha-alone" hypotheses diverge — 2/2 PASS, exact match. EasyGL reuses the same generic
-per-stride shaders `BasicEffect` uses, which already carry the correct vertex-color logic.
-
-## 5. Fog behavior (Task 378)
-
-**Real bug found and fixed on EasyGL.** `AlphaTestEffect::FillGpuDrawParams()` never forwarded any of
-`FogEnabled`/`FogColor`/`FogStart`/`FogEnd` — fog was a total no-op regardless of settings, even
-though EasyGL's shared per-stride shaders already fully implement fog generically (the same
-shaders `BasicEffect` uses, and already correctly wired from `BasicEffect::FillGpuDrawParams()`).
-**Fixed** by forwarding the 4 fields, mirroring `BasicEffect`'s pattern (`FogColor` is backed by an
-`EffectParameter*` here, read via `getFogColorProperty()`) — no shader changes needed on EasyGL.
-
-The original 3-point Z-sweep pixel test (`easygl_alphatest_fog_test.cpp`) proved genuine
-interpolation rather than an on/off switch; 2/3 assertions failed before Task 378's forwarding
-fix. Task 1111 later found that EasyGL's generic fog formula was only coincidentally equivalent to
-FNA at the original test's Z=0 midpoint. The shader and test now use FNA's view-space dot-product
-formula over discriminating no-, half- and full-fog points. The shared fog contract also covers
-transformed World/View matrices and `FogStart == FogEnd`.
-
-## 6. Null/disabled texture behavior (Task 379)
-
-FNA's `AlphaTestEffect` has no `TextureEnabled` flag; every shader variant unconditionally samples
-`Texture`. Task 379 treated the null result as undefined and invented opaque white. SOFTWARE-303
-instead measured Microsoft XNA 4.0: the sampler returns opaque black, including alpha one before
-the comparison. CNA now preserves that measured rule across its active rasterizing renderers.
-The standalone EasyGL/SDLGPU test first binds a real non-black texture and then clears it, so stale
-sampler state or an invented white identity cannot pass accidentally; the shared stock-effect
-fixture independently covers the same null slot.
-
-## 7. Current regression ownership
-
-EasyGL owns the original compare sweep, vertex-color/diffuse, fog, null-texture and golden
-programs. SDLGPU reuses those sources through the cross-family corpus. The renderer-neutral
-`AlphaTestEffect` contract additionally combines all eight comparison functions with material,
-vertex-color, texture, discard, depth and fog ordering in one fixture; the shared fog contract
-holds the view-space and degenerate cases separately.
-
-## Support matrix
-
-| Feature | EasyGL |
+| Concern | Authoritative project evidence |
 |---|---|
-| Property defaults (8/8) | ✅ Task 371/372 |
-| `AlphaTest` switch, all 8 `CompareFunction` values | ✅ Task 373 |
-| Unclamped `ReferenceAlpha` scaling, boundary + out-of-range | ✅ Task 376 |
-| `VertexColorEnabled` × `DiffuseColor` × alpha-test | ✅ Task 377 |
-| Fog forwarding and view-space factor | ✅ fixed Tasks 378/1111 |
-| Null texture samples opaque black | ✅ Task 379 / SOFTWARE-303 |
+| Public API and derived draw parameters | `AlphaTestEffect.hpp`, `AlphaTestEffect.cpp` and `AlphaTestEffectTests.cpp` |
+| Normal readable behavior reference | FNA's `AlphaTestEffect.cs`, `AlphaTestEffect.fx`, `Common.fxh` and `Structures.fxh` in the local FNA checkout |
+| Measured Microsoft XNA disagreements | [`xna-fna-behavior-decisions.md`](xna-fna-behavior-decisions.md) |
+| Shared rendered evidence | [`cross-renderer-parity-fixtures.md`](cross-renderer-parity-fixtures.md) and `modules/graphics/examples/parity/ParityFixtures.cmake` |
+| Renderer capability boundary | [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md) and each renderer's own page |
+| Current defects and limitations | [`handoff.md`](../handoff.md) section 5 |
 
-Legend: ✅ verified working.
+The generated XNA runtime-member report owns API presence. This page owns the behavioral contract
+and deliberately avoids fixed test totals, which drift whenever coverage grows.
 
-Phase 43 and the later exactness work named on this page are closed. Current renderer-wide
-capability status belongs in `graphics-renderer-feature-matrix.md`; unresolved defects belong in
-`handoff.md` section 5.
+## XNA public state
+
+The constructor starts with the following XNA-compatible state:
+
+| Property group | Initial value |
+|---|---|
+| `World`, `View`, `Projection` | `Matrix::Identity` |
+| `DiffuseColor`, `Alpha` | `Vector3::One`, `1` |
+| `FogEnabled`, `FogStart`, `FogEnd`, `FogColor` | `false`, `0`, `1`, `Vector3::Zero` |
+| `Texture` | null |
+| `VertexColorEnabled` | `false` |
+| `AlphaFunction`, `ReferenceAlpha` | `CompareFunction::Greater`, `0` |
+
+The setters store their inputs without public clamping. In particular, `ReferenceAlpha` is retained
+as an `int`, including values outside the usual byte range, and is divided by 255 only when the
+comparison parameters are derived. Cloning copies all public settings and preserves the referenced
+texture resource identity; it does not clone the texture.
+
+## Shader selection
+
+The stock effect has eight logical variants. The shader index is the sum of three independent
+selector bits:
+
+| Bit | Condition | Result |
+|---|---|---|
+| `1` | `FogEnabled == false` | Select the no-fog vertex and pixel path |
+| `2` | `VertexColorEnabled == true` | Select the vertex-color vertex path |
+| `4` | `AlphaFunction` is `Equal` or `NotEqual` | Select the absolute-difference pixel comparison |
+
+The remaining six comparison functions use the less/greater pixel form. This maps the eight
+logical variants onto four vertex shaders and four pixel shaders in the XNA/FNA stock artifact.
+Renderers must preserve the observable selection and discard behavior even when their native shader
+packaging differs.
+
+## Material, texture and vertex inputs
+
+Every variant samples texture slot 0; there is no `TextureEnabled` property. Before the comparison,
+the fragment color is composed as:
+
+```text
+sample(Texture) * float4(DiffuseColor * Alpha, Alpha) * optionalVertexColor
+```
+
+The vertex-color factor participates only when `VertexColorEnabled=true`. Its alpha therefore
+changes whether a fragment passes, rather than merely tinting an already accepted pixel. The stock
+shader performs the alpha comparison after all three alpha sources have been multiplied. The
+material/vertex factor travels through the stock D3D9 `COLOR0` vertex output and therefore follows
+the same [pre-interpolation saturation rule](basiceffect-support.md#d3d9-vertex-color-output-saturation)
+as `BasicEffect`; the public property values themselves remain unclamped.
+
+A null `Texture` deliberately samples as opaque black, matching measured Microsoft XNA behavior.
+Its alpha is one, so it can pass an alpha test even though its RGB result is black. Implementations
+must not substitute white, bypass sampling or accidentally reuse a previously bound texture.
+
+Vertex requirements are semantic rather than stride-selected:
+
+- position semantic 0 is always required;
+- texture-coordinate semantic 0 is always required;
+- color semantic 0 is required when vertex color is enabled;
+- normals are not consumed.
+
+An active variant with a missing required input must be rejected rather than silently routed to an
+unrelated declaration shape. General declaration rules are in
+[`vertex-format-support.md`](vertex-format-support.md).
+
+## Alpha comparison
+
+Let `a` be the fully composed fragment alpha, `r = ReferenceAlpha / 255` and
+`t = 0.5 / 255`. The stock parameter encoding produces these effective keep rules:
+
+| `AlphaFunction` | Fragment is kept when |
+|---|---|
+| `Always` | always |
+| `Never` | never |
+| `Less` | `a < r - t` |
+| `LessEqual` | `a < r + t` |
+| `GreaterEqual` | `a >= r - t` |
+| `Greater` | `a >= r + t` |
+| `Equal` | `abs(a - r) < t` |
+| `NotEqual` | `abs(a - r) >= t` |
+
+The half-byte tolerance makes the floating-point shader comparisons reproduce the intended 8-bit
+boundary decisions. Neither `r` nor the derived threshold is clamped when `ReferenceAlpha` lies
+outside 0-255.
+
+A rejected fragment writes neither color nor depth, so it cannot occlude a later draw. Accepted
+color continues through fog and the ordinary output/blend path.
+
+## Fog
+
+Fog uses FNA's view-space dot-product `FogVector`, with the world-view transform baked into the
+vector. When fog is disabled, the effect resets that vector and selects a no-fog shader variant.
+When enabled, `FogStart == FogEnd` produces full fog instead of a division-by-zero artifact. Fog is
+applied after the alpha test, blends RGB toward `FogColor * composedAlpha`, and preserves alpha; it
+cannot change the keep/discard decision.
+
+## Renderer boundary
+
+| Renderer family | Current `AlphaTestEffect` evidence boundary |
+|---|---|
+| EasyGL (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | Native stock-shader paths, the shared parity corpus and the renderer-neutral contract fixture |
+| WebGPU | Native stock WGSL paths plus the shared parity corpus and focused fog coverage |
+| SDLGPU | Native stock shader packages plus shared parity and cross-family fixtures |
+| Software | CPU stock-effect execution and the renderer-neutral comparison/source/depth contract |
+| DirectX9 | Microsoft stock bytecode and focused shader-dispatch, comparison and fog evidence |
+| FNA3D | Compiled stock-effect artifacts with focused real discard evidence; final execution remains graphics-driver dependent |
+| HEADLESS, STUB | Validation/resource behavior only; no raster-output claim |
+
+The feature matrix and renderer pages own platform qualification, conditional capabilities and
+known limitations. This page does not infer one renderer's status from another renderer's pixels.
+
+## CNA extensions
+
+`SetOwnedTexture()` is a `CNAEXT` lifetime adapter for content-loading paths: it makes the effect
+share ownership of the selected texture, matching the lifetime of XNA's managed reference. A clone
+shares that ownership. `IsStockEffectEXT()`, `GetTypeName()` and `FillGpuDrawParams()` expose
+framework/runtime integration without changing the XNA property semantics or the eight stock
+variants.
+
+## Executable evidence
+
+Stable fixture names are the maintained evidence:
+
+- `AlphaTestEffectDefaultsTest` and `AlphaTestReferenceScalingTest` cover defaults, setters,
+  cloning, owned textures, unclamped references and both comparison-parameter shapes;
+- `StockEffectNullTextureTest.AlphaTestEffectSamplesOpaqueBlack` pins the measured null sample;
+- parity fixtures `alpha_test_sweep` and `alpha_test_sources` cover every comparison signature,
+  null texture and the vertex-color/material sources across EasyGL, WebGPU and SDLGPU;
+- `AlphaTestEffectContract` covers the comparison sweep, texture/effect/vertex alpha ordering and
+  the rule that discard does not write depth on EasyGL and Software;
+- focused renderer tests cover fog, shader dispatch, vertex color, null binding and real discard.
+
+Use the private GPU runner described in the repository instructions for every rendered test.
+
+## Historical task map
+
+Tasks 371-379 established the original property, comparison, material-source, fog and null-texture
+coverage. Task 1111 corrected the shared view-space fog formula; SOFTWARE-303 replaced the invented
+white null sample with measured opaque black; WEBGPU-174 established the shared rendered parity
+fixtures. All of that work is closed. Git history is the detailed narrative; this page and the
+executable evidence above are the maintained contract.

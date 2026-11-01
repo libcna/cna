@@ -123,9 +123,12 @@ original phase closed — check each file's own status banner/date.
 - `basiceffect-support.md` — renderer-neutral current contract for the classic 32 variants,
   material/lighting, fog, inputs, measured D3D9 saturation, CNA extensions and executable evidence;
   reconciled 2026-11-01.
-- `alphatesteffect-support.md`, `dualtextureeffect-support.md`,
-  `environmentmapeffect-support.md`, `skinnedeffect-support.md` — stock-effect conformance,
-  reconciled with current source and tests on 2026-10-31.
+- `alphatesteffect-support.md` — renderer-neutral current contract for all eight shader variants,
+  comparison boundaries, alpha-source ordering, fog, null sampling and discard behavior;
+  reconciled 2026-11-01.
+- `dualtextureeffect-support.md`, `environmentmapeffect-support.md`,
+  `skinnedeffect-support.md` — stock-effect conformance, reconciled with current source and tests on
+  2026-10-31.
 - `depthstencilstate-support.md` — refreshed 2026-07-11.
 - `sampler-state-support.md` — reconciled 2026-10-31: current nine-value filter mapping,
   renderer-wide LOD/W propagation, sampler lifetime, and measured `SpriteBatch` publication;

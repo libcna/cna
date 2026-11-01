@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- `AlphaTestEffect` support-document cleanup (2026-11-01): the Phase 43 Tasks 371-379 diary and
+  EasyGL-only support table are replaced by the current renderer-neutral contract. The page now
+  defines the public defaults, eight-way shader selector, exact half-byte comparison boundaries,
+  texture/material/vertex alpha ordering, opaque-black null sampling, view-space fog, semantic
+  inputs, discard/depth rule, renderer evidence boundary and owned-texture extension. Closed tasks
+  remain only as a compact Git-history map, while moving test totals are replaced by stable fixture
+  names. The renderer-identity gate passes, and all 66 selected API, null-texture, EasyGL, WebGPU,
+  SDLGPU and Software comparison/parity/fog checks pass on private displays.
 - `BasicEffect` support-document cleanup (2026-11-01): the Phase 42 Tasks 361-370 diary and
   EasyGL-only support table are replaced by the current renderer-neutral contract. The page now
   defines the public defaults, 32-variant selector, material/lighting and fog equations, semantic
@@ -201,12 +209,6 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   and `SpriteBatch` work, and the closed historical list is separated from the two genuine current
   limitations. All 14 focused EasyGL sampler, mip, anisotropy, AddressW and publication regressions
   pass in the private GPU runner.
-- AlphaTestEffect support-document reconciliation (2026-10-31): the last unreconciled classic
-  stock-effect page now uses the modular test path and current 46-case API inventory, separates
-  Task 378 fog forwarding from Task 1111's corrected view-space formula, and replaces Task 379's
-  invented white null sample with the measured SOFTWARE-303 opaque-black renderer contract. All
-  five stock-effect support pages now carry current reconciliation dates. Focused private-runner
-  validation passes all 66 API, null-texture, EasyGL and SDLGPU tests.
 - SkinnedEffect support-document reconciliation (2026-10-31): Tasks 893–895 are no longer
   presented as open, the pre-modular test path and `NEXT.md` references are gone, and the former
   "more accurate" per-pixel-only behavior is correctly recorded as the Task 1102b XNA mismatch.
