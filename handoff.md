@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- GamerServices limitations reconciliation (2026-11-01, GS-011/GSH-01–22): all 46 stable
+  entries/summary rows remain, with current FNA3D/Linux avatar evidence, bounded request replay,
+  privacy/poll/reconnect timing, native/cross Opus and Android curl conditions, admission/request
+  budget scope and title-dependent port impact. Avatar AO absence is no longer justified by a
+  nonexistent lack of CNA SkinnedEffect vertex color: the avatar layout omits that stream.
+  PropertyDictionary's explicit boxed type set and NaN equality defect are documented, with
+  Microsoft's floating-point Equals references and the defect in §5.1. Current targets build;
+  privately on HEADLESS/dummy audio, 744 GamerServices cases yield 743 passes and one deliberate
+  vertex-buffer-refusal skip, and all 565 Net cases pass. Canonical protocol drift, links and
+  inventory checks pass. No new runtime implementation/ABI, NaN regression, physical/remote-
+  network/native-Windows/macOS or console qualification.
 - GamerServices deployment/architecture reconciliation (2026-11-01, GS-003–009/GSP-O6/GSH):
   the guide replaces its staged construction diary with current control/relay/session ownership,
   packet/resource bounds, origin capture, retries, APM and validation boundaries. It corrects
@@ -1566,6 +1577,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- PropertyDictionary's BoxedValuesEqual delegates supported float/double values to operator==,
+  so pair-based Contains/Remove treat two NaNs as unequal. .NET floating-point Equals treats two
+  NaNs as equal (Microsoft Double.Equals and Single.NaN documentation, linked from
+  docs/gamer-services-known-limitations.md §43). The same-type explicit comparison set is narrower
+  than arbitrary XNA/primitive boxed values; mismatched types return false, unsupported matching
+  types throw. Source-inspected 2026-11-01 in gamer-services/src/Xna/PropertyDictionary.cpp;
+  no dedicated permanent NaN regression or runtime correction was added by this documentation task.
 - CNJ numeric extraction narrows before validating representability: ParseCnjEnvelope casts
   cnjVersion's double to int before the version-range check, and ReadCnjAnimationClip casts an
   inline track's numeric boneIndex directly to int. A finite value such as 1e30 is accepted by
