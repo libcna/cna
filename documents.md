@@ -1,7 +1,7 @@
 # Stav dokumentace v `docs/`
 
 Inventura: 2026-11-01. Rozsah: všech 177 aktuálně verzovaných souborů `docs/**/*.md`.
-Souhrn: 56 zpracovaných, 21 podpůrně aktualizovaných čekajících na vlastní audit a 100 dosud
+Souhrn: 57 zpracovaných, 22 podpůrně aktualizovaných čekajících na vlastní audit a 98 dosud
 samostatně nezpracovaných.
 
 Tento soubor sleduje současný dokumentační úklid. Stav neříká, že čekající dokument je nutně
@@ -195,7 +195,7 @@ Odstraněné historické soubory (`graphics-ext-scope-reduction.md`,
 - 🟡 **ČEKÁ — podpůrně aktualizováno** — [`docs/c-api/AUDIO.md`](docs/c-api/AUDIO.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/CALLBACKS_AND_THREADING.md`](docs/c-api/CALLBACKS_AND_THREADING.md)
 - 🟡 **ČEKÁ — podpůrně aktualizováno** — [`docs/c-api/CNB.md`](docs/c-api/CNB.md)
-- ⬜ **ČEKÁ** — [`docs/c-api/COMPATIBILITY.md`](docs/c-api/COMPATIBILITY.md)
+- 🟡 **ČEKÁ — podpůrně aktualizováno** — [`docs/c-api/COMPATIBILITY.md`](docs/c-api/COMPATIBILITY.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/CONSUMING.md`](docs/c-api/CONSUMING.md)
 - 🟡 **ČEKÁ — podpůrně aktualizováno** — [`docs/c-api/CONTENT.md`](docs/c-api/CONTENT.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/CORE.md`](docs/c-api/CORE.md)
@@ -214,7 +214,7 @@ Odstraněné historické soubory (`graphics-ext-scope-reduction.md`,
 - ⬜ **ČEKÁ** — [`docs/c-api/HANDLES.md`](docs/c-api/HANDLES.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/INDEX_BUFFERS.md`](docs/c-api/INDEX_BUFFERS.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/INPUT_SNAPSHOTS.md`](docs/c-api/INPUT_SNAPSHOTS.md)
-- ⬜ **ČEKÁ** — [`docs/c-api/LIMITATIONS.md`](docs/c-api/LIMITATIONS.md)
+- ✅ **ZPRACOVÁNO** — [`docs/c-api/LIMITATIONS.md`](docs/c-api/LIMITATIONS.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/MATH_AND_3D_VALUES.md`](docs/c-api/MATH_AND_3D_VALUES.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/MEDIA.md`](docs/c-api/MEDIA.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/MODELS.md`](docs/c-api/MODELS.md)

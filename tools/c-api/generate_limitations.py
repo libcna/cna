@@ -242,7 +242,8 @@ def render(analysis: dict) -> str:
         if not entries:
             continue
         count = sum(len(entry["symbols"]) for entry in entries)
-        add(f"### {theme['title']} — {count} symbols")
+        symbol_word = "symbol" if count == 1 else "symbols"
+        add(f"### {theme['title']} — {count} {symbol_word}")
         add("")
         add(theme["note"])
         add("")
@@ -260,9 +261,10 @@ def render(analysis: dict) -> str:
     add("")
 
     compatibility = json.loads(COMPATIBILITY_PATH.read_text(encoding="utf-8"))
-    add("## Not covered by any test here")
+    add("## Outside the compatibility matrix")
     add("")
-    add("Taken from `tools/c-api/compatibility_matrix.json`, so the two cannot disagree:")
+    add("Taken from `tools/c-api/compatibility_matrix.json`, so the two cannot disagree. Some")
+    add("targets have a separate qualification path rather than a cell in this native matrix:")
     add("")
     for entry in compatibility["unsupported"]:
         note = entry["note"]

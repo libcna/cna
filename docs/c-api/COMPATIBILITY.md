@@ -33,23 +33,24 @@ environment rather than a narrower matrix, and fails.
 ## Build and run configurations
 
 Compiling a header proves it parses. Running the C smoke programs is what proves the ABI
-behaves, and every one of them runs in all four configurations below — the same source, four
+behaves, and every one of them runs in all 4 configurations below — the same source, 4
 different answers from the runtime underneath it.
 
 | Configuration | Renderer | `CNA_DEVICES` | Role | What it is for |
 |---|---|---|---|---|
 | `headless` | `HEADLESS` | OFF | required | No window, no GPU. Every route that needs neither is proven here, and every route that does is proven to refuse. |
 | `opengles3` | `OPENGLES3` | OFF | required | EasyGL's GL ES 3 profile with a real GL context on the private display, in the multi-renderer tree that also compiles SDLGPU, WEBGPU and FNA3D. It replaced the SDL_RENDERER configuration when that renderer was retired on 2026-10-13. |
-| `software` | `SOFTWARE` | OFF | required | A CPU rasteriser: a third backend answer for every capability query, and the compiled-out devices half again. |
+| `software` | `SOFTWARE` | OFF | required | A CPU rasteriser: a third renderer answer for every capability query, and the compiled-out devices half again. |
 | `asan` | `SOFTWARE` | ON | required | AddressSanitizer and UndefinedBehaviorSanitizer with leak detection on. This is what catches a handle that outlives its owner or an operation nobody released. It runs the CPU rasteriser with the devices half compiled in, which is the one pairing the other three rows leave out: SOFTWARE is therefore exercised in both CNA_DEVICES states. |
 
-## What is not covered
+## What is outside this matrix
 
-A matrix that only lists successes is not a matrix. These are the combinations this
-repository does **not** exercise, and the reason each one is absent:
+A matrix that only lists successes is not a matrix. These are the combinations outside
+this matrix, including ones covered by a separate qualification path:
 
 - **Running a Windows binary.** The cross-compiler proves the headers parse for a Windows target; nothing here links or executes one, so no Windows behaviour is claimed.
-- **macOS, as a cell of this matrix.** The matrix records the reference Linux host and its four configurations, and macOS is not one of them. It was measured separately on Apple silicon (Apple M4 AM4-209..213): every C API test passed in the SOFTWARE and the since-retired SDL_RENDERER configurations there, the dylib exports exactly the cna_* ABI, and CApi_InstalledConsumer builds and runs the installed package, shared and static. docs/c-api/CONSUMING.md has what a macOS consumer needs to know.
-- **iOS, Android and the web targets.** No toolchain for any of them is present here, so no cell exists for them at all rather than an untested claim. iOS builds of CNA itself exist (docs/apple-platforms.md); the C ABI is not exercised on them.
+- **macOS, as a cell of this matrix.** The matrix records the reference Linux host and its declared configurations, and macOS is not one of them. It was measured separately on Apple silicon (Apple M4 AM4-209..213): every C API test passed in the SOFTWARE and the since-retired SDL_RENDERER configurations there, the dylib exports exactly the cna_* ABI, and CApi_InstalledConsumer builds and runs the installed package, shared and static. docs/c-api/CONSUMING.md has what a macOS consumer needs to know.
+- **iOS and Android targets.** No mobile toolchain is a cell of this matrix, so it makes no mobile C ABI claim. iOS builds of CNA itself exist (docs/apple-platforms.md); the C ABI is not exercised on either mobile target here.
+- **Web targets, as cells of this matrix.** The WEBGL2 and WEBGPU Emscripten C ABI artifacts are built and exercised separately under Node and in real browsers, as documented in docs/c-api/WASM_ARTIFACT.md. They are not native compatibility configurations, and this matrix does not claim that its complete native smoke-program set runs under either web renderer.
 - **C89.** The headers use `//` comments and mixed declarations, so C99 is the floor by design rather than by accident.
-- **Renderers other than the four configured.** CNA has 10 renderer identities; three are built and run here. The other 7 share the same C surface, and the capability queries are what a caller uses to find out what any of them supports.
+- **Renderer identities absent from these configurations.** The configurations run HEADLESS, OPENGLES3 and SOFTWARE. Other public renderer identities share the same C surface, and capability queries are what a caller uses to discover what any active renderer supports.

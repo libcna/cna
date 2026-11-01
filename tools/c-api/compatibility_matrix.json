@@ -71,7 +71,7 @@
       "renderer": "SOFTWARE",
       "devices": "OFF",
       "role": "required",
-      "note": "A CPU rasteriser: a third backend answer for every capability query, and the compiled-out devices half again."
+      "note": "A CPU rasteriser: a third renderer answer for every capability query, and the compiled-out devices half again."
     },
     {
       "id": "asan",
@@ -88,19 +88,23 @@
     },
     {
       "subject": "macOS, as a cell of this matrix",
-      "note": "The matrix records the reference Linux host and its four configurations, and macOS is not one of them. It was measured separately on Apple silicon (Apple M4 AM4-209..213): every C API test passed in the SOFTWARE and the since-retired SDL_RENDERER configurations there, the dylib exports exactly the cna_* ABI, and CApi_InstalledConsumer builds and runs the installed package, shared and static. docs/c-api/CONSUMING.md has what a macOS consumer needs to know."
+      "note": "The matrix records the reference Linux host and its declared configurations, and macOS is not one of them. It was measured separately on Apple silicon (Apple M4 AM4-209..213): every C API test passed in the SOFTWARE and the since-retired SDL_RENDERER configurations there, the dylib exports exactly the cna_* ABI, and CApi_InstalledConsumer builds and runs the installed package, shared and static. docs/c-api/CONSUMING.md has what a macOS consumer needs to know."
     },
     {
-      "subject": "iOS, Android and the web targets",
-      "note": "No toolchain for any of them is present here, so no cell exists for them at all rather than an untested claim. iOS builds of CNA itself exist (docs/apple-platforms.md); the C ABI is not exercised on them."
+      "subject": "iOS and Android targets",
+      "note": "No mobile toolchain is a cell of this matrix, so it makes no mobile C ABI claim. iOS builds of CNA itself exist (docs/apple-platforms.md); the C ABI is not exercised on either mobile target here."
+    },
+    {
+      "subject": "Web targets, as cells of this matrix",
+      "note": "The WEBGL2 and WEBGPU Emscripten C ABI artifacts are built and exercised separately under Node and in real browsers, as documented in docs/c-api/WASM_ARTIFACT.md. They are not native compatibility configurations, and this matrix does not claim that its complete native smoke-program set runs under either web renderer."
     },
     {
       "subject": "C89",
       "note": "The headers use `//` comments and mixed declarations, so C99 is the floor by design rather than by accident."
     },
     {
-      "subject": "Renderers other than the four configured",
-      "note": "CNA has 10 renderer identities; three are built and run here. The other 7 share the same C surface, and the capability queries are what a caller uses to find out what any of them supports."
+      "subject": "Renderer identities absent from these configurations",
+      "note": "The configurations run HEADLESS, OPENGLES3 and SOFTWARE. Other public renderer identities share the same C surface, and capability queries are what a caller uses to discover what any active renderer supports."
     }
   ]
 }

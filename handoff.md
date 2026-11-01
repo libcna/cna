@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Generated C API limitations audit (2026-11-01): `docs/c-api/LIMITATIONS.md` is current against
+  the 8,134-symbol inventory: 15 partially mapped symbols in nine approved groups and 453 symbols
+  with no C form in 89 classified groups. Its declared non-symbol limitations now record the
+  foreign-thread dispatch and any-thread `SoundEffect` exceptions instead of calling every handle
+  use unconditionally thread-affine; remove stale dated GNU-unique-symbol and renderer-count
+  snapshots; scope the compiled-effect gap to the compatibility matrix; and acknowledge the
+  separately qualified Emscripten C ABI instead of saying the web target has never been exercised.
+  The companion compatibility generator now derives its configuration count, distinguishes
+  out-of-matrix from untested targets and renders the corrected source into
+  `docs/c-api/COMPATIBILITY.md`; the limitations generator also renders singular symbol counts
+  correctly. All 23 compiler/language cells pass across the 60 public headers, the four registered
+  header/limitations/export-count/release-gate checks pass, and the renderer-identity and release
+  document gates remain green with the experimental verdict correctly **Not ready**.
 - Experimental C ABI release-gate audit (2026-11-01): the generated
   `docs/c-api/RELEASE_GATE.md`, its ten declared criteria and every measured source are current.
   Nine criteria are met; coverage closure is correctly not met while 633 public symbols remain

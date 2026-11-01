@@ -183,9 +183,13 @@ def render_doc(matrix: dict) -> str:
     lines.append("")
     lines.append(
         "Compiling a header proves it parses. Running the C smoke programs is what proves the ABI")
+    configuration_count = len(matrix["configurations"])
+    configuration_word = "configuration" if configuration_count == 1 else "configurations"
+    answer_word = "answer" if configuration_count == 1 else "answers"
     lines.append(
-        "behaves, and every one of them runs in all four configurations below — the same source, four")
-    lines.append("different answers from the runtime underneath it.")
+        f"behaves, and every one of them runs in all {configuration_count} {configuration_word} below — "
+        f"the same source, {configuration_count}")
+    lines.append(f"different {answer_word} from the runtime underneath it.")
     lines.append("")
     lines.append("| Configuration | Renderer | `CNA_DEVICES` | Role | What it is for |")
     lines.append("|---|---|---|---|---|")
@@ -194,11 +198,11 @@ def render_doc(matrix: dict) -> str:
             f"| `{configuration['id']}` | `{configuration['renderer']}` | {configuration['devices']} | "
             f"{configuration['role']} | {configuration['note']} |")
     lines.append("")
-    lines.append("## What is not covered")
+    lines.append("## What is outside this matrix")
     lines.append("")
     lines.append(
-        "A matrix that only lists successes is not a matrix. These are the combinations this")
-    lines.append("repository does **not** exercise, and the reason each one is absent:")
+        "A matrix that only lists successes is not a matrix. These are the combinations outside")
+    lines.append("this matrix, including ones covered by a separate qualification path:")
     lines.append("")
     for entry in matrix["unsupported"]:
         lines.append(f"- **{entry['subject']}.** {entry['note']}")
