@@ -35,6 +35,18 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- XNA Content Pipeline API-guide reconciliation (2026-11-01, XNAPP-030/038–044): the guide
+  corrects exact C++ carrier checks versus CLR casts, ordered dictionary carriers, current described
+  XNB writing, member/factory registration, bitmap resampling thresholds, identity-transform normal
+  preservation, material mutation and XNB EffectMaterial support. Nested builds now describe numeric
+  names, synchronous execution, source-identity exception wrapping and the runtime-reference-only
+  planned-sibling shortcut; the native pipeline guide receives that narrow related correction.
+  Explicit graph-cycle checks are not claimed as a universal nested-call recursion guard.
+  Existing CnaContentPipelineTests target builds; privately on OPENGLES3/dummy audio, 112 selected
+  core/bridge/bitmap/material/compiler cases pass, followed by 75 intermediate/model cases including
+  parametrized families. Links/inventory pass. Bitmap region overflow and lazy Vector3 factory
+  scope are source-inspected below; no new runtime correction/regression, sanitizer or genuine-XNA
+  campaign was bundled into the docs task.
 - Generated pipeline final-audit reconciliation (2026-11-01, XNAPP-330): the report/generator
   now name each predicate kind and report source/metadata checks rather than claim all 26 runtime
   acceptance conditions hold. They distinguish maintained counts/flags, path existence, source
@@ -1635,6 +1647,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- BitmapContent's RegionInside helper adds signed Int32 rectangle coordinates/extents before
+  comparing them with bitmap dimensions (content-pipeline/src/Xna/Graphics/BitmapContent.cpp).
+  Positive inputs such as X=INT_MAX, Width=1 overflow the signed addition, so ValidateCopyArguments
+  does not establish overflow-safe refusal for extreme source/destination regions. Found by source
+  inspection on 2026-11-01 during docs/xna-content-pipeline-compat-api.md reconciliation; the
+  ordinary copy-protocol tests pass, but no targeted extreme-region/sanitizer regression or
+  arithmetic correction was added by this documentation task.
 - Content Pipeline font discovery can reuse stale compiled SpriteFont bytes. A project-local
   font resolved through the dependency context is tracked, but FontDescriptionImporter records
   configured/system-discovered font paths only in the imported description, without enrolling the
@@ -1798,6 +1817,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- BitmapContent's lazy factory list currently omits PixelBitmapContent<Vector3>, despite its
+  supported pixel trait. Constructing that concrete PixelBitmapContent or explicitly registering
+  its factory enrolls it; the trait set alone is not the initial CreateBitmap factory set.
+  Source-inspected 2026-11-01 in content-pipeline/src/Xna/Graphics/BitmapContent.cpp and
+  include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp. Existing bitmap
+  tests construct Vector3 bitmaps, so they do not qualify an unwarmed fresh-process factory path.
+  No new cold-process probe/registration change was added during the API-guide cleanup.
 - XnaPipelineFinalAuditIsGreen is an evidence-metadata gate, not current runtime qualification.
   It joins maintained parity counts/status flags, checks paths and TEST/add_test source patterns,
   and executes the processor-default annotation checker. Source matchers do not preprocess C++ or

@@ -325,8 +325,10 @@ These graph edges differ from the XNA façade's implemented BuildAsset/BuildAndL
 The bridge uses the active pipeline for nested import/process/build work. BuildAndLoadAsset
 returns processed content, not a GraphicsDevice-backed runtime object. BuildAsset contributes
 compiled nested outputs/references to the containing node, sharing its ownership/publication
-rather than creating independent primary graph nodes. A context outside an active pipeline refuses
-these operations.
+rather than creating independent primary graph nodes. An unnamed request matching an already
+planned primary sibling instead returns that item's output reference without building it, waiting
+for it or adding a build edge. Explicit graph-cycle checks do not establish a recursion guard for
+every synchronous nested call. A context outside an active pipeline refuses these operations.
 
 ## Content Type Writers and CNB codecs
 
