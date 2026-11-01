@@ -1,538 +1,306 @@
 # Runtime graphics renderer selection
 
-**Status: usable.** Runtime renderer selection works and is verified across several build sets (see
-the table at the end). The renderer-gated test/example corpus has been audited and its applicable
-sites converted or deliberately retained as compile-time family/default gates. Nothing is left
-open: the platform-specific validation sets once planned were all for renderers retired since, and
-the cost measurement, with why build time is not measured, is *What a multi-renderer build costs*.
+**Status: reconciled with the active registry, selection implementation, browser contract and
+known-defect ledger on 2026-11-01.** Compile-time selection remains CNA's default and recommended
+mode. Multi-renderer selection is a second, explicit build mode: several renderer identities are
+linked into one binary and one is chosen before the first graphics device successfully starts.
 
----
+This page owns that selection and fallback contract. CNA has **10 public renderer identities** over
+**8 implementation families**; their canonical inventory is
+[`renderer-registry.md`](renderer-registry.md). Renderer capabilities belong in the live
+`RendererCapabilityProfile` and the renderer-specific pages; current defects belong only in
+[`handoff.md` section 5](../handoff.md#5-known-bugs-and-limitations). The completed `RTR-P0`–`P14`
+campaign, retired-renderer transcripts and old binary-size measurements are historical evidence in
+Git, not current configuration guidance.
 
-## What this is
+## Sources of truth
 
-CNA selects its graphics renderer at **compile time** (`-DCNA_GRAPHICS_RENDERER=<X>`). That stays
-the default and recommended mode: it produces the smallest binary and lets the compiler eliminate
-every renderer that was not selected.
-
-This document describes a **second, opt-in mode**, in which CNA is compiled with several renderers
-linked in and the concrete one is chosen at runtime, before CNA is started.
-
----
-
-## Status
-
-| Capability | Status |
+| Question | Authoritative source |
 |---|---|
-| Descriptor / registry value types | ✅ present (`GraphicsRendererDescriptor`, `GraphicsRendererRegistry`, `GraphicsRendererFallbackRecord`) |
-| Pre-window contract extracted from `GraphicsDevice` | ✅ window flags, `SDL_INIT_VIDEO`, the no-window branch and per-family GL context attributes are all descriptor-driven |
-| Per-family descriptors | ✅ all 8 implementation families / 10 public renderer identities; guarded by `scripts/check_runtime_renderer_discipline.py` |
-| Namespaced factories / generated registry | ✅ all 8 factories namespaced; `cmake/RendererRegistry.cmake` emits the table, and the discipline gate checks every identity reaches it |
-| `GraphicsRendererSelection` API | ✅ selection, latch, env var, availability; 20 tests |
-| Fallback chain | ✅ resolution, recording, logging and exhaustion; cross-window-kind recreation verified in multi-renderer builds (the measured sets included renderers retired since) |
-| Multi-renderer CMake mode | ✅ `CNA_GRAPHICS_RENDERERS`, configure-time combination rules, CI job |
-| Runtime identity reporting | ✅ `GraphicsDevice::GetGraphicsRendererType/Name()` report the device's real renderer |
+| Which renderer names exist or are retired? | `cmake/RendererIdentities.cmake` and `docs/renderer-registry.md` |
+| What is the host's default identity? | `cmake/RendererIdentityDefault.cmake` |
+| How are the default and compiled set resolved? | `cmake/RendererDefaultSelection.cmake` |
+| Which identity maps to which descriptor/factory? | `cmake/RendererRegistry.cmake` |
+| Which combinations are impossible? | `cmake/RendererCombinations.cmake` |
+| What may an application select and query? | `CNA/GraphicsRendererSelection.hpp` |
+| How are candidates, windows and fallback resolved? | `GraphicsDevice::resolveRenderer()` |
 
-Legend: ✅ implemented and verified · 🟨 exists but unverified · ⬜ not implemented.
+Do not copy the identity list into another selection table. The registry checks deliberately keep
+the CMake list, C++ enum, generated descriptor table, C ABI values and retired-name diagnostics in
+lockstep.
 
-`modules/graphics/src` contains no `CNA_RENDERER_*` reference at all as of phase P3; renderer-specific
-behaviour reaches the XNA layer through `IGraphicsRenderer` virtuals (queries that have a device) or
-`GraphicsRendererDescriptor::adapterQueries` hooks (`GraphicsAdapter` queries, which run before one
-exists). `scripts/check_runtime_renderer_discipline.py` enforces both.
+## The two build modes
 
----
+### Single renderer
 
-## What a renderer descriptor answers
+`CNA_GRAPHICS_RENDERER` selects one public identity at configure time:
 
-Four decisions have to be made *before* an `IGraphicsRenderer` instance exists, so no virtual method
-can serve them. Each renderer family answers them through its own
-`GraphicsRendererDescriptor` (`modules/renderers/<family>/src/*RendererDescriptor.cpp`):
-
-| Question | Field |
-|---|---|
-| Does this renderer need a window at all? | `needsWindow` — false for `HEADLESS`, `SOFTWARE`, `STUB` |
-| Must the platform's video subsystem be started? | `needsVideoSubsystem` — false for the same families, which is what lets them run with no display server |
-| What kind of window does it need? | `windowKind` (`None`/`Plain`/`OpenGL`) |
-| Anything to fix before the window exists? | `glFramebuffer` — depth/stencil/double-buffer/multisample bits, which a desktop GLX visual fixes at window-creation time. Only `FNA3D` has real work here |
-| Which platform services is it handed? | `needsSurfacePresenter`, `needsGlContext` |
-
-These last three groups were function-pointer hooks (`prepareWindowFlags()`,
-`applyPreWindowAttributes()`) when this design was written, and became **data** when the platform
-contract landed: every hook implementation only mapped the window kind onto flags the windowing
-library understood, and `WindowDescription` already carries those. `GraphicsDevice` performs the
-mapping once, so no descriptor names a windowing library at all.
-
-One surviving family computes its window flags at **runtime**, because its own native API is itself
-a runtime choice. This predates runtime renderer selection; the plan generalizes that existing
-mechanism rather than inventing one:
-
-| Renderer | Decides | Via |
-|---|---|---|
-| `FNA3D` | SDLGPU / D3D11 / OpenGL | `FNA3D_PrepareWindowAttributes`, which also primes the GL attributes |
-
-Several retired renderers used the same mechanism (bgfx, LLGL and Diligent each chose their own
-native API at runtime), which is why the descriptor carries a hook for it rather than a fixed
-window kind. That generality is still earned by `FNA3D` alone today.
-
----
-
-## The API
-
-See `modules/graphics/examples/renderer_selection/renderer_selection_demo.cpp` for a runnable
-reference (`cna_demo_renderer_selection`).
-
-```cpp
-#include "CNA/GraphicsRendererSelection.hpp"
-
-int main()
-{
-    // Before any GraphicsDevice is constructed:
-    CNA::GraphicsRendererSelection::SetPreferred(CNA::GraphicsRendererType::SdlGpu);
-
-    // Optional, off by default: try these in order if SDLGPU is unavailable or fails to start.
-    CNA::GraphicsRendererSelection::SetFallbackChain({
-        CNA::GraphicsRendererType::OpenGLES3,
-        CNA::GraphicsRendererType::Software,
-    });
-
-    MyGame game;
-    game.Run();
-}
+```bash
+cmake -S . -B cmake-build-sdlgpu -G Ninja \
+  -DCNA_GRAPHICS_RENDERER=SDLGPU
 ```
 
-Selection precedence, highest first:
+If the option is omitted, the host default is `WEBGL2` under Emscripten, `SDLGPU` on Windows,
+macOS and iOS, and `OPENGLES3` elsewhere. A single-renderer build publishes one registry entry and
+the runtime API can only validate or report that choice; it cannot manufacture another renderer.
 
-1. an explicit `SetPreferred()` call,
-2. the `CNA_GRAPHICS_RENDERER` **environment variable**,
-3. the build's compile-time default.
+### Building with several renderers
 
-A `CNA_GRAPHICS_RENDERER` value naming a renderer that is not compiled in **throws**, rather than
-being ignored — silently ignoring it would leave you believing you had switched renderer when you
-had not. The same applies to `SetPreferred()`.
-
-`GetAvailable()` and `GetSelected()` are usable before any `GraphicsDevice` exists, which is the
-whole point: the compiled-in set is published into the selection layer before `main()` runs.
-
----
-
-## Failure policy
-
-**Default: hard failure.** If the selected renderer is not compiled into the build, reports itself
-unavailable, or throws during initialization, CNA throws. There is no silent substitution — a game
-that asked for SDLGPU and quietly got a CPU rasterizer is a worse outcome than a clear error.
-
-**Fallback is opt-in.** `SetFallbackChain()` or `EnableAutomaticFallback(true)` enables it. When
-enabled:
-
-- both failure modes are covered: the renderer's availability probe returning false, and its
-  construction throwing;
-- every step is logged at warning level and recorded in `GetFallbackHistory()`;
-- `GetActive()` reports what was really created, which may differ from `GetSelected()`;
-- if the chain is exhausted, CNA throws, carrying the first failure as the primary cause.
-
-### The window-kind limitation
-
-A window created for an OpenGL context (`SDL_WINDOW_OPENGL`) is not the plain window `SDLGPU` and
-`WEBGPU` claim, and the other way round. Falling back across that boundary therefore requires the SDL window to be destroyed and recreated, which is
-only legal while CNA owns it. When the game supplied its own window through
-`PresentationParameters::DeviceWindowHandle`, such a candidate is skipped and recorded as
-`WindowKindConflict` rather than silently attempted.
-
----
-
-## The latch
-
-Once CNA has begun using the selected renderer, the selection can no longer change: `SetPreferred()`,
-`SetFallbackChain()` and `EnableAutomaticFallback()` all throw `System::InvalidOperationException`
-after the first `GraphicsDevice` is constructed.
-
-The latch forbids *changing the selection*, not *creating a renderer again*: `GraphicsDevice::Reset()`
-and its multisample reconstruction path legitimately rebuild the same renderer on a live device.
-
----
-
-## Building with several renderers
+`CNA_GRAPHICS_RENDERERS` opts into the second mode. `CNA_GRAPHICS_RENDERER` still names the
+default and must be a member of the list:
 
 ```bash
 cmake -S . -B cmake-build-multi -G Ninja \
-      -DCNA_GRAPHICS_RENDERER=HEADLESS \
-      -DCNA_GRAPHICS_RENDERERS="HEADLESS;SOFTWARE;STUB"
+  -DCNA_GRAPHICS_RENDERER=OPENGLES3 \
+  -DCNA_GRAPHICS_RENDERERS="OPENGLES3;OPENGL33;WEBGPU;SDLGPU;FNA3D;SOFTWARE;HEADLESS;STUB" \
+  -DCNA_BUILD_TESTS=ON \
+  -DCNA_BUILD_EXAMPLES=ON
 ```
 
-`CNA_GRAPHICS_RENDERER` keeps its meaning: it names the **default** renderer, the one used when
-nothing selects another at runtime. It must be a member of `CNA_GRAPHICS_RENDERERS`, and a default
-outside the list is a **configure error**:
+The resolver removes duplicate identities and stores the default first. A default outside the
+compiled set is a configure error, not a request to substitute the list's first entry. Unknown,
+renamed and retired identities are likewise refused explicitly on every CMake selection route.
 
-```text
-CMake Error at cmake/RendererDefaultSelection.cmake:54 (message):
-  CNA: CNA_GRAPHICS_RENDERER=SOFTWARE is not a member of
-  CNA_GRAPHICS_RENDERERS="OPENGL33;SDLGPU".
+Only the default renderer's `CNA_RENDERER_<X>`/profile definition is project-wide. Each
+non-default family's own definitions are private to its target. Test targets additionally receive
+`CNA_RENDERER_PRESENT_<IDENTITY>` for every linked identity, so they can distinguish “compiled in”
+from “the build default”. Code deciding what a live device does must ask the active renderer,
+never a build-default macro.
 
-    CNA_GRAPHICS_RENDERER names the DEFAULT renderer chosen from the compiled-in set, so it has to be one of them.
-    Either add SOFTWARE to CNA_GRAPHICS_RENDERERS, or set -DCNA_GRAPHICS_RENDERER=OPENGL33 to make the list's first entry the default.
+## Application API
+
+Select a renderer before constructing the first successful `GraphicsDevice`:
+
+```cpp
+#include <array>
+
+#include "CNA/GraphicsRendererSelection.hpp"
+
+using CNA::GraphicsRendererSelection;
+using CNA::GraphicsRendererType;
+
+GraphicsRendererSelection::SetPreferred(GraphicsRendererType::SdlGpu);
+const std::array fallbackChain{
+    GraphicsRendererType::OpenGL33,
+    GraphicsRendererType::Software,
+};
+GraphicsRendererSelection::SetFallbackChain(fallbackChain);
+
+MyGame game;
+game.Run();
 ```
 
-It is refused rather than silently corrected on purpose. The default is not merely which renderer
-starts first: it also decides which `CNA_RENDERER_<X>` macro is defined project-wide, which example
-targets exist, and what every `CNA_GRAPHICS_RENDERER STREQUAL` gate in the build answers. A build
-that asked for one default and quietly got another is a build whose every later renderer question
-is about a renderer nobody asked for. It is also the same policy the runtime already applies —
-CNA never substitutes a renderer silently — and configure time may not be laxer than run time about
-the same question.
+The selection precedence is:
 
-The rule is exercised by the `CnaRendererDefaultSelection_*` CTest cases, which run
-`cmake/RendererDefaultSelection.cmake` in script mode for a valid default inside the list, a default
-that is the list's last entry (proving the resolved set is reordered default-first), an invalid
-default outside the list, and an ordinary single-renderer configuration.
+1. `GraphicsRendererSelection::SetPreferred()`;
+2. the native `CNA_GRAPHICS_RENDERER` environment variable, or under Emscripten
+   `Module.cnaPreferredRenderer` when no real environment value is present;
+3. the build's compile-time default.
 
-Leaving `CNA_GRAPHICS_RENDERERS` unset is single-renderer mode, unchanged in every respect.
+The important queries are:
 
-### What multi-renderer mode changes
-
-Only the default renderer's `CNA_RENDERER_<X>` macro is defined project-wide; each family's own
-macro is private to that family's target. This keeps the compile-time accessors
-(`getCurrentGraphicsRendererType()`) and the existing renderer-gated tests and examples meaningful —
-they all describe the **default**. A renderer family's example suite is therefore registered only
-in a build whose default is that family; the other compiled-in families are covered there by their
-device-free suites (below) and by runtime selection. Making the test corpus itself
-renderer-agnostic is a separate piece of work (RTR-P9).
-
-`CNA_MULTI_RENDERER` is defined when more than one renderer is compiled in, and
-`CNA_RENDERER_PRESENT_<IDENTITY>` is defined on the test executable for **every** compiled-in
-renderer. The distinction matters: `CNA_RENDERER_<IDENTITY>` means "is the default", while
-`CNA_RENDERER_PRESENT_<IDENTITY>` means "is compiled in". A renderer's own device-free test suite
-guards on the latter, so it runs whenever that renderer is present.
-
-### Which accessor answers which question
-
-| Question | Use |
+| API | Answer |
 |---|---|
-| What did this build select **by default**? | `CNA::getCurrentGraphicsRendererType()` — still a constant expression in both modes |
-| What will CNA **attempt**? | `GraphicsRendererSelection::GetSelected()` |
-| What was actually **created**? | `GraphicsRendererSelection::GetActive()` |
-| What is **this device** using? | `GraphicsDevice::GetGraphicsRendererType()` / `GetGraphicsRendererName()` |
+| `GetAvailable()` / `IsAvailable()` | Identities compiled into this binary |
+| `GetSelected()` | The identity CNA will attempt first; querying it does not latch selection |
+| `GetActive()` | The renderer actually created; throws before a successful resolution |
+| `IsLatched()` | Whether a renderer has been created and selection is now immutable |
+| `GetFallbackHistory()` | Every rejected candidate before the active renderer, in order |
 
-`GraphicsDevice::GetGraphicsRendererType()` used to be `constexpr` and ignored `this`, returning the
-compile-time identity. That was correct while a build could hold only one renderer and wrong as soon
-as it can hold several, so it is now a real accessor. The `constexpr` had to go with it: a
-compile-time answer cannot describe a runtime choice. Callers wanting the build's compile-time
-identity still have `CNA::getCurrentGraphicsRendererType()`.
+Names use the canonical selectors case-insensitively. A name that is not a public identity throws
+`ArgumentException`; a known identity absent from this build throws `InvalidOperationException`
+unless fallback was explicitly enabled. Retired names are diagnosed as retired, including their
+reserved C ABI value, rather than being treated as unknown or aliased to a survivor.
+
+## Latch and device lifetime
+
+Selection latches **after a renderer is successfully resolved and created**. A failed availability
+probe or construction attempt does not latch the process; a caller may catch the error, change the
+selection and try again. This is covered by the failed-resolution and recovery tests.
+
+After success, `SetPreferred()`, `SetFallbackChain()` and `EnableAutomaticFallback()` throw
+`InvalidOperationException`. Rebuilding the active renderer during `GraphicsDevice::Reset()` or an
+MSAA reconstruction is still legal: the latch prevents choosing a different renderer, not
+recreating the one already active. A second device uses the same process-wide selection.
+
+Applications must complete selection before starting graphics work on another thread. The state is
+process-wide because window creation and renderer construction consume the answer before a game has
+a useful per-device configuration surface.
+
+## Failure and fallback policy
+
+Hard failure is the default. An unavailable renderer, a renderer absent from the build or an
+initialization exception is surfaced; CNA never silently changes renderer.
+
+Fallback is enabled only by `SetFallbackChain()` or `EnableAutomaticFallback(true)`:
+
+- an explicit chain may contain identities not present in every build; each absent entry is
+  recorded rather than silently removed;
+- the automatic chain is derived from the published renderer maturity/category metadata, keeping
+  picture-producing renderers ahead of `HEADLESS` and `STUB`;
+- duplicate candidates are removed while preserving order;
+- each rejection is logged and appended to `GetFallbackHistory()` as `NotCompiledIn`,
+  `ProbeUnavailable`, `InitializationFailed` or `WindowKindConflict`;
+- an exhausted chain throws with the originally requested renderer's first failure as the primary
+  cause and the complete attempt history as detail.
+
+Two test seams make both failure stages reproducible without breaking a driver:
+
+```bash
+CNA_DEBUG_UNAVAILABLE_RENDERERS=WEBGPU ./mygame
+CNA_DEBUG_FAIL_RENDERER_INIT=SDLGPU ./mygame
+```
+
+They are diagnostics/testing controls, not automatic fallback configuration.
+
+## Descriptor and window contract
+
+Each compiled identity reaches one `GraphicsRendererDescriptor` through the generated registry.
+The descriptor supplies the information needed before an `IGraphicsRenderer` exists: public type
+and name, window kind, video/window requirements, optional platform services, a side-effect-free
+availability probe, the namespaced factory and adapter-level query hooks.
+
+| Window kind | Current identities | Pre-construction contract |
+|---|---|---|
+| `None` | `HEADLESS`, `SOFTWARE`, `STUB` | No native window or video subsystem. Software may consume a platform surface presenter where the platform supplies one. |
+| `Plain` | `WEBGPU`, `DIRECTX9`, `SDLGPU` | Native window and video subsystem, without an OpenGL render intent. |
+| `OpenGL` | `OPENGLES3`, `OPENGL33`, `WEBGL2`, `FNA3D` | Native window and video subsystem with an OpenGL-compatible intent. EasyGL receives the platform GL-context service. FNA3D reserves a 24-bit depth/8-bit stencil, double-buffered GL visual because its runtime OpenGL driver is the restrictive case. |
+
+FNA3D may select OpenGL, Direct3D 11 or SDL_GPU internally; that upstream driver choice does not
+create another CNA renderer identity. Its CNA descriptor conservatively prepares a window that can
+serve the OpenGL route.
+
+A fallback candidate with a different window kind cannot reuse the current window. CNA destroys
+and recreates a window it owns. If the application supplied the window through
+`PresentationParameters::DeviceWindowHandle`, CNA may not destroy it, so the candidate is skipped
+with `WindowKindConflict`. Video-subsystem ownership is balanced per device across every attempt.
+
+Renderer-specific behavior after construction belongs behind `IGraphicsRenderer` virtuals.
+Adapter queries that must run before a device exists use the descriptor's `adapterQueries` hooks.
+The runtime-discipline gate refuses a new `CNA_RENDERER_*` branch in `modules/graphics/src`.
 
 ## Renderer combinations
 
-Not every pair of renderers can be linked into one binary. Incompatible combinations are rejected at
-**configure time with a reason**, never left to surface as a link error. The rules live in
-`cmake/RendererCombinations.cmake` and are kept in step with this table by
-`scripts/check_renderer_combinations.py`. Each rule below has been verified to actually fire at
-configure time, not merely to exist.
+Combination rules describe demonstrated incompatibilities, not speculative bans. The current
+pairwise rule is the **platform partition**: `DIRECTX9` is Windows-only and `WEBGL2` is
+Emscripten-only, so those identities cannot be built into the same binary because one toolchain
+cannot target both platforms. Per-identity platform and dependency gates still apply to every
+other set.
 
-| Combination | Why it is refused |
-|---|---|
-| Renderers from different **platform** partitions | Windows-only (`DIRECTX9`) and Emscripten-only (`WEBGL2`) cannot be targeted by one toolchain. |
+The three EasyGL profiles share an implementation, but native `OPENGLES3` and `OPENGL33` may
+coexist because the selected `GlProfile` is runtime state. `WEBGL2` belongs to the browser
+partition. Two representative supported sets are:
 
-### Verified combinations
+| Target | Set | Evidence boundary |
+|---|---|---|
+| Native Linux | `OPENGLES3;OPENGL33;WEBGPU;SDLGPU;FNA3D;SOFTWARE;HEADLESS;STUB` | Current `cmake-build-multi`; registry, selection, fallback and cross-renderer contract tests exercise all eight identities. |
+| Browser | `WEBGL2;WEBGPU` | Current workflow proves configure/build/link/registry consistency. Renderer-specific browser harnesses, not the multi-renderer workflow alone, provide runtime graphics qualification. |
 
-| Set | Status |
-|---|---|
-| `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
-| `OPENGLES3;OPENGL33;WEBGPU;SDLGPU;FNA3D;SOFTWARE;HEADLESS;STUB` | ✅ builds with tests and examples (`RRC-035`, 2026-10-14): only the default's example suite registers; every renderer is selectable at run time, and the retirement campaign's focused suites ran with SDLGPU, WEBGPU, SOFTWARE, FNA3D, HEADLESS and STUB selected that way ([retirement record](removed-renderers.md#the-2026-10-13-retirement)). |
-| `WEBGL2;WEBGPU` (Emscripten) | ✅ one wasm bundle carries both. In headless Chrome on the real GPU (2026-10-07, emsdk 6.0.9) the renderer benchmark and `cna_house3d_demo --depth-probe` ran under each, selected at runtime through `Module.cnaPreferredRenderer`, with no extra link flags: a build that compiles `WEBGPU` in sizes the Asyncify stack for it automatically (`RRC-025`). With Emscripten's default 4 KiB stack `WEBGPU` aborted with `unreachable` (`RRC-018`) |
+A small display-independent development set such as `HEADLESS;SOFTWARE;STUB` is also valid. Its
+members still have different semantics: linking them together does not imply feature parity.
 
-Combinations whose evidence involved a renderer retired on 2026-09-17, 2026-09-27, 2026-09-28,
-2026-10-06 or 2026-10-13 are no longer listed: they cannot be configured any more, so the measurement is not reproducible. Those rows are in
-git history (`docs/removed-renderers.md` names the renderers).
+## Browser selection
 
-### What a multi-renderer build makes newly testable
-
-`CrossRendererContractTests` asks questions that previously required building twice and comparing
-artifacts out of band — it walks every compiled-in renderer in one process, against live devices,
-and checks the properties every renderer must hold regardless of what it draws: that it reports the
-identity it was selected as, that a capability answer is a property of the renderer rather than of
-when it was asked (stable across repeat queries and across a renderer rebuild), that `Clear`/
-`Present` are accepted, that the logical viewport is never degenerate even without a window, and
-that a `Texture2D` round-trip works.
-
-It deliberately does **not** compare two renderers' answers to each other: renderers legitimately
-differ (SOFTWARE rasterizes, STUB renders nothing). What they may not do is disagree about the
-framework contract.
-
-**What a second renderer costs.** Adding another GL profile is free: `OPENGLES3` alone and
-`OPENGLES3;OPENGL33` produce the same binary to within 16 bytes, because after phase P11 the profile
-branches are compiled either way. The cost was paid once, by that phase, in the single-renderer
-build: the EasyGL archive grew 16.6 % (4.77 MB → 5.56 MB) when `#if`-eliminated branches became
-runtime ones. Every profile after the first is free.
-
-Cost of that set versus a single-renderer `HEADLESS` build: the `CnaTests` binary grows from
-238.5 MB to 241.2 MB (**+1.2 %**) for two additional renderers. The runtime cost is one
-function-pointer call per `GraphicsDevice` construction and none per frame.
-
-### A real fallback, start to finish
-
-The transcript below was recorded in 2026-08 against `LLGL`, a renderer **retired on 2026-09-17**
-(`docs/removed-renderers.md`). It is kept because the failure it shows was a genuine environmental
-one rather than a simulated one, and because the resolution path it exercises is unchanged: LLGL
-needed SDL's `x11` video driver and could not initialize on a Wayland session.
-
-```
-$ cna_demo_renderer_selection LLGL OPENGLES3 SOFTWARE
-WARN [RENDER] graphics renderer LLGL was not used (InitializationFailed): LLGL renderer:
-  the SDL window exposes no X11 handles (video driver 'wayland'). This renderer needs the
-  x11 driver -- run with SDL_VIDEODRIVER=x11.
-Requested LLGL -- now selected: LLGL
-CNA: graphics renderer: OPENGLES3 (selected at runtime from 4 compiled in)
-Active renderer: OPENGLES3
-Fallback history (1 renderer(s) passed over):
-  - LLGL (InitializationFailed): LLGL renderer: the SDL window exposes no X11 handles ...
-```
-
-Note what survives: `GetSelected()` still reports what was **asked for**, `GetActive()` reports what
-was **created**, and the renderer's own diagnostic reaches the history verbatim rather than being
-reduced to "it did not work". That last property matters most for a renderer that dispatches
-internally, where the interesting information is *which* of its own backends were tried; `FNA3D` is
-the surviving renderer of that shape.
-
-To reproduce the path today, without waiting for an environment that genuinely breaks, use the
-`CNA_DEBUG_FAIL_RENDERER_INIT` seam described under *Verifying a fallback chain* below.
-
-### Smoke-testing several renderers from one build
-
-`scripts/run-all-renderer-smoke-tests.sh` gained a multi-renderer mode, which is where this build
-mode pays for itself in CI time — N renderers cost one build instead of N:
-
-```bash
-scripts/run-all-renderer-smoke-tests.sh --multi "HEADLESS;SOFTWARE;STUB"
-```
-
-It configures one build, then selects each renderer in turn through the `CNA_GRAPHICS_RENDERER`
-environment variable. A renderer with no smoke test registered in that build is reported as
-**skipped**, never as a pass — `ctest -L <label that matches nothing>` exits 0, so a wrong label
-would otherwise look like success. Only the default's family registers its example suite
-(`RRC-022`), so another renderer is smoke-tested through the default family's `GraphicsSmoke`
-tests where it has some (the GL, SDLGPU and WebGPU families do) and is otherwise
-reported as skipped: in the set above, `SOFTWARE` and `STUB` are.
-
-### Comparing renderers against the XNA oracle, from one binary
-
-```bash
-scripts/run-oracle-corpus-multi.sh <cna_oracle_render_exe> "OPENGLES3;OPENGL33"
-```
-
-Renders the 39-scene oracle corpus once per renderer and diffs each scene against the same
-checked-in XNA 4.0 reference PNGs. Every renderer is measured against the *same* fixed point, so
-agreement with XNA implies agreement with each other — the cross-renderer question that previously
-needed one build per renderer and a comparison done by hand.
-
-A renderer that is not compiled into that binary, or cannot start, is probed once and reported as
-skipped rather than as 39 scene failures.
-
-### Verifying a fallback chain
-
-`CNA_DEBUG_UNAVAILABLE_RENDERERS` is a comma-separated list of renderer names to treat as though
-their availability probe had failed. It exists so a configured fallback chain can be verified
-without breaking a driver to do it:
-
-```bash
-CNA_DEBUG_UNAVAILABLE_RENDERERS=HEADLESS ./mygame   # fails the availability probe
-CNA_DEBUG_FAIL_RENDERER_INIT=SDLGPU ./mygame       # fails during initialization
-```
-
-The two are materially different. A failed probe happens before any window exists; a failed
-initialization happens after, so a candidate needing a different window kind forces CNA to destroy
-and recreate the window. That second path is otherwise unreachable without a genuinely broken
-driver.
-
-It sits alongside the renderer-specific debug variables this project already has
-(`CNA_SDLGPU_TRACE_*`, `CNA_WEBGPU_TRACE_DRAW_ORDER`) — a named test seam,
-not something the resolution path does on its own.
-
----
-
-## Building for the browser
-
-The Emscripten build needs two things this repository does not currently supply, both pre-existing
-and unrelated to renderer selection:
-
-- **zlib.** `sharp-runtime`'s io-compression component calls `find_package(ZLIB)`, which fails under
-  Emscripten. Build Emscripten's own port once (`embuilder build zlib`) and point CMake at it:
-  `-DZLIB_LIBRARY=$EMSDK/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/libz.a`
-  `-DZLIB_INCLUDE_DIR=$EMSDK/upstream/emscripten/cache/sysroot/include`
-- **A `-Werror` unused-function** in `sharp-runtime`'s `System/IO/RandomAccess.cpp`, which Clang
-  diagnoses and GCC does not. Until it is fixed upstream, add
-  `-DCMAKE_CXX_FLAGS="-Wno-error=unused-function"`.
-
-## Choosing the renderer from JavaScript
-
-A browser build is where runtime selection pays off most: one wasm bundle is downloaded and cached,
-and the page picks the renderer before the program starts, instead of shipping one bundle per
-renderer.
-
-Build the bundle with several renderers as usual:
+Configure a browser bundle with both supported browser identities in the usual way:
 
 ```bash
 emcmake cmake -S . -B cmake-build-wasm-multi -G Ninja \
-      -DCNA_GRAPHICS_RENDERER=WEBGL2 \
-      -DCNA_GRAPHICS_RENDERERS="WEBGL2;WEBGPU"
+  -DCNA_GRAPHICS_RENDERER=WEBGL2 \
+  -DCNA_GRAPHICS_RENDERERS="WEBGL2;WEBGPU"
 ```
 
-Then have the page state its preference on the `Module` object, before the module starts:
+The page may set its preference before module startup:
 
 ```html
 <script>
-  var Module = {
-    // Any public renderer identity, in the CNA_GRAPHICS_RENDERER spelling, case-insensitive.
-    cnaPreferredRenderer: "WEBGPU",
-  };
+  var Module = { cnaPreferredRenderer: "WEBGPU" };
 </script>
-<script src="cna_app.js"></script>
 ```
 
-A page that wants to decide from feature detection can do so in the same place:
+An embedding that already drives the module can call the Emscripten-only
+`cna_set_preferred_renderer` export; it returns 1 when accepted and 0 for an unknown/unavailable
+name or a late call, logging the reason instead of throwing through the Wasm boundary. An explicit
+C++ `SetPreferred()` remains higher precedence than the page property.
 
-```js
-var Module = {
-  cnaPreferredRenderer:
-    "gpu" in navigator ? "WEBGPU" : "WEBGL2",
-};
+Browser exception ABI, Asyncify, canvas, pthread, storage and runtime-evidence requirements belong
+in [`web-emscripten-graphics-limitations.md`](web-emscripten-graphics-limitations.md). This page does
+not carry toolchain workarounds or imply that a successful multi-renderer link is a browser run.
+
+## Validation
+
+The static gates are quick and do not need a display:
+
+```bash
+python3 scripts/check_renderer_identities.py
+python3 scripts/check_renderer_combinations.py
+python3 scripts/check_runtime_renderer_discipline.py
+ctest --test-dir cmake-build-multi \
+  -R '^(RendererCombinationRegistry|CnaRendererDefaultSelection_)' \
+  --output-on-failure
 ```
 
-There is also a direct export for pages that already drive the module themselves:
+Build the focused executable and run live selection through the private GPU runner:
 
-```js
-Module.ccall("cna_set_preferred_renderer", "number", ["string"], ["WEBGL2"]);  // 1 = accepted
+```bash
+cmake --build cmake-build-multi --target CnaTests --parallel 8
+tools/platform/run_gpu_tests_private.sh cmake-build-multi \
+  -R '^(CrossRendererContractTest|GraphicsRendererFallbackTest|GraphicsRendererSelectionTest|GraphicsRendererRegistryTest|MultiRendererFallbackTest|GraphicsDevicePlatformWindowTests)\.' \
+  --output-on-failure -j6
 ```
 
-### Where this sits in the resolution order
+Never run the live multi-renderer suite on the owner's desktop. Test counts are observations, not
+the contract; select the named suites so additions are included automatically.
 
-`Module.cnaPreferredRenderer` is consulted at exactly the point, and with exactly the precedence, a
-native build consults the `CNA_GRAPHICS_RENDERER` environment variable:
+## Current known limitation
 
-1. an explicit `GraphicsRendererSelection::SetPreferred()` call in the program
-2. `CNA_GRAPHICS_RENDERER` if the shell provides one, otherwise `Module.cnaPreferredRenderer`
-3. the compile-time default this bundle was built with
+The mode is usable, but it is not defect-free. EasyGL's
+`ApplyRasterizerMultiSampleState` still consults the build default's
+`CNA_GL_PROFILE_OPENGL33` definition instead of the active runtime `GlProfile`. Consequently an
+`OPENGLES3`-default native multi-renderer build that selects `OPENGL33` does not toggle
+`GL_MULTISAMPLE`; the inverse default/profile combination attempts the desktop state on ES. The
+defect and missing regression are recorded in `handoff.md` section 5.1 and qualified in
+[`opengl33-renderer.md`](opengl33-renderer.md) and
+[`rasterizerstate-support.md`](rasterizerstate-support.md).
 
-The property is deliberately **not** applied by calling `SetPreferred()` from JS glue. Doing that
-would make a page property indistinguishable from an explicit call in the program and let it
-silently outrank one.
-
-### Failure behaviour
-
-`cna_set_preferred_renderer` returns 1 on success and 0 when the name is not a renderer identity,
-is not compiled into this bundle (with no fallback chain configured), or the selection has already
-latched — CNA logs the reason in each case. It never throws across the wasm boundary, because a
-browser has no useful place to catch that and aborting the module would be a worse answer than a
-page that can see it was refused.
-
-The same latch applies as everywhere else: once the first `GraphicsDevice` exists, the renderer
-cannot be changed, from JS or from C++.
-
-## What a multi-renderer build costs
-
-Measured on 2026-08-15, Debug, GCC, on this project's own build trees. Sizes are of the `CnaTests`
-executable, which links every renderer in the build and is therefore the widest binary the project
-produces — a game linking one renderer's own library pays far less.
-
-**Stripped size is the honest column.** A Debug build's symbol tables dwarf the code: the same
-executable is 232 MB unstripped and 32 MB stripped, so an unstripped comparison mostly measures
-debug info, not renderers.
-
-| Build | Renderers | `CnaTests`, stripped | vs. single HEADLESS |
-|---|---|---|---|
-| single | `HEADLESS` | 32.1 MB | — |
-| single | `SOFTWARE` | 32.1 MB | +0.0 MB |
-| single | `OPENGLES3` | 32.6 MB | +0.5 MB |
-| multi | `HEADLESS;LLGL;SOFTWARE;STUB` † | 36.2 MB | **+4.1 MB** |
-
-† `LLGL` was retired on 2026-09-17 (`docs/removed-renderers.md`); this row cannot be reconfigured
-today. It is kept because it is the only measurement here that includes a **large third-party**
-renderer, which is the case a reader most wants a number for. The three surviving rows above it are
-reproducible as written.
-
-Four renderers in one binary, including a large third-party one, cost about **13 %** over a
-single-renderer build of the same executable. That is the number to weigh against the convenience
-of choosing a renderer at startup.
-
-### Where the size goes, per renderer
-
-CNA's own renderer archives in that multi build (same 2026-08-15 measurement, so the retired LLGL
-row is carried with the same caveat):
-
-| Renderer archive | Size |
-|---|---|
-| `libcna_renderer_llgl.a` † | 7.19 MB |
-| `libcna_renderer_software.a` | 6.19 MB |
-| `libcna_renderer_headless.a` | 3.97 MB |
-| `libcna_renderer_stub.a` | 1.65 MB |
-
-The third-party archives behind LLGL were much larger than CNA's own wrapper — `libLLGL_VulkanD.a`
-40.2 MB, `libLLGL_OpenGLD.a` 34.3 MB, `libLLGLD.a` 21.4 MB, `libLLGL_NullD.a` 7.2 MB — yet the
-final executable grew by only ~4 MB, because the linker takes what is referenced rather than whole
-archives. **A renderer's cost in the binary is not its library's size on disk**, and estimating from
-archive sizes overstated it by an order of magnitude there. That conclusion is about linking, not
-about LLGL, and still applies to `SDLGPU`, `WEBGPU` and `FNA3D`.
-
-### What is NOT measured here, and why
-
-- **Build time.** A trustworthy figure needs from-scratch builds of each set, and this project's
-  build rules treat repeated clean rebuilds as real SSD wear to be avoided
-  (`../CLAUDE.md`). Timing several full builds for a table was not judged worth that cost. The
-  incremental cost is the one developers actually pay, and it is dominated by how many renderer
-  archives must relink, which the per-renderer table above already indicates.
-- **Sets containing FNA3D, WebGPU or the Windows/macOS families.** Those need dependencies or
-  operating systems not available on the machine these numbers come from. Their rows are absent
-  rather than estimated.
-- The `OPENGLES3` tree uses the Makefiles generator where the others use Ninja. That affects build
-  time, not binary size, so it is left in the size table and out of any timing claim.
+Capability answers remain properties of the active renderer and live device. A successful runtime
+selection does not make two renderers interchangeable and does not widen either renderer's
+documented platform qualification.
 
 ## Design decisions
 
-The numbered decisions this mode is built on. Source comments and gate messages cite them as
-"design decision N"; the tasks that implemented them (`RTR-P0`..`RTR-P14`, 2026-08) are in Git history.
+Source comments and build diagnostics cite these stable numbers. The implementation tasks
+(`RTR-P0`–`P14`) are in Git history.
 
-1. **Compile-time selection stays the default.** `-DCNA_GRAPHICS_RENDERER=<X>` keeps producing the
-   behaviour and macro environment it always did. Several renderers in one binary is an opt-in
-   second mode (`-DCNA_GRAPHICS_RENDERERS=<A>;<B>;…`) that no build acquires silently.
-2. **One descriptor per family, consulted before construction.** What `GraphicsDevice` must know
-   before an `IGraphicsRenderer` exists -- the window kind and its flags, whether a window or SDL's
-   video subsystem is needed at all, pre-window GL attributes, an availability probe -- is the
-   family's `GraphicsRendererDescriptor`, not an `#ifdef` chain in `GraphicsDevice.cpp`.
-3. **A generated registry, not self-registration.** A self-registering translation unit inside a
-   static archive is dropped by the linker when nothing references it, so
-   `cmake/RendererRegistry.cmake` generates the table; this also stays out of the
-   `cna_graphics_core` ↔ renderer archive cycle.
-4. **Each family's factory lives in the family namespace.**
-   `CNA::Internal::Renderers::<Family>::CreateGraphicsRenderer` replaced one colliding
-   `CNA::Internal::Renderers::CreateGraphicsRenderer`; that is what lets two renderer archives link
-   into one binary.
-5. **The selection latches when `GraphicsDevice` construction starts**, not at the first factory
-   call, because creating the window consumes it first. The latch forbids changing the selection,
-   not calling the factory again: recreating the same renderer for another multisample count is
-   legitimate.
-6. **Failure is hard by default.** A selection or latch violation is
-   `System::InvalidOperationException`, and an initialization failure propagates the family's own
-   exception. CNA never substitutes another renderer on its own.
-7. **Fallback is opt-in, ordered and reported.** `SetFallbackChain()` and `EnableAutomaticFallback()`
-   latch like `SetPreferred()`, cover both a probe that reports the renderer unavailable and a
-   `create()` that throws, log every step at warning level and record it in `GetFallbackHistory()`;
-   `GetActive()` reports what was really created.
-8. **A fallback across window kinds recreates the window, and only CNA's own.** With a
-   game-supplied window the candidate is skipped and recorded as `WindowKindConflict` (*The
-   window-kind limitation*).
-9. **Renderer-specific behaviour leaves the XNA layer.** What were per-renderer `#ifdef` blocks in
-   XNA types are `IGraphicsRenderer` virtuals the XNA layer asks the active renderer: the applied
-   back-buffer, multisample and depth-stencil formats (`GetApplied*EXT`), the `GraphicsProfile`
-   ceilings (`GetMaxTextureSizeForProfileEXT`, `GetMaxCubeSizeForProfileEXT`) and the surface-format
-   verdicts (`ClassifySurfaceFormatEXT`), each of which may defer to the framework's own rule.
-10. **Runtime selection adds no public renderer identity.** The identities are
-    `cmake/RendererIdentities.cmake`'s, pinned by `scripts/check_renderer_identities.py`, in either
-    mode.
-11. **Unbuildable combinations are refused at configure time, with a reason** (*Renderer
-    combinations*, `cmake/RendererCombinations.cmake`), never left as a link error. The former rule
-    against two EasyGL profiles in one binary was lifted when the GL profile became a runtime value
-    (`RTR-P11`).
-12. **The test corpus converts incrementally.** Tests and examples ask which renderer is active
-    rather than which one the build defaults to, a phase at a time; single-renderer builds keep
-    compiling the corpus as before.
+1. **Compile-time selection remains the default.** Multi-renderer mode is opt-in through
+   `CNA_GRAPHICS_RENDERERS`.
+2. **Pre-construction decisions live in one descriptor per family.** Window kind, services,
+   availability, factory and adapter hooks are data/function pointers, not XNA-layer `#ifdef`s.
+3. **The registry is generated, not self-registering.** Static-archive dead stripping cannot make
+   a compiled renderer disappear from the table.
+4. **Factories are namespaced per family.** Several renderer archives can therefore coexist
+   without a shared factory-symbol collision.
+5. **Selection latches after successful renderer resolution.** A failed attempt remains
+   recoverable; reset/reconstruction keeps the already active renderer.
+6. **Failure is hard by default.** CNA never substitutes a renderer without explicit fallback.
+7. **Fallback is opt-in, ordered and reported.** Every rejected candidate has a stable reason and
+   diagnostic history.
+8. **Cross-kind fallback recreates only a CNA-owned window.** A caller-owned incompatible window
+   produces `WindowKindConflict`.
+9. **Renderer-specific behavior stays out of the XNA layer.** Post-construction behavior uses
+   virtuals; pre-device adapter answers use descriptor hooks.
+10. **Runtime selection adds no renderer identity.** Both build modes use the canonical registry.
+11. **Impossible combinations fail during configuration with a reason.** The combination registry
+    and its documentation gate stay in lockstep.
+12. **Tests distinguish default, present and active identities.** Default-gated family examples
+    remain intentional; shared registry/selection/contract suites exercise the compiled set.
 
 ## See also
 
-- `modules/core/include/CNA/GraphicsRendererType.hpp` — the public renderer identities.
-- `cmake/RendererSelection.cmake` — compile-time selection.
+- [`renderer-registry.md`](renderer-registry.md) — canonical identities, families and defaults.
+- [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md) — cross-renderer
+  feature overview.
+- [`renderer-capability-profiles.md`](renderer-capability-profiles.md) — live structured
+  capability queries.
+- [`web-emscripten-graphics-limitations.md`](web-emscripten-graphics-limitations.md) — browser
+  build, event-loop and evidence contract.
+- [`removed-renderers.md`](removed-renderers.md) — retired identities and reserved values.

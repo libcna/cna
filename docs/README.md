@@ -62,6 +62,9 @@ on it) rather than assuming either way.
 - **[`renderer-registry.md`](renderer-registry.md)** — the canonical list of the public
   renderer identities (enum, CMake selector, compile definition, factory, platform/dependency
   gate). Start here for "which renderers does CNA have."
+- **[`runtime-renderer-selection.md`](runtime-renderer-selection.md)** — the opt-in
+  multi-renderer build, application selection and fallback API, generated descriptor registry,
+  window-kind rules, browser choice, validation route and current known limitation.
 - **[`cnaext-engine-layer.md`](cnaext-engine-layer.md)** — current standalone ASCII, CRT,
   colour-depth and DebugDraw extensions; the previous modern engine layer has been retired.
 - **[`opengl33-renderer.md`](opengl33-renderer.md)** — current desktop OpenGL 3.3 core profile

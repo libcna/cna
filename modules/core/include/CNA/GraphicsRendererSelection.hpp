@@ -30,8 +30,9 @@ namespace CNA
      * several, so this whole surface is a CNA extension.
      *
      * Process-wide, and deliberately so: the choice has to be made before the first GraphicsDevice
-     * is constructed, which is before a game has anywhere natural to put per-instance state. All of
-     * it must be called before any graphics thread starts (see IsLatched()).
+     * successfully creates a renderer, which is before a game has anywhere natural to put
+     * per-instance state. All of it must be called before any graphics thread starts (see
+     * IsLatched()).
      */
     class CNAEXT GraphicsRendererSelection
     {
@@ -75,9 +76,10 @@ namespace CNA
         /**
          * @brief Whether the selection can still be changed.
          *
-         * Becomes true when the first GraphicsDevice begins construction. It forbids CHANGING the
-         * selection, not creating a renderer again: GraphicsDevice::Reset() and its multisample
-         * reconstruction path legitimately rebuild the same renderer on a live device.
+         * Becomes true after the first GraphicsDevice successfully creates a renderer. A failed
+         * resolution does not latch the process. The latch forbids CHANGING the selection, not
+         * creating a renderer again: GraphicsDevice::Reset() and its multisample reconstruction
+         * path legitimately rebuild the same renderer on a live device.
          *
          * @return true once CNA has begun using the selected renderer.
          */

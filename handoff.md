@@ -35,6 +35,18 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Runtime renderer-selection documentation reconciliation (2026-11-01): the former
+  `RTR-P0`–`P14` campaign/current-contract mixture now describes the canonical 10 identities over
+  eight implementation families, generated descriptor registry, selection precedence,
+  post-success latch, opt-in reported fallback, window-kind ownership, platform combination rule
+  and browser boundary. Historical LLGL transcripts, 2026-08 binary-size measurements and obsolete
+  Emscripten zlib/`RandomAccess.cpp` workarounds were removed. The public
+  `GraphicsRendererSelection` Doxygen now matches the implemented post-success latch, and the live
+  EasyGL multi-profile MSAA defect is explicit instead of the page claiming that nothing remains
+  open. All three renderer consistency gates pass, the focused `CnaTests` executable builds, all
+  five configure-time registry/default tests pass, and the private selection/fallback/registry/
+  window run has no failure across 78 registered tests: 73 pass and five platform-window cases are
+  declared skips.
 - Shared parity-fixture documentation reconciliation (2026-11-01): the former 13-fixture
   `WEBGPU-207` snapshot now documents the canonical 32-entry rendered corpus and the separate
   32-entry conformance-program corpus driven by `ParityFixtures.cmake`, including their actual

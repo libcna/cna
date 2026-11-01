@@ -62,7 +62,7 @@ served, or its result is only the code.
 | `PSG-0001`..`0013` | `plan_pre_sdlgpu_closeout.md`, 2026-10-28 | The WebGPU merge and the bounded GoogleTest runner. Cited "pre-SDLGPU PSG-NNNN". | `../tools/tests/run_gtest_bounded.sh` |
 | `RRC-001`..`029` | `plan_renderer_cleanup.md`, 2026-10-11 | The renderer curation: the 2026-09-17 retirement of 25 identities and the rounds after it. | [`removed-renderers.md`](removed-renderers.md) |
 | `RRC-030`..`054` | `plan_renderer_retirement.md`, 2026-10-28 | The 2026-10-13 retirement of `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER`. | [`removed-renderers.md`](removed-renderers.md), [`renderer-registry.md`](renderer-registry.md) |
-| `RTR-P0`..`P14` | `plan_runtimerenderer.md`, 2026-10-29 | Runtime renderer selection. | [`runtime-renderer-selection.md`](runtime-renderer-selection.md) |
+| `RTR-P0`..`P14` | `plan_runtimerenderer.md`, 2026-10-29 | Runtime renderer selection. | Current contract: [`runtime-renderer-selection.md`](runtime-renderer-selection.md); task record: Git history |
 | `RTS-001`/`002` | `plan_cna_rts.md`, 2026-10-28 | The `cna-rts` consumer validation. | `cna-rts` `missing.md`; `rendertarget_effect_source_test.cpp` |
 | `SAMPLE-*` | `plan_samples.md`, 2026-08-22 | The sample backlog. | `cna-samples/plan.md` |
 | — | `plan_sdl3free.md`, 2026-10-26 | An SDL3-independent migration, superseded twice over. | [`platform-abstraction.md`](platform-abstraction.md) |
