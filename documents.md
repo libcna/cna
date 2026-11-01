@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 83 reviewed, 14 updated incidentally and awaiting their own audit, and 80 not yet
+Summary: 84 reviewed, 14 updated incidentally and awaiting their own audit, and 79 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -219,7 +219,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/c-api/MATH_AND_3D_VALUES.md`](docs/c-api/MATH_AND_3D_VALUES.md)
 - ✅ **REVIEWED** — [`docs/c-api/MEDIA.md`](docs/c-api/MEDIA.md)
 - ✅ **REVIEWED** — [`docs/c-api/MODELS.md`](docs/c-api/MODELS.md)
-- ⬜ **PENDING** — [`docs/c-api/NET.md`](docs/c-api/NET.md)
+- ✅ **REVIEWED** — [`docs/c-api/NET.md`](docs/c-api/NET.md)
 - ⬜ **PENDING** — [`docs/c-api/OWNERSHIP.md`](docs/c-api/OWNERSHIP.md)
 - ✅ **REVIEWED** — [`docs/c-api/README.md`](docs/c-api/README.md)
 - ✅ **REVIEWED** — [`docs/c-api/RELEASE_GATE.md`](docs/c-api/RELEASE_GATE.md)

@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API networking-contract reconciliation (2026-11-01): `docs/c-api/NET.md` now describes the
+  four-byte color round trip, absent property defaults, diagnostic retention and independently
+  owned advertised properties. It distinguishes caller-owned roster/sender views from callback
+  loans, corrects SendData flag combinations, and records the event-injection validation and
+  standalone-gamer parent-lifetime limitations in §5.1. Packet-extension prose no longer proposes
+  a language-specific consumer. The networking and C17/C++23 header targets build; all five
+  focused networking/ABI tests pass through the private SDLGPU runner and all nine C API static
+  gates pass. Runtime implementation and public ABI are unchanged.
 - C API model/animation contract reconciliation (2026-11-01): `docs/c-api/MODELS.md` now covers
   the current model graph, content-owned resource tokens, owned views and device lifetime, including
   independently owned/pre-run device inputs. It removes obsolete next-slice and repeated
@@ -1140,6 +1148,20 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- C API network-event injection validates `CNA_NetworkEventInfo.reliable` as an ordinal in 0..4,
+  rejecting the valid `Chat` flag combinations 5, 6 and 7. Both
+  `NetworkSessionSendNetworkEventExt` and `LocalNetworkGamerEnqueuePacketExt` contain this check;
+  the six ordinary send routes correctly use a defined-bit mask. Found by source inspection on
+  2026-11-01 during the `docs/c-api/NET.md` audit. No permanent regression test covers these
+  extension combinations yet; ordinary SendData is the supported flag-combination path.
+- Standalone C network-gamer factories do not retain their session or, for a local gamer, its
+  signed-in gamer. `NetworkGamerResource` owns the gamer but stores only the session token, and
+  native gamer state holds raw pointers. Source inspection during the 2026-11-01 networking
+  audit found no parent-destruction guard for this path. Keep all factory inputs alive until the
+  standalone gamer is destroyed; roster views have separate parent retention and are unaffected.
+  No use-after-parent-destruction probe or permanent regression test has been run for this path.
+  A copied network machine likewise copies non-owning roster pointers without retaining their
+  session; keep the source session alive while using the copy or its gamer views.
 - `cna_video_player_get_video` can return a stale handle with `out_available = CNA_TRUE` after
   the caller destroys the Video handle used for Play. `VideoPlayerResource` retains the native
   video but stores the original token in `playingVideoHandle`; the getter returns that token

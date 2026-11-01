@@ -16,9 +16,11 @@ transport at all.
 `CNA_NetworkSessionType` and `CNA_SendDataOptions` carry the canonical ordinals exactly, pinned by
 adapter static assertions.
 
-`CNA_SendDataOptions` is a set of flags, as XNA's `[Flags]` enumeration is: `RELIABLE_IN_ORDER` is
+For the six ordinary `SendData` routes, `CNA_SendDataOptions` is a set of flags:
+`RELIABLE_IN_ORDER` is
 `RELIABLE | IN_ORDER`, and `CHAT` combines with either or both of them (5, 6 and 7). A value with any
-other bit set is refused with `CNA_RESULT_INVALID_ARGUMENT`.
+other bit set is refused with `CNA_RESULT_INVALID_ARGUMENT`. The two event-injection extensions
+have a narrower validation boundary; see [Extension limitations](#extension-limitations).
 
 ## Quality of service
 
@@ -36,7 +38,7 @@ fields stay zero.
 
 `CNA_NetworkSessionPropertiesHandle` owns eight fixed slots. Each value is a
 `CNA_OptionalInt32` carrying presence and signed value. Count is always eight; initial slots are
-unspecified. Get/set accept indices 0..7 and return `CNA_RESULT_INVALID_ARGUMENT` outside that range
+absent (`has_value = CNA_FALSE`). Get/set accept indices 0..7 and return `CNA_RESULT_INVALID_ARGUMENT` outside that range
 without mutation. Structural add/insert/remove/remove_at/clear return `CNA_RESULT_NOT_SUPPORTED`,
 including invalid structural indices, following the reference fixed collection contract.
 
@@ -58,11 +60,10 @@ destruction while an enumerator remains open. Writes cannot invalidate the fixed
 canonical `Write` overload and each canonical read gets its own C route, so C never depends on
 overload resolution.
 
-The canonical color asymmetry is preserved and is worth stating plainly: the writer emits four
-**bytes** while the reader consumes four **floats**. A color written with
-`cna_packet_writer_write_color` therefore cannot be read back with
-`cna_packet_reader_read_color` — the reader will run off the end of a four-byte payload. Four
-floats do read back into a color through the canonical float constructor.
+`cna_packet_writer_write_color` writes four bytes in R, G, B, A order and
+`cna_packet_reader_read_color` reads those same four bytes. They round-trip all four channels;
+a payload shorter than four bytes fails with `CNA_RESULT_IO`. Do not encode a color as four floats.
+Matrices, quaternions and vectors use their component floats in the native declaration order.
 
 A negative capacity is refused exactly as the canonical constructor refuses it. A non-negative
 capacity is a hint the canonical backing buffer does not act on.
@@ -77,9 +78,8 @@ extension routes exist:
 - `cna_packet_writer_copy_data_ext` copies out the bytes a writer has produced;
 - `cna_packet_reader_set_data_ext` replaces a reader's contents and rewinds it;
 - `cna_packet_reader_copy_data_ext` copies out the bytes a reader holds, whatever its position and
-  without moving it -- after `cna_local_network_gamer_receive_data_into_packet_reader`, the whole
-  received packet, so a consumer with a reader type of its own (a managed `BinaryReader`) receives
-  packets of any length (ABI 0.36.0, `CBIND-130`).
+  without moving it, including the whole packet received through
+  `cna_local_network_gamer_receive_data_into_packet_reader`.
 
 All three are marked `_ext` because they have no canonical counterpart. None exposes a native stream.
 
@@ -90,9 +90,11 @@ the ABI. The firewall converts the exception to `CNA_RESULT_INVALID_STATE` with
 `CNA_ERROR_CATEGORY_STATE` and the message in the per-thread diagnostic, and records the join error
 per thread as well. `cna_net_get_last_join_error` reads it back.
 
-Any later failure on the same thread clears the record, so a stale join error can never be
-returned; a caller that needs it must read it immediately after the failing call, exactly as with
-the rest of the per-thread error information.
+A later recorded failure on the same thread replaces the record, including the join-error payload.
+Successful direct calls and diagnostic reads preserve it; opt-in foreign-thread dispatch has the
+success-reset exception described in [ERRORS.md](ERRORS.md). Inspect the join error before another
+failure can overwrite it. When absent, `out_has_join_error` is false and the enum output is the
+`SESSION_NOT_FOUND` placeholder, not a new failure indication.
 
 ## Gamers, machines and event descriptions
 
@@ -105,12 +107,13 @@ The CNA extension setters keep an `_ext` suffix — `set_has_left_session_ext`, 
 `set_is_host_ext`, `set_roundtrip_ticks_ext` — so a consumer can see at a glance which state the
 canonical API leaves permanently fixed without them.
 
-`cna_network_gamer_copy_machine` hands back an **independent copy** rather than an alias. The
-canonical setter already takes its machine by value, and the canonical machine exposes no mutator,
-so a copy is observationally identical to the reference the canonical getter returns.
+`cna_network_gamer_copy_machine` hands back an owned machine copy rather than an alias. Its roster
+contains non-owning gamer pointers, so it is not a deep copy of those gamers. Keep the source
+session alive while accessing that copy or its gamer views; the machine adapter does not retain it.
 
 `CNA_NetworkMachineHandle` owns a machine. Its roster is exposed as a count plus indexed access
-returning a borrowed gamer view; a view keeps its machine alive and blocks the machine's release.
+returning a new owned view handle; a view keeps its machine alive and blocks the machine's release.
+Release each view with `cna_network_gamer_destroy`.
 Only a session populates a roster, so a machine created from C reports none.
 `cna_network_machine_remove_from_session` is the canonical `RemoveFromSession`: only the host may
 remove another machine, and the canonical refusals (the local machine, a machine that left, a
@@ -125,7 +128,8 @@ validated handle, so a description can never name a handle that was never a game
 `CNA_AvailableNetworkSessionHandle` owns one description a discovery backend published. Every
 scalar is exposed directly; the host gamertag and connect address use the count/copy protocol; the
 quality of service comes back as a copied `CNA_QualityOfService`; and the session properties come
-back as an **independent owned list**, so a caller's list cannot alias or outlive the description.
+back as an **independent owned list**. It does not alias the description and may outlive it;
+the advertised copy still rejects writes. Destroy it through the property-list API.
 
 Both equality operators become explicit routes, because C has no operator overloading.
 
@@ -159,8 +163,9 @@ That shapes the three creation routes:
   collection entirely.
 
 All four rosters — all, local, remote and previous — are a roster identity plus a count and an
-indexed **borrowed view**. A view keeps its session alive and blocks the session's release, so a
-caller releases every view first.
+indexed **owned view handle** onto borrowed native gamer state. A view keeps its session alive and
+blocks the session's release, so a caller destroys every view with `cna_network_gamer_destroy` first.
+This differs from a callback's temporary gamer token, which the caller must not destroy or retain.
 
 The canonical `SessionProperties` getter returns a mutable list. C does not receive a reference
 whose lifetime is tied invisibly to the session: `cna_network_session_copy_session_properties`
@@ -205,9 +210,9 @@ player accepts a CNA service invitation in the Guide (or joins a friend's game f
 acceptance nobody is subscribed to reaches the first subscriber once, and only while its invitation
 can still be joined. Without a configured service there are no invitations, and the `join_invited`
 routes, like a `PlayerMatch` or `Ranked` create or find, answer `CNA_RESULT_NOT_SUPPORTED`
-(`GamerServicesNotAvailableException`). See `docs/gamer-services-known-limitations.md`.
+(`GamerServicesNotAvailableException`). See [gamer-services-known-limitations.md](../gamer-services-known-limitations.md).
 
-## Discovery, join and the fake-async pairs
+## Discovery, join and synchronous completion routes
 
 Every canonical `Begin`/`End` pair collapses into one synchronous C route: offline operations
 complete before `Begin` returns, and an online one (`PlayerMatch`/`Ranked` create, find, join,
@@ -221,8 +226,8 @@ like their synchronous counterparts. CNA retains the value through its internal 
 instead of inheriting FNA's stubbed hardcoded value; the resulting limit drives both readback and
 the functional session-capacity behavior.
 
-`cna_network_session_find` refuses a local-only session type outright, matching the canonical
-search; a `SystemLink` search runs LAN discovery and a `PlayerMatch`/`Ranked` search reads the CNA
+`cna_network_session_find` refuses `Local`; `LocalWithLeaderboards` returns an empty collection.
+A `SystemLink` search runs LAN discovery and a `PlayerMatch`/`Ranked` search reads the CNA
 service directory. `cna_network_session_join` joins the discovered session, and the invited-join
 routes join the invitation the player accepted in the Guide.
 
@@ -244,8 +249,8 @@ internal factory for the cases where a gamer is needed outside a session; the se
 
 Each canonical `ReceiveData` overload gets its own route, so C never depends on overload
 resolution. A payload arrives in a caller-owned buffer described by a pointer and a byte count, and
-the sender comes back as a **borrowed gamer view** that keeps its session alive exactly like a
-roster view — the caller releases it. An empty queue is not a failure: the route succeeds and
+the sender comes back as an **owned view handle** that keeps its session alive exactly like a
+roster view — the caller destroys it with `cna_network_gamer_destroy`. An empty queue is not a failure: the route succeeds and
 reports zero bytes.
 
 The canonical checks come first, in XNA's order: the offset must lie inside the destination (a zero
@@ -260,9 +265,8 @@ All six canonical `SendData` overloads are mapped: the plain and offset/length b
 with and without a recipient, and the two packet-writer forms. A null recipient handle means "every
 gamer", matching the canonical null pointer.
 
-`CNA_SendDataOptions` is validated against the canonical identities, because its members are
-discrete values rather than composable flags; an unknown value is refused instead of being cast
-through.
+All combinations of the three defined option bits are accepted by these routes; unknown bits
+return `CNA_RESULT_INVALID_ARGUMENT` before sending.
 
 ### The two extensions
 
@@ -275,3 +279,24 @@ object crosses the ABI.
 and then stops or resumes the gamer's voice to that remote gamer. `SendPartyInvites` answers
 `CNA_RESULT_INVALID_STATE`, the canonical refusal, while the gamer's CNA service party has fewer
 than two people, and otherwise invites the rest of the party to the current online session.
+
+## Extension limitations
+
+- `cna_network_session_send_network_event_ext` and
+  `cna_local_network_gamer_enqueue_packet_ext` currently accept `event_info.reliable` only in
+  0..4. Unlike the ordinary send routes, they reject valid `CHAT` combinations 5, 6 and 7 with
+  `CNA_RESULT_INVALID_ARGUMENT`. This is an adapter validation limitation.
+- Standalone `cna_network_gamer_create` and `cna_local_network_gamer_create_ext` store the supplied
+  session token/native pointer without retaining the session. The local factory also borrows its
+  signed-in gamer. Keep those inputs alive until the standalone gamer is destroyed; these factories
+  do not provide the parent retention of roster views and do not add a gamer to a roster.
+- Event-injection payload bytes are copied, but optional gamer/sender pointers are borrowed by
+  queued native events. Keep those gamers alive until the event has been processed or cleared.
+
+## Verification
+
+The adapter code is in `modules/c-api/src/CnaCApiNet*.cpp`. `CApi_NetSmoke` covers the C packet
+round trip, properties, discovery descriptions, local sessions, events, roster lifetime and
+send/receive routes. `CApi_BoundaryDetail` checks join-exception translation. These local checks
+do not certify LAN discovery, the configured online service, relay connectivity or voice hardware;
+see the networking and gamer-service qualification documents for those environments.
