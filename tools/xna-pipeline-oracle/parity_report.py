@@ -7,14 +7,16 @@ with CNA's hand-maintained answer (`content-pipeline-parity-map.json`) and, opti
 input-format matrix (`content-pipeline-inputs.json`), and writes the generated coverage report
 `docs/xna-content-pipeline-parity-report.md`.
 
-Every percentage in the plan comes from here. The denominator is the inventory; the map may not
-add to it, and nothing in the inventory may be silently absent from the map.
+Percentages count maintained map classifications against the captured inventory. The map may not
+add to that denominator, and nothing in the inventory may be silently absent from the map.
+This script does not compile the mapped spellings, inspect implementations or execute behaviour
+tests. A complete map is not a proof of universal behavioural parity.
 
 Statuses (plan section 4):
-  EXACT_EQUIVALENT     same name, members and observable behaviour
-  SEMANTIC_EQUIVALENT  C++ cannot spell it identically; every capability exists (note says how)
+  EXACT_EQUIVALENT     maintained claim of the same API/behaviour within its documented scope
+  SEMANTIC_EQUIVALENT  maintained C++ mapping claim, with differences explained in the note
   HOST_SUBSTITUTION    a Microsoft-host mechanism replaced by a CNA mechanism (note says how)
-  EXTERNAL_BLOCKED     needs a legally/physically unavailable component (note names it)
+  EXTERNAL_BLOCKED     needs an unavailable component (note names its scope)
   MISSING              not there -- zero allowed at completion
 
 Two mechanical rules the report states rather than applies silently:
@@ -227,7 +229,9 @@ def build_report(inventory, pmap, inputs):
                 me = de.get("property:" + prop["name"])
                 if me:
                     pstatus, pcna = me.get("status", "MISSING"), me.get("cna", "")
-            property_rows.append((p["type"].split(".")[-1], prop["name"], prop["type"].split(".")[-1], str(prop.get("defaultValue", prop.get("defaultValueError", ""))), pstatus, pcna))
+            default = prop.get("defaultValue", prop.get("defaultValueError", ""))
+            rendered_default = "null" if default is None else str(default)
+            property_rows.append((p["type"].split(".")[-1], prop["name"], prop["type"].split(".")[-1], rendered_default, pstatus, pcna))
 
     def pct(num, den):
         return "%d/%d (%.1f%%)" % (num, den, (100.0 * num / den) if den else 0.0)
@@ -252,9 +256,16 @@ def build_report(inventory, pmap, inputs):
     w("> (CNA's answer). Do not edit by hand; edit the map and regenerate. Each decision is the note")
     w("> on its row; the task log (`XNAPP-*`) is in Git history.")
     w("")
+    w("**Reading this report.** Percentages count the maintained map's classifications against the")
+    w("captured assembly inventory. They do not measure passing tests or universal behavioural parity.")
+    w("The current limitations, regressions and platform qualifications are documented in the")
+    w("[API guide](xna-content-pipeline-compat-api.md), [native pipeline guide](content-pipeline.md),")
+    w("[media evidence](xna-content-pipeline-media.md), [XML reference](xna-intermediate-xml-format.md)")
+    w("and [handoff](../handoff.md) §5. Statuses do not supersede those boundaries.")
+    w("")
     w("## 1. Coverage summary")
     w("")
-    w("| Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |")
+    w("| Quantity | Mapped as implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |")
     w("|---|---|---:|---:|")
     w("| public/protected types | %s | %d | %d |" % (pct(implemented_count(type_counts), total_types), type_counts["EXTERNAL_BLOCKED"], type_counts["MISSING"]))
     w("| public/protected members | %s | %d | %d |" % (pct(implemented_count(member_counts), total_members), member_counts["EXTERNAL_BLOCKED"], member_counts["MISSING"]))
@@ -271,13 +282,19 @@ def build_report(inventory, pmap, inputs):
         blocked = sum(1 for s in statuses if s == "EXTERNAL_BLOCKED")
         w("| source extensions IMPLEMENTED+TESTED | %s | %d | %d |" % (pct(done, len(ext)), blocked, len(ext) - done - blocked))
     w("")
-    w("Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),")
+    w("Status vocabulary records maintained claims: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (C++ mapping; note says how),")
     w("HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the")
     w("unavailable component), MISSING. Type status by value: " + ", ".join("%s %d" % (s, type_counts[s]) for s in ALL_STATUSES) + ".")
     w("Member status by value: " + ", ".join("%s %d" % (s, member_counts[s]) for s in ALL_STATUSES) + ".")
     w("")
     w("Rules applied mechanically: %d delegate plumbing members are listed in section 7 and not counted; %d exception" % (len(plumbing), sum(1 for r in member_rows if r[3] == "HOST_SUBSTITUTION" and r[5] == SERIALIZATION_NOTE)))
     w("serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).")
+    w("")
+    w("`--check` verifies regeneration and map annotations; `--gate` additionally rejects MISSING")
+    w("types/members/enum values. Neither compiles the named C++ API or executes the named tests.")
+    w("The separate input-matrix checker matches fixture paths and test-name source patterns; it")
+    w("does not establish that those tests ran, passed or avoided conditional skips.")
+    w("The captured inventory is an assembly snapshot, not fresh reflection over an installed SDK.")
     w("")
     w("## 2. Types by namespace")
     w("")
@@ -315,7 +332,12 @@ def build_report(inventory, pmap, inputs):
     if inputs is not None:
         w("## 6. Source extensions")
         w("")
-        w("| Extension | XNA importer | CNA importer | Processor | Windows | Phone | Xbox | Tests | Status | Note |")
+        w("Target cells describe the recorded build-time route/policy, not execution on a Windows,")
+        w("Phone or Xbox device. A named test role can verify a deliberate refusal (for example CNB")
+        w("for generic XML/effects or XMA without an external encoder). IMPLEMENTED+TESTED therefore")
+        w("does not mean that every format/target combination succeeds. See each row's evidence and note.")
+        w("")
+        w("| Extension | XNA importer | CNA importer | Processor | Windows | Phone | Xbox | Named test roles | Status | Note |")
         w("|---|---|---|---|---|---|---|---|---|---|")
         for extname, e in inputs.get("extensions", {}).items():
             # Both halves of the row, read where the matrix actually keeps them. The XNA facts sit

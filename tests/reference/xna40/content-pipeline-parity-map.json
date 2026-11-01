@@ -5,12 +5,12 @@
    "status": "SEMANTIC_EQUIVALENT",
    "cna": "Microsoft::Xna::Framework::Content::Pipeline::Audio::AudioContent",
    "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Audio/AudioContent.hpp",
-   "note": "the samples and the format are answered by const reference and shared pointer rather than as a ReadOnlyCollection and a reference. Every source XNA reads is read: a WAVE in its own encoding, and an MP3 or a WMA decoded to the 16-bit PCM at 44100 the genuine MP3 importer reports it will produce.",
+   "note": "Samples and format use const-reference/shared-pointer carriers. Supported WAVE inputs preserve their encoded format; current MP3/WMA decoding uses optional build-time FFmpeg and produces 16-bit PCM at 44100 Hz with source channel count. The retained MP3 metadata/duration witnesses do not prove all-source or successful Windows Media parity; see docs/xna-content-pipeline-media.md.",
    "members": {
     "constructor:.ctor(System.String, Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioFileType)": {
      "status": "SEMANTIC_EQUIVALENT",
      "cna": "AudioContent(const std::string&, AudioFileType)",
-     "note": "reads a WAVE in the encoding the file names, and an MP3 or a WMA decoded through the build-time media decoder to 16-bit PCM at 44100 with the source's channel count, which is what the genuine MP3 importer reports. Content-driven, as XNA's is: a source whose bytes are not of the named format is refused whatever its extension says."
+     "note": "Current CNA reads supported WAVE variants in their declared encoding and decodes MP3/WMA through optional build-time FFmpeg to 16-bit PCM at 44100 Hz. CNA checks the requested source format. This is current policy: the retained WmaImporter/MP3 oracle returns metadata and fails later on Data, whereas CNA refuses at import/construction; native-Windows positive-control qualification remains open."
     },
     "property:Data": {
      "status": "SEMANTIC_EQUIVALENT",
@@ -50,7 +50,7 @@
     "method:ConvertFormat(Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionFormat, Microsoft.Xna.Framework.Content.Pipeline.Audio.ConversionQuality, System.String)": {
      "status": "HOST_SUBSTITUTION",
      "cna": "ConvertFormat(ConversionFormat, ConversionQuality, const std::string&)",
-     "note": "Pcm at Best is XNA's own answer byte for byte, and the two resampled qualities match its rate, depth, channel count, byte rate, data length, loop and duration; the sample values are this host's resampler, where XNA's lives inside its native helper. Adpcm is an in-house MS-ADPCM encoder writing XNA's own block geometry. WindowsMedia writes a real Windows Media file at the target name with this host's encoder rather than Microsoft's, and refuses with XNA's own sentence when there is nowhere to write it. Xma is the one format still refused by name: its encoder ships only with the Xbox 360 tools and could not be measured."
+     "note": "Recorded PCM Best witnesses match XNA bytes; resampled qualities compare format/rate/length/loop/duration while PCM sample values come from CNA resampling. ADPCM uses the CNA MS-ADPCM encoder. WindowsMedia uses optional FFmpeg to write a real media file and is not a measured Microsoft encoder match. Xma delegates to a configured external XmaEncoderService; without one it refuses explicitly. No in-tree conforming XMA encoder or native-Xbox qualification is claimed (docs/xma-encoder-backend.md)."
     },
     "method:Dispose()": {
      "status": "SEMANTIC_EQUIVALENT",
@@ -522,7 +522,7 @@
     "method:BuildAsset<TInput, TOutput>(Microsoft.Xna.Framework.Content.Pipeline.ExternalReference<TInput>, System.String, Microsoft.Xna.Framework.Content.Pipeline.OpaqueDataDictionary, System.String, System.String)": {
      "status": "SEMANTIC_EQUIVALENT",
      "cna": "BuildAsset<TInput, TOutput>(const ExternalReference<TInput>&, const std::string&, const OpaqueDataDictionary&, const std::string&, const std::string&)",
-     "note": "a generic method cannot be virtual in C++: the member template forwards to the non-template virtual BuildAssetCore; the nested build runs through the canonical pipeline and its compiled output becomes an additional output of the current node, owned and fingerprinted like any other artifact."
+     "note": "The member template forwards to virtual BuildAssetCore because a C++ member template cannot be virtual. A nested build contributes owned additional output and dependencies. An unnamed request matching a planned primary sibling instead returns its runtime output reference without building/waiting or adding a scheduling edge; see docs/xna-content-pipeline-compat-api.md section 6."
     },
     "method:Convert<TInput, TOutput>(TInput, System.String)": {
      "status": "SEMANTIC_EQUIVALENT",
@@ -2446,7 +2446,7 @@
    "status": "SEMANTIC_EQUIVALENT",
    "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::VertexContent",
    "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexContent.hpp",
-   "note": "Every channel follows the vertices: adding one gives each channel a default entry at that position and removing one takes it away (measured, vertexcontent/add_with_channel, insert_with_channel, remove_with_channel). CreateVertexBuffer is the one member with no equivalent yet -- it answers a VertexBufferContent, which XNAPP-134 owns.",
+   "note": "Channels follow vertex insertion/removal with default entries, as the recorded vertexcontent/add_with_channel, insert_with_channel and remove_with_channel witnesses show. CreateVertexBuffer is implemented: it packs position then supported channels into VertexBufferContent (XNAPP-134); it is no longer an open API gap.",
    "members": {
     "property:Channels": {
      "status": "EXACT_EQUIVALENT",
@@ -2593,7 +2593,7 @@
    "status": "SEMANTIC_EQUIVALENT",
    "cna": "Microsoft::Xna::Framework::Content::Pipeline::Mp3Importer",
    "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Mp3Importer.hpp",
-   "note": "the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). Everything the genuine importer answers for the corpus is reproduced: the format is the decoder's own -- 16-bit PCM at 44100 whatever the source rate, with only the channel count surviving -- the duration is the whole decoded stream truncated to whole milliseconds, encoder delay and padding included, and both loop fields are 0.",
+   "note": "Audio uses a shared-pointer carrier. Twelve retained MP3 sources cover three MPEG versions and rates from 8000 to 48000; their measured output format is 16-bit PCM at 44100 Hz with source channel count and zero loop fields. Current duration tests allow 30 ms decoder variance and retain MP3 delay/padding; metadata agreement is not byte-exact PCM agreement. See docs/xna-content-pipeline-media.md.",
    "members": {
     "constructor:.ctor()": {
      "status": "EXACT_EQUIVALENT",
@@ -3452,7 +3452,7 @@
    "status": "SEMANTIC_EQUIVALENT",
    "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::SongProcessor",
    "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp",
-   "note": "the audio and the song are shared pointers, which is the lifetime a .NET reference gives them; the default Quality is the measured Best. No longer EXTERNAL_BLOCKED: Microsoft's own Windows Media encoder is unavailable, but the format is not, and a song is a Windows Media file the runtime streams rather than a payload the .xnb carries.",
+   "note": "Audio/song values use shared-pointer carriers and Quality defaults to the measured Best. The current optional FFmpeg path writes external Windows Media audio referenced by SongContent/XNB. Successful Microsoft Windows Media encoding was not measured in the retained Wine corpus; this is a host substitution with explicit limits, not proof of encoder byte parity.",
    "members": {
     "constructor:.ctor()": {
      "status": "EXACT_EQUIVALENT",
@@ -3467,7 +3467,7 @@
     "method:Process(Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent, Microsoft.Xna.Framework.Content.Pipeline.ContentProcessorContext)": {
      "status": "HOST_SUBSTITUTION",
      "cna": "Process(const std::shared_ptr<AudioContent>&, ContentProcessorContext&) -> std::shared_ptr<SongContent>",
-     "note": "Writes a real Windows Media audio file beside the output asset, named after it, and answers a SongContent carrying that name and the source's duration; the file is added to the context as an output. The encoder is this host's rather than Microsoft's, whose behaviour could not be measured at all -- XNA's Windows Media path never returns under the oracle's Wine prefix -- so the bytes are not Microsoft's and are not claimed to be. What is held is that the file a runtime reads back is Windows Media audio of the source's own rate and channel count, that its length survives a lossy round trip, and that each lower quality writes a smaller file. Refusals carry XNA's own \"Could not convert audio file X to WindowsMedia format.\""
+     "note": "Current CNA writes a real .wma beside the output asset, records it as an output and returns SongContent with its reference/duration. Optional FFmpeg WMAV2 encoding uses 192000/128000/96000 bit/s for Best/Medium/Low; these are CNA policy values. Existing tests inspect the resulting stream, quality selection and a duration allowance on finite fixtures. Retained Microsoft SongProcessor cases failed on the Wine host, so neither successful Microsoft encoding nor universal file-size ordering is established."
     }
    }
   },
@@ -4310,7 +4310,7 @@
     "method:Execute()": {
      "status": "HOST_SUBSTITUTION",
      "cna": "Execute()",
-     "note": "Builds every source asset through the canonical coordinator into .xnb, honouring the Name, Importer, Processor, Link and ProcessorParameters metadata a .contentproj writes, and fills OutputContentFiles, RebuiltContentFiles and IntermediateFiles from the build manifest. RebuildAll drops the incremental state. A non-empty PipelineAssemblies is refused rather than ignored, because C++ has no assembly to load and a project naming one expects its own importers to run."
+     "note": "Attempts routable source items through the canonical coordinator as XNB, honouring Name, Importer, Processor, Link and processor metadata, and fills output/rebuilt/intermediate item lists. RebuildAll drops incremental state. Unknown components or PipelineAssemblies make Execute return false after routable assets may already be published; partial output is not project success. Managed pipeline assemblies are not loaded; register C++ components in a custom compiler."
     }
    }
   },
@@ -4398,7 +4398,7 @@
     "method:Execute()": {
      "status": "HOST_SUBSTITUTION",
      "cna": "Execute()",
-     "note": "Validates every named project -- that it exists, opens, and opens with an XACT signature -- and then invokes the XACT compiler named by SetXactCompilerEXT() or CNA_XACTBLD, through CNA_XACTBLD_LAUNCHER where one is set, collecting the .xgs, .xwb and .xsb it produced. Validation runs whether or not a compiler is present, so a bad project is told what is wrong with it rather than being told the tool is missing. Compiling an .xap itself needs Microsoft's own XactBld3.exe, which ships with the XNA Game Studio tools and is not something CNA can reimplement or redistribute; where none is found the task answers false with a message naming it. The target platform becomes the SDK's own /WINDOWS or /XBOX360 switch (any other named target is refused before launch), and under Wine the paths are handed over through winepath (XACTBUILD-001). Measured with XactBld3 9.28.1886.0: it auto-imports an XACT2 project (ContentVersion 43) into version-46 banks, which XNA 4.0's own BuildXact rejects -- a route to modern banks, not authentic XACT2 output, exact cue playback or a real Xbox 360 build."
+     "note": "Validates every named project -- that it exists, opens, and opens with an XACT signature -- and then invokes the XACT compiler named by SetXactCompilerEXT() or CNA_XACTBLD, through CNA_XACTBLD_LAUNCHER where one is set, collecting the .xgs, .xwb and .xsb it produced. Validation runs whether or not a compiler is present, so a bad project is told what is wrong with it rather than being told the tool is missing. Compiling an .xap itself needs Microsoft's own XactBld3.exe, from the XNA Game Studio tools, which CNA does not ship; where none is found the task answers false with a message naming it. The target platform becomes the SDK's own /WINDOWS or /XBOX360 switch (any other named target is refused before launch), and under Wine the paths are handed over through winepath (XACTBUILD-001). Measured with XactBld3 9.28.1886.0: it auto-imports an XACT2 project (ContentVersion 43) into version-46 banks, which XNA 4.0's own BuildXact rejects -- a route to modern banks, not authentic XACT2 output, exact cue playback or a real Xbox 360 build."
     }
    }
   },
@@ -4502,7 +4502,7 @@
     "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
      "status": "SEMANTIC_EQUIVALENT",
      "cna": "Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<TextureContent>",
-     "note": "the texture is answered by shared pointer; every source XNA reads is read the same way and answers the same content -- a DDS included, whose compressed blocks stay compressed, whose cube becomes a TextureCubeContent and whose volume a Texture3DContent, and whose DX10 extension is refused as XNA refuses it."
+     "note": "The recorded texture corpus compares supported source shapes and DDS compressed-block/cube/volume handling with genuine XNA; DX10-header refusal has its own witness. This is a finite importer/format comparison, not a guarantee that every XNA-readable image produces identical pixels through every decoder. JPEG and processing policies have documented tolerances and limits."
     }
    }
   },
@@ -4573,7 +4573,7 @@
     "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
      "status": "SEMANTIC_EQUIVALENT",
      "cna": "Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<AudioContent>",
-     "note": "the audio is answered by shared pointer; every WAV variant XNA accepts is accepted with the same fields, including the unformatted \"{0}\" its missing-file message carries."
+     "note": "Audio uses a shared-pointer carrier. Recorded WAV variants compare accepted fields and refusals, including the unformatted {0} in the missing-file message. Coverage is the retained finite corpus, not every possible RIFF/WAVE encoding or chunk layout."
     }
    }
   },
@@ -4581,7 +4581,7 @@
    "status": "SEMANTIC_EQUIVALENT",
    "cna": "Microsoft::Xna::Framework::Content::Pipeline::WmaImporter",
    "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/WmaImporter.hpp",
-   "note": "the audio is answered by shared pointer. The genuine importer could not be measured here -- Wine carries no Windows Media Format runtime, so every WMA is refused before it is opened (docs/xna-content-pipeline-media.md section 6) -- so this reads the format itself and answers the shape the MP3 measurement settled for the same SongProcessor input.",
+   "note": "Audio uses a shared-pointer carrier. Retained valid-WMA cases failed on the Wine Windows Media host, so the successful WMA path has no corresponding Microsoft decode measurement. WmaImporter with an MP3 source did return metadata before Data failed; current CNA rejects that format mismatch earlier. Current WMA decoding uses optional FFmpeg and its format/priming policy, described in docs/xna-content-pipeline-media.md.",
    "members": {
     "constructor:.ctor()": {
      "status": "EXACT_EQUIVALENT",
@@ -4591,7 +4591,7 @@
     "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
      "status": "SEMANTIC_EQUIVALENT",
      "cna": "Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<AudioContent>",
-     "note": "the audio is answered by shared pointer, and a source whose bytes are not Windows Media audio is refused whatever its extension says. The successful path is not measured against the genuine importer, which this environment cannot run."
+     "note": "Current CNA refuses a source whose bytes do not match Windows Media audio at import. This timing differs from the retained WmaImporter/MP3 metadata-only observation. Successful genuine WMA decoding needs a working native-Windows positive control; the current FFmpeg path is tested independently."
     }
    }
   },

@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Content Pipeline parity-report reconciliation (2026-11-01, XNAPP-014/020): the generator
+  now labels percentages as maintained classifications, distinguishes annotation/freshness gates
+  from compilation/runtime proof and explains named refusal tests versus successful target/device
+  qualification. Explicit null rendering aligns EffectProcessor.Defines with the component guide.
+  Fourteen map notes and seven input-route notes correct current media/XMA service boundaries,
+  completed CreateVertexBuffer, partial project output, sibling references and finite evidence;
+  both generated reports are refreshed. Only note fields changed in the JSON maps: classifications,
+  frozen denominator and gate functions remain unchanged. Nine metadata CTests pass privately;
+  47 property rows preserve nine false defaults and one null. No runtime/wire change or new
+  Microsoft/Phone/Xbox qualification run.
 - Intermediate XML reference reconciliation (2026-11-01, XNAPP-070–079): the guide separates
   the 265 retained oracle outcomes from CNA test counts and incorporates later direct-read,
   section-fixup and character-boundary evidence. It corrects external-reference deduplication to
