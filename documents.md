@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 129 reviewed, 12 updated incidentally and awaiting their own audit, and 36 not yet
+Summary: 133 reviewed, 12 updated incidentally and awaiting their own audit, and 32 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -87,8 +87,8 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/devices-native-backend-design.md`](docs/devices-native-backend-design.md)
 - ✅ **REVIEWED** — [`docs/devices-thread-safety.md`](docs/devices-thread-safety.md)
 - ✅ **REVIEWED** — [`docs/devices_sensor_hardware_qa_template.md`](docs/devices_sensor_hardware_qa_template.md)
-- ⬜ **PENDING** — [`docs/diagnostics-benchmark.md`](docs/diagnostics-benchmark.md)
-- ⬜ **PENDING** — [`docs/diagnostics.md`](docs/diagnostics.md)
+- ✅ **REVIEWED** — [`docs/diagnostics-benchmark.md`](docs/diagnostics-benchmark.md)
+- ✅ **REVIEWED** — [`docs/diagnostics.md`](docs/diagnostics.md)
 - ✅ **REVIEWED** — [`docs/directx9-renderer.md`](docs/directx9-renderer.md)
 - ✅ **REVIEWED** — [`docs/dualtextureeffect-support.md`](docs/dualtextureeffect-support.md)
 - ✅ **REVIEWED** — [`docs/emscripten-mainloop-game-lifetime.md`](docs/emscripten-mainloop-game-lifetime.md)
@@ -125,8 +125,8 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/input-pre-merge-checklist.md`](docs/input-pre-merge-checklist.md)
 - ✅ **REVIEWED** — [`docs/input-public-api-frozen.md`](docs/input-public-api-frozen.md)
 - ✅ **REVIEWED** — [`docs/input-test-coverage.md`](docs/input-test-coverage.md)
-- ⬜ **PENDING** — [`docs/inspector-benchmark.md`](docs/inspector-benchmark.md)
-- ⬜ **PENDING** — [`docs/inspector.md`](docs/inspector.md)
+- ✅ **REVIEWED** — [`docs/inspector-benchmark.md`](docs/inspector-benchmark.md)
+- ✅ **REVIEWED** — [`docs/inspector.md`](docs/inspector.md)
 - ✅ **REVIEWED** — [`docs/installed-cpp-sdk.md`](docs/installed-cpp-sdk.md)
 - ✅ **REVIEWED** — [`docs/keyboard-device-emulation.md`](docs/keyboard-device-emulation.md)
 - ⬜ **PENDING** — [`docs/link-size-architecture.md`](docs/link-size-architecture.md)

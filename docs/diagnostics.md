@@ -1,6 +1,7 @@
 # CNA diagnostics and profiler
 
-Status: current for DIAG-0001 (2026-09-17).
+Current contract reconciled against source on 2026-11-01. DIAG-0001 introduced the foundation;
+later lifetime, accounting, UTF-8 and parser hardening remain part of the current implementation.
 
 ## Purpose and boundary
 
@@ -22,13 +23,12 @@ Game / GraphicsDevice / GraphicsResource / audio / application instrumentation
                     v          v          v
                 snapshots   events    bounded trace
                     \          |          /
-                     future consumer or Inspector
+                     Inspector or another consumer
 ```
 
-Diagnostics are a CNA extension in `CNA::Diagnostics`; no XNA-compatible behavior or public
-Microsoft namespace semantics change. DIAG-0001 deliberately does not add a C ABI. The existing
-C ABI therefore remains unchanged. A future out-of-process consumer should put a versioned wire
-format above the provider rather than exposing C++ objects across a process boundary.
+Diagnostics are a CNA extension in `CNA::Diagnostics`; instrumentation does not add XNA API.
+There is no diagnostics C ABI. Inspector supplies a separately versioned wire format above the
+in-process C++ provider rather than exposing C++ objects across a process boundary.
 
 ## Build and runtime modes
 
@@ -38,7 +38,7 @@ engine and an application that links CNA compile the same instrumentation surfac
 
 | Mode | Retained functionality | Cost model |
 |---|---|---|
-| `OFF` | No metrics, resources, histories, zones, events, or recordings | Engine macros expand to do-nothing statements without evaluating arguments. Conditional graphics resource state is absent. No state object, thread-local buffer, thread, lock, allocation, traversal, polling, or serialization occurs. |
+| `OFF` | No collected metrics, resources, histories, zones, events, or recordings | Engine macros type-check arguments through unevaluated expressions; they do not execute them. Conditional graphics resource state is absent, and instrumentation creates no collection state, producer buffer or polling work. Explicit offline Trace parsing/export and consumer-owned data can still allocate. |
 | `STATS` | Metrics, frame timing/FPS, 240-frame history, resource metadata, frame-boundary sources | Metric registration allocates once. Updates are relaxed atomic operations. Frames scan at most 512 registered metric slots; resource lifetime operations use the resource-registry lock. |
 | `FULL` | Everything in STATS plus hierarchical zones, markers, resource events, per-thread streams, and recording/export | The first event on a thread allocates and registers one fixed-capacity context. Later producer events use thread-local state without a global hot-path lock or allocation. Merging happens at a frame boundary or explicit consumer read. |
 
@@ -76,6 +76,8 @@ Available macros are:
 Names at macro sites are registered once through function-local static handles; no dynamic string
 allocation occurs on subsequent hot-path calls. Direct handles (`CounterHandle`, `GaugeHandle`,
 `FrameCounterHandle`, and `NameHandle`) are available for code that needs explicit ownership.
+Name registrations sanitize invalid UTF-8 bytes to U+FFFD and bound stored names to 1 MiB each,
+65,536 trace-name entries and 16 MiB of trace-name bytes; exhausted registrations become inert.
 `BeginZone`/`EndZone` provide manual timing. A token must end on its producer thread. Out-of-order,
 duplicate, wrong-thread, and depth-overflow uses are contained and reported rather than corrupting
 the stack. The recommended API remains `ZoneScope` or the scope macro.
@@ -89,7 +91,7 @@ remains available in a snapshot.
 
 ## Frames and built-in engine metrics
 
-Every shared `Game` tick publishes one frame, whether native `Tick()` waits for a fixed step or an
+With statistics active, each shared `Game` tick publishes one frame, whether native `Tick()` waits for a fixed step or an
 Emscripten scheduler supplies the next non-blocking frame opportunity. A completed sample
 contains its monotonically increasing frame number, monotonic start timestamp, elapsed duration,
 FPS,
@@ -147,8 +149,8 @@ frames, resources, drop counts, malformed-usage counts, and diagnostics-memory m
 reports both history gaps and producer drops. `ResolveName` resolves interned event names.
 
 Consumers allocate their own returned vectors and should poll at a rate appropriate for a debug
-tool. No consumer callback runs on an instrumentation path. A future Inspector should use one
-consumer thread, keep the latest event sequence as its cursor, and serialize only in that thread.
+tool. Inspector already uses a dedicated consumer thread, retains its event cursor and serializes
+there. Snapshot copying is not an atomic observation of every subsystem at one native instant.
 
 `IDiagnosticsSource` is the extension point for renderer- or subsystem-specific statistics.
 Sources pre-register handles and publish already-available data through `FrameStatisticsSink`.
@@ -166,7 +168,9 @@ FULL uses one single-producer/single-consumer event buffer per producing thread.
 1,024 records. The producer owns zone nesting and the write index; a consumer advances the atomic
 read index. Once initialized, a producer does not acquire the global history mutex, allocate, or
 intern a name. New events are dropped when that thread's buffer is full, preserving already
-published records. Drops are observable.
+published records. Drops are observable. Thread exit drains/unregisters its context; a later
+static-destructor emission after that thread-local release is dropped safely rather than using
+the destroyed context. Buffer capacity is per thread, not a global limit on producer count.
 
 Frame boundaries and explicit provider reads merge thread buffers into a 32,768-record process
 ring. The oldest process event is overwritten when full, with an overwrite counter and sequence
@@ -199,8 +203,9 @@ repeat events: seven u64 fields, i64 value, u32 name, u8 kind, u8 category, u16 
 
 The seven event integers are sequence, timestamp ns, duration ns, frame number, thread ID,
 correlation ID, and parent correlation ID. The reader rejects bad magic/version, truncation,
-invalid enums, more than 65,536 names, a name longer than 1 MiB, more than 16 MiB of name data, or
-more than 32,768 events.
+invalid enums, more than 65,536 names, an encoded name longer than 1 MiB, more than 16 MiB of
+encoded name data, or more than 32,768 events. Read names are sanitized to valid UTF-8; replacement
+can enlarge their stored representation. This is separate from registration's stored-name bounds.
 
 `WriteChromeTrace` is an offline streaming converter. It writes directly to the destination stream
 and never constructs a frame-sized or trace-sized JSON document in memory. CNA does not serialize
@@ -236,10 +241,17 @@ and its explicit preview source. The Inspector did not require a diagnostics pro
   when diagnostics are re-enabled.
 - Timestamps use `steady_clock` and are comparable only within one process run.
 - The provider is an in-process C++ contract. No C ABI or out-of-process transport is included.
-- Most resources of a typical game report `unknown` metadata: the stock state objects, the state
-  objects `SpriteBatch` owns and vertex declarations are `GraphicsResource`s that never describe
-  themselves (19 of the Inspector demo's 25 resources). The rows are truthful, not missing, but
-  they push the described textures and buffers down the list.
+- GraphicsResource initially registers unknown metadata; state objects and vertex declarations
+  may retain it when they never supply a descriptor. The old demo's 19/25 count was an observation,
+  not a fixed current ratio for typical games. These rows are distinct from described textures
+  and buffers, not evidence of missing native allocations.
+- Resource registry size and total producer count follow application lifetime/use; fixed event/
+  metric capacities do not make every snapshot or all diagnostics memory globally constant-size.
 
-See [`diagnostics-benchmark.md`](diagnostics-benchmark.md) for the reproducible performance gate
-and measured results.
+The 2026-11-01 audit built isolated Linux HEADLESS/NULL configurations and passed the focused
+diagnostics suite in OFF (2 cases), STATS (16) and FULL (41). These are mode-specific suites;
+passing OFF does not exercise FULL event/trace paths. No new sanitizer, GPU/OS or whole-game
+performance qualification is implied.
+
+See [`diagnostics-benchmark.md`](diagnostics-benchmark.md) for the historical measurements and
+current benchmark method.

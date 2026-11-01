@@ -1,6 +1,7 @@
 # CNA diagnostics microbenchmark
 
-Status: DIAG-0001 performance record (2026-09-17).
+Historical DIAG-0001 performance record (2026-09-17), source-audited on 2026-11-01.
+The numbers are retained evidence for that setup, not measurements of current HEAD.
 
 ## Reproduction
 
@@ -13,13 +14,17 @@ path. Run an optimized build on an otherwise idle machine:
 ```sh
 cmake -S . -B /tmp/cna-diag-off -G Ninja \
   -DCMAKE_BUILD_TYPE=Release -DCNA_DIAGNOSTICS=OFF -DCNA_BUILD_BENCHMARKS=ON
-cmake --build /tmp/cna-diag-off --target cna_diagnostics_benchmark
+cmake --build /tmp/cna-diag-off --target cna_diagnostics_benchmark --parallel 8
 /tmp/cna-diag-off/modules/diagnostics/cna_diagnostics_benchmark
 ```
 
-Repeat for `STATS` and `FULL`. Run each executable at least five times, report the median, and keep
+Use separate directories for STATS and FULL. The focused benchmark links diagnostics, not the
+whole engine; root configuration still needs its dependency/toolchain setup.
+Run each executable at least five times, report the median, and keep
 the same compiler, CPU affinity, power policy, and background workload. The program reports the
 loop baseline, a frame-counter macro, a scoped-zone macro, and baseline-subtracted overhead.
+Keep individual outputs: medians of per-run differences need not equal differences between the
+displayed total medians. The program reports timings, not an automated pass/fail threshold.
 
 ## DIAG-0001 results
 
@@ -41,24 +46,31 @@ sub-nanosecond differences should be read as noise.
 | FULL frame-counter update | 2.677 ns/op | 1.594 ns/op |
 | FULL completed scoped zone | 64.873 ns/op | 63.913 ns/op |
 
-The OFF counter and zone measurements are statistically indistinguishable from the loop. An
-`nm -C -u` inspection of the OFF `Game.cpp`, `GraphicsDevice.cpp`, `SpriteBatch.cpp`, and
-`TextureCollection.cpp` objects also finds no `CNA::Diagnostics` reference, which verifies that
-the normal engine instrumentation sites did not merely become runtime no-ops.
+The original record interpreted the small OFF differences as measurement noise; raw run samples
+and confidence intervals are not retained here, so equivalence cannot be recomputed from the
+medians. The original campaign's `nm -C -u` inspection of the OFF Game.cpp, GraphicsDevice.cpp,
+SpriteBatch.cpp and TextureCollection.cpp objects found no CNA::Diagnostics reference, supporting
+the claim that normal engine instrumentation sites did not merely become runtime no-ops.
 
 A common direct draw updates three frame counters (total calls, indexed/non-indexed split, and
-submitted primitives), so its measured steady-state statistics cost is approximately 4.9 ns here
+submitted primitives), so extrapolating the primitive measurement gives approximately 4.9 ns on the recorded system
 plus already-existing draw validation and renderer submission. FULL zones are intentionally much
 richer: two monotonic timestamps, nesting validation, and one thread-local event publication. They
 remain allocation-free and free of global locks after the thread's first profiler event.
 
-The results satisfy the acceptance criteria:
+The historical record's acceptance assessment was:
 
 - OFF macros stay within measurement noise and disappear from engine object references;
 - STATS counter cost is about 1.6 ns per update on this system;
 - FULL zones remain bounded and low enough for selected regions, but are not intended for every
   instruction or inner-loop iteration;
 - no mode creates a profiler thread or performs periodic work.
+
+The zone timer uses 512-operation batches while the plain baseline is one continuous loop;
+clock/batch overhead and excluded consumer work remain part of the interpretation. First-use name/
+thread registration, snapshots, frame/source collection and serialization are not measured by the
+steady-state primitive numbers. Source/benchmark smoke verification in the 2026-11-01 audit does
+not replace the original seven-run performance campaign.
 
 The numbers measure instrumentation primitives, not a renderer or game workload. Real frame impact
 depends on the number of draw calls, counters, and FULL zones selected by the application.

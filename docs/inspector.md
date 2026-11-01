@@ -1,6 +1,7 @@
 # CNA Inspector
 
-Status: INSP-0001 complete (2026-09-17).
+Current contract reconciled against source on 2026-11-01. INSP-0001 introduced the tool;
+later transport/parser, lifetime and frontend fixes are included here.
 
 ## Purpose and boundary
 
@@ -9,7 +10,8 @@ version-1 diagnostics provider. It does not replace a debugger or a general-purp
 and it is not an editor, scene browser, ECS browser, scripting console, input injector, or remote
 administration interface.
 
-The profiler foundation at `b7e856221b61c273e0ac085ec67d103e0ac7184a` remains unchanged.
+The diagnostics provider interface remains version 1; its implementation has received subsequent
+accounting, lifetime and UTF-8 fixes. It is not frozen at the original foundation commit.
 Inspector consumes `IDiagnosticsProvider::CaptureSnapshot()`, cursor-based `ReadEvents()`, and
 `ResolveName()`. It preserves every `Accuracy` value and exposes all producer-drop, history-gap,
 history-overwrite, malformed-use, and source-failure counters. Transport, authentication, binary
@@ -41,7 +43,7 @@ Inspector is compiled out by default. Configure diagnostics and the optional mod
 cmake -S . -B build-inspector \
   -DCNA_DIAGNOSTICS=FULL \
   -DCNA_BUILD_INSPECTOR=ON
-cmake --build build-inspector --target cna-inspector
+cmake --build build-inspector --target cna-inspector --parallel 8
 ```
 
 `STATS` is sufficient for frames, metrics, memory estimates, and resource metadata. `FULL` also
@@ -107,12 +109,14 @@ port. `--help` lists the complete command line.
 
 `cna_inspector_demo` is a small game that opts in exactly as above. It draws sprites into a render
 target, owns textures and buffers, publishes CPU zones and markers, and creates and destroys a
-texture every two seconds, so every view has live data. It runs under any platform, including
-`HEADLESS`, and is built with `CNA_BUILD_EXAMPLES` (on by default):
+texture every two seconds. Unsupported views still show unavailable data. It needs a compatible
+renderer/platform pair (including a windowless HEADLESS pair), and is built with
+CNA_BUILD_EXAMPLES (on by default):
 
 ```sh
-cmake --build <build-dir> --target cna_inspector_demo cna-inspector
-<build-dir>/cna_inspector_demo --port 47001          # prints the port and token; --seconds N exits
+cmake --build <build-dir> --target cna_inspector_demo cna-inspector --parallel 8
+tools/platform/run_gpu_tests_private.sh --exec \
+  <build-dir>/cna_inspector_demo --port 47001 --seconds 60
 CNA_INSPECTOR_TOKEN='<token>' <build-dir>/modules/inspector/cna-inspector --agent-port 47001
 ```
 
@@ -190,7 +194,9 @@ a new major version. The diagnostics provider and wire protocol versions are del
 
 ## Demand and backpressure model
 
-The UI requests the metrics/frame overview and up to 512 new events twice per second. It advances
+The UI polls again 500 ms after the previous poll finishes, rather than guaranteeing exactly two
+requests per second. Each poll pulls an overview and up to four event batches of 512 records,
+including any retry needed to seek to the live tail. It advances
 its cursor to the last event actually delivered so a bounded page cannot silently skip a backlog.
 Its graph uses the provider's bounded 240-frame history. Its local event model discards the oldest
 entries above 1,000. Resource metadata is transmitted only after the user opens the Resources view or
@@ -267,6 +273,12 @@ Safeguards are enforced outside the source as well:
 - source results with a changed ticket, unsafe MIME type, invalid dimensions, or excessive bytes
   are rejected without terminating the game.
 
+Source callbacks run synchronously on the agent thread. Nonblocking behavior is a provider
+requirement, not a watchdog-enforced deadline; marshal renderer work to its owning thread and poll
+completion. The agent validates metadata and payload bounds/MIME, not that the encoded bytes form
+a decodable image. A pending ticket is bounded in count but not automatically cancelled when the
+browser's ten-second polling timeout expires.
+
 There is no continuous texture/render-target readback and buffer contents are never exposed.
 Current CNA renderers do not yet install a preview provider, so production sessions truthfully show
 the feature as unavailable. The seam exists without changing diagnostics provider v1 or renderer
@@ -303,15 +315,22 @@ reported separately and do not claim renderer GPU-readback cost.
 
 ## Verification
 
-- Native Debug protocol, frontend-model, and real-loopback agent integration tests pass 24/24;
-  the same 24/24 pass under AddressSanitizer and UndefinedBehaviorSanitizer.
-- The immutable diagnostics provider regression suite passes 17/17.
-- Native `-Wall -Wextra -Wpedantic -Werror` and MinGW-w64 cross-builds pass, including the
-  Winsock and Windows system-RNG path.
-- The default-OFF configuration builds the standalone compiled-out benchmark and exposes no
-  `cna-inspector` target.
-- Embedded JavaScript passes Node 20 parsing. A live HTTP smoke test verifies the offline assets,
-  CSP, UI-token gate, bad-Host rejection, and disconnected-agent response.
+DiagnosticsTests.cpp covers mode/argument behavior, metrics, resources, sources, nested/threaded
+events, teardown and trace parsing. InspectorTests.cpp covers protocol mutation/parsing,
+frontend expectations and real authenticated loopback behavior, including reconnects, bounds,
+previews and high-numbered sockets. Run their focused targets with the selected diagnostics mode;
+an OFF build does not execute FULL-only cases.
+
+The original campaign recorded 24 Inspector and 17 diagnostics cases, sanitizer builds, warning/
+MinGW checks, Node parsing and HTTP/browser smokes. Those are historical counts, not the current
+suite size or a fresh all-platform result. Native Windows and browser qualification remain scoped
+as in the platform table. The 2026-11-01 audit uses new Linux HEADLESS/NULL builds for current
+tests; it does not requalify the Windows/macOS/mobile/browser matrix or reproduce old timings.
+
+That audit passes all 27 current Inspector tests and a disposable bridge HTTP check of offline
+assets, CSP, Host rejection, the UI-token gate and a disconnected-agent response. Benchmark
+executables complete a smoke run, including zero idle provider calls; that is not a new statistical
+performance campaign.
 
 ## Troubleshooting
 

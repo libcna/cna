@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Diagnostics/Inspector documentation reconciliation (2026-11-01, DIAG-0001/INSP-0001): four
+  pages correct the obsolete immutable-foundation claim, OFF macro type checking, explicit
+  offline allocations, UTF-8/name bounds, producer teardown, resource/snapshot limits, UI batch
+  polling and provider-thread/preview-ticket semantics. Performance tables remain historical;
+  synthetic preview bytes, per-process estimators, excluded work and unavailable raw intervals
+  are explicit. New isolated Release HEADLESS/NULL/SDL-free trees build; private diagnostics tests
+  pass OFF 2/2, STATS 16/16 and FULL 41/41, Inspector 27/27. The bridge HTTP asset/CSP/Host/UI-token/
+  disconnected smoke passes; benchmark smokes complete with zero idle provider calls. An old
+  museum-ASan tree points to a removed source checkout and is not used as current sanitizer
+  evidence. No implementation/ABI changes, new performance campaign or Windows/macOS/browser/
+  sanitizer qualification.
 - Terminal-platform documentation reconciliation (2026-11-01, PLAT-140/TCR-2): the feasibility
   proposal becomes a current provider contract with the actual CPU presenter, independent
   platform quantizer, capability/null-service table, requested versus resized virtual dimensions,
