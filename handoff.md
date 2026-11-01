@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Apple-platform documentation reconciliation (2026-11-01): `docs/apple-platforms.md` now
+  separates current CMake/workflow contracts from historical M4/retired-renderer measurements,
+  removes contradictory live-CI claims and moves the long finished campaign table to Git history.
+  iOS recipes use the recorded SOFTWARE baseline, default/allow-list status is separated from
+  SDLGPU qualification, the mobile event pair is corrected to WillEnterBackground/DidEnterForeground,
+  and storage precedence, signing/deployment and pixel-density boundaries match source. The
+  host-portable Apple CMake script passes, and workflow/source/local-link checks pass. The cited
+  old remote run could not be independently re-fetched in this audit; no current remote success,
+  new Xcode build, Apple runtime or physical-device evidence is claimed. Implementation and ABI
+  are unchanged.
 - Release-procedure documentation reconciliation (2026-11-01): `docs/releasing.md` corrects
   the product-version example, removes the stale develop push recipe, identifies the owner-approved
   branch and explicit tag, and separates product/installed-package/C ABI version and readiness

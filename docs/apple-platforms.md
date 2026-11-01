@@ -1,86 +1,71 @@
 # Apple platforms: macOS and iOS
 
-CNA targets two Apple platforms, and they are not equally supported. This document states what
-each one is, how to build it, and — most importantly — what evidence exists behind each claim.
+This page separates build configuration, recorded Apple measurements and current qualification
+limits. `CMAKE_SYSTEM_NAME=Darwin` selects macOS; `iOS` with an `iphoneos` or
+`iphonesimulator` sysroot selects an iPhone/iPad device or simulator.
 
-| Target | CMake identity | Status |
-|---|---|---|
-| macOS (Apple silicon; Intel configurable) | `CMAKE_SYSTEM_NAME=Darwin` | arm64 native build/test CI; x86_64 not CI-verified |
-| iOS / iPadOS device | `CMAKE_SYSTEM_NAME=iOS`, `iphoneos` sysroot | Experimental; final-linked app build, no device run |
-| iOS simulator | `CMAKE_SYSTEM_NAME=iOS`, `iphonesimulator` sysroot | Experimental; one-frame app smoke run |
-| tvOS / watchOS / visionOS | — | Rejected at configure time |
+| Target | Current boundary |
+|---|---|
+| macOS arm64 | Native build/test evidence and configured CI gates; renderer-specific limitations remain. |
+| macOS x86_64 / universal | Configurable; no current Intel/universal runtime qualification recorded here. |
+| iOS device | Experimental application-bundle build support; no physical-device run. |
+| iOS Simulator | Experimental SOFTWARE smoke evidence; retired METAL pixel measurements are historical. |
+| tvOS / watchOS / visionOS | Rejected by the Apple platform CMake layer. |
 
-The corresponding tasks were `APPLE-1`…`APPLE-20` (the Apple platform plan, deleted on 2026-10-28;
-Git history only). What is deliberately left undone is under *Known gaps* below.
+`SDLGPU` is the default on macOS and iOS. SDL supplies its Metal backend; CNA's former
+`METAL` and `SDL_RENDERER` identities are retired and refused. See
+[removed-renderers.md](removed-renderers.md). Default selection and iOS allow-list membership
+are configuration facts, not a claim of successful iOS SDLGPU rendering.
 
-## Evidence boundary
+## Recorded evidence
 
-Read this before quoting anything below as "CNA supports iPhone".
+The Apple M4 campaign ran native macOS suites and external samples with several renderer families
+before the 2026-10-13 retirement. Its Phase 4 full-tree measurements were recorded at
+`fdd33d2c6`; later tasks checked C API packaging and mobile behavior. The complete AM4 table,
+counts, machine/toolchain details and retired-renderer results remain in this page's Git history.
+They must not be read as tests of the current head or selectors that no longer exist.
 
-**Renderers on Apple since 2026-10-13.** CNA's own `METAL` and `SDL_RENDERER` renderers are retired
-(`docs/removed-renderers.md`). `SDLGPU` is the designated Apple renderer -- CNA maps XNA onto
-SDLGPU and SDL drives Metal underneath it -- and the default on macOS and iOS. Its Apple status:
-on macOS it passed the full test tree on the Mac mini M4 (table below, `AM4-*`); it has not been
-re-qualified since the retirement, and on iOS it has never been built. That qualification is a
-separate, later campaign (`handoff.md` §5.2).
+The earlier platform campaign also recorded device/simulator application builds at `be4ea08bc`
+and a final device bundle at `49bdf63b8`. The recorded iOS multi-frame pixel probe
+(AM4-120) used the retired METAL renderer. It does not qualify SOFTWARE or SDLGPU pixels today.
+The repository currently records SOFTWARE simulator smoke evidence, while full surviving-renderer
+Apple requalification and SDLGPU on iOS remain open in
+[handoff.md §5.2](../handoff.md#52-limitations).
 
-**macOS arm64** builds natively, runs the portable test suites, and has one GitHub Actions gate: the
-Apple workflow (`.github/workflows/apple-ci.yml`, `SOFTWARE` plus the platform/storage suites,
-chosen because the gate is about the platform layer, not a GPU renderer).
-The CMake layer keys vendored dependencies by requested architecture and permits x86_64/universal
-builds, but the current hosted workflow runs on Apple silicon and is not Intel evidence.
+The workflow definitions below describe what CI attempts and whether a failure gates the workflow.
+They are not a live report of the latest remote workflow result.
 
-The concrete evidence for the claims on this page is the green Apple workflow
-[run 31736845749](https://github.com/openeggbert/cna/actions/runs/31736845749) for commit
-`be4ea08bc`: macOS 14 arm64, an arm64 iOS device build, and an arm64 iOS Simulator build/run.
+## macOS build
 
-**iOS** support is experimental. What exists is: a toolchain file; an iOS-aware, static vendored
-SDL3/SDL3_mixer build; `.app` bundle generation with a generated `Info.plist`; the SDL
-`main()` bridge UIKit requires; application lifecycle and orientation handling; a conservative
-renderer allow-list; and `cna_ios_smoke`, a real application that constructs `Game` and runs one
-frame. CI final-links that app for device and simulator, checks its Mach-O platform, entry-point
-symbols and dynamic dependencies, then installs and launches the simulator build.
+Use a macOS host, a compatible modular Sharp Runtime sibling, initialized submodules and dependencies
+for the selected configuration. A normal SDLGPU configuration is:
 
-`cna_ios_pixel_probe` reads back a clear colour, a SpriteBatch quad and a BasicEffect triangle. Its
-simulator pixel evidence (`AM4-037`/`AM4-120`) was measured with the retired `METAL` renderer; it
-has not yet been measured with a surviving one.
-
-What does **not** exist is a run on a physical iPhone/iPad, device pixel correctness, real touch,
-audio, storage or performance evidence, an App Store package, or production signing. A green
-one-frame simulator smoke test proves initialization/event/update/draw/present returns without
-an exception; it does not prove those unobserved features.
-
-## Building for macOS
-
-Nothing special is required beyond the normal prerequisites (`sharp-runtime` cloned as a sibling
-checkout, submodules initialized):
-
-```bash
-brew install ccache ffmpeg
+```sh
+brew install ccache ffmpeg nlohmann-json
 cmake -S . -B cmake-build-macos -DCNA_GRAPHICS_RENDERER=SDLGPU
 cmake --build cmake-build-macos --parallel 4
 ```
 
-macOS-specific defaults, all overridable:
+FFmpeg is optional through `CNA_ENABLE_VIDEO=AUTO/ON/OFF`. AUTO enables the decoder only when
+all target dependencies are found; OFF retains the API without FFmpeg decoding. Installed Homebrew
+libraries can impose a newer OS floor than CNA's own minimum. A binary intended for the minimum
+OS must use dependencies built for that floor or omit the optional dependency.
 
-| Option | Default | Meaning |
-|---|---|---|
-| `CNA_MACOS_DEPLOYMENT_TARGET` | `13.3` | Seeds `CMAKE_OSX_DEPLOYMENT_TARGET` and is the supported floor. CNA/sharp-runtime use floating-point `std::to_chars`, which Apple libc++ marks unavailable before macOS 13.3. |
-| `CNA_APPLE_BUNDLE_MACOS_EXECUTABLES` | `OFF` | When `ON`, repository executables become `.app` bundles and non-system dylibs are copied into `Contents/Frameworks` with fixed install names. Off by default because examples/tools/tests are normally invoked by path. |
-| `CNA_APPLE_BUNDLE_IDENTIFIER_PREFIX` | `com.openeggbert.cna` | Generated `CFBundleIdentifier` is `<prefix>.<target-name-with-dashes>`. |
+| Option | Default / contract |
+|---|---|
+| `CNA_MACOS_DEPLOYMENT_TARGET` | 13.3; seeds the deployment target. The CMake layer refuses a lower effective macOS target. |
+| `CNA_APPLE_BUNDLE_MACOS_EXECUTABLES` | OFF; ON makes CNA-owned executables application bundles and fixes up their non-system dylibs. |
+| `CNA_APPLE_BUNDLE_IDENTIFIER_PREFIX` | `com.openeggbert.cna`; used with the target name for bundle identity. |
+| `CNA_APPLE_BUNDLE_VERSION` | Defaults to numeric product version; pre-release suffix is omitted for bundle metadata. |
 
-FFmpeg (`VideoPlayer`) is available on macOS through Homebrew and is detected by `pkg-config`,
-exactly as on Linux. `CNA_ENABLE_VIDEO=AUTO` enables it when found; `OFF` produces a CNA/Game
-binary without FFmpeg while retaining the public video API.
+The 13.3 macOS / 16.3 iOS floors are enforced for CNA/Sharp Runtime floating-point
+`std::to_chars` availability. They are not evidence that every external SDK or library runs on
+those minimum releases.
 
-Homebrew builds its bottles for the macOS it runs on, so a binary linked against them does not
-start on an older macOS whatever `CNA_MACOS_DEPLOYMENT_TARGET` says: the linker warns "building
-for macOS-13.3, but linking with dylib ... built for newer version" (27.0 on the M4 campaign host).
-A binary meant to run down to the 13.3 floor either builds with `CNA_ENABLE_VIDEO=OFF` or links an
-FFmpeg built for that floor.
+## Application bundles and entry point
 
-An application consuming CNA with `add_subdirectory()` is not part of CNA's repository-owned
-bundle sweep. Configure its executable explicitly:
+A source-tree consumer configures its own executable explicitly; the CNA-owned target sweep does
+not own a parent project's later targets:
 
 ```cmake
 add_subdirectory(path/to/cna)
@@ -89,284 +74,134 @@ target_link_libraries(my_game PRIVATE CNA SHARP_RUNTIME)
 cna_apple_configure_bundle(my_game)
 ```
 
-The helper uses paths relative to CNA itself, not the outer project's `CMAKE_SOURCE_DIR`. On
-macOS it takes effect only with `CNA_APPLE_BUNDLE_MACOS_EXECUTABLES=ON`; sign a distributable
-bundle after the post-build dependency fixup. On iOS the call is mandatory, and the translation
-unit containing `main()` must include `CNA/Platform/Entrypoint.hpp` before SDL headers so SDL can hand
-process startup to UIKit.
+On macOS the helper acts when bundling is enabled; it copies/fixes up the non-system dylib closure
+under `Contents/Frameworks`. Sign a distributable application after those post-build changes.
+The helper resolves templates relative to CNA's own source root.
 
-## Building for iOS
+On iOS the bundle setup is required. The translation unit defining `main()` must include
+`CNA/Platform/Entrypoint.hpp` before SDL headers so SDL can provide UIKit startup.
+The generated plist includes `UILaunchScreen` and supported orientations. These source-build
+helpers do not establish an installed Apple SDK packaging/signing workflow; see
+[installed-cpp-sdk.md](installed-cpp-sdk.md) for that separate qualification boundary.
 
-Requires a macOS host with Xcode installed.
+Windowed Cocoa/UIKit games must use the process main thread. Offscreen-capable configurations have
+their own platform behavior; do not generalize a headless run into windowed main-thread evidence.
 
-```bash
-# Device (arm64)
+## iOS build
+
+Use a macOS host with Xcode. SOFTWARE is the recorded platform-smoke path, so use it for the
+baseline; SDLGPU is allowed but remains separately unqualified:
+
+```sh
+# Device.
 cmake -S . -B cmake-build-ios \
-      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-      -DCNA_GRAPHICS_RENDERER=SDLGPU \
-      -DCNA_ENABLE_NET=OFF \
-      -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF
-cmake --build cmake-build-ios --parallel 4
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+  -DCNA_GRAPHICS_RENDERER=SOFTWARE \
+  -DCNA_ENABLE_NET=OFF \
+  -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF
+cmake --build cmake-build-ios --target cna_ios_smoke --parallel 4
 
-# Simulator (arm64 on Apple silicon, x86_64 on Intel)
+# Simulator.
 cmake -S . -B cmake-build-ios-sim \
-      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-      -DCNA_IOS_SIMULATOR=ON \
-      -DCNA_GRAPHICS_RENDERER=SDLGPU \
-      -DCNA_ENABLE_NET=OFF \
-      -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+  -DCNA_IOS_SIMULATOR=ON \
+  -DCNA_GRAPHICS_RENDERER=SOFTWARE \
+  -DCNA_ENABLE_NET=OFF \
+  -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF
+cmake --build cmake-build-ios-sim --target cna_ios_smoke --parallel 4
 ```
 
-`CNA_ENABLE_NET=OFF` is required on iOS today: networking (`GamerServices` + `Net`) needs a
-libcurl for the target, and the iOS SDK ships none, so with networking on the configure stops at
-"Could NOT find CURL" (Apple M4 `AM4-105`; Apple CI passes the same flag).
-`SDLGPU` on iOS has never been built; `-DCNA_GRAPHICS_RENDERER=SOFTWARE` is the dependency-free
-alternative for a platform smoke run.
+The toolchain defaults devices to arm64 and the simulator to the host architecture, using separate
+sysroots and SDL cache identities. Explicit `CMAKE_OSX_SYSROOT` / `CMAKE_OSX_ARCHITECTURES`
+override defaults; the observed simulator identity follows the effective sysroot.
 
-Use the Xcode generator (`-G Xcode`) when you need to sign and deploy to a physical device:
-signing is expressed through `XCODE_ATTRIBUTE_*` target properties, which only Xcode consumes.
-Set `-DCNA_APPLE_DEVELOPMENT_TEAM=<TEAMID>`; without it, code signing is disabled and the
-product builds but cannot be installed on a device.
+The baseline disables networking because iOS does not supply the required target libcurl and this
+repository has no qualified iOS service transport integration. Host Homebrew curl is not a target
+dependency. A separately supplied target library would need its own qualification; the OFF recipe
+is not an intrinsic prohibition on all future networking.
 
-iOS-specific defaults:
+iOS builds use static SDL3/SDL3_mixer and final-link an application bundle. FFmpeg AUTO remains
+unavailable on iOS and ON refuses this unsupported target integration. The public video surface
+still links and reports unavailable decoding through its normal API contract. Multi-process native
+test cases are excluded from iOS test builds.
 
-| Option | Default | Meaning |
-|---|---|---|
-| `CNA_IOS_SIMULATOR` | `OFF` | Selects the `iphonesimulator` sysroot and the host architecture instead of `iphoneos`/arm64. |
-| `CNA_IOS_DEPLOYMENT_TARGET` | `16.3` | Seeds `CMAKE_OSX_DEPLOYMENT_TARGET` and is the supported floor. Floating-point `std::to_chars` is unavailable in Apple libc++ before iOS 16.3. |
-| `CNA_APPLE_DEVELOPMENT_TEAM` | *(empty)* | Apple Developer Team ID. Empty disables code signing entirely — fine for the simulator and CI, not installable on a device. |
-| `CNA_APPLE_ALLOW_UNVALIDATED_RENDERER` | `OFF` | Downgrades the iOS renderer allow-list from a hard error to a warning. |
-| `CNA_BUILD_APPLE_SMOKE_APP` | `ON` | Builds the final-linked one-frame `cna_ios_smoke.app`; keep it enabled when validating an iOS toolchain. On macOS it defaults off and creates `cna_macos_smoke.app` when enabled. |
-
-### What the iOS build does differently
-
-- **SDL3 and SDL3_mixer are linked statically.** A dylib inside an `.app` needs to be embedded in `Frameworks/`,
-  given an `@rpath` install name, and signed separately. Static linking keeps the product a
-  single Mach-O executable. The persistent SDL install root is keyed by sysroot
-  (`.sdl-prebuilt-iOS-arm64` vs `.sdl-prebuilt-iOS-arm64-simulator`), because device and
-  simulator binaries are not interchangeable even at the same architecture.
-- **Every executable becomes an `.app` bundle** with a generated `Info.plist`
-  (`cmake/AppleInfo.iOS.plist.in`). The plist declares an empty `UILaunchScreen`; without a
-  launch screen declaration UIKit refuses to give the app the full screen and hands it the
-  device's compatibility resolution, silently changing every backbuffer size.
-- **A real smoke application is built by default.** `cna_ios_smoke` links the complete selected
-  renderer, includes `CNA/Platform/Entrypoint.hpp`, selects a landscape orientation and runs one `Game`
-  frame. Disable it only with `-DCNA_BUILD_APPLE_SMOKE_APP=OFF`.
-- **`main()` is renamed** by `CNA/Platform/Entrypoint.hpp`, which pulls in `<SDL3/SDL_main.h>` on iOS for
-  the same reason it already did on Android: UIKit owns the process, and SDL's own `main()` has
-  to run `UIApplicationMain` before the game's `main()` is called. A game that does not include
-  `CNA/Platform/Entrypoint.hpp` never gets a `UIApplication`, and therefore no window and no events.
-- **FFmpeg is disabled** (`CNA_ENABLE_VIDEO=AUTO` resolves unavailable): `pkg-config` on a macOS
-  host resolves to Homebrew's *macOS* FFmpeg, which cannot be linked into an iOS binary. The public
-  `Video`/`VideoPlayer` and content-reader surface remains link-complete; file probing/playback
-  reports `System::NotSupportedException`. `CNA_ENABLE_VIDEO=ON` fails configuration until a real
-  target-native iOS integration exists.
-- **Multi-process tests are excluded** from `CnaTests`. An app-sandboxed process may not spawn
-  another executable, and the harness paths those tests bake in are build-machine absolute paths
-  that do not exist inside the `.app`.
-
-### Renderers on iOS
-
-Only renderers CNA actually wires up for iOS may be selected; anything else fails at configure
-time with a readable message instead of somewhere deep inside a dependency build.
-
-| Renderer | On iOS |
+| Option | Default / contract |
 |---|---|
-| `SDLGPU` | Allowed, **unqualified**. The designated iOS renderer (SDL's Metal backend through SDL_shadercross). It has never been built for iOS; Apple CI builds it for device and simulator as a non-blocking leg until the SDLGPU Apple qualification. |
-| `SOFTWARE` | Allowed. The CPU renderer, presenting through SDL's window surface; the blocking Apple CI legs final-link and launch the smoke app with it. |
-| `OPENGLES3` | Refused by default. It requires the sibling `easy-gl` and `meta-gl` repositories, which the iOS workflow does not provide or validate. |
-| `HEADLESS`, `STUB` | Refused by default. Useful for experiments, but not final-linked by Apple CI. |
-| Everything else | Refused. Desktop APIs cannot exist on iOS; other third-party-backed renderers have not been configured for an iOS sysroot. `METAL` and `SDL_RENDERER`, which were allowed until 2026-10-13, are retired and refused everywhere. |
+| `CNA_IOS_SIMULATOR` | OFF; ON selects simulator defaults. |
+| `CNA_IOS_DEPLOYMENT_TARGET` | 16.3; lower effective deployment targets are refused. |
+| `CNA_BUILD_APPLE_SMOKE_APP` | ON on iOS, OFF on macOS; builds the corresponding one-frame application target. |
+| `CNA_APPLE_DEVELOPMENT_TEAM` | Empty disables signing. Set a valid team and use an Xcode generator for the documented signing target properties. |
+| `CNA_APPLE_ALLOW_UNVALIDATED_RENDERER` | OFF; ON downgrades the iOS platform allow-list refusal for experiments. |
 
-"Allowed" means configure accepts it and CI final-links it for both iOS sysroots. It does not mean
-correct pixels have been observed, and for `SDLGPU` not even that the CI leg is green yet.
-`CNA_APPLE_ALLOW_UNVALIDATED_RENDERER=ON` downgrades any refusal to a warning for experimentation;
-expect build or runtime failures, and nothing about such a configuration is supported.
+Unsigned device bundles are build artifacts, not installable physical-device qualification. There
+is no `.ipa`/App Store/signing-product pipeline in this support claim.
 
-## Mac mini M4 qualification (2026-10-07/08)
+### iOS renderer selection
 
-The `AM4-*` campaign plan was the task-by-task record (deleted on 2026-10-28; Git history only);
-this is its summary. It predates the
-2026-10-13 retirement: its `METAL` and `SDL_RENDERER` rows describe renderers CNA no longer has,
-and `VULKAN` and `DIRECTX11` in its scope rows were retired the same day; all are kept as the
-measurement they were. Host: Mac mini
-M4 (arm64, 16 GB), macOS 27.0.1, Xcode 27.0 / Apple clang 21, CMake 4.4.4, `CNA_PLATFORM=SDL3`
-(SDL's Cocoa and UIKit drivers -- CNA has no Cocoa/AppKit/UIKit backend of its own). Every number
-below was measured on that machine. Statuses: **PASS**, **PASS WITH KNOWN LIMITATION**,
-**BUILD ONLY**, **FAIL**, **NOT APPLICABLE**, **NOT TESTED**, **OUT OF SCOPE**.
+The normal allow-list contains SOFTWARE and SDLGPU. SOFTWARE backs the gating platform-smoke
+legs; SDLGPU legs are non-gating. Other selectors are refused by the iOS gate unless its explicit
+experimental override is used. That override does not restore globally retired identities or make
+desktop/browser APIs available on iOS.
 
-The Phase 4 qualification (`AM4-160`..`AM4-207`) ran every tree at `fdd33d2c6` with `ctest -j3`
-while the console session was **locked**, which makes macOS report every window occluded; renderers
-that draw the back buffer offscreen are unaffected, and WebGPU has rendered offscreen since `AM4-089`.
-A long unattended run must also keep the display awake (`caffeinate -d -i -m`): the first final pass
-stalled at a display-sleep transition, with test processes blocked in `open()` and `ctest` unable to
-apply its own timeout, and that tree was rerun. Skip counts are tests that decline by name -- another
-renderer is active, a capability is absent, a facility is Linux-only -- never failures. The
-baseline the qualification started from, its classification, and the full evidence are in
-`zero-failure-macos-report.md` beside the campaign's other reports.
+The simulator workflow recognizes exactly SDL's Metal-device hardware-requirement refusal for
+SDLGPU and records it without running the pixel probe. A workflow leg accepting that refusal is
+not positive rendering evidence. Successful allow-list/configure or final link alone is not a
+device/pixel result.
 
-| Component | Status | Evidence on the M4 | Known limitations / notes |
-|---|---|---|---|
-| sharp-runtime (standalone) | PASS WITH KNOWN LIMITATION | 18,127/18,127 at the Phase 4 head, 25 skip (native float `from_chars` absent below macOS 26 x17, `/rv` XNA sample fixtures x3, live SOAP x2, x86-64 layout pin, ...) | FileSystemWatcher has a kqueue backend since this campaign (AM4-055, hardened by AM4-101: per-file descriptors capped at half the soft limit, FIFOs never opened); see sharp-runtime `docs/Platform-macOS.md` |
-| SDL3 platform baseline (`SDL_RENDERER`) | PASS WITH KNOWN LIMITATION | full tree 10,940/10,940, 966 skip | 2D-only by design: the 966 are 3D cases declining on the renderer's by-name refusals (`AM4-179`) or a `ThreeD` precondition. Under the default `Unsupported3DGraphicsCallBehavior::Throw` a `TextureCube`/`Texture3D` is refused at construction and a `RenderTargetCube` at its face binding (`AM4-196`); a blend mode SDL's backend cannot draw is refused by name (`AM4-198`); a platform without SDL windows is the platform's refusal (`AM4-207`) |
-| `METAL` | PASS WITH KNOWN LIMITATION | full tree 11,015/11,015, 114 skip; Phase 3 (`AM4-134`..`AM4-159`): `ctest -L Metal` 261/261 with `MTL_DEBUG_LAYER`/`MTL_SHADER_VALIDATION` (101 shared pixel fixtures, 146 renderer-neutral oracles, 14 native); Release tree 261/261 (`AM4-156`); compiled effects (`CNA_METAL_COMPILED_EFFECTS=ON`) 43 Metal and 1,237 effect tests (`AM4-144`); cna-samples 91/91; iOS device build links; cna-examples 248/248 | MSAA, every XNA surface format (float, packed, DXT as BC or decoded), instancing, multi-stream input, compiled XNA effects, MRT outputs and the backbuffer's own depth format are native since Phase 3. Left: compiled effects are opt-in (off by default); custom `ShaderEffect`s are SpriteBatch-scoped MSL; `PresentInterval.Two` presents as `One`; the backbuffer is always BGRA8 (reported as `Color`); LOD bias needs macOS/iOS 26; a multisampled RenderTarget2D loses a `SetData` under `PreserveContents`. Phase 3 verdict: **SUPPORTED** -- not primary-production, because on-screen presentation, a physical iOS device and a soak run are unmeasured |
-| `OPENGL33` (EasyGL) | PASS WITH KNOWN LIMITATION | full tree 11,916/11,916, 128 skip, with compiled effects on (`CNA_EASYGL_COMPILED_EFFECTS=ON`); cna-samples 91/91 | Apple's GL ("4.1 Metal") stores 24-bit depth as float32, so a constant `DepthBias` is exact only for depths in [0.5, 1) and the normalized depth-bias contract is skipped there (`AM4-171`); the driver keeps an over-cap max anisotropy and clamps it when filtering (`AM4-172`) |
-| `SDLGPU` (SDL's Metal driver) | PASS WITH KNOWN LIMITATION | full tree 10,962/10,962, 295 skip; cna-samples 90/91 | SDL3's GPU API has no occlusion queries, so LensFlare is `RENDERER_UNSUPPORTED`; SDL's Metal backend ignores `mip_lod_bias`. Fixed in Phase 4: point lists (`AM4-181`), XNA's forwarded draw ranges (`AM4-183`), float and wide `Texture2D` formats with Direct3D 9's channel fill (`AM4-184`), the platform refusal without SDL video (`AM4-176`) |
-| `WEBGPU` (wgpu-native v29.0.1.1, Metal backend) | PASS WITH KNOWN LIMITATION | full tree 10,968/10,968, 279 skip; cna-samples 91/91 | wgpu-native's Metal backend ignores `MultiSampleMask` (Metal pipelines have no sample-mask state) and counts occlusion as a boolean (`AM4-091`). Fixed in Phase 4: XNA's sixteen vertex bindings (`AM4-185`), block-aligned partial compressed cube writes (`AM4-186`), `HdrBlendable`/`HalfVector4` `Texture2D` (`AM4-187`) |
-| `SOFTWARE` | PASS | full tree 11,084/11,084, 133 skip | A Debug build draws the Guide below two frames a second; its click test now searches centre-out (`AM4-180`) |
-| `FNA3D` (FNA3D's Metal driver) | PASS WITH KNOWN LIMITATION | full tree 10,875/10,875, 433 skip; cna-samples 90/91 | FNA3D's Metal driver has no occlusion queries (LensFlare `RENDERER_UNSUPPORTED`) and its float render-target formats are not promoted (measured: Metal asserts on Bgra4444, and cube/partial-transfer/swizzle paths break). Fixed in Phase 4: MojoShader's Metal profile gained `TEXCRD` and Direct3D 9's vertex-colour clamp (`AM4-192`), a stock draw missing a shader input refuses by name instead of crashing (`AM4-190`), NormalizedByte2 samples Direct3D 9's fill (`AM4-193`). On the legacy GL 2.1 driver `Fna3d_RenderTarget_Advanced` leaks a draw into an unbound cube face (`AM4-051`, not root-caused) |
-| `OPENGLES3` | NOT APPLICABLE | -- | macOS has no native OpenGL ES |
-| `WEBGL2` | NOT TESTED | -- | Emscripten/browser; no emsdk on this host |
-| `HEADLESS`, `STUB` | NOT TESTED | -- | Not part of this campaign's matrix |
-| `DIRECTX9`, `DIRECTX11` | NOT APPLICABLE | -- | Windows only; `DIRECTX11` retired 2026-10-13 |
-| iOS Simulator, SDL3 + `METAL` | PASS | `cna_ios_pixel_probe` (iOS 27 Simulator, iPhone 17 profile) exact on frame 1 and on the 10 frames after it in 8 of 8 launches at `AM4-120`, `cna_ios_smoke` OK | The all-zero runs seen at `AM4-037` were SDL's UIKit view-frame swap (`AM4-120`): once the window rotated to the landscape-only set, every frame drew into a 1346x0 view. The probe used to stop at the first good frame, which hid it in most launches |
-| iOS device (arm64) | BUILD ONLY | Final-linked `.app` for `iphoneos` (rebuilt at `49bdf63b8`: Mach-O arm64, platform 2, minos 16.3, system frameworks only) | No physical iPhone, signing identity or Apple account available |
-| C API (`modules/c-api`) | PASS | every C API test, 119/119, in the SOFTWARE and `SDL_RENDERER` trees, the documentation gates with Doxygen 1.9.8 through `CNA_C_API_DOXYGEN` (`AM4-160`); `CApi_InstalledConsumer` installs the package and builds and runs `hello_cna` against it, shared and static | Phase 5 (`AM4-209`..`214`): the dylib exports exactly the 3,210 `_cna_*` names (ld64 exported-symbols list), loads its shipped SDL3 through `LC_RPATH @loader_path`, carries Mach-O versions from the ABI version, and has a static archive made with `ld -r -all_load` and `nmedit`; the ABI-baseline and declared-export gates read Mach-O. Homebrew's curl/FFmpeg/Opus/zstd stay system dependencies, and the game must be created on the main thread for a windowed renderer (`docs/c-api/CONSUMING.md`). No CI job builds the C API on macOS yet |
-| cna-examples | PASS | ctest 3/3; 248/248 demos render on Metal | Net demos fixed in cna-examples `ede3473` |
-| cna-samples (multi-renderer Release) | PASS WITH KNOWN LIMITATION | 453 automated passes over METAL, OPENGL33, SDLGPU, WEBGPU and FNA3D | LensFlare needs `OcclusionQuery`, which SDLGPU and FNA3D's Metal driver do not have, and is reported `RENDERER_UNSUPPORTED` (`AM4-182`); Yacht fixed (`AM4-169`) |
-| house-simulator | PASS WITH KNOWN LIMITATION | 1,830/1,832, 22 skip, with the world content built here (user-local Blender 4.3.2, `AM4-199`/`204`) | Two open, both upstream questions that need a Linux reference run: `ExteriorTraversalTests.AWindowShowsASliceOfTheGardenAndNotTheGarden` (analysed as platform-independent -- per-plane culling against a reduced cone is weaker than against the camera in some directions) and `HeadlessRunTests.TheOpaquePassDrawsTheSortedListAndNotTheResidencyMap` (50 alpha-test batches against an expected 51). The 22 skips are the project's own opt-ins (software-rasteriser references, GPU reviews, Linux-only checks) |
-| cna-car-simulator | PASS | 7/7 (the unit suite and the smokes) | Seeded traffic is portable since `AM4-170` |
-| cna-gamer-services-server | PASS WITH KNOWN LIMITATION | 46/46, 9 skip, with CNA's client harnesses from a tree linking Homebrew curl | 7 skip (Linux network namespaces), 2 skip where 127/8 is not routed (`AM4-178`). A CNA build that links the SDK's libcurl 8.7.1 has no WebSocket support and refuses the relay transport by name (`AM4-123`), so the harness-driven tests need one that found Homebrew curl |
+## Runtime behavior
 
-## Runtime behavior on Apple platforms
+`CNA/TargetPlatform.hpp` reports Desktop for macOS, iOS for iOS, and provides `isApplePlatform()`,
+`isMobilePlatform()` and platform-name helpers. `CNA_TARGET_*` platform identities are separate
+from the selected `CNA_PLATFORM_*` implementation.
 
-### Platform identification
+The mobile blocking Run loop waits while suspended. Current event handling sets suspension on
+**WillEnterBackground** and clears it on **DidEnterForeground**; resume resets timing and invalidates
+the surface. Terminating requests Exit and clears suspension; low-memory events log a warning.
+This corrects the older reversed event-pair description. The injected
+`GameTest.MobileLifecycleEventsSuspendResumeAndTerminateTheLoop` is a state-machine regression,
+not a physical iOS background/resume observation.
 
-`CNA/TargetPlatform.hpp` answers the compile-time questions:
+SDL finger down/motion/up/cancel events feed TouchPanel and gesture detection through the shared
+input bridge. Actual iPhone/iPad touch behavior remains unmeasured.
 
-```cpp
-CNA::getCurrentPlatform();      // TargetPlatform::Desktop on macOS, TargetPlatform::iOS on iOS
-CNA::isApplePlatform();         // true on both
-CNA::isMobilePlatform();        // true on iOS and Android
-CNA::getCurrentPlatformName();  // "macOS", "iOS", "Linux", "Windows", "Android", "Web"
-CNA::getCurrentDesktopOS();     // DesktopOS::MacOSX on macOS; throws on iOS
-```
+SupportedOrientations reaches SDL's mobile orientation hint and the UIKit adapter; the bundle's
+plist bounds the allowed set. Current orientation comes from resize/window geometry.
+The pinned SDL UIKit scene-window-frame patch preserves the actual scene bounds during rotation;
+its earlier simulator pixel evidence does not substitute for a current physical rotation test.
 
-The `CNA_TARGET_APPLE`, `CNA_TARGET_MACOS` and `CNA_TARGET_IOS` macros are defined by the same
-header for preprocessor conditions. They use the `CNA_TARGET_` prefix, not `CNA_PLATFORM_`, so
-they cannot be confused with `CNA_PLATFORM_<NAME>` — that names the selected platform
-*implementation* (`SDL3`, `HEADLESS`, `TERMINAL`), an independent build axis. macOS deliberately
-reports `TargetPlatform::Desktop` — it is a desktop — so `isApplePlatform()` is the query that
-spans both Apple targets.
+Storage resolves independently of the windowing platform: desktop policy checks XDG_DATA_HOME,
+then LOCALAPPDATA, then the platform's home-data location (Library/Application Support on Apple),
+with a working-directory fallback. On iOS the normal home is the application container.
+Root overrides, tests and already-open containers follow the storage contract in
+[c-api/STORAGE.md](c-api/STORAGE.md). Bundled content uses the platform's application base path;
+the application must supply/package its assets.
 
-### Application lifecycle
+## CI definitions
 
-iOS terminates an application that submits GPU work after entering the background, and Android
-destroys the rendering surface at the same moment. `Game`'s loop therefore stops between the
-operating system's "did enter background" and "will enter foreground" notifications: it blocks
-on the SDL event queue instead of ticking, and neither updates nor draws. This is a deliberate
-deviation from FNA, which tracks only `IsActive` on those events — it is documented in
-`Game.cpp` at the site and covered by Apple APPLE-7.
+[apple-ci.yml](../.github/workflows/apple-ci.yml) currently declares:
 
-On resume the performance counter is restarted, so the first frame after a resume measures only
-itself rather than the whole background period. `SDL_EVENT_TERMINATING` ends the loop so
-`Exiting` still runs; `SDL_EVENT_LOW_MEMORY` is logged as a warning.
+| Job | What it attempts / gating rule |
+|---|---|
+| `apple-cmake-check` | Linux host-portable Apple CMake/allow-list/deployment/plist/static-SDL/bundle/orientation checks. |
+| `macos-build` | macOS-26 SOFTWARE portable platform/lifecycle/storage suites and a separately bundled smoke application. |
+| `macos-sdlgpu` | macOS-26 SDLGPU on SDL Metal; the smoke script requires real exit-zero results and treats unavailable devices as failure. |
+| `ios-build` SOFTWARE device/simulator | Final-linked bundles and Mach-O/plist/dependency checks; simulator launch requires the smoke marker. |
+| `ios-build` SDLGPU device/simulator | Experimental `continue-on-error` legs; simulator can report the exact unsupported Metal device result before pixel testing. |
 
-The compile-time `isMobilePlatform()` guard means desktop builds keep the plain `Tick()` loop
-unchanged. The event-state transitions are also covered by a focused `GameTest` in the macOS CI
-suite; the simulator smoke covers the normal one-frame path, not a real OS background/resume.
+The focused SDLGPU program list comes from `scripts/ci/run-sdlgpu-smoke.sh --targets`; do not
+hard-code an old program count. Workflow configuration, a historical green run and current
+hardware qualification are distinct evidence.
 
-### Touch input
+## Open qualification and verification
 
-Touch already reaches the XNA API on any platform SDL reports fingers on: `SdlInputBridge`
-translates `SDL_EVENT_FINGER_DOWN`/`_MOTION`/`_UP`/`_CANCELED` into `TouchPanel` locations and
-feeds `GestureDetector`, and `GraphicsDevice` keeps `TouchPanel`'s display metrics in sync with
-the backbuffer. None of that is iOS-specific and none of it needed changing — but equally, none
-of it has ever been exercised against a real iOS touch screen.
+Physical iPhone/iPad rendering, touch, audio, storage, performance and background/resume remain
+unqualified. No current Intel/universal runtime, App Store distribution or additional Apple OS
+target is established. The default Game window does not request high pixel density, although the
+platform window descriptor supports it; Retina backing resolution is not thereby qualified.
+DisplayInfo's safe-area extension exists, while XNA TitleSafeArea still reports the full surface;
+neither has iOS notch/home-indicator evidence.
 
-### Display orientation
-
-`GraphicsDeviceManager.SupportedOrientations` reaches the operating system on mobile:
-before `SDL_INIT_VIDEO`, CNA seeds SDL's complete XNA-default orientation set. Later,
-`GameWindow::SetSupportedOrientations` publishes the requested narrower set through
-`SDL_HINT_ORIENTATIONS`; an Objective-C++ adapter then asks the existing UIKit view controller to
-re-evaluate supported orientations. iOS intersects that result with the
-`UISupportedInterfaceOrientations` array in the bundle's `Info.plist`, so the plist is the outer
-bound and the hint can only narrow it. On desktop the hint is not set at all and the property
-stays CNA-internal bookkeeping, exactly as before.
-
-The *current* orientation continues to be derived from the window bounds on resize, which is what
-a rotation produces, so `OrientationChanged` fires without any iOS-specific code.
-
-A narrowed set rotates the window asynchronously. SDL's `UIKit_ComputeViewFrame` swapped a
-portrait window's bounds for a landscape-only set before that rotation, and UIKit's autoresizing
-then turned the rotation into a 1346x0 root view (iPhone 17 Simulator started in portrait): the
-game ran on, drawing into a drawable one pixel high. CNA carries
-`cmake/patches/sdl-86296ac8-0003-uikit-scene-window-frame.patch` for iOS builds, which keeps a
-scene window's bounds as UIKit reports them (Apple M4 `AM4-120`; SDL main stopped
-swapping on iOS 13+ in `22a4d8b25`, 2026-10-23, after the pin).
-
-### Storage locations
-
-`StorageDevice` resolves its root itself, independently of the windowing platform
-(`modules/storage/src/StorageDevice.cpp`): `XDG_DATA_HOME/<app>` when that variable is set (tests
-and tools use it for isolation, on Apple too), otherwise `$HOME/Library/Application Support/<app>`
-on both Apple platforms -- on iOS `$HOME` is the app container, so saves stay inside it and survive
-an app update. The Linux layout (`~/.local/share`) is never used on Apple.
-
-Content is loaded relative to `SDL_GetBasePath()`, which is the `.app` bundle's resource
-directory on both Apple platforms, so bundled content works without changes.
-
-## Continuous integration
-
-`.github/workflows/apple-ci.yml`:
-
-- **`apple-cmake-check`** — Linux runner, seconds, no Apple hardware. Runs
-  `scripts/check-apple-platform-cmake.sh`, which parses `cmake/ApplePlatform.cmake` in cmake
-  script mode and asserts that the iOS allow-list accepts an allow-listed renderer, refuses one
-  outside it with a message naming the override, honours the override, and stays completely inert
-  on a non-Apple host. It also checks all three static SDL switches, deployment floors, the macOS
-  dependency fixup and both halves of the orientation bridge. Run it locally on any platform.
-- **`macos-build`** — macOS runner, `SOFTWARE`, builds `CnaTests` and runs the platform,
-  window, lifecycle, storage and desktop-OS suites (dummy audio driver, real video driver). A
-  separate build tree enables `.app` bundling, final-links and launches `cna_macos_smoke.app`,
-  and rejects dependencies that still point to the SDL build cache or a Homebrew prefix.
-- **`macos-sdlgpu`** — macOS runner, `SDLGPU` (the Apple default) on SDL's Metal backend. Builds
-  and runs `scripts/ci/run-sdlgpu-smoke.sh`: the SDLGPU device/swapchain smoke, SpriteBatch
-  drawing and five pixel/contract conformance programs, each required to exit 0, so a runner on
-  which SDLGPU cannot create its Metal device fails the job instead of skipping. Gating. Added
-  2026-10-14 (RRC-051); it has not run yet, and it is a smoke set, not the SDLGPU Apple
-  qualification.
-- **`ios-build` (device, simulator)** — builds and final-links `cna_ios_smoke.app` for both
-  sysroots with `SOFTWARE`; validates `Info.plist`, Mach-O platform, `_main`/`_SDL_main`, and the
-  absence of dynamic SDL/build-machine dependencies. The simulator leg then boots an available
-  iPhone, ad-hoc signs and installs the app, launches it, and requires `CNA_APPLE_SMOKE_OK`. Two
-  more legs do the same with `SDLGPU` and also run `cna_ios_pixel_probe`; they are
-  `continue-on-error` until the SDLGPU Apple qualification, so their result is information, not
-  a gate: `SDLGPU` has no recorded iOS build, so whether the simulator probe is deterministic is
-  unmeasured. In the Simulator the probe cannot run at all: SDL's Metal backend requires
-  `MTLGPUFamilyApple3`, the Simulator's Metal device fails that check on the hosted runners, and
-  `SDL_CreateGPUDevice` refuses with "Device does not meet the hardware requirements for SDL_GPU
-  Metal" (every launch since 2026-10-14). The leg accepts exactly that refusal and fails on any
-  other outcome. `macos-sdlgpu` is the gating Apple-side `SDLGPU` GPU evidence meanwhile.
-
-Run [31736845749](https://github.com/openeggbert/cna/actions/runs/31736845749) was green with the
-since-retired `SDL_RENDERER`; the `SOFTWARE`/`SDLGPU` legs have not run yet as of 2026-10-13. CI
-evidence is compile, bundle and bounded smoke evidence only; it does not expand the feature
-boundary stated above. The former `metal-macos-ci.yml` went with the `METAL` renderer.
-
-## Known gaps
-
-These remain outside the verified support boundary:
-
-- No physical iPhone/iPad run, and no pixel, real-touch, audio, storage, background/resume or
-  performance observation. The simulator smoke proves only that one framework frame returns; no
-  content-bearing game or example has yet run for multiple frames in the simulator.
-- Touch on iOS is unobserved. The path is platform-neutral and already exists (`SdlInputBridge`
-  turns SDL finger events into `TouchPanel`/`GestureDetector`), so this is verification work, not
-  implementation work -- and iOS has no keyboard/mouse fallback to hide behind.
-- No current Intel-macOS CI run; x86_64 and universal builds are configured but unverified.
-- Safe area is only a CNA extension. `CNA::Devices::DisplayInfo::getSafeAreaProperty(window)`
-  (`modules/devices-ext`, from `SDL_GetWindowSafeArea`) reports the notch/home-indicator safe
-  area, but XNA's `Viewport.TitleSafeArea` and `DisplayMode.TitleSafeArea` still return the whole
-  surface, so a game that only uses XNA's API can place UI under them. Neither has been measured
-  on an iOS device or simulator.
-- No high-density (Retina) back buffer. CNA creates the game window without
-  `SDL_WINDOW_HIGH_PIXEL_DENSITY` (`CNA::Platform::WindowDescription::highDpi` stays false; the
-  retired `METAL` renderer was the only one that asked for it, and the descriptor field that carried
-  the request was removed with it, RRC-042), so by SDL3's documented behaviour the back buffer is
-  sized in points and the system scales it -- XNA's model of a back buffer sized in window pixels.
-  The Mac mini M4 qualification above ran `SDLGPU` this way; Retina-resolution rendering is not
-  offered and has not been measured.
-- No app-icon or asset-catalog generation, no `.ipa` packaging, no App Store metadata.
-- No Mac Catalyst, tvOS, watchOS or visionOS target.
+Run `scripts/check-apple-platform-cmake.sh` on a non-Apple host for the mechanical layer.
+It passes in the 2026-11-01 documentation audit. That source/workflow review did not build with
+Xcode, run an Apple application or establish a new remote CI result. Renderer-specific current
+limits remain in [handoff.md §5](../handoff.md#5-known-bugs-and-limitations) and their renderer pages.
