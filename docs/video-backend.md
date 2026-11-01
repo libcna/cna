@@ -1,68 +1,84 @@
-# Optional FFmpeg video backend
+# Optional FFmpeg video decoding
 
-CNA keeps the XNA `MediaPlayer`, `Video`, `VideoPlayer`, video content readers and their public
-headers available in every build. FFmpeg decoding is a separate native module,
-`cna_video_ffmpeg` (`CNA::VideoFfmpeg`), selected with `CNA_ENABLE_VIDEO`:
+The XNA MediaPlayer, Video and VideoPlayer declarations remain available independently of
+FFmpeg. Runtime decoding is supplied by `modules/video-ffmpeg` (target `cna_video_ffmpeg`,
+alias `CNA::VideoFfmpeg`); the decoder-free implementation lives in `modules/media`.
+XNB metadata readers live in the content module.
 
-| Value | Configure behavior | Runtime video behavior |
-|---|---|---|
-| `OFF` | Does not probe or link FFmpeg. | File-backed video construction/playback throws `System::NotSupportedException`. |
-| `AUTO` | Enables the backend only when all four required FFmpeg pkg-config modules are present. This is the default. | Decodes through FFmpeg when found; otherwise behaves like `OFF`. |
-| `ON` | Requires a supported target and all FFmpeg development packages; configuration fails if either condition is unmet. | Decodes through FFmpeg. |
+## Selection and dependencies
 
-For a game that does not use video, the dependency-free choice is explicit:
+`CNA_ENABLE_VIDEO` is a three-state option, resolved by `modules/CMakeLists.txt`:
+
+| Value | Configure/runtime behavior |
+|---|---|
+| OFF | No CNA FFmpeg probe/link edge; decoder-dependent operations report NotSupportedException. |
+| AUTO (default) | Enables FFmpeg when the toolchain is eligible and all four pkg-config modules are found; otherwise uses the unavailable decoder. |
+| ON | Requires an eligible toolchain and all four packages; configure fails rather than silently falling back. |
+
+The packages are libavcodec, libavformat, libavutil and libswresample. CNA's frame conversion does
+not require libswscale development headers. The backend target owns the native FFmpeg dependency
+and public XNA headers expose none of its types.
+
+Build-time MP3/WMA/WMV importing is a separate module/option, `CNA_ENABLE_MEDIA_PIPELINE`, but its
+availability currently reuses the FFmpeg detection controlled by CNA_ENABLE_VIDEO. With VIDEO=OFF,
+MEDIA_PIPELINE=AUTO disables those importers and MEDIA_PIPELINE=ON fails configuration. It is not
+currently possible to enable that build-time decoder independently through these options.
+
+For a decoder-free configuration in the usual debug tree:
 
 ```sh
-cmake -S . -B build -DCNA_ENABLE_VIDEO=OFF
-cmake --build build
+cmake -S . -B cmake-build-debug -DCNA_ENABLE_VIDEO=OFF -DCNA_ENABLE_MEDIA_PIPELINE=OFF
+cmake --build cmake-build-debug --parallel 8
 ```
 
-That build has no `libavcodec`, `libavformat`, `libavutil` or `libswresample` link edge. In
-particular, using `Microsoft::Xna::Framework::Game` or audio-only `MediaPlayer` does not bring
-FFmpeg into the final executable.
+Those settings remove CNA's own FFmpeg edges. Merely using Game or audio-only MediaPlayer in an
+FFmpeg-enabled configuration does not guarantee a dependency-free executable: the shared runtime
+contains the composed modules, and static link closure depends on what is retained. Inspect the
+actual consumer artifact when absence of those libraries matters.
 
-## Stable no-backend contract
+## Decoder-free contract
 
-The decoder-free build is link-complete, not a reduced-header profile:
+- The compiled-asset/metadata Video constructor preserves supplied metadata without probing a file.
+  VideoContentTypeReader and built-in XNB reader registration remain available.
+- Raw local-file construction checks file existence before requiring a decoder: a missing/non-file
+  path gives FileNotFoundException; an existing file gives NotSupportedException.
+- FromUriEXT resolves local paths/file URIs before the same check. Non-file absolute URIs are
+  independently refused with InvalidOperationException; not every URI failure means missing FFmpeg.
+- VideoPlayer can be constructed, queried, configured and disposed. Play validates disposal and
+  non-null input, then requires the decoder before changing the association/playback state.
+- The unavailable AudioDurationProbe returns zero for unknown duration. Song playback still uses
+  the selected audio implementation; this is not a promise that every encoded song format works.
 
-- `Video`'s compiled-asset/metadata constructor remains usable and preserves its supplied
-  metadata without touching the file.
-- `VideoContentTypeReader` and the built-in XNB reader registration remain available, so video
-  metadata can be loaded.
-- The raw file constructor and `Video::FromUriEXT` still report
-  `System::IO::FileNotFoundException` for a missing path. For an existing path, they report
-  `System::NotSupportedException` because probing requires the decoder.
-- `VideoPlayer` can be constructed, queried, configured and disposed. `Play(non-null-video)`
-  reports `System::NotSupportedException` before changing the player's video or playback state.
-- FFmpeg-backed audio-duration probing used by `MediaLibrary` returns zero (the existing
-  “unknown duration” sentinel) when the optional backend is absent. Song playback itself still
-  uses CNA's selected audio backend and is unaffected.
+The native C API translates NotSupportedException to CNA_RESULT_NOT_SUPPORTED.
+cna_video_create_with_metadata remains a metadata route; file probing/playback can require the
+decoder. See [c-api/MEDIA.md](c-api/MEDIA.md) for handle/frame lifetime and the precise C contract.
 
-The C ABI maps the same exception to `CNA_RESULT_NOT_SUPPORTED`. Metadata-only
-`cna_video_create_with_metadata` remains successful; file probing and playback report the missing
-backend deterministically.
+CNA_VIDEO_AVAILABLE is defined on the shared build-configuration surface when FFmpeg is selected;
+CNA_FFMPEG_AVAILABLE remains the equivalent legacy internal/test definition.
 
-A video whose coded resolution changes mid-stream is refused: `VideoDecoder::NextFrame` throws
-`std::runtime_error` on the first frame whose size differs from the one reported at open, because
-XNA's `Video` has a single fixed `Width`/`Height` and the frame converters are sized by it.
+## Enabled decoding boundary
 
-`CNA_VIDEO_AVAILABLE` is defined on CNA targets only when the FFmpeg backend was selected.
-`CNA_FFMPEG_AVAILABLE` remains as the legacy equivalent for existing internal/test code.
+VideoDecoder refuses a decoded frame whose dimensions differ from those established at Open,
+with std::runtime_error. This is covered by a mid-stream resolution-change fixture; the converters
+and XNA Video width/height assume a fixed size.
 
-## Platform boundary
+Codec/container/audio-stream coverage depends on the linked FFmpeg build and CNA's converter
+support. Enabling the option is not a guarantee for every codec or file, network URI playback,
+hardware decoding or a particular renderer's upload behavior.
 
-The current support and verification boundary is explicit:
+## Toolchains and evidence
 
-| Target | `AUTO` result | Evidence |
-|---|---|---|
-| Linux native | FFmpeg when installed, fallback otherwise | Both `ON` and `OFF` configurations are built and their video contracts tested by `MEDIA-233`; the `OFF` executable dependency list is checked for absence of all four FFmpeg libraries. |
-| macOS native | FFmpeg when Homebrew/pkg-config finds it, fallback otherwise | Existing native macOS CI/history covers the FFmpeg build; the new optional split was not run on macOS by `MEDIA-233`. |
-| Windows/MSVC | Fallback | No target-native FFmpeg integration or decode verification yet (`MEDIA-192`). |
-| MinGW | Fallback | No target-native FFmpeg integration or decode verification yet (`MEDIA-193`). |
-| Android | Fallback | No target-native FFmpeg integration or decode verification yet (`MEDIA-194`). |
-| Emscripten | Fallback | No target-native FFmpeg integration or decode verification yet (`MEDIA-195`). |
-| iOS | Fallback | Host macOS FFmpeg is deliberately not used for an iOS cross-build; no target-native integration or decode verification yet. |
+| Target | Current configure policy |
+|---|---|
+| Linux native | Eligible for pkg-config FFmpeg detection. |
+| macOS native | Eligible; requires target-compatible FFmpeg/pkg-config paths. |
+| Windows/MSVC, MinGW, Android, Emscripten, iOS | AUTO falls back; ON fails. No target-native FFmpeg integration is wired here. |
 
-Requesting `ON` on a fallback-only toolchain fails at configure time. Adding real target-native
-FFmpeg integrations there remains separate work and does not affect availability of the public XNA
-types.
+The gate is a CMake policy, not a universal upstream FFmpeg platform limitation. Other cross-builds
+must likewise supply target-compatible pkg-config resolution; eligibility alone does not prove it.
+
+MEDIA-233 recorded Linux ON/OFF builds, refusal tests and an OFF-artifact dependency inspection.
+Older macOS FFmpeg evidence predates this optional split. On 2026-11-01 the current Linux
+multi-renderer Media target builds and all 23 availability/decoder tests pass through the private
+runner, including corrupt/truncated input and resolution-change cases. This audit does not repeat
+the OFF dependency inspection or qualify another native/mobile/browser decoder integration.

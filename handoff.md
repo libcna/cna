@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Video/XMA documentation reconciliation (2026-11-01): the FFmpeg page corrects the shared
+  VIDEO/MEDIA_PIPELINE detection gate, enabled shared-runtime link claims, URI refusal order and
+  target policy versus upstream possibility. The XMA page bounds codec/licensing assertions to
+  project evidence, preserves the three-target fixture fields without generalizing one sample
+  into an encoder algorithm, and records parser/loop/identity/CMake-fallback limitations. The WAV
+  parity row receives the related bounded correction; its own full audit remains pending. Focused
+  Media/ContentPipeline targets build; 23 availability/decoder cases and ten XMA/target-processor
+  cases pass on private displays. The independent XNB parser accepts all three committed target
+  fixtures; host FFmpeg 7.1.5 has no XMA encoder. No OFF-artifact dependency check, real encoder,
+  console playback, cross-target decode, implementation or ABI changes are claimed.
 - Input API/emulation documentation reconciliation (2026-11-01): the signature reference
   corrects disjoint-tier/all-member-freeze claims, TouchPanel setters, missing object equality,
   formatting, emulation and nested enumerator entries, with current module paths and an explicit
@@ -1422,6 +1432,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- The external XMA adapter validates only RIFF/chunk/tag structure, preserves requested loop
+  fields rather than extracting measured quantized ones, and does not make the built-in Xbox WAV
+  route select XMA. Its filename/mtime identity is neither a full dependency fingerprint nor
+  consumed by a compiler component-version path. Source has optional compile-definition
+  fallbacks but current CMake has no matching cache-option wiring. Source-inspected 2026-11-01;
+  stub tests do not qualify real encoder output, incremental invalidation or console playback
+  (`docs/xma-encoder-backend.md`).
 - The Input signature guard is not exhaustive: it omits GamePad keyboard-emulation methods,
   eight Equals(std::any) overloads, four value ToString methods, TouchPanel emulation/suppression
   pairs and TouchCollection's nested enumerator API. Its pointer/constructibility traits also do

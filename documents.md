@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 113 reviewed, 12 updated incidentally and awaiting their own audit, and 52 not yet
+Summary: 115 reviewed, 12 updated incidentally and awaiting their own audit, and 50 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -169,13 +169,13 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ⬜ **PENDING** — [`docs/texture-stream-formats.md`](docs/texture-stream-formats.md)
 - ✅ **REVIEWED** — [`docs/texture3d-texturecube-support.md`](docs/texture3d-texturecube-support.md)
 - ✅ **REVIEWED** — [`docs/vertex-format-support.md`](docs/vertex-format-support.md)
-- ⬜ **PENDING** — [`docs/video-backend.md`](docs/video-backend.md)
+- ✅ **REVIEWED** — [`docs/video-backend.md`](docs/video-backend.md)
 - ✅ **REVIEWED** — [`docs/viewport-displaymode-adapter-support.md`](docs/viewport-displaymode-adapter-support.md)
 - ✅ **REVIEWED** — [`docs/web-emscripten-graphics-limitations.md`](docs/web-emscripten-graphics-limitations.md)
 - ✅ **REVIEWED** — [`docs/webgl2-renderer.md`](docs/webgl2-renderer.md)
 - ✅ **REVIEWED** — [`docs/webgpu-renderer.md`](docs/webgpu-renderer.md)
 - ⬜ **PENDING** — [`docs/windows-visual-studio.md`](docs/windows-visual-studio.md)
-- ⬜ **PENDING** — [`docs/xma-encoder-backend.md`](docs/xma-encoder-backend.md)
+- ✅ **REVIEWED** — [`docs/xma-encoder-backend.md`](docs/xma-encoder-backend.md)
 - ⬜ **PENDING** — [`docs/xna-4-enumerator-reference.md`](docs/xna-4-enumerator-reference.md)
 - ⬜ **PENDING** — [`docs/xna-4-runtime-member-coverage-baseline.md`](docs/xna-4-runtime-member-coverage-baseline.md)
 - ⬜ **PENDING** — [`docs/xna-4-runtime-member-coverage.md`](docs/xna-4-runtime-member-coverage.md)
