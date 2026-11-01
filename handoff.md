@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- XNA/FNA migration-guide reconciliation (2026-11-01): the graphics Tasks 486-489 snapshot and
+  its fixed-item/member checklists are replaced by a current porting workflow tied to the generated
+  runtime-member report, live renderer capabilities, content/effect contracts and this file's sole
+  known-defect ledger. The guide no longer calls the fully implemented XNB `ModelReader` partial,
+  labels live render-target `Texture2D::GetData` a CPU-cache read, recommends one GL identity for
+  every 3D port, presents Task 933's expected post-`SpriteBatch` rasterizer state as a command-order
+  defect, or sends GPU tests to caller-selected Xvfb/`DISPLAY`. It now distinguishes `CNAEXT` from
+  `CNA_CNAEXT`, lists the exact compiled-effect build options, describes compile-time and runtime
+  renderer selection, and routes all GPU/window work through the private runner. All 20 local
+  links resolve, the renderer-identity gate passes, and six focused ModelReader, maturity,
+  capability-profile and EasyGL SpriteBatch/3D-order tests pass on the private display.
 - Runtime renderer-selection documentation reconciliation (2026-11-01): the former
   `RTR-P0`–`P14` campaign/current-contract mixture now describes the canonical 10 identities over
   eight implementation families, generated descriptor registry, selection precedence,

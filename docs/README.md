@@ -84,8 +84,9 @@ on it) rather than assuming either way.
 - **[`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md)** — current
   Microsoft-reference runtime type and member census, with every missing declaration listed;
   the separate [Content Pipeline parity report](xna-content-pipeline-parity-report.md) covers build-time APIs.
-- **[`migration-guide.md`](migration-guide.md)** — practical guide for porting an existing XNA/FNA
-  game to CNA; consult the current content and effect documentation for format support.
+- **[`migration-guide.md`](migration-guide.md)** — current practical guide for porting an existing
+  XNA/FNA game: C#-to-C++ mappings, content, renderer/capability and effect choices, XNA state
+  behavior, validation workflow and troubleshooting.
 - **[`cnj-format.md`](cnj-format.md)** — the `.cnj` editable JSON content format: how
   `ContentManager` resolves `.xnb`/`.cnb`/`.cnj`/native files, the envelope, `sourceFile`
   sidecars, the per-type members, `Model` versions and custom loaders. The compiled form is

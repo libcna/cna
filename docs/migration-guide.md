@@ -1,366 +1,261 @@
-# Migration guide: porting an XNA 4.0 / FNA game to CNA
+# Migration guide: porting an XNA 4.0 or FNA game to CNA
 
-**Written for Task 486 (graphics Phase 54).** This is a practical guide for someone who
-already has an XNA 4.0 or FNA game and wants to know: can I bring this to CNA, what needs to
-change, and what doesn't work yet. It draws conclusions from `docs/graphics-renderer-feature-matrix.md`
-(Task 451), `CHECKLIST.md`'s deviation table and `handoff.md` §5 for a practical audience — see
-those documents for the full underlying detail; this guide does not repeat their tables.
+**Status: reconciled with the current runtime surface, renderer registry, content pipeline and
+known-defect ledger on 2026-11-01.** This guide contains the decisions a game port must make. It
+does not duplicate member inventories, renderer capability tables or completed task histories.
 
-## What CNA is (and isn't)
+CNA is a C++23 reimplementation of the XNA 4.0 programming model. It preserves the
+`Microsoft::Xna::Framework` API vocabulary, but it is not a CLR and cannot execute an existing C#
+assembly. A port translates the game's source and ownership model to C++, then reuses or rebuilds
+its content for the selected CNA configuration.
 
-CNA is a **C++23 reimplementation** of the XNA 4.0 programming model — it preserves XNA's class
-names, method signatures, and namespaces (`Microsoft::Xna::Framework::*`), but it is not a C#/.NET
-runtime and cannot run your existing C# assembly. Porting a game means **translating the C#
-source to C++**, not recompiling or bridging it. If your game is small-to-medium and mostly uses
-the XNA API surface directly (not deep reflection, `dynamic`, or heavy LINQ), the translation is
-usually mechanical once you know the conventions below.
+## Sources of truth
 
-## The single biggest mechanical difference: properties
+| Question | Current source |
+|---|---|
+| Is a documented XNA runtime member represented? | [`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md) |
+| How does an accepted C++ mapping differ from C# or FNA? | [`CHECKLIST.md`](../CHECKLIST.md) |
+| What is broken or limited now? | [`handoff.md` section 5](../handoff.md#5-known-bugs-and-limitations) |
+| Which renderer identities exist? | [`renderer-registry.md`](renderer-registry.md) |
+| What does each renderer support? | [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md), then the renderer's own page and live capability profile |
+| What can CNA load from an existing `.xnb`? | [`xnb-content-pipeline-support.md`](xnb-content-pipeline-support.md) |
+| How is an existing `.contentproj` built? | [`xna-content-pipeline-migration.md`](xna-content-pipeline-migration.md) |
+| Which custom-effect format is which? | [`shader-effect-vs-fx-bytecode.md`](shader-effect-vs-fx-bytecode.md) |
 
-C# properties (`public Color Color { get; set; }`) do not exist in C++. CNA's project-wide
-convention is explicit getter/setter methods:
+The generated member report establishes API representation, not behavioral parity. Conversely, a
+renderer supporting one feature does not imply that every format, graphics profile, driver or
+combination supports it. Use the narrower source for the question being asked.
+
+## 1. Establish the C++ build
+
+Choose the CNA renderer and module set before translating renderer-dependent code. The repository
+quick start builds CNA from source:
+
+```bash
+git submodule update --init
+cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3
+cmake --build build --parallel 8
+```
+
+CNA also has an opt-in installed C++ package. A consumer can request only the modules it uses and
+link their exported `CNA::` targets; [`installed-cpp-sdk.md`](installed-cpp-sdk.md) owns the exact
+`find_package`, deployment and binary-compatibility contract. Do not copy private include paths,
+renderer libraries or runtime DLL rules into the game.
+
+The source checkout requires the compatible sibling `sharp-runtime`, `easy-gl` and `meta-gl`
+checkouts named by the top-level [`README.md`](../README.md). They are not Git submodules. SDL and
+the other vendored dependencies that are submodules are initialized by the command above.
+
+## 2. Translate the public API mechanically
+
+### Namespaces, types and headers
+
+XNA namespaces and names stay recognizable:
+
+```text
+Microsoft.Xna.Framework.Graphics.Texture2D
+Microsoft::Xna::Framework::Graphics::Texture2D
+```
+
+Include the public header that declares the type; do not include a renderer implementation header.
+Use the signature in that header for ownership, nullability and overload selection rather than
+guessing from the C# declaration. Sharp Runtime supplies the `System::*` types and the .NET
+primitive aliases used by CNA's public surface, including `String`, `Single`, `intcs` and
+`bytecs`.
+
+C# `ref`/`out`, nullable values, arrays, delegates and reference types have explicit C++ mappings.
+They may become references, pointers, `std::optional`, spans or project collection types depending
+on the API. The generated member report names the mapping classification, while `CHECKLIST.md`
+owns the project-wide accepted deviations.
+
+### Properties
+
+C# properties become explicit getter and setter methods:
 
 ```csharp
-// XNA/FNA C#
 spriteBatch.GraphicsDevice.BlendState = BlendState.AlphaBlend;
-var color = texture.Format;
+var format = texture.Format;
 ```
 
 ```cpp
-// CNA C++
 spriteBatch->getGraphicsDeviceProperty()->setBlendStateProperty(BlendState::AlphaBlend);
 auto format = texture->getFormatProperty();
 ```
 
-Every single property access in your existing C# code needs this rewrite — `X` becomes
-`getXProperty()` for reads and `setXProperty(value)` for writes. There is no way around this; it's
-the most common source of purely mechanical (not logical) porting errors.
+Rewrite every property access this way. Do not replace it with direct field access even when the
+value type looks simple; the accessor may validate, apply native state or preserve XNA event order.
 
-## Namespace mapping
+### Events and disposal
 
-`Microsoft.Xna.Framework.*` stays exactly the same, just with C++ `::` instead of C# `.`:
-`Microsoft.Xna.Framework.Graphics.Texture2D` → `Microsoft::Xna::Framework::Graphics::Texture2D`.
-Class names, enum names, and constants are preserved exactly (e.g. `Color::CornflowerBlue`, not a
-renamed or restructured equivalent) — CLAUDE.md's own project rule is to never diverge from the
-XNA/FNA name even when a more "C++-idiomatic" name would read better.
+Events use `System::EventHandler<TEventArgs>` and retain XNA's event names:
 
-Non-XNA CNA-only additions (helpers, extensions, internal renderer types) are marked with a
-`CNAEXT` macro and/or an `EXT` suffix (e.g. `PrimitiveType::PointListEXT`,
-`Texture2D::SetDataPointerEXT`) — anything with that suffix is safe to ignore unless you
-specifically want a CNA extension your original XNA code never used.
-
-### CNAEXT and C++ language artefacts
-
-`CNAEXT` is a declaration-level marker, not by itself proof of a new runtime
-capability. Some tagged C++ declarations spell out behavior that C# supplies
-implicitly: the parameterless `KeyboardState`, `MouseState` and `GamePadState`
-constructors correspond to zero-initialized XNA value types, and vector compound
-assignments such as `Vector3::operator+=` express C#'s synthesized assignment from
-the corresponding binary operator. Using those operations does not require a
-CNA-only feature in the original XNA program (cna-engine UP-002).
-
-Do not confuse a semantic XNA-compatibility audit with CNA's optional
-`CNA_STRICT_XNA_API` declaration check. That macro turns **every** `CNAEXT` marker
-into a deprecation diagnostic, including these language artefacts. With
-`-Werror=deprecated-declarations`, calling them is therefore rejected even though
-their semantics are available in C# XNA. The marker and this compile gate have not
-been relaxed. For compound assignment, strict declaration-checking code can write
-the explicit equivalent, for example `position = position + offset`. Genuine CNA
-extensions, such as horizontal mouse scrolling or extra vertex layouts, remain
-extensions regardless of this language-mapping distinction.
-
-## Choosing a renderer
-
-CNA has 10 public renderer identities over 8 implementation families, chosen at CMake configure
-time (`-DCNA_GRAPHICS_RENDERER=<OPENGLES3|OPENGL33|WEBGL2|WEBGPU|HEADLESS|SOFTWARE|STUB|DIRECTX9|SDLGPU|FNA3D>`). Full per-feature detail is in
-`docs/graphics-renderer-feature-matrix.md`; the practical summary:
-
-The former `SDL_GPU` identity was renamed to `SDLGPU` on 2026-10-30. There is no compatibility
-alias: change selector values from `SDL_GPU` to `SDLGPU`, `CNA_RENDERER_SDL_GPU` to
-`CNA_RENDERER_SDLGPU`, every `CNA_SDL_GPU_*` build option or compile definition to
-`CNA_SDLGPU_*`, and the C constant `CNA_GRAPHICS_RENDERER_SDL_GPU` to
-`CNA_GRAPHICS_RENDERER_SDLGPU`. The numeric C ABI value remains 31. Do not rename SDL's own
-`SDL_GPU*` types/constants, the `SDL_GPU_DRIVER` hint or MojoShader's SDL_GPU adapter.
-
-- **Your game is 2D only** (SpriteBatch/SpriteFont, no 3D models or stock Effects): any drawing
-  renderer works; keep the host default.
-- **Your game uses 3D** (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/
-  `SkinnedEffect`, `Model`, render targets): use **OPENGLES3** (or **WEBGL2** under Emscripten) —
-  internally implemented by EasyGL, it is the most mature 3D renderer, with the fewest open gaps
-  and the most complete pixel-test coverage.
-- **Your game loads custom compiled XNA/FNA effects:** choose **FNA3D** when you want the support
-  enabled unconditionally. EasyGL, WebGPU, SDLGPU, Software and DirectX9 implement the same shared
-  contract behind their renderer-specific `CNA_*_COMPILED_EFFECTS` build option, which is off by
-  default; a build without that runtime rejects the constructor explicitly instead of substituting
-  a stock shader.
-- **SDLGPU** is the modern native path (SDL's Vulkan, Direct3D 12 and Metal backends) and the
-  default on Windows, macOS and iOS. Its legacy `ShaderEffect` GLSL-text compiler is absent on
-  Windows, Apple and Emscripten, but with `CNA_CNAEXT=ON` an explicit `ShaderPackageEXT` can still
-  select the SPIR-V route on a live device; query `SupportsShaderLanguageEXT()` rather than
-  inferring this from the platform. SDLGPU has no occlusion queries.
-
-## What fully works today
-
-Every public type and documented member of the XNA 4.0 runtime is present
-(`docs/xna-4-runtime-member-coverage.md`, generated); presence is not behaviour. What each renderer
-does is in `docs/graphics-renderer-feature-matrix.md` and each renderer's own document, and what is
-currently broken or limited is `handoff.md` §5.
-
-## The former blockers that matter to existing ports
-
-Before the smaller caveats below — these two are the ones most likely to block a real port:
-
-- **`.xnb` is supported for the registered built-in readers**, including the general
-  `EffectReader`. Reflective custom readers and some media/surface formats remain explicit gaps;
-  consult `docs/xnb-content-pipeline-support.md` before assuming every asset type is portable.
-- **`Effect(GraphicsDevice&, byte[])` is implemented on most programmable renderers.** The input must be compiled
-  Direct3D 9 Effect Framework bytecode (`.fxb` or an XNB Effect payload), not HLSL `.fx` source and
-  not MonoGame MGFX. Public parameters, techniques/passes, cloning, pass state, general 3D draws,
-  and `SpriteBatch` use the native MojoShader-backed runtime. Use FNA3D (always enabled), or enable
-  the matching `CNA_<RENDERER>_COMPILED_EFFECTS` option (`SDLGPU`, `EASYGL`, `WEBGPU`,
-  `SOFTWARE`, `DIRECTX9`; matrix in `docs/fx-compiled-effects.md` §10).
-  Otherwise keep a renderer-specific CNAEXT `ShaderEffect` path.
-
-## What has caveats — read this before porting anything using these
-
-**Update, 2026-07-11: the items originally listed in this section are all fixed** — kept here
-briefly so old bookmarks/searches still find them, not because they're still risks:
-
-- ~~`IndexElementSize` (32-bit index buffers)~~ — **fixed, Task 921** (2026-07-09). CNA's values now
-  match FNA exactly (`SixteenBits=0`, `ThirtyTwoBits=1`).
-- ~~EasyGL anisotropic filtering~~ — **fixed, Task 918** (2026-07-09). `TextureFilter::Anisotropic`
-  now issues a real `GL_EXT_texture_filter_anisotropic` call on EasyGL too.
-- ~~`Model` root bone~~ — **fixed, Task 916** (2026-07-09). The constructor now takes an optional
-  `rootBoneIndex` parameter.
-
-Real, currently-open caveats worth knowing about instead:
-
-- ~~EasyGL: a `SpriteBatch.Begin()`/`End()` pair leaks its blend state into subsequent 3D draws~~ —
-  **fixed, Task 956** (2026-07-11). `SpriteBatch::Begin()` on EasyGL used to hardcode its own blend
-  factors regardless of what `BlendState` was requested, and leave that leftover state in effect
-  after `End()`. Now, whatever `BlendState` you pass to `SpriteBatch.Begin()` (or the default
-  `AlphaBlend`) genuinely persists on `GraphicsDevice.BlendState` afterward, matching real FNA — if
-  you draw 3D geometry after a `SpriteBatch` pass without resetting `BlendState` yourself, you get
-  real FNA's own well-known behavior (it inherits the SpriteBatch's blend mode), not leftover
-  garbage state.
-- **EasyGL: a full-backbuffer `SpriteBatch` draw before any 3D draw in the same frame breaks that
-  frame's 3D rendering** (Task 933) — investigated, root cause not yet isolated.
-- ~~`EnvironmentMapEffect` only forwards `DirectionalLight0`~~ — **fixed, Task 890** (2026-07-11):
-  `DirectionalLight1`/`2` now forward correctly on all 3 renderers.
-- ~~`SkinnedEffect` only forwards `DirectionalLight0`~~ — **fixed, Task 893** (2026-07-11):
-  `DirectionalLight1`/`2` now forward correctly on all 3 renderers.
-- ~~`SkinnedEffect` has no specular term~~ — **fixed, Task 894** (2026-07-11): real half-vector
-  Blinn-Phong specular (`SpecularColor`/`SpecularPower`) now implemented on all 3 renderers.
-- ~~`SkinnedEffect`'s `WeightsPerVertex` is a GPU no-op~~ — **fixed, Task 895** (2026-07-11): each
-  renderer's skinning vertex shader now only sums the first `WeightsPerVertex` (1, 2, or 4)
-  weight/index pairs, matching FNA's real `Skin(vin, boneCount)` behavior.
-- See `CHECKLIST.md`'s "Known acceptable C++ deviations from FNA/XNA" table for the smaller,
-  permanent, intentional deviations (e.g. `GetHashCode()` returns `std::size_t`, not `int`) that
-  are unlikely to affect a typical port but are documented there in full.
-- `handoff.md` §5 is the actively-maintained current bug list — check it directly for anything not
-  covered above before committing to a renderer.
-
-## Content pipeline: no longer the other big difference
-
-**This section described the state before the content pipeline existed, and was wrong from the
-moment it did; it is corrected here (`XNAPP-320`, 2026-09-07).**
-It said that CNA's `ContentManager` does not read `.xnb` at all and that
-`ContentReader`/`ContentTypeReaderManager`/`LzxDecoder` are intentionally not implemented. All of
-that is now false, and the paragraph above ("The former blockers that matter to existing ports")
-had already said so.
-
-What is true today:
-
-* **`ContentManager` reads `.xnb`**, through `ContentReader`, `ContentTypeReaderManager` and a real
-  LZX decoder, for every registered built-in reader.
-* **The build side exists too**: `cna-content` is a content pipeline with XNA's own importers and
-  processors, and it writes both CNA's `.cnb` and XNA's `.xnb`. Eleven asset families of its `.xnb`
-  output are verified by loading them in a genuine XNA 4.0 runtime.
-* **Your `.contentproj` is an input**, built as a project, with its own platform, profile,
-  compression and per-item components.
-
-The whole of that story — the three ways in, the container choice, custom importers and
-processors, the `.xml` route, and what still behaves differently on purpose — is
-**[`xna-content-pipeline-migration.md`](xna-content-pipeline-migration.md)**, which is the document
-to read for the content half of a port. The per-component reference is
-[`xna-content-pipeline-components.md`](xna-content-pipeline-components.md) and the member-by-member
-parity matrix is [`xna-content-pipeline-parity-report.md`](xna-content-pipeline-parity-report.md).
-
-`Model` remains the one asset worth checking by hand: its loader's gaps versus a real FNA-authored
-model (bone hierarchy, `ParentBone` wiring — Task 440) are tracked separately from the pipeline
-work above.
-
-## Summary checklist for a new port
-
-1. Rewrite every C# property access as `getXProperty()`/`setXProperty()`.
-2. Pick a renderer (see "Choosing a renderer"): the host default for 2D, EasyGL for the most
-   complete 3D.
-3. Bring your content across with [`xna-content-pipeline-migration.md`](xna-content-pipeline-migration.md):
-   build the `.contentproj` you already have, or point `cna-content` at the source directory.
-   Existing `.xnb` files load as they are.
-4. Check the "what doesn't work yet" list above against your game's actual feature use before
-   committing to a renderer.
-5. If your game loads compiled `.fx` bytecode, check the renderer: it needs FNA3D, SDLGPU or the
-   EasyGL/OpenGL family with compiled effects configured in (see "The former blockers that matter
-   to existing ports" above).
-
-## 2D compatibility checklist (Task 487)
-
-A scannable, tick-through-your-own-source checklist for 2D-only games (`SpriteBatch`/`SpriteFont`/
-`Texture2D`). Every row was checked against the real current header (not assumed from XNA
-docs). Legend: ✅ ports as-is (after the property rewrite) · ⚠️ ports with a caveat, read the note
-· ❌ not supported, throws.
-
-**`SpriteBatch`**
-
-| Member | Status | Note |
-|---|---|---|
-| `Begin()` (all 4 overloads: no-arg, sort+blend, +sampler/depth/raster, +effect/transform) | ✅ | |
-| `End()` | ✅ | |
-| `Draw(Texture2D, Vector2 position, Color)` | ✅ | |
-| `Draw(Texture2D, Vector2 position, Rectangle? source, Color)` | ✅ | |
-| `Draw(Texture2D, Vector2 position, Rectangle? source, Color, rotation, origin, float scale, SpriteEffects, layerDepth)` | ✅ | |
-| `Draw(Texture2D, Vector2 position, Rectangle? source, Color, rotation, origin, Vector2 scale, SpriteEffects, layerDepth)` | ✅ | |
-| `Draw(Texture2D, Rectangle destination, Color)` | ✅ | |
-| `Draw(Texture2D, Rectangle destination, Rectangle? source, Color)` | ✅ | |
-| `Draw(Texture2D, Rectangle destination, Rectangle? source, Color, rotation, origin, SpriteEffects, layerDepth)` | ✅ **fixed, Task 922** (2026-07-09) | The real overload now takes an optional `std::optional<Rectangle> sourceRectangle`, matching FNA's `Rectangle?` exactly. Previously this was a `CNAEXT`-marked near-equivalent with a required `Rectangle` source parameter — not a drop-in signature match — found while verifying this checklist against the real header. |
-| `SpriteSortMode` (all 4 values) | ✅ | |
-| `transformMatrix` in `Begin()` | ✅ | |
-| Custom `Effect` via `Begin(effect)` | ⚠️ | Compiled `.fxb` requires FNA3D or the renderer's compiled-effect option. `ShaderEffect` is a separate CNAEXT path: SDLGPU's legacy GLSL-text compiler is absent on Windows, Apple and Emscripten, while its `CNA_CNAEXT=ON` SPIR-V package intake is queried separately. |
-| `DrawString` (6 overloads) | ✅ | |
-
-**`SpriteFont`**
-
-| Member | Status | Note |
-|---|---|---|
-| `MeasureString(String)` | ✅ | |
-| `MeasureString(StringBuilder)` | ✅ | Added by Task 423 — if you're on an older CNA checkout predating that task, this overload won't exist yet. |
-| Glyph placement, spacing/kerning, `\n` newlines, unknown-char fallback | ✅ | Pixel-verified (Tasks 424-427/690-693). |
-| `SpriteEffects` flip + rotation/origin/scale via `DrawString` | ✅ | Fixed in shared code this session (Task 694) — correct on every renderer, not just where it was found. |
-
-**`Texture2D`**
-
-| Member | Status | Note |
-|---|---|---|
-| `Texture2D(GraphicsDevice&, int width, int height)` | ✅ | |
-| `Texture2D(GraphicsDevice&, int width, int height, bool mipMap, SurfaceFormat)` | ✅ | |
-| `FromStream(GraphicsDevice&, Stream&)` (2 overloads) | ✅ | PNG/JPEG/GIF are detected by signature, matching measured Microsoft XNA behavior. DDS is available through explicit `CNAEXT DDSFromStreamEXT`; BMP/TGA/QOI/PSD/HDR/PNM remain outside the classic API. |
-| `SetData(Color* data, int elementCount)` | ✅ | |
-| `SetData(int level, Rectangle* rect, Color* data, int startIndex, int elementCount)` | ⚠️ | `level == 0` is fully correct everywhere; for mip levels (`level > 0`) check `graphics-renderer-feature-matrix.md` for your renderer. |
-| `GetData` (3 overloads) | ✅ | Pure CPU-side cache read on every renderer — renderer-independent by construction. |
-| `SaveAsPng`/`SaveAsJpeg` (stream + file-path `CNAEXT` overloads) | ✅ | |
-| Non-`Color` `SurfaceFormat` for real GPU sampling | ✅ | Per renderer. EasyGL uploads and samples XNA's classic formats (`Dxt1`/`3`/`5`, the packed 16-bit formats, `NormalizedByte2`/`4`, `Rgba1010102`, `Alpha8`, the float and half formats, and `Rg32`/`Rgba64` where the context has 16-bit normalized textures) and logs at start-up what its context took; the `ClassicTextureFormat` tests cover them. Other renderers: each renderer's own document. |
-
-**`BlendState`/`SamplerState` (as used via `SpriteBatch::Begin`)**
-
-| Preset | Status | Note |
-|---|---|---|
-| `BlendState::Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive` | ✅ | |
-| `SamplerState::PointClamp`/`PointWrap`/`LinearClamp`/`LinearWrap`/`AnisotropicClamp`/`AnisotropicWrap` | ✅ | EasyGL's `TextureFilter::Anisotropic` trilinear-fallback bug (Task 918) was fixed 2026-07-09. |
-
-## 3D compatibility checklist (Task 488)
-
-A scannable, tick-through-your-own-source checklist for 3D games (the 5 stock Effects, `Model`,
-`VertexBuffer`/`IndexBuffer`/`VertexDeclaration`). Unlike the 2D checklist above, 3D behavior
-genuinely differs by renderer, so every row below is qualified per renderer. Every constructor/
-overload listed was checked against the real current CNA header **and** the real FNA `.cs` source
-at `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/StockEffects/` — the same
-overload-diffing discipline that found Task 487's `SpriteBatch::Draw` gap (Task 922) — not assumed
-from memory. If you're 2D-only, see the checklist above instead and skip this section entirely. Legend:
-✅ ports as-is (after the property rewrite) · ⚠️ ports with a caveat, read the note · ❌ known gap.
-
-**The 5 stock Effects — construction**
-
-Real FNA has exactly one public constructor per effect, `EffectName(GraphicsDevice device)`, plus
-a `Clone()` override backed by a `protected` copy constructor (confirmed by reading each of
-`BasicEffect.cs`/`AlphaTestEffect.cs`/`DualTextureEffect.cs`/`EnvironmentMapEffect.cs`/
-`SkinnedEffect.cs` directly). CNA matches this exactly for all 5: one public
-`explicit EffectName(GraphicsDevice&)` constructor (device passed by reference, this project's
-established convention throughout) plus a
-`Clone()` override backed by a `private` copy constructor (CNA's accepted mapping for FNA's
-`protected`, per `CLAUDE.md`'s visibility table). No signature or overload-count mismatch found —
-unlike `SpriteBatch::Draw` (Task 922), this area checked out clean.
-
-| Effect | Construction | Core rendering (EasyGL) | Known caveats |
-|---|---|---|---|
-| `BasicEffect` | ✅ | ✅ | None (per Task 483's table). |
-| `AlphaTestEffect` | ✅ | ✅ | |
-| `DualTextureEffect` | ✅ | ✅ | No open EasyGL gap; `VertexColorEnabled` was fixed by Task 889. |
-| `EnvironmentMapEffect` | ✅ | ✅ | No open gaps — `DirectionalLight1`/`2` (Task 890) and base-lerp alpha scaling (Task 891) were fixed 2026-07-11. |
-| `SkinnedEffect` | ✅ | ✅ | No open gaps — `DirectionalLight1`/`2` (Task 893), `SpecularColor`/`Power` (Task 894), and `WeightsPerVertex` GPU enforcement (Task 895) all fixed 2026-07-11. |
-| Fog (all 5 effects) | — | ✅ | Implemented for every effect (Task 899, closed 2026-07-07). |
-| `ShaderEffect` (CNAEXT custom shader) | ✅ | ✅ | |
-
-**`Model` / `ModelMesh` / `ModelBone`**
-
-Real FNA's own `Model` constructor is `internal` — ordinary XNA/FNA game code never calls it
-directly, only via `ContentManager.Load<Model>()`'s content pipeline (confirmed in `Model.cs`).
-CNA exposes two `CNAEXT`-marked public constructors instead (there being no real public FNA
-constructor to match against) so hand-built models are possible without content loading — this is
-an intentional, documented CNA convenience, not a signature mismatch.
-
-| Member | Status | Note |
-|---|---|---|
-| `Model::Draw(Matrix world, Matrix view, Matrix projection)` | ✅ | Correct on EasyGL. |
-| Constructing a `Model` by hand (`CNAEXT` constructors) | ✅ | **Fixed, Task 916** (2026-07-09) — an optional `rootBoneIndex` parameter (default `0`) now lets you specify a root bone other than `bones[0]`. |
-| Loading a `Model` via `ContentManager` | ⚠️ | An `.xnb` model loads through `ModelReader`, and the reader is swept over a corpus by the `CnaXnbModelCorpusSweep` ctest; CNA's own `.cnb`/`.model.json` routes remain. The loader gaps recorded under Task 440 (bone hierarchy/`ParentBone`/`BoundingSphere`/`Tag` wiring) are tracked separately, so check a real authored model rather than assuming either extreme. See "Content pipeline" above. |
-| `ModelMesh`/`ModelBone` collections (`ModelMeshCollection`, `ModelBoneCollection`) | ✅ | `TryGetValue`/`Contains`/`begin()`/`end()` all present (Tasks 432/433). |
-| `Model::CopyBoneTransformsFrom`/`To` | ⚠️ | Loop bound is `Bones.Count`, not the caller array's length like FNA — an intentional, safer deviation (see "Known deviations" list), not a bug. |
-
-**`VertexBuffer` / `IndexBuffer` / `VertexDeclaration`**
-
-Real FNA has exactly 2 public constructors each for `VertexBuffer`/`IndexBuffer` and 2 for
-`VertexDeclaration` (confirmed against `VertexBuffer.cs`/`IndexBuffer.cs`/`VertexDeclaration.cs`);
-CNA has all of FNA's overloads plus extra `CNAEXT` convenience overloads (e.g.
-`VertexBuffer(GraphicsDevice&, int vertexCount)` without an explicit `VertexDeclaration`) — purely
-additive, no missing or mismatched FNA-facing overload found.
-
-| Member | Status | Note |
-|---|---|---|
-| `VertexBuffer`/`IndexBuffer` construction (both FNA overloads) | ✅ | No open gaps (Task 483's table). |
-| `VertexDeclaration` construction (both FNA overloads + `initializer_list` convenience) | ✅ | Construction/assignment confirmed never throws (Task 729). |
-| `IndexElementSize::ThirtyTwoBits` numeric value | ✅ | **Fixed, Task 921** (2026-07-09) — CNA's values now match FNA's real `0`/`1` exactly (previously `16`/`32`). |
-| `SetDataOptions`/`BufferUsage` | ✅ | No open gaps. |
-
-## Troubleshooting graphics renderer selection (Task 489)
-
-Practical fixes for real configure-time and runtime problems, not another compatibility list —
-see the sections above for "is this a bug or a known limitation." Every command and env var below
-was verified against the actual current `CMakeLists.txt`/source, not assumed from general CMake/XNA
-knowledge.
-
-### Picking/overriding the renderer at configure time
-
-```bash
-cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3      # or SDLGPU / WEBGPU / ...
-cmake --build build --target CnaTests
+```cpp
+game.Exiting += [](System::Object* sender, const ExitingEventArgs& eventArgs) {
+    // Respond to exit.
+};
 ```
 
-`CNA_GRAPHICS_RENDERER` defaults to `WEBGL2` under Emscripten, `SDLGPU` on Windows, macOS and iOS,
-and `OPENGLES3` everywhere else. See the
-top-level `README.md` §9 for the full per-platform build matrix (Windows/MinGW cross-compile
-included) — not repeated here.
+Keep explicit `Dispose()` calls where the XNA lifetime is observable, especially for graphics,
+audio and content resources. The concrete header states whether the C++ caller owns an object,
+shares it or merely borrows it. A disposed CNA object must not be treated as reusable just because
+its C++ storage still exists.
 
-### Common configure-time failures
+### `CNAEXT` is a compatibility marker
 
-| Symptom | Cause | Fix |
+`CNAEXT` marks declarations that are not literal XNA 4.0 API. Some are genuine CNA features;
+others spell out operations that C# supplies implicitly, such as a zero-initialized value-type
+constructor or a compound-assignment operator. The repository's strict XNA declaration checks
+deliberately diagnose both groups, so the marker alone is not a behavioral capability query.
+
+The `CNA_CNAEXT` CMake option is a different concept: it enables the optional `graphics-ext`
+module and package-oriented shader extensions. It does not control whether every declaration
+marked `CNAEXT` exists. Before depending on an extension, check its owning document and build
+option.
+
+## 3. Bring content across
+
+### Existing compiled content
+
+Existing `.xnb` assets remain valid inputs. `ContentManager` implements the registered built-in
+readers, LZX/LZ4 containers and the general compiled-Effect reader. `ModelReader` is not a partial
+placeholder: it loads the bone hierarchy, meshes and mesh parts, shared vertex/index/effect
+resources, parent bones, bounds and tags. Its binary `.xnb` path is distinct from CNA's older
+`.model.json` route.
+
+The important boundary is registration rather than the container name. CNA cannot discover an
+arbitrary C# reader assembly through CLR reflection. Supported built-in readers, registered generic
+reader combinations, `ReflectiveReader<T>` setup and explicit refusals are listed in
+[`xnb-content-pipeline-support.md`](xnb-content-pipeline-support.md).
+
+### Rebuilding source content
+
+An existing XNA `.contentproj` is an input to `cna-content`, not a file that must first be
+converted:
+
+```bash
+cna-content build Content/MyGameContent.contentproj -o Content/bin
+```
+
+The same pipeline can build a source directory, emit XNA-compatible `.xnb`, or emit CNA's `.cnb`.
+Custom C# importers/processors must be ported and registered in a C++ compiler binary because CNA
+cannot load their assemblies. The exact commands, CMake helper, processor parameters and deliberate
+differences are in [`xna-content-pipeline-migration.md`](xna-content-pipeline-migration.md).
+
+CNA can additionally load `.cnb`, editable `.cnj`, native media and glTF/GLB according to the
+documented resolution order in [`cnj-format.md`](cnj-format.md). A present but malformed compiled
+asset is an error; it does not silently fall through to a source file with the same logical name.
+
+## 4. Choose a renderer by requirement
+
+Start with the host default unless the game has a requirement it cannot meet: `WEBGL2` under
+Emscripten, `SDLGPU` on Windows, macOS and iOS, and `OPENGLES3` elsewhere. The default is a build
+policy, not a promise that every optional feature is present on the live device.
+
+| Need | Renderer direction | Boundary to check |
 |---|---|---|
-| `CNA: Missing sibling repository 'sharp-runtime'` / `'easy-gl'` | These are sibling checkouts next to this repo, **not** git submodules — `git submodule update --init` will not fetch them | `cd ..` and `git clone` the missing repo next to this one (the error message prints the exact URL) |
-| `Missing vendored 'SDL' …` right after a fresh clone | Downloaded a ZIP/release archive instead of cloning with Git, or forgot to init submodules — vendored `third_party/SDL`/`SDL_mixer` are empty | `git submodule update --init`, or pass `-DCNA_USE_SYSTEM_SDL=ON` to use system SDL3 packages instead |
-| `CNA: renderer <NAME> ... has been retired` | The named renderer was retired ([removed-renderers.md](removed-renderers.md)); nothing aliases it | Pick a surviving renderer — `SDLGPU` reaches Vulkan, Direct3D 12 and Metal through SDL |
-| `CNA_ENABLE_VIDEO=ON` cannot find FFmpeg | The required FFmpeg development packages are missing; this is independent of the graphics renderer | Install `libavcodec-dev libavformat-dev libavutil-dev libswresample-dev`, use the default `AUTO` fallback, or configure `-DCNA_ENABLE_VIDEO=OFF` for a game without video. See [video-backend.md](video-backend.md). |
+| Established native GL path | `OPENGLES3` or desktop `OPENGL33` | Context/profile-specific formats, MSAA, queries and extensions |
+| Browser GL | `WEBGL2` | Emscripten/browser restrictions and WebGL capability limits |
+| Modern native portability | `SDLGPU` | Linux/Vulkan is qualified; native Windows and Apple qualification remains open, and SDL_gpu exposes no occlusion queries |
+| Native and browser WebGPU | `WEBGPU` | Qualified on Linux x86-64 and headless Chrome; other native packages remain unverified |
+| XNA 4.0 Direct3D 9 authenticity | `DIRECTX9` | Windows-only; the current evidence is MinGW/Wine/DXVK rather than real Windows hardware |
+| FNA's graphics abstraction and always-enabled compiled XNA effects | `FNA3D` | Experimental CNA renderer; capabilities depend on its selected OpenGL, Direct3D 11 or SDL_GPU driver |
+| Deterministic bounded CPU pixels | `SOFTWARE` | Experimental and intentionally CPU-bound |
+| Logic/validation without pixel output | `HEADLESS` or `STUB` | Neither makes a raster-output claim; their validation and diagnostics differ |
 
-### Common runtime failures
+Maturity is queryable through `getGraphicsRendererMaturity()`. Feature support must be queried from
+the created `GraphicsDevice`: use `SupportsCapability()` for the compact compatibility set and
+`GetRendererCapabilityProfileEXT()` plus the per-format queries for structured feature, limit and
+format decisions. Do not branch on a renderer name when a capability answer exists.
 
-| Symptom | Cause | Fix / is it a bug? |
-|---|---|---|
-| Blank/black window, or GL-based renderers (EasyGL) fail to create a context in CI/headless environments | No real X server / GPU driver — common under Xvfb with only a software (`llvmpipe`) GL driver | Expected in headless CI; tests still run against software rendering. If entire runs fail rather than just individual pixel-tolerance edge cases, confirm an X server is actually reachable (`DISPLAY` env var, or pass `-DCNA_TEST_DISPLAY=:99` at configure time to point the whole `ctest` suite at a specific Xvfb display) |
-| Pixel-comparison example/tests fail after an intentional rendering change | Golden images are stale references, not a bug | Re-run the specific test with `CNA_UPDATE_GOLDEN=1` set to regenerate the golden PNG, then review the diff before committing it |
-| Flaky/inconsistent test failures that don't reproduce in isolation | **Never run multiple renderers' full `ctest` suites concurrently** — confirmed to cause transient GPU/driver-contention false failures (`handoff.md` §7) | Run renderer test suites sequentially; re-run any single anomalous test in isolation (`ctest -R <TestName>`) before treating it as a real regression |
+A normal build contains one renderer. An opt-in multi-renderer build uses
+`CNA_GRAPHICS_RENDERERS`, and the application may select before the first successful graphics
+device creation. Failure is hard by default; fallback must be enabled explicitly. The complete
+precedence, latch and window-recreation rules are in
+[`runtime-renderer-selection.md`](runtime-renderer-selection.md).
 
-### Is it a bug, or a known limitation?
+## 5. Choose the correct effect contract
 
-Before filing anything, check `handoff.md` §5 (the actively maintained list of current bugs and
-limitations), `docs/graphics-renderer-feature-matrix.md` for per-renderer support, and
-`CHECKLIST.md`'s deviation table for deliberate differences from XNA/FNA. If your symptom isn't
-listed there, it's more likely a genuinely new finding worth its own task.
+The five XNA stock effects work across all rasterizing renderer families. Custom effects have two
+separate contracts:
+
+- `Effect(GraphicsDevice&, byte[])` and XNB `EffectReader` consume compiled Direct3D 9 Effect
+  Framework bytecode (`.fxb` or an XNB Effect payload). FNA3D enables this unconditionally.
+  EasyGL, WebGPU, SDLGPU, Software and DirectX9 expose it behind their off-by-default
+  `CNA_EASYGL_COMPILED_EFFECTS`, `CNA_WEBGPU_COMPILED_EFFECTS`,
+  `CNA_SDLGPU_COMPILED_EFFECTS`, `CNA_SOFTWARE_COMPILED_EFFECTS` and
+  `CNA_DIRECTX9_COMPILED_EFFECTS` options.
+- `ShaderEffect` is a CNA extension for renderer-language source or an explicitly typed portable
+  package. Its accepted languages depend on the renderer and platform.
+
+Raw `.fx` source and MonoGame MGFX are not interchangeable with compiled XNA effect bytecode. CNA
+does not silently replace an unsupported custom effect with a stock effect; malformed bytecode and
+an unsupported renderer are reported separately. See
+[`shader-effect-vs-fx-bytecode.md`](shader-effect-vs-fx-bytecode.md) and
+[`fx-compiled-effects.md`](fx-compiled-effects.md) before choosing an asset format.
+
+## 6. Preserve XNA state and profile behavior
+
+Several common surprises are compatibility behavior rather than CNA draw-order defects:
+
+- `SpriteBatch::End()` does not restore prior graphics state. The blend, depth/stencil,
+  rasterizer and sampler state selected by `Begin()` remain on the device, matching XNA/FNA.
+  Explicitly set the state required by a following 3D pass. The former report that a
+  full-backbuffer SpriteBatch draw broke the next 3D draw was traced to the expected default
+  `CullCounterClockwiseFace`, and the dedicated order test now distinguishes state from lost
+  commands.
+- Reach and HiDef restrictions are part of XNA behavior. A native API being able to allocate or
+  draw something does not make it legal under the active `GraphicsProfile`.
+- `Texture2D::GetData` is not universally a read from an upload shadow. An ordinary texture may
+  retain CPU data, but a render target must observe its live rendered surface. Query render-target
+  readback support; `HEADLESS` and `STUB` refuse it.
+- Texture and render-target support is per `SurfaceFormat` and usage. Query the live format profile
+  instead of treating successful `Color` storage as proof for compressed, float, filterable,
+  blendable or multisampled storage.
+- Use `handoff.md` section 5 for current defects. Historical task notes and fixed-item lists are
+  not an additional backlog.
+
+## 7. Port in verifiable slices
+
+1. Build a minimal `Game` with the target renderer and platform.
+2. Translate framework types and property/event syntax without introducing CNA extensions.
+3. Load one real existing asset through `ContentManager`; decide whether the project will reuse
+   `.xnb` or rebuild content only after that proof.
+4. Bring up `SpriteBatch` and input, then one representative 3D/effect path if the game has one.
+5. Query every renderer-dependent feature and format the game actually needs.
+6. Add CNA extensions only after the XNA-shaped path is stable, keeping them isolated so the
+   portability cost is visible.
+7. Run the game's tests and graphics probes through the private runner, never on the owner's live
+   desktop:
+
+   ```bash
+   tools/platform/run_gpu_tests_private.sh build --output-on-failure
+   ```
+
+8. Compare remaining failures with the generated member report, the relevant subsystem page and
+   `handoff.md` section 5. If none owns the behavior, treat it as a new compatibility finding.
+
+For an intentional change to a CNA pixel fixture, `CNA_UPDATE_GOLDEN=1` may regenerate that
+fixture's PNG, but the image must be reviewed before it is accepted. Regenerating a golden is not a
+way to classify an unexplained port difference.
+
+## Troubleshooting
+
+| Symptom | What to check |
+|---|---|
+| Configuration reports a missing `sharp-runtime`, `easy-gl` or `meta-gl` | Clone the compatible sibling checkout named by the top-level README; these three are not submodules. |
+| Vendored SDL is absent after a fresh clone | Initialize Git submodules, or deliberately select the supported system-SDL mode. |
+| A renderer name is refused as retired | Choose a current identity from `renderer-registry.md`; retired names have no compatibility aliases. |
+| A renderer works on one machine but a feature throws on another | Inspect the live capability profile, graphics profile, format usages and renderer-specific driver qualification. |
+| A 3D draw after `SpriteBatch` is culled or blended unexpectedly | Reapply the 3D pass's blend, depth/stencil, rasterizer and sampler states after `End()`. |
+| `Effect(byte[])` or an XNB Effect is rejected | Confirm the payload is D3D9 Effect Framework bytecode and that the renderer's compiled-effect runtime is enabled. |
+| An `.xnb` reader cannot be resolved | Check the registered built-in/generic/reflective reader boundary; CNA cannot discover a C# reader assembly. |
+| GPU/window tests cannot create a context | Use `tools/platform/run_gpu_tests_private.sh`; do not point tests at the live desktop or substitute Xvfb for Vulkan presentation. |
+
+## See also
+
+- [`docs/README.md`](README.md) — current documentation index.
+- [`binding.md`](binding.md) — why the approved cross-language boundary is CNA's native C API.
+- [`development-environment.md`](development-environment.md) — build dependencies and private
+  display setup.
+- [`xna-fna-behavior-decisions.md`](xna-fna-behavior-decisions.md) — measured cases where Microsoft
+  XNA wins over FNA.
