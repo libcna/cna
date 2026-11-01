@@ -2022,6 +2022,35 @@ TEST(GltfToCnjToolTest, UnitScaleReachesTheNodeHierarchyAndNotOnlyTheVertices)
         << "MeshNode's translation did not convert with the vertices: " << meshNodeLine;
 }
 
+TEST(GltfToCnjToolTest, InvalidUnitScaleIsRefusedBeforeWritingOutput)
+{
+    ScratchDir gltfDir;
+    const auto gltfPath = gltfDir.path() / "scale.gltf";
+    WriteFile(gltfPath, kUnitScaleGltf);
+    for (const std::string scale : {"1trailing", "1e3junk", "1 2", "1.0 ", "inf", "+inf",
+                                    "-inf", "nan", "0", "-1", "1e999", "1e-999"})
+    {
+        SCOPED_TRACE(scale);
+        ScratchDir output;
+        EXPECT_EQ(RunGltfToCnjTool(gltfPath.string(), output.path().string(), "invalid", scale), 1);
+        EXPECT_TRUE(std::filesystem::is_empty(output.path()));
+    }
+}
+
+TEST(GltfToCnjToolTest, FiniteWholeTokenUnitScaleIsAccepted)
+{
+    ScratchDir gltfDir;
+    const auto gltfPath = gltfDir.path() / "scale.gltf";
+    WriteFile(gltfPath, kUnitScaleGltf);
+    for (const std::string scale : {"1", "0.01", "1e-2", "+1.5"})
+    {
+        SCOPED_TRACE(scale);
+        ScratchDir output;
+        ASSERT_EQ(RunGltfToCnjTool(gltfPath.string(), output.path().string(), "valid", scale), 0);
+        EXPECT_TRUE(std::filesystem::is_regular_file(output.path() / "valid.cnj"));
+    }
+}
+
 TEST(GltfToCnjToolTest, UnitScaleAppliesToPositionsAndBoneTranslations)
 {
     ScratchDir gltfDir;

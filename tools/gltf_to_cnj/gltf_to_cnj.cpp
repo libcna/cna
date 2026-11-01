@@ -40,6 +40,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -1746,18 +1747,20 @@ int main(int argc, char** argv)
     opts.baseName = argv[3];
     if (argc == 5)
     {
+        const std::string token = argv[4];
+        std::size_t consumed = 0;
         try
         {
-            opts.unitScale = std::stof(argv[4]);
+            opts.unitScale = std::stof(token, &consumed);
         }
         catch (const std::exception&)
         {
             std::cerr << "error: unitScale must be a number, got '" << argv[4] << "'\n";
             return 1;
         }
-        if (!(opts.unitScale > 0.0f))
+        if (consumed != token.size() || !std::isfinite(opts.unitScale) || !(opts.unitScale > 0.0f))
         {
-            std::cerr << "error: unitScale must be a positive number.\n";
+            std::cerr << "error: unitScale must be a finite positive number with no trailing characters.\n";
             return 1;
         }
     }

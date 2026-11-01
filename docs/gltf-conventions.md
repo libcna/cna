@@ -650,10 +650,11 @@ never a node's authored scale, because a change of unit is not a change of shape
 to move together: a model whose vertices shrink by a hundred while its node offsets do not comes
 apart, each part correctly sized and standing a hundred times too far from the next.
 
-Use a finite positive multiplier. The standalone `gltf_to_cnj` CLI currently uses `std::stof`
-without checking full-token consumption or finiteness: `1trailing` and `inf` both reach export
-success on a small isolated fixture. This parser defect is recorded in handoff §5.1; positive-only
-comparison is not sufficient numeric validation. It is separate from the intended unit conversion.
+Use a finite positive multiplier. The standalone `gltf_to_cnj` CLI requires the entire argument
+to parse as one finite, positive float; trailing characters, infinities, NaN, nonpositive values
+and out-of-range tokens are refused before export writes any files. Decimal and scientific
+notation are accepted. The converter tool regressions exercise invalid tokens and ordinary
+position/bone/node translation scaling.
 
 ## Animation: which channels arrive, and what the rest report
 

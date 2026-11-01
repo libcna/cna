@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D08 (2026-11-01): standalone gltf_to_cnj unitScale parsing now requires a
+  complete finite positive float before export. The subprocess regression fails with the old
+  parser; afterwards twelve invalid tokens return 1 without writing files and four valid
+  decimal/scientific/signed-positive tokens export successfully. The complete private converter
+  suite passes 33/35 with two optional reference-asset budget skips; existing vertex/bone/node
+  scale checks pass. Affected content/tool targets build; the conventions guide matches. No
+  public API/ABI change or new dependency.
 - CNA-FIX-D09 (2026-11-01): supported boxed float/double comparisons now use Sharp
   Runtime’s existing default equality comparer. The native pair regression fails before the fix
   and passes afterwards for same/opposite-sign NaNs, signed zeros, infinities and mismatches,
@@ -1887,10 +1894,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   fixture based on mat-unlit and the dual-texture image inputs exported unlit=true, stride 28,
   DualTextureEffect and texture2 successfully (2026-11-01). No permanent framebuffer regression
   or runtime fix was added during the docs/gltf-conventions.md audit.
-- Standalone tools/gltf_to_cnj unitScale parsing accepts trailing text and positive infinity:
-  std::stof's consumed length is ignored and only value>0 is checked. Both 1trailing and inf
-  exported a small temporary glTF fixture with exit 0 (2026-11-01). Require full-token and finite
-  validation in a runtime/tooling task; no parser correction was bundled into the documentation audit.
 - CNJ numeric extraction narrows before validating representability: ParseCnjEnvelope casts
   cnjVersion's double to int before the version-range check, and ReadCnjAnimationClip casts an
   inline track's numeric boneIndex directly to int. A finite value such as 1e30 is accepted by

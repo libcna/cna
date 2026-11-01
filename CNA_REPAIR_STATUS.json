@@ -72,9 +72,13 @@
       "id": "CNA-FIX-D08",
       "source_section": "5.1 Defects",
       "summary": "Standalone tools/gltf_to_cnj unitScale parsing accepts trailing text and positive infinity: std::stof's consumed length is ignored and only value>0 is checked.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Require complete unitScale token consumption, a finite float and a positive value before invoking export.",
+      "evidence": [
+        "CLI subprocess regression fails before the fix for numeric prefixes/trailing text and positive infinities; after it all twelve invalid tokens return 1 without writing files.",
+        "Four valid decimal/scientific/signed-positive tokens still export; existing unit conversion tests check vertex, bone and node translations.",
+        "All 35 converter tests run privately: 33 pass, two optional reference-mesh/joint budget skips. Existing CnaContentTests and converter targets build. No public API or ABI change."
+      ]
     },
     {
       "id": "CNA-FIX-D09",
