@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- XNA/FNA decision-ledger reconciliation (2026-11-01): the ledger now preserves historical
+  binding findings without claiming an external consumer's current maintenance status and states
+  the approved native-C boundary. It names the local FNA revision, corrects GetValueString's real
+  cached-value implementation versus its unimplemented string setter, qualifies finite oracle
+  families and replaces the browser teardown check's stale ordinal with its semantic purpose.
+  All 18 cited CNA commits and named regression/evidence paths were checked. Existing targets
+  build; 19 selected native cases and ten Game clock/reset cases pass privately. No historical
+  all-family replay or optional compiled-effect/Windows/browser/device qualification claim.
 - Enumerator-reference reconciliation (2026-11-01, XNA-ENUM-001): the page separates old
   326/331 and 323/329 counts from the current 331/331 type census, corrects default Touch's inline/
   empty state, names borrowed lifetimes/native-iterator boundaries and fixes the description of

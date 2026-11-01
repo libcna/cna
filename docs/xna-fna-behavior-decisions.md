@@ -9,9 +9,16 @@ measured and disagrees with FNA, XNA wins. A new entry needs reproducible eviden
 test, and the implementation disposition; source recollection or a stale consumer report is not
 enough.
 
-The first binding-led campaign was collected in 2026-09 from ten consumer repositories. CNA.NET is
-now the maintained language binding; the Go, Java, Python, Ruby, Rust, Swift and TypeScript
-bindings are archived in `cna-lab`. See [`binding.md`](binding.md) for the current binding model.
+The first binding-led campaign was collected in 2026-09 from ten consumer repositories. Those
+historical consumer findings do not establish any external binding's current release status.
+The approved planning boundary here is CNA's native C API/C ABI; language-specific binding work
+requires separate owner authorization. See [`binding.md`](binding.md).
+
+Rows record accepted implementation decisions within their evidence's scope. A regression name
+or commit does not prove every platform/input is covered or that its test ran in a particular
+configuration. FNA comparisons in this review use local revision
+`00498b0b81425b14bf8da23e68655215b9b5daa7`; runtime qualification remains with the subsystem
+guides and their dated results.
 
 ## Measured XNA-over-FNA decisions
 
@@ -19,7 +26,7 @@ bindings are archived in `cna-lab`. See [`binding.md`](binding.md) for the curre
 |---|---|---|
 | Effect structure defaults | Every non-array structure member keeps its own declared default; a later array member does not overwrite its rows. | `tests/reference/xna40/effect-struct-defaults/`, `EffectStructDefaultsOracle.cs`, dependency audit A2v2 A-09, and the corresponding libcna/mojoshader fix. |
 | Effect structure member values | A member's getter returns what the source declares: each member row sits in its own float4 register, as the Effect Framework stores it. FNA reads members contiguously, so its `Direction`/`Thresholds` come back shifted. | Genuine XNA reports `Direction` 0.6,0.7,0.8 and `Thresholds` 0.9,1 (`tests/reference/xna40/effect-struct-defaults/`); `Fna3dCompiledEffectTest.CompiledStructDefaultsMatchGenuineXna`. `StockFixtureReflectionMatchesTheFnaOracle` compares values everywhere but inside a structure (FX-016). |
-| Compiled `EffectParameter` string access | `SetValue(String)`/`GetValueString()` work on a String parameter and throw `InvalidCastException` on any other reflected type; FNA leaves both unimplemented behind a FIXME. Numeric accessors on a String parameter throw the same. | Decompiled `Microsoft.Xna.Framework.Graphics` (`ID3DXBaseEffect` path); the parameter-API conformance section `RunCompiledEffectParameterApiContract` and `EffectParameterTest.SetValueStringRoundTrip` (FX-089, FX-104, FX-105). A stock/CNAEXT parameter CNA itself constructs stays lenient. |
+| Compiled `EffectParameter` string access | `SetValue(String)`/`GetValueString()` work on a String parameter and throw `InvalidCastException` on other reflected types. FNA's setter throws NotImplementedException behind a FIXME; its getter returns cachedString without the corresponding reflected-type check. Numeric accessors on a String parameter throw InvalidCastException in XNA. | Decompiled `Microsoft.Xna.Framework.Graphics` (`ID3DXBaseEffect` path); the parameter-API conformance section `RunCompiledEffectParameterApiContract` and `EffectParameterTest.SetValueStringRoundTrip` (FX-089, FX-104, FX-105). A stock/CNAEXT parameter CNA itself constructs stays lenient. |
 | Pixel centres on multisampled targets | XNA's integer pixel-centre correction remains active on multisampled destinations. | `XnaMultisamplePixelCenterTest`; libcna/FNA3D `74698f735a43`; CNA `baf453c9c`. The measurement used XNA 4.0 under Wine/DXVK, not native Direct3D 9. |
 | Achievement collections | Mutation is refused with `NotSupportedException` before argument validation; a missing string key raises `KeyNotFoundException`. | CNA-DEMOS-ISSUE-077/078 and the gamer-services regression corpus. The C missing-key route keeps its documented `INVALID_ARGUMENT` mapping. |
 | Effect scalar getters and SkinnedEffect bones | Scalar getters reject non-scalar shapes. Bones exposes 72 coherent 4x3 views, while restored transforms remain affine 4x4 matrices. | CNA-DEMOS-ISSUE-034/035 and the compiled-effect reflection tests. |
@@ -51,9 +58,10 @@ bindings are archived in `cna-lab`. See [`binding.md`](binding.md) for the curre
 
 ## Further measured oracle families
 
-The 2026-10 demos repair campaign also measured and pinned these families. Detailed raw probes live
+The 2026-10 demos repair campaign also measured and pinned cases in these families. Detailed raw probes live
 in the sibling `cna-demos/docs/repair-evidence/` tree; the named CNA tests and commits are the local
-regression authority.
+regression authority. The family descriptions summarize those finite witnesses, not exhaustive
+precision/exception guarantees for every overload, value or platform.
 
 | Family | Decisions retained here | Evidence |
 |---|---|---|
@@ -93,8 +101,9 @@ These are current decisions, not open defects:
 - BINDFIX-052 is retained as an Emscripten dependency correction: SDL created the shared
   `/tmp/filedrop` directory defensively but removed it unguarded for every window, so destroying a
   second window raised `ENOENT`. CNA carries
-  `cmake/patches/sdl-86296ac8-0001-emscripten-filedrop-rmdir.patch`, pinned by the twelfth
-  `CApi_WasmBrowserProbe` check.
+  `cmake/patches/sdl-86296ac8-0001-emscripten-filedrop-rmdir.patch`, covered by the Game/device
+  teardown check in `CApi_WasmBrowserProbe` (`modules/c-api/wasm/browser_probe.html`). The ordinal
+  and total number of checks are not part of that contract.
 - Historical binding defect queues and their point-in-time test totals remain in Git history. A
   fixed finding is not a current defect merely because an archived consumer still reports it.
 
@@ -107,3 +116,13 @@ These are current decisions, not open defects:
 3. Add a regression that fails on the old behavior.
 4. Record the decision here with its evidence and implementation disposition.
 5. Put a real current defect in `handoff.md` §5.1; do not turn this ledger into a second backlog.
+
+## Verification of this ledger
+
+Reconciled on 2026-11-01 against the retained evidence paths/commits, named regression declarations,
+current C boundary and local FNA reference. All 18 cited CNA commit hashes resolve. The current
+native test targets build; 19 selected adapter/microphone/string/resource/renderer-detail cases
+and ten Game clock/reset cases passed privately on OPENGLES3/dummy audio. This selected run does
+not replay every historical oracle family or qualify optional compiled-effect, Windows, browser
+or physical-device legs. In particular, the direct string round-trip test alone does not prove
+the compiled parameter-type refusal contract.
