@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Intermediate XML reference reconciliation (2026-11-01, XNAPP-070–079): the guide separates
+  the 265 retained oracle outcomes from CNA test counts and incorporates later direct-read,
+  section-fixup and character-boundary evidence. It corrects external-reference deduplication to
+  type/filename, replaces the stale std::map carrier with OrderedDictionary, removes the already
+  repaired NUL exception gap and qualifies rectangular-array, parser timing/depth and time-zone
+  claims. Existing content-pipeline test/example targets build; 75 relevant cases pass privately,
+  including parameterized section/fixup/alias families. Case-name/link/inventory checks pass.
+  No runtime/schema change or fresh Microsoft/Windows/sanitizer campaign.
 - XNA media-source guide reconciliation (2026-11-01, XNAPP-201/202/220/136/043/332): the
   guide separates the 56 retained XNA/Wine records from current FFmpeg-backed CNA policy, preserves
   all twelve MP3 rows, states the 30 ms duration-test allowance, corrects WmaImporter/MP3 failure

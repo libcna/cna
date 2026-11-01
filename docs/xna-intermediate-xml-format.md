@@ -1,17 +1,24 @@
 # The XNA 4.0 intermediate XML format, as measured
 
-This document is the specification CNA's `IntermediateSerializer` implements
-(`XNAPP-070`..`XNAPP-079`). Every statement in it was measured by running the
-genuine XNA Game Studio 4.0 `IntermediateSerializer` over CNA-authored types under the .NET
-Framework 4.0 in Wine; the driver is `tools/xna-pipeline-oracle/intermediate/IntermediateOracle.cs`
-and the resulting corpus is `tests/reference/xna40/intermediate/` (the `manifest.json` there names
-every case and its verdict). Nothing here comes from XNA's IL, from MonoGame or from FNA. A
-statement that is not in the corpus is not in this document; extend the driver before extending the
-document.
+This describes the measured XML contract used by CNA's `IntermediateSerializer`
+(`XNAPP-070`..`XNAPP-079`), together with its current C++ mappings and limits. The main behavioural
+reference is genuine XNA Game Studio 4.0 on .NET Framework 4.0 in Wine, driven by
+[`IntermediateOracle.cs`](../tools/xna-pipeline-oracle/intermediate/IntermediateOracle.cs).
+The retained [`manifest.json`](../tests/reference/xna40/intermediate/manifest.json) contains 265
+records: 73 written, one round-trip difference, three failed write/round-trip cases, 86 accepted,
+93 rejected, four imported and five refused. These are observed outcomes, not 265 passing CNA
+tests or a general proof of all XML inputs.
+
+Later direct-read, section-order and character-input measurements from the cna-demos repair
+campaign supplement that corpus (ISSUE-147/148/149). Their CNA regression tests and the source
+boundary are identified below. Extend the relevant oracle and retain its evidence before asserting
+a new Microsoft behaviour; distinguish that evidence from CNA-only policy or implementation limits.
 
 Case names below (`primitives`, `accept_bool_case`, …) are files in the corpus:
 `<case>.xml` is what the serializer wrote, `<case>.input.xml` is what was handed to the
-deserializer and `<case>.normalized.xml` is how the accepted object serialized back.
+deserializer and `<case>.normalized.xml` is how the accepted object serialized back. The original
+`Accept<T>` driver catches a combined deserialize/serialize operation: a `rejected` record alone
+does not locate which half failed. `accept_asset_null` is the important example (§3).
 
 ## 1. Envelope
 
@@ -30,10 +37,12 @@ deserializer and `<case>.normalized.xml` is how the accepted object serialized b
 </XnaContent>
 ```
 
-* Two-space indentation, `<X />` for empty elements, one XML declaration.
+* The captured writer used two-space indentation, `<X />` for empty elements and one XML
+  declaration. Indentation/encoding depend on the supplied XmlWriter settings; the examples do
+  not require every intermediate document to use this exact byte layout.
 * The root is `XnaContent` (case-sensitive: `accept_xnacontent_lowercase` is rejected with
   *XML is not in the XNA intermediate format. Missing XnaContent root element.*). Unknown attributes
-  on any element are ignored (`accept_root_attribute_extra`, `accept_asset_attribute_extra`,
+  on the tested root, asset and member elements are ignored (`accept_root_attribute_extra`, `accept_asset_attribute_extra`,
   `accept_member_attribute_extra`); a default namespace is ignored (`accept_default_namespace`).
 * Children of the root, in this order and each at most once: `Asset` (required), `Resources`
   (optional), `ExternalReferences` (optional). Any other order or repetition is rejected
@@ -48,7 +57,9 @@ deserializer and `<case>.normalized.xml` is how the accepted object serialized b
   spelled with an explicit end tag: the self-closing `<Resources />` and `<ExternalReferences />`
   are rejected (`accept_empty_resources_selfclosing`, `accept_empty_externals_selfclosing`) while
   `<Resources></Resources>` is accepted (`accept_empty_resources_expanded`,
-  `accept_expanded_resources_then_externals`).
+  `accept_expanded_resources_then_externals`). The later
+  `IntermediateSectionCompatibilityTest` pins the corresponding cursor errors and paired-section
+  controls; a missing-reference fixup can take precedence over a later envelope error (§11).
 * Namespace aliases: the writer declares `xmlns:<Alias>="<Namespace>"` on the root for every
   namespace a `Type` attribute names, where `<Alias>` is the last dotted segment of the namespace
   (`IntermediateOracle` for `Cna.Xna40.IntermediateOracle`, `Framework` for
@@ -76,7 +87,7 @@ The reader accepts any of: the alias form; the full CLR namespace-qualified name
 (`accept_int_type_full`, `accept_string_type_full`, `Generic:List[System.Int32]`). It rejects the
 bare short name of a non-keyword type (`accept_vector3_short`, `accept_color_hex` before it was
 respelled: *Cannot find type "Vector3"*), `char` as a keyword (`accept_char_keyword_type`), the
-CLR backtick generic form `List`1[System.Int32]` (`accept_list_int_clr`) and whitespace inside
+CLR backtick generic form ``List`1[System.Int32]`` (`accept_list_int_clr`) and whitespace inside
 generic brackets (`accept_list_int_space_in_generic`: *Cannot find type " int "*).
 
 ### The `Type` attribute
@@ -121,7 +132,8 @@ generic brackets (`accept_list_int_space_in_generic`: *Cannot find type " int "*
   (`root_null_string`: `ArgumentNullException(value)`). Reading `<Asset Null="true" />`
   succeeds and returns null. The `accept_asset_null` corpus rejection describes the
   subsequent serialization in its combined round-trip oracle, not deserialization.
-  Direct genuine-XNA evidence: cna-demos `IntermediateEnvelopeOracle.cs` (ISSUE-149).
+  Direct genuine-XNA evidence: cna-demos `IntermediateEnvelopeOracle.cs` (ISSUE-149), pinned by
+  `XnaIntermediateSerializerCorpus.NullRootDeserializationIsSeparateFromReserialization`.
   The existing Sharp ArgumentNullException uses modern .NET parameter formatting
   (`Value cannot be null. (Parameter 'value')`), whereas the Framework4 corpus uses
   a separate `Parameter name: value` line. Type, parameter identity and timing match;
@@ -160,7 +172,7 @@ Written and read with the invariant culture; the reader trims surrounding whites
 | `char` | the character itself (`<Tab>	</Tab>`, `&lt;`, `&amp;`, a space) | exactly one character | `ab`, empty (*String must be exactly one character long.*); U+0000 cannot be written (`nul_character`: `ArgumentException` from the XML writer) |
 | `string` | verbatim text with XML escaping; leading/trailing spaces and newlines preserved (`string_edges`, `root_string_whitespace`); empty string `<X></X>`; null `<X Null="true" />` | CDATA (`accept_cdata`), surrounding whitespace preserved (`accept_whitespace_value`) | — |
 | `TimeSpan` | ISO 8601 duration `PT1.5S`, `PT1M30S`, `P1DT2H`, `-PT1S` | the same grammar | `00:01:30` (`accept_timespan_dotnet`) |
-| `DateTime` | `2010-09-16T12:30:45Z`; kind preserved: unspecified `2000-01-02T00:00:00`, local `…+01:00`, fraction `…05.1234567Z` | date only, no zone, offset (converted to local time and written with the local offset) | — |
+| `DateTime` | `2010-09-16T12:30:45Z`; kind preserved: unspecified `2000-01-02T00:00:00`, local `…+01:00` in the capture zone, fraction `…05.1234567Z` | date only, no zone, offset (converted to local time and written with the local offset) | — |
 | enums | member name; `[Flags]` as `Cheese, Olives`; `None` for zero; an undefined numeric value as its number (`accept_enum_out_of_range_number` → `99`) | name (case-sensitive), number, `Cheese,Olives` or `Cheese, Olives`, numeric flags (`3` → `Cheese, Ham`) | `happy`, `Bored`, `Cheese Olives` (*XML contains invalid value "…" for enum …*) |
 
 ## 5. Framework value types
@@ -178,7 +190,7 @@ the space-separated list.*).
 | `Rectangle` | `x y width height` (integers; `1.5` rejected) | `1 2 3 4` |
 | `Point` | `x y` | `1 2` |
 | `Plane` | `nx ny nz d` | `0 1 0 3` |
-| `Color` | one packed `uint` in hex, `AARRGGBB`, upper case | `FF6495ED` (CornflowerBlue), `280A141E` for `Color(10,20,30,40)`; the reader accepts lower case and fewer digits (`80FF` → `000080FF`), rejects `0x`, decimal digits beyond `uint` and component lists |
+| `Color` | XML hex text in `AARRGGBB` order, upper case; this differs from Color's `AABBGGRR` PackedValue layout | `FF6495ED` (CornflowerBlue), `280A141E` for `Color(10,20,30,40)`; the reader accepts lower case and fewer digits (`80FF` → `000080FF`), rejects `0x`, decimal digits beyond `uint` and component lists |
 | `BoundingBox` | child elements | `<Min>0 0 0</Min><Max>1 1 1</Max>` |
 | `BoundingSphere` | child elements | `<Center>0 0 0</Center><Radius>2</Radius>` |
 | `Ray` | child elements | `<Position>0 0 0</Position><Direction>0 0 1</Direction>` |
@@ -229,7 +241,8 @@ Reading: the reference text is matched verbatim against the `ID` attributes — 
 is not trimmed (`accept_shared_reference_whitespace`: *Missing shared resource " #B "*), an unknown
 id fails with *Missing shared resource "#Z"*, and forward references inside `Resources` are fine.
 Every `Resource` needs a unique `ID` (*XML attribute "ID" was not found.*, *Duplicate XML ID
-attribute "#A".*) and a `Type`. An unreferenced resource is ignored (`accept_shared_resource_unused`).
+attribute "#A".*) and a `Type`. A valid unreferenced resource is not attached to the result
+(`accept_shared_resource_unused`); this does not mean its entry skips parsing/type validation.
 An empty reference (`<X />`) or `Null="true"` leaves the member **unassigned** — it keeps whatever
 the constructor put there (`accept_shared_null_attribute`, `accept_shared_resource_no_hash` show the
 constructor's objects surviving). Inline content in a shared-resource member is rejected
@@ -240,14 +253,16 @@ constructor's objects surviving). Inline content in a shared-resource member is 
 An `ExternalReference<T>` member is written as `<X><Reference>#External1</Reference></X>` with the
 filename under `<ExternalReferences>` as `<ExternalReference ID="#External1" TargetType="<name of
 T>">path</ExternalReference>`, numbered from 1 in first-use order and deduplicated by
-object identity (`external_references`). `TargetType` is spelled with a namespace alias **only when
+target type and filename (`external_references`). The oracle constructs separate `Texture` and
+`Again` objects but both name `#External1`; CNA keys deduplication by that type/filename pair.
+`TargetType` is spelled with a namespace alias **only when
 the document already declares one**, and in full otherwise: the same `TextureContent` is
 `Graphics:TextureContent` in a material's document, whose root declares that alias for its own
 `Asset Type`, and
 `Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent` in a document that declares
 only the oracle's namespace (`tests/reference/xna40/graphics` case `material/serialize_basic`
 against `accept_external_relocated_relative`). The section is written after the root element, so it
-cannot declare a new alias, and the runtime does not try. A null member is `<X Null="true" />`; an `ExternalReference`
+cannot declare a new root alias, and the serializer does not try. A null member is `<X Null="true" />`; an `ExternalReference`
 with no filename is `<X />` and reads back as such (`accept_external_reference_empty_element`).
 
 The filename is made relative to the `referenceRelocationPath` argument's **directory** when both
@@ -264,14 +279,22 @@ fails with *Invalid filesystem location "Textures\wall.png"* (`accept_external_r
 specifies wrong type for external reference "#E".*, *Cannot find type "No.Such.Type"*); an unknown
 id fails with *Missing external reference "#E"*; an empty filename fails with `ArgumentNullException`;
 a filename written inline in the member instead of a `<Reference>` is rejected
-(`accept_external_reference_inline_filename`). Unreferenced entries are ignored.
+(`accept_external_reference_inline_filename`). Valid unreferenced entries do not create an object
+reference; their section attributes and target type are still parsed.
+
+Current CNA external-target resolution also accepts locally declared aliases and supported generic
+identities without constructing a serializer for the target payload. The
+`IntermediateExternalAliasCompatibilityTest` and round-trip controls pin this distinction: knowing
+a target type's identity is separate from being able to deserialize it as an XML asset.
 
 ## 9. Root values
 
-Any type may be the root: `root_int` … `root_curve` show scalars, framework types, arrays, lists,
+The measured root types include `root_int` … `root_curve`: scalars, framework types, arrays, lists,
 dictionaries, enums, structs and `object` (`root_object_int` writes `Type="int"`,
 `root_list_object` writes `Type="Generic:List[System.Object]"` with typed items). `Deserialize<T>`
-with `T = object` needs the `Type` attribute (`accept_object_root_no_type`).
+with `T = object` needs the `Type` attribute (`accept_object_root_no_type`). In CNA a game-defined
+root must have its type serializer/description registered before an untyped read can resolve its
+name. This is not automatic reflection over arbitrary C++ types.
 
 ## 10. NamedValueDictionary and OpaqueDataDictionary
 
@@ -298,44 +321,76 @@ serializer itself refused, with these exceptions that surface as other exception
 `NullReferenceException` for `Null="true"` on a value type, `ArgumentNullException` for a null
 root being serialized or an empty external filename, `RankException` for multidimensional arrays
 and `ArgumentException` for U+0000. CNA now preserves the null-value NullReferenceException and
-null-root serialization ArgumentNullException categories. Other remaining category differences
-are tracked separately; a round-trip rejection must not be interpreted as a failed read.
+null-root serialization ArgumentNullException categories; default XML writing of U+0000 also raises
+ArgumentException. These categories do not imply identical platform/parser diagnostics.
+
+Section error precedence is observable. CNA applies shared-resource fixups immediately after
+`Resources`, and external-reference fixups immediately after `ExternalReferences`, before checking
+later sections/end-of-document. `IntermediateSectionFixupOrderTest` pins missing shared-reference
+errors ahead of an invalid later external type, and missing external references ahead of trailing
+elements. A round-trip rejection must not be interpreted as a failed read.
 
 ## 12. Where CNA differs, and why
 
-Every difference between CNA's serializer and the corpus is one of these, each also named in
-the corpus test (`modules/content-pipeline/tests/…/XnaIntermediateSerializerTests.cpp`):
+The following mappings, aligned behaviours and remaining limits explain the current contract.
+They are not an exhaustive defect inventory; current open findings belong in
+[`handoff.md`](../handoff.md) §5. Corpus regression tests live in
+[`XnaIntermediateSerializerTests.cpp`](../modules/content-pipeline/tests/Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/XnaIntermediateSerializerTests.cpp),
+with separate initialization, registry, owner-isolation, section and external-alias suites beside it.
 
 * **A parser error reads differently.** A document the XML parser itself rejects -- not the
   serializer -- is refused with XNA's own sentence, "There was an error while deserializing
   intermediate XML.", followed by *this* parser's reason. .NET says "Data at the root level is
   invalid. Line 1, position 1." and "Root element is missing." where CNA's names its own error.
-  The sentence is the part callers match on, and it is the same.
+  Errors raised inside Deserialize use that wrapper. Most malformed XML is parsed during
+  `XmlReader::CreateFromString` and can fail before Deserialize is called; the repaired character
+  BOM boundary instead fails on the first read, allowing the serializer to wrap it.
 * **`std::string` has no null.** A C# `string` member that is null writes `Null="true"`; a C++
   `std::string` cannot, so it never writes `Null="true"` and reads it as the empty string. A
-  `std::optional<std::string>` member behaves exactly like the C# string.
+  `std::optional<std::string>` preserves the nullable string distinction for this mapping.
 * **`std::vector<T>` is `List<T>`.** C# arrays and lists are one C++ type, spelled `List` when
   written; reading accepts both `T[]` and `List[T]` where XNA insists on the declared one
   (`accept_int_array_from_list_type`, `accept_list_from_array_type`).
-* **`std::map<K,V>` writes in key order**, where a .NET `Dictionary` enumerates in insertion order.
-* **Multidimensional arrays remain a category difference.** XNA throws RankException;
-  CNA refuses with InvalidContentException. Null value-type members now preserve
-  NullReferenceException, with CNA's useful member/type diagnostic. XML character
-  exception alignment is tracked separately under CNA-DEMOS-ISSUE-147.
+* **Dictionary carriers preserve entry order.** The standard serializer uses
+  `System::Collections::Generic::OrderedDictionary<K,V>`, preserving insertion/document order.
+  `std::map<K,V>` is not the built-in carrier for an XNA `Dictionary<K,V>`.
+* **Multidimensional arrays have no built-in C++ carrier/serializer.** The captured XNA write
+  fails with RankException; do not infer a supported rectangular-array API or a matching CNA
+  exception from that record. Null value-type members preserve NullReferenceException with CNA's
+  member/type diagnostic. Default XML character writing now preserves ArgumentException for NUL
+  (ISSUE-147); the substrate still rejects NUL when `CheckCharacters=false`, rather than implement
+  that optional mode's literal-NUL output.
 * **Number formatting is .NET Framework 4.0's.** `R` writes 7 or 9 significant digits for `float`
-  and 15 or 17 for `double`, with `E+300`-style exponents (§4); sharp-runtime's own `Single::ToString`
-  follows .NET Core's shortest round-trip form, which XNA never wrote.
+  and 15 or 17 for `double`, with `E+300`-style exponents (§4); this serializer uses the
+  Framework-style formatting path rather than assuming a generic shortest-round-trip C++
+  formatter produces the captured bytes.
 * **tinyxml2 is the XML substrate.** The Sharp Runtime processing-instruction repair
   accepts instructions inside elements (`accept_processing_instruction`) while
   preserving declaration restrictions. Its character-input boundary rejects a leading
   U+FEFF on the first read (`accept_bom_and_declaration`), so the serializer wraps it
   as `InvalidContentException`, matching XNA. Encoded file preambles remain accepted.
   The parser keeps whitespace-only element content but drops indentation between elements, reports no
-  column, so `Line L, position 0.` replaces .NET's column in messages, and refuses element
-  nesting beyond 500 levels while parsing (the corpus's deepest graph has 200; XNA has no ceiling
-  and overflows its stack instead). The serializer keeps its own 1024-level guard behind that for
-  flattened members and refuses to write a graph that cycles through a member that is not a
-  shared resource.
+  column, so `Line L, position 0.` replaces .NET's column in messages. Its ordinary DOM parse can
+  report an error earlier than a streaming .NET reader. The parser refuses element nesting beyond
+  500 levels; serializer read/write guards additionally limit object nesting to 1024, including
+  flattened members. The retained XNA corpus proves 200 levels, not an unbounded Microsoft
+  recursion contract. CNA hardening tests separately accept 400 levels and refuse 550-level XML,
+  and refuse writing a graph that cycles through a member that is not a shared resource.
 * **Paths.** Filenames under `ExternalReferences` are made relative to the relocation path's
   directory and written with backslashes as XNA does; a relative filename is resolved against that
   directory on reading and stored in the host's path form.
+* **DateTime output depends on the host time zone.** Offset input is converted to local time. The
+  POSIX corpus test temporarily selects the capture's CET/CEST rule so expected `+01:00` bytes
+  compare consistently; Windows uses its host zone. The capture offset is not a universal constant.
+
+## 13. Verification of this reference
+
+Reconciled on 2026-11-01 against the retained 265-record manifest and oracle driver, current
+serializer/reader/writer and dictionary carriers, the repair evidence and Sharp Runtime XML
+boundary. The existing `CnaContentPipelineTests` build passed; 75 targeted intermediate, XML-route,
+importer and opaque-dictionary tests passed privately on OPENGLES3/dummy audio, including the
+parameterized section/fixup/alias cases. Explicit case names and local links were checked.
+The corpus suites compare their supported handlers, with documented path/encoding/time-zone
+normalization and two intentional array/list acceptance exceptions; the result is not a claim that
+all 265 records were replayed as independent passing tests. No new Microsoft oracle, native-Windows
+or sanitizer campaign was run for this documentation edit.
