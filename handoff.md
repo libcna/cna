@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Release-procedure documentation reconciliation (2026-11-01): `docs/releasing.md` corrects
+  the product-version example, removes the stale develop push recipe, identifies the owner-approved
+  branch and explicit tag, and separates product/installed-package/C ABI version and readiness
+  rules. Dependency pins are distinguished from system/override qualification, and the multi tree
+  is no longer called the only configuration exercising all siblings. Root version, Doxyfile,
+  README and changelog identities agree at 0.2.0; referenced CMake rules, local links and whitespace
+  are checked. Documentation-only: no release/tag/push or dependency change was performed.
 - Installed C++ SDK documentation reconciliation (2026-11-01): `docs/installed-cpp-sdk.md`
   replaces the obsolete Sharp Runtime version example with the actual modular-export requirement,
   records the separate combined static C archive build prerequisite, and documents the installed
