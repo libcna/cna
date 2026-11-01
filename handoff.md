@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D10 (2026-11-02): CNJ version extraction now checks representability before
+  narrowing and retains the raw unsupported value; validation avoids an integer cast. Inline
+  AnimationClip indices must be finite whole Int32 values before conversion. Both new regression
+  groups fail before the fix and pass after it, preserving signed Int32 boundaries. The inline
+  version probe triggers float-cast-overflow on 1e30 before the fix; eleven extreme/boundary/ordinary
+  inputs pass after it. All 51 focused envelope/clip/codec cases pass; privately, the broader
+  rebuilt CNJ/tool/codec set passes 186/188 with two optional asset skips and dummy audio (the first
+  broad run had no ALSA device). Targets build, format documentation and local links match. No
+  public API/ABI change or stub; this does not qualify every numeric field against hostile JSON.
 - CNA-FIX-D08 (2026-11-01): standalone gltf_to_cnj unitScale parsing now requires a
   complete finite positive float before export. The subprocess regression fails with the old
   parser; afterwards twelve invalid tokens return 1 without writing files and four valid
@@ -1894,14 +1903,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   fixture based on mat-unlit and the dual-texture image inputs exported unlit=true, stride 28,
   DualTextureEffect and texture2 successfully (2026-11-01). No permanent framebuffer regression
   or runtime fix was added during the docs/gltf-conventions.md audit.
-- CNJ numeric extraction narrows before validating representability: ParseCnjEnvelope casts
-  cnjVersion's double to int before the version-range check, and ReadCnjAnimationClip casts an
-  inline track's numeric boneIndex directly to int. A finite value such as 1e30 is accepted by
-  the JSON number parser but is outside int range; fractional bone indices are also truncated.
-  Found by source inspection on 2026-11-01 in content/include/CNA/Internal/CnjEnvelope.hpp and
-  content/src/Internal/CnjCanonicalRead.cpp. Existing ordinary/fractional-version tests do not
-  qualify these out-of-int-range conversions; no permanent discriminator or runtime fix was
-  added during the documentation audit (`docs/cnj-format.md`).
 - Native FileDialog moves its callback into the platform request, then suppresses a thrown
   PlatformException without completing the callback. Normal cancellation/native error callbacks
   and the absent-service route deliver an empty result, but provider rejection can leave a

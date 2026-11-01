@@ -96,9 +96,14 @@
       "id": "CNA-FIX-D10",
       "source_section": "5.1 Defects",
       "summary": "CNJ numeric extraction narrows before validating representability: ParseCnjEnvelope casts cnjVersion's double to int before the version-range check, and ReadCnjAnimationClip casts an inline track's numeric boneIndex directly to int.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Guard version extraction by representability before narrowing, validate versions without a cast, and require finite whole Int32 bone indices before conversion.",
+      "evidence": [
+        "New version and inline-track regressions fail before the change and pass after it; Int32 boundaries and the raw unsupported version value remain preserved.",
+        "The same inline extractor probe triggers float-cast-overflow on 1e30 before the fix; after rebuilding it, eleven extreme/boundary/ordinary tokens pass without sanitizer findings.",
+        "Final rebuilt native focused run: all 51 envelope/clip/codec cases pass. Broad private CNJ/tool/animation codec run with dummy audio: 186 pass, two optional reference-asset skips out of 188. The initial broad run lacked an ALSA device; dummy audio resolves that environment failure.",
+        "Affected targets build; local docs links resolve. No API/ABI change or new stub."
+      ]
     },
     {
       "id": "CNA-FIX-D11",

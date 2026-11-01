@@ -85,11 +85,12 @@ readers generally ignore unknown optional members; a custom factory can define s
 The generic custom dispatch still accepts version 1 only. Schema versions do not negotiate every
 optional feature or vertex stride, so a newly authored asset can still require a newer runtime.
 
-Current limitation: extraction narrows numeric `cnjVersion` to `int` **before** range validation.
-Ordinary unsupported/fractional versions have regressions, but an out-of-int-range numeric value
-can reach an unsafe floating-to-integer conversion. Inline AnimationClip `boneIndex` has a similar
-unchecked narrowing. This page does not claim complete hostile-JSON/numeric-range safety; the
-source findings are recorded in `handoff.md` §5.1.
+Envelope extraction retains the raw numeric version and narrows it only when it fits the `int`
+range; unsupported and fractional versions are then rejected by validation. Inline AnimationClip
+`boneIndex` values must be finite integers representable as Int32 before conversion. Standalone
+clips retain signed indices, as binary sidecars do; a player ignores indices outside its current
+bone/node collection. Extreme-version and fractional/out-of-range index regressions cover these
+conversions. This does not claim complete hostile-JSON or numeric-range safety for every field.
 
 ## References to other assets
 

@@ -4,6 +4,7 @@
 // First gtest coverage of any .cnj JSON-envelope-level parsing, independent of any one reader.
 
 #include <gtest/gtest.h>
+#include <limits>
 
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -40,6 +41,32 @@ TEST(ParseCnjEnvelopeTest, MissingCnjVersionLeavesFlagFalse)
 
     EXPECT_FALSE(env.hasCnjVersion);
     EXPECT_TRUE(env.hasType);
+}
+
+TEST(ParseCnjEnvelopeTest, OutOfIntRangeVersionsRetainRawValueWithoutNarrowing)
+{
+    for (const std::string token : {"2147483648", "-2147483649", "2147483647.5",
+                                    "1e30", "-1e30", "1e300", "-1e300"})
+    {
+        SCOPED_TRACE(token);
+        const auto env = ParseCnjEnvelope("{\"cnjVersion\":" + token + ",\"type\":\"Model\"}");
+        ASSERT_TRUE(env.hasCnjVersion);
+        EXPECT_DOUBLE_EQ(env.cnjVersionRaw, std::stod(token));
+        EXPECT_EQ(env.cnjVersion, 0);
+        EXPECT_THROW(ValidateCnjEnvelope(env, "invalid.cnj", "Model", 2), ContentLoadException);
+    }
+}
+
+TEST(ParseCnjEnvelopeTest, IntBoundaryVersionsAreExtractedWithoutOverflow)
+{
+    for (const int value : {std::numeric_limits<int>::min(), std::numeric_limits<int>::max()})
+    {
+        const auto env = ParseCnjEnvelope("{\"cnjVersion\":" + std::to_string(value) +
+                                          ",\"type\":\"Model\"}");
+        ASSERT_TRUE(env.hasCnjVersion);
+        EXPECT_EQ(env.cnjVersion, value);
+        EXPECT_DOUBLE_EQ(env.cnjVersionRaw, static_cast<double>(value));
+    }
 }
 
 TEST(ParseCnjEnvelopeTest, MissingTypeLeavesFlagFalse)

@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <limits>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -167,6 +168,36 @@ TEST_F(CnjAnimationClipTest, KeyframeDefaultsAppliedWhenFieldsOmitted)
     EXPECT_EQ(key.Translation, Vector3(0, 0, 0));
     EXPECT_EQ(key.Rotation, Quaternion::Identity);
     EXPECT_EQ(key.Scale, Vector3(1, 1, 1));
+}
+
+TEST_F(CnjAnimationClipTest, FractionalAndOutOfIntRangeBoneIndicesAreRefused)
+{
+    ScratchContentRoot root;
+    for (const std::string token : {"1.5", "-0.5", "2147483648", "-2147483649", "1e30", "-1e30"})
+    {
+        SCOPED_TRACE(token);
+        WriteFile(root.path() / "invalid.cnj",
+                  "{\"cnjVersion\":1,\"type\":\"AnimationClip\",\"duration\":1,\"tracks\":[{\"boneIndex\":" +
+                  token + ",\"keys\":[]}]}");
+        ContentManager cm(nullptr, root.path().string());
+        EXPECT_THROW((void)cm.Load<AnimationClipEXT>("invalid"), ContentLoadException);
+    }
+}
+
+TEST_F(CnjAnimationClipTest, WholeInt32BoneIndicesArePreserved)
+{
+    ScratchContentRoot root;
+    for (const int value : {std::numeric_limits<int>::min(), -1, 0, std::numeric_limits<int>::max()})
+    {
+        SCOPED_TRACE(value);
+        WriteFile(root.path() / "index.cnj",
+                  "{\"cnjVersion\":1,\"type\":\"AnimationClip\",\"duration\":1,\"tracks\":[{\"boneIndex\":" +
+                  std::to_string(value) + ",\"keys\":[]}]}");
+        ContentManager cm(nullptr, root.path().string());
+        const auto clip = cm.Load<AnimationClipEXT>("index");
+        ASSERT_EQ(clip.Tracks.size(), 1U);
+        EXPECT_EQ(clip.Tracks[0].BoneIndex, value);
+    }
 }
 
 TEST_F(CnjAnimationClipTest, LoadsClipFileFixture)

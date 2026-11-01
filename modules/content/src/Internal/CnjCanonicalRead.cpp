@@ -478,11 +478,15 @@ namespace CNA::Internal
             }
             BoneTrackEXT track;
             const JsonValue* boneIndex = trackValue.FindMember("boneIndex");
-            if (boneIndex == nullptr || !boneIndex->IsNumber())
+            if (boneIndex == nullptr || !boneIndex->IsNumber() ||
+                !std::isfinite(boneIndex->numberValue) ||
+                boneIndex->numberValue < static_cast<double>(std::numeric_limits<int>::min()) ||
+                boneIndex->numberValue > static_cast<double>(std::numeric_limits<int>::max()) ||
+                boneIndex->numberValue != std::trunc(boneIndex->numberValue))
             {
                 throw ContentLoadException(
                     "AnimationClip .cnj '" + path +
-                    "' has a track missing a numeric 'boneIndex'.");
+                    "' requires a finite integer 'boneIndex' in the Int32 range for every track.");
             }
             track.BoneIndex = static_cast<int>(boneIndex->numberValue);
             const JsonValue* keys = trackValue.FindMember("keys");

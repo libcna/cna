@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cmath>
+#include <limits>
 #include <string>
 
 #include "CNA/Internal/Json.hpp"
@@ -22,7 +24,7 @@ namespace CNA::Internal
         /** @brief Whether the document had a top-level `"cnjVersion"` field. */
         bool hasCnjVersion = false;
 
-        /** @brief Parsed `"cnjVersion"` value truncated to `int`, or 0 if the field was absent. */
+        /** @brief Parsed version truncated to int, or 0 if absent or outside the int range. */
         int cnjVersion = 0;
 
         /**
@@ -92,7 +94,12 @@ namespace CNA::Internal
             {
                 env.hasCnjVersion = true;
                 env.cnjVersionRaw = v->numberValue;
-                env.cnjVersion = static_cast<int>(v->numberValue);
+                if (std::isfinite(v->numberValue) &&
+                    v->numberValue >= static_cast<double>(std::numeric_limits<int>::min()) &&
+                    v->numberValue <= static_cast<double>(std::numeric_limits<int>::max()))
+                {
+                    env.cnjVersion = static_cast<int>(v->numberValue);
+                }
             }
         }
         if (const JsonValue* v = root.FindMember("type"))
@@ -159,7 +166,7 @@ namespace CNA::Internal
         // rejected outright instead of truncating into the supported range.
         const double highest = static_cast<double>(maxVersion);
         if (!(envelope.cnjVersionRaw >= 1.0 && envelope.cnjVersionRaw <= highest) ||
-            envelope.cnjVersionRaw != static_cast<double>(static_cast<int>(envelope.cnjVersionRaw)))
+            envelope.cnjVersionRaw != std::trunc(envelope.cnjVersionRaw))
         {
             throw ContentLoadException(
                 "ContentManager: '" + path + "' has unsupported 'cnjVersion' (" +
