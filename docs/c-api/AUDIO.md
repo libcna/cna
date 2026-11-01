@@ -1,223 +1,230 @@
-# CNA C API Audio Resources and Control
+# CNA C API Audio
 
-## PCM sound ownership
+The C audio surface is split between [`audio.h`](../../modules/c-api/include/CNA/C/audio.h) for
+sound effects, streaming, capture and 3D positioning, and
+[`xact.h`](../../modules/c-api/include/CNA/C/xact.h) for authored XACT engines, banks, categories
+and cues. This page records the shared ownership and behavioural contract; the declarations remain
+the source of truth for individual arguments and result codes.
 
-`cna_sound_effect_create_pcm16` copies a nonempty sequence of complete interleaved signed 16-bit
-little-endian channel frames into an owned native `SoundEffect`. The initial entry point accepts
-mono or stereo data and a positive sample rate. It deliberately does not reinterpret WAV, Ogg,
-MP3, XNB or another container as raw samples; container/content loading remains a later mapping.
+## Playback availability and ownership
 
-The game argument supplies a creation-thread and lifetime parent even though audio does not borrow
-a graphics device. A sound effect must be destroyed before that game. Every controllable instance
-must in turn be destroyed before its parent effect; parent destruction is refused while a C
-instance is live. All handles are generation-checked and become stale immediately after successful
-destruction.
+`cna_audio_get_capabilities` is the playback preflight. It validates an active game and probes the
+real process-wide mixer; it does not infer support from the operating system, renderer or build
+name. No playback device is an ordinary successful snapshot with
+`is_playback_available == CNA_FALSE`. The probe creates no owned C resource, although its first
+call may initialize the native mixer.
 
-## Instance control
+Every sound effect, controllable instance, streaming instance and XACT engine is an owned game
+child. A normal instance is also a child of its sound effect; a dynamic instance has no parent
+effect because the caller supplies its samples. XACT banks and category handles are children of
+their engine, and an owned cue is a child of its sound bank. Parents refuse destruction while a
+tracked C child remains live. Successful destruction invalidates the generation-checked handle
+immediately, and a second destroy returns `CNA_RESULT_INVALID_HANDLE`.
 
-An instance supports play, pause, resume, immediate stop, release-tail stop, volume, pitch, pan and
-full-effect looping. `CNA_SoundEffectInstanceInfo` snapshots the current state and properties:
+The direct sound-effect routes cover four native constructions:
 
-- volume follows CNA/FNA pass-through behavior and is not clamped by the adapter;
-- instance pitch is range-checked against `[-1, 1]`, with out-of-range assignments refused;
-- pan is validated in `[-1, 1]`;
-- looping may be changed only before playback has begun;
-- `Play` while already playing is CNA's no-op, and `Resume` starts an unplayed instance.
+- `cna_sound_effect_create_pcm16` copies a nonempty complete sequence of interleaved signed PCM16LE
+  mono or stereo frames;
+- `cna_sound_effect_create_pcm16_range_ext` copies the caller's bytes and constructs from a
+  validated range with an explicit loop region;
+- `cna_sound_effect_create_from_encoded_ext` copies encoded file bytes and asks the configured
+  audio backend to decode them;
+- `cna_sound_effect_create_from_asset_ext` decodes a UTF-8 path from disk. An empty path
+  deliberately creates the canonical silent effect rather than failing.
 
-The native backend can fail to allocate a playback voice without throwing; in that case the
-control call succeeds and the following info snapshot reports `STOPPED`, matching the underlying
-void `SoundEffectInstance::Play()` contract.
+The range route rejects a negative offset, empty count, negative loop values or a range outside the
+supplied buffer before native decoding. Encoded-format support is build-dependent; an unsupported
+codec or unavailable playback device returns `CNA_RESULT_NOT_SUPPORTED` and leaves the output
+handle invalid.
 
-## Threads, hardware and shutdown
+`cna_content_manager_load_sound_effect` is a fifth acquisition path outside `audio.h`. It maps the
+canonical content load, does not cache the result, and returns a new independently owned game child
+on every success. All acquisition paths produce the same sound-effect handle kind and use the same
+query, playback and destruction routes.
 
-Creation, query, instance control and destruction use the game creation thread by default. The two
-fire-and-forget routes, `cna_sound_effect_play` and
-`cna_sound_effect_play_with_settings`, deliberately accept a live effect handle from any thread;
-every other sound-effect route keeps the owner-thread rule. The optional game-thread service queue
-can dispatch other qualifying foreign-thread handle calls. See
-[`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md) for its blocking, pumping and shutdown
-contract. Without either documented exception, a wrong-thread call returns `CNA_RESULT_THREAD`
-before touching mixer state.
+The two `cna_sound_effect_get_sample_*` functions are pure static computations and need no handle.
+Their dynamic-instance counterparts are instance methods that use the streaming instance's own
+sample rate and channel count.
 
-SDL/CNA may mix and finish tracks on an internal audio thread. User C callbacks exist only through
-documented event registrations, such as a streaming instance's buffer-needed event and a
-microphone's buffer-ready event; their declarations state which thread advances and raises them.
+## Sound effects and controllable instances
 
-`cna_audio_get_capabilities` is the stable preflight for playback availability. It validates an
-active game and probes CNA's real process-wide native mixer rather than guessing from a renderer,
-operating system or compile-time name. The first query may initialize that mixer. A missing device
-is represented by `CNA_RESULT_SUCCESS` plus `is_playback_available == CNA_FALSE`; malformed ABI
-structures, stale handles and wrong-thread calls remain errors. The query creates no owned C
-resource, so a false result does not prevent clean game destruction.
+A sound-effect handle exposes duration, name, disposal state, type identity, controllable-instance
+creation and fire-and-forget playback. The two fire-and-forget routes preserve the canonical
+asymmetry: pan is range-checked in `[-1, 1]`, while pitch is clamped. They return success plus
+`out_played == CNA_FALSE` when the disposed/native state declines playback; an instance-limit
+failure maps to `CNA_RESULT_INVALID_STATE`.
 
-Instance destruction calls native `Dispose`, which stops and detaches its track. CNA/SDL performs
-any mixer-iteration-safe internal cleanup; when the C call returns, the C handle is invalid and no
-later mixer activity can call into user C code. A non-immediate `Stop` merely exits a loop and lets
-the current sound finish; destroying that instance still cuts off and releases it.
+`CNA_SoundEffectInstanceInfo` snapshots transport and caller-visible properties together. Instance
+behaviour is:
 
-When no audio device can be opened, effect creation returns `CNA_RESULT_NOT_SUPPORTED` and leaves
-the output handle invalid. The positive regression uses SDL's dummy audio driver so it exercises
-real availability probing, mixer creation and track transitions without requiring speakers. A
-separate regression process forces a nonexistent SDL audio driver and proves repeatable successful
-unavailable snapshots followed by `NOT_SUPPORTED` creation, invalid output handles, structured
-diagnostics and clean game shutdown after failed mixer initialization.
+- finite volume is passed through without clamping;
+- pitch and pan are restricted to `[-1, 1]`;
+- looping may be changed only before playback begins;
+- `Play` on an already playing instance is a no-op;
+- `Resume` resumes a paused instance and starts an unplayed one;
+- immediate stop cuts playback off, while non-immediate stop exits a loop and allows the current
+  sound to finish.
 
-## The complete sound-effect surface
+The native backend may fail to allocate a playback voice without throwing. The control call then
+succeeds and the next info snapshot reports `CNA_SOUND_STATE_STOPPED`, matching the native void
+`Play` contract. Destroying an instance stops and detaches its track before invalidating the C
+handle; the parent effect cannot be destroyed until every C-created instance has gone.
 
-A sound effect can now be created four ways, and the difference is what the bytes are: raw PCM16
-(whole buffer, or an explicit range with a loop region), an **encoded file already in memory**, or a
-**path on disk**. The canonical stream factory takes a C++ stream and reads it to the end, so the C
-route takes the bytes it would have read; what it accepts is whatever the audio backend can decode,
-which is more than the raw PCM the other routes take.
+## Threads, callbacks and errors
 
-Two canonical behaviors are reported rather than evened out:
+Audio handles use the game creation thread by default. The explicit exceptions are:
 
-- **Pan is range-checked and pitch is clamped.** `cna_sound_effect_play_with_settings` refuses a pan
-  outside -1 to 1 and silently accepts any pitch, because that is exactly what the canonical route
-  does.
-- **An empty asset path is not an error.** The canonical constructor answers an effect with no audio
-  rather than throwing, so `cna_sound_effect_create_from_asset_ext` reports success with a silent
-  effect.
+- `cna_sound_effect_play` and `cna_sound_effect_play_with_settings` accept a live effect handle from
+  any thread and execute directly rather than entering the game-thread queue;
+- pure value helpers such as the static sample calculations and emitter/listener initialization may
+  run on any thread;
+- when a game enables foreign-thread service, other qualifying handle calls may block and execute
+  on the game thread.
 
-The C range route adds one check the canonical constructor does not have: a negative offset, an empty
-count or a range that leaves the buffer is refused before the decoder ever sees a length nobody
-validated. That is argument validation at the boundary, which is this ABI's job, not a behavioral
-change.
+Copying input bytes does not itself change thread affinity. In particular, a producer thread may
+reuse a submitted streaming buffer after the route returns, but calling that route from the producer
+requires the opt-in game-thread service queue. Its pumping and shutdown rules are in
+[`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md).
 
-### The four 3D-audio settings belong to the process
+The native mixer may work on an internal audio thread, but it never invokes these C event handlers
+from that real-time mixer callback. Buffer-needed events are raised by whichever owner thread
+advances the dynamic queue; microphone events are raised when capture buffers are checked; XACT
+disposal events run synchronously during disposal. Every audio subscription returns an owned
+registration released by `cna_audio_unsubscribe_ext`. The registration retains its source storage
+where needed, so it may be released safely after observing source disposal; its caller-owned
+context must remain valid until release or the documented source lifetime ends.
 
-Master volume, distance scale, Doppler scale and speed of sound are canonical **statics**. Their
-routes take a game handle for thread affinity only — setting one changes every sound effect in the
-process, including ones created later. The two sample computations (`..._get_sample_duration_ticks`
-and `..._get_sample_size_in_bytes`) are static too, and take no handle at all.
+The exception firewall maps `NoAudioHardwareException` and `NoMicrophoneConnectedException` to
+`CNA_RESULT_NOT_SUPPORTED`, and `InstancePlayLimitException` to
+`CNA_RESULT_INVALID_STATE`. A missing playback device therefore has the same result semantics
+regardless of which creation or playback route encounters it.
 
-### Both audio exceptions now convert at the boundary
+## Dynamic streaming
 
-`NoAudioHardwareException` becomes `CNA_RESULT_NOT_SUPPORTED` and `InstancePlayLimitException`
-becomes `CNA_RESULT_INVALID_STATE`, in the exception firewall rather than in one creation route that
-happened to catch the first one locally. Every audio route gets the same conversion.
+A `DynamicSoundEffectInstance` uses the ordinary sound-effect-instance handle kind. All
+`cna_sound_effect_instance_*` transport, property, type and destroy routes accept it; streaming-only
+routes reject an ordinary instance with `CNA_RESULT_INVALID_STATE`.
 
-## Streaming: one handle kind, two shapes
+PCM16 byte submissions and float submissions copy the selected range before returning. One
+instance uses the sample representation established by its first submission; callers must not mix
+byte and float feeds. The pending-buffer count decreases only after playback consumes a buffer, not
+when the buffer is merely handed to the mixer.
 
-A streaming instance is a **sound-effect instance**. It lives under the same handle kind, so every
-`cna_sound_effect_instance_*` route accepts it — transport, mixing setters, state, destroy — and the
-canonical overrides dispatch virtually behind them. What the kind adds is the buffer queue, and what
-it lacks is a parent: `cna_dynamic_sound_effect_instance_create` takes a sample rate and a channel
-count, because the caller is the source of every sample. A route that needs streaming refuses an
-ordinary instance with `CNA_RESULT_INVALID_STATE`, which is how a caller tells the two apart.
+`cna_framework_dispatcher_update` advances every live dynamic instance during the normal game
+loop. The explicit queue-initialization, clear and update routes exist because the canonical
+operations are public and support a host that drives them directly. A buffer-needed handler runs
+on the thread that performs that update and can submit more copied data before returning.
 
-**Submitted buffers are copied.** The caller's array may be reused or freed the moment the call
-returns, which is what makes submission safe from a producer thread while playback runs — the
-canonical usage. Both the byte and float routes take an explicit range, covering both canonical
-overloads with one route each.
+## Microphone capture
 
-The two sample computations here are **instance methods**, unlike the sound-effect ones: they use the
-rate and channel count the instance was created with rather than taking them as arguments.
+Microphones are runtime-owned and addressed by zero-based index. A machine with no capture device
+successfully reports a count of zero. The default query separates availability from identity: when
+there is no default it clears `out_available` and leaves `out_index` unchanged. Index routes reject
+an index at or beyond the reported count.
 
-The pending buffer count only shrinks once a buffer has actually been **consumed by playback**, not
-when it was handed to the mixer. That is the canonical contract and the reason the count is worth
-polling at all.
+`cna_microphone_get_data_at` is a stream read rather than an all-or-nothing copy. It writes up to
+the supplied capacity and reports the actual byte count; a short or zero-byte read is success, not
+`CNA_RESULT_BUFFER_TOO_SMALL`. The type-name routes remain available even when the device count is
+zero.
 
-## Capture is enumerated, and a short read is not a failure
+Buffer-ready registrations use the shared audio-registration handle. The normal framework
+dispatcher checks all microphones; `cna_microphone_check_all_buffers_ext` exposes the same public
+canonical operation to manually driven hosts.
 
-Microphones are addressed by **index**, like every other enumerated device in this ABI, because the
-canonical list hands out pointers the runtime owns and never transfers. The default microphone
-follows the availability-separate-from-the-answer rule: no default is an ordinary success with the
-flag clear and the index left exactly as the caller set it.
+## 3D positioning
 
-`cna_microphone_get_data_at` is the one count/copy route in this ABI where **a short read is not a
-failure**. Every text route refuses a buffer it cannot fill; capture is a stream, so this one fills
-what it can and reports how much arrived. Zero bytes means nothing has been captured yet, not an
-error.
+`CNA_AudioEmitter` and `CNA_AudioListener` are versioned values rather than handles. Their init
+routes produce the canonical origin, forward `-Z`, up `+Y` and zero velocity; only the emitter has
+a per-emitter Doppler scale, defaulting to 1. Master volume, distance scale, Doppler scale and speed
+of sound are process-wide statics. Their C routes take a game only for owner-thread validation.
 
-**No verification tree has a capture device**, so the count is zero and every index route refuses.
-That is the microphone's real availability rather than a gap in the binding — the same honesty the
-compass and the camera already record. The type-name routes still answer, because a type name
-belongs to the type rather than to a device.
+An instance must choose 3D positioning before its first `Play`. An already playing instance that
+was never positioned returns `CNA_RESULT_INVALID_STATE`; stop it, position it and play again. An
+instance positioned before playback may be repositioned while it plays. Its spatial attenuation,
+pan and Doppler values remain latched and are recombined with later volume and pitch changes.
+Once a submitted voice is using 3D, `cna_sound_effect_instance_set_pan` is refused and leaves the
+stored pan unchanged until `Stop` permits the playback mode to change.
 
-`NoMicrophoneConnectedException` joins the other two audio exceptions in the firewall: no microphone
-connected is `CNA_RESULT_NOT_SUPPORTED`.
+Distance attenuation stays at full volume within the process-wide distance scale and follows a
+computed inverse law beyond it. Pan projects the emitter offset onto the listener's own right axis,
+so listener orientation matters. The multi-listener route accepts any positive count. CNA evaluates
+every listener and uses the nearest/loudest one because its stereo mixer has no XACT-equivalent
+per-listener output matrix; zero listeners are explicitly refused because XNA's native outcome for
+that case is not established.
 
-## Positioning: two values and multiple listeners
+## XACT authored audio
 
-An emitter and a listener are **fixed values, not handles**. The canonical types carry settings and
-no behavior — no identity, no lifetime, nothing to observe between calls — so `CNA_AudioEmitter` and
-`CNA_AudioListener` are structures the caller fills in, and `cna_audio_emitter_init` /
-`cna_audio_listener_init` write the canonical defaults: at the origin, facing -Z with +Y up, at rest,
-and (for the emitter alone) a Doppler scale of 1. The listener has no Doppler scale of its own, which
-is why the two are separate structures rather than one shared one.
+The XACT surface uses content-version-46 `.xgs` settings alongside `.xwb` wave banks and `.xsb`
+sound banks. Missing files map to `CNA_RESULT_IO`; malformed headers are rejected before a handle
+is published. The C surface covers the engine, renderer-detail views, global variables, categories,
+resident and streaming wave banks, sound banks, cues, 3D cue playback and disposal events.
 
-`cna_sound_effect_instance_apply_3d` positions a playing instance against one listener. The
-attenuation it applies is **full volume within the process-wide distance scale and a computed inverse
-law beyond it**, not a falloff that starts at zero distance, and pan is the emitter's offset projected
-onto the listener's own right axis — so which way the listener faces changes the result. The four
-process-wide settings are what this route reads, which is what makes them worth setting.
+Renderer details remain owned by their engine and are addressed by index. Friendly name, identifier,
+text, hash and equality use query/copy/value routes rather than exposing the native type. This
+runtime has one audio backend; the explicit constructor's look-ahead and renderer-id arguments are
+accepted for canonical signature compatibility but do not select or configure another backend.
 
-**Positioning latches.** Once an instance has been positioned, the spatial gain, pan and pitch it
-computed are combined with the instance's own settings on every later call, and `..._set_pan` stops
-reaching the output. The instance's properties keep reading back whatever the caller last set them
-to; the output is driven by the position from then on. That is the canonical behavior, reported here
-rather than hidden.
+Engine-global and cue-scoped variables are separate domains. Both clamp writes to their authored
+ranges. Writing a read-only global variable succeeds without changing it because the canonical API
+does not report the underlying refusal. Category handles are owned C copies of canonical values;
+releasing one affects neither playback nor the engine, and categories compare by name.
 
-`cna_sound_effect_instance_apply_3d_multi_ext` covers the array overload. Any positive listener
-count is accepted, matching XNA's unrestricted listener array. CNA's stereo mixer has no separate
-output matrix for every listener, so it evaluates them all and uses the listener nearest to the
-emitter for attenuation, pan and Doppler; this is not a silent fallback to the first listener. A
-zero count or null array is `CNA_RESULT_INVALID_ARGUMENT`.
+`cna_sound_bank_get_cue` returns a new independently controllable prepared cue on every call.
+`cna_sound_bank_play_cue` and its 3D sibling create no C handle; the sound bank retains those cues,
+and `cna_audio_engine_update` retires them after playback. `CNA_CueInfo` snapshots all eight state
+predicates together. A prepared cue starts with `is_prepared` rather than `is_created`, and a paused
+cue remains playing while `is_paused` is also true.
 
-`RendererDetail` is not mapped here. Its constructor is private and its only source is
-`AudioEngine::getRendererDetailsProperty`, so it cannot be reached without an engine — it belongs
-with the XACT surface, and is recorded there.
+`AudioEngine::InstanceLimitDecision` has no C representation because every producer and consumer
+of that public native value is internal to cue playback. A caller observes only the resulting cue
+play decision.
 
-## XACT: reachable, because the test authors the files
+## Shutdown order
 
-Nothing in this repository ships an `.xgs`, `.xsb` or `.xwb`, and the whole XACT family needs all
-three. It is still fully bound, because a binary XACT file is **authorable**: `XactSmoke.c` writes a
-settings file with one category and two variables, a wave bank with one mono PCM entry and a sound
-bank with one cue, and then drives the real parsers. The family did not have to be recorded
-unreachable the way the unimplemented runtime facade was.
+For deterministic shutdown:
 
-Ownership runs in one direction and is enforced: an engine is a child of the game, banks and
-categories are children of the engine, and a prepared cue is a child of its sound bank. Each parent
-refuses to be released while a C child of it is alive.
+1. stop producer/capture work and release audio event registrations that no longer need to observe
+   disposal;
+2. destroy owned cues before sound banks, then wave/sound banks and category handles before their
+   XACT engine;
+3. destroy ordinary instances before their parent effects, and destroy parentless dynamic
+   instances;
+4. destroy every remaining sound effect and XACT engine before `cna_game_destroy`;
+5. release any disposal registration deliberately retained across its source's destroy.
 
-### A renderer detail is an index, and a category is a handle
+The game refuses destruction with `CNA_RESULT_INVALID_STATE` while any tracked owned audio resource
+remains. A refused destroy changes neither the game nor its children.
 
-`RendererDetail` has a **private constructor** and exactly one source — the engine's own list — so C
-never holds one. Its friendly name, identifier and text form are count/copy pairs addressed by index,
-and equality and the hash code answer against indices too. This runtime reports exactly one renderer,
-and the two extra arguments of the look-ahead constructor are accepted and ignored: there is one
-backend, so a renderer id has nothing to select between.
+## Verification and current limitations
 
-`AudioCategory` is the opposite case. The canonical lookup answers a value, and the handle here is
-simply somewhere for C to keep it: releasing one changes nothing about the engine or about playback.
-**Categories compare by name alone**, so two categories obtained from two different engines are
-equal — canonical behavior, and the reason one equality route covers both canonical operators.
+The focused strict-C regressions are:
 
-`AudioEngine::InstanceLimitDecision` is the one XACT type with no C form. It is public, but every
-method that produces one is private: the decision is computed inside `Cue::Play` and handed to
-nobody. A C caller sees its effect — a cue refused by an authored instance limit — and never the
-value.
+- `CApi_AudioSmoke`: availability, full-buffer PCM ownership, instance state, parent ordering and
+  owner-thread refusal;
+- `CApi_AudioSoundEffectSmoke`: ranged PCM, encoded and path acquisition, static settings, sample
+  math, metadata and any-thread fire-and-forget playback;
+- `CApi_ContentSmoke`: content-manager sound acquisition and interoperability with the ordinary
+  sound-effect handle routes;
+- `CApi_AudioStreamingSmoke`: dynamic instances, copied byte/float submissions, event registration
+  and the enumerated microphone boundary;
+- `CApi_Audio3DSmoke`: value defaults, validation, positioning order, latching and multi-listener
+  acceptance;
+- `CApi_XactSmoke`: authored resident XACT fixtures, renderer views, variable domains, categories,
+  cues, ownership and disposal handlers;
+- `CApi_AudioUnavailableSmoke`: repeatable no-device capability snapshots and atomic
+  `CNA_RESULT_NOT_SUPPORTED` creation failure.
 
-### Two variable domains, and one silent write
+The remaining qualification and implementation limits are:
 
-Engine-global and cue-scoped variables are **separate domains, not a strict and a lax view of one**.
-A variable reachable through `cna_cue_get_variable` is refused by
-`cna_audio_engine_get_global_variable`, and the other way round. Both clamp a write to the authored
-range rather than refusing it.
+- microphone tests exercise whatever the host reports, but the committed deterministic path has no
+  positive capture-device fixture;
+- `Microphone::Start` currently sets `Started` even when native capture opening fails, rather than
+  reporting the measured XNA failure;
+- CNA has no playback-device-change or device-loss recovery of its own; SDL default-device handling
+  and ALSA device disappearance remain backend behaviour;
+- the XACT regression positively validates a resident wave bank. Its streaming-wave-bank route has
+  atomic missing/malformed-file coverage, but the authored resident fixture is allowed to be
+  non-streamable, so it is not a positive streaming-XWB qualification.
 
-**Writing a read-only global variable succeeds and changes nothing.** The canonical route never
-reports that refusal — the reference implementation ignores the native return code — so this one does
-not invent it either. Read the value back to see what took effect.
-
-### Two kinds of cue
-
-`cna_sound_bank_get_cue` prepares a cue the caller owns, and each call answers a **new** one: two
-lookups of the same name give two independently playable cues. `cna_sound_bank_play_cue` plays a cue
-that gets **no handle at all**, because the caller never touches it — the bank keeps it alive while it
-plays and `cna_audio_engine_update` is what retires it.
-
-A cue's eight state predicates are one snapshot rather than eight routes, so a caller cannot see a
-combination that never existed. Two of them are worth naming: a cue from a bank arrives **prepared**
-rather than created — the created state is internal to construction — and **pausing does not stop
-playing**, so a paused cue reports both paused and playing at once.
+The microphone-start defect and playback-device-loss limitation are also recorded in
+[`handoff.md`](../../handoff.md) section 5 until resolved and regression-tested.

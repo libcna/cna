@@ -35,6 +35,21 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API audio contract reconciliation (2026-11-01):
+  `docs/c-api/AUDIO.md` is now one current subsystem contract rather than an initial PCM slice with
+  later SoundEffect, streaming, capture, 3D and XACT appendices. It distinguishes four direct
+  SoundEffect constructions from the non-caching content-manager acquisition path; records the
+  complete parent/child destruction order, instance behaviour, any-thread fire-and-forget exception
+  and opt-in dispatch requirement for producer-thread streaming; and makes callback delivery and the
+  shared audio registration lifetime explicit. Microphone short reads, 3D mode latching and the
+  nearest-listener stereo approximation are reconciled with the headers and tests. The XACT section
+  now states the content-version-46 settings boundary, indexed renderer details, variable domains,
+  owned versus fire-and-forget cues and the actual resident/streaming-wave-bank evidence. Its
+  limitations section records the absent deterministic positive capture fixture, the known
+  `Microphone::Start` failure-state defect, missing playback-device-loss recovery and the lack of a
+  positive streaming-XWB fixture instead of presenting those paths as fully qualified. Seven
+  focused SDLGPU C API tests pass through the private runner: AudioSmoke, AudioSoundEffectSmoke,
+  ContentSmoke, AudioStreamingSmoke, Audio3DSmoke, XactSmoke and AudioUnavailableSmoke.
 - C API callback, threading and shutdown reconciliation (2026-11-01):
   `docs/c-api/CALLBACKS_AND_THREADING.md` is now a current cross-cutting contract rather than an
   initial-ABI snapshot. It distinguishes lifecycle failure callbacks from observing event handlers
@@ -45,8 +60,8 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   components and activated/deactivated handlers, both graphics-device loan windows and the complete
   non-reentrant driving set. Shutdown now separates blocking owned children from game/window event
   registrations that deliberately survive disposal. The directly contradictory thread paragraph
-  and obsolete initial-slice boundary were removed from `docs/c-api/AUDIO.md`, which remains queued
-  for its own full audit. Seven focused SDLGPU C API regressions pass through the private runner:
+  and obsolete initial-slice boundary were removed from `docs/c-api/AUDIO.md`. Seven focused SDLGPU
+  C API regressions pass through the private runner:
   lifecycle, host-driven run, component device borrow, foreign-thread calls, owner-thread refusal,
   any-thread SoundEffect play and stress/registration teardown.
 - C API landing-page reconciliation (2026-11-01):
