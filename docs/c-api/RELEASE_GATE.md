@@ -28,7 +28,7 @@ decided not to ship.
 | ✅ | **A real C application, built the way a consumer builds one** | A complete C program exists, is built from outside the source tree against an installed CNA through find_package, and is run. | hello_cna is built from an installed prefix and run by CApi_InstalledConsumer |
 | ✅ | **The package is installable and findable** | `find_package(CNA CONFIG)` resolves from an installed prefix and yields one target, and the package version is the C ABI version. | CNAConfig.cmake, a version file from abi.h, and a CNACApi component |
 | ✅ | **The consumer documentation exists** | Consumption, handles, errors, strings and buffers, callbacks and threading, renderer capabilities, ABI versioning and fuzzing are each documented. | 13 documents present |
-| ✅ | **The lifetime and byte-facing contracts are measured, not asserted** | Handle lifetime, teardown ordering and buffer boundaries are stressed under a sanitizer, and the surfaces that read caller-supplied bytes are covered against an independent oracle. | stress, exhaustive oracle and fuzz target all present |
+| ✅ | **The lifetime and shared byte-adapter contracts are measured, not asserted** | Handle lifetime and teardown ordering are stressed under a sanitizer, and the shared UTF-8, pointer/count and element-size adapter boundaries are covered against an independent oracle. Subsystem parsers retain their own test and fuzz obligations. | stress, deterministic byte oracle and manual shared-boundary fuzz target present |
 | ✅ | **The package carries the native libraries CNA builds** | An installed CNA links and runs with no environment variable: the SDL3 libraries this project builds are installed beside libcna_c_api.so, whose RPATH is $ORIGIN, and beside libcna_c_api.dylib on macOS, whose LC_RPATH is @loader_path. | SDL3 ships beside the library; the consumer needs no environment variable |
 | ✅ | **A static configuration that keeps the same ABI promise** | A static archive exists, exports the same cna_* names as the shared library and no others, and a consumer links and runs against it from the installed package. | CNA::CApiStatic ships and is linked and run by the consumer gate |
 
@@ -82,7 +82,7 @@ Before CBIND-041 the module installed a targets file and no package config, so t
 
 CONSUMING.md is the entry point for somebody who has never read this repository.
 
-### ✅ The lifetime and byte-facing contracts are measured, not asserted
+### ✅ The lifetime and shared byte-adapter contracts are measured, not asserted
 
 *Evidence:* CApi_StressSmoke and CApi_Utf8Oracle, plus tests/fuzz/StringViewFuzz.cpp
 

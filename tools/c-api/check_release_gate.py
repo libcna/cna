@@ -162,9 +162,12 @@ def check_safety_tests_present() -> tuple[str, str]:
     for test, source in required.items():
         if test not in lists or not source.exists():
             return NOT_MET, f"{test} is not registered or its source is gone"
-    if not (C_API_DIR / "tests" / "fuzz" / "StringViewFuzz.cpp").exists():
+    fuzz_source = C_API_DIR / "tests" / "fuzz" / "StringViewFuzz.cpp"
+    if not fuzz_source.exists():
         return NOT_MET, "the fuzz target is gone"
-    return MET, "stress, exhaustive oracle and fuzz target all present"
+    if "cna_c_api_fuzz_targets" not in lists or "tests/fuzz/StringViewFuzz.cpp" not in lists:
+        return NOT_MET, "the manual fuzz source is no longer compiled by the native test build"
+    return MET, "stress, deterministic byte oracle and manual shared-boundary fuzz target present"
 
 
 def check_native_dependencies_shipped() -> tuple[str, str]:

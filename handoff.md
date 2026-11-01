@@ -35,6 +35,18 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API shared-byte fuzzing reconciliation (2026-11-01):
+  `docs/c-api/FUZZING.md` now states the exact shared adapter boundary instead of claiming that one
+  string-view target covers every caller-controlled byte parser in the expanded C API. It records
+  the deterministic oracle's actual enumeration and sampling split, distinguishes the native
+  test-build object check from a manual libFuzzer campaign, and replaces the broken historical
+  Clang command with a verified build that includes the platform headers, current Sharp Runtime
+  paths and core exception RTTI. Findings and the mutable corpus now stay inside the selected
+  stable build tree.
+  The generated release gate narrows its matching safety claim to UTF-8, pointer/count and
+  element-size adapters and explicitly leaves subsystem parsers their own obligations. The fuzz
+  object and UTF-8 oracle build, `CApi_Utf8Oracle` passes through the private SDLGPU runner, a
+  10,000-run ASan/libFuzzer check finds no disagreement, and the release/documentation gates pass.
 - C API error-contract reconciliation (2026-11-01):
   `docs/c-api/ERRORS.md` is now a current result, category, exception-firewall and diagnostic
   contract instead of the original ABI snapshot. It records all fixed-width category values and

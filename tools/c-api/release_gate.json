@@ -70,8 +70,8 @@
     },
     {
       "id": "safety-evidence",
-      "title": "The lifetime and byte-facing contracts are measured, not asserted",
-      "requirement": "Handle lifetime, teardown ordering and buffer boundaries are stressed under a sanitizer, and the surfaces that read caller-supplied bytes are covered against an independent oracle.",
+      "title": "The lifetime and shared byte-adapter contracts are measured, not asserted",
+      "requirement": "Handle lifetime and teardown ordering are stressed under a sanitizer, and the shared UTF-8, pointer/count and element-size adapter boundaries are covered against an independent oracle. Subsystem parsers retain their own test and fuzz obligations.",
       "check": "safety_tests_present",
       "recorded": "met",
       "evidence": "CApi_StressSmoke and CApi_Utf8Oracle, plus tests/fuzz/StringViewFuzz.cpp",
