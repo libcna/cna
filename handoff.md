@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API error-contract reconciliation (2026-11-01):
+  `docs/c-api/ERRORS.md` is now a current result, category, exception-firewall and diagnostic
+  contract instead of the original ABI snapshot. It records all fixed-width category values and
+  the range-category exception, exact non-overwriting size/copy semantics, the successful
+  foreign-thread-dispatch reset, canonical exception type/parameter metadata, network-join and
+  sensor-error supplemental payloads, and first-failure persistence for lifecycle callbacks.
+  The consumer rules now distinguish plain-C control flow from binding-only exception metadata and
+  message text. Focused error, boundary, content-exception, network, sensor, host-driven callback
+  and generated-route regressions pass through the private SDLGPU runner; route generation,
+  route-test coverage, coverage, limitations and export-count gates remain current.
 - C API effects contract reconciliation (2026-11-01):
   `docs/c-api/EFFECTS.md` is now a current reflection, lifetime, construction, stock-effect and
   material-extension contract instead of an implementation-era narrative with eight repeated test

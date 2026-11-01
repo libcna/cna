@@ -1,7 +1,7 @@
 # Stav dokumentace v `docs/`
 
 Inventura: 2026-11-01. Rozsah: všech 177 aktuálně verzovaných souborů `docs/**/*.md`.
-Souhrn: 69 zpracovaných, 18 podpůrně aktualizovaných čekajících na vlastní audit a 90 dosud
+Souhrn: 70 zpracovaných, 18 podpůrně aktualizovaných čekajících na vlastní audit a 89 dosud
 samostatně nezpracovaných.
 
 Tento soubor sleduje současný dokumentační úklid. Stav neříká, že čekající dokument je nutně
@@ -202,7 +202,7 @@ Odstraněné historické soubory (`graphics-ext-scope-reduction.md`,
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/COVERAGE.md`](docs/c-api/COVERAGE.md)
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/DEVICES.md`](docs/c-api/DEVICES.md)
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/EFFECTS.md`](docs/c-api/EFFECTS.md)
-- ⬜ **ČEKÁ** — [`docs/c-api/ERRORS.md`](docs/c-api/ERRORS.md)
+- ✅ **ZPRACOVÁNO** — [`docs/c-api/ERRORS.md`](docs/c-api/ERRORS.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/FUZZING.md`](docs/c-api/FUZZING.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/GAMER_SERVICES.md`](docs/c-api/GAMER_SERVICES.md)
 - 🟡 **ČEKÁ — podpůrně aktualizováno** — [`docs/c-api/GAME_COMPONENTS.md`](docs/c-api/GAME_COMPONENTS.md)
