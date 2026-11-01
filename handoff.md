@@ -35,6 +35,12 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Documentation reconciliation inventory (2026-11-01): root `documents.md` now lists all 178
+  tracked `docs/**/*.md` files and distinguishes completed standalone reconciliation from pending
+  work and files changed only as supporting indexes/ledgers. It records the two partially duplicate
+  BasicEffect and AlphaTestEffect passes, explains the other high-touch files, and excludes six
+  historical pages retired on 2026-10-31. The inventory matches `git ls-files` exactly: every
+  tracked Markdown document appears once, no extra entry exists and every link resolves.
 - `AlphaTestEffect` support-document cleanup (2026-11-01): the Phase 43 Tasks 371-379 diary and
   EasyGL-only support table are replaced by the current renderer-neutral contract. The page now
   defines the public defaults, eight-way shader selector, exact half-byte comparison boundaries,
