@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
@@ -62,12 +63,68 @@ uniform vec4 uMyTint;
 void main() { FragColor = vec4(uMyTint.rgb, 1.0); }
 )";
 
+static const char* kFlipFragSrc = R"(#version 300 es
+precision mediump float;
+out vec4 FragColor;
+uniform vec4 uRtFlipV;
+void main() { FragColor = vec4(uRtFlipV.xyz, 1.0); }
+)";
+
 class EasyGLShaderEffectSpriteBatchUniformTest : public Game
 {
     std::unique_ptr<SpriteBatch> sb_;
     Texture2D tex_;
     bool done_ = false;
     int result_ = 1;
+
+    bool CheckTextureUniformProgram()
+    {
+        auto& device = getGraphicsDeviceProperty();
+        ShaderEffect target(device, kVertSrc, kFlipFragSrc);
+        ShaderEffect other(device, kVertSrc, kFlipFragSrc);
+        if (!target.IsEffectValid() || !other.IsEffectValid()) return false;
+
+        RenderTarget2D rendered(device, 8, 8);
+        device.SetRenderTarget(&rendered);
+        device.Clear(Color::White);
+        device.SetRenderTarget(nullptr);
+
+        const auto check = [&](ShaderEffect& effect, const Color& expected, const char* step)
+        {
+            device.Clear(Color::Magenta);
+            sb_->Begin(SpriteSortMode::Deferred, BlendState::Opaque,
+                       nullptr, nullptr, nullptr, &effect);
+            sb_->Draw(tex_, Rectangle(0, 0, 8, 8), Color::White);
+            sb_->End();
+            const Rectangle region(4, 4, 1, 1);
+            Color pixel;
+            device.GetBackBufferData(&region, &pixel, 0, 1);
+            const bool ok = pixel == expected;
+            std::printf("[%s] %s: pixel=(%d,%d,%d), expected=(%d,%d,%d)\n",
+                        ok ? "PASS" : "FAIL", step,
+                        pixel.getRProperty(), pixel.getGProperty(), pixel.getBProperty(),
+                        expected.getRProperty(), expected.getGProperty(), expected.getBProperty());
+            return ok;
+        };
+
+        // SetTexture is legal before Apply, including while another effect is current.
+        // Both shaders declare the same uniform so a misdirected write also corrupts pixels.
+        other.SetUniformVec4("uRtFlipV", 0, 1, 0, 0);
+        target.SetTexture(0, rendered);
+        bool ok = check(target, Color::Red, "SetTexture before Apply reaches its own program");
+        ok = check(other, Color::Lime, "SetTexture preserves the other program") && ok;
+
+        other.Apply();
+        target.SetTexture(0, tex_);
+        ok = check(target, Color::Black, "switching to uploaded rows clears the flip") && ok;
+        ok = check(other, Color::Lime, "clearing the flip preserves the other program") && ok;
+
+        // No state change: the previously uploaded flags must survive without another write.
+        other.Apply();
+        target.SetTexture(0, tex_);
+        ok = check(target, Color::Black, "unchanged texture keeps the uploaded flags") && ok;
+        return ok;
+    }
 
 protected:
     void Initialize() override
@@ -126,6 +183,7 @@ protected:
                         "       expected: blue (B>=200,R<=50) -- uMyTint uniform did not reach the real draw\n",
                         centPx.getRProperty(), centPx.getGProperty(), centPx.getBProperty());
         }
+        if (!CheckTextureUniformProgram()) result_ = 1;
         Exit();
     }
 

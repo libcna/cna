@@ -2138,6 +2138,8 @@ namespace CNA::Internal::Renderers::EasyGL
                 const int loc = program_.uniform_location("uRtFlipV");
                 if (loc >= 0)
                 {
+                    // SetTexture may precede Apply while another effect's program is current.
+                    MakeProgramCurrent();
                     program_.set_uniform(loc, rtFlipV_[0], rtFlipV_[1], rtFlipV_[2], rtFlipV_[3]);
                     rtFlipVUploaded_ = true;
                 }

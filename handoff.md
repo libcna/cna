@@ -1243,6 +1243,14 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   of the last value at each uniform location (sampler-unit uniforms set once at link) and a per-unit
   bound-texture record, dropped on context loss, texture deletion and relink as GLB-41's records
   are, with real-context tests like `EasyGLRedundantStateTests.cpp`.
+- **Custom-effect lookup and recovery limits** (`IEFFECT-AUDIT-001`, 2026-11-01): EasyGL's
+  name setters still query GL on every call; mutable `GetProgram()` permits relinking without a
+  detectable executable revision, so a handle/context-keyed cache would be unsafe. Custom effects
+  are not registered for context recovery, and direct recompilation does not reset their
+  texture-flag upload state. Stock SpriteBatch also queries projection/channel names per flush.
+  The measured costs, call sites, WebGPU/D3D9 analysis and deliberately deferred candidates are
+  in [`docs/ieffect-renderer-audit.md`](docs/ieffect-renderer-audit.md). These lifecycle limits
+  remain open; the separate pre-Apply texture-flag write to another program is regression-fixed.
 - **Three audio reports from the 2026-07-17 audit stay unconfirmed, not open:** high-pitched sound
   effects, missing audio files, and distorted or sped-up gameplay audio. They were never
   reproduced against the game they came from, which is not available. The audit narrowed the
