@@ -341,7 +341,8 @@ CNA_C_API CNA_Result cna_platform_copy_current_name_ext(
  * @param context Caller-owned context supplied when the sink was installed.
  *
  * The bytes are borrowed for the duration of the call: copy them to keep them. A sink must not
- * call back into CNA, and must return normally -- see CALLBACKS_AND_THREADING.md.
+ * call back into CNA, and must return normally -- see CALLBACKS_AND_THREADING.md. Delivery is
+ * synchronous on whichever thread emitted the log line and is serialized by the native logger.
  */
 typedef void (*CNA_LogSinkCallback)(
     CNA_LogLevel level,
@@ -353,7 +354,9 @@ typedef void (*CNA_LogSinkCallback)(
  * @brief Replaces the destination log lines are written to.
  *
  * @param callback The sink, or null to restore the default.
- * @param context Caller-owned context passed back unchanged.
+ * @param context Caller-owned context passed back unchanged. It must remain valid until this sink
+ *        is replaced or reset; after that replacement/reset call returns, the old callback and
+ *        context are no longer in flight.
  * @return `CNA_RESULT_SUCCESS` or an argument failure.
  *
  * The default sink writes to **stderr**, deliberately never stdout: a terminal-hosted game draws

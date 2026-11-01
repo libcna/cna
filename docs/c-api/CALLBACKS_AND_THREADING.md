@@ -37,6 +37,14 @@ Every C callback must return normally. Throwing a C++ exception or using `longjm
 frame, retaining callback-only pointers or borrowed handles, and freeing a context while CNA may
 still invoke it are unsupported.
 
+The process-wide logger sink is the retained callback without a registration handle in this
+cross-cutting layer. `cna_logger_set_sink_ext` replaces it and `cna_logger_reset_sink_ext` (or a
+null replacement) restores stderr. It runs synchronously on whichever thread emits the line, under
+the logger's serialization; its message view is valid only for that call. It must not re-enter CNA
+because a nested operation may log while the native logger is still delivering the outer line.
+Keep its context alive until the replacement/reset call returns; that return also establishes that
+the previous callback is no longer in flight.
+
 ## Owner-thread default
 
 Every runtime handle belongs to the thread that created it. Unless a route explicitly documents a

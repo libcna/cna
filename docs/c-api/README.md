@@ -163,6 +163,7 @@ The C API must not expose:
 | Question | Contract |
 |---|---|
 | How do I install, link and run it? | [`CONSUMING.md`](CONSUMING.md) |
+| Where are the ABI primitives, diagnostics, logging and platform facts? | [`CORE.md`](CORE.md) |
 | What is missing or deliberately narrower? | [`LIMITATIONS.md`](LIMITATIONS.md) |
 | What may change between ABI versions? | [`ABI_VERSIONING.md`](ABI_VERSIONING.md) |
 | What owns a handle or resource, and when does it die? | [`HANDLES.md`](HANDLES.md), [`OWNERSHIP.md`](OWNERSHIP.md) |

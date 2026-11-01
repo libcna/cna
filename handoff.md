@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API core contract reconciliation (2026-11-01):
+  `docs/c-api/CORE.md` now covers the current three-layer foundation (`abi.h`, `core.h` and
+  `core_ext.h`) instead of stopping at the original logger/platform/renderer-classification slice.
+  It records ABI primitives and shared values, per-thread diagnostics plus canonical exception
+  metadata, process-wide logger threshold/sink behavior, platform facts, sparse renderer identities,
+  compile-time versus selected versus active renderer state, opt-in fallback history, assembly title
+  and the non-exhaustive `_ext` naming convention. The public log-sink Doxygen and
+  `CALLBACKS_AND_THREADING.md` now state synchronous emitting-thread delivery, serialization,
+  non-reentrancy and the context lifetime through replacement/reset; the C API landing-page map
+  now links the core contract. All ten focused SDLGPU C API tests pass through the private runner,
+  and the renderer-identity, runtime-discipline, coverage, limitations and export-count gates pass.
 - C API content contract reconciliation (2026-11-01):
   `docs/c-api/CONTENT.md` now describes the complete current manager surface rather than the former
   three-loader slice: all nine typed/foreign producers, their independent versus cache-disposed
