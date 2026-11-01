@@ -1,20 +1,24 @@
 # Task ID index
 
 Comments, commit messages and documents across CNA cite task IDs such as `XNASWEEP-231`,
-`GSC-0007` or `RRC-009`. Most came from an implementation plan under `plans/`. Every plan was
-finished or retired and deleted, the last on 2026-10-29, and the directory went with them; the
-plans themselves are in Git history (`git log --diff-filter=D -- 'plans/*'` lists them,
-`git show <commit>^:plans/<file>` prints one). Later bounded maintenance audits may assign IDs
-directly from their source note. This table says where each prefix originated, what the work was,
-and where whatever outlived it now lives.
+`GSC-0007` or `RRC-009`. Most came from an implementation plan under `plans/`. That directory
+was retired by 2026-10-29; its plans record completed, cancelled and deferred work. The dates
+below are deletion dates, not implementation or qualification dates. Recover a deleted plan with
+`git log --diff-filter=D -- 'plans/<file>'`, then `git show <deletion-commit>^:plans/<file>`.
+Later bounded maintenance audits may assign IDs directly from their source note. This is a
+historical routing registry, not an exhaustive inventory of later maintenance IDs or a claim that
+every planned feature shipped. Current contracts and evidence boundaries belong to the linked
+subsystem pages.
 
 Current defects and limitations are [`../handoff.md`](../handoff.md) §5, not here. Where a row
-says *Git history only*, nothing outside the plan survived: the work was retired with what it
-served, or its result is only the code.
+says *Git history only*, there is no dedicated maintained result page: consult the archived plan
+and implementation commits. External consumer paths identify historical destinations; consult
+those repositories for their current status. The approved binding scope remains CNA's native
+C API/C ABI, as described in [`binding.md`](binding.md).
 
 | Prefix | Plan, deleted | What it was | Where it lives now |
 |---|---|---|---|
-| `a-NNNN` | `plan.md`, 2026-10-26 | Cross-cutting tasks that crossed a layer boundary; all three done. | [`xna4-runtime-compatibility.md`](xna4-runtime-compatibility.md), `cna-samples/plan.md` |
+| `a-NNNN`; later `SAMPLE-104` notes | `plan.md`, 2026-10-26 | The cross-layer cursor transform (`a-0001`) and two bounded sample exception/browser follow-ups. Their completion does not claim full sample networking qualification. | [`input-backend.md`](input-backend.md), [`xna4-runtime-compatibility.md`](xna4-runtime-compatibility.md), [`browser-network-readiness.md`](browser-network-readiness.md); historical consumer destination: `cna-samples/plan.md` |
 | `AM4-*` | `plan_apple_m4.md`, 2026-10-28 | Mac mini M4 qualification, 2026-10-07/08. Cited "Apple M4 AM4-NNN". | [`apple-platforms.md`](apple-platforms.md) |
 | `APPLE-1`..`20` | `plan_apple.md`, 2026-10-28 | macOS/iOS platform subsystem. Cited "Apple APPLE-N". | [`apple-platforms.md`](apple-platforms.md) |
 | `ASCII-1`..`82` | `plan_ascii.md`, 2026-10-28 | The SDL-windowed ASCII renderer, completed 2026-07-15; its quantizer, atlas and oracles became a post-process effect. | [`ascii-post-process-effect.md`](ascii-post-process-effect.md) |
@@ -68,7 +72,7 @@ served, or its result is only the code.
 | — | `plan_sdl3free.md`, 2026-10-26 | An SDL3-independent migration, superseded twice over. | [`platform-abstraction.md`](platform-abstraction.md) |
 | `SDLGPU-1`..`135` | `plan_sdlgpu.md` with `sdlgpu_renderer_contract_audit.csv` and `sdlgpu_easygl_example_classification.csv`, 2026-10-29 | The SDLGPU renderer and its EasyGL parity. | [`sdl-gpu-renderer.md`](sdl-gpu-renderer.md) |
 | `SMG-*`, `VMG-*`, `WMG-*`, `GL4-*` (modern) | `plan_sdlgpu_modern_graphics.md`, `plan_vulkan_modern_graphics.md`, `plan_webgpu_modern_graphics.md`, 2026-10-11; `plan_opengl4_modern_graphics.md`, 2026-09-28 | Putting the modern CNAEXT graphics layer on SDLGPU, Vulkan, WebGPU and OpenGL 4; the layer was retired on 2026-10-13. | Git history only |
-| `SOFTWARE-1`..`485` | `plan_software.md`, 2026-10-29 | The Software CPU rasterizer and its EasyGL parity. | Task evidence: [`software-easygl-parity-ledger.md`](software-easygl-parity-ledger.md) and Git history. Current contract: [`software-renderer.md`](software-renderer.md). |
+| `SOFTWARE-1`..`485` | `plan_software.md`, 2026-10-29 | The Software CPU rasterizer and its EasyGL parity. | Maintained evidence map and recovery instructions for the full historical ledger: [`software-easygl-parity-ledger.md`](software-easygl-parity-ledger.md). Current contract: [`software-renderer.md`](software-renderer.md). |
 | `STREET-*`, `STREETS-*`, `STREETW-*`, `STREETGL4-*`, `STREETPERF-*` | `plan_street.md`, `plan_street_sdlgpu.md`, `plan_street_webgpu.md`, `plan_street_perf.md`, 2026-10-11; `plan_street_opengl4.md`, 2026-09-28 | Bringing the `cna-street` consumer up on EasyGL, Vulkan, SDLGPU, WebGPU and OpenGL 4, and its frame rate. | Git history only; the consumer is `cna-street` |
 | `STUB-1`..`6` | `plan_stub.md`, 2026-10-28 | The no-op Stub renderer. | [`stub-renderer.md`](stub-renderer.md) |
 | `TCR-1`..`8` | `plan_terminal_capi_repair.md`, 2026-10-29 | `SOFTWARE` presenting through the terminal, and the C API building again. | [`platform-terminal-analysis.md`](platform-terminal-analysis.md) |
@@ -79,10 +83,10 @@ served, or its result is only the code.
 | `WEBGPUPERF-*`, `WGF-*` | `plan_webgpu_perf.md`, `plan_webgpu_failing_eight.md`, 2026-10-11 | WebGPU's per-draw CPU cost, and eight failing WebGPU ctests (fixed). | Git history only; [`webgpu-renderer.md`](webgpu-renderer.md) for the renderer |
 | `WINPORT-*`, `WINCLOSE-*`, `WINNATIVE-*` | `plan_windows_portability.md`, `plan_windows_portability_closeout.md`, 2026-10-28; `plan_win32_native_validation.md`, 2026-10-11 | The Unicode filesystem path model on native Windows and its closing passes, run on a since-deleted Windows 10 VM. | [`filesystem-path-model.md`](filesystem-path-model.md) |
 | `XACTBUILD-001` | `plan_xact_build_invocation.md`, 2026-10-29 | `BuildXact` invoking XactBld3 with the SDK's switches and Wine paths. | The `BuildXact.Execute()` row of [`xna-content-pipeline-parity-report.md`](xna-content-pipeline-parity-report.md) |
-| `XNA-ENUM-001`, `XNA-MEMBER-001`/`002` | `plan_xna_runtime_surface.md`, 2026-10-26 | The runtime type and member census and its first fixes. | [`xna-4-enumerator-reference.md`](xna-4-enumerator-reference.md), [`xna-4-runtime-member-coverage-baseline.md`](xna-4-runtime-member-coverage-baseline.md) |
-| `XNA-MISSING-001`..`020` | `plan_missing.md`, 2026-10-26 | The 160 runtime members that completed the XNA surface. | [`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md) |
+| `XNA-ENUM-001`, `XNA-MEMBER-001`/`002` | `plan_xna_runtime_surface.md`, 2026-10-26 | The runtime type/member census, enumerators and four initial member fixes. The frozen baseline has 164 missing declarations; those four fixes left 160 for the next campaign. | [`xna-4-enumerator-reference.md`](xna-4-enumerator-reference.md), [`xna-4-runtime-member-coverage-baseline.md`](xna-4-runtime-member-coverage-baseline.md); current declaration census: [`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md). Presence does not establish behavior or test coverage. |
+| `XNA-MISSING-001`..`020` | `plan_missing.md`, 2026-10-26 | The remaining 160 declarations, grouped into twenty packages; this completed the measured member surface, not a behavioral certification. | [`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md) |
 | `XNAP-*` | `plan_xnapipeline.md`, 2026-10-29 | CNA's native XNB writer. | [`xnb-interoperability.md`](xnb-interoperability.md) |
-| `XNAPP-*` | `plan_xnapipeline_parity.md`, 2026-10-29 | XNA 4.0 Content Pipeline API and input-format parity. | The generated `xna-content-pipeline-*.md`; its source rules in [`xnb-interoperability.md`](xnb-interoperability.md) §9.1 |
+| `XNAPP-*` | `plan_xnapipeline_parity.md`, 2026-10-29 | XNA 4.0 Content Pipeline API and input-format parity. | [`xna-content-pipeline-parity-report.md`](xna-content-pipeline-parity-report.md) and related generated references classify the maintained member map; executable evidence is separate. Source rules: [`xnb-interoperability.md`](xnb-interoperability.md) §9.1. |
 | `XNASWEEP-*` | `plan_xna_sample_xnb_sweep.md`, 2026-10-29 | Rebuilding every genuine sample `.xnb` through CNA and comparing. | [`../tools/xna-sample-sweep/README.md`](../tools/xna-sample-sweep/README.md); its residues in handoff §5.2 |
-| `XNB-*` | `plan_xnb.md`, 2026-10-29 | The runtime `.xnb` reader. `XNB-61b` closed the compressed-manifest inventory on 2026-10-31; Phase I, `XNB-61`..`64`, was never started. | [`xnb-content-pipeline-support.md`](xnb-content-pipeline-support.md) |
+| `XNB-*` | `plan_xnb.md`, 2026-10-29 | The runtime `.xnb` reader. `XNB-61b` closed the compressed-manifest inventory on 2026-10-31, after plan deletion. Phase I (`XNB-61`..`64`) was deferred in that plan; the later `XNASWEEP-*` campaign has its own record above. | [`xnb-content-pipeline-support.md`](xnb-content-pipeline-support.md) |
 | Retired renderers: `BLEND2D-*`, `CANVAS-*`, `D2D-*`, `D3D10-*`/`DX10-*`, `DILIGENT-*`, `DX-*`, `DX1-*`..`DX8-*`, `DX30-*`, `DX12-*`, `GDI-*`, `GL4-*`, `GLIDE-*`, `HTMLDOM-*`, `IGL-*`, `LLGL-*`, `MAGNUM-*`, `METAL-*`, `NVG-*`, `OPENGLES1-*`, `OPENGLES2-*`, `PIXIJS-*`, `RLGL-*`, `SKIA-*`, `SOKOL-*`, `SVGDOM-*`, `TINYGL-*`, `VULKAN-*`, `WICKED-*`, `WIN11-*` | One plan per retired renderer: `plan_blend2d`, `plan_canvas`, `plan_direct2d`, `plan_d3d10`, `plan_diligent`, `plan_dx` (Direct3D 11/12), `plan_dx1`, `plan_dx2`, `plan_dx3`, `plan_dx5`, `plan_dx6`, `plan_dx7`, `plan_dx8`, `plan_dxold`, `plan_freedirect`, `plan_directx12_parity`, `plan_gdi`, `plan_opengl1`, `plan_opengl2`, `plan_opengl4`, `plan_glide`, `plan_html_dom`, `plan_igl`, `plan_llgl`, `plan_magnum`, `plan_metal`, `plan_nanovg`, `plan_opengles1`, `plan_opengles2`, `plan_pixijs`, `plan_rlgl`, `plan_skia`, `plan_sokol`, `plan_svg_dom`, `plan_tinygl`, `plan_vulkan` (with `baselines/easygl-ctests-2026-09-06.txt`), `plan_wicked`, `plan_windows11_directx`; deleted 2026-08-30..10-14 | The renderers CNA built and later retired, and the physical Windows 11 bring-up of the retired DirectX renderers. | [`removed-renderers.md`](removed-renderers.md) |

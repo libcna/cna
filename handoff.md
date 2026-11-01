@@ -35,6 +35,12 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Historical task-index reconciliation (2026-11-01, XNA-MEMBER-001/002): all 133 deleted
+  plans are represented and quoted deletion dates agree with Git history. The index separates
+  plan retirement from feature completion and current qualification, corrects the a-0001 versus
+  SAMPLE-104 grouping, explains the 164-to-160 runtime-gap stages, and routes Software's compact
+  evidence map and later XNB/sample work accurately. Local links and inventory checks pass; no
+  runtime or generated report changes.
 - Software/EasyGL evidence-map reconciliation (2026-11-01, SOFTWARE-100/164/165/457): the
   391,991-byte cumulative ledger is replaced by a compact maintained map; every original byte is
   verified recoverable at 9b51bbab4. The page separates historical verdicts/counts/skip lists from

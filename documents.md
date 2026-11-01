@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 175 reviewed, 2 updated incidentally and awaiting their own audit, and 0 not yet
+Summary: 176 reviewed, 1 updated incidentally and awaiting its own audit, and 0 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -34,7 +34,7 @@ Other repeated edits did not repeat the same work:
 - `docs/README.md` was changed 28 times as a running index; its own complete audit is still pending.
 - `docs/graphics-renderer-feature-matrix.md` was changed seven times: once in its own audit and
   subsequently during related renderer/capability corrections.
-- `docs/task-id-index.md` was changed six times as a routing registry, not in six separate audits.
+- `docs/task-id-index.md` received six incidental routing updates before its own complete audit.
 - `docs/webgpu-renderer.md` was changed five times for different subsystems before its own audit;
   the sixth pass on 2026-11-01 rewrote it as a current contract and completed the review.
 - `docs/migration-guide.md` was changed four times; the first three were related updates and the
@@ -165,7 +165,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/spritefont-support.md`](docs/spritefont-support.md)
 - ✅ **REVIEWED** — [`docs/stub-renderer.md`](docs/stub-renderer.md)
 - ✅ **REVIEWED** — [`docs/surface-format-support.md`](docs/surface-format-support.md)
-- 🟡 **PENDING — updated incidentally** — [`docs/task-id-index.md`](docs/task-id-index.md)
+- ✅ **REVIEWED** — [`docs/task-id-index.md`](docs/task-id-index.md)
 - ✅ **REVIEWED** — [`docs/texture-stream-formats.md`](docs/texture-stream-formats.md)
 - ✅ **REVIEWED** — [`docs/texture3d-texturecube-support.md`](docs/texture3d-texturecube-support.md)
 - ✅ **REVIEWED** — [`docs/vertex-format-support.md`](docs/vertex-format-support.md)
