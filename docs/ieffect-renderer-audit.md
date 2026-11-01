@@ -1,10 +1,11 @@
 # IEffectRenderer audit — IEFFECT-AUDIT-001
 
-Measured 2026-11-01 against CNA `9d3807b77`, with the correction described below.
-Scope: renderer-local implementation and call sites; no public API or common virtual interface
-changes. The working tree was clean at entry. No stubs, dependencies or XNA behavior deviations
-were introduced. FNA's local `src/Graphics/Effect/{Effect.cs,StockEffects/BasicEffect.cs}` was
-consulted; `ShaderEffect` and `IEffectRenderer` are CNA-specific contracts, not FNA APIs.
+The original 2026-11-01 measurement/repair record used CNA 9d3807b77 plus the correction below.
+Its clean-entry state and measurements describe that task, not every later checkout. Source,
+dependency identities and the focused regression were rechecked during the documentation audit
+on 2026-11-01. No new performance campaign or renderer implementation change follows from that
+recheck. ShaderEffect and IEffectRenderer are CNA-specific; the original FNA source consultation
+does not make them FNA APIs.
 
 ## A. Confirmed problems
 
@@ -125,7 +126,8 @@ alive, as documented in the renderer; a name-lookup change would not alter that 
 
 `D3D9EffectRenderer::CompileProgram` parses compiler CTAB data once into vertex/pixel vectors.
 `UploadEXT` pads the input to float4 registers, then linearly searches each vector by string
-comparison on **every setter**, including misses. Matching constants issue the separate vertex
+comparison on each implemented scalar/vector/matrix upload, including misses. This does not
+claim every optional array setter uses that path or is supported. Matching constants issue separate vertex
 and pixel constant writes. Both tables are cleared on compilation. No string-key allocation or
 compiler reflection occurs in this loop. The cost grows with table size, but no representative
 large-table D3D9 profile was collected. A second name index was not justified, and D3D9 register
@@ -200,8 +202,8 @@ WebGL JavaScript-boundary measurement was taken.
 
 ## E. Verification
 
-All builds used existing directories and at most four jobs; shared ccache configuration was kept.
-Commands (run from the repository root):
+The commands/counts below are the original repair's evidence. They used existing directories and
+at most four jobs; shared ccache configuration was kept. Run from the repository root:
 
 ```sh
 cmake --build cmake-build-debug --target cna_test_easygl_shader_effect_spritebatch_uniform cna_test_easygl_shadereffect_3d cna_test_easygl_shader_effect_reflection cna_test_easygl_bloom_extract cna_test_easygl_bloom_gaussianblur --parallel 4
@@ -225,6 +227,13 @@ git diff --check
   runner/builds succeeded outside that restriction. No test used the owner's live desktop.
 - No browser/WebGL, D3D9, WebGPU or SDLGPU live performance/regression run in this task; their
   production code was not changed. No real asynchronous context-loss experiment was run.
+
+The documentation recheck confirms the same easy-gl/meta-gl revisions and remaining lookup/cache
+paths. The focused multi-tree pixel executable builds and passes with OPENGLES3 and OPENGL33
+selected privately. A fresh sizeof-only probe compiled with the current Graphics target's flags
+confirms GpuDrawParams is 7,856 bytes on this Linux x86_64 configuration. It measures no
+construction/draw cost. The timing tables remain the original probes, not newly repeated samples
+or a universal ABI/performance bound.
 
 ## F. Remaining profiling candidates
 

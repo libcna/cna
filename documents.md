@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 142 reviewed, 12 updated incidentally and awaiting their own audit, and 23 not yet
+Summary: 143 reviewed, 12 updated incidentally and awaiting their own audit, and 22 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -116,7 +116,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/graphics-renderer-feature-matrix.md`](docs/graphics-renderer-feature-matrix.md)
 - ✅ **REVIEWED** — [`docs/graphics-resource-lifetime.md`](docs/graphics-resource-lifetime.md)
 - ✅ **REVIEWED** — [`docs/headless-renderer.md`](docs/headless-renderer.md)
-- ⬜ **PENDING** — [`docs/ieffect-renderer-audit.md`](docs/ieffect-renderer-audit.md)
+- ✅ **REVIEWED** — [`docs/ieffect-renderer-audit.md`](docs/ieffect-renderer-audit.md)
 - ✅ **REVIEWED** — [`docs/input-backend.md`](docs/input-backend.md)
 - ✅ **REVIEWED** — [`docs/input-build-and-test.md`](docs/input-build-and-test.md)
 - ✅ **REVIEWED** — [`docs/input-fna-fidelity.md`](docs/input-fna-fidelity.md)

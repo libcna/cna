@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- IEffectRenderer audit reconciliation (2026-11-01, IEFFECT-AUDIT-001): the page separates its
+  original repair/microbenchmark record from the current source recheck and limits D3D9's CTAB
+  search statement to implemented scalar/vector/matrix uploads. Dependency revisions and current
+  EasyGL/WebGPU/SDLGPU/D3D9 cache/lifetime paths agree with the recorded findings. The focused
+  two-program pixel target builds and passes privately on OPENGLES3 and OPENGL33; a fresh
+  sizeof-only current-flag probe confirms 7,856-byte GpuDrawParams on Linux x86_64. No new timing,
+  browser/other-renderer/recovery qualification, implementation, cache or ABI change.
 - Compiled-effect/fuzzing documentation reconciliation (2026-11-01, FX-051/053): the guide
   distinguishes dirty-value synchronization from native uploads, borrowed texture bindings,
   disposal checks, conditional capabilities, route/profile limits and actual parser/dependency
