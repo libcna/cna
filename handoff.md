@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API CNB contract reconciliation (2026-11-01):
+  `docs/c-api/CNB.md` is now a current ownership, authoring, loading and error contract instead of
+  the chronological `CBIND-106`–`CBIND-111` implementation narrative. It records the active read-
+  limit consumers, current Texture2D BC1/BC2/BC3-plus-RGBA8 representation boundary, Model schema-1
+  C data graph including cameras, schema-2 runtime-load versus C authoring boundary, SoundEffect
+  schema 2 and the wider WAV conversion rules. The page now distinguishes the reserved, schemaless
+  Effect identity from implemented asset schemas and states that a registered custom CNB loader is
+  reachable through `cna_content_manager_load_foreign_ext`; the former direct-invocation-only claim
+  was also corrected supportively in `docs/c-api/CONTENT.md` and the public `content.h` Doxygen
+  contract. A stale WAV-test comment was aligned with the implementation. All seven focused CNB and
+  Content strict-C tests pass through the private SDLGPU runner, as do six native regressions for
+  custom manager dispatch, Model schema separation/loading, wide PCM conversion, format-spec scope
+  and compressed texture fallback.
 - C API audio contract reconciliation (2026-11-01):
   `docs/c-api/AUDIO.md` is now one current subsystem contract rather than an initial PCM slice with
   later SoundEffect, streaming, capture, 3D and XACT appendices. It distinguishes four direct

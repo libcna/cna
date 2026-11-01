@@ -302,7 +302,8 @@ static int validate_dds_import(void)
     return 1;
 }
 
-/* The WAV importer accepts exactly what converts to Pcm16 losslessly and refuses the rest by name. */
+/* The WAV importer preserves 8-bit PCM, preserves 16-bit PCM and converts supported wider source
+   formats to Pcm16. This focused fixture exercises the 16-bit path. */
 static int validate_wav_import(void)
 {
     static const char path[] = "cna_c_api_cnb_tooling.wav";
@@ -343,8 +344,7 @@ static int validate_wav_import(void)
         REQUIRE(samples[2] == 0x78U && samples[3] == 0x56U);
     }
 
-    /* The whole point of the importer being narrow: an IEEE-float WAV is refused by name rather
-       than converted, because that conversion is an authoring decision. */
+    /* A format tag for IEEE float paired with a 16-bit width is malformed: only float32 is read. */
     {
         uint8_t floatWav[48];
         REQUIRE(build_minimal_wav(floatWav, 3U) == sizeof(floatWav));

@@ -244,12 +244,12 @@ argument.
 
 Two consequences of it being an ordinary load. It is **cached** by asset name like any other asset,
 so a second call answers the same pointer without re-reading the file and the object must outlive
-the manager's cache — `cna_content_manager_unload` drops it. And only **compiled `.xnb` assets**
-reach a registered reader: a loose file or a `.cnj` descriptor is dispatched by requested C++ type
-rather than by reader name, and there is no C++ type here to dispatch on, so such an asset fails
-with `CNA_RESULT_IO` rather than being read by the wrong reader.
+the manager's cache — `cna_content_manager_unload` drops it. The route reaches three caller-defined
+forms: a compiled `.xnb` reader, a custom `.cnb` loader registered in the process-wide CNB registry,
+or a `.cnj` loader registered on this manager. Loose unregistered files still fail rather than
+being guessed into an unrelated type.
 
-## The CNB content format is not reachable from this ABI yet
+## CNB content and custom loaders
 
 CNA has a second compiled content format beside `.xnb`: **CNB** (`CNA::Content::Cnb`,
 `docs/cnb-format.md`), a CNA-native container with its own schemas for textures, sprite fonts,
@@ -257,24 +257,14 @@ sound effects, media, curves, animation clips and models, its own compiler front
 (`cna_tool_source_to_cnb`, `cna_tool_cnj_to_cnb`, `cna_tool_gltf_to_cnb`) and its own
 `ContentManager` tier.
 
-**The container is bound; nothing that turns a chunk into an asset is.** `CBIND-106` published the
-format's identities, byte-level constants, checksums, whole-file arithmetic, read limits and chunk
-compression, `CBIND-107` published the parsed document, its bounded cursor and both writers, and
-`CBIND-108` published the texture pixel formats and the three texture schemas, `CBIND-109` the
-model schema with its codec and `.cnj` compile path, `CBIND-110` the remaining five — sprite font,
-sound effect, song, video, curve and animation clip — and `CBIND-111` the loader registry and the
-two compilation front ends; see [`CNB.md`](CNB.md). **Every asset schema the format defines is bound,
-and a C application can compile source files into `.cnb`.** What still has no C route is
-`ContentManager::RegisterCnbLoaderEXT` — the hook that reaches the registry during an ordinary
-`Load`, so a C-registered loader is invoked directly rather than through a manager.
+The C API exposes the complete generic container, typed codecs for every implemented schema except
+Model schema 2, source importers, CNJ compilation and the process-wide loader registry; see
+[`CNB.md`](CNB.md) for the precise boundary. The reserved Effect identifier has no native CNB
+schema. Model schema 2 can be loaded as a runtime Model but has no `CNA_CnbModelDataHandle`
+authoring/inspection representation.
 
-So a C application can load `.xnb` assets, loose files and `.cnj` descriptors through the routes
-above, can build and parse a `.cnb` container, read any chunk's bytes out of it and encode or decode
-a texture, and **cannot load a `.cnb` asset through a `ContentManager`**.
-
-That the rest is unbound is a **scheduling** decision recorded on 2026-08-28, not a judgement that
-the format has no C form. The remaining declarations are counted in [`COVERAGE.md`](COVERAGE.md) as
-`planned` — deliberately not as `not-applicable`, which would say something false — they are why
-[`RELEASE_GATE.md`](RELEASE_GATE.md) reads *Not ready*, and
-the planned-owner table in [`COVERAGE.md`](COVERAGE.md) is the sized backlog. Historical C API
-tasks `CBIND-109`–`CBIND-112` remain in Git history.
+`ContentManager::RegisterCnbLoaderEXT` needs no second C route: it is a typed C++ wrapper over the
+same process-wide registry reached by `cna_cnb_loader_registry_register`. After registering a
+custom loader, `cna_content_manager_load_foreign_ext` performs the ordinary cached manager load and
+returns the opaque pointer produced by the callback. Built-in CNB assets use the corresponding
+typed content-manager route where one is exposed.

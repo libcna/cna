@@ -235,16 +235,11 @@ CNA_C_API CNA_Result cna_content_manager_load_sprite_font(
  *         message carries the `CNA_Result` the callback returned; or a documented
  *         argument/handle/thread failure.
  *
- * The counterpart of `cna_content_type_reader_manager_register`, and the only route that reaches
- * a caller-supplied reader from outside: the typed loaders next to this one each name a C++ type
- * this ABI knows, and a custom content type is by definition not one of them. The asset's own
- * type-reader table decides which reader runs, so this route needs no type argument -- it needs
- * only that the reader the file names has been registered.
- *
- * **Only compiled `.xnb` assets reach a registered reader.** A loose file or a `.cnj` descriptor
- * is dispatched by the requested C++ type instead of by a reader name, and there is no C++ type
- * here to dispatch on. Such an asset fails with `CNA_RESULT_IO` rather than being read by the
- * wrong reader.
+ * This is the common return route for caller-defined content. A compiled `.xnb` selects a reader
+ * from its type-reader table, a custom `.cnb` selects a loader from the process-wide CNB registry,
+ * and a `.cnj` descriptor selects a loader registered on this manager. The file carries the
+ * dispatch identity, so this route needs no caller-supplied type argument. A loose unregistered
+ * file fails with `CNA_RESULT_IO` rather than being guessed into an unrelated type.
  *
  * The result is cached by asset name exactly as every other load is, so a second call for the
  * same name returns the same pointer without re-reading the file -- which is the caching XNA
