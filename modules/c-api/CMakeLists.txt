@@ -174,9 +174,8 @@ if(EMSCRIPTEN)
         # consumer cannot make a function pointer at all -- and this ABI is callback-driven
         # (game callbacks, ContentLost, storage disposing, resource events). The artifact was
         # exporting 2,872 routes and no way to hand any of them a callback. FS goes with it:
-        # FORCE_FILESYSTEM was already set, but the object was not reachable from JS, so
-        # "filesystem/title content" in the fixcnats.md Phase 7 contract had no implementation
-        # on the consumer's side either.
+        # FORCE_FILESYSTEM was already set, but the object was not reachable from JS, so the
+        # consumer-side filesystem/content contract had no implementation either.
         "-sALLOW_TABLE_GROWTH=1"
         # SDL installs its fullscreen callback on Module; do not let assertion builds install
         # Emscripten's read-only "unexported runtime method" trap at the same property.
@@ -251,61 +250,69 @@ if(EMSCRIPTEN)
             COMMAND "${NODE_JS_EXECUTABLE}"
                     "${CMAKE_CURRENT_SOURCE_DIR}/wasm/module_smoke.mjs"
                     "$<TARGET_FILE_DIR:cna_c_api_wasm>/cna_c_api.mjs"
-                    "${CNA_C_API_WASM_EXPORTS}")
+                    "${CNA_C_API_WASM_EXPORTS}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/include/CNA/C/abi.h")
 
-        # And the same artifact in a real browser, which is what fixcnats.md Phase 7 actually asks
-        # for: node compiles the module itself, a browser fetches it over HTTP and runs it through
-        # its own WebAssembly pipeline. Registered only where Playwright resolves, since a browser
-        # is an environment fact rather than a build one -- and reported as a skipped test rather
-        # than silently absent, so a machine that cannot run it says so.
+        # And the same WEBGL2 artifact in a real browser: node compiles the module itself, while a
+        # browser fetches it over HTTP and runs it through its own WebAssembly pipeline. The page's
+        # renderer assertion is deliberately WEBGL2-specific; registering it as a passing WEBGPU
+        # qualification would claim coverage it does not provide. A non-WEBGL2 build therefore
+        # reports an explicit skip rather than silently omitting the test.
         # Playwright is usually a global install that a bare `require` will not find, so NODE_PATH
         # is pointed at the module root belonging to *this* node -- `npm root -g` answers for
         # whichever npm is on PATH, which need not be the same installation.
-        get_filename_component(_cna_node_bin_dir "${NODE_JS_EXECUTABLE}" DIRECTORY)
-        get_filename_component(_cna_node_prefix "${_cna_node_bin_dir}" DIRECTORY)
-        set(_cna_node_global_modules "${_cna_node_prefix}/lib/node_modules")
-        if(NOT IS_DIRECTORY "${_cna_node_global_modules}")
-            execute_process(
-                COMMAND "${NODE_JS_EXECUTABLE}" -e "console.log(require('node:child_process').execSync('npm root -g').toString().trim())"
-                OUTPUT_VARIABLE _cna_node_global_modules
-                OUTPUT_STRIP_TRAILING_WHITESPACE
-                ERROR_QUIET)
-        endif()
-
-        # The gate asks the runner itself, so the two cannot disagree about what is resolvable. A
-        # separate search here was narrower than the runner's own and would report a skip on a
-        # machine where the test would have passed.
-        execute_process(
-            COMMAND ${CMAKE_COMMAND} -E env "NODE_PATH=${_cna_node_global_modules}"
-                    "${NODE_JS_EXECUTABLE}"
-                    "${PROJECT_SOURCE_DIR}/scripts/run_browser_tests.mjs"
-                    --check-playwright
-            RESULT_VARIABLE _cna_playwright_missing
-            OUTPUT_QUIET ERROR_QUIET)
-        find_program(CNA_BROWSER_FOR_WASM_PROBE
-            NAMES google-chrome google-chrome-stable chromium chromium-browser)
-        if(_cna_playwright_missing EQUAL 0)
-            set(_cna_probe_env "NODE_PATH=${_cna_node_global_modules}")
-            if(CNA_BROWSER_FOR_WASM_PROBE)
-                list(APPEND _cna_probe_env "PLAYWRIGHT_CHROMIUM=${CNA_BROWSER_FOR_WASM_PROBE}")
-            endif()
-            add_test(NAME CApi_WasmBrowserProbe
-                COMMAND ${CMAKE_COMMAND} -E env ${_cna_probe_env}
-                        "${NODE_JS_EXECUTABLE}"
-                        "${PROJECT_SOURCE_DIR}/scripts/run_browser_tests.mjs"
-                        "$<TARGET_FILE_DIR:cna_c_api_wasm>"
-                        "browser_probe.html")
-            set_tests_properties(CApi_WasmBrowserProbe PROPERTIES TIMEOUT 300)
-        else()
-            # SKIP_REGULAR_EXPRESSION, not PASS_REGULAR_EXPRESSION: the latter reports Passed, which
-            # would fold a test that did nothing into the suite's pass count -- the very thing this
-            # branch exists to avoid. Matches the convention in modules/renderers/webgpu and
-            # modules/renderers/diligent.
+        if(NOT CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
             add_test(NAME CApi_WasmBrowserProbe
                 COMMAND ${CMAKE_COMMAND} -E echo
-                        "[SKIP] Playwright is not resolvable from this node, so the browser probe cannot run here.")
+                        "[SKIP] The C API browser probe currently qualifies WEBGL2, not ${CNA_GRAPHICS_RENDERER}.")
             set_tests_properties(CApi_WasmBrowserProbe PROPERTIES
                 SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+        else()
+            get_filename_component(_cna_node_bin_dir "${NODE_JS_EXECUTABLE}" DIRECTORY)
+            get_filename_component(_cna_node_prefix "${_cna_node_bin_dir}" DIRECTORY)
+            set(_cna_node_global_modules "${_cna_node_prefix}/lib/node_modules")
+            if(NOT IS_DIRECTORY "${_cna_node_global_modules}")
+                execute_process(
+                    COMMAND "${NODE_JS_EXECUTABLE}" -e "console.log(require('node:child_process').execSync('npm root -g').toString().trim())"
+                    OUTPUT_VARIABLE _cna_node_global_modules
+                    OUTPUT_STRIP_TRAILING_WHITESPACE
+                    ERROR_QUIET)
+            endif()
+
+            # The gate asks the runner itself, so the two cannot disagree about what is resolvable.
+            # A separate search here was narrower than the runner's own and would report a skip on
+            # a machine where the test would have passed.
+            execute_process(
+                COMMAND ${CMAKE_COMMAND} -E env "NODE_PATH=${_cna_node_global_modules}"
+                        "${NODE_JS_EXECUTABLE}"
+                        "${PROJECT_SOURCE_DIR}/scripts/run_browser_tests.mjs"
+                        --check-playwright
+                RESULT_VARIABLE _cna_playwright_missing
+                OUTPUT_QUIET ERROR_QUIET)
+            find_program(CNA_BROWSER_FOR_WASM_PROBE
+                NAMES google-chrome google-chrome-stable chromium chromium-browser)
+            if(_cna_playwright_missing EQUAL 0)
+                set(_cna_probe_env "NODE_PATH=${_cna_node_global_modules}")
+                if(CNA_BROWSER_FOR_WASM_PROBE)
+                    list(APPEND _cna_probe_env "PLAYWRIGHT_CHROMIUM=${CNA_BROWSER_FOR_WASM_PROBE}")
+                endif()
+                add_test(NAME CApi_WasmBrowserProbe
+                    COMMAND ${CMAKE_COMMAND} -E env ${_cna_probe_env}
+                            "${NODE_JS_EXECUTABLE}"
+                            "${PROJECT_SOURCE_DIR}/scripts/run_browser_tests.mjs"
+                            "$<TARGET_FILE_DIR:cna_c_api_wasm>"
+                            "browser_probe.html")
+                set_tests_properties(CApi_WasmBrowserProbe PROPERTIES TIMEOUT 300)
+            else()
+                # SKIP_REGULAR_EXPRESSION, not PASS_REGULAR_EXPRESSION: the latter reports Passed,
+                # which would fold a test that did nothing into the suite's pass count -- the very
+                # thing this branch exists to avoid. Matches the convention in other browser tests.
+                add_test(NAME CApi_WasmBrowserProbe
+                    COMMAND ${CMAKE_COMMAND} -E echo
+                            "[SKIP] Playwright is not resolvable from this node, so the browser probe cannot run here.")
+                set_tests_properties(CApi_WasmBrowserProbe PROPERTIES
+                    SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+            endif()
         endif()
     endif()
 endif()
@@ -589,7 +596,11 @@ install(FILES
     COMPONENT CNACApi
 )
 
-if(CNA_BUILD_TESTS)
+# Native smoke executables exercise host processes, threads, installed shared libraries and native
+# display drivers. They are not Emscripten programs; the Wasm module/link/browser tests above are
+# the C API suite for that target. Keeping the native block out of an Emscripten configure also
+# avoids requiring a host Threads package that a single-threaded wasm toolchain cannot provide.
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     if(CNA_SHARED_LIBRARY)
         foreach(_order IN ITEMS CFirst CppFirst)
             add_executable(CApi_SharedRuntime${_order}

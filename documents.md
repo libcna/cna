@@ -1,7 +1,7 @@
 # Stav dokumentace v `docs/`
 
 Inventura: 2026-11-01. Rozsah: všech 177 aktuálně verzovaných souborů `docs/**/*.md`.
-Souhrn: 58 zpracovaných, 21 podpůrně aktualizovaných čekajících na vlastní audit a 98 dosud
+Souhrn: 59 zpracovaných, 21 podpůrně aktualizovaných čekajících na vlastní audit a 97 dosud
 samostatně nezpracovaných.
 
 Tento soubor sleduje současný dokumentační úklid. Stav neříká, že čekající dokument je nutně
@@ -229,4 +229,4 @@ Odstraněné historické soubory (`graphics-ext-scope-reduction.md`,
 - ⬜ **ČEKÁ** — [`docs/c-api/TEXTURES.md`](docs/c-api/TEXTURES.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/TEXTURE_VOLUMES.md`](docs/c-api/TEXTURE_VOLUMES.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/VERTEX_BUFFERS.md`](docs/c-api/VERTEX_BUFFERS.md)
-- ⬜ **ČEKÁ** — [`docs/c-api/WASM_ARTIFACT.md`](docs/c-api/WASM_ARTIFACT.md)
+- ✅ **ZPRACOVÁNO** — [`docs/c-api/WASM_ARTIFACT.md`](docs/c-api/WASM_ARTIFACT.md)

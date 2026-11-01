@@ -17,8 +17,11 @@ import { readFileSync } from 'node:fs';
 
 const modulePath = argv[2];
 const exportsPath = argv[3];
-if (!modulePath) {
-    console.error('usage: module_smoke.mjs <path to cna_c_api.mjs> [path to exports json]');
+const abiHeaderPath = argv[4];
+if (!modulePath || !exportsPath || !abiHeaderPath) {
+    console.error(
+        'usage: module_smoke.mjs <path to cna_c_api.mjs> <path to exports json> ' +
+        '<path to abi.h>');
     exit(2);
 }
 
@@ -27,13 +30,28 @@ const cna = await createCnaCApi();
 
 // The one route a consumer must call before trusting any other: it decides whether the artifact it
 // just downloaded is an ABI generation it knows.
-const encoded = cna._cna_get_abi_version();
-const major = (encoded >>> 16) & 0xff;
+const abiHeader = readFileSync(abiHeaderPath, 'utf8');
+const abiComponents = ['MAJOR', 'MINOR', 'PATCH'].map((component) => {
+    const match = abiHeader.match(
+        new RegExp(`#define\\s+CNA_ABI_VERSION_${component}\\s+UINT32_C\\((\\d+)\\)`));
+    if (!match) {
+        console.error(`could not read CNA_ABI_VERSION_${component} from ${abiHeaderPath}`);
+        exit(2);
+    }
+    return Number(match[1]);
+});
+const expected = (((abiComponents[0] & 0xffff) << 16) |
+                  ((abiComponents[1] & 0xff) << 8) |
+                  (abiComponents[2] & 0xff)) >>> 0;
+const encoded = cna._cna_get_abi_version() >>> 0;
+const major = (encoded >>> 16) & 0xffff;
 const minor = (encoded >>> 8) & 0xff;
 const patch = encoded & 0xff;
 console.log(`cna_get_abi_version() -> ${major}.${minor}.${patch} (0x${encoded.toString(16)})`);
-if (encoded === 0) {
-    console.error('the ABI version came back zero; the call did not reach compiled code');
+if (encoded !== expected) {
+    console.error(
+        `the module ABI 0x${encoded.toString(16)} does not match the public header ` +
+        `0x${expected.toString(16)}`);
     exit(1);
 }
 
@@ -73,20 +91,15 @@ try {
 }
 
 // Completeness: every generated name must actually be on the module.
-if (exportsPath) {
-    const declared = JSON.parse(readFileSync(exportsPath, 'utf8'));
-    const names = Array.isArray(declared) ? declared : declared.exports;
-    const missing = names.filter((name) => typeof cna[name] !== 'function');
-    console.log(`export completeness: ${names.length - missing.length}/${names.length} present`);
-    if (missing.length > 0) {
-        console.error(
-            `the module is missing ${missing.length} declared export(s); the generated list and ` +
-            'the linked module disagree. First few: ' + missing.slice(0, 10).join(', '));
-        exit(1);
-    }
-} else {
-    console.error('no exports json given, so export completeness was NOT checked');
-    exit(2);
+const declared = JSON.parse(readFileSync(exportsPath, 'utf8'));
+const names = Array.isArray(declared) ? declared : declared.exports;
+const missing = names.filter((name) => typeof cna[name] !== 'function');
+console.log(`export completeness: ${names.length - missing.length}/${names.length} present`);
+if (missing.length > 0) {
+    console.error(
+        `the module is missing ${missing.length} declared export(s); the generated list and ` +
+        'the linked module disagree. First few: ' + missing.slice(0, 10).join(', '));
+    exit(1);
 }
 
 console.log('wasm module smoke: OK');

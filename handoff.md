@@ -35,6 +35,20 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API WebAssembly artifact reconciliation (2026-11-01):
+  `docs/c-api/WASM_ARTIFACT.md` is now a current consumer contract rather than an eleven-part
+  snapshot tied to the deleted `fixcnats.md`. It removes the stale qualified ABI 0.21.0, lists all
+  layouts actually pinned by `module_entry.c`, distinguishes the WEBGL2 browser probe from WebGPU
+  renderer evidence, and records that the native ELF/Mach-O manifest generator is not a Wasm
+  provenance tool. The generator now rejects a `.wasm` instead of falsely reporting Linux/x86_64
+  with zero exports. The Node smoke reads `abi.h`, compares the exact packed runtime version and
+  decodes its 16-bit major correctly. Emscripten configurations no longer enter the native C API
+  smoke block and fail on `Threads`, so the three Wasm tests can be registered; the browser probe
+  explicitly skips non-WEBGL2 renderers rather than claiming WebGPU qualification. The WEBGL2 C
+  ABI artifact rebuilt with all 3,213 routes, and link, Node and real Chrome/Playwright probes all
+  pass through the private runner. A WEBGPU+C-API configure confirms the explicit browser skip,
+  but its fresh module build remains unqualified because vendored ENet misdetects `socklen_t` under
+  this Emscripten tree and fails on a conflicting typedef; no WebGPU C ABI pass is claimed.
 - C API header-compatibility audit (2026-11-01): `docs/c-api/COMPATIBILITY.md` now describes the
   source-level contract its generator and CI actually enforce. The unconsumed four-row runtime
   table is gone: no tool read it, the current HEADLESS/SOFTWARE/ASan trees do not build the C API,

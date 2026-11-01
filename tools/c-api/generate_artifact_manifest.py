@@ -56,6 +56,12 @@ def is_macho(library: Path) -> bool:
         return handle.read(4) in _MACHO_MAGICS
 
 
+def is_wasm(library: Path) -> bool:
+    """Whether the input is a WebAssembly binary rather than a native shared library."""
+    with library.open("rb") as handle:
+        return handle.read(4) == b"\x00asm"
+
+
 def nm_export_command(library: Path) -> list[str]:
     """`nm` arguments listing a shared library's exported definitions, ELF or Mach-O."""
     return ["-gU", str(library)] if is_macho(library) else ["-D", "--defined-only", str(library)]
@@ -135,6 +141,13 @@ def main() -> int:
     library: Path = arguments.library
     if not library.is_file():
         print(f"error: no such library: {library}", file=sys.stderr)
+        return 2
+    if is_wasm(library):
+        print(
+            "error: WebAssembly artifact manifests are not implemented; this tool describes "
+            "native ELF and Mach-O shared libraries only",
+            file=sys.stderr,
+        )
         return 2
 
     cache = cache_values(

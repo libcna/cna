@@ -9,13 +9,10 @@
 <canvas id="canvas" width="160" height="96" style="width:160px;height:96px"></canvas>
 <pre id="out">running…</pre>
 <script type="module">
-// C ABI CABI-37; fixcnats.md Phase 7: "If toolchain exists, build a real artifact and
-// create a tiny C-level browser probe before involving TypeScript."
-//
-// module_smoke.mjs proves the artifact loads and answers under node. It does not prove the same in
-// a browser, where the module is fetched over HTTP, compiled by the browser's own WebAssembly
-// pipeline and run under its memory model. This is the smallest page that does, and it stays at
-// the C level on purpose -- no TypeScript, no binding layer.
+// C ABI CABI-37. module_smoke.mjs proves the artifact loads and answers under node. It does not
+// prove the same in a browser, where the module is fetched over HTTP, compiled by the browser's
+// own WebAssembly pipeline and run under its memory model. This is the smallest page that does,
+// and it stays at the C level on purpose -- no TypeScript, no binding layer.
 //
 // Reports in the same shape as every other CNA browser page, so
 // scripts/run_browser_tests.mjs runs it unchanged.
