@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Browser boundary/lifetime documentation reconciliation (2026-11-01):
+  `docs/browser-network-readiness.md` separates the accepted unavailable browser transport from
+  historical SAMPLE-104 acceptance, corrects the Android libcurl exception and removes an implied
+  CNA-local sample-evidence directory. The five browser refusal tests are identified as negative
+  transport evidence, separately from the C API lifecycle probe. `docs/emscripten-mainloop-game-lifetime.md`
+  distinguishes blocking C++ Asyncify from host-driven C frames, exception termination, source-build
+  aliases versus installed SDK exports, and the historical spike's actual path. The current WEBGL2
+  C ABI probe builds; all three Wasm link/module/real-Chrome browser checks pass through the private
+  runner. This does not rerun the five browser-network refusal tests or qualify an installed C++
+  blocking-loop consumer. Runtime implementation and public ABI are unchanged.
 - Standalone graphics-extension documentation reconciliation (2026-11-01):
   `docs/cnaext-engine-layer.md` now distinguishes the always-registered module target from
   CNA_CNAEXT-guarded APIs, lists the actual umbrella composition, qualifies shader/readback support
@@ -1329,6 +1339,11 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- The installed C++ SDK export registers `EmscriptenExceptionAbi` but not the source-build
+  `EmscriptenAsyncify` / `EmscriptenAbi` targets. The in-tree/add_subdirectory blocking Game::Run
+  link recipe therefore cannot be assumed to work through the installed package. Found by source
+  inspection on 2026-11-01; an installed Emscripten blocking-loop consumer has not been qualified.
+  The JavaScript-driven C API artifact uses its separate non-Asyncify contract and is unaffected.
 - `RasterizerState.MultiSampleAntiAlias` is honored by `SOFTWARE` and by a single/default-profile
   desktop `OPENGL33` build only; the multi-profile selection defect is in §5.1.
   `OPENGLES3`/`WEBGL2` have no equivalent native switch, while `WEBGPU`, `SDLGPU`, `DIRECTX9` and

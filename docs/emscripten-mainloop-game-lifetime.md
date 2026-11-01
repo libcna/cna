@@ -16,6 +16,9 @@ int main()
 
 No page-lifetime leak or Emscripten-specific heap allocation is required.
 
+This is the application-style C++ blocking-loop contract. The generated C API library instead
+uses host-driven frames, described separately below.
+
 ## Implementation
 
 The former implementation called
@@ -24,8 +27,8 @@ unwinding the C++/Wasm caller, which destroyed a local `Game` while the register
 held its address. The next frame then failed as a dangling-pointer virtual call.
 
 CNA links application-style Emscripten executables with JS-lowered C++ exceptions and Asyncify.
-Native WebAssembly
-exception handling cannot be combined with Asyncify in the supported Emscripten toolchain.
+The selected toolchain/build contract keeps native WebAssembly exception handling separate from
+this Asyncify path.
 `RunLoop()` invokes the frame body on its existing Wasm stack and awaits
 `requestAnimationFrame()` through `EM_ASYNC_JS` only to suspend that same stack between frames. A
 second C++/Wasm callback never re-enters a suspended Wasm instance, and the
@@ -41,7 +44,8 @@ Emscripten `Game*`, copied `GameTime` or floating-point millisecond accumulator 
 game into another. A frame exception is logged by `Run()` and continues unwinding as it does
 natively; the browser path does not turn it into a normal `EndRun()`.
 
-The exception ABI and blocking-loop facility are separate CMake interfaces:
+The exception ABI and blocking-loop facility in `cmake/BuildPerformance.cmake` are separate
+CMake interfaces:
 
 ```text
 CNA::EmscriptenExceptionAbi:
@@ -53,16 +57,33 @@ CNA::EmscriptenAsyncify:
 ```
 
 `CNA::BuildConfig` propagates only the exception ABI. CNA-owned application executables opt into
-Asyncify automatically; an external final executable that uses blocking `Game::Run()` links
-`CNA::EmscriptenAsyncify` (the compatibility `CNA::EmscriptenAbi` composition contains both).
+Asyncify automatically; a source-build consumer's final executable that uses blocking
+`Game::Run()` links `CNA::EmscriptenAsyncify` (the compatibility `CNA::EmscriptenAbi` composition
+contains both).
 In a build that compiles the `WEBGPU` renderer in, `CNA::EmscriptenAsyncify` also carries
 `-sASYNCIFY_STACK_SIZE=65536`, because that renderer suspends deeper than Emscripten's default
-4 KiB unwind buffer holds (see `webgpu-renderer.md`); nothing has to be added by hand.
+4 KiB unwind buffer holds (see [webgpu-renderer.md](webgpu-renderer.md)); nothing has to be added
+by hand.
+
+These are source-build CMake aliases. The current C++ SDK export registers
+`CNA::EmscriptenExceptionAbi`, but not the Asyncify/composition targets; this link-target recipe
+therefore does not establish an installed Emscripten blocking-loop consumer. That package path
+needs its own final-link policy and qualification. See [installed-cpp-sdk.md](installed-cpp-sdk.md).
 
 The generated `cna_c_api_wasm` library is intentionally different. JavaScript owns its event loop
 and calls `cna_game_run_frame_ext` from `requestAnimationFrame`, so its final link explicitly uses
 `-sASYNCIFY=0`. This prevents Asyncify rewind from re-entering an exported i64-handle route without
 the original JavaScript `BigInt` argument.
+
+Use the host-driven `cna_game_run_frame_ext` loop for that artifact. The C library's lack of
+Asyncify must not be applied to a C++ executable that calls blocking `Game::Run()`, nor should
+enabling Asyncify on a JavaScript-entered C artifact be treated as a lifetime repair.
+
+The host frame path initializes and begins the run once, performs one non-waiting shared tick per
+call, and returns false after normal exit/end hooks. A terminal frame exception marks the host run
+ended and propagates through the ordinary error boundary; it does not synthesize normal EndRun.
+The qualified C browser probe is WEBGL2-specific; C++ WEBGPU browser application evidence has its
+own renderer/Asyncify boundary.
 
 ## Regression coverage
 
@@ -70,12 +91,18 @@ The web template and CNA renderer examples intentionally use ordinary local owne
 browser checks must reach multiple `Update()`/`Draw()` frames, call `Exit()`, return from `Run()`,
 and destroy the game normally. Merely compiling the page does not verify this contract.
 
-The separate `CApi_WasmBrowserProbe` drives `RunFrameEXT()` from five animation frames. It verifies
+The separate `CApi_WasmBrowserProbe` drives `RunFrameEXT()` from animation frames. It verifies
 the initialize/load/begin/update/draw/exiting/end order, variable-step `ResetElapsedTime()`, one-draw
 suppression, no final draw after `Exit()`, exact Update/Draw counts, BigInt handles and clean
 destruction. A second fixed-step game verifies that a browser frame with no update still draws and
 inherits no timing state from the first game. The qualified WEBGL2 artifact also passed 60- and
 600-frame canaries before this stronger lifecycle coverage replaced the old `RunOneFrame()` probe.
 
-`emscripten-mainloop-stack-spike/` remains as the minimal reproduction of the obsolete unwind-based
-implementation and documents why heap allocation previously appeared necessary.
+[spikes/emscripten-mainloop-stack-spike/](../spikes/emscripten-mainloop-stack-spike/README.md)
+contains the reproduction of the obsolete unwind-based implementation and explains the former
+heap-allocation workaround. It is historical evidence, not the current compiler/loop recipe.
+
+A passing host-driven C probe does not by itself prove a stack-local C++ Game survives blocking
+Run; that requires an application-style browser run through normal Exit, return and destruction.
+Native frame/lifetime tests and source-level local ownership complement, rather than replace,
+that browser check.

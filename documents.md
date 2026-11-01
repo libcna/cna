@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 96 reviewed, 12 updated incidentally and awaiting their own audit, and 69 not yet
+Summary: 98 reviewed, 12 updated incidentally and awaiting their own audit, and 67 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -62,7 +62,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ⬜ **PENDING** — [`docs/avatars.md`](docs/avatars.md)
 - ✅ **REVIEWED** — [`docs/basiceffect-support.md`](docs/basiceffect-support.md)
 - ✅ **REVIEWED** — [`docs/binding.md`](docs/binding.md)
-- ⬜ **PENDING** — [`docs/browser-network-readiness.md`](docs/browser-network-readiness.md)
+- ✅ **REVIEWED** — [`docs/browser-network-readiness.md`](docs/browser-network-readiness.md)
 - ⬜ **PENDING** — [`docs/build-performance.md`](docs/build-performance.md)
 - ⬜ **PENDING** — [`docs/cna-devices-camera-design.md`](docs/cna-devices-camera-design.md)
 - ✅ **REVIEWED** — [`docs/cnaext-engine-layer.md`](docs/cnaext-engine-layer.md)
@@ -91,7 +91,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ⬜ **PENDING** — [`docs/diagnostics.md`](docs/diagnostics.md)
 - ✅ **REVIEWED** — [`docs/directx9-renderer.md`](docs/directx9-renderer.md)
 - ✅ **REVIEWED** — [`docs/dualtextureeffect-support.md`](docs/dualtextureeffect-support.md)
-- ⬜ **PENDING** — [`docs/emscripten-mainloop-game-lifetime.md`](docs/emscripten-mainloop-game-lifetime.md)
+- ✅ **REVIEWED** — [`docs/emscripten-mainloop-game-lifetime.md`](docs/emscripten-mainloop-game-lifetime.md)
 - ✅ **REVIEWED** — [`docs/environmentmapeffect-support.md`](docs/environmentmapeffect-support.md)
 - ⬜ **PENDING** — [`docs/filesystem-path-model.md`](docs/filesystem-path-model.md)
 - ⬜ **PENDING** — [`docs/fna-reference-harness.md`](docs/fna-reference-harness.md)
