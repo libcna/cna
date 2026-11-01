@@ -568,19 +568,6 @@ CNA_C_API CNA_Result cna_graphics_device_manager_subscribe_preparing_device_sett
     CNA_GameEventRegistrationHandle* out_registration);
 
 /**
- * @brief Releases a manager handle.
- *
- * @param manager Owned manager handle.
- * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
- *
- * Releasing disposes the manager, which unregisters both services, and then **keeps the object
- * alive until the game is destroyed**. That is not tidiness: the canonical game caches a raw pointer
- * to the graphics device service the first time it resolves one and never clears it, so destroying
- * the manager while its game still lives would leave the game dereferencing freed memory on its very
- * next frame. A disposed manager still answers that cached pointer correctly, because disposal does
- * not touch the game-owned device it points at. The handle is invalid immediately either way.
- */
-/**
  * @brief Subscribes to the manager's device-settings event with the power to change the settings.
  *
  * @param manager Owned manager handle.
@@ -610,6 +597,18 @@ CNA_C_API CNA_Result cna_graphics_device_manager_subscribe_preparing_device_sett
     void* context,
     CNA_GameEventRegistrationHandle* out_registration);
 
+/**
+ * @brief Releases a manager handle.
+ *
+ * @param manager Owned manager handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ *
+ * Releasing disposes the manager, which unregisters both services, and then **keeps the object
+ * alive until the game is destroyed**. The canonical game caches a raw pointer to the graphics
+ * device service and never clears it, so freeing the manager earlier would leave a dangling
+ * pointer. A disposed manager still serves that cached pointer because disposal does not touch the
+ * game-owned device. The C handle is invalid immediately.
+ */
 CNA_C_API CNA_Result cna_graphics_device_manager_destroy(CNA_GraphicsDeviceManagerHandle manager);
 
 #ifdef __cplusplus

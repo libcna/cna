@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API game-runtime and components contract reconciliation (2026-11-01):
+  `docs/c-api/GAME_COMPONENTS.md` now describes the complete current game, component, window,
+  graphics-device-manager and borrowed-content-manager boundary instead of the earlier
+  implementation narrative. It corrects four obsolete claims: every explicit component disposal
+  remains observable, duplicate collection add/insert is rejected, nonempty colonless launch
+  arguments are retained with an empty value, and XNA's integer window token is distinct from the
+  structured native-window accessor. The page now records blocking, one-frame and host-driven run
+  shapes, foreign-thread dispatch, callback borrowing, service constraints, mutable device settings
+  and manager retention. Public Doxygen clarifies callback-borrowed game routes, repeated explicit
+  initialization and duplicate insertion, and the manager-destroy documentation is attached to its
+  declaration. All 12 selected game, component, window, manager, ABI and generated-route tests pass
+  through the private SDLGPU runner; all nine coverage, generation, limitation, export and release
+  gates pass.
 - C API gamer-services contract reconciliation (2026-11-01):
   `docs/c-api/GAMER_SERVICES.md` is now a current C-boundary contract instead of a chronological
   implementation narrative. It separates deterministic no-service strict-C evidence from the

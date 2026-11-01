@@ -278,13 +278,15 @@ CNA_C_API CNA_Result cna_game_component_compare_to(
     int32_t* out_order);
 
 /**
- * @brief Runs a component's initialization once.
+ * @brief Runs a component's initialization.
  *
  * @param component Owned component handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
  * The game initializes every component it owns, so a caller normally never calls this; it is here
- * because the canonical operation is public.
+ * because the canonical operation is public. Each explicit call invokes the C initialization
+ * handler. A drawable component's base content-loading step still runs only on its first
+ * initialization.
  */
 CNA_C_API CNA_Result cna_game_component_initialize(CNA_GameComponentHandle component);
 
@@ -460,6 +462,9 @@ CNA_C_API CNA_Result cna_game_components_add(CNA_Handle game, CNA_GameComponentH
  * @param component Owned component handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index past the count, or a
  *         documented handle/thread/native failure.
+ *
+ * As with add, inserting a component already in the collection returns
+ * `CNA_RESULT_INVALID_ARGUMENT` and preserves membership.
  */
 CNA_C_API CNA_Result cna_game_components_insert(
     CNA_Handle game,

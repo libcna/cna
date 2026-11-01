@@ -287,7 +287,7 @@ CNA_C_API CNA_Result cna_game_run(CNA_Handle game);
 /**
  * @brief Requests that the native game loop exit at its next safe point.
  *
- * @param game Owned game handle.
+ * @param game Active owned or callback-borrowed game handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_game_request_exit(CNA_Handle game);
@@ -304,7 +304,7 @@ CNA_C_API CNA_Result cna_game_clear(CNA_Handle game, CNA_Color color);
 /**
  * @brief Sets a game window's UTF-8 title.
  *
- * @param game Owned game handle.
+ * @param game Active owned or callback-borrowed game handle.
  * @param title UTF-8 title bytes without an embedded NUL scalar value.
  * @return `CNA_RESULT_SUCCESS`, an encoding/handle/thread failure, or a translated native
  * failure.
@@ -507,7 +507,7 @@ CNA_C_API CNA_Result cna_game_suppress_draw(CNA_Handle game);
 /**
  * @brief Runs one update and, unless drawing was suppressed, one draw.
  *
- * @param game Active owned or callback-borrowed game handle.
+ * @param game Owned game handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_CALLBACK`, or a documented handle/thread/native failure.
  *
  * This is the canonical frame step `cna_game_run_one_frame` wraps; it does not process host events.
