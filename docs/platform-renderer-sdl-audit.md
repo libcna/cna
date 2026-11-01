@@ -1,21 +1,22 @@
 # Renderer SDL audit (PLAT-3)
 
-**Generated** by `tools/platform/renderer_sdl_audit.py`. Regenerate with `--out`, gate with
-`--check` (PLAT-76). Do not hand-edit.
+**Generated** by `tools/platform/renderer_sdl_audit.py`. Regenerate with `--out`.
+`--check` gates coupling/allowlist metadata (PLAT-76); it does not compare this report's
+text for freshness. Do not hand-edit.
 
 10 renderer identities over 8 module families.
 
 | Verdict | Families | Meaning |
 |---|---:|---|
 | `sdl-native` | 1 | Identity **is** an SDL3 API. Permanently allowlisted. |
-| `sdl-upstream` | 1 | Own sources are effectively SDL-free; the wrapped third-party library links SDL3. Allowlisted for a dependency reason. |
+| `sdl-upstream` | 1 | The wrapped library links SDL3; small CNA integration seams remain allowlisted. This does not mean the measured source count is zero. |
 | `sdl-free` | 6 | No SDL references at all. |
 
 ## Per-family detail
 
 | Family | Identities | Verdict | SDL refs (all / in code) | Platform services needed | Presentation calls |
 |---|---|---|---:|---|---|
-| `sdl-gpu` | SDLGPU | `sdl-native` | 2425 / 2143 | `window`, `display` | — |
+| `sdl-gpu` | SDLGPU | `sdl-native` | 2450 / 2163 | `window`, `display` | — |
 | `fna3d` | FNA3D | `sdl-upstream` | 15 / 11 | `window` | — |
 | `directx9` | DIRECTX9 | `sdl-free` | 0 / 0 | — | — |
 | `easygl` | OPENGL33 OPENGLES3 WEBGL2 | `sdl-free` | 0 / 0 | — | — |

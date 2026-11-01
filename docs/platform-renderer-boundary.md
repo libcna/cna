@@ -1,9 +1,11 @@
-# Renderer-facing platform boundary (PLAT-57)
+# Renderer-facing platform boundary
 
-## Decision
+This is the implemented boundary between platform windows and graphics renderers, checked against
+IGraphicsRenderer.hpp, GraphicsDevice.cpp and Game.cpp on 2026-11-01. The original PLAT-57 design
+and completed Phase 4 migration tasks remain in Git history; the old proposed suspend/resume
+notification table was not the final interface.
 
-A renderer does not receive `IPlatform`, `IPlatformWindow`, or an SDL window. Its ordinary
-window-facing input is a small value snapshot:
+## Surface snapshot and construction
 
 ```cpp
 struct RendererSurfaceInfo
@@ -15,133 +17,98 @@ struct RendererSurfaceInfo
 };
 ```
 
-The names are prescriptive for the Phase 4 implementation. `drawableSize` is the physical pixel
-size returned by `IPlatformWindow::GetPixelSize()`, never the logical client size. `displayScale`
-is the current logical-to-physical scale and is always positive; a platform without high-DPI
-support supplies `1.0f`. `nativeHandle` is a non-owning value whose validity ends with the window.
-`windowId` is the stable identity used by events and by the renderer registry.
+The value owns nothing. drawableSize is the platform window's physical pixel size, while client
+bounds/input coordinates use logical units. displayScale comes from the window, not a division
+of rounded dimensions. Consumers such as PlatformRendererSurfaceState normalize invalid/nonpositive
+scale to one and reject replacement of the stable id/native handle.
 
-The snapshot deliberately contains no title, position, focus state, input state, clipboard,
-display enumeration or platform implementation pointer. A renderer does not need those to create
-or maintain a graphics surface. Adding one later requires evidence from a renderer and a contract
-change; reaching for `IPlatformWindow` as an escape hatch is not allowed.
+GraphicsDevice creates/adopts its platform window before the renderer and snapshots those four
+fields. GraphicsRendererCreateArgs also carries renderer construction policy (virtual resolution,
+presentation mode, recovery, multisampling, swap interval, formats/profile and device callback).
+Its window plumbing consists of the snapshot and optional narrow services:
 
-## Narrow graphics services are the only exception
+| Service | Ownership and use |
+|---|---|
+| IPlatformGlContext | Borrowed from the platform. EasyGL owns/destroys the GL context it creates through the service and uses WindowId rather than an IPlatformWindow pointer. |
+| IPlatformSurfacePresenter | Owned by GraphicsDevice; borrowed by the CPU renderer. It presents a completed RGBA frame and is destroyed after the renderer, before the window. |
+| NativeWindowHandle | Borrowed discriminated value for renderer-local native surface creation; copying it does not retain a window. |
 
-Two already-defined services may accompany the snapshot when the selected renderer needs the
-matching operation:
+Descriptor needsGlContext/needsSurfacePresenter selects the service for the renderer actually
+being constructed, including multi-renderer builds. A missing required service is refused; do not
+pass IPlatform or IPlatformWindow through the common creation contract as an escape hatch.
 
-- `IPlatformGlContext` creates/makes-current/swaps an OpenGL context by stable `WindowId` and
-  exposes both object-oriented and C-callback entry-point resolution.
-- `IPlatformSurfacePresenter` puts one finished CPU RGBA frame on screen.
+SDLGPU and FNA3D are explicit SDL3-dependent exceptions. Their family adapters may resolve the
+stable window id to SDL's window internally; common creation arguments do not expose SDL_Window.
+See [generated renderer SDL audit](platform-renderer-sdl-audit.md).
 
-These are surface plumbing, not drawing APIs; the renderer never receives an `IPlatformWindow`
-escape hatch. OpenGL/CPU drawing remains inside the renderer; the platform boundary is crossed
-only for context or surface lifecycle and at most once per presented frame.
-`GraphicsRendererCreateArgs` must carry only the applicable narrow service, not `IPlatform*`, and
-a missing required service is a deterministic construction error naming the capability.
-Native-handle renderers (`DIRECTX9`, the native WebGPU path) need no service pointer at all.
+## Platform, window and context lifetime
 
-The two deliberate SDL exceptions (`SDLGPU`, `FNA3D`) may keep their SDL-specific construction
-internally. They still do not make SDL types part of the common renderer interface.
+The platform must outlive its devices/windows/services. Game establishes that order by owning and
+installing its platform before its other members; standalone GraphicsDevice consumers must also
+respect the lifetime of their selected/ambient platform.
 
-## Lifetime and ownership
+GraphicsDevice destroys its renderer first, then its CPU presenter, then its platform-window
+wrapper, and releases the video acquisition afterwards. Renderer context leases ensure native
+resources are destroyed in the owning context. A platform service is not an independently owned
+resource merely because the renderer stores its pointer.
 
-The ownership order is fixed:
+PresentationParameters.DeviceWindowHandle is an opaque platform compatibility token.
+AdoptWindowHandle/GetWindowHandle round-trip it through the creating platform; it is distinct from
+NativeWindowHandle. An adopted wrapper can borrow the caller's native window: owning the wrapper
+does not transfer native-window ownership.
 
-1. `Game` owns the selected `IPlatform` for longer than every graphics object.
-2. `GraphicsDevice` owns the `IPlatformWindow` and creates it before the renderer.
-3. The renderer may copy `RendererSurfaceInfo`; copying does not extend the native handle's
-   lifetime.
-4. A GL context or CPU presenter is destroyed by the renderer before the renderer
-   itself finishes destruction.
-5. `GraphicsDevice` destroys the renderer before destroying its platform window.
+A native-handle replacement is not transparently supported by mutating the stored snapshot.
+The common surface-state helper throws on a changed id/handle. Any future native-window
+replacement needs an explicit renderer/window reconstruction path; no automatic swapchain
+retargeting is promised here.
 
-An application-supplied window is first validated/wrapped by the active platform. The renderer
-still sees the same `RendererSurfaceInfo`; it never interprets
-`PresentationParameters::DeviceWindowHandle` itself. A platform that cannot adopt the supplied
-kind refuses explicitly instead of casting an integer to its own native type.
+## Actual event and refresh flow
 
-The strict XNA integer window property round-trips through `IPlatformWindow::GetWindowHandle()`
-and `IPlatform::AdoptWindowHandle()`. It is an opaque, non-owning compatibility token, distinct
-from `NativeWindowHandle`: only the creating platform may interpret it. New renderer and interop
-code uses the typed native handle instead.
+Game drains IPlatform.PollEvents into a reused batch and passes each mapped event to the input
+bridge before its runtime reaction. GraphicsDevice does not own/drain a second event queue.
+The current Game reaction intentionally does not filter all window events by its own WindowId;
+that behavior is covered by the event transcript.
 
-The native handle is immutable for one renderer lifetime. If a platform must replace the native
-window, `GraphicsDevice` tears down and recreates the renderer. Mutating a stored handle underneath
-a live swapchain or context is forbidden.
+| Runtime input | Current calls/effect |
+|---|---|
+| Resized, PixelSizeChanged, DisplayScaleChanged | Update GameWindow state; refresh GraphicsDevice viewport/surface snapshot; invalidate the renderer surface using the event's window id. |
+| FocusGained, fullscreen entered/left | Surface invalidation; fullscreen events also synchronize the manager's flag. |
+| Exposed, Minimized, Maximized, Restored, DisplayChanged | Surface invalidation. These are not typed suspend/resume snapshot notifications. |
+| WillEnterBackground | Mark Game suspended/inactive; the mobile loop waits rather than continuing normal rendering. |
+| DidEnterForeground | Clear suspension, reset elapsed-time accumulation, reactivate and invalidate with id zero. |
+| LowMemory / Terminating | Log memory pressure / clear suspension and exit. |
 
-## Lifecycle notifications
+GraphicsDevice.UpdateViewportFromWindow re-queries the owned window and calls
+`OnSurfaceChanged(const RendererSurfaceInfo&)` synchronously when the queries succeed.
+There is no reason enum or suspended flag in that call. Query exceptions log and retain the
+previous snapshot; renderer exceptions from OnSurfaceChanged propagate rather than being hidden.
+Other viewport/reset paths can also refresh the snapshot, so this is not exactly one notification
+per native event.
 
-`GraphicsDevice`, not a renderer, consumes the platform event batch. It filters by `WindowId`,
-re-reads `GetPixelSize()` and `GetDisplayScale()` from the window, and synchronously notifies the
-renderer with a fresh `RendererSurfaceInfo` for only these changes:
+`OnSurfaceInvalidated(WindowId)` is a separate redraw/revalidation hook. Its default may do
+nothing; actual renderer handling determines what needs reconfiguration. Invalidation does not
+automatically imply a GraphicsDevice reset, device loss or swapchain recreation.
 
-| Notification | Platform event(s) | Renderer obligation |
-|---|---|---|
-| `DrawableSizeChanged` | `Resized`, `PixelSizeChanged`, `DisplayChanged` | Recreate/resize the swapchain or presentation target from `drawableSize`. Duplicate unchanged snapshots are harmless. |
-| `DisplayScaleChanged` | `DisplayScaleChanged` | Refresh density-dependent presentation state; also honour any simultaneous drawable-size change. |
-| `Suspended` | `Minimized`, `WillEnterBackground` | Stop acquiring/presenting a surface that the OS has made unavailable. |
-| `Resumed` | `Restored`, `DidEnterForeground` | Revalidate the surface and redraw; the accompanying snapshot is authoritative. |
+Real driver loss travels back through RendererDeviceEvent/deviceEventCallback and the resource
+recovery path. It is distinct from a window resize/expose or application suspension.
 
-The implementation exposes one synchronous `IGraphicsRenderer::OnSurfaceChanged(...)` entry
-point rather than callbacks registered against `IPlatform`. Delivery happens on the same thread
-that drains events and completes before the next update/draw. There is no subscription lifetime,
-cross-thread callback, or second event queue to reconcile.
+## Coordinates, presentation and performance
 
-Window close, focus, movement, title and input events are not renderer notifications. Destruction
-needs no notification: C++ ownership already destroys the renderer before the window. Real
-driver-detected device loss travels in the opposite direction through the existing
-`RendererDeviceEvent` callback and is not conflated with platform surface lifecycle.
+The renderer registry is keyed by stable WindowId. Input and renderer transforms distinguish
+platform logical client units, physical drawable pixels and renderer logical game coordinates,
+including presentation viewport/letterbox offsets. A missing registered transform falls back to
+1:1 mapping. Normalized touch events carry the client size used for their conversion.
 
-## Construction and event flow
+WindowDescription carries render intent and pre-window framebuffer requirements. The platform
+implementation maps those to its native toolkit; renderer drawing still goes directly to the
+graphics API. CPU renderers hand over completed frames, not a series of drawing primitives.
+Context binding, resource upload and presentation can require more than one native/service call;
+there is no blanket one-call-per-frame promise.
 
-```text
-IPlatform::CreateWindow(WindowDescription with render intent)
-  -> GraphicsDevice owns IPlatformWindow
-  -> GraphicsDevice snapshots WindowId / native handle / pixel size / scale
-  -> CreateGraphicsRenderer(RendererSurfaceInfo + one applicable narrow service)
-  -> renderer talks directly to its graphics API
+## Verification boundary
 
-IPlatform::PollEvents(batch)
-  -> Game / GraphicsDevice filter the owned WindowId
-  -> GraphicsDevice refreshes the snapshot
-  -> IGraphicsRenderer::OnSurfaceChanged(snapshot, reason)
-```
-
-`WindowDescription` also carries the small set of framebuffer requirements that genuinely must
-be selected before an OpenGL window exists (depth, stencil, double buffering and samples).
-`GraphicsDevice` describes those requirements; only the platform backend maps them to its native
-windowing API. This keeps pre-window visual selection from becoming a hidden toolkit call in the
-graphics module.
-
-This keeps the draw path `Game -> GraphicsDevice -> Renderer`. It does not become
-`Game -> GraphicsDevice -> Platform -> Renderer`, and there is no platform virtual call per
-primitive, vertex, pixel or input event.
-
-## Consequences for the remaining Phase 4 tasks
-
-- PLAT-58 replaces `GraphicsRendererCreateArgs::SDL_Window*` with `RendererSurfaceInfo` and the
-  applicable narrow service. Window creation itself moves to the platform in PLAT-62.
-- PLAT-59 removed common `GetWindowInternal()` and `GetRendererInternal()`. The complete call-site
-  audit found no runtime consumer for `SDL_Renderer*`; tests that need an SDL presenter query their
-  already-known SDL window inside the SDL-dependent renderer module instead.
-- PLAT-60 removes `SDL_Texture*` from `ITextureRenderer`; it is not part of this boundary.
-- PLAT-61 keys the registry by `WindowId`, matching both this snapshot and `PlatformEvent`.
-- PLAT-66 defines the two sides of coordinate conversion as platform logical-client units and
-  renderer logical-game units. The renderer registry keyed by `WindowId` is authoritative for
-  both directions; input never resolves a native window and falls back to a 1:1 mapping when no
-  transform is registered. Each renderer accounts for its own presentation viewport, density and
-  letterbox/crop offsets.
-- PLAT-67 supplies `IPlatformGlContext` only to the selected EasyGL family. EasyGL owns its context
-  transactionally, consumes resize and density from `RendererSurfaceInfo`, and has no native
-  window-toolkit include, symbol or link input.
-- Normalized touch coordinates cross the event boundary together with the client size that defines
-  them. Scaling to client units therefore also stays platform-neutral and requires no per-event
-  window query in the consumer.
-- GL and CPU-presentation migrations use their narrow services. Other renderer families
-  use `NativeWindowHandle` and their own API directly.
-
-Verification for the code tasks must include a non-SDL fake window with a non-1.0 scale, a resize
-notification whose logical and pixel sizes differ, lifetime-order assertions, and compilation of
-the STUB/HEADLESS/SOFTWARE families without SDL declarations in the common interface.
+Current source/interface checks establish the flow above. PlatformRendererSurfaceState tests
+exercise non-unit density, resize and stable-handle validation. GraphicsDevicePlatformWindowTests
+exercise ownership/adoption/query failure only in configurations where their guards allow it;
+a skip is not proof of teardown on that renderer/platform pair. Native window-system conformance
+and cross-implementation event tests provide complementary evidence.

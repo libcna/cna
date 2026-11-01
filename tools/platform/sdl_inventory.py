@@ -289,18 +289,21 @@ def render_markdown(inv: Inventory) -> str:
     )
 
     out.write(
-        "\nThe native-window properties actually consumed today — these define the minimum\n"
-        "`NativeWindowHandle` surface, so the struct is derived from measured need, not guessed:\n\n"
+        "\nWindow properties consumed by platform/renderer interop are listed below. Some populate\n"
+        "`NativeWindowHandle`; the browser canvas identifier instead serves its platform route.\n"
+        "The list is not a one-to-one field layout of that native-handle value:\n\n"
     )
     out.write("```text\n")
     for prop in sorted(inv.window_properties):
         out.write(f"{prop}\n")
     out.write("```\n")
 
-    out.write("\nRenderer families calling `SDL_GL_*` directly, freed as a group by one `IPlatformGlContext`:\n\n")
-    out.write("```text\n")
-    out.write(" ".join(sorted(inv.gl_renderer_families)) + "\n")
-    out.write("```\n")
+    if inv.gl_renderer_families:
+        out.write("\nRenderer families calling `SDL_GL_*` directly:\n\n```text\n")
+        out.write(" ".join(sorted(inv.gl_renderer_families)) + "\n```\n")
+    else:
+        out.write("\nNo renderer family calls `SDL_GL_*` directly; GL window/context operations use\n"
+                  "`IPlatformGlContext` at the platform edge.\n")
 
     return out.getvalue()
 

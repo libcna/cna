@@ -1,389 +1,225 @@
 # CNA platform abstraction
 
-This is the implementer's guide to `CNA::Platform`. It describes the contract a platform backend
-must satisfy and the checks that keep the rest of CNA independent from its native host library.
-The migration that built it is tasks `PLAT-1`..`PLAT-141` (2026-08) in Git history; for the SDL
-lifecycle derivation, see `docs/platform-sdl-lifecycle-audit.md`.
+This is the current implementer's guide to CNA::Platform. The completed PLAT migration remains
+in Git history; source, contracts and focused tests define the implemented boundary. See
+[renderer boundary](platform-renderer-boundary.md), [physical modules](physical-modules.md) and
+[SDL lifecycle audit](platform-sdl-lifecycle-audit.md) for the related ownership/translation rules.
 
-## What the boundary owns
+## Responsibilities and selection
 
-`IPlatform` owns host integration, not application logic and not rendering:
+IPlatform owns host integration: subsystem acquisition, windows/events/timing, input snapshots/
+sessions, display/system/filesystem services, optional clipboard/dialog/tray/camera services,
+and narrow GL-context/finished-CPU-frame presentation seams. Application logic stays in Game and
+drawing stays in the renderer. Audio uses its separate CNA_AUDIO_PLATFORM contract.
 
-- subsystem acquisition and release;
-- windows, events and monotonic timing;
-- input snapshots and device sessions;
-- displays, clipboard, dialogs, tray, cameras, filesystem and host information;
-- creation seams for OpenGL contexts and finished CPU-frame presentation.
+CNA_PLATFORM selects the default PlatformFactory.Create implementation:
 
-A graphics renderer receives `RendererSurfaceInfo` and the one narrow service it needs. It then
-talks directly to its graphics API. `IPlatformSurfacePresenter` is deliberately a one-finished-
-frame API, not a drawing API. Audio selection is orthogonal and uses `CNA_AUDIO_PLATFORM`.
+| Selection | Implemented boundary |
+|---|---|
+| SDL3 | The graphical platform implementation, using SDL's compiled/available native video driver. Source presence does not qualify every SDL target/driver. |
+| HEADLESS | Virtual window/state for tests/windowless use; no native graphical display, presentation or input service. Always compiled into the platform library. |
+| TERMINAL | Non-Windows/termios implementation with a terminal surface and input quality limits. Availability depends on its terminal probe; see [terminal analysis](platform-terminal-analysis.md). |
 
-`CNA_PLATFORM` selects the default implementation created by `PlatformFactory::Create()`:
+Factory names are case-sensitive: SDL3, Headless, Terminal. Default construction and named
+construction have separate translation units: a consumer using the default factory need not link
+every named implementation. GetAvailable reports implementations compiled into the library, not
+a guarantee every one is retained in a final static executable.
+
+Example selections (reuse the matching existing build tree):
 
 ```sh
-cmake -S . -B build -DCNA_PLATFORM=SDL3          # the default: every windowed target
-cmake -S . -B build-headless \
-  -DCNA_PLATFORM=HEADLESS -DCNA_GRAPHICS_RENDERER=HEADLESS
-cmake -S . -B build-terminal \
-  -DCNA_PLATFORM=TERMINAL -DCNA_GRAPHICS_RENDERER=SOFTWARE
+cmake -S . -B cmake-build-debug -DCNA_PLATFORM=SDL3
+cmake -S . -B cmake-build-headless -DCNA_PLATFORM=HEADLESS -DCNA_GRAPHICS_RENDERER=HEADLESS
+cmake -S . -B cmake-build-terminal -DCNA_PLATFORM=TERMINAL -DCNA_GRAPHICS_RENDERER=SOFTWARE
 ```
 
-**SDL3 is CNA's graphical platform layer.** It is the one implementation that opens a window, and
-it does so on every desktop and mobile target: Windows, X11, Wayland, macOS, iOS, Android and the
-browser are each reached through SDL's own video driver, not through code of CNA's. SDL chooses the
-driver at run time from what it was built with and what the session offers;
-`SDL_VIDEODRIVER=windows|x11|wayland` selects one explicitly. Window-system specifics -- the X
-selections, Wayland's scale, Windows' per-monitor DPI -- are SDL's to implement, and CNA consumes
-them through the same `IPlatform` services everywhere.
+Those recipes select a windowing platform; HEADLESS/TERMINAL alone do not remove the selected
+audio/renderer dependencies. An explicitly SDL-free composition additionally uses CNA_ENABLE_SDL=OFF,
+compatible HEADLESS/SOFTWARE/STUB rendering and NULL or Linux ALSA audio. Clear an incompatible
+CNA_GRAPHICS_RENDERERS list when reusing a multi tree. SdlAvailability.cmake refuses combinations
+requiring SDL rather than silently substituting a renderer/platform/audio implementation.
 
-What a renderer needs from the window system still reaches it unchanged.
-`IPlatformWindow::GetNativeHandle()` reports which system SDL's driver is and the handles it owns
-(see [Native window handles](#native-window-handles)):
+Windowed targets use SDL3; CNA's direct WIN32/X11/WAYLAND platforms and SDL2 platform/audio choices
+are retired and refused. SDL12 and a direct EMSCRIPTEN platform remain reserved/unimplemented;
+the browser currently uses SDL3's Emscripten driver.
 
-| Host | SDL video driver | `NativeWindowSystem` and handles | Consumed directly by |
-|---|---|---|---|
-| Windows | `windows` | `Win32`: `HWND` | Direct3D 9, WebGPU |
-| Linux, X11 | `x11` | `X11`: `Display*` + `Window` XID | WebGPU |
-| Linux, Wayland | `wayland` | `Wayland`: `wl_display*` + `wl_surface*` | WebGPU |
-| macOS | `cocoa` | `Cocoa`: `NSWindow*` | WebGPU |
-| Android | `android` | `Android`: `ANativeWindow*` | WebGPU |
+## Host services and capability meaning
 
-The other renderers do not read the handle themselves: the OpenGL/OpenGL ES (EasyGL) family asks
-`IPlatformGlContext`, implemented over SDL by the SDL3 platform for the same window, and `SDLGPU`
-and `FNA3D` are handed the SDL window itself.
+PlatformCapabilities fields default false. Implementations opt into implemented operations;
+callers cache the stable service/capability information outside inner loops. Repeated-query
+stability is covered by conformance, but a capability is not proof of hardware presence,
+permission, a running desktop host or successful future allocation.
 
-CNA's own direct `WIN32`, `X11` and `WAYLAND` platform implementations were retired on 2026-10-06,
-and SDL2 platform and audio support on 2026-10-04. None of them is a selectable value any more, and
-CNA provides no compatibility alias or forwarding backend for them: configuring with one fails,
-naming `SDL3` as the replacement. Their designs and measurements stay in the history -- the plans
-`plans/plan_x11.md`, `plans/plan_wayland.md`, `plans/plan_win32.md` and
-`plans/plan_win32_native_validation.md` (all deleted since; Git history), and the commits that
-removed them.
+- Presence accessors agree with the corresponding capability; quality flags such as
+  exactKeyboardState/pixelAccurateMouse do not imply that the keyboard/mouse service is absent.
+  Terminal deliberately supplies lower-quality services.
+- Filesystem/system-information services are always present; individual values can be unknown.
+  GetDialogs serves either of message-box/native-file-dialog capabilities.
+- GetCamera/GetTray are non-virtual link anchors forwarding to protected implementation hooks.
+  In the SDL3 implementation they install/resolve lazy service factories; a program that only
+  queries support need not pull the capture/tray implementation.
+- SDL3's whole capability query or Supports(Camera) can initialize the camera subsystem. Other
+  Supports queries avoid that side effect. A driver/init probe is not a physical capture or
+  permission guarantee; failures can prevent a camera service from being available.
+- Game caches its exposed capability set on the first GetPlatformCapabilitiesEXT call, rather
+  than constructing optional camera services during Game construction.
 
-Headless is compiled in every build. Terminal is also compiled on POSIX. This lets the conformance
-suite exercise multiple implementations in one process; the selected value determines the
-default, not necessarily the only factory name present in the binary.
+Unsupported operations use PlatformNotSupportedException naming the capability.
+Ordinary absence returns the documented empty/status/null result; operational failure uses
+PlatformException with operation/detail. Higher-level CNA wrappers can intentionally map those
+exceptions to their own false/empty outcomes; see [device extensions](devices-ext.md).
 
-**`CNA_ENABLE_SDL=OFF` is a windowless configuration.** It skips the vendored SDL sub-build entirely
-and refuses any selection that genuinely needs SDL, naming which. What remains is the HEADLESS
-and TERMINAL platforms, the HEADLESS/SOFTWARE/STUB renderers and `NULL` or Linux `ALSA` audio --
-a server, a test runner, a terminal game. A build that opens a window needs SDL3.
+A platform with multipleWindows=false refuses a second live virtual/native window and releases
+that capacity on destruction. Borderless/exclusive fullscreen are distinct requests; unsupported
+behavior must not be reported as successful substitution.
 
-**Platform independence, the audio backend and content WAV decoding are three separate axes, and
-"SDL-free" only means something once all three agree.** `CNA_PLATFORM=HEADLESS`/`TERMINAL`
-removes SDL from windowing/events/input; `CNA_AUDIO_PLATFORM=NULL` or `ALSA` removes it from
-playback/capture; but until NPI-0007..0011,
-`cna_content` still could not finish linking in that combination, because `DecodeWavToPcm16` --
-used to decode a WAV-wrapped `SoundEffect`/XACT `WaveBank` entry to PCM16, independent of whether
-anything is ever played back -- was implemented only via `SDL_LoadWAV_IO`/`SDL_ConvertAudioSamples`
-and excluded from the build whenever `CNA_AUDIO_PLATFORM` was not `SDL3`. It is now a CNA-owned
-implementation (`modules/audio/src/Internal/WavDecoder.cpp`, on top of the pre-existing SDL-free
-RIFF/WAVE chunk reader) covering PCM 8/16/24/32-bit, IEEE float 32/64-bit (including via
-`WAVE_FORMAT_EXTENSIBLE`), MS-ADPCM and IMA-ADPCM, compiled unconditionally regardless of
-`CNA_AUDIO_PLATFORM`. A renderer choice is the third axis again: it decides how pixels are
-produced and is unaffected by either of the above.
+## Subsystems, ownership and teardown
 
-An SDL-free build does not have to be a silent one: `CNA_AUDIO_PLATFORM=ALSA` plays through ALSA
-(and so through PipeWire or PulseAudio on a desktop) with CNA's own mixer behind the same
-`MixerEngine.hpp` facade SDL3_mixer implements -- see [`docs/audio-alsa.md`](audio-alsa.md).
+There is no platform-wide Initialize/Shutdown. CNA acquires Video/Audio/Gamepad/Haptic/Sensor
+lazily, balances successful acquisitions, tolerates an unpaired release as a no-op and releases
+its own references on platform destruction. An embedding application's native-library references
+remain its responsibility.
 
-## Contract rules
+Process-global native state must be serialized across platform instances. SDL3 uses
+SdlGlobalStateMutex with per-instance ownedRefCounts; GL attribute transactions share that
+serialization. Acquiring a subsystem must not wait for a main-thread callback that needs the
+blocked thread's event pump. Windowless paths must avoid video initialization.
 
-### The contract describes what CNA needs
+Service pointers are borrowed from the owning platform. Windows/sessions/context handles/
+presenters need explicit lifetime owners and callback barriers as appropriate. Game owns and
+installs its platform before later members, restores the ambient installation on construction
+failure and destroys the platform last. Standalone consumers must respect their ambient platform's
+lifetime; they cannot retain a borrowed service after its owner is gone.
 
-Shape the contract after what CNA needs from a host, never after one library's API or after what
-several libraries happen to have in common. Each implementation then provides that contract as well
-as its host allows and declares the rest unsupported through its capabilities. A contract shaped
-after SDL3 would have fitted only SDL3; the Headless and Terminal implementations, and the Win32
-one before its retirement, joined without a change to any contract header.
+Destroy inward resources before their host: renderer/context resources, CPU presenter, window,
+then the video acquisition. CPU presenter ownership is GraphicsDevice's; GL renderers own their
+created context while borrowing the platform GL service.
 
-### Capabilities are promises
+## Events, snapshots and runtime reaction
 
-Read `PlatformCapabilities` once and cache it outside hot paths. Every field defaults to false.
-An implementation opts into only behavior it actually provides.
+PollEvents clears/fills a caller-owned vector so capacity can be reused. Native mapping produces
+owning PlatformEvent values inside the implementation. Update event taxonomy, mappers, input bridge
+and the golden transcript together when adding a variant.
 
-- A service accessor is non-null exactly when its presence capability is true.
-- Keyboard and mouse quality flags are exceptions to that equality: a Terminal keyboard exists
-  while `exactKeyboardState` is false, and its mouse may exist while coordinates are not pixel
-  accurate.
-- Filesystem and system-information services are always non-null. Their individual queries may
-  return an unavailable/unknown result.
-- `GetDialogs()` is non-null when either message boxes or native file dialogs are supported.
-- Capabilities do not change during an instance's lifetime.
-- `GetCamera()` and `GetTray()` are not virtual: the first call creates the service, and the call
-  is what links its implementation, so a program that never makes it contains neither
-  (docs/link-size-architecture.md). A platform implements `GetCameraService()` and
-  `GetTrayService()` (protected) instead.
-- `Supports(capability)` answers one capability. On SDL3, reading the whole set or asking about the
-  camera starts SDL's camera subsystem, because only a running subsystem knows whether cameras
-  work; no other question does. The runtime therefore asks `Supports()`, and
-  `Game::GetPlatformCapabilitiesEXT()` reads the set on its first call, not during construction.
+Game owns the event drain, sends each event through the input bridge first and then performs
+runtime reactions. It intentionally does not filter every window event by its own id.
+WindowId is a stable nonzero platform identity, separate from native handle fields and opaque
+XNA window tokens. There is no second renderer event queue.
 
-Unsupported behavior refuses deterministically with `PlatformNotSupportedException`, naming the
-missing capability. It must not silently succeed. Ordinary absence uses a status, empty value or
-null service as documented; operational failure throws `PlatformException` with the CNA operation
-name and backend detail text.
+Input services normally advance once per Game pump and expose snapshots afterwards; individual
+contracts still define consume-on-read data such as relative mouse deltas. Platform-owned sensor
+callbacks and asynchronous dialog/device completion do not become game-thread events merely
+because the window/input pump uses batches.
 
-This applies to behavior carried by an otherwise available object too. In particular, a platform
-with `multipleWindows == false` must refuse a second *live* window and release that capacity when
-the first is destroyed; a window with no `borderlessFullscreen` capability must refuse that mode.
+Size/density refresh and surface invalidation are separate renderer calls. Mobile Game suspension
+is a runtime-loop policy, not an OnSurfaceChanged reason enum.
+See [platform-renderer-boundary.md](platform-renderer-boundary.md) for the actual call table.
 
-### Subsystems are acquired, not globally initialized
+## Native window handles and units
 
-There is intentionally no platform-wide `Initialize()` or `Shutdown()` method. CNA production
-code acquires `Video`, `Audio`, `Gamepad`, `Haptic` and `Sensor` lazily and balances every
-successful acquisition. Global native-library lifetime belongs to the embedding application.
+NativeWindowHandle is a trivially-copyable borrowed discriminated value. Inspect system and use
+the matching TryGet accessor. An X11 XID is an integer, not a pointer.
 
-Implementations must:
-
-- refcount nested acquisitions;
-- tolerate an unpaired release as a no-op;
-- release exactly the references owned by that platform instance in its destructor;
-- never route acquisition through a main-thread callback that requires an event pump;
-- preserve a display-free branch by doing no video initialization for a headless device;
-- serialize process-global native subsystem state across platform instances when the backend
-  library itself exposes process-global lifetime.
-
-For SDL3, `SdlGlobalStateMutex()` is process-wide, while `ownedRefCounts_` is per instance. The
-same lock covers the process-global OpenGL attribute set. The application
-remains responsible for its own `SDL_Init()`/`SDL_Quit()` calls.
-
-### Events are batches
-
-`PollEvents(std::vector<PlatformEvent>&)` clears and fills a caller-owned vector. The caller reuses
-its capacity each frame. Do not replace this with per-event virtual callbacks or return a freshly
-allocated container.
-
-Native event mapping belongs inside the implementation. Runtime behavior consumes only
-`PlatformEvent`. New event variants must update the event taxonomy helpers, every mapper, the
-input bridge where applicable, and the cross-implementation golden transcript.
-
-Window IDs are stable, non-zero identifiers within a platform instance. The current runtime does
-not filter all events by its own window ID; that observable behavior is pinned by the golden test.
-
-### Ownership and teardown
-
-The object returned by `PlatformFactory` owns its services. Service pointers are borrowed and
-remain valid only while their platform exists. Windows, contexts, surfaces, device sessions and
-presenters use owning handles (`std::unique_ptr` or the service-specific RAII type).
-
-`Game` declares its owned platform before every other member, installs it as the ambient platform
-from that first member initializer, and destroys it last. Code must not cache the ambient pointer
-beyond the lifetime of the owner that supplied it.
-
-Destroy resources from the consumer inward: renderer resources, graphics context/surface, window,
-then the acquired subsystem. Callback-producing devices must establish a callback barrier before
-closing their native handle.
-
-## Native window handles
-
-`NativeWindowHandle` is a trivially-copyable, non-owning snapshot. Always inspect `system` and use
-the matching `TryGet*` accessor. Never reinterpret a field based on the build host.
-
-| `NativeWindowSystem` | `display` | `window` | `surface` | `windowId` |
-|---|---|---|---|---|
-| `Win32` | — | `HWND` | — | — |
-| `X11` | `Display*` | — | — | X11 `Window` XID |
-| `Wayland` | `wl_display*` | — | `wl_surface*` | — |
-| `Cocoa` | — | `NSWindow*` | — | — |
-| `Android` | — | `ANativeWindow*` | — | — |
-| `Web` | — | — | — | — |
-| `Headless` | — | — | — | — |
-| `Terminal` | — | — | — | — |
-
-An X11 `Window` is an integer XID, not a pointer. It must stay in `windowId`. Empty Web, Headless
-and Terminal handles are valid descriptions of implementations with no native graphical window;
-a renderer that requires one must refuse clearly. `Describe()` deliberately reports populated
-fields without logging pointer values.
-
-The stable CNA `WindowId` used by events and renderer registries is separate from this native
-snapshot and from the legacy integer window-handle token.
-
-## Window units and surface updates
-
-Window client bounds use logical units. Drawable/pixel size uses physical pixels. Display scale
-connects the two but must never be inferred by dividing dimensions when the platform can report it
-directly. A zero or invalid native scale is normalized to 1.0.
-
-`SetSize()` may be asynchronous; `Sync()` makes requested state observable. The Headless backend
-models this deliberately so code cannot accidentally depend on immediate application.
-
-Borderless and exclusive fullscreen are distinct. SDL3 assigns a null display mode only for
-borderless desktop fullscreen; exclusive mode selects a concrete closest display mode. A backend
-that cannot provide the requested distinction fails the operation instead of reporting the other
-mode as success.
-
-Renderers receive surface changes through their platform-neutral state and keep these concerns
-separate:
-
-- logical client coordinates for input;
-- physical drawable dimensions for backbuffers and swapchains;
-- renderer-owned viewport/letterbox/overscan transforms;
-- stable window identity for the renderer registry.
-
-A `SurfaceFrame` always describes forward, row-major RGBA8 storage. `strideBytes == 0` means
-`width * 4`; a non-zero stride must be positive and at least that large. Implementations validate
-row-size and address-span overflow before reading the buffer. The contract cannot discover the
-allocation size behind a raw pointer, so ownership still requires the caller to keep the complete
-described storage alive through `Present()`.
-
-## Performance contract
-
-The platform boundary is outside inner draw, audio-callback and input-element loops.
-
-- Poll native events once per frame into one reused batch.
-- Update each input service once per frame, then read snapshots without native polling.
-- Cache capabilities and stable services; do not query them per element or per draw.
-- Present a completed CPU frame once, never dispatch drawing primitives through `IPlatform`.
-- Do not allocate after an event batch or device snapshot reaches steady-state capacity.
-- Keep timing calls monotonic and `GetPerformanceFrequency()` non-zero.
-
-`tools/platform/hot_path_lint.py` rejects platform calls inside recognized production hot loops.
-The checked-in performance baseline and PLAT-120 comparison define the measured noise floor; a
-regression beyond it is investigated rather than waived.
-
-## Design decisions
-
-- **`CNA::Platform` is not XNA API.** It never appears in a `Microsoft::Xna::Framework` header and
-  therefore never needs `CNAEXT`; where an XNA type must reach a platform object (`GameWindow`, for
-  one), that XNA-side accessor is the `CNAEXT`-tagged part.
-- **No host-library type in a contract header**, not even a forward declaration such as
-  `struct SDL_Window;`. Native handles cross the boundary as the untyped fields of
-  `NativeWindowHandle`, read according to its `system`.
-- **Compile-time selection, runtime polymorphism.** `CNA_PLATFORM` picks the default
-  implementation, yet `IPlatform` stays virtual: the conformance suite needs several
-  implementations live in one process, which a devirtualized `using ActivePlatform = …` would rule
-  out for a gain the performance contract below already calls irrelevant.
-- **Two renderers depend on SDL3, for two different reasons.** `SDLGPU` is an SDL3 API by
-  identity. `FNA3D` depends on SDL3 through the third-party library it wraps, while CNA's own
-  sources for it stay platform-neutral. Both declare `REQUIRES_PLATFORM SDL3` and are the explicit
-  allowlist of `tools/platform/renderer_sdl_audit.py`; every other renderer is SDL-free.
-- **Audio is its own contract.** `CNA::Audio::Platform::IAudioDevice` lives in `modules/audio`, is
-  chosen by `CNA_AUDIO_PLATFORM` and does not derive from `IPlatform`, so an audio backend needs no
-  matching window implementation -- ALSA is one.
-- **Gamepads belong to the input contract.** The differences between the SDL1 joystick, SDL2
-  GameController and SDL3 Gamepad APIs are capability differences, which the capability model
-  already expresses. A separate gamepad module is warranted only once a second implementation
-  shows that seam is wrong.
-
-## Implementations
-
-
-| `CNA_PLATFORM` | Implementation | Availability | Capability boundary |
-|---|---|---|---|
-| `SDL3` (default) | `CNA::Platform::Sdl3` | everywhere | every window system SDL3 drives; the reference the conformance suite compares others against |
-| `HEADLESS` | `CNA::Platform::Headless` | everywhere, and always compiled | no window, no display, no input; every refusal path |
-| `TERMINAL` | `CNA::Platform::Terminal` | POSIX targets only | [`docs/platform-terminal-analysis.md`](platform-terminal-analysis.md) |
-
-`HEADLESS` is compiled into every binary whatever the selection says, and `TERMINAL` into every
-POSIX one, because the conformance suite needs more than one implementation live in one process to
-be worth anything.
-
-SDL3 on a real window system is tested on servers private to the run, never on the desktop:
-`CnaPlatformSdl3X11Tests` (a private Xvfb, `tools/platform/x11_test_server.sh`) and
-`CnaPlatformSdl3WaylandTests` (a private headless Weston, `tools/platform/wayland_test_server.sh`)
-run the SDL3 window suite and the window conformance suite with `SDL_VIDEODRIVER` forced, and
-`Sdl3WindowTest.NativeHandleMatchesTheVideoDriver` asserts the native handle each driver hands a
-renderer. Each skips (77) where its server is not installed.
-
-## Implementations CNA does not have, and why
-
-None of these exists. They are recorded because the contract was shaped to admit them, and the
-reserved `CNA_PLATFORM`/`CNA_AUDIO_PLATFORM` values refuse at configure time by pointing here.
-
-| Candidate | Why it does not exist |
+| System | Populated native fields |
 |---|---|
-| `Sdl12Platform` (`CNA_PLATFORM=SDL12`, reserved) | SDL 1.2 is deprecated upstream (last release 1.2.15), so CNA would own it indefinitely. Its profile would be a basic window, keyboard and mouse, the old joystick API, timing, basic audio, a GL or software surface and basic fullscreen, with clipboard, text input, gamepads and HiDPI declared unsupported, never emulated. |
-| `EmscriptenPlatform` (`CNA_PLATFORM=EMSCRIPTEN`, reserved) | A direct browser platform for the web renderers: one window, no native dialogs. SDL3's Emscripten driver serves the browser today. |
-| Direct `Win32`, `X11` and `Wayland` platforms | Implemented, then retired on 2026-10-06: a second copy of what SDL3 already drives was not worth its upkeep. The Win32 one needed no change to any contract header, which is the best evidence the contract is not SDL-shaped. |
-| `TERMINAL` on Windows | `TerminalPlatform` is built on termios and pseudo-terminals; there is no Windows console path. |
-| A separate gamepad module | See *Design decisions*: on evidence, not in advance. |
-| OpenAL and WASAPI audio (`CNA_AUDIO_PLATFORM`, reserved) | The audio contract is separate so that they would need no platform implementation; ALSA exists ([`audio-alsa.md`](audio-alsa.md)), these do not. |
-| `sdl2-compat`/`sdl12-compat` test configurations | They run on SDL3 underneath and reach no new operating system: a test configuration, never a substitute for an implementation. |
-| A legacy C++ or toolchain profile | Separating SDL3 is necessary but not sufficient for genuinely old targets: an older compiler, a language level below C++23, standard-library restrictions and possibly a C ABI between a modern core and a legacy host are separate problems. |
+| Win32 | window = HWND |
+| X11 | display = Display*, windowId = Window XID |
+| Wayland | display = wl_display*, surface = wl_surface* |
+| Cocoa | window = NSWindow* |
+| UIKit | window = UIWindow* |
+| Android | window = ANativeWindow* |
+| Web, Headless, Terminal | No native pointer payload; platform/browser presentation has its own route |
+
+Native DirectX9/WebGPU use applicable typed native handles; EasyGL uses IPlatformGlContext.
+SDLGPU/FNA3D have explicit internal SDL interop. Handle availability is not renderer qualification
+on that OS (for example, a UIKit handle alone does not qualify native WebGPU).
+Native handle lifetime ends with the native window; Describe omits pointer values.
+
+Client bounds/input use logical units, drawable dimensions use physical pixels and scale comes
+from the platform. Invalid density is normalized by consumers as documented. SetSize can be
+asynchronous; Sync makes requests observable. Headless intentionally models pending size changes.
+
+SurfaceFrame is forward row-major RGBA8. Stride zero means width*4; a nonzero stride must fit a row.
+Presenters validate dimensions/stride/address-span arithmetic, but cannot infer the allocation
+length behind a raw pointer. The caller retains complete storage through Present.
+
+## Layering and performance policy
+
+The platform describes CNA's needs rather than copying one host API. Contract headers expose no
+SDL/native-toolkit declarations; native handles carry discriminated opaque fields instead.
+CNA::Platform itself is not XNA API, while CNAEXT accessors/constructors can intentionally expose
+its types from XNA headers. Private forward declarations/members also appear there; the old claim
+that the namespace never appears in an XNA header was incorrect.
+
+The SDL renderer allowlist is SDLGPU (SDL GPU by identity) and FNA3D (SDL-dependent wrapped library
+plus small integration seams). Other families are SDL-free under the source audit.
+CNA_ENABLE_SDL=OFF also removes the native audio edge only with an SDL-free audio selection.
+WAV-to-PCM decoding is CNA-owned and independent of window/audio selection; it does not require
+SDL merely to decode content. ALSA is a separate mixer/device integration, whose host PCM routing
+is documented in [audio-alsa.md](audio-alsa.md).
+
+Keep platform dispatch outside primitive/vertex/pixel loops, reuse event/snapshot capacity and
+present completed CPU frames. This is a design policy, not a universal allocation-free guarantee
+for every provider or enabled extension. hot_path_lint recognizes platform calls in selected loop
+shapes; it is not an allocator profiler or proof of every runtime call path.
+[platform-performance.md](platform-performance.md) records historical bounded measurements, not
+a performance baseline for today's entire tree.
 
 ## Adding an implementation
 
-A new implementation is for a host SDL3 cannot reach -- the way Headless and Terminal serve hosts
-with no window system at all -- not a second route to a window system SDL3 already drives. CNA
-carried direct Win32, X11 and Wayland implementations alongside SDL3 until 2026-10-06 and retired
-them: three copies of window management, input translation, clipboard, IME and DPI handling cost
-more to keep correct than the independence from SDL they bought.
+New platform work needs a concrete host/capability benefit. The retired duplicate direct desktop
+implementations do not authorize recreating them incidentally.
 
-1. Add `modules/platform/src/<Name>/` and implement the entire `IPlatform` surface. Share only
-   genuinely portable pieces through `src/Common/`; do not subclass the SDL3 implementation.
-2. Add the uppercase selection to `cmake/PlatformSelection.cmake`. Fail loudly for unsupported
-   host combinations rather than falling back to another backend.
-3. Add conditional sources and private native-library links in `modules/platform/CMakeLists.txt`.
-   Native dependencies must not enter the public include interface.
-4. Register the stable display name in all three `PlatformFactory` operations: default selection,
-   named construction and `GetAvailable()`.
-5. Start with every capability false. Flip each field only when the corresponding accessor and
-   refusal behavior are complete.
-6. Map native input/events into CNA enums and owning event values at the platform edge. Native
-   pointers or event-lifetime strings must not cross it.
-7. Give every acquired native resource an explicit owner and test constructor-failure as well as
-   ordinary teardown order.
-8. Run the implementation-neutral suites. They are parameterized over
-   `PlatformFactory::GetAvailable()`, so a correctly registered implementation joins
-   automatically:
+1. Implement the IPlatform surface under modules/platform/src/<Name>, sharing genuinely portable
+   helpers through Common and keeping native includes/libraries at the implementation edge.
+2. Add explicit host/selection rules in PlatformSelection, source/link rules in the module manifest
+   and default/named/available factory behavior. Unsupported hosts must fail clearly.
+3. Start capabilities false, implementing each accessor/refusal/quality contract before enabling it.
+   Give native resources explicit owners and constructor-failure/teardown coverage.
+4. Map owning events/CNA input enums at the edge; add implementation-specific translation tests and
+   parameterized platform/window conformance. Add a selected-default build and compatible renderer.
+5. Run implementation-neutral, native integration and mechanical gates. Use the private runner
+   for window/GPU tests, for example:
 
-   ```sh
-   CnaTests --gtest_filter='EveryImplementation/PlatformConformance.*:EveryImplementation/PlatformWindowConformance.*:EveryImplementation/GameEventSemanticsGoldenTest.*'
-   ```
+```sh
+tools/platform/run_gpu_tests_private.sh --exec cmake-build-multi/CnaTests \
+  '--gtest_filter=EveryImplementation/PlatformConformance.*:EveryImplementation/PlatformWindowConformance.*:EveryImplementation/GameEventSemanticsGoldenTest.*'
+python3 tools/platform/sdl_inventory.py --check
+python3 tools/platform/sdl_classify.py --check
+python3 tools/platform/renderer_sdl_audit.py --check
+python3 tools/platform/sdl_ratchet.py --check --strict
+python3 tools/platform/hot_path_lint.py
+python3 tools/platform/nonproduction_sdl_audit.py --check
+python3 tools/platform/check_contract.py
+```
 
-9. Add implementation-specific mapper and native integration tests. These complement rather than
-   replace conformance: conformance tests the CNA contract; native tests prove the translation.
-10. Configure a build where the new implementation is the selected default, with no environment
-    that only the old implementation needs. Build and run the full non-environmental suite.
-11. Run all mechanical gates:
+Platform contract/native tests live under modules/platform/tests, runtime reactions under
+modules/runtime/tests, and consumers use canned platform services in their own modules.
+The renderer audit's --check enforces coupling metadata; compare regenerated report output
+separately for textual freshness. SDL inventory --check does compare the generated block below.
 
-    ```sh
-    python3 tools/platform/sdl_inventory.py --check
-    python3 tools/platform/sdl_classify.py --check
-    python3 tools/platform/renderer_sdl_audit.py --check
-    python3 tools/platform/sdl_ratchet.py --check --strict
-    python3 tools/platform/hot_path_lint.py
-    python3 tools/platform/nonproduction_sdl_audit.py --check
-    python3 tools/platform/check_contract.py
-    ```
+## Current audit boundary
 
-12. Add the selection to the CI matrix with one compatible renderer. Do not multiply every
-    platform by every renderer: cover materially different seams and keep the matrix deliberate.
-
-## Where tests belong
-
-- Contract and cross-implementation behavior: `modules/platform/tests/CNA/Platform/` with a
-  parameterized suite over `PlatformFactory::GetAvailable()`.
-- Native translation and backend integration: the same platform test area, clearly named for the
-  implementation and compiled only when it is present.
-- Runtime reaction to events: `modules/runtime/tests/.../GameEventSemanticsGoldenTests.cpp`.
-- Consumer behavior: the consuming module, using canned platform services rather than native
-  event injection.
-
-The generated SDL inventory and ratchet treat any new native reference outside the platform/audio
-and two renderer exceptions as a boundary regression. A test that genuinely verifies SDL3 may
-remain native-specific, but production consumers do not gain that exception.
+The 2026-11-01 reconciliation checks current headers/selection/ownership/event paths and
+regenerates the inventory. Passing mechanical gates do not qualify every native OS, permission
+flow or device lifecycle. Fresh focused build/test evidence is recorded below.
 
 ## SDL inventory (generated)
 
 Regenerate with `python3 tools/platform/sdl_inventory.py --update`; `--check` (one of the gates
 above) fails when it is stale. Do not hand-edit the block. A reference counts when it is a textual
-SDL identifier or an `SDL3/`-rooted include, forward declarations and doc comments in SDL's
-vocabulary included. Two CNA spellings that only look like SDL are excluded: the
-`CNA_RENDERER_SDL_RENDERER`/`CNA_RENDERER_SDLGPU` build macros and the bare identity names
-`SDLGPU`/`SDL_RENDERER`.
+SDL identifier or an `SDL3/`-rooted include, including forward declarations and comments.
+The tool excludes CNA renderer identity/build-macro spellings rather than counting them as SDL APIs.
 
 <!-- BEGIN GENERATED: tools/platform/sdl_inventory.py -->
 
 | Metric | Value |
 |---|---|
 | Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **960** |
-| Files referencing SDL (all) | **134** |
+| Files referencing SDL (all) | **135** |
 | Production files (`src/` + `include/`) referencing SDL | **50** |
 | …of which are renderer production files | **13** |
-| Test/example files referencing SDL | **84** |
+| Test/example files referencing SDL | **85** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **9** |
 | Renderer families reaching for `SDL_GL_*` directly | **0** |
 
@@ -395,8 +231,9 @@ Production SDL surface per module (`src/` + `include/` only):
 | `modules/audio` | 6 | audio device/stream, mixer, microphone |
 | `modules/renderers/*` | 13 | native window handle, GL context, SDL GPU device (2 families) |
 
-The native-window properties actually consumed today — these define the minimum
-`NativeWindowHandle` surface, so the struct is derived from measured need, not guessed:
+Window properties consumed by platform/renderer interop are listed below. Some populate
+`NativeWindowHandle`; the browser canvas identifier instead serves its platform route.
+The list is not a one-to-one field layout of that native-handle value:
 
 ```text
 SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER
@@ -410,10 +247,7 @@ SDL_PROP_WINDOW_X11_DISPLAY_POINTER
 SDL_PROP_WINDOW_X11_WINDOW_NUMBER
 ```
 
-Renderer families calling `SDL_GL_*` directly, freed as a group by one `IPlatformGlContext`:
-
-```text
-
-```
+No renderer family calls `SDL_GL_*` directly; GL window/context operations use
+`IPlatformGlContext` at the platform edge.
 
 <!-- END GENERATED: tools/platform/sdl_inventory.py -->

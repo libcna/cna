@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Platform-boundary documentation reconciliation (2026-11-01, PLAT-57/PLAT-76): the platform
+  guide and renderer boundary now describe current factory/link behavior, capability probes,
+  service/window/context ownership, native handles including UIKit, surface snapshots and actual
+  Game event reactions. Obsolete proposed suspend reasons and universal allocation/qualification
+  claims are removed. The two inventory generators receive prose-only corrections; their reports
+  regenerate cleanly and all seven platform mechanical gates pass. Platform/graphics/runtime test
+  targets build; privately, all three platform conformance entries and all three cross-platform
+  event transcripts with HEADLESS rendering pass. The GL-default surface filter passes five cases
+  and skips five guarded ownership/adoption cases; its event filter passes SDL3 and skips the other
+  two until a compatible renderer is selected. No implementation or ABI changes, native-handle
+  replacement support or new OS/hardware qualification.
 - Filesystem-path documentation reconciliation (2026-11-01): historical CP1252 measurements
   are separated from current helpers; TryPathFromUtf8, Unicode versus legal-name validation,
   NUL, POSIX raw bytes, host separator parsing, portable-name limits and exact containment
@@ -1472,6 +1483,12 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- Five GraphicsDevice platform-window ownership/adoption/query-failure tests require a
+  combination of SDL-free platform, window-creating renderer and fake-window tolerance that the
+  current configurations do not provide. Their GL-default skips do not verify those lifetime
+  paths. Common surface-state and platform conformance tests cover related contracts, not a
+  substitute execution of these five cases (source/test audit 2026-11-01,
+  `docs/platform-renderer-boundary.md`).
 - The external XMA adapter validates only RIFF/chunk/tag structure, preserves requested loop
   fields rather than extracting measured quantized ones, and does not make the built-in Xbox WAV
   route select XMA. Its filename/mtime identity is neither a full dependency fingerprint nor

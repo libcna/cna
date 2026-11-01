@@ -247,15 +247,16 @@ def render_markdown(rows: list[dict[str, object]], identities: dict[str, str]) -
 
     out.write("# Renderer SDL audit (PLAT-3)\n\n")
     out.write(
-        "**Generated** by `tools/platform/renderer_sdl_audit.py`. Regenerate with `--out`, gate with\n"
-        "`--check` (PLAT-76). Do not hand-edit.\n\n"
+        "**Generated** by `tools/platform/renderer_sdl_audit.py`. Regenerate with `--out`.\n"
+        "`--check` gates coupling/allowlist metadata (PLAT-76); it does not compare this report's\n"
+        "text for freshness. Do not hand-edit.\n\n"
         f"{len(identities)} renderer identities over {len(rows)} module families.\n\n"
     )
 
     out.write("| Verdict | Families | Meaning |\n|---|---:|---|\n")
     meanings = {
         "sdl-native": "Identity **is** an SDL3 API. Permanently allowlisted.",
-        "sdl-upstream": "Own sources are effectively SDL-free; the wrapped third-party library links SDL3. Allowlisted for a dependency reason.",
+        "sdl-upstream": "The wrapped library links SDL3; small CNA integration seams remain allowlisted. This does not mean the measured source count is zero.",
         "cpu-presentation": "CPU rasteriser using SDL_Renderer only to present finished pixels. Needs a platform presentation service.",
         "interface-leak": "Names only the common boundary's bare SDL_Window type. Freed by PLAT-58/PLAT-61.",
         "migratable": "Uses platform services only (native handle, GL context, window, events).",
