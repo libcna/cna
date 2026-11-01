@@ -4,26 +4,26 @@ What CNA's glTF import **cannot** carry, what it **approximates**, and where eac
 *reported* rather than dropped in silence. It is the inverse of `docs/gltf-conventions.md`: that
 file records what CNA decided to do, this one records what it cannot do and how you find out.
 
-The campaign's thesis is that a silent drop is a bug even when the render looks fine. So the
-organising rule here is not "list the missing features" — it is **every entry names the report
-field that says so at run time**. If a row has no report entry, the loss is invisible to a caller,
-and that is itself the defect the row should be recording.
+The policy is to report semantic loss even when the image looks plausible. The tables identify
+known counters, named attributes and validation/report routes. A declaration or source-table
+entry alone does not prove complete reporting on every path; gaps must be recorded as such.
 
 ## How this file is kept true
 
-Two mechanical checks, because a limitations document that drifts is worse than none — it reads as
-a promise.
+Current source/registry/report contracts were checked on 2026-11-01. Three tests help keep
+selected parts synchronized:
 
-* **§1's table is generated.** Its source of truth is `GltfExtensionRegistryEXT()` in
-  `modules/content/src/GltfImport/GltfImportCore.cpp`, the same registry the `extensionsRequired`
-  gate reads. `GltfLimitationsDoc.ExtensionTableAgreesWithTheRegistry` compares this file against
-  it row by row and **prints the corrected table on failure** — paste that, do not edit the rows by
-  hand.
-* **Every report field named below must exist.**
-  `GltfLimitationsDoc.EveryReportFieldNamedHereExistsInTheHeader` reads
-  `modules/content/include/CNA/Internal/GltfImport/GltfImportCore.hpp` and fails on any
-  `…EXT`/report identifier this file cites that the header no longer declares. A renamed field
-  therefore breaks the document that promised it, rather than leaving a dead name behind.
+- ExtensionTableAgreesWithTheRegistry checks extension names, classification, claimed state and
+  task attribution against GltfExtensionRegistryEXT. It prints a replacement table on failure,
+  but does not compare the evidence/note prose or regenerate this file automatically.
+- EveryReportFieldNamedHereExistsInTheHeader checks identifiers in the report columns of §2/§3
+  against declarations in GltfImportCore.hpp. It does not prove every execution path emits them.
+- EveryApproximatedOrUnsupportedExtensionIsInTheApproximationTables checks that each approximated
+  extension is mentioned beyond its registry row. Its name is broader than its current predicate;
+  it is not a complete audit of every unsupported extension.
+
+The report fields below describe internal accounting routes. Source/runtime tests are still
+needed to establish their meaning and coverage; declaration existence alone is insufficient.
 
 The fine-grained source reports remain internal (`CNA::Internal::GltfImport`) because they carry
 cgltf-oriented intermediate state. They now feed the public
@@ -70,31 +70,31 @@ every lit file would be far worse than the approximation.
 | `KHR_materials_anisotropy` | **NOT_DESIRED** | no | Needs a tangent-aligned specular lobe, and therefore a reliable tangent basis on every affected primitive -- which GLTF-086 shows CNA cannot carry at most strides. | `GLTF-348` |
 | `KHR_materials_dispersion` | **NOT_DESIRED** | no | Wavelength-dependent refraction, which presupposes the refraction pass KHR_materials_transmission is explicitly approximated instead of implementing. | `GLTF-348` |
 
-An extension **not in this table at all** is one cgltf does not parse and CNA has never seen. Such
-a name in `extensionsRequired` is refused for that reason; in `extensionsUsed` it produces a
-warning. Adding one requires a registry record *and* a corpus fixture — `GLTF-335`, enforced by
+An extension absent from this registry is unclaimed by CNA, even if cgltf happens to recognize
+its metadata. Required use is refused by name; optional use is warned. Parsing metadata alone
+is not an implementation claim. Adding one requires a registry record *and* a corpus fixture — `GLTF-335`, enforced by
 `GltfExtensionRegistry.EveryExtensionTheCorpusDeclaresIsClassified` and its converse.
 
 ---
 
-## 2. Approximations in core glTF
+## 2. Approximations, generated data and fallback behavior
 
-Not extensions — parts of glTF 2.0 itself that CNA converts into something XNA can express. Each
-one is a deliberate decision recorded in `docs/gltf-conventions.md`; what this table adds is **the
-field that tells a caller it happened**.
+This table covers core conversion/generation as well as selected extension approximations.
+It names the internal report route for each; exact topology conversion is distinct from a loss.
+See [conventions](gltf-conventions.md) for transform and generation policy.
 
 | What the file asked for | What CNA does | Report field | Task |
 |---|---|---|---|
 | A primitive with no `NORMAL` | Computes §3.7.2.1's flat normals: a real geometric normal per face, and a vertex shared between differently oriented faces is **duplicated** once per orientation so each face carries its own. Faces whose unit normals agree to within ~0.081° share one copy and get their area-weighted sum, which is a reproducibility floor rather than a smoothing threshold — topology decided by float noise would make the generated corpus non-reproducible — and the vertices where that tolerance actually merged non-identical faces are counted separately. An authored `TANGENT` is ignored, as the same sentence requires, and a basis is generated from the computed normals. | `generatedNormalsEXT`, `flatNormalDuplicatedVertexCountEXT`, `flatNormalMergedVertexCountEXT`, `ignoredTangentForGeneratedNormalsEXT` | `GLTF-173`, `GLTF-461` |
 | A primitive with no `NORMAL` **and** morph targets | §3.7.2.2 requires flat normals for each morph target, and a `POSITION` delta can rotate a face — so the normals are a function of the weights and cannot be baked. Every corner is split into its own vertex at import (a rest-pose split cannot serve every reachable pose) and `BlendMorphTargetsEXT` recomputes the face normals from the morphed positions on every weight change. Tangents are the one approximation left: §3.7.2.2's SHOULD is a full MikkTSpace regeneration per target, and CNA instead re-orthogonalises the generated basis against the recomputed normal, which preserves the property tangent-space normal mapping depends on without re-solving the UV gradients. A `NORMAL` delta on such a target is not legal (§3.7.2.2 requires an original attribute) and is dropped rather than blended. | `morphedFlatNormalsEXT`, `ignoredMorphNormalDeltasForGeneratedNormalsEXT`, `ignoredTangentForGeneratedNormalsEXT` | `GLTF-461` |
-| `TRIANGLE_STRIP` / `TRIANGLE_FAN` / `LINE_LOOP` | Converted to the equivalent list at import, so no renderer needs the topology. The conversion is exact — the same triangles, in the same winding — and the source mode is still carried, so the conversion is checkable rather than assumed. | *(exact; reported at debug severity)* | `GLTF-081` |
+| `TRIANGLE_STRIP` / `TRIANGLE_FAN` / `LINE_LOOP` | Triangle strip/fan become triangle lists with winding preserved; LINE_LOOP becomes a line strip with its closing segment appended. Source topology is retained. These are exact topology conversions, not a promise that every renderer draws every point/line mode. | *(exact; reported at debug severity)* | `GLTF-081` |
 | An index run that does not complete a primitive | The trailing remainder is dropped and counted. §3.7.2.1 requires a whole number of primitives; `cgltf_validate` does not check it, and neither reading nor refusing the remainder is safe by default. | `droppedIncompleteIndicesEXT` | `GLTF-079` |
 | Joint weights that do not sum to 1 | Renormalised, with the worst deviation recorded so a quantised exporter (a few 1e-3) is distinguishable from a broken file. An all-zero weight set is left alone — `0/0` is not a normalisation — and counted separately. | `renormalisedWeightVertexCountEXT`, `worstWeightSumDeviationEXT`, `zeroWeightVertexCountEXT` | `GLTF-256` |
 | More than four joint influences per vertex | Truncated to four, which is what `BlendIndices`/`BlendWeight` carry. The count alone does not say whether it matters, so the largest discarded share of a vertex's influence is recorded too. | `extraInfluenceSetsEXT`, `worstDroppedInfluenceEXT` | `GLTF-095`, `GLTF-257` |
 | More than three punctual lights (`KHR_lights_punctual`) | The first three become XNA's three directional lights; the rest are dropped and counted. Point and spot lights become directional lights aimed at the origin; ranges and cone angles are ignored; an out-of-gamut intensity is clamped, with the worst pre-clamp channel recorded. | `droppedLightCount`, `approximatedPointLightCount`, `approximatedSpotLightCount`, `ignoredRangeCount`, `ignoredConeAngleCount`, `clampedIntensityLightCount`, `worstPreClampChannelEXT` | `GLTF-325`, `GLTF-326` |
 | An animation channel on a path CNA does not import, or on a node outside the scene | Skipped and counted, per animation, rather than silently producing a clip that plays less than the file describes. | `skippedUnsupportedPathChannels`, `skippedOutOfSceneChannels` | `GLTF-310`, `GLTF-313` |
 | A sampler whose input times need resampling to a shared track | Resampled, with the track count and the duplicate-input-time count recorded. Playback is linear between keys, so a STEP channel gets a hold key before each step and a CUBICSPLINE interval is sampled at least every 1/60 s (CNA-DEMOS-ISSUE-031); `anim-cubicspline` then plays within 0.0021 units of its spline instead of 0.962 off. This is a bound for that fixture, not a universal one, because authored tangents may bend a spline more sharply. Equal adjacent times are kept (an exporter writes them for a hard cut); a **decreasing** time is refused outright, because it has two authored values for one time. | `resampledTrackCount`, `duplicateInputTimeCount` | `GLTF-297`, `GLTF-310`, `GLTF-313` |
-| A mirrored node transform | The composed world 3×3 has a negative determinant, so §3.7.4 requires the winding to be reversed for front faces to stay front-facing. CNA reverses it and marks the placement, rather than leaving the model inside-out. | `mirroredEXT` | `GLTF-116`, `GLTF-117` |
+| A mirrored node transform | The composed world 3×3 has a negative determinant, so §3.7.4 requires the winding to be reversed for front faces to stay front-facing. CNA marks the placement but leaves shared vertex/index winding unchanged. The application reverses its cull choice per placement; the public report names mirrored-winding-unapplied. | `mirroredEXT` | `GLTF-116`, `GLTF-117` |
 | A material sampling a third distinct authored `TEXCOORD` set | The first two distinct sampled sets are packed as channels 0/1 and selected independently per map. A map needing a third set falls back to packed channel 0 and is listed by name. | `uvSetMismatchedMapsEXT` | `GLTF-182`, `GLTF-188` |
 | A sampled PNG/JPEG map with an explicit `*_MIPMAP_*` minFilter | Imported with one texture level; every LOD samples level zero. Generic generation is deferred because colour, normal and packed-data maps require different downsampling rules. | `mipmappedSamplerMapsWithoutMipChainEXT` | `GLTF-206` |
 | A morph target carrying `TEXCOORD_n` or `COLOR_n` deltas | Not morphed. §3.7.2.2 asks a client to support `POSITION`, `NORMAL` and `TANGENT` and makes morphed texture coordinates and vertex colours a **MAY**; CNA carries the three required semantics only. The scope cut is permitted — importing as though the file had asked for nothing was not, which is what this field fixes. | `ignoredMorphAttributesEXT` | `GLTF-466` |
@@ -113,9 +113,9 @@ which is what distinguishes a documented limitation from a silent drop.
 | Data | Why it cannot be carried | Report field | Task |
 |---|---|---|---|
 | `COLOR_1` and beyond | XNA's vertex layouts carry exactly one colour channel. | `extraColorSetsEXT` | `GLTF-091` |
-| `_*` custom attributes | §3.7.2.1 reserves the underscore prefix so a reader *may* ignore them, and ignoring one is not an error — but a file whose geometry depends on `_BATCHID` deserves to be told. | `ignoredCustomAttributesEXT` | `GLTF-092` |
-| An authored `TANGENT` on a non-PBR layout | Only strides 48/60 and 68/76 carry a tangent, and those are the PBR layouts. | `droppedTangentForStrideEXT` | `GLTF-086` |
-| An authored `NORMAL` on an unlit or dual-texture layout | Strides 28 and 24 have no Normal slot. Since `GLTF-462`/`GLTF-463` those two are reached only by a primitive whose material declares `KHR_materials_unlit` or by `DualTextureEffect` — neither of which has any lighting for a normal to feed — so this is no longer a loss a lit primitive can suffer. | `droppedNormalForStrideEXT` | `GLTF-241`, `GLTF-462` |
+| `_*` custom attributes | Unrecognized custom attributes are named. The recognized legacy _TANGENT/_BINORMAL VEC3 float pair is a separate basis path when NORMAL exists and standard TANGENT does not; it is not automatically included in the ignored list. | `ignoredCustomAttributesEXT` | `GLTF-092` |
+| An authored `TANGENT` on a non-PBR layout | Current PBR layouts 48/60/68/76/80 carry a tangent; other selected layouts can drop it. | `droppedTangentForStrideEXT` | `GLTF-086` |
+| An authored `NORMAL` on a layout without that slot | Strides 24/28 have no Normal slot. The dedicated drop flag currently checks 24/legacy-20; current dual-UV stride 28 uses the layout rule's generic unrepresentable report instead. A field's existence does not mean that flag covers every stride. | `droppedNormalForStrideEXT`, `unrepresentableForStrideEXT` | `GLTF-241`, `GLTF-462` |
 | A texture whose image is KTX2/Basis or WebP, with no fallback `source` | No decoder. When the file provides a plain PNG/JPEG fallback it is used instead and nothing is lost. | `unsupportedTextureSourcesEXT` | `GLTF-200`, `GLTF-350` |
 | A third distinct sampled UV set (`TEXCOORD_n`) | PBR layouts carry two packed UV channels. A material sampling three distinct authored sets cannot represent the third; see §2's `uvSetMismatchedMapsEXT` row. | `uvSetMismatchedMapsEXT` | `GLTF-188` |
 | Per-instance transforms of `EXT_mesh_gpu_instancing` | The node's own single placement is imported; the file renders one copy where it describes many. | `gpuInstancedNodeCount` | `GLTF-352` |
@@ -127,12 +127,11 @@ downgrade CNA performs names itself in one place. `CNA/Internal/Graphics/VertexD
 
 `KHR_materials_specular`'s optional `specularTexture` and `specularColorTexture` now have dedicated
 PBR-effect and `GpuDrawParams` slots. Direct and offline import retain each map's independent UV,
-transform and sampler; the colour map also retains its sRGB declaration. EasyGL,
-DirectX9 and SDL GPU apply the extension's multiply-before-clamp
-Fresnel equation.
-SDL GPU regenerates a seven-sampler SPIR-V fragment and keeps each imported sampler state distinct;
-its rigid, skinned and analytic Fresnel pixel witnesses pass under Xvfb. Every PBR renderer samples
-both maps; validation continues to name the extension (`GLTF-344`).
+transform and sampler; the colour map also retains its sRGB declaration. All six current PBR families sample both maps; the source-policy partition has no factor-only
+remainder. Import validation still leaves KHR_materials_specular unclaimed and warns optional
+use. Renderer support does not silently promote the registry's required-extension contract.
+See [PBR bindings/evidence](gltf-renderer-pbr-fallbacks.md); old shader-size/driver snapshots are
+not current qualification.
 
 ---
 
@@ -156,62 +155,30 @@ PBR `MASK` draw stays PBR and every PBR fragment path evaluates the same coverag
 `docs/gltf-api-change-review.md` §1.3 records where the line falls and why the other two stay on this
 side of it; `docs/gltf-renderer-pbr-fallbacks.md` records the renderer matrix and evidence.
 
-`COLOR_0` on a metallic-roughness material is the same shape of statement, one step further out: the
-importer carries it in full (stride 60 for a rigid primitive, stride 80 for a skinned one since
-`GLTF-463`), `PbrEffect::VertexColorEnabledEXT` and `SkinnedPbrEffect::VertexColorEnabledEXT` carry the
-switch, and §3.9.2's product — `baseColorFactor` × `baseColorTexture` × `COLOR_0`, alpha included — is
-evaluated by **every PBR renderer but one**. That one does **not** substitute the
-identity and draw the surface anyway: it **refuses the draw** through the shared
-`RequireVertexColourPbrSupportEXT`, naming the renderer, the specification section and the way out.
-Accepting a valid asset and rendering it with different core semantics would be a wrong picture
-reported as success; refusing it is limited backend coverage, which is what it actually is.
+COLOR_0 remains part of the metallic-roughness material: rigid stride 60 and skinned stride 80
+carry RGB/alpha, with VertexColorEnabledEXT controlling multiplication. All six current PBR
+families implement it; the old “all but one” refusal count is obsolete. An explicit application
+opt-out is distinct from silently substituting white.
 
-One qualification belongs next to that count, measured by drawing rather than by reading shader
-source (`GLTF-472`). `GLTF-474` removed `SDLGPU`'s own unreachable strides, so it now
-draws every canonical glTF stride. Nothing in the tree now accepts a
-valid core glTF primitive and renders it with different semantics.
-
-An **uncoloured** primitive is unaffected everywhere — its slot holds opaque white, the multiplier's
-identity, and the effect's switch is false — so nothing that rendered before this rule stops
-rendering. An application that wants the identity on coloured geometry can say so explicitly with
-`VertexColorEnabledEXT = false`, and the draw is then permitted. Which renderers apply the product,
-which refuse it, and the specific missing toolchain behind each refusal are in
-`docs/gltf-renderer-pbr-fallbacks.md` (`GLTF-465`).
+A valid route must evaluate the material or refuse it before incompatible layout interpretation/
+submission. Source partitions and focused live draws cover known routes, not every possible
+asset/native program. No universal “nothing can render with different semantics” claim follows.
+See [PBR contract and evidence](gltf-renderer-pbr-fallbacks.md).
 
 ---
 
-## 4.1 `EXT_mesh_gpu_instancing` — the design, and why it is not built (`GLTF-352`)
+## 4.1 EXT_mesh_gpu_instancing — current unsupported boundary
 
-The one unsupported extension with an obvious implementation, so the sketch is worth writing down
-rather than rediscovering.
+Required use is refused. For optional use, CNA imports the node's ordinary placement and counts
+gpuInstancedNodeCount; it does not apply the extension's per-instance transforms. Native
+DrawInstancedPrimitives support does not provide an importer/model instance representation
+automatically, nor is that renderer feature universally available.
 
-**What the file says.** A node carries `EXT_mesh_gpu_instancing` with `TRANSLATION`, `ROTATION` and
-`SCALE` accessors of equal length; the node's mesh is drawn once per element, each with its own
-TRS composed *after* the node's own transform.
-
-**What CNA already has.** `GraphicsDevice::DrawInstancedPrimitives` is real XNA 4.0 API and is
-implemented on every GPU renderer; `GpuDrawParams::instanceCount` and a per-instance
-`VertexBuffer` stream already exist. So the GPU half is not the work.
-
-**The sketch.**
-
-1. `ExtractSceneMeshesEXT` reads the three accessors and emits **one placement carrying N
-   instance transforms**, instead of the one placement it emits today. `NodeGraphReportEXT`
-   already counts such nodes (`gpuInstancedNodeCount`), which is what makes the current loss
-   visible.
-2. The transforms become a per-instance vertex buffer (four `Vector4` rows of a 4×3 affine, the
-   layout `DrawInstancedPrimitives` already streams) built once at import, not per frame.
-3. `ModelMeshPart` grows a CNAEXT instance-buffer property, and `ModelMesh::Draw` calls
-   `DrawInstancedPrimitives` when it is present. That is the API-change-review row, and it is the
-   real cost: a new public member plus a branch in the draw path every XNA application shares.
-4. The fallback matters as much as the path: a renderer without instancing must draw N times or
-   refuse **by name** — never draw once and look nearly right, which is exactly today's failure.
-
-**Why it is not built.** It is `GLTF ROBUST` scope, and every layer that could *verify* it is L7:
-the numbers at L3–L5 are identical whether the instance transforms arrive or not, because they
-describe one mesh either way. Building an instancing path this environment cannot render is how
-`GLTF-157`'s lesson repeats. Until then the loss is counted per file and named here, which is the
-difference between a limitation and a bug.
+The old public-member/buffer sketch was a proposal, not implemented API or an environment blocker
+that can be assumed permanent. A future change needs metadata/transform checks, a model/draw
+contract and capability/refusal behavior, plus selected live/pixel witnesses. L3–L6 can test
+instance metadata/dispatch; L7 is complementary, not the only possible verification layer.
+No instance-buffer member or new API is authorized by this limitations page.
 
 ---
 
@@ -220,7 +187,7 @@ difference between a limitation and a bug.
 | Capability | Condition | Behaviour when absent |
 |---|---|---|
 | `KHR_draco_mesh_compression` | `CNA_ENABLE_DRACO=ON`, the default except under Emscripten (the decoder is built from the pinned `third_party/draco` submodule, or taken from the system with `CNA_USE_SYSTEM_DRACO=ON`) | The extension is **not claimed**, so a file requiring it is refused by name, and a Draco-compressed primitive throws at import rather than producing empty geometry. |
-| L7 image comparison | A renderer with a real 3D pipeline | The `STUB` renderer reports `GraphicsCapability::ThreeD == false` and the tests that need pixels skip rather than pass vacuously (`GLTF-009`). |
+| L7 image comparison | A rasterizing renderer with usable color readback, fixture policy and required external reference inputs | STUB has no 3D; HEADLESS's ThreeD is validation-only. Neither supplies rendered-pixel evidence. Capability skips, committed goldens and fresh captures are different results. |
 
 Regardless of decoder availability, the Draco extension's primitive-mode restriction is enforced
 before decoding: only `TRIANGLES` and `TRIANGLE_STRIP` are accepted. `POINTS`, all three line modes
@@ -228,6 +195,19 @@ and `TRIANGLE_FAN` are rejected with the allowed modes named; decoded strip conn
 from Draco's explicit face list and is not reinterpreted as a second strip (`GLTF-080`, `GLTF-362`).
 
 ---
+
+## Audit verification
+
+The existing Content target builds. All 55 selected registry/document, report, topology, mirroring
+and light-budget cases pass privately with HEADLESS selected; source/validation checks do not
+imply a new full-corpus L7 or hardware run.
+The point/spot-to-directional approximation remains in ExtractPunctualLightsEXT even though CNA
+extensions elsewhere can represent punctual lights. It is the current import path, not a claim
+that native APIs can never represent them.
+
+The extension table's no-KTX2/WebP statements concern this glTF import route; unrelated texture
+stream/container support does not implement KHR_texture_basisu decoding here. Report preservation
+above names direct glTF and the .cnj route, not every content format.
 
 ## What this file is not
 

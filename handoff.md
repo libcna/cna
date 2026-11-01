@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- glTF-limitations reconciliation (2026-11-01, GLTF-447): the registry's classifications/claims
+  stay unchanged while the guide corrects its mechanical checks' real scope, unknown-extension
+  meaning, strip/fan/line-loop conversion, mirrored cull ownership, recognized legacy tangent
+  attributes, stride-80 tangents and generic versus dedicated normal-drop reporting. COLOR_0
+  support now names all six PBR families. The obsolete instancing API/environment sketch becomes
+  a current unsupported boundary; 3D validation is distinguished from pixel/readback capability,
+  and point/spot approximation is scoped to this importer. The Content target builds and all 55
+  selected registry/document/report/topology/mirroring/light cases pass privately with HEADLESS.
+  No registry promotion, native instancing implementation, L7 recapture, hardware or ABI change.
 - Windows-IDE documentation reconciliation (2026-11-01): the guide now describes the overridable
   Sharp Runtime root, source archive/submodule boundary, C++23 toolset requirement, static Windows
   module composition versus ELF DSO policy, limited preset feature set/two-job budgets, MSVC GUI
