@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Generated C API coverage audit (2026-11-01): the mandatory
+  `generate_coverage_inventory.py --check` gate found `docs/c-api/COVERAGE.md` stale after recent
+  public-header documentation changes. Regeneration changes only the full-matrix SHA-256; its 466
+  headers and 8,134 symbols remain 7,033 implemented, 15 partial, 633 planned and 453 not
+  applicable, with the same six open planned owners. The full inventory, total module-scope
+  function, case-insensitive Internal/Detail exclusions, owner approvals and generated summary
+  were reviewed without reclassifying any row. `CApiCoverageMatrix`, `CApiLimitations` and
+  `CApiReleaseGate` pass; the last validates that the generated release verdict is correctly still
+  **Not ready** because all 633 planned symbols remain real open work.
 - C renderer/capability contract reconciliation (2026-11-01):
   `docs/c-api/RENDERERS_AND_CAPABILITIES.md` is rewritten from its initial-slice description to the
   current C surface. It now distinguishes compile-time default, selected, active and per-device
