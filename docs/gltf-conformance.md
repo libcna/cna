@@ -2,8 +2,14 @@
 
 The glTF campaign's task record (`GLTF-001`…`GLTF-480`, 2026-08) is in Git history; its milestones
 are §8 and its lessons are [`gltf-campaign-retrospective.md`](gltf-campaign-retrospective.md).
-This file is the campaign's **normative reference anchor** (`GLTF-002`) and the operating manual for
-the numerical oracle harness (`GLTF-003` … `GLTF-006`, `GLTF-041`).
+This file pins the campaign's specification reference (`GLTF-002`) and documents the numerical
+oracle harness (`GLTF-003` … `GLTF-006`, `GLTF-041`). Its milestones are project declarations
+over named witnesses, not Khronos certification or exhaustive proof for every legal input.
+
+Current importer boundaries are in [gltf-limitations.md](gltf-limitations.md) and
+[gltf-conventions.md](gltf-conventions.md); newly found defects are in [handoff.md §5](../handoff.md#5-known-bugs-and-limitations).
+The retained framebuffer reports below describe their recorded revisions/environments. A current
+metadata/hash check does not rerun those captures or qualify a newer renderer binary.
 
 It records *where* the specification is, not *what* it says: no part of the Khronos specification is
 reproduced here. Every semantic claim made by a `GLTF-xxx` task must be resolvable against the exact
@@ -13,44 +19,38 @@ snapshot pinned below.
 
 ## 1. Baseline reproduction (`GLTF-001`)
 
-The campaign's forensic baseline is `origin/develop` @ `fb3728267e8f2179d43b96357ff372ae712b7e7f`.
-The one-command reproduction of the converter every glTF defect was proven through:
+The forensic baseline was `origin/develop` at
+`fb3728267e8f2179d43b96357ff372ae712b7e7f`. Its STUB configuration and build counts belong to
+that revision's Git history; do not overwrite an existing debug configuration to recreate them.
+
+For current work, reuse a configured test-enabled tree. The following commands use this checkout's
+`cmake-build-multi/`; use the corresponding existing tree on another machine. Build with at most
+eight jobs (four here), and run window/device tests through the private display runner:
 
 ```bash
-cmake -S . -B cmake-build-debug -G Ninja \
-      -DCMAKE_BUILD_TYPE=Debug \
-      -DCNA_GRAPHICS_RENDERER=STUB \
-      -DCNA_BUILD_TESTS=OFF \
-      -DCNA_BUILD_EXAMPLES=OFF \
-      -DCNA_ENABLE_NET=OFF
-cmake --build cmake-build-debug --target cna_tool_gltf_to_cnj -j4     # 525 edges, exit 0
-./cmake-build-debug/cna_tool_gltf_to_cnj <fixture>.gltf <outDir> <baseName> [unitScale]
-./cmake-build-debug/cna_tool_gltf_to_cnj --dump-oracle <fixture>.gltf <emptyOutDir>
+cmake --build cmake-build-multi \
+  --target CnaTests CnaContentTests cna_tool_gltf_to_cnj --parallel 4
+tools/platform/run_gpu_tests_private.sh --exec \
+  env CNA_GRAPHICS_RENDERER=OPENGLES3 SDL_AUDIODRIVER=dummy \
+  cmake-build-multi/CnaTests --gtest_filter='*Gltf*'
 ```
 
-The diagnostic form writes one deterministic `oracle.json`: decoded accessors (L2), imported
-semantic mesh streams (L3), independently expected and CNA world geometry (L4), and exact imported
-vertex/index bytes as hexadecimal (L5). The output directory must be absent or empty; the tool
-refuses to overwrite an earlier capture. Its implementation reuses the test-scope oracle helpers,
-but neither those helpers nor the dump schema are CNA runtime/public API.
+Run from the repository root. The converter accepts
+`cna_tool_gltf_to_cnj <fixture>.gltf <outDir> <baseName> [unitScale]` or
+`cna_tool_gltf_to_cnj --dump-oracle <fixture>.gltf <emptyOutDir>`.
+The diagnostic form writes `oracle.json`: decoded accessors (L2), semantic mesh streams (L3),
+expected and CNA world geometry (L4), and imported vertex/index bytes as hexadecimal (L5).
+The dump directory must be absent or empty. The implementation reuses test-scope oracle helpers;
+neither those helpers nor the dump schema are runtime/public API.
 
-The conformance **tests** need a second, test-enabled configuration; it is deliberately a separate
-build directory so the converter reproduction above stays byte-for-byte the one the audit ran:
+The standalone converter currently accepts trailing text and positive infinity as `unitScale`;
+positive-value checking alone is insufficient. See `handoff.md` §5 for the reproduced defect.
 
-```bash
-cmake -S . -B cmake-build-tests -G Ninja \
-      -DCMAKE_BUILD_TYPE=Debug \
-      -DCNA_GRAPHICS_RENDERER=STUB \
-      -DCNA_BUILD_TESTS=ON \
-      -DCNA_BUILD_EXAMPLES=OFF \
-      -DCNA_ENABLE_NET=OFF
-cmake --build cmake-build-tests --target CnaTests -j4
-./cmake-build-tests/CnaTests --gtest_filter='*Gltf*'                  # run from the repository root
-```
-
-Both build directories are gitignored and survive between sessions; never build the glTF campaign in
-a session scratchpad (see `CLAUDE.md`, *Build locations & caching*). Maximum parallelism in this
-sandbox is `-j4`.
+The 2026-11-01 local recheck built these three targets and ran 634 glTF cases privately on
+OPENGLES3: 631 passed, with three opt-in external-model cases skipped. After the prose update,
+all 26 corpus/ladder/ledger cases passed. The specification digest, generated inventory and
+two-process generator determinism were rechecked; the Validator result is §2.11.
+No new whole-corpus framebuffer/reference-renderer or sanitizer campaign was run.
 
 ---
 
@@ -77,7 +77,7 @@ stable content digest, and it is retrievable at an exact immutable revision.
 Any later session can prove it is reading the same specification text:
 
 ```bash
-curl -sS -o /tmp/Specification.adoc \
+curl -fsS -o /tmp/Specification.adoc \
   https://raw.githubusercontent.com/KhronosGroup/glTF/2b29723d025a995971726f2989697cdc49b1222a/specification/2.0/Specification.adoc
 sha256sum /tmp/Specification.adoc
 # 55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967
@@ -193,11 +193,12 @@ mutable npm ranges:
 | importer permutations | `KhronosGroup/glTF-Asset-Generator` | `3d99767e9a67fbfe109f0d298c1e8d909bcac9db` | MIT; manifest inspection only |
 | L7 comparison renderer | `KhronosGroup/glTF-Sample-Renderer` | `863b981fb755359063e370ff7b6e956bda0716e2` (package version `1.1.0`) | Apache-2.0; local development capture only |
 
-All three records state `runtimeDependency: false` and `ciDependency: false`, and the corpus test
-enforces both fields, the full 40-hex revisions, the repository allow-list, and a non-empty licence
-summary. They are fetched only when a developer deliberately performs a supplementary comparison.
-No source, npm package, generated model, image, or binary from them is committed, linked, fetched by
-CMake, or needed by the test gate. Every corpus fixture below remains CNA-authored and MS-PL.
+All three records state `runtimeDependency: false` and `ciDependency: false`. The pin validator
+and corpus test check those fields, full 40-hex revisions, the repository allow-list and a non-empty
+licence summary. These metadata checks do not inspect every build/CI dependency. The current
+generated-corpus gate does not need these three checkouts; deliberate supplementary comparisons
+fetch them separately. The separate production-viewer CI checkout is a different dependency.
+The synthetic corpus remains CNA-authored and MS-PL.
 
 The Sample Assets pin does **not** grant a blanket model licence. Its own README says the displayed
 licence is only a summary and directs readers to each model directory for the detailed terms.
@@ -217,19 +218,22 @@ destination and never deletes a partial checkout. It prints the per-model `READM
 paths for review, but fetching does not itself clear a model for redistribution. This remains a
 developer-only supplementary input: no CMake target or CI job invokes the script.
 
-The inverse invariant is checked by `scripts/check-gltf-asset-provenance.sh`: every Git-tracked
-`.gltf` or `.glb` must live in the generated corpus, and the corpus must pass its byte-identical
-generator check. The glTF sanitizer workflow invokes this audit. Thus a copied external model
-cannot silently become a fixture or test resource; CNA's current zero-third-party-asset policy must
-be changed explicitly, together with the per-asset `GLTF-018` licence and attribution record.
+`scripts/check-gltf-asset-provenance.sh` checks top-level Git-tracked `.gltf`/`.glb` paths against
+the generated-corpus prefix and verifies the corpus byte for byte. It also regenerates/checks the
+CNA avatar catalog in its separate submodule, which the top-level path scan does not enumerate.
+The sanitizer workflow invokes this audit. It detects misplaced containers and generator drift;
+it does not establish the authorship/licence of arbitrary generator inputs, images, other formats
+or every submodule. Third-party redistribution still requires the per-asset `GLTF-018` review.
 
 `ChronographWatch` has one opt-in acceptance because it is the exact real-world file that exposed
 the campaign's transform failure (`GLTF-407`). Fetch and run it without copying the model into CNA:
 
 ```bash
 scripts/fetch-gltf-sample-assets.sh /tmp/cna-gltf-watch ChronographWatch
-CNA_GLTF_CHRONOGRAPH_WATCH=/tmp/cna-gltf-watch/Models/ChronographWatch/glTF-Binary/ChronographWatch.glb \
-  /path/to/CnaTests --gtest_filter='GltfRealWorldAcceptanceL4.*'
+tools/platform/run_gpu_tests_private.sh --exec env \
+  CNA_GRAPHICS_RENDERER=OPENGLES3 SDL_AUDIODRIVER=dummy \
+  CNA_GLTF_CHRONOGRAPH_WATCH=/tmp/cna-gltf-watch/Models/ChronographWatch/glTF-Binary/ChronographWatch.glb \
+  cmake-build-multi/CnaTests --gtest_filter='GltfRealWorldAcceptanceL4.*'
 ```
 
 The test first requires SHA-256
@@ -240,23 +244,21 @@ variant mappings, the scalar transmission approximation for `Glass Face`, and th
 rigid animation of `Hand Seconds`. With no environment variable the case reports `SKIPPED`; this is
 an explicit network/licence-gated supplementary check, not a green claim over a missing file.
 
-At the pinned revision the model and textures are CC-BY-4.0 (Darmstadt Graphics Group GmbH, Eric
-Chadwick) and the Khronos/3D Commerce/DGG logos carry the model's own `LicenseRef-LegalMark-*`
-records. The local test reads those files from their external checkout; it makes no claim that the
-logos are cleared for redistribution. No model, texture, logo or metadata file is committed or
-redistributed by CNA, and the zero-asset guard above stays unchanged.
+The recorded model metadata identifies CC-BY-4.0 model/textures (Darmstadt Graphics Group GmbH,
+Eric Chadwick), with separate `LicenseRef-LegalMark-*` records for the logos. Inspect the actual
+pinned model's README/LICENSE before using it; a successful geometry test does not clear those
+marks for redistribution. This supplementary test does not commit or redistribute the model.
 
-To check that the immutable objects still exist without changing the pins:
+To validate the local registry without fetching anything:
 
 ```bash
-git ls-remote https://github.com/KhronosGroup/glTF-Sample-Assets.git refs/heads/main
-git ls-remote https://github.com/KhronosGroup/glTF-Asset-Generator.git refs/heads/main
-git ls-remote https://github.com/KhronosGroup/glTF-Sample-Renderer.git refs/heads/main
 PYTHONPATH=tools python3 -m gltf_fixtures --reference-pins
 ```
 
-The three printed branch heads matched the table when it was recorded on 2026-08-14; a later
-branch move is expected and does not change the immutable pins.
+To verify a pinned commit in an already populated external checkout, use
+`git -C <checkout> cat-file -e <full-commit-id>^{commit}` and inspect its files. This proves local
+object availability; compare the table's exact revision as well. `git ls-remote ... refs/heads/main`
+reports a moving branch head and cannot establish that an older pinned object is available.
 
 ### 2.9 Asset Generator manifest projection (`GLTF-014`)
 
@@ -336,7 +338,10 @@ per-asset provenance plus aggregate report. `GLTF-411`'s executed result is in �
 The driver additionally requires `xvfb-run`, Python Pillow and a Chromium-compatible browser;
 `tools/gltf_reference/capture.mjs` defaults to `/usr/bin/google-chrome` and accepts an explicit
 `CNA_GLTF_CHROME` path. Browser automation is loaded from the pinned renderer's own `npm ci`
-installation, never from a global package.
+installation, never from a global package. Launch comparison/capture scripts through
+`tools/platform/run_gpu_tests_private.sh --exec` on the owner's machine, including scripts which
+also create their own isolated Xvfb/browser display. The isolated CI Xvfb recipe is historical
+campaign context, not permission to use the owner's live desktop.
 
 ### 2.11 Pinned corpus Validator gate (`GLTF-015`)
 
@@ -362,13 +367,16 @@ a missing expected error, or one additional error all fail generation. This is d
 stricter than treating every `bad-*` file as an unrestricted exception: five compatibility/repair
 fixtures whose names predate that convention are also explicit, exact-code exceptions.
 
-The closing audit covers **290 containers: 270 valid, 20 expected-invalid**, from ten declared
-exception identities. It currently reports 42 warnings, which remain informational because they
-include portability and best-practice advice rather than schema errors. The audit corrected the
-fixtures rather than weakening the gate: animation inputs gained required bounds, absent scenes
-are omitted instead of emitted as an empty array, integer normals declare and align
-`KHR_mesh_quantization`, interleaved attributes declare their stride, multi-joint skins have a
-common root, and the scale/strength material owns a schema-valid shared texture.
+The 2026-11-01 recheck of all 148 assets covers **296 containers: 276 valid and 20
+expected-invalid**, from ten declared exception identities, with **47 warnings**. Warnings are
+retained diagnostics, not evidence of warning-free content. The gate compares distinct error-code
+sets; it does not require identical error multiplicity or ordering.
+
+The earlier campaign repaired fixture validity rather than weakening the gate: animation input
+bounds, omitted absent scenes, aligned/declared quantized normals, interleaved strides, common skin
+roots and a schema-valid shared texture. Generator-only `--check` does not run the Validator unless
+explicitly supplied. `scripts/regenerate-gltf-goldens.sh --determinism` compares two emissions
+under different hash seeds; that branch does not invoke the Validator even if `GLTF_VALIDATOR` is set.
 
 ---
 
@@ -389,15 +397,15 @@ pass for its fixture. Implemented so far:
 | **L6** | effect parameters actually bound for a draw | implemented — `CaptureDrawParamsEXT` | `GLTF-008` |
 | **L7** | rendered pixels vs a golden PNG | 148 explicit EasyGL dispositions: 140 PNGs + 8 safe rejections | `GLTF-009` |
 
-The helpers are **test scope only** — they live under `modules/content/tests/CNA/Internal/GltfImport/`
-in namespace `CnaTest::GltfOracle`, are compiled only into `CnaTests`, and are not part of the CNA
-public API, of `CNA::Internal::GltfImport`, or of the CNAEXT surface. Nothing in `modules/*/src/`
-may call them.
+The helpers live under `modules/content/tests/CNA/Internal/GltfImport/` in namespace
+`CnaTest::GltfOracle`. They are compiled into the test executables, including focused
+`CnaContentTests`, and reused by the converter's diagnostic dump. They are not CNA runtime/public
+API or a CNAEXT surface; normal runtime import does not call the test helpers.
 
 ### 3.2 The fixture generator (`GLTF-003`)
 
 `tools/gltf_fixtures/` is a deterministic Python generator. One source of truth per fixture emits the
-asset **and** its expectation manifest, so the two cannot drift:
+asset **and** its expectation manifest, keeping their authored inputs together:
 
 ```bash
 python3 -m gltf_fixtures --out tests/assets/gltf         # regenerate the corpus in place
@@ -415,7 +423,9 @@ regeneration script.
 
 `CnaTests` never runs the generator. It verifies the committed corpus against the SHA-256 digests
 `manifest.json` records for every emitted file, so the byte-identity guarantee holds at test time
-without a Python interpreter. `--check` is the developer-side equivalent.
+without a Python interpreter. `--check` independently regenerates and compares the bytes.
+These integrity checks detect changed artefacts, not a semantic mistake shared by a fixture builder
+and its expectation calculation. Review the numeric derivation against the specification.
 
 Per fixture the generator emits three core files into `tests/assets/gltf/`, plus the L5 goldens for
 a fixture CNA can import and, for the named external-source fixtures, generated sidecars:
@@ -425,7 +435,7 @@ a fixture CNA can import and, for the named external-source fixtures, generated 
 | `<id>.gltf` | the asset, JSON with a base64 `data:` URI buffer by default; the named external-source fixtures instead reference generated sidecars |
 | `<id>.glb` | the same asset in the binary container, from the same source of truth |
 | `<id>.expected.json` | the inventory record and the **spec-derived** expectations for every layer the asset validates |
-| `<id>.vb.bin` / `<id>.ib.bin` | the L5 golden vertex and index buffers (§3.7). Part 0 of a fixture uses these names; a second part would use `<id>.p1.vb.bin`, so adding one never renames the first |
+| `<id>.vb.bin` / `<id>.ib.bin` | the L5 golden vertex and index buffers (§4). Part 0 uses these names; further parts use `.p1`, `.p2`, etc., without renaming the first |
 | `<id>.*.bin` / `<id>.*.png` | an external buffer or image sidecar, emitted from the fixture's own builder/image bytes and hashed in `manifest.json` |
 
 `tests/assets/gltf/manifest.json` is the corpus-level inventory: the current and target distinct-
@@ -442,19 +452,20 @@ contract.
 
 ### 3.3 Expected truth vs current CNA output
 
-This is the invariant that makes the harness trustworthy while D1–D8 are still unfixed.
+The original D1–D8 records are now fixed. The following lifecycle preserves the distinction
+between an independently derived expectation and a recorded implementation result.
 
 Each `<id>.expected.json` keeps three things strictly apart:
 
 * `l1` / `l2` / `l3` / `l4` — **spec-derived expectations**. Never CNA's output. They are computed
   by the generator from the fixture's own authored values and the pinned specification, and they do
-  not change when CNA is fixed. (`l5` is the one layer that is not purely spec-derived; see §3.7.)
+  not change when CNA is fixed. (`l5` also depends on CNA packing/import policy; see §4.)
 * `defects[]` — one record per proven defect the fixture exposes, each naming the defect id
   (`D1`…`D8`), the layer it first diverges at, the remediation tasks that own it, and
-  `currentActual`: **what CNA produces today**, recorded as evidence.
+  `currentActual`: the result recorded at the owning remediation, rather than a live measurement.
 * `status` per defect — see the lifecycle below.
 
-A known-defect test therefore asserts two things at once:
+For an open record, a known-defect test asserts two things at once:
 
 1. the spec expectation is still **not** met (the defect is still present); and
 2. the divergence is **exactly** the recorded one (CNA is broken in the documented way, not a new
@@ -472,9 +483,8 @@ its spec expectation**.
 | `partially-remediated` | one owning task landed and changed the behaviour; `closedTasks` names it and `remainingTasks` names what is left | same suppression, but the known-defect test now asserts the **new** behaviour |
 | `fixed` | every owning task landed | `divergentFieldsByLayer` is empty, so the layer is asserted in full and the record becomes a regression witness. Its known-defect test is deleted |
 
-A defect record is **never deleted**. When a defect is fixed, `currentActual` becomes what CNA
-produces today and the measurement it replaced moves to `priorActual`, dated with the baseline
-commit it was taken on. `GltfKnownDefectTests.cpp` asserts this bookkeeping in both directions: an
+A defect record is retained. On remediation, `currentActual` records that revision's result and
+the replaced measurement moves to `priorActual`, dated with its baseline commit. `GltfKnownDefectTests.cpp` asserts this bookkeeping in both directions: an
 open defect must have a test there, and a remediated one must not.
 
 `divergentFieldsByLayer` is authoritative and is what the conformance suites consult. A defect
@@ -485,7 +495,7 @@ the second failing as if it were a conformance regression.
 Never weaken an expectation to make the current implementation green. If a fixture contradicts the
 forensic audit, stop and investigate the contradiction.
 
-#### Current state
+#### Original defect ledger
 
 | Defect | Status | Closed by | Remaining |
 |---|---|---|---|
@@ -496,18 +506,18 @@ forensic audit, stop and investigate the contradiction.
 | **D7** | **`fixed`** | **`GLTF-215`** → `GLTF-216`/`217`/`219`/`221` → `GLTF-228`/`229`/`231` | — |
 | **D8** | **`fixed`** | **`GLTF-245` → `GLTF-247` → `GLTF-248` → `GLTF-260`** | — |
 
-**D8 was closed in its own batch, deliberately after the node-transform work rather than with it.**
-`GLTF-114` only parked a skinned mesh on the identity root — the conservative half of glTF's rule
-that a skinned mesh's own node transform is ignored, which is what stopped it introducing a second,
-opposite error on top of D8. The joint ancestry and the `inverse(globalTransform(meshNode))`
-cancellation were then resolved on their own fixtures: `skin-armature-ancestor` for the ancestry
-above the joint set, and `skin-mesh-node-transform` for the cancellation, which is authored so that
-omitting it, applying it once and applying it twice are three numerically distinct outcomes.
+D8's task chain includes an intermediate correction later withdrawn: the
+`inverse(globalTransform(meshNode))` compensation from `GLTF-247` must not be reintroduced.
+The current path parks a skinned mesh on the identity root and does not apply its own node
+transform. `SkeletonRootPrefix`/`BoneOut::parentWorldPrefix` retain scene ancestry above a joint
+root, separately from its animated local transform. `skin-armature-ancestor`,
+`skin-mesh-node-transform` and `skin-mesh-node-parent-transform` discriminate those spaces;
+see [gltf-conventions.md](gltf-conventions.md).
 
-Both terms ride on a per-root prefix (`BoneOut::parentWorldPrefix`, `SkinningData::
-SkeletonRootPrefix`) rather than being folded into the bind pose. Folding them in would have been
-undone the moment an animation clip replaced a root joint's local transform; kept separate, an
-animated root joint substitutes only its own local transform exactly like any other bone.
+The ledger's `status`, closed/remaining tasks, divergent-field sets and executable regressions
+describe its closure. Some retained D6/D7/GLTF-241 summary strings still describe intermediate
+limitations; do not treat every historical summary as today's implementation. Closure of these
+original defects is not a statement that all subsequently discovered defects are fixed.
 
 ### 3.4 Promoted audit fixtures (`GLTF-004`)
 
@@ -536,7 +546,7 @@ generator's own self-test.
 
 ### 3.5 What `GLTF-041` locks
 
-The audit proved the **attribute** decode path correct: `UnpackAccessor()` →
+The campaign established these **attribute** decode witnesses: `UnpackAccessor()` →
 `cgltf_accessor_unpack_floats` honours `bufferView.byteOffset`, `accessor.byteOffset`,
 `byteStride`/interleaving, `normalized` integer conversion, and sparse *attribute* accessors
 including the null-base-`bufferView` case.
@@ -544,16 +554,18 @@ including the null-base-`bufferView` case.
 `GltfAccessorDecodeLockTests.cpp` locks exactly those behaviours with permanent L2 tests, and
 cross-checks the L2 dump against the L3 `MeshOut` that the **production** `ExtractMesh` (and hence
 the production `UnpackAccessor`) produced from the same accessors. A rewrite of that path breaks
-these tests.
+these tests if it changes their asserted output.
 
-**Do not rewrite this path.** Phase 2 adds fixtures and bounds checks *around* the decoder, never a
-replacement decoder. The index path was a different, genuinely broken path; `GLTF-063` replaced it
-(§3.7) without touching this one, which is exactly what `GLTF-041` exists to guarantee.
+Keep these decoder regressions when changing validation or adding format coverage. The campaign
+preserved the attribute decoder and repaired the separate index path in `GLTF-063`; that history
+does not make the current attribute path immune to undiscovered cases.
 
 ### 3.6 Running the harness
 
 ```bash
-./cmake-build-tests/CnaTests --gtest_filter='*Gltf*'
+tools/platform/run_gpu_tests_private.sh --exec \
+  env CNA_GRAPHICS_RENDERER=OPENGLES3 SDL_AUDIODRIVER=dummy \
+  cmake-build-multi/CnaTests --gtest_filter='*Gltf*'
 ```
 
 Note the **leading** star. `RuntimeGltfModelTest` is a glTF suite whose name does not begin with
@@ -587,19 +599,20 @@ working directory, which is what CTest is configured to use. The suites are:
 #### The `gltf-conformance` CTest label (`GLTF-010`)
 
 ```bash
-ctest -L gltf-conformance          # the whole ladder
-ctest -L gltf-conformance -R L4    # one rung
+tools/platform/run_gpu_tests_private.sh cmake-build-multi -L gltf-conformance
+tools/platform/run_gpu_tests_private.sh cmake-build-multi -L gltf-conformance -R L4
 ```
 
-Each rung is its **own** CTest entry, registered lowest-first, so CTest's own result line names the
-divergent layer — `CnaGltfConformanceL4 ... Failed` — without anyone reading a log. Higher rungs
-still run after a failure, because whether a wrong world matrix also corrupted the bound effect
-parameters is worth knowing in the same run.
+Each rung has its own CTest registration, so a failure names its layer, for example
+`CnaGltfConformanceL4`. Multi-renderer configurations add renderer-qualified registrations.
+Registration order is not a CTest execution dependency: parallel runs may overlap, and multiple
+layers can fail for the same defect. Diagnose the lowest failing relevant layer first.
 
 | Entry | Covers |
 |---|---|
 | `CnaGltfConformanceL0` | the corpus and the oracle helpers themselves — if this fails nothing above it means anything |
 | `CnaGltfConformanceL1` … `L6` | the six implemented ladder rungs |
+| `CnaGltfConformancePerf` | focused performance budgets; optional large files can skip |
 | `CnaGltfConformanceLedger` | the defect ledger: every measured defect is either still declared open or closed by a named task |
 | `CnaGltfConformanceTool` | the offline `.cnj` converter, the second of the two loaders |
 
@@ -643,9 +656,9 @@ An image diff tells you that something is wrong and little about what: the same 
 for a wrong world matrix, a wrong stride, a wrong colour space and a driver upgrade. Every one of
 those has a numerical layer that names it exactly, and each of those layers runs first.
 
-So the ordering is the contract: **the earliest divergent layer is the one that fails.** The
-viewer-owned `CnaGltfConformanceL7` is registered last, after L6 in the CI sequence, for the same
-reason — a pixel comparison is the *last* question worth asking, not the first.
+Numerical layers narrow the cause before framebuffer analysis. They do not guarantee that a
+defect fails only its earliest layer, or that every image difference has an existing lower-layer
+assertion. CI places the viewer-owned L7 step after the numerical build/run.
 
 ### 3.7 Adding a fixture (`GLTF-417`)
 
@@ -680,7 +693,7 @@ Four steps, one of which is a command. The corpus is generated, so **never edit 
    you find out whether it says what you think:
 
    ```bash
-   ctest -L gltf-conformance
+   tools/platform/run_gpu_tests_private.sh cmake-build-multi -L gltf-conformance
    ```
 
 If the fixture must be **refused**, give it a `rejection` block naming the stage and the fragments
@@ -695,8 +708,9 @@ an asset that declares an extension needs a registry record (`GLTF-335`). Both a
 
 ### 3.8 Inline documents vs corpus fixtures — which goes where (`GLTF-414`)
 
-The suite also contains **260 glTF documents written inline as C++ string literals**, and they are
-deliberately not in the corpus. The rule, so the choice is made rather than defaulted to:
+The suite also contains inline C++ glTF probes outside the corpus. Its ratchet currently caps
+counted raw-literal openings at 284; concatenated fragments mean this is not an exact document
+count. Choose the location by what the probe establishes:
 
 **Put it in the corpus** when the document is an *asset whose correct import is a conformance
 statement*. Such a fixture earns four things the corpus gives it and nothing else does: spec-derived
@@ -708,7 +722,8 @@ document belongs there.
 
 * **A negative one-off** whose entire expectation is "refused, with this message". A corpus asset
   must be describable at the layers it declares; a document that is refused at parse has nothing to
-  describe, and adding fifty of them would bury the seventy-four assets that do.
+  describe. Reusable malformed semantic cases can still belong in the corpus with explicit
+  rejection metadata; one-off parser failures need not become permanent assets.
 * **A probe of loader machinery rather than of glTF semantics** — `ContentManager`'s extension
   resolution, the CLI's exit code, an embedded PNG in a `bufferView`, a `.cnj` round-trip. The
   subject is CNA's plumbing; the glTF document is a means.
@@ -716,7 +731,7 @@ document belongs there.
 * **A shape the generator cannot express** without growing a feature that exists for one test.
 
 The trade is real and worth naming: an inline document is invisible to every corpus sweep, so it
-only ever asserts what its own test asserts. That is acceptable for the three categories above,
+only ever asserts what its own test asserts. That is acceptable for the four categories above,
 because in each the test *is* the whole statement. It is not acceptable for anything else, which is
 why `GltfFixtureCorpus.InlineGltfDocumentsDoNotGrowWithoutADecision` puts a ceiling on the count:
 adding one is fine, and raising the number in that test is the deliberate act that says so.
@@ -736,7 +751,9 @@ Unlike L1–L4, an L5 golden is **not** purely spec-derived, and the distinction
 * the **values** come from the fixture's own spec-derived L3 expectation;
 * the **placement** comes from CNA's own vertex stride ABI (`VertexLayoutTableEXT`, `GLTF-099`) — a
   CNA decision, not a Khronos one — including the fill values `ExtractMesh` writes into a slot whose
-  attribute the file omits: normal `(0,0,1)`, texture coordinate `(0,0)`, colour alpha `255`.
+  attribute the file omits, plus explicit import-policy answers such as generated normals/tangents.
+  Missing triangle normals are generated flat, potentially splitting vertices; `(0,0,1)` is not a
+  universal absent-normal rule. See the fixture's `importPolicy` and conventions page.
 
 So a golden asserts *the spec-derived values, laid out the way CNA says it lays them out*. A
 deliberate ABI change therefore requires regenerating these goldens, and that regeneration is the
@@ -785,22 +802,23 @@ buffer that is no longer a whole number of vertices at its stated stride says ou
 `ApplyLayout` is a restatement of that table. `python3 -m gltf_fixtures --explain <golden>
 --against <file>` is the same decode for any two versions.
 
-**The review rule.** A golden changes for exactly two reasons: the vertex ABI changed, or a
-fixture's own authored values changed. Both are deliberate decisions, so a commit touching a golden
-must say **which of the two, and why**. A golden change with no stated reason is the one case where
-"the tests still pass" means nothing at all — the goldens were regenerated from the same code that
-produced them.
+**The review rule.** Explain whether a golden changed because of authored fixture values,
+the native vertex/index ABI, or a deliberate import-policy correction (for example flat normals,
+topology conversion or tangent fallback). Review the independent expected values and every affected
+renderer layout. Passing regenerated comparisons alone does not validate the new expectation.
 
 ### 4.3 Coverage today
 
-**140 of the 148** fixtures carry a golden, covering strides 48, 24, 68 and 80, all seven primitive topologies
-with their own topology-aware primitive counts, the 16-bit index path and the `vertexCount > 65535`
-width-selection rule. Eight do not carry one. Seven are fixtures the importer must **refuse**
-(`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`);
-`interleaved-pos-nrm-uv` is the one positive asset whose packed bytes contain a generated tangent
-basis, an importer policy the spec-derived generator deliberately does not duplicate. Every one
-records `l5.supported = false` with its own reason, so the layer is visibly absent rather than
-quietly unasserted.
+**140 of 148** fixtures carry L5 goldens. Their 148 mesh parts use strides
+**24, 28, 32, 48, 52, 56, 60, 68 and 80**, with all seven source topologies represented.
+All committed L5 parts currently use **16-bit indices**. The `vertexCount > 65535` width boundary
+is exercised separately by `GltfIndexForm`; it is not a 32-bit corpus golden.
+
+Eight assets have `l5.supported = false`, with a reason: seven deliberate rejection cases and the
+positive `interleaved-pos-nrm-uv`, whose generated tangent basis lacks an independently declared
+packing answer. These are not the same eight assets as the L7 safe-rejection set:
+`bad-animation-input-order` has L5 expected bytes but is rejected by validation, while
+`interleaved-pos-nrm-uv` has an L7 image.
 
 A converted topology's golden holds the **converted** index list, not the authored one — a strip's
 golden is the triangle list `GLTF-072` rewrites it into, and a `LINE_LOOP`'s carries the closing
@@ -840,7 +858,9 @@ assigned its factors to an effect.
 `ModelMeshPart` it records the `GpuDrawParams` block a renderer would receive, having first bound
 `absoluteBoneTransform * world`, the view and the projection exactly as `Model::Draw` binds them. It
 calls the same virtual `Effect::FillGpuDrawParams()` that `GraphicsDevice::DrawIndexedPrimitives`
-calls, on the same effect instance — no renderer, no device draw, no reimplementation of an effect.
+calls, on the same effect instance, without submitting the device draw. The tests still construct
+a GraphicsDevice/effects and can depend on the selected renderer's capabilities; the capture does
+not independently reimplement the effect.
 
 What it deliberately does **not** capture is `GraphicsDevice`'s own additions to the block *after*
 that call: vertex stream bindings, `vertexStart`, `startIndex`. Those describe the buffers, not the
@@ -861,24 +881,24 @@ byte.
 | Tangent handedness | — | **L5**, in the vertex bytes; not an effect parameter |
 | Bone palette | `SkinnedDrawBindsThePaletteAndFourInfluencesPerVertex` | `AnimationPlayer::GetSkinTransforms()`, entry for entry |
 | Influences per vertex | `SkinnedDrawBindsThePaletteAndFourInfluencesPerVertex` | CNA always packs four |
-| Alpha mode / cutoff | `AlphaStateIsCarriedOnTheEffectButNotYetInTheParameterBlock` | L3 `material.alphaMode` / `alphaCutoff` |
-| Double-sided | same | L3 `material.doubleSided` — *carried*, see below |
+| Alpha mode / cutoff | `ABlendMaterialCarriesItsAlphaStateWithoutDiscardingAnything`, `AMaskMaterialsCutoffReachesTheDrawsAlphaTestVector` | L3 `material.alphaMode` / `alphaCutoff` and the MASK parameter |
+| Double-sided | material snapshot/capture assertions | L3 `material.doubleSided` — carried; application cull state remains separate |
 
 `RigidAndSkinnedPbrEffectsGiveEverySharedNameTheSameConvention` guards the duplicated public
 effect boundary itself (`GLTF-380`). One generic setter sequence configures `PbrEffect` and
 `SkinnedPbrEffect` with deliberately asymmetric matrices, factors, five maps, alpha state, colour-
-space flags, lights and fog, then compares every shared `GpuDrawParams` field. Only the explicitly
-skin-specific flag, palette, palette count and influence count may differ. A parameter name shared
-by the two PBR effects therefore cannot silently acquire a different unit, colour space, default or
-meaning on the skinned path.
+space flags, lights and fog, then compares the shared fields explicitly listed by the test,
+excluding skin-specific state. This is a regression over that configured subset, not automatic
+coverage of every current/future draw-parameter member, map or lighting path.
 
 `GLTF-237` applies the same L6 contract across the loader boundary. The offline converter and
 direct runtime loader both start from `MaterialOut`; the former serialises it through `.cnj`, then
 `OfflineAndRuntimePathsHaveIdenticalL6MaterialStateForTheCorpus` compares every material-bearing
 draw for all 14 generated `mat-*` fixtures. The comparison covers effect selection, five map
 bindings, every factor/scalar, alpha state and five sampler slots. A separate rich probe authors
-every value non-default so an omitted field cannot accidentally agree through defaults. This is
-the L6 half of `GLTF-244`.
+the five core map roles and factors non-default. This is the L6 half of `GLTF-244`, not a blanket
+comparison of all later material extensions. Current native PBR supports seven map roles, including
+specular strength/colour, with their own selectors and affine transforms.
 
 The L7 half is equally directory-driven: EasyGL's complete 148-asset two-process oracle (§5.3)
 includes all 14 material fixtures.
@@ -900,9 +920,10 @@ and verifies the three matrices arrived without changing the vertex bytes. This 
 it proves that custom effects keep the imported geometry and reach the renderer boundary, while
 actual attribute rasterization remains an L7, renderer-specific question.
 
-Every comparison is against a value **another layer already established independently**, never
-against a second walk of the same code. That is what makes a green L6 mean "the value survived the
-whole trip" rather than "two copies of the same mistake agree".
+Manifest-derived factors/world matrices test transport across layers. Some expectations share
+production machinery: the normal-matrix test uses XNA Matrix operations, and palette comparison
+uses AnimationPlayer output. Those comparisons can catch transport mistakes while sharing a
+calculation defect; independent numeric L4/analytic witnesses remain necessary.
 
 Two entries in the table are honest boundaries rather than coverage:
 
@@ -917,223 +938,118 @@ Two entries in the table are honest boundaries rather than coverage:
 
 ### 5.3 Whole-corpus EasyGL L7 oracle (`GLTF-009` / `GLTF-390` / `GLTF-391`)
 
-`GLTF-009`'s acceptance is *deterministic PNGs across two runs on `OPENGLES3`*. The committed
-`scripts/gltf-l7-corpus.py` now launches the production viewer in **two independent processes for
-every one of the 148 canonical assets**. The result is 140 byte-identical 512×512 PNG pairs and
-eight byte-identical, non-zero safe rejections whose stable diagnostic and lower-layer owning task
-are both recorded. The corresponding 138 goldens live in `tests/gltf-l7/easygl/`; policy and the
-two camera/culling rig exceptions live in `tests/gltf-l7/easygl-policy.json`; the complete input,
-binary, commit, image, classification and hash evidence is
-`docs/gltf-l7-corpus-report.json`. `cna-gltf-viewer` registers the runner as
-`CnaGltfConformanceL7`, and `.github/workflows/gltf-renderer-stride-ci.yml` builds that pinned viewer
-against the CNA commit and runs the labelled rung under Xvfb.
+The retained [EasyGL report](gltf-l7-corpus-report.json), whose root `capturedOn` is
+2026-10-29, enumerates **148 assets: 140 captured PNGs and eight safe rejections**. The directory
+`tests/gltf-l7/easygl/` contains 140 goldens. The report records source/manifest hashes, viewer/CNA
+revisions, executable hash, per-asset outcomes and two-process comparison state.
+Use those structured records for counts; some retained explanatory strings still mention an
+earlier corpus size.
 
-This is a real OPENGLES3 configuration that genuinely rasterises. The earlier registered rigid and
-identity-skinned EasyGL PBR golden tests both render, read the framebuffer and compare four 8×8 PNG
-regions. The `GLTF-212` refresh also gives a discriminating colour-space witness: the former
-linear-space byte
-oracle `(64,74,87)` becomes `(137,146,158)` after the independently calculated sRGB OETF, and both
-programs produce the latter. A second registered test uses mid-grey rather than endpoint textures:
-both programs return byte 128 through sRGB decode+encode, return 188 when each decode is deliberately
-bypassed, and produce the analytic 92/112 factor/composition cases. `EasyGL_Pbr_MaterialMaps` adds
-an equally discriminating material-map witness on both programs: asymmetric texture channels lock
-occlusion to red, three
-strengths lock its interpolation formula, and three normal scales lock `rgb*2-1` plus XY-only
-scaling before TBN transformation. The same test now also locks the skinned-PBR joint normal under
-`S=[1,2,1]` at byte 93 instead of the old direct-matrix result 139; the stock-effect companion
-locks the manifest's exact `(0,.351123,.936329)` direction in both per-pixel and per-vertex programs
-as byte 90 instead of 212. Both focused oracles pass on OPENGLES3. The byte-93 case
-also has the first fixture-driven pilot: `EasyGL_Gltf_SkinnedPbrNonUniformJoint` loads the committed
-`skin-nonuniform-joint-scale.gltf`, verifies its stride-selected effect and non-identity bind palette,
-then renders it through `Model::Draw` twice. Thus L1-L6 and focused framebuffer evidence now meet on
-one generated asset rather than only on equivalent hand-built geometry. A second pilot,
-`EasyGL_Gltf_BaseColorFactorTexture`, does the same for the generated
-`mat-basecolor-factor-times-texture.gltf`: it verifies the imported texture and factor remain
-independent, then obtains analytic byte 92 twice on OPENGLES3.
-`EasyGL_Gltf_SamplerWrap` adds three more generated assets with byte-identical geometry and image:
-their common out-of-range UV resolves to the authored yellow, blue and green quadrants under
-CLAMP, REPEAT and MIRRORED_REPEAT respectively, after the application selects each part's public
-base-colour sampler on device slot zero.
-`GltfSamplerMapping.MissingRoleAwareMipChainIsReportedOnlyForAnAffectedSampledMap` owns the adjacent
-mipmap boundary (`GLTF-206`): `sampler-trilinear` explicitly requests `LINEAR_MIPMAP_LINEAR` and
-names `baseColorTexture` in the missing-chain report, while the otherwise comparable
-`tex-reference-checkerboard` requests base-level-only `NEAREST` and remains silent. The raw mapping
-test separately proves all four `*_MIPMAP_*` enums require a chain and that an undefined sampler
-does not acquire an authored request by accident.
-`EasyGL_Gltf_TangentHandedness` adds the generated two-primitive tangent witness: its common
-tangent-space approximately-`+Y` normal map becomes world `+Y`/`-Y` solely through the two authored
-`tangent.w` signs, producing analytic bytes 151/0 under one light on both EasyGL profiles.
-`EasyGL_Gltf_MirroredTangent` uses one shared `(+X,+1)` tangent buffer for ordinary and mirrored
-node placements. Both reconstruct world `B=+Y` and produce byte 151; before `GLTF-176` multiplied
-the per-draw determinant sign into `w`, the mirrored placement produced exact black.
-`EasyGL_Gltf_AlphaBlend` adds `mat-factor-only-gold`: its straight gold RGB at alpha 0.5 composites
-over blue to `(128,92,168)` with application-selected `NonPremultiplied`, while `Opaque` and the
-wrong premultiplied preset produce distinct `(255,184,80)` and `(255,184,208)` controls.
-`EasyGL_Gltf_TransmissionOrdering` adds a depth-sensitive two-layer use of
-`mat-material-variants`: the opaque red default stands in for a dial and the nearer blue variant
-authors `KHR_materials_transmission=0.5`. Glass-first hides the later dial and produces
-`(7,26,115)` over black; dial-first followed by straight-alpha glass keeps both authored colours
-visible at `(83,38,127)` on both EasyGL profiles.
-`EasyGL_Gltf_TextureTransformPerMap` adds the generated `texture-transform-per-map` witness: one
-authored UV stream drives base-colour and normal maps through deliberately different affine rows,
-and OPENGLES3 selects the expected blue base texel and +Z normal texel. The first
-complete viewer retake after the affine rows reached every PBR shader remained 146/146: all 138
-accepted assets were byte-identical between their two new processes and all eight rejections kept
-their diagnostic. Ten texture-bearing goldens were deliberately rebaselined. The target fixture is
-the only material image change; ordinary linear-filtered cases move by at most four byte levels,
-while two nearest/checker cases change only the texels exactly on a sampling boundary (whole-image
-mean absolute delta below 0.009 byte). The report records the new executable, input and image hashes.
+The protocol launches two independent OPENGLES3 viewer processes per asset, at 512×512 with
+transparent clear and exact RGB/alpha tolerance zero, under `LIBGL_ALWAYS_SOFTWARE=1` on llvmpipe.
+It checks each accepted PNG against its renderer-owned golden and verifies expected non-zero
+rejections/diagnostics. The production viewer registers `CnaGltfConformanceL7`; the workflow
+`.github/workflows/gltf-renderer-stride-ci.yml` builds its pinned checkout separately.
 
-Those focused analytic tests remain valuable because a whole-image hash says *which fixture*
-changed while a centre-pixel analytic witness says *which equation* changed. The corpus rung adds
-the missing breadth without replacing them. Two otherwise valid one-sided fixtures are back-facing
-from the generic positive-octant camera, so their recorded rig uses the viewer's explicit
-`--no-cull`; dedicated culling fixtures retain the culling oracle. `skin-unnormalized` deliberately
-collapses its zero-weight corner onto another corner and is the sole explicitly allowed clear PNG.
-Every other accepted asset must contain at least one non-clear pixel, which prevents a renderer
-that draws nothing from creating an apparently deterministic oracle.
+Two back-facing assets (`mode-triangle-strip-morph` and `xf-rot-x90`) use the recorded
+`--no-cull` rig exception. `skin-unnormalized` deliberately collapses a zero-weight corner and is
+the sole allowed clear PNG; other captured assets must contain non-clear pixels.
+The safe rejections are `accessor-count-mismatch`, `bad-accessor-count-overflow`,
+`bad-accessor-out-of-bounds`, `bad-animation-input-order`, `bad-index-out-of-range`,
+`gltf-required-extension-unsupported`, `skin-73-joints` and `skin-joint-index-out-of-range`.
 
-The per-renderer threshold is **RGB 0, alpha 0** for this EasyGL gate. This is not copied from the
-legacy focused tests, whose tolerances range up to 60 and represent scene-specific discrimination
-margins. It is measured: three complete campaigns, including the final clean verification, produced
-byte-identical PNG files under `LIBGL_ALWAYS_SOFTWARE=1` on Mesa llvmpipe. A hardware GPU is useful
-development evidence but is not allowed to share this byte oracle; if another renderer gains a
-corpus L7 gate, it must first produce its own two-process report and its own justified policy.
-`STUB` still cannot be used as a shortcut:
-it has no 3D pipeline, and a golden captured from a renderer that draws nothing would be a golden
-bug of exactly the kind `docs/gltf-center-collapse-verdict.md` §5 warns about.
+The zero-delta result applies to the recorded same-renderer/environment comparison. It does not
+prove accuracy on another GPU, a later binary, every feature combination, or Khronos-reference
+pixel parity. A zero active-divergence list has that same limited meaning. STUB cannot provide
+framebuffer evidence; HEADLESS supplies trace/refusal evidence rather than rendered images.
 
-The non-raster table in `docs/graphics-renderer-feature-matrix.md` keeps that project-wide
-distinction explicit: STUB is an import-only/no-op boundary, HEADLESS supplies trace evidence and
-OPENGLES3 supplies pixels. The glTF-specific layout and material evidence now lives with its own
-maintained scope in `docs/gltf-renderer-stride-conformance.md` and
-`docs/gltf-renderer-pbr-fallbacks.md`; the closed `GLTF-393` campaign table remains in Git history.
+Focused analytic framebuffer witnesses explain changes that whole-image hashes alone cannot:
 
-`GLTF-386`'s Windows run (a MinGW build under Wine) exposed and fixed two host assumptions: an
-RFC `/`-absolute URI is now classified as absolute even under Windows path semantics, and ladder
-traceability accepts the platform-excluded tool suite only while its source still declares it. The
-26 registered `GltfToCnjToolTest` cases are not part of a Windows `CnaTests` binary because that
-suite launches the converter with POSIX process APIs; the converter itself still cross-builds.
+| Witness | Recorded discriminating result |
+|---|---|
+| PBR colour space | linear bytes (64,74,87) encode to (137,146,158); mid-grey decode/encode yields 128 versus 188 when decode is bypassed |
+| `EasyGL_Pbr_MaterialMaps` | asymmetric channels distinguish occlusion red, strength interpolation and normal XY scale; the non-uniform skinned normal witness yields 93 versus the former 139 |
+| `EasyGL_Gltf_SkinnedPbrNonUniformJoint` | imports the actual non-uniform-joint fixture and draws its non-identity palette twice |
+| `EasyGL_Gltf_BaseColorFactorTexture` | independent imported texture/factor yield analytic byte 92 |
+| `EasyGL_Gltf_SamplerWrap` | one out-of-range UV selects yellow/blue/green under clamp/repeat/mirrored-repeat after caller sampler binding |
+| `EasyGL_Gltf_TangentHandedness` | opposite authored tangent signs yield 151/0 |
+| `EasyGL_Gltf_MirroredTangent` | ordinary and mirrored placements reconstruct the same bitangent and yield 151 |
+| `EasyGL_Gltf_AlphaBlend` | caller-selected NonPremultiplied yields (128,92,168), versus distinct Opaque/premultiplied controls |
+| `EasyGL_Gltf_TransmissionOrdering` | glass-first (7,26,115) differs from dial-first (83,38,127), demonstrating caller draw-order ownership |
+| `EasyGL_Gltf_TextureTransformPerMap` | independent base/normal affine rows select blue base colour and +Z normal |
 
-`GLTF-387` adds the CPU SOFTWARE rasteriser as an independent boundary. Its first L0–L6 run
-was 519/520 and exposed a gap hidden by every prior configuration: SOFTWARE rejected a stock
-PBR/Skinned draw whose optional base map was absent before it could validate the vertex record,
-then lacked the glTF-era 48/56/68-byte layouts behind that guard. An absent optional base map now
-uses the same white identity fallback as the shader renderers, while missing mandatory
-DualTexture/environment maps still refuse. SOFTWARE consumes all ten canonical CNA strides and
-the eight-fixture native draw sweep reaches rigid PBR, dual-UV PBR, coloured skinning and skinned
-PBR. The rerun is **520/520 with no skips** and the ten-rung L0–L6/tool ladder is 10/10. Focused ordinary
-target/backbuffer cull, depth/depth-bias and stride-52 skinning pixels are green; the broader
-winding control separately found a pre-existing blank readback on a 4x-MSAA target, recorded under
-`GLTF-395` rather than misclassified as an importer or stride failure. `GLTF-395` then fixed that
-boundary: a level-zero SOFTWARE readback now snapshots the live four-sample plane without ending
-the render pass or exposing generated mip levels. The shared winding oracle is 127/127 on
-EasyGL and green on SOFTWARE; HEADLESS also passes its explicit non-rasterising
-boundary. It covers both windings under all three cull modes, ordinary/MSAA targets, every draw
-entry point, stock textured effects, mirrored transforms and SpriteBatch. The later whole-corpus
-L7 campaign is complete at 140 deterministic captures plus eight deterministic safe rejections;
-its two additional renderer-boundary findings and exact evidence are in §5.4.
+These are campaign measurements on named witnesses. Focused tests have their own discrimination
+tolerances; do not replace them with the corpus's zero-tolerance policy or treat them as a fresh
+all-renderer run. The adjacent sampler tests distinguish authored mip-chain requests from
+base-level filtering; a missing chain is reported only for an affected sampled role.
 
-`GLTF-396` records the adjacent clip/depth boundary in `docs/gltf-conventions.md`. CNA projection
-matrices emit Direct3D/XNA `0 <= z <= w`: EasyGL converts
-it to OpenGL's wider clip interval in every renderer-owned 3D vertex shader, and SOFTWARE clips all
-six homogeneous XNA planes before mapping `z/w` directly. `SOFTWARE-336` adds the missing absolute
-EasyGL proof: stock clip `z=0` is the near depth endpoint and `z<0` is rejected. Existing viewport,
-clipping and corpus selections retain the wider output coverage. No importer compensation is
-permitted for these renderer-owned conversions.
+Current renderer layout/material scope belongs in
+[gltf-renderer-stride-conformance.md](gltf-renderer-stride-conformance.md) and
+[gltf-renderer-pbr-fallbacks.md](gltf-renderer-pbr-fallbacks.md). Historical 519/520, 520/520 and
+retired-renderer campaign totals remain in Git history. Projection-depth and render-target
+orientation conversions belong to the renderer, not the importer
+([gltf-conventions.md](gltf-conventions.md)); a later renderer implementation is qualified by its
+own focused tests.
 
-`GLTF-397` similarly keeps render-target orientation out of import. The asymmetric asset UV lock
-remains byte-exact, while the shared 8x4 render-target sampling oracle feeds the same deliberately
-unflipped mesh UVs to an ordinary uploaded texture and to a rendered texture. EasyGL is 62/62
-and SOFTWARE 62/62; HEADLESS passes its explicit refusal boundary. The stock 3D legs
-prove both sources upright and texel-identical. EasyGL's `cnaSampleUV` flag is recomputed per bound
-resource and uploaded even when zero, so a bottom-up target correction cannot leak into the next
-ordinary glTF/PBR texture draw.
+The numerical corpus also covers pinned Draco: the default decoder is the `google/draco` 1.5.7
+gitlink `8786740086a9f4d83f44aa83badfbea4dce7a1b5`.
+`CNA_ENABLE_DRACO=OFF` keeps explicit decoder-free rejection, and
+`CNA_USE_SYSTEM_DRACO=ON` is a separate packager option. Encoder-pin and decoded-twin tests check
+the four generated assets/five streams. The parser-adapter test recovers cgltf's fixed-up attribute
+IDs through range/alignment checks even without a decoder. Draco permits TRIANGLES/TRIANGLE_STRIP;
+decoded face triples remain an explicit triangle list and must not be strip-converted twice.
+These tests establish the named cases, not arbitrary compressed-input safety.
 
-The normal build uses the unmodified `google/draco` 1.5.7 gitlink at
-`8786740086a9f4d83f44aa83badfbea4dce7a1b5`; `CNA_ENABLE_DRACO=OFF` preserves the deliberate
-decoder-free refusal configuration and `CNA_USE_SYSTEM_DRACO=ON` is an explicit packager escape
-hatch. The four generated Draco assets keep their compressed bytes in the same spec-derived corpus
-as every other fixture. `GltfDracoEncoderPin` recreates all five distinct streams with the pinned
-sequential encoder and requires byte equality, while `GltfDracoParity` compares decoded rigid,
-colour, skinned and morphed streams plus connectivity exactly against uncompressed twins. A corrupt
-real stream is rejected under ASan+UBSan before a `MeshOut` can escape.
-
-The decoder also has one parser-adapter invariant that remains tested in builds without Draco:
-cgltf represents each `KHR_draco_mesh_compression.attributes` integer N as the fixed-up
-pointer `&data->accessors[N]`. `GltfImportCoreTest.DracoUniqueIdsFollowCgltfsFixedUpAttributePointers`
-parses sparse, deliberately reordered IDs 7/2/5 through cgltf itself and requires their exact
-recovery by semantic and set. `FindDracoUniqueIdEXT` first checks the complete accessor byte range
-and element alignment, so a future cgltf representation change fails closed rather than performing
-undefined pointer subtraction or selecting a plausible but wrong Draco attribute (`GLTF-359`).
-
-Draco topology is a separate exact partition (`GLTF-080`, `GLTF-362`). The extension permits only
-`TRIANGLES` and `TRIANGLE_STRIP`; the other five core modes, including `TRIANGLE_FAN`, are rejected
-with that restriction named before decoder availability is consulted. A decoded `draco::Mesh`
-already exposes explicit face triples, so CNA preserves that triangle list for either permitted
-source mode. It must not feed the triples through ordinary strip conversion a second time. The
-19-case `GltfPrimitiveTopology` suite includes the full seven-mode partition, five real parsed
-early-rejection cases and a discriminating two-face strip/list normalization check.
-
-The layers below it are unaffected: L1–L6 are renderer-independent by construction (they read the
-file, the importer's output and the effect's own parameter block), which is what `GLTF-017` asserts
-directly. The report's divergence scope is equally explicit: the same-renderer run has no active
-golden mismatch; the actual renderer-owned divergence found by the pinned Khronos subset was the
-EasyGL unlit-origin NaN, owned by `GLTF-411` and fixed in `a88b14220`. The two presentation-rig
-exceptions and all eight expected safe rejections have one named owner each. Reported/deferred
-features remain owned by their numerical diagnostics rather than being reclassified from pixels.
+The pinned Khronos subset found an EasyGL unlit-origin NaN, fixed by `GLTF-411` in
+`a88b14220`. That historical fix does not close the different current unlit/occlusion selection
+defect in `handoff.md` §5. Likewise, `scripts/gltf-renderer-parity.sh` currently can return zero
+for identically failing/partial gtest logs; verify each test process's exit/result independently.
+That wrapper compares status lines, not raw L1–L6 data.
 
 ### 5.4 Whole-corpus SOFTWARE L7 oracle (`GLTF-387` / `GLTF-390` / `GLTF-391`)
 
-The generalized corpus protocol also has an independently measured CPU-rasteriser policy. It runs
-the production viewer twice for every canonical asset with `CNA_GRAPHICS_RENDERER=SOFTWARE`,
-records the renderer identity emitted by the application and compares only against SOFTWARE-owned
-`tests/gltf-l7/software/` goldens. The viewer still creates an SDL window for its application
-shell, so the recorded capture environment uses X11/Xvfb and dummy audio; all mesh transformation,
-clipping, depth, shading and framebuffer pixels are nevertheless produced by CNA's CPU rasteriser,
-not by the display server or a graphics API. The result is 138 byte-identical 512×512 PNG pairs at
-exact RGB/alpha tolerance 0 and eight deterministic non-zero safe rejections. Policy and exception
-reasons live in `tests/gltf-l7/software-policy.json`; complete input, viewer, executable and PNG
-hashes live in `docs/gltf-l7-software-corpus-report.json`.
+The retained [SOFTWARE report](gltf-l7-software-corpus-report.json), whose root `capturedOn` is
+2026-08-18, also enumerates **148 assets, 140 PNGs and eight safe rejections**. Its goldens are
+`tests/gltf-l7/software/`, with exceptions/tolerances in `software-policy.json`.
+Two viewer processes use the CPU rasteriser at 512×512 and exact RGB/alpha tolerance zero.
+The application shell still creates an SDL window, so it needs a private display even though CNA
+performs transformation, clipping, shading and rasterisation on the CPU.
 
-The initial images were reviewed before becoming goldens. The first run stopped on
-`mode-points`: the importer had correctly preserved the core topology, but SOFTWARE's effect-aware
-native draw path still accepted only triangles. The renderer now rasterises `PointListEXT`,
-`LineList` and `LineStrip`, for indexed and non-indexed submissions, through the same clipped,
-depth-tested, blended fragment path as triangles; `TriangleStrip` remains an explicit unsupported
-boundary. The next run stopped on `uv1-material`: its canonical 60-byte dual-UV record reached the
-renderer intact, but the CPU path only knew stride 48/68. SOFTWARE now accepts stride 60/76 and
-retains both UV channels. Its later PBR completion applies the independent selector and affine
-transform for every material map; the analytic direct-lighting and mirrored-skin TBN oracle is
-paired with the corpus rather than inferred from its images. The recorded capture itself predates
-that lighting completion and remains evidence for the importer/raster/coverage boundary, not a
-current PBR golden claim.
+The capture predates SOFTWARE's later PBR lighting completion. Retained records include subsequent
+corpus maintenance; the root date is not proof that every row was captured on that date. This is
+importer/raster/coverage regression evidence at its recorded scope, not a current full-PBR golden
+qualification. SOFTWARE's present seven-map lighting contract and targeted pixel evidence are
+documented in the renderer pages linked above.
 
-Reproduce the exact campaign after building the SOFTWARE viewer:
+To run the protocol against an already built SOFTWARE viewer, write a new report in a temporary
+directory, inspect its differences, and decide separately whether committed goldens need updating:
 
 ```bash
-xvfb-run -a python3 scripts/gltf-l7-corpus.py \
+tools/platform/run_gpu_tests_private.sh --exec \
+  env CNA_GRAPHICS_RENDERER=SOFTWARE SDL_AUDIODRIVER=dummy \
+  python3 scripts/gltf-l7-corpus.py \
   --viewer /path/to/software-build/cna_gltf_viewer \
   --viewer-source /path/to/cna-gltf-viewer \
   --policy tests/gltf-l7/software-policy.json \
-  --report-out docs/gltf-l7-software-corpus-report.json
+  --report-out /tmp/cna-gltf-software-report.json
 ```
 
-`GltfFixtureCorpus.SoftwareCorpusL7ReportIsCompleteExactAndReproducible` makes the recorded evidence
-portable to a no-display unit test: it re-hashes all 146 canonical sources and all 138 goldens,
-requires the golden directory to equal the captured disposition set, verifies each safe rejection,
-and locks the two-process, single-renderer and zero-tolerance policy.
+`GltfFixtureCorpus.SoftwareCorpusL7ReportIsCompleteExactAndReproducible` verifies recorded
+classifications, source/golden hashes, the exact directory set and the two-process policy without
+opening a display. It does not recreate the recorded executable or rerender its images.
 
 ### 5.5 Pinned reference-renderer subset (`GLTF-411`)
 
-The supplementary reference comparison is now executed over 13 generated assets: JSON and GLB,
+The retained supplementary reference comparison covers 13 generated asset containers: JSON and GLB,
 ordinary and non-indexed triangles, interleaved and sparse accessors, converted strip topology,
 unlit and textured materials, normalized vertex colour, independent UV0/UV1 map selection, and the
 pinned-Draco path. Reproduce it
 after building the detached renderer and the OPENGLES3 viewer:
 
 ```bash
-python3 scripts/gltf-reference-renderer-compare.py \
+tools/platform/run_gpu_tests_private.sh --exec \
+  env CNA_GRAPHICS_RENDERER=OPENGLES3 SDL_AUDIODRIVER=dummy \
+  python3 scripts/gltf-reference-renderer-compare.py \
   --renderer /tmp/glTF-Sample-Renderer \
   --viewer /path/to/cna-gltf-viewer/build/cna_gltf_viewer \
   --viewer-source /path/to/cna-gltf-viewer \
@@ -1160,8 +1076,9 @@ coverage was pixel-aligned. Alpha differences remain in the report as diagnostic
 disposable; [`gltf-reference-comparison.json`](gltf-reference-comparison.json) retains every asset,
 camera, state, environment, input/output hash and metric needed to audit the result without adding
 an external renderer or browser to CNA's CI/runtime dependency graph. This 13-asset cross-check is
-the independent implementation check; the 146-asset EasyGL gate in §5.3 is the broad regression
-oracle. Neither is substituted for the other.
+an independent implementation check over its 13 inputs; the 148-asset EasyGL gate in §5.3 is
+the broader same-renderer regression oracle. Neither substitutes for the other, nor for current
+qualification after a renderer change.
 
 ### 5.6 Final viewer retake matrix (`GLTF-429`)
 
@@ -1194,13 +1111,15 @@ OPENGLES3 viewer and an explicit sparse checkout of the three pinned sample mode
 scripts/fetch-gltf-sample-assets.sh /tmp/cna-gltf-retake-assets \
   Fox DamagedHelmet Sponza
 
-xvfb-run -a python3 scripts/gltf-viewer-retake.py \
+tools/platform/run_gpu_tests_private.sh --exec \
+  env CNA_GRAPHICS_RENDERER=OPENGLES3 SDL_AUDIODRIVER=dummy \
+  python3 scripts/gltf-viewer-retake.py \
   --renderer /tmp/glTF-Sample-Renderer \
   --sample-assets /tmp/cna-gltf-retake-assets \
   --viewer /path/to/cna-gltf-viewer/build/cna_gltf_viewer \
   --viewer-source /path/to/cna-gltf-viewer \
   --output /tmp/cna-gltf-viewer-retake \
-  --report-out docs/gltf-viewer-retake-report.json
+  --report-out /tmp/cna-gltf-viewer-retake-report.json
 ```
 
 The renderer must be the §2.8 pin `863b981fb755359063e370ff7b6e956bda0716e2`; the sample checkout
@@ -1232,7 +1151,9 @@ corpus.
 
 §3.7.2.1 says a client "should" compute tangents when a normal-mapped material needs them and the
 file authors none. It does not say **how**, and the algorithm decides what the surface looks like,
-so CNA's is written down here rather than left to be read out of `ComputeTangentsEXT`.
+so CNA's policy is documented here alongside `ComputeTangentsEXT`. The formulas below describe
+finite, usable input normals/geometry; skipping degenerate UVs is not a general NaN/overflow
+sanitizer for every input component.
 
 ### What it computes
 
@@ -1263,12 +1184,14 @@ cannot be bit-for-bit equivalent on every mesh.
 
 Three consequences worth being explicit about:
 
-* **An authored `TANGENT` is always preferred**, and is passed through byte-exact. Generation is
-  the fallback, never an override, so a file exported from a MikkTSpace-based tool is unaffected.
-* **A degenerate UV triangle** (zero-area in UV space, so `r` would be infinite) contributes
-  nothing rather than a NaN, and a vertex left with no usable accumulation falls back to `+X` with
-  a `+1` handedness — a valid frame that is simply arbitrary, which is the only honest answer when
-  the UVs carry no direction to derive one from.
+* Authored tangents are retained on a compatible layout when NORMAL is present. With no NORMAL,
+  glTF requires authored tangents to be ignored and flat normals generated; the importer reports
+  that case. Layouts without a tangent slot can drop one, and morph policy can modify the basis.
+  Authored data is therefore not universally preserved byte for byte.
+* A UV triangle with `abs(det) < 1e-12` contributes nothing. For final tangent length at most
+  `1e-8`, the current fallback projects +X onto the normal's perpendicular plane when
+  `abs(N.x) < 0.9`, otherwise +Y, then normalizes it. With no bitangent accumulation, handedness
+  is +1. The former unconditional +X fallback was fixed: it was parallel to normals on ±X faces.
 * **The MikkTSpace difference is measured by `GLTF-179`**, and remains a deliberate fallback
   limitation rather than a claim of parity. The generated basis is valid, but may not be the basis
   against which a normal map was baked. Which one an asset needs is a property of its authoring
@@ -1293,10 +1216,11 @@ numbers.
 
 This is a discriminating measurement, not a universal error bound: a different mesh can diverge
 less or more. The current policy is accepted because generation is only the fallback when an asset
-omits `TANGENT`; an authored MikkTSpace basis still passes through byte-exact. Full parity is
-scheduled only when the importer can accept per-corner output, split vertices as required, rewrite
-every affected per-vertex stream and re-index afterward. Quietly averaging the reference output
-back into today's index list is specifically invalid according to the reference contract.
+omits a usable authored tangent basis, subject to the exceptions above. Full MikkTSpace parity
+would require accepting per-corner output, splitting vertices as required, rewriting every
+affected stream and re-indexing. This is an implementation requirement for a future change, not an
+active task commitment. Averaging the reference output back into today's index list violates its
+reference contract.
 
 ---
 
@@ -1472,42 +1396,48 @@ task, which is what keeps "no golden" distinguishable from "golden forgotten".
 
 ## 8. Milestones (`GLTF-458`, `GLTF-459`)
 
-The milestone in force is **`GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT`**, declared on 2026-08-18
-(`GLTF-458`) with renderer coverage stated beside it rather than inside it. The unqualified
-`GLTF CORE 2.0 CORRECT` is not claimed; why, and the two-state renderer partition that replaced it,
-is in [`gltf-campaign-retrospective.md`](gltf-campaign-retrospective.md) §4.
-`GLTF ROBUST` (§8.3) is not declared.
+The campaign declared **`GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT`** on 2026-08-18
+(`GLTF-458`), with renderer coverage stated separately. Retain this as a dated project milestone
+over the listed evidence, not a present guarantee that every glTF input/combination is correct.
+The unqualified `GLTF CORE 2.0 CORRECT` was not claimed; see
+[gltf-campaign-retrospective.md](gltf-campaign-retrospective.md) §4.
+`GLTF ROBUST` (§8.3) remains undeclared. Subsequent source-found defects in `handoff.md` §5,
+including unlit occlusion selection and standalone unitScale parsing, remain open.
 
 ### 8.1 Core requirements
 
-Each requirement holds with permanent automated tests at the stated oracle layer (§3.1).
+These are the campaign's acceptance areas, restated at the scope of their permanent witnesses.
+Tests cover finite fixtures/forms and stated tolerances, not every allowed combination, arbitrary
+hierarchy, all future native layouts, or universal animation/shading error bounds.
 
 | # | Requirement | Layer |
 |---|---|---|
-| 1 | `.gltf` and `.glb` load equivalently; GLB chunk layout, padding and the `BIN` chunk are validated | L1 |
-| 2 | `buffer`s resolve from external files, base64 `data:` URIs and the GLB `BIN` chunk; `byteLength` is enforced | L1 |
-| 3 | Every `bufferView` offset/length/stride and `accessor` offset/count/type/componentType/normalized combination the specification allows decodes exactly, with bounds and alignment enforced | L2 |
-| 4 | `accessor.sparse` is correct for **attributes and indices** | L2 |
-| 5 | All seven primitive `mode`s are either supported or explicitly rejected — **never silently reinterpreted** | L3 |
-| 6 | Indices decode exactly for `UNSIGNED_BYTE`/`SHORT`/`INT`, with range validation; non-indexed primitives work | L3 |
-| 7 | `POSITION`, `NORMAL`, `TANGENT`, `TEXCOORD_0/1`, `COLOR_0`, `JOINTS_0`, `WEIGHTS_0` decode exactly, with correct defaults for absent attributes | L3 |
-| 8 | Node `matrix` and TRS both compose correctly through arbitrary hierarchies, including negative scale and mirroring; every `xf-*` transform fixture passes numerically | L4 |
-| 9 | Scenes, default-scene selection, multiple roots, transform-only nodes and **shared meshes instanced by multiple nodes** all import correctly | L4 |
-| 10 | Generated vertex/index buffers are byte-exact against goldens for all supported strides; `primitiveCount` is correct per topology | L5 |
-| 11 | Images load from all three sources; **samplers** map to `SamplerState`; colour space is correct for all five map roles | L6/L7 |
-| 12 | Metallic-roughness PBR is complete: `baseColorFactor`, metallic, roughness, all four maps and their factors, normal scale, occlusion strength, emissive and emissive strength | L6 |
-| 13 | `alphaMode` `OPAQUE`/`MASK`/`BLEND` with `alphaCutoff`, and `doubleSided`, are honoured | L6/L7 |
-| 14 | Skinning matches glTF's joint-matrix equation exactly, including the full joint ancestor chain and the mesh-node cancellation; every `skin-*` ladder fixture passes numerically | L4 |
-| 15 | Morph targets apply position, normal **and** tangent deltas on every stride that has the slot; `mesh.weights` and `node.weights` are both honoured | L4 |
-| 16 | `LINEAR`, `STEP` and `CUBICSPLINE` animation of `translation`/`rotation`/`scale`/`weights` is exact at keyframes and at midpoints, for **joint and non-joint nodes alike** | L4 |
-| 17 | An unsupported **required** extension produces a clear, deterministic error instead of a silent mis-import | L1 |
-| 18 | Every loss the importer does perform is reported through an import diagnostic, never silently | L1 |
-| 19 | The whole corpus passes identically on `STUB`, `HEADLESS`, `OPENGLES3` and (until its retirement) `VULKAN` at L5 and L6 | L5/L6 |
-| 20 | `cna-gltf-viewer` renders the Gate C retake matrix (§5.6) correctly against reference output, with **no** compensating logic | L7 |
+| 1 | JSON/GLB twins load equivalently; malformed chunk/padding/BIN witnesses are validated | L1 |
+| 2 | Named external/base64/BIN buffer and byteLength witnesses behave as specified | L1 |
+| 3 | Accessor/view offset, length, stride, type, normalization, bound and alignment witnesses decode as expected | L2 |
+| 4 | Sparse attribute and index witnesses decode their overrides | L2 |
+| 5 | All seven primitive modes have supported/conversion/refusal policies, without silent triangle reinterpretation | L3 |
+| 6 | U8/U16/U32 source indices, non-indexed primitives and out-of-range cases have focused witnesses | L3 |
+| 7 | Named position/normal/tangent/UV0/UV1/colour/joint/weight forms follow documented packing, generated-attribute and quantization policies | L3 |
+| 8 | Matrix/TRS, hierarchy, negative-scale and mirroring fixtures compose numerically as specified | L4 |
+| 9 | Scene selection, roots, transform-only nodes and shared-mesh instances have regression witnesses | L4 |
+| 10 | Every declared L5 golden matches packed bytes and topology-aware primitive counts; actual layout coverage is §4.3 | L5 |
+| 11 | Named external/data-URI/bufferView image, sampler and five core-map colour-space witnesses reach the draw boundary | L6/L7 |
+| 12 | Core metallic-roughness factors/five map roles, normal scale, occlusion and emissive-strength witnesses survive import/binding | L6 |
+| 13 | MASK cutoff reaches the shader; BLEND/double-sided metadata require caller blend/cull state and draw order | L6/L7 |
+| 14 | Joint ancestry and ignored mesh-node-transform fixtures pass under the corrected spaces in §3.3 | L4 |
+| 15 | Morph witnesses cover supported position/normal/tangent deltas, mesh/node defaults and generated-flat-normal policy | L4 |
+| 16 | Joint/rigid/morph animation witnesses cover LINEAR/STEP/CUBICSPLINE; retained linear playback/resampling is bounded per witness | L4 |
+| 17 | Unsupported required-extension witnesses produce deterministic errors | L1 |
+| 18 | Declared approximations/limits have structured diagnostics and named regression cases | L1 |
+| 19 | Renderer gates use the same numerical expectations; historical observations and today's configured matrix are distinct | L5/L6 |
+| 20 | The recorded 15-case Gate C retake (§5.6) meets its thresholds without importer compensation in the viewer | L7 |
 
-Explicitly **not** required for this milestone: image-based lighting, tone mapping, transmission,
-clearcoat/sheen/volume/iridescence, material variants, Basis/WebP textures, meshopt, GPU instancing,
-GPU morphing, >4 skin influences, >72 bones.
+Outside that historical core milestone's acceptance: IBL/tone-mapping integration, complete
+transmission/clearcoat/sheen/volume/iridescence, material variants, Basis/WebP decoding, meshopt,
+GPU instancing/morphing, more than four retained influences or 72 joints. Some have since gained
+native APIs, imported metadata, or approximations; this list is not an inventory of missing CNA
+features. Current extension-required policy remains the registry in `gltf-limitations.md`.
 
 ### 8.2 Traceability (`GLTF-403` / `GLTF-413`)
 
@@ -1517,7 +1447,9 @@ requires every row 1–20 to appear, every fixture named to be in the corpus, an
 name to resolve either to gtest in `CnaTests` or to an exact renderer CTest registration — so a
 renamed suite or a deleted fixture fails instead of leaving a milestone citing evidence that no
 longer exists. It deliberately does not check the State column: whether a row is green is a
-judgement made from the tests themselves.
+judgement made from the tests themselves. Here “green” means the named regression witnesses;
+historical renderer observations remain dated evidence. This source/name-presence check does not
+prove a prose claim or detect every missing semantic combination.
 
 | # | Fixtures | Test suites | State |
 |---|---|---|---|
@@ -1527,37 +1459,41 @@ judgement made from the tests themselves.
 | 4 | `sparse-position`, `sparse-indices` | `GltfConformanceL2`, `GltfIndexDecode` | green |
 | 5 | `mode-triangles`, `mode-triangle-strip`, `mode-triangle-fan`, `mode-lines`, `mode-line-strip`, `mode-line-loop`, `mode-points` | `GltfPrimitiveTopology`, `GltfDrawTopology`, `GltfConformanceL3` | green |
 | 6 | `u8-idx`, `sparse-indices`, `mode-triangles` (the 16-bit path), `accessor-count-mismatch` | `GltfIndexDecode`, `GltfIndexForm`, `GltfConformanceL3` | green |
-| 7 | `normal-absent`, `mat-authored-tangent`, `mat-vertex-color-pbr`, `normalized-u8-color`, `skin-*`, `uv1-material` | `GltfAttributeCoverage`, `GltfConformanceL3`, `GltfUvChannel`, `GltfDrawParamsOracleL6`, `GltfToCnjToolTest`, `EasyGL_Pbr_MaterialMaps` | **green:** PBR strides 60/76 carry two disjoint authored UV streams with deterministic padding, each of five map slots selects its packed channel through direct and offline paths, and independent base-colour/emissive coordinates produce the expected framebuffer on EasyGL OPENGLES2/3 and Vulkan. Vulkan's first whole-corpus run exposed and then fixed its hard-coded 48/68-byte PBR strides and UV0-only samples. SOFTWARE's intentionally simplified PBR fallback separately consumes the base-colour selector at the same 60/76-byte native boundary; its first whole-corpus run exposed and fixed that missing layout before accepting the full 45,643-pixel `uv1-material` golden. All three complete 145-asset renderer-owned L7 gates are now zero-delta, and the pinned Khronos cross-check passes its IoU/coverage/RGB thresholds (`GLTF-182`/`183`/`385`/`387`). |
+| 7 | `normal-absent`, `mat-authored-tangent`, `mat-vertex-color-pbr`, `normalized-u8-color`, `skin-*`, `uv1-material` | `GltfAttributeCoverage`, `GltfConformanceL3`, `GltfUvChannel`, `GltfDrawParamsOracleL6`, `GltfToCnjToolTest`, `EasyGL_Pbr_MaterialMaps` | Named attribute/UV witnesses pass. Current PBR includes coloured rigid/skinned strides 60/80 as well as core single/dual-UV layouts. Five-core-map transport tests are narrower than the seven-map contract; SOFTWARE now has native PBR lighting. |
 | 8 | `xf-matrix-node`, `xf-parent-child`, `xf-scale-nonuniform`, `xf-negative-scale`, `xf-mirror-child` | `GltfConformanceL4`, `GltfNodeTransformOrder`, `GltfNodeHierarchy`, `GltfMirroring`, `GltfConventions` | green |
 | 9 | `xf-shared-mesh`, `scene-default-selection`, `skin-plus-static-mesh` | `GltfConformanceL4`, `GltfSceneSelection`, `GltfModelShape`, `GltfSceneGraphBones` | green |
-| 10 | every fixture with `l5.supported` (138 of 146) | `GltfConformanceL5`, `GltfBufferOracle`, `GltfStrideAndBuffer`, `GltfVertexLayoutTable`, `GltfVertexBufferInvariants` | green |
+| 10 | every fixture with `l5.supported` (140 of 148) | `GltfConformanceL5`, `GltfBufferOracle`, `GltfStrideAndBuffer`, `GltfVertexLayoutTable`, `GltfVertexBufferInvariants` | green |
 | 11 | `tex-reference-checkerboard`, `tex-texture-transform`, `tex-dual-texture-stride`, `mat-normal-occlusion-scale` | `GltfSamplerMapping`, `GltfImageSource`, `GltfUnsupportedTexture`, `GltfOcclusionRemap`, `GltfConformanceL6`, `CnaGltfConformanceL7` | green at L6 and in the complete OPENGLES3 L7 corpus gate (`GLTF-009`) |
 | 12 | `mat-factor-only-gold`, `mat-basecolor-factor-times-texture`, `mat-emissive-strength`, `mat-normal-occlusion-scale`, `mat-material-variants` | `GltfConformanceL6`, `GltfMaterialState`, `GltfMaterialVariants`, `GltfDrawParamsOracleL6`, `GltfToCnjToolTest`, `EasyGL_Gltf_BaseColorFactorTexture` | green on L1–L6 and the named EasyGL L7 witness |
-| 13 | `mat-factor-only-gold` (BLEND, doubleSided), `mat-alpha-mask-cutoff` (MASK) | `GltfConformanceL6`, `EasyGL_Gltf_AlphaBlend` | **green:** `MASK` cutoff is applied in every PBR fragment path (`GLTF-372`). The real BLEND fixture proves caller-selected `NonPremultiplied` against Opaque and premultiplied controls. The same imported `doubleSided` property now selects `CullNone` for a deliberately back-facing draw after the ordinary single-sided state proves it is otherwise culled. All five discriminating pixel checks plus four load/carrier checks pass on OPENGLES2 and OPENGLES3 (`GLTF-230`/`231`); `Model::Draw` correctly preserves, rather than mutates, application-owned device state. |
+| 13 | `mat-factor-only-gold` (BLEND, doubleSided), `mat-alpha-mask-cutoff` (MASK) | `GltfConformanceL6`, `EasyGL_Gltf_AlphaBlend` | MASK and caller-selected BLEND/cull witnesses pass; Model::Draw preserves application state/source order. OPENGLES2 observations are historical. |
 | 14 | `skin-armature-ancestor`, `skin-mesh-node-transform`, `skin-mesh-node-parent-transform`, `skin-skeleton-hint`, `skin-unnormalized` | `GltfSkinSpaces`, `GltfSkinComposition`, `GltfConformanceL4` | green |
 | 15 | `morph-node-weights-override`, `mode-triangle-strip-morph`, `anim-weights-path`, `morph-position-normal-tangent` | `GltfMorphWeights`, `GltfMorphBlending`, `GltfConformanceL4`, `GltfToCnjToolTest` | green; all 13 `morph-*` fixtures now compare direct and offline default blended bytes, including tangent deltas (`GLTF-289`) |
 | 16 | `anim-step`, `anim-cubicspline`, `anim-rigid-node`, `anim-weights-path`, `anim-parent-child`, `anim-two-clips`, `anim-nonzero-start` | `GltfAnimationSampling`, `GltfAnimationRobustness`, `GltfRigidAnimation`, `GltfClipAndLight`, `GltfConformanceL4` | green |
 | 17 | `gltf-required-extension-unsupported` | `GltfContainerValidation`, `GltfExtensionRegistry` | green |
-| 18 | `mat-vertex-color-pbr`, `skin-eight-influences`, `skin-unnormalized`, `lights-over-budget` | `GltfKnownDefect`, `GltfLightBudget`, `GltfAttributeCoverage`, `GltfLimitationsDoc`, `GltfImportReport` | green as both internal counters and the public structured `GltfImportReportEXT` reachable from `Model` on direct and offline paths (`GLTF-034`/`GLTF-035`) |
-| 19 | the whole corpus | `GltfConformanceL5`, `GltfConformanceL6` across the renderer gate | **green**: the same committed L5 goldens and manifest-derived L6 oracle pass on `STUB`, `HEADLESS`, `OPENGLES3` and `VULKAN`; all 42 L1–L5 results are byte-identical (`GLTF-168`/`GLTF-388`/`GLTF-389`) |
+| 18 | `mat-vertex-color-pbr`, `skin-eight-influences`, `skin-unnormalized`, `lights-over-budget` | `GltfKnownDefect`, `GltfLightBudget`, `GltfAttributeCoverage`, `GltfLimitationsDoc`, `GltfImportReport` | Named counters and direct/offline structured-report witnesses pass. The current unlit-occlusion defect prevents a blanket all-losses/all-combinations claim. |
+| 19 | the whole corpus | `GltfConformanceL5`, `GltfConformanceL6` across the renderer gate | Historical STUB/HEADLESS/OPENGLES3/VULKAN observations use the same expectations. Current CI configures STUB, HEADLESS, OPENGLES3, SDLGPU, WEBGPU and SOFTWARE; configuration is not a fresh execution. The parity shell wrapper requires independent exit/result checks (§5.3). |
 | 20 | the 15-case Gate C retake matrix of §5.6 (14 rows; sparse attribute/index are distinct) | `GltfFixtureCorpus`, `CnaGltfConformanceL7` | **green:** `scripts/gltf-viewer-retake.py` executed every row through two byte-identical OPENGLES3 viewer processes and the exact viewer-reported camera through the pinned Khronos renderer. All 15 pass IoU/coverage/RGB gates; the ≥50 MiB Sponza row is 52,686,624 bytes / 262,267 triangles (`GLTF-429`, `docs/gltf-viewer-retake-report.json`). `GltfFixtureCorpus.ViewerRetakeMatrixIsPinnedCompleteAndStrict` keeps the pins, row set and thresholds permanent; the required corpus L7 CTest remains the per-commit broad pixel gate. |
 
-Evidence that names `VULKAN`, `DIRECTX11` or `OPENGLES2` was gathered before those renderers were
-retired (2026-10-06 and 2026-10-13); `OPENGLES3` and `SOFTWARE` remain the whole-corpus L7 witnesses.
+VULKAN, DIRECTX11 and OPENGLES2 evidence predates their retirement. The maintained OPENGLES3
+and SOFTWARE corpus reports have the different lighting/provenance scopes in §5.3–5.4; neither
+retired selectors nor a CI matrix definition constitute current execution evidence.
 
 ### 8.3 `GLTF ROBUST` — not declared (`GLTF-459`)
 
+This is the retained extended acceptance checklist. Checked rows mean their named, bounded
+evidence exists; they do not expand a historical campaign into current exhaustive qualification.
+
 | # | Requirement | State | Evidence, or what is missing |
 |---|---|---|---|
-| 1 | Draco parity at L3 for every vertex stream and indices, including skinned and morphed Draco primitives | ✅ | `GltfDracoParity` compares each compressed primitive against its ordinary twin byte for byte; `GltfDracoEncoderPin` recreates the committed streams. |
-| 2 | `EXT_meshopt_compression` supported or cleanly rejected | ✅ | Refused before any buffer view is read as undefined bytes (`GLTF-351`, `GltfContainerRobustness`). |
-| 3 | `KHR_materials_unlit`, `_ior`, `_specular`, `_transmission` (documented approximation) and `_variants` | ✅ | §1 of [`gltf-limitations.md`](gltf-limitations.md); every surviving PBR renderer samples both specular maps (`GLTF-344`). |
-| 4 | `KHR_texture_transform` per map, and two real UV channels end to end | ✅ | `GLTF-184`, `GltfUvChannel`, PBR strides 60/76. |
-| 5 | `KHR_texture_basisu` / `EXT_texture_webp` supported or cleanly rejected | ✅ | `GltfUnsupportedTexture`: refused when required, otherwise a plain fallback or a dropped map reported by name. |
-| 6 | Point and spot lights with real falloff and cone angles | ⬜ | **Not implemented, deliberately.** The loss is counted and reported (`GLTF-326`/`327`); XNA's `IEffectLights` names exactly three directional lights, so real point/spot lighting needs a light ABI shared by every renderer (`GLTF-331`). See §2 of [`gltf-limitations.md`](gltf-limitations.md). |
-| 7 | Imported perspective (including infinite far) and orthographic cameras | ✅ | `GltfCameras`. |
-| 8 | Deterministic, actionable errors for malformed input; zero ASan/UBSan findings across the corpus | ✅ | `GltfContainerRobustness`, `GltfContainerValidation`, `.github/workflows/gltf-sanitizers-ci.yml`. |
-| 9 | Large real-world assets load within a stated time and memory budget | ✅ | [`gltf-performance.md`](gltf-performance.md). |
-| 10 | Lifetime stress: repeated load/unload, `ContentManager::Unload`, device loss, concurrent `Model::Draw` | ✅ | `GLTF-436`, `GLTF-438`, `GLTF-439`, `GLTF-444`. |
-| 11 | Performance hazards measured and fixed or documented with numbers | ✅ | [`gltf-performance.md`](gltf-performance.md). |
-| 12 | The Gate C retake matrix (§5.6) passes on at least four renderers, including a Direct3D path | ⬜ | It passed on `OPENGLES3`, `VULKAN` and `DIRECTX11` (under Wine + DXVK); the latter two are retired. Meeting the row now needs three more surviving renderers (for example `SOFTWARE`, `SDLGPU`, `WEBGPU`), with `DIRECTX9` under Wine as the only Direct3D candidate, plus the harness's two external inputs (a built Khronos glTF-Sample-Renderer and a glTF-Sample-Assets checkout). |
+| 1 | Draco stream/connectivity parity, including skin/morph witnesses | ✅ | `GltfDracoParity` compares decoded twins; `GltfDracoEncoderPin` recreates pinned streams. |
+| 2 | Meshopt support or clean refusal | ✅ | `GltfContainerRobustness` checks refusal before undefined buffer-view use. |
+| 3 | Documented unlit/IOR/specular/transmission/variant behaviour | ⬜ | Native PBR maps/factors and approximations have witnesses, but the unlit+occlusion material-selection defect remains open in handoff §5. Optional metadata support does not imply that an extension is accepted as required; consult the registry. |
+| 4 | Per-map texture transforms and two packed UV channels | ✅ | `GltfUvChannel`, direct/offline material witnesses and named framebuffer probes; current seven-map scope is in the conventions/renderer pages. |
+| 5 | Basis/WebP support or explicit required-extension refusal/fallback diagnostics | ✅ | `GltfUnsupportedTexture` covers named required/optional cases. |
+| 6 | Imported point/spot lights with real falloff/cones | ⬜ | Native PunctualLightEXT APIs already exist, but automatic glTF import still approximates these lights through the three-directional-light budget. Native availability is not integrated import fidelity; see gltf-limitations.md. |
+| 7 | Imported perspective/infinite-far/orthographic cameras | ✅ | `GltfCameras`. |
+| 8 | Actionable malformed-input errors and corpus sanitizer qualification | ✅ | Named container/validation cases and the historical ASan/UBSan workflow; no new sanitizer campaign was run for this documentation audit, and this does not prove arbitrary-input safety. |
+| 9 | Stated time/memory budgets for named large assets | ✅ | [gltf-performance.md](gltf-performance.md), with opt-in input and measurement scope. |
+| 10 | Lifetime/device-loss/concurrent-draw stress witnesses | ✅ | GLTF-436/438/439/444 cover named harness cases, not general shared-GraphicsDevice thread safety. |
+| 11 | Measured/documented performance hazards | ✅ | [gltf-performance.md](gltf-performance.md); retained measurements are dated. |
+| 12 | Gate C retake on at least four renderers, including a Direct3D route | ⬜ | Historical OPENGLES3/VULKAN/DIRECTX11-under-Wine observations leave only OPENGLES3 as a surviving qualified identity for this exact retake. Three more surviving renderers and an executed Direct3D route are needed. DIRECTX9 is one candidate; SDLGPU can also use SDL's Direct3D 12 backend. Renderer existence alone supplies no retake evidence. The built pinned Khronos renderer and external Sample Assets checkout remain required inputs. |

@@ -35,6 +35,18 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- glTF conformance reconciliation (2026-11-01, GLTF-002/007/008/015/403/458): the guide
+  separates dated project milestones/framebuffer reports from current numeric witnesses, fixes
+  withdrawn mesh-node compensation, tangent fallback/authored-tangent exceptions, L5 layouts/index
+  width scope, current alpha test names, seven-map versus five-map test coverage, private commands,
+  pin/provenance boundaries and native punctual/Direct3D routes. Existing unlit/unitScale/parity
+  wrapper defects remain explicit rather than hidden by historical green rows. CnaTests,
+  CnaContentTests and converter targets build; 634 glTF cases yield 631 passes and three external
+  input skips privately on OPENGLES3/dummy audio, followed by 26/26 corpus/ladder/ledger cases after
+  the prose changes. The exact pinned specification digest, 148-row generated table, 744 corpus
+  files and two-process generator determinism pass. Pinned Khronos Validator rechecks all 296
+  containers: 276 valid, 20 expected-invalid, 47 warnings. Inventory/links pass; no runtime/wire
+  changes, new full framebuffer/reference capture or sanitizer qualification.
 - glTF conventions reconciliation (2026-11-01, GLTF-105/132/241/337/349/392): the guide corrects
   asset +Z front versus camera -Z, column-vector TRS order, test/byte-identity claims, current
   coloured PBR strides, seven-map transforms, CPU morph work/retained weight tracks, empty-light
