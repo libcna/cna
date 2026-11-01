@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- ALSA audio documentation reconciliation (2026-11-01): `docs/audio-alsa.md` now describes
+  current selection/dependencies, negotiated playback/capture, bounded queues, mixer rules and
+  encoded-memory streaming. Host ALSA plugin routing and hardware/latency claims are qualified;
+  the microphone-layer defect remains explicit. Recipes use separate build trees and the private
+  runner, with current registered null/file test names. All eight audio-platform selection tests
+  pass; source references and local links are checked. Documentation-only: no new ALSA-enabled
+  runtime build, physical playback or microphone capture was performed in this audit.
 - Android graphics documentation reconciliation (2026-11-01):
   `docs/android-graphics-limitations.md` distinguishes earlier full builds/application runs from
   the later SDL/platform-only dependency-audit build and the unrebuilt final pin. It records the
