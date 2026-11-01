@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- `BasicEffect` support-document cleanup (2026-11-01): the Phase 42 Tasks 361-370 diary and
+  EasyGL-only support table are replaced by the current renderer-neutral contract. The page now
+  defines the public defaults, 32-variant selector, material/lighting and fog equations, semantic
+  vertex inputs, measured D3D9 vertex-output saturation, null-texture behavior, renderer evidence
+  boundary and explicitly separate CNA shadow/punctual-light extensions. Closed tasks remain only
+  as a compact Git-history map, while moving test totals and registrations are replaced by their
+  stable fixture names. The renderer-identity gate passes, and all 75 selected API, null-texture,
+  saturation, EasyGL, WebGPU and SDLGPU parity/conformance checks pass on private displays.
 - XNA/FNA migration-guide reconciliation (2026-11-01): the graphics Tasks 486-489 snapshot and
   its fixed-item/member checklists are replaced by a current porting workflow tied to the generated
   runtime-member report, live renderer capabilities, content/effect contracts and this file's sole
@@ -199,12 +207,6 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   invented white null sample with the measured SOFTWARE-303 opaque-black renderer contract. All
   five stock-effect support pages now carry current reconciliation dates. Focused private-runner
   validation passes all 66 API, null-texture, EasyGL and SDLGPU tests.
-- BasicEffect support-document reconciliation (2026-10-31): Tasks 885/886 are no longer
-  simultaneously described as deferred and complete, and the obsolete open-work section is now a
-  closed follow-up record. The page now includes Task 1102's real vertex/pixel lighting dispatch,
-  Task 1111 fog, D3D9-style vertex-output saturation, the current accepted vertex declarations
-  and FX-124 large-world precision. Focused private-runner validation passes all 83 API, EasyGL
-  and SDLGPU tests.
 - SkinnedEffect support-document reconciliation (2026-10-31): Tasks 893–895 are no longer
   presented as open, the pre-modular test path and `NEXT.md` references are gone, and the former
   "more accurate" per-pixel-only behavior is correctly recorded as the Task 1102b XNA mismatch.

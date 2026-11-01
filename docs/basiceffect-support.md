@@ -1,230 +1,185 @@
-# BasicEffect exactness support matrix
+# `BasicEffect` current contract
 
-Phase 42 (graphics Tasks 361–370) audited and pixel-verified `BasicEffect` conformance
-against FNA. This document records those findings and the later fixes that closed the phase's
-follow-up work. Current-state reconciliation: 2026-10-31.
+Current-state reconciliation: 2026-11-01.
 
----
+`BasicEffect` implements the XNA 4.0 stock-effect contract and also exposes explicitly marked CNA
+extensions for owned textures, shadows and punctual lights. This page describes the behavior that
+callers and renderer implementations may rely on now. It is not a list of completed implementation
+tasks.
 
-## 1. Property/default audit (Tasks 361–363)
+## Sources of truth
 
-Task 361 audited all 22 `BasicEffect` properties line-by-line against FNA's `BasicEffect.cs`.
-Two real default-value bugs found and fixed: `VertexColorEnabled` and `DirectionalLight0.Enabled`
-defaulted wrong. Task 362 wrote exhaustive default-value tests for all 22 properties and found one
-more: `DirectionalLight`'s `Direction` default was `Vector3::Forward` instead of `Vector3.Zero`.
-Task 363 confirmed `EnableDefaultLighting()`'s exact constants (ambient color, all 3 lights'
-direction/diffuse/specular) match FNA literal-for-literal — no fix needed.
-
-The current 40-case fixture is
-`modules/graphics/tests/Microsoft/Xna/Framework/Graphics/BasicEffectTests.cpp`. In addition to the
-original defaults it covers the authentic parameter graph, derived values, texture ownership and
-sampler publication, clone behavior and the device/effect texture-binding contract.
-
-## 2. No-lighting shader paths (Tasks 364–367)
-
-All four combinations of `TextureEnabled`/`VertexColorEnabled` with `LightingEnabled=false` (the
-real FNA default) were pixel-verified on EasyGL, each with a discriminating,
-non-degenerate test (distinct non-white/non-primary colors chosen so partial-product failure modes
-are numerically distinguishable from the correct result — never a case where "ignored" and
-"correct" would coincidentally look the same):
-
-- **Task 364** (no texture, `VertexColorEnabled` toggle): found and fixed **2 real bugs, one per
-  renderer** — `VertexColorEnabled` wasn't honored by either renderer's no-texture shaders.
-- **Task 365** (`VertexColorEnabled=true`, no texture): verify-only, already correct.
-- **Task 366** (`TextureEnabled=true`, no vertex color): verify-only, already correct.
-- **Task 367** (`TextureEnabled=true` AND `VertexColorEnabled=true`, the stride-24
-  `VertexPositionColorTexture` path): found and fixed **1 real bug** — EasyGL's
-  stride-24 shader silently dropped `DiffuseColor` entirely (no uniform, no multiply at all).
-  Fixing EasyGL's bug also exposed a
-  stale pre-existing test (Task 189's combinations test case (d)) that only passed *because of*
-  the bug being fixed — corrected to set `VertexColorEnabled=true`, restoring its own stated intent.
-
-## 3. Lighting (Task 368)
-
-Verified `BasicEffect`'s one-directional-light diffuse formula
-(`AmbientLightColor + DirectionalLight0.DiffuseColor × max(dot(-Direction,N),0)`, multiplied by
-`DiffuseColor`) with a **non-saturating** `NdotL=0.5` test — deliberately not 0 or 1, to prove the
-dot product is real math and not a boolean lit/unlit check — plus a back-facing-normal case (proves
-the negative-dot clamp) and a `DirectionalLight0.Enabled=false` case (proves the light can be
-switched off). Found and fixed **1 real bug**:
-
-- **Shared C++**: `BasicEffect::FillGpuDrawParams()` forwarded
-  `DirectionalLight0`'s `Direction`/`DiffuseColor` unconditionally, never checking
-  `DirectionalLight0.Enabled` — a disabled light still lit the surface.
-
-## 4. Ambient + emissive (Task 369)
-
-Re-derived FNA's authoritative `EffectHelpers.SetMaterialColor()` formula directly from source
-(not assumed): the disabled-lighting branch is `(DiffuseColor + EmissiveColor) * Alpha`, folded
-into a single forwarded parameter; the enabled-lighting branch bakes ambient into a second,
-confusingly-named GPU "EmissiveColor" parameter. Confirmed algebraically that CNA's
-independently-structured lit formula (ambient forwarded as its own raw uniform, verified correct in
-Task 368) is mathematically identical to FNA's once a plain `+EmissiveColor` term is added after
-the ambient/diffuse multiply.
-
-**Fixed** (shared C++, no shader changes needed): `FillGpuDrawParams()` forwarded
-`DiffuseColor*Alpha` alone in every case, always silently dropping `EmissiveColor` in the
-no-lighting path — the exact gap Task 366 had deferred.
-
-The audit deliberately deferred two larger, multi-pipeline changes into dedicated follow-up tasks.
-Both were subsequently fixed:
-
-- **Task 885** — at phase close the *lit*-path `+EmissiveColor` term and
-  `DirectionalLight1`/`DirectionalLight2` forwarding were absent. The fix added all three and a
-  channel-discriminating multi-light regression.
-- **Task 886** — at phase close `BasicEffect` had no GPU specular infrastructure: no
-  `SpecularColor`/`SpecularPower` or per-light specular transport and no eye-position wiring. The
-  completed implementation uses the stock half-vector Blinn-Phong formula and a focused pixel
-  regression.
-
-## 5. Integration capstone (Task 370)
-
-Closed the phase with a capstone test combining everything Tasks 364–369 verified individually —
-`TextureEnabled` + `VertexColorEnabled` + `DiffuseColor` + `EmissiveColor`, `LightingEnabled=false`
-— to prove the fixes compose correctly together, not just in isolation. Used, for the first time in
-any `BasicEffect` pixel test, a **real 2×2 multi-texel texture** (every prior task used a 1×1
-solid color) sampled at all 4 texel centers via 4 separate draws.
-
-**Result: the pixel output matched the FNA-derived expected formula
-(`TextureColor × VertexColor × (DiffuseColor+EmissiveColor)`) at all 4 sample points.** No new
-bugs found — this was pure integration verification, and it passed cleanly on the first attempt
-thanks to Tasks 364–369's fixes already being in place.
-
-## 6. `DiffuseColor` above 1 is saturated per vertex (2026-09-07)
-
-`BasicEffect.DiffuseColor` is a `Vector3` with no clamp in its setter (`BasicEffect.cs:117`), and
-`Alpha` is an unclamped `float`, so a game can hand the shader a value above 1. XNA still renders it
-as 1 — not because the effect clamps, but because the **unlit** path writes the value to
-`vout.Diffuse`, which `Structures.fxh` declares `COLOR0`, and **Direct3D 9 saturates a vertex
-shader's colour output registers before interpolation**. It is the same `oD0`/`oD1` rule
-FX-123 measured for the vertex-lit programs.
-
-**Measured on the real XNA 4.0 runtime** (`spikes/xna-diffuse-color-clamp-spike/`), with a **grey**
-`(100,100,100)` texture — never white, or both answers saturate at the output and the probe could
-not fail:
-
-| `DiffuseColor` | 0.5 | 1.0 | 2.0 | 3.0 |
-|---|---|---|---|---|
-| real XNA | `(50,50,50)` | `(100,100,100)` | `(100,100,100)` | `(100,100,100)` |
-
-**Where it stops being invisible: a colour gradient.** A flat, untextured quad cannot separate the
-two orders at all, because the render-target write saturates either way. Two vertices that disagree
-can — which is what FX-123's argument is actually about. Left edge white, right edge 20 % grey,
-sampled at the centre:
-
-| `DiffuseColor` | 1.0 | 2.0 |
-|---|---|---|
-| real XNA | `(153,153,153)` | `(178,178,178)` |
-
-`178` is the midpoint of `saturate(2.0) = 255` and `saturate(0.4) = 102`. Interpolating the raw
-product first gives `1.2` and clips to `255` — the two orders are **77 levels** apart there.
-
-**Renderer status.** EasyGL saturates at the vertex stage too: its unlit programs compute
-`vColor = clamp(vertexColour * uDiffuseColor, 0, 1)` before the interpolator
-(`GlStockShaderSources.hpp`), as `FX-123` already did for the vertex-**lit** ones.
-`basiceffect_diffuse_color_clamp_test.cpp` is the oracle on both families: `SdlGpu_BasicEffect_DiffuseColorClamp`
-and `EasyGL_CrossFamily_BasicEffect_DiffuseColorClamp` pass 9/9, the gradient leg included
-(2026-10-29).
-
-**Not applied to the per-pixel lit path, on purpose.** FNA's `VSBasicPixelLightingTx` writes
-`vout.Diffuse = float4(1, 1, 1, DiffuseColor.a)` and applies the material colour in the **pixel**
-shader, unclamped, with only the render-target write saturating it. Clamping CNA's equivalent
-varying would make it *more* clamped than XNA.
-
-Guarded by `modules/graphics/examples/basiceffect_diffuse_color_clamp_test.cpp`, registered as
-`SdlGpu_BasicEffect_DiffuseColorClamp`.
-
-## 7. Vertex layouts a lit `BasicEffect` accepts (2026-09-07)
-
-XNA selects a stock `BasicEffect` shader from what the vertex *declaration* says, not from the
-buffer's stride — and the two disagree more often than they look like they would. Two ordinary XNA
-layouts are 24 and 36 bytes:
-
-| Declaration | Bytes | Where it comes from |
-|---|---|---|
-| Position + Normal | 24 | Microsoft's Primitives3D sample (`SAMPLE-002`) — the **same stride** as `VertexPositionColorTexture` |
-| Position + Normal + Colour + TexCoord | 36 | what the stock `ModelProcessor` emits for a mesh with a colour channel (`FX-125`) |
-
-**EasyGL** renders both: `SelectStockProgramShape` matches the first as a declaration test and the
-second as a stride case, and its lit programs carry a colour attribute. `FX-125` is the record of
-what it cost to find out — a mesh with a colour channel fell onto the *unlit* program and
-`SAMPLE-047`'s sphere rendered as a flat green disc.
-
-**The vertex-colour ordering is the part that is easy to get subtly wrong**, and it differs between
-the two lighting families:
-
-* **per-vertex** (XNA's default): `VSBasicVertexLightingTxVc` does `vout.Diffuse *= vin.Color`
-  **before** the value reaches `oD0`, so the colour is *inside* Direct3D 9's saturate. Clamping the
-  lit sum first and scaling by the colour afterwards is a different picture, not a rounding
-  difference — a lit sum of 1.8 with a colour of 0.5 gives 0.9 the right way and 0.5 the wrong way.
-* **per-pixel**: `VSBasicPixelLightingTxVc` carries the colour to the fragment stage, where
-  `PSBasicPixelLightingTx` multiplies it into the **whole** lit bracket, emissive included, before
-  `AddSpecular` scales by the resulting alpha.
-
-**One implementation note that cost a debugging round**, kept here because the next renderer to
-grow a colour input will meet it: a stock program's input table is written in the **shader's
-location order**, not the record's byte order, and for this layout the two differ — the colour sits
-at byte 24 and the UV at 28, while `aUV` is location 2 (inherited from the colourless sibling) and
-`aColor` is location 3. Listing them the record's way binds the UV's two floats to `aColor`, and
-`vec4(uv, 0, 1)` at the centre of the quad is `(0.5, 0.5, 0, 1)` — half of which is a perfectly
-plausible `(64,64,0)` that is *neither* the unlit vertex colour *nor* lit-but-colourless. It passes
-both negative checks. That is why the test asserts the exact value the arithmetic predicts.
-
-Guarded by `EasyGL_BasicEffect_PositionNormal` (`SAMPLE-002`) and
-`EasyGL_BasicEffectLitVertexColor` (`FX-125`). The `FX-125` source sets
-`PreferPerPixelLighting(false)`, so the per-pixel half is covered by the conformance program
-`basiceffect_lit_vertex_color_perpixel` (`<Renderer>_Conformance_*` on EasyGL, SDLGPU and WebGPU).
-
-## 8. Later exactness fixes
-
-- **Tasks 885/886** completed lit emissive composition, three-light forwarding and real specular
-  highlights. EasyGL owns the original discriminating programs; SDLGPU reuses both through the
-  cross-family corpus.
-- **Task 1102** implemented XNA's real `PreferPerPixelLighting` dispatch. The default `false`
-  path computes lighting per vertex and Gouraud-interpolates it; `true` evaluates it per fragment.
-  The regression's centre pixel is approximately 127 versus 155, so a decorative selector cannot
-  pass.
-- **Task 1111** replaced EasyGL's coincidentally-correct-at-Z=0 fog shortcut with FNA's view-space
-  dot-product formula. The focused gradient and the renderer-neutral stock-effect fog contract
-  exercise intermediate fog and the degenerate `FogStart == FogEnd` case.
-- **FX-124** raised the per-pixel stock fragment precision so normalizing a view vector at large
-  world-space scales cannot overflow mediump and silently erase specular highlights. Its scale-
-  invariance regression compares otherwise identical unit and 1000× scenes.
-- The renderer-neutral lighting and unlit contracts now hold material composition, vertex/pixel
-  dispatch, all three lights, specular, fog, vertex-output saturation and texture behavior
-  together rather than only in the original single-feature scenes.
-
-## Support matrix
-
-| Feature | EasyGL |
+| Concern | Authoritative project evidence |
 |---|---|
-| Property defaults (22/22) | ✅ Task 361/362 |
-| `EnableDefaultLighting()` exact constants | ✅ Task 363 |
-| No-texture, `VertexColorEnabled` toggle | ✅ fixed Task 364 |
-| Texture × diffuse (no vertex color) | ✅ Task 366 |
-| Texture × vertex color × diffuse (stride 24) | ✅ fixed Task 367 |
-| One directional light, diffuse + ambient | ✅ Task 368 |
-| `DirectionalLight0.Enabled` gating | ✅ fixed Task 368 |
-| `DiffuseColor+EmissiveColor`, no lighting | ✅ fixed Task 369 |
-| `EmissiveColor` while lit | ✅ fixed Task 885 |
-| `DirectionalLight1`/`2` (multi-light) | ✅ fixed Task 885 |
-| Real specular highlights | ✅ fixed Task 886 |
-| `PreferPerPixelLighting` vertex/pixel dispatch | ✅ fixed Task 1102 |
-| Fog view-space factor | ✅ fixed Task 1111 |
-| Above-one diffuse vertex-output saturation | ✅ measured FX-123 |
-| Position+Normal and lit-color vertex declarations | ✅ SAMPLE-002 / FX-125 |
-| Large-world per-pixel specular precision | ✅ fixed FX-124 |
-| Combined integration capstone | ✅ Task 370 |
+| Public API and derived draw parameters | `BasicEffect.hpp`, `BasicEffect.cpp` and `BasicEffectTests.cpp` |
+| Normal readable behavior reference | FNA's `BasicEffect.cs`, `BasicEffect.fx`, `Lighting.fxh`, `Structures.fxh` and `Common.fxh` in the local FNA checkout |
+| Measured Microsoft XNA disagreements | [`xna-fna-behavior-decisions.md`](xna-fna-behavior-decisions.md) |
+| Shared rendered evidence | [`cross-renderer-parity-fixtures.md`](cross-renderer-parity-fixtures.md) and `modules/graphics/examples/parity/ParityFixtures.cmake` |
+| Renderer capability boundary | [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md) and each renderer's own page |
+| Current defects and limitations | [`handoff.md`](../handoff.md) section 5 |
 
-Legend: ✅ verified working.
+The generated XNA runtime-member report answers whether the public API exists. This page answers how
+the effect behaves; it deliberately avoids fixed test totals, which become stale whenever coverage
+grows.
 
-## Subsequent fixes
+## XNA public state
 
-- **Task 885** (opened by Task 369, fixed 2026-07-07) — lit-path `EmissiveColor` and
-  `DirectionalLight1`/`DirectionalLight2` now reach the renderer.
-- **Task 886** (opened by Task 369, fixed 2026-07-07) — `SpecularColor`, `SpecularPower`, each
-  light's specular color and the view-dependent half vector now form the real stock specular term.
+The constructor starts with the following XNA-compatible state:
 
-Phase 42 and all follow-up work named on this page are closed. Current renderer-wide capability
-status belongs in `graphics-renderer-feature-matrix.md`; unresolved defects belong in
-`handoff.md` section 5.
+| Property group | Initial value |
+|---|---|
+| `World`, `View`, `Projection` | `Matrix::Identity` |
+| `DiffuseColor` | `Vector3::One` |
+| `EmissiveColor`, `AmbientLightColor` | `Vector3::Zero` |
+| `Alpha` | `1` |
+| `SpecularColor`, `SpecularPower` | `Vector3::One`, `16` |
+| `LightingEnabled`, `PreferPerPixelLighting` | `false`, `false` |
+| `DirectionalLight0/1/2.Enabled` | `true`, `false`, `false` |
+| `FogEnabled`, `FogStart`, `FogEnd`, `FogColor` | `false`, `0`, `1`, `Vector3::Zero` |
+| `TextureEnabled`, `Texture` | `false`, null |
+| `VertexColorEnabled` | `false` |
+
+The three directional-light objects exist regardless of their enabled state. Disabled lights
+contribute zero rather than leaking their stored direction or colors into a draw.
+`EnableDefaultLighting()` installs the XNA/FNA ambient term and all three standard directional-light
+directions and colors. Cloning copies the effect state and preserves the referenced texture resource
+identity; it does not clone the texture.
+
+## Shader selection
+
+The classic effect has 32 logical variants. Within each eight-variant block, independent selector
+bits choose texture use, vertex-color use and fog-disabled versus fog-enabled code:
+
+| Selector range | Lighting path |
+|---|---|
+| 0-7 | Lighting disabled |
+| 8-15 | Per-vertex lighting with all three directional lights available |
+| 16-23 | Per-vertex one-light optimization when lights 1 and 2 are disabled |
+| 24-31 | Per-pixel lighting |
+
+`PreferPerPixelLighting=false`, the default, computes lighting at vertices and interpolates the
+result. `true` evaluates lighting in the fragment stage. These are observably different over a
+coarsely tessellated surface, so renderers must implement the selector rather than treating it as a
+quality hint. The CNA shadow and punctual-light extensions are additional renderer inputs; they do
+not redefine this 32-variant XNA selector.
+
+## Material and lighting
+
+With lighting disabled, the material factor is:
+
+```text
+(DiffuseColor + EmissiveColor) * Alpha
+```
+
+With lighting enabled, the diffuse and emissive inputs are equivalent to FNA's material folding:
+
+```text
+diffuse  = DiffuseColor * Alpha
+emissive = (EmissiveColor + AmbientLightColor * DiffuseColor) * Alpha
+```
+
+Each enabled directional light adds its diffuse color scaled by
+`max(dot(-Direction, normal), 0)`. Its specular color uses the stock half-vector Blinn-Phong term
+and `SpecularPower`; the final specular contribution is also scaled by the material alpha. Vertex
+color, when enabled, participates at the stage selected by the stock shader rather than being
+applied as a renderer-wide post-multiply.
+
+The ordinary `Opaque` blend path therefore still observes `Alpha`: stock effects premultiply their
+RGB material inputs by it before blending. Above-one intermediate values follow the XNA saturation
+rule described below, not an eager public-property clamp.
+
+## Texture and vertex inputs
+
+When `TextureEnabled=true`, the effect requires texture coordinates and publishes sampler slot 0
+for the draw. A non-null `Texture` supplies the sampled resource. A null texture deliberately
+samples as opaque black, matching measured Microsoft XNA behavior. When texturing is disabled,
+`BasicEffect` does not read or replace the slot.
+
+Vertex requirements are semantic, not inferred from byte stride:
+
+- position semantic 0 is always required;
+- normal semantic 0 is required when lighting is enabled;
+- color semantic 0 is required when vertex color is enabled;
+- texture-coordinate semantic 0 is required when texturing is enabled.
+
+The standard 24-byte position-plus-normal declaration and 36-byte
+position-plus-normal-plus-color-plus-texture-coordinate declaration are both valid. A declaration
+that omits an input required by the active variant must be rejected instead of silently selecting an
+unrelated shader shape. General declaration and format rules are in
+[`vertex-format-support.md`](vertex-format-support.md).
+
+## Fog
+
+Stock fog uses FNA's view-space dot-product `FogVector`, including the world-view transform. When
+fog is disabled, the effect resets that vector and selects a no-fog shader variant. When enabled,
+`FogStart == FogEnd` uses the stock degenerate vector and produces full fog rather than a
+division-by-zero artifact. Fog blends RGB toward `FogColor * Alpha` while preserving the source
+alpha.
+
+## D3D9 vertex-color-output saturation
+
+Microsoft XNA's stock D3D9 shaders write per-vertex diffuse and specular values through `COLOR0`
+and `COLOR1`. D3D9 saturates those vertex-shader color outputs before interpolation. CNA preserves
+that observable rule for unlit and per-vertex-lit variants, including above-one material values and
+vertex-color products.
+
+Ordering matters on a gradient. For example, a vertex-lit value of `1.8` multiplied by vertex color
+`0.5` must reach the interpolator as `0.9`; saturating the light sum first would incorrectly produce
+`0.5`. The per-pixel-lit path is intentionally different: its material operation occurs in the
+fragment stage and is saturated only by the later output path. These rules come from real XNA probes
+and are guarded by the diffuse-color and vertex-lighting saturation regressions.
+
+## Renderer boundary
+
+| Renderer family | Current `BasicEffect` evidence boundary |
+|---|---|
+| EasyGL (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | Native stock-shader paths plus the shared parity and conformance corpora |
+| WebGPU | Native stock WGSL paths plus the shared parity and conformance corpora |
+| SDLGPU | Native stock shader packages plus the shared parity and conformance corpora |
+| Software | CPU stock-effect execution and renderer-neutral conformance tests |
+| DirectX9 | Microsoft stock bytecode where available, with logic/oracle-equivalent handling for the remaining programs |
+| FNA3D | Compiled stock-effect artifacts; final execution remains graphics-driver dependent |
+| HEADLESS, STUB | Validation/resource behavior only; no raster-output claim |
+
+The feature matrix and renderer pages own platform qualification, conditional capabilities and
+known limitations. This page does not promote a family based only on another renderer's pixels.
+
+## CNA extensions
+
+The following additions are outside the XNA 4.0 `BasicEffect` surface and are marked `CNAEXT`:
+
+- owned-texture publication for internal/resource-loading paths;
+- directional and cascaded shadow-receiver state;
+- point- and spot-light state through `PunctualLightEXT`.
+
+`FillGpuDrawParams()` transports this state through the shared draw contract. Whether a particular
+renderer executes an extension, and under which limits, belongs to that renderer's capability page
+and focused tests. The extensions do not change the defaults or semantics of the classic XNA
+properties.
+
+## Executable evidence
+
+The stable evidence names are more useful than totals:
+
+- `BasicEffectDefaultsTest`, `BasicEffectVariantTest` and
+  `BasicEffectVertexLightingSaturationTest` cover defaults, derived parameters, cloning, the 32-way
+  selector and D3D9-style saturation;
+- `StockEffectNullTextureTest` covers opaque-black null sampling and the disabled-texture slot rule;
+- parity fixtures `basic_effect_light_terms`, `basic_effect_vertex_color` and
+  `basic_effect_alpha_scale` compare shared rendered behavior;
+- conformance programs `basiceffect_textured_msaa`, `basic_effect_declaration_inputs`,
+  `basiceffect_lit_vertex_color_perpixel` and `basiceffect_unlit_vertex_color_36byte` exercise
+  texture, declaration and lighting-path boundaries;
+- focused renderer tests cover fog, vertex-versus-pixel lighting, diffuse saturation, shadows and
+  punctual lights.
+
+Use the private GPU runner described in the repository instructions for every rendered test.
+
+## Historical task map
+
+Tasks 361-370 established the original property, unlit, lighting, material and integration
+coverage. Tasks 885/886 completed lit emissive, three-light and specular transport; Tasks 1102 and
+1111 corrected vertex/pixel dispatch and fog; FX-123/124/125 captured vertex-output saturation,
+large-world specular precision and lit color declarations. All of that work is closed. Git history
+is the detailed task narrative; this page and the executable evidence above are the maintained
+contract.
