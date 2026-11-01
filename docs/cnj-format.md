@@ -3,9 +3,12 @@
 A `.cnj` file is one content asset described as a JSON document: a sprite font, a model, an effect's
 parameters, an animation clip, or metadata layered over an ordinary image or sound. It is the format
 people and tools edit. It can be read and diffed by hand, written by a script, and loaded by
-`ContentManager` as it is. For shipping, `cna_tool_cnj_to_cnb` compiles it into a single-file `.cnb`
-([`cnb-format.md`](cnb-format.md)): glTF, PNG and WAV are how content arrives, `.cnj` is how it is
-edited, `.cnb` is how it ships.
+`ContentManager` within the selected type/renderer's support. For shipping,
+`cna_tool_cnj_to_cnb` compiles supported built-in shapes to `.cnb`
+([`cnb-format.md`](cnb-format.md)); external asset references can remain separate dependencies,
+so one logical compiled asset does not mean an entire model bundle is self-contained.
+CNA's pipeline can also ship XNB. Custom runtime CNJ factories do not automatically gain a CNB
+compiler/codec.
 
 ## CNA's content formats at a glance
 
@@ -17,21 +20,29 @@ edited, `.cnb` is how it ships.
 | native files | PNG, JPEG, BMP, GIF, TGA, QOI, DDS, WAV and others, loaded by extension; glTF 2.0 (`.gltf`, `.glb`) for `Model` | the reader of each type; [`gltf-limitations.md`](gltf-limitations.md) for glTF |
 
 A `Model` loads straight from a `.gltf` or `.glb` file, with no conversion step: they are its native
-extensions, tried after `.cnj` like any other. A same-named `.cnj` therefore wins over the glTF file.
+extensions, tried after `.cnj` like any other. A same-named `.cnj` wins for extensionless loose lookup; an explicit existing glTF path retains
+the literal-path rule below.
 To work offline instead, `cna_tool_gltf_to_cnj` converts a glTF file into a `Model` `.cnj` with its
 binary sidecars and one `AnimationClip` `.cnj` per clip.
 
 ## How `ContentManager` finds an asset
 
-`Load<T>("Textures/player")` tries these candidates in order and takes the first that exists:
+On an ordinary cache miss, `Load<T>("Textures/player")` follows these tiers. Compiled XNB is
+opened through the virtual `OpenStream` seam; only the base missing-XNB condition permits CNA's
+lower tiers. Override refusal/I/O/decode errors are not swallowed. Explicit stream-only managers
+do not use the loose fallback.
 
-1. **`player.xnb`.** A genuine, externally produced compiled asset wins over everything CNA offers.
+1. **`player.xnb`.** A compiled XNB stream (including CNA-produced XNB) has first priority.
 2. **`player.cnb`.** CNA's own compiled form, ranked above the sources it was compiled from but
    below a real `.xnb`.
-3. **The literal name**, when the caller passed a full file name with an extension.
+3. **The literal name**, if it exists, whether or not it has an extension.
 4. **`player.cnj`.**
 5. **`player.<native extension>`**, for each extension the reader of `T` declares.
-6. Otherwise the asset is not found.
+6. The bare path is handed to the reader for its final handling/error.
+
+The cache is keyed by normalized logical name and C++ type; a hit does not rerun these probes.
+Case/extension/root handling follows [the path contract](filesystem-path-model.md). A literal
+old filename is not automatic schema migration.
 
 A `.xnb` or `.cnb` that is present but malformed or unsupported is an error. Loading does not fall
 through to the next candidate, because a broken compiled asset should not be quietly replaced by a
@@ -69,23 +80,43 @@ Every `.cnj` is a single JSON object with a common envelope and type-specific me
   a self-contained description (see below).
 
 The envelope is parsed by `CNA::Internal::ParseCnjEnvelope` and checked by
-`ValidateCnjEnvelope`/`ValidateCnjEnvelopeBaseline` (`CNA/Internal/CnjEnvelope.hpp`). Members a
-reader does not know are ignored.
+`ValidateCnjEnvelope`/`ValidateCnjEnvelopeBaseline` (`CNA/Internal/CnjEnvelope.hpp`). Built-in
+readers generally ignore unknown optional members; a custom factory can define stricter rules.
+The generic custom dispatch still accepts version 1 only. Schema versions do not negotiate every
+optional feature or vertex stride, so a newly authored asset can still require a newer runtime.
+
+Current limitation: extraction narrows numeric `cnjVersion` to `int` **before** range validation.
+Ordinary unsupported/fractional versions have regressions, but an out-of-int-range numeric value
+can reach an unsafe floating-to-integer conversion. Inline AnimationClip `boneIndex` has a similar
+unchecked narrowing. This page does not claim complete hostile-JSON/numeric-range safety; the
+source findings are recorded in `handoff.md` §5.1.
 
 ## References to other assets
 
-A document can name other assets by logical name or relative path: a font its glyph atlas, a model
-its textures and animation clips. Each reference is loaded through the same `ContentManager` and
-the same resolution order, so it is cached and unloaded like any other asset, and a texture two
-models share is loaded once.
+There are two mechanisms. Asset references such as a SpriteFont atlas or a model's external
+texture/effect go through `ContentManager` resolution and caching. Binary geometry, raw pixels,
+GLSL sources, skeletons and raw `.clip.bin` are sidecar file reads, not independently cached assets.
+A standalone AnimationClip `.cnj` is cached, but returned clip values are copies rather than one
+mutable shared clip object.
+
+| Reference | Resolution base |
+|---|---|
+| `sourceFile` | Referring CNJ's directory, then confined to the manager's content root |
+| Model vertex/index/skeleton/morph/raw-clip paths, AnimationClip `clipFile`, Texture3D `data`, Effect `vertex`/`fragment` | Content root, with contained-relative-path checks |
+| Built-in asset references (atlas, textures, external effects, standalone clips) | Root-relative logical names through `ContentManager`, after the applicable path check |
+| Custom factory references | The factory's explicit contract |
+
+Moving a native sidecar CNJ to a subdirectory and moving a root-relative Model bundle are therefore
+different operations. For the separate `.skinnedmodel.json` container, see
+[SkinnedModelEXT](skinned-model-ext.md), whose manifest references use its own bundle rules.
 
 ## `sourceFile`: metadata over a native file
 
-With `sourceFile`, CNA loads the named file the normal way and applies the document's other members
-on top of it. The reference is checked before anything is opened; a violation is a
-`ContentLoadException` that names both files:
+With `sourceFile`, the built-in reader checks the embedded path, loads its logical name through
+`ContentManager`, then applies supported metadata. Path violations raise `ContentLoadException`
+with the referring file/reason:
 
-- it must be relative;
+- it must be nonempty and relative to the CNJ's own directory;
 - it must stay inside the content root, through `../` or a symbolic link alike;
 - it must not resolve to another `.cnj`, by name or because the resolver would pick a sibling
   `.cnj`, so a sidecar can never chain to another sidecar or back to itself.
@@ -100,10 +131,12 @@ Which types accept it:
 | every other built-in type | **rejected** | these documents are self-contained |
 | a game-registered loader | up to the loader | it receives the whole document |
 
-`colorKey` is the only metadata a `Texture2D` document applies. Premultiplied alpha, an atlas
-sub-rectangle and mip-generation hints were considered and deliberately not added: each needs a
-`Texture2D`/`GraphicsDevice` capability the runtime reader does not have, and none is added
-speculatively (CNJ `CNB-10`).
+`colorKey` is the only metadata the runtime `Texture2D` CNJ applies: three integral bytes;
+matching RGB values retain their RGB and receive alpha zero. Premultiplication, atlas cropping
+and mip policy are not defined by this descriptor. Their absence is not a claim that CNA lacks
+every such runtime/pipeline capability; pipeline processing options have their own contract.
+The broad loose-image decoder is also distinct from classic
+[`Texture2D::FromStream`](texture-stream-formats.md)'s measured PNG/JPEG/GIF allowlist.
 
 ## One extension for every type
 
@@ -120,15 +153,16 @@ read `type`.
 | `SpriteFont` | `texture` (the glyph atlas, an ordinary image), `lineSpacing`, `spacing`, `defaultCharacter`, and `glyphs`, each with `char` (an integer code), `source`, `crop` and `kerning` |
 | `Texture3D` | `width`, `height`, `depth`, and `data`, a raw RGBA8 sidecar file; one mip level, no DXT |
 | `Curve` | `preLoop`, `postLoop`, and `keys`, each with `position`, `value`, `tangentIn`, `tangentOut` and `continuity` |
-| `AnimationClip` | either inline `tracks` or `clipFile`, a reference to a `.clip.bin` sidecar; loaded with `Load<Graphics::AnimationClipEXT>()` and shareable between models |
+| `AnimationClip` | exactly one of `tracks` or `clipFile`; inline tracks require numeric `duration` in seconds, each track has `boneIndex` and `keys`, each key has time in seconds and optional translation/rotation/scale. `targetSpace: "SceneNode"` selects rigid-node indices; otherwise JointPalette is the default. Load with `Load<Graphics::AnimationClipEXT>()`; raw clip sidecars default to JointPalette. |
 | `Effect` | a `ShaderEffect` built from GLSL `vertex` and `fragment` files; whether a renderer runs it is that renderer's capability |
 | `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect` | the stock effect's parameters (colours, texture references, lighting); an omitted member keeps the effect constructor's own default |
 | `Model` | meshes with binary vertex and index sidecars, bones, materials and animations; see the next section |
 | anything else | a game-registered loader (see [Custom loaders](#custom-loaders)) |
 
-Two boundaries are deliberate. A compiled XNA effect (shader bytecode) has no `.cnj` form; it comes
-from `.xnb` or `.fxb`. And `SkinnedModelEXT` keeps its own `.skinnedmodel.json` format rather than
-`.cnj`, because existing cross-language tooling depends on it ([`skinned-model-ext.md`](skinned-model-ext.md)).
+A compiled XNA effect has no CNJ descriptor here: use supported Effect XNB or the bytecode Effect
+API with bytes from an `.fxb`; the loose Effect reader declares `.cnj`, not automatic `.fxb`
+loading. `SkinnedModelEXT` retains its separate `.skinnedmodel.json` format for its existing
+offline tooling ([guide](skinned-model-ext.md)).
 
 ### A `SpriteFont` document
 
@@ -154,8 +188,9 @@ integer `[x, y, width, height]` arrays, and `kerning` is `[left bearing, advance
 
 Before `.cnj`, CNA's JSON readers each had their own extension: `.font.json` for sprite fonts,
 `.model.json` for models and `.shader.json` for effects. None of them is read any more. To convert
-such a file, rename it to `.cnj` and add the envelope members `"cnjVersion": 1` and the matching
-`"type"`; the other members kept their names. A `Model` converted this way is a version-1 document,
+such a document, add `"cnjVersion": 1` and its matching `"type"`, save it as `.cnj`, and
+verify the current type-specific fields/paths. The old envelope is not recognized automatically,
+even if the literal file resolver can find an old suffix. A `Model` converted this way is a version-1 document,
 without a bone hierarchy (see below).
 
 ## Model documents
@@ -192,7 +227,7 @@ Members at the root:
 
 | Member | Meaning |
 |---|---|
-| `meshes` | required; one entry per primitive (several entries can form one mesh, see `partOfMesh` below) |
+| `meshes` | geometry entries, normally one per primitive (several can form one mesh through `partOfMesh`). The legacy runtime reader can return an empty model when geometry is absent/skipped; it is not a strict nonempty-asset validator. |
 | `bones` | version 2: the node hierarchy as `{ "name", "parent", "transform" }` entries, parent before child. Entry 0 is the root, of which only the name is read; every other entry needs a valid `parent`. `transform` is 16 numbers in XNA's row-major `Matrix` order, so the translation is the 13th to 15th |
 | `skeleton` | optional `.skeleton.bin` sidecar for a skinned model; with `animations`, its skinning data is attached to `Model::Tag`, as XNA's Skinned Model sample does |
 | `animations` | optional `{ "name", "clip" }` entries; `clip` names a `.clip.bin` sidecar or a standalone `AnimationClip` `.cnj` |
@@ -205,7 +240,7 @@ Members of each `meshes` entry:
 | `name` | the mesh's name |
 | `vertices` | sidecar of raw vertex records, `vertexStride` bytes each |
 | `indices` | sidecar of indices: 16-bit, or 32-bit once the mesh has more than 65,535 vertices, as XNA's own model processor chooses |
-| `vertexStride` | the vertex layout, by its size in bytes (default 16); see the table below. Any other value is a `ContentLoadException` |
+| `vertexStride` | positive supported layout size (default 16), listed below; unrecognized positive layouts are refused. A nonpositive value or missing vertices/indices makes the legacy runtime reader skip that entry. |
 | `effect` | empty or `BasicEffect` (the default), `SkinnedEffect`, `DualTextureEffect`, `PbrEffect`, `SkinnedPbrEffect`, or the asset name of any other effect. A custom effect gets no texture bound by the loader |
 | `texture` | the diffuse texture. `BasicEffect` gets texturing enabled; `SkinnedEffect` always samples it |
 | `texture2` | `DualTextureEffect`'s second texture |
@@ -229,7 +264,7 @@ bytes and everything else 32-bit floats; elements follow each other without padd
 | 76 | the 68-byte layout, then TextureCoordinate1 | `SkinnedPbrEffect` (two UV sets) |
 | 80 | the 76-byte layout, then Color | `SkinnedPbrEffect` (two UV sets, vertex colours) |
 
-The layouts the glTF converter emits are checked against every renderer in
+The canonical layouts and scope of source/import/draw checks are documented in
 [`gltf-renderer-stride-conformance.md`](gltf-renderer-stride-conformance.md).
 
 What the loader builds from this: the bone tree from `bones`, each mesh's `ParentBone` from
@@ -238,8 +273,8 @@ What the loader builds from this: the bone tree from `bones`, each mesh's `Paren
 
 ### Versions
 
-A version-1 `Model` has no node hierarchy: each mesh gets its own child bone of the root at the
-identity transform, so it sits in its own local space. **Version 2** adds two members, written by `cna_tool_gltf_to_cnj` since the glTF campaign
+A hierarchyless version-1 `Model` gives each mesh its own identity child bone of Root.
+**Version 2** defines the hierarchy fields, written by `cna_tool_gltf_to_cnj` since the glTF campaign
 (`GLTF-455`):
 
 | Member | Where | Purpose |
@@ -247,14 +282,18 @@ identity transform, so it sits in its own local space. **Version 2** adds two me
 | `bones` | top level | the node hierarchy, `{ "name", "parent", "transform" }` per node, parent before child |
 | `parentBone` | each `meshes` entry | which node places this mesh |
 
-A version-1 document still loads, with exactly the placement it had when it was written. It does
-not gain correct placement by being loaded again; re-convert the source glTF for that.
+A hierarchyless old document does not gain the source scene's placement merely by loading again;
+reconvert the original glTF. The current reader consumes a supplied bones array even under
+version 1, so version 1 is not itself an enforcement that the field is absent; author hierarchy
+documents as version 2. Root entry 0 stays at identity in both the loose loader and native
+schema-1 CNB loader. A stored canonical root transform is not applied on those paths; this is
+different from schema-2 CNB's exact stored XNB-style graph/root contract.
 
 ### Optional members
 
-Everything below is written **only when it differs from its default**, so the document of an
-ordinary opaque triangle-list asset is byte-identical to what the converter wrote before the member
-existed. A reader that does not know a member gets the earlier behaviour for that asset.
+The converter generally omits default optional settings. That does not promise byte-identical
+assets across converter versions or correct appearance on a reader that ignores a feature. A new
+layout can also be refused by an old reader even when `cnjVersion` is unchanged.
 
 | Member | Default when absent | Notes |
 |---|---|---|
@@ -262,7 +301,7 @@ existed. A reader that does not know a member gets the earlier behaviour for tha
 | `partOfMesh` | the placement is its own mesh | groups the parts of a multi-primitive mesh |
 | `alphaMode` | `"OPAQUE"` | |
 | `alphaCutoff` | `0.5` | reaches the shader's alpha test for `MASK` materials |
-| `doubleSided` | `false` | carried, not applied: culling is a `RasterizerState` the application sets |
+| `doubleSided` | `false` | carried, not installed by Model.Draw: the application sets culling; likewise BLEND needs application BlendState |
 | `unlit`, with `diffuseColor`/`alpha` | lit | `KHR_materials_unlit`; the base colour travels with the flag |
 | `vertexColorEnabled` | `false` | vertex colours on the non-PBR path |
 | `metallicFactor`, `roughnessFactor`, `emissiveFactor`, `diffuseColor`, `alpha` | glTF's defaults | for `PbrEffect`/`SkinnedPbrEffect` |
@@ -297,16 +336,19 @@ non-negative integers: `nodeCount`, `meshInstanceCount`, `distinctMeshCount`, `s
 | `details` | names of the affected maps, attributes or extensions |
 | `message` | display text; its wording is not a stable API |
 
-A wrong type, a negative, fractional, non-finite or overflowing count, a non-finite magnitude or an
-unknown name is rejected. The report never contains the converting machine's absolute paths, so the
-output stays relocatable and reproducible.
+The report reader rejects wrong field types, negative/fractional/non-finite/overflowing counts,
+non-finite magnitudes and unknown severity/kind names. Diagnostic codes and text are strings, not
+a closed enum. The converter avoids machine-path provenance in its generated diagnostics; the
+reader does not redact arbitrary strings supplied by a hand-authored document. Reproducibility
+still requires matched converter/input versions.
 
 ### The morph sidecar
 
 A `_morph.bin` starts with the original layout: the target count, then each target's position
 deltas and optional normal deltas. Tangent deltas follow in an optional trailer that begins with the
-little-endian magic `MTAN`, a version (`1`) and the target count again; an older reader stops before
-it and keeps its former behaviour. Tangent handedness is not repeated, because `TANGENT.w` lives in
+little-endian magic `MTAN`, a version (`1`) and the target count again. Keeping the legacy prefix
+does not make an older reader apply the added tangent deltas; match the target runtime's feature
+support. Tangent handedness is not repeated, because `TANGENT.w` lives in
 the base vertices and blending never changes it. A target without positions, which glTF allows, gets
 a zero-filled position stream, since the original layout sizes every later stream from it.
 
@@ -342,17 +384,27 @@ change. The contract is strict:
 - registering for a `T` that already has a reader throws `std::logic_error`, because that reader
   would never consult the table.
 
-`tests/Microsoft/Xna/Framework/Content/CnjCustomLoaderTests.cpp` runs this example.
+The example is covered by
+`modules/content/tests/Microsoft/Xna/Framework/Content/CnjCustomLoaderTests.cpp`.
+Registration is manager-local, and built-in types already have their own reader even before a
+first load. A custom factory is responsible for its own sourceFile interpretation, validation,
+dependency cycles and resource ownership.
 
 ## Related documents
 
+- Current verification (2026-11-01): the content target and glTF-to-CNJ tool build. Privately on
+  OPENGLES3 with dummy audio selected before process startup, 140/142 envelope, per-type CNJ,
+  resolver/custom-loader and offline round-trip tests pass; two external large-reference budget
+  cases skip for absent asset configuration. Runtime and canonical builders, paths, registration,
+  version/field parsing and layouts were source-checked. This is not every-renderer pixel parity,
+  a fresh large-asset performance campaign or complete hostile-input safety.
 - [`cnb-format.md`](cnb-format.md): the compiled format a `.cnj` becomes.
 - [`xnb-content-pipeline-support.md`](xnb-content-pipeline-support.md): reading `.xnb`.
 - [`model-content-pipeline-support.md`](model-content-pipeline-support.md): `Model` loading.
 - [`xna-content-pipeline-migration.md`](xna-content-pipeline-migration.md): bringing an XNA game's
   content to CNA.
-- [`gltf-renderer-stride-conformance.md`](gltf-renderer-stride-conformance.md): the vertex layouts
-  checked against every renderer.
+- [`gltf-renderer-stride-conformance.md`](gltf-renderer-stride-conformance.md): canonical vertex
+  layouts and the exact renderer validation scope.
 - [`gltf-conformance.md`](gltf-conformance.md) and [`gltf-limitations.md`](gltf-limitations.md): the
   glTF import behind `Model` documents.
 - The task history of the format, `CNB-1`..`CNB-110` (2026-07), was `plans/plan_cnj.md`, deleted
