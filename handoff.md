@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Generated pipeline final-audit reconciliation (2026-11-01, XNAPP-330): the report/generator
+  now name each predicate kind and report source/metadata checks rather than claim all 26 runtime
+  acceptance conditions hold. They distinguish maintained counts/flags, path existence, source
+  TEST/add_test patterns and the executed default-annotation helper. All original conditions,
+  ordering and evidence arguments are unchanged. A temporary scope probe confirms commented-out
+  TEST/add_test text satisfies the source matchers; the report states that limit. Existing
+  CnaContentPipelineTests target builds, the audit regenerates, five related CTest metadata gates
+  pass privately, and all numbered rows/local links/inventory checks pass. No checker hardening,
+  new runtime/sanitizer/interop execution or current all-conditions-complete claim.
 - Generated Content Pipeline component-reference reconciliation (2026-11-01, XNAPP-320):
   component_reference.py no longer hides nine measured false defaults as empty cells and renders
   EffectProcessor.Defines' measured null explicitly, with its existing empty-C++-string mapping.
@@ -1789,6 +1798,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- XnaPipelineFinalAuditIsGreen is an evidence-metadata gate, not current runtime qualification.
+  It joins maintained parity counts/status flags, checks paths and TEST/add_test source patterns,
+  and executes the processor-default annotation checker. Source matchers do not preprocess C++ or
+  evaluate CMake conditions and can match commented-out declarations (temporary probe confirmed
+  2026-11-01). Its regenerated report now states these limits. Use configured test inventories
+  and actual test/interop/sanitizer results to substantiate the original acceptance conditions;
+  no source-matcher hardening or broad new qualification was bundled into the docs audit.
 - Embedded Content Pipeline hosts must keep font-search configuration fixed while builds run.
   ConfiguredFontDirectories in content-pipeline/src/SpriteFontContentPipeline.cpp is a process-
   global vector; SetFontSearchDirectoriesEXT assigns it without synchronization, and importer

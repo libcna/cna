@@ -1,27 +1,25 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""XNAPP-330: the mission's own definition of done, executed.
+"""XNAPP-330: source/metadata evidence for the campaign's acceptance checklist.
 
-The mission that opened this plan ends with twenty-six conditions, in seven groups, that must all
-hold before the local work can be called complete. Written as prose they are twenty-six claims
-somebody has to believe; run from here they are twenty-six checks against the same measured files
-and the same test sources everything else in this plan is checked against.
+The campaign named twenty-six acceptance conditions. This script checks their recorded counts,
+status flags, paths and source patterns. It does not establish that every condition holds at the
+current revision; test execution and semantic qualification are separate evidence.
 
-Each row names **where its evidence lives**, and the check is that the evidence is really there and
-really says what the row claims:
+Each row identifies the kind of evidence this script inspects:
 
   * `parity`  -- a count read from the generated parity report's own summary, which is itself the
     join of the frozen inventory with the map;
   * `inputs`  -- the eighteen-extension matrix, read directly;
-  * `tests`   -- named gtest cases that must exist in the tree; a renamed or deleted test fails the
-    audit rather than silently unproving a row;
-  * `ctests`  -- named ctests that must be registered in CMake, for the gates that are not gtest;
+  * `tests`   -- gtest declaration patterns in C++ source, without compilation or execution;
+  * `ctests`  -- add_test name patterns in CMake source, without evaluating configuration;
   * `files`   -- artefacts that must exist, for the documents and fixtures a row rests on;
   * `gate`    -- another gate script, run for its exit status.
 
 What this cannot do is re-run the whole suite, and it does not pretend to: a test that exists but
 fails is a red suite, and the suite is where that is answered. This answers the other question --
-whether every one of the twenty-six has something behind it at all.
+whether each condition has its requested metadata/source witness. Regex matches can include
+comments or inactive source; a positive match is not proof that a configured binary runs it.
 
 Usage:
     final_audit.py --repo <root> [--output docs/xna-content-pipeline-final-audit.md] [--check]
@@ -41,7 +39,7 @@ import parity_report  # noqa: E402  (path is set above on purpose)
 
 
 def test_names_in(repo, names):
-    """Every named gtest case that is really declared somewhere under the tests trees."""
+    """Finds requested TEST/TEST_F/TEST_P patterns in modules/tests C++ source text."""
     found = set()
     wanted = {n.split(".", 1)[1] if "." in n else n: n for n in names}
     for root in ("modules", "tests"):
@@ -61,7 +59,7 @@ def test_names_in(repo, names):
 
 
 def ctest_names_in(repo, names):
-    """Every named ctest really registered by a CMake file in this tree."""
+    """Finds requested add_test names in CMake text, without evaluating conditions."""
     text = ""
     for base, _, files in os.walk(os.path.join(repo, "cmake")):
         for name in files:
@@ -198,13 +196,13 @@ def run(repo, summary, inputs):
             found = test_names_in(repo, argument)
             missing = sorted(set(argument) - found)
             answers.append((not missing, "%d named test(s), %s" % (
-                len(argument), "all declared" if not missing else "not found: " + ", ".join(missing))))
+                len(argument), "source patterns found" if not missing else "not found: " + ", ".join(missing))))
         elif kind == "ctests":
             found = ctest_names_in(repo, argument)
             missing = sorted(set(argument) - found)
             answers.append((not missing, "%d ctest(s), %s" % (
-                len(argument), "all registered" if not missing
-                else "not registered: " + ", ".join(missing))))
+                len(argument), "CMake source patterns found" if not missing
+                else "source pattern absent: " + ", ".join(missing))))
         elif kind == "gate":
             command = [sys.executable, os.path.join(HERE, argument[0])]
             for one in argument[1:]:
@@ -219,20 +217,36 @@ def run(repo, summary, inputs):
 
 def render(answers):
     lines = ["# XNA 4.0 Content Pipeline final audit\n",
-             "> **Generated** by `tools/xna-pipeline-oracle/final_audit.py`. Twenty-six conditions,"
-             " in the mission's own order and words, each checked against the file or the test that"
-             " is its evidence. Do not edit by hand. The ctest `XnaPipelineFinalAuditIsGreen` runs"
-             " it (`XNAPP-330`; the task log is in Git history).\n",
-             "A check answers whether a row's evidence exists and says what the row claims. Whether"
-             " that evidence *passes* is the test suite's own question.\n",
-             "| # | Group | Condition | | Evidence |",
-             "|---:|---|---|---|---|"]
-    for index, ((group, statement, _, _), (ok, evidence)) in enumerate(zip(CHECKS, answers), 1):
-        lines.append("| %d | %s | %s | %s | %s |" % (
-            index, group, statement, "PASS" if ok else "**FAIL**", evidence))
+             "> **Generated** by `tools/xna-pipeline-oracle/final_audit.py` from the campaign's"
+             " twenty-six acceptance conditions (`XNAPP-330`). Do not edit by hand."
+             " `XnaPipelineFinalAuditIsGreen` checks this generated file and its evidence predicates.\n",
+             "A PASS means the row's **source/metadata predicate** succeeds. It does not declare"
+             " that the recorded acceptance condition is currently fulfilled. The script neither"
+             " runs the referenced gtests/interop/sanitizers nor verifies arbitrary semantic claims.\n",
+             "## What the check kinds establish\n",
+             "- `parity`: counts/statuses joined from the maintained parity map and inventory;"
+             " no compiled API or runtime rediscovery.\n"
+             "- `inputs`: eighteen recorded IMPLEMENTED+TESTED flags; no source-asset execution.\n"
+             "- `files`: path existence, not content validity, freshness or documentation completeness.\n"
+             "- `tests`: TEST/TEST_F/TEST_P source-pattern matches, not compiled or passing cases.\n"
+             "- `ctests`: add_test name patterns, not configured registrations or passing jobs.\n"
+             "- `gate`: executes the named helper; here it compares processor-default annotations"
+             " with recorded measurements, without running the C++ assertions.\n",
+             "Source patterns can match comments/inactive code. Use `ctest -N` for the configured"
+             " inventory and actual run results for execution; GPU/window runs must use the private"
+             " runner described in [content-pipeline.md](content-pipeline.md). Current defects and"
+             " external qualification limits remain in [handoff.md](../handoff.md),"
+             " [the pipeline guide](content-pipeline.md) and"
+             " [the media evidence](xna-content-pipeline-media.md). A green table does not close them.\n",
+             "## Recorded acceptance conditions and their witnesses\n",
+             "| # | Group | Recorded acceptance condition | Check kind | Evidence result | Evidence |",
+             "|---:|---|---|---|---|---|"]
+    for index, ((group, statement, kind, _), (ok, evidence)) in enumerate(zip(CHECKS, answers), 1):
+        lines.append("| %d | %s | %s | `%s` | %s | %s |" % (
+            index, group, statement, kind, "PASS" if ok else "**FAIL**", evidence))
     passed = sum(1 for ok, _ in answers if ok)
     lines.append("")
-    lines.append("**%d of %d conditions hold.**" % (passed, len(answers)))
+    lines.append("**%d of %d source/metadata checks pass.**" % (passed, len(answers)))
     return "\n".join(lines) + "\n"
 
 
@@ -271,7 +285,8 @@ def main(argv):
             handle.write(document)
     for index, statement in failed:
         print("  FAIL %d: %s" % (index, statement))
-    print("final audit: %d of %d conditions hold" % (len(answers) - len(failed), len(answers)))
+    print("final audit: %d of %d source/metadata checks pass" %
+          (len(answers) - len(failed), len(answers)))
     return 1 if failed or stale else 0
 
 

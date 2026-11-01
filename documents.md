@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 160 reviewed, 8 updated incidentally and awaiting their own audit, and 9 not yet
+Summary: 161 reviewed, 8 updated incidentally and awaiting their own audit, and 8 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -181,7 +181,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ⬜ **PENDING** — [`docs/xna-4-runtime-member-coverage.md`](docs/xna-4-runtime-member-coverage.md)
 - ⬜ **PENDING** — [`docs/xna-content-pipeline-compat-api.md`](docs/xna-content-pipeline-compat-api.md)
 - ✅ **REVIEWED** — [`docs/xna-content-pipeline-components.md`](docs/xna-content-pipeline-components.md)
-- ⬜ **PENDING** — [`docs/xna-content-pipeline-final-audit.md`](docs/xna-content-pipeline-final-audit.md)
+- ✅ **REVIEWED** — [`docs/xna-content-pipeline-final-audit.md`](docs/xna-content-pipeline-final-audit.md)
 - ⬜ **PENDING** — [`docs/xna-content-pipeline-media.md`](docs/xna-content-pipeline-media.md)
 - ⬜ **PENDING** — [`docs/xna-content-pipeline-migration.md`](docs/xna-content-pipeline-migration.md)
 - 🟡 **PENDING — updated incidentally** — [`docs/xna-content-pipeline-parity-report.md`](docs/xna-content-pipeline-parity-report.md)
