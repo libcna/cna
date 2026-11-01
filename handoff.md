@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Compiled-effect/fuzzing documentation reconciliation (2026-11-01, FX-051/053): the guide
+  distinguishes dirty-value synchronization from native uploads, borrowed texture bindings,
+  disposal checks, conditional capabilities, route/profile limits and actual parser/dependency
+  composition. Historical performance and sanitizer/fuzz records no longer imply current
+  zero-cost/equivalence or exhaustive safety. Fuzz recipes use private displays and describe
+  actual metadata/clone/apply coverage, early skips, swallowed exceptions, corpus loading and
+  process-budget limits. The current twelve effect/fourteen crash binaries replay on both
+  FNA3D drivers. Multi targets build; privately 106 core cases pass, each FNA3D driver passes
+  66/67 (Reach volume skip), SDLGPU 61/62 (ShaderCross not linked), and native WEBGPU 64/64.
+  GLSL ES precision wording is checked against Khronos §4.5. No new million-run, sanitizer,
+  browser/EasyGL/SOFTWARE/DIRECTX9 or performance campaign, implementation or ABI change.
 - glTF-limitations reconciliation (2026-11-01, GLTF-447): the registry's classifications/claims
   stay unchanged while the guide corrects its mechanical checks' real scope, unknown-extension
   meaning, strip/fan/line-loop conversion, mirrored cull ownership, recognized legacy tangent
@@ -1576,6 +1587,12 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- The compiled-effect fuzzer walks bounded metadata, clones and applies passes, but does not
+  fuzz all typed accessors/setters or draw. It skips empty/oversized/no-capability inputs and
+  catches std::exception (including candidate-side bad_alloc); standalone corpus reads occur
+  before the size gate and have no process budget. A zero replay exit alone is not exhaustive
+  parsing/allocation evidence; select a capable route and external limits (source audit
+  2026-11-01, `docs/fx-bytecode-fuzzing.md`).
 - Five GraphicsDevice platform-window ownership/adoption/query-failure tests require a
   combination of SDL-free platform, window-creating renderer and fake-window tolerance that the
   current configurations do not provide. Their GL-default skips do not verify those lifetime

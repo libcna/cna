@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 140 reviewed, 12 updated incidentally and awaiting their own audit, and 25 not yet
+Summary: 142 reviewed, 12 updated incidentally and awaiting their own audit, and 23 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -98,8 +98,8 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/fna3d-parity-report.md`](docs/fna3d-parity-report.md)
 - ✅ **REVIEWED** — [`docs/fna3d-renderer.md`](docs/fna3d-renderer.md)
 - ✅ **REVIEWED** — [`docs/framework-design.md`](docs/framework-design.md)
-- ⬜ **PENDING** — [`docs/fx-bytecode-fuzzing.md`](docs/fx-bytecode-fuzzing.md)
-- ⬜ **PENDING** — [`docs/fx-compiled-effects.md`](docs/fx-compiled-effects.md)
+- ✅ **REVIEWED** — [`docs/fx-bytecode-fuzzing.md`](docs/fx-bytecode-fuzzing.md)
+- ✅ **REVIEWED** — [`docs/fx-compiled-effects.md`](docs/fx-compiled-effects.md)
 - 🟡 **PENDING — updated incidentally** — [`docs/gamer-services-known-limitations.md`](docs/gamer-services-known-limitations.md)
 - ⬜ **PENDING** — [`docs/gamer-services-manual-qualification.md`](docs/gamer-services-manual-qualification.md)
 - ⬜ **PENDING** — [`docs/gamer-services-server.md`](docs/gamer-services-server.md)

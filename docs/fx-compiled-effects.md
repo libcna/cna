@@ -1,6 +1,7 @@
 # Compiled XNA effects in CNA
 
-This is the porter-facing guide to `Effect(GraphicsDevice&, byte[])` — the API an XNA/FNA game uses
+Current source/test contract checked on 2026-11-01. This is the porter-facing guide to
+`Effect(GraphicsDevice&, byte[])` — the API an XNA/FNA game uses
 to load a compiled effect it shipped as content. It covers what the format boundary is, how to
 load, inspect, apply and clone an effect, which renderer supports it, and how to read every error
 the path can produce.
@@ -24,19 +25,14 @@ For the difference from the CNAEXT source-based shader API, see
 | GLSL/SPIR-V/WGSL source pairs | not here | That is CNAEXT `ShaderEffect`, a separate API and capability |
 
 The binary is untrusted input. It is bounded at 64 MiB, its reflected object graph is bounded and
-arithmetic-checked, and every rejection is a specific exception rather than a generic failure.
+arithmetic-checked. Header/limit/unsupported-format checks are distinct; native parser/shader
+failures can still use renderer-specific runtime diagnostics.
 
-**Trust boundary.** A coverage-guided fuzz campaign is clean on both FNA3D drivers past the bar
-FX-051 set for it -- over three million executions on OpenGL/GLSL and over two and a
-half million on SDLGPU/SPIR-V, under AddressSanitizer with asserts fatal, no new crash. Getting
-there fixed forty-one distinct ways untrusted bytecode crashed the process.
-
-That is a measured bound, not a proof. Fuzzing cannot establish absence, and the SPIR-V emitter
-still validates shader bytecode with asserts in places no campaign has reached. So: ship your own
-effects with confidence, and treat a user-supplied one as untrusted input that has been made much
-harder to weaponise rather than as safe.
-[`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md) records what the bound covers and what it does
-not.
+**Trust boundary.** The retained FX-051 record reports more than three million OpenGL and
+2.6 million SDL_GPU driver executions under ASan after forty-one historical crash classes were
+fixed. Those runs used their recorded revision/seeds; current parser hardening and finite replay
+do not prove safe behavior for all inputs or a clean current sanitizer campaign.
+[Fuzzing scope](fx-bytecode-fuzzing.md) records the entry point's actual coverage and blind spots.
 
 **Standing decisions, not gaps.** CNA embeds no HLSL compiler, reads no MonoGame MGFX, and never
 translates a compiled effect into a `ShaderEffect`. A `.fx` source is compiled by the XNA/FNA
@@ -117,8 +113,9 @@ effect.getParametersProperty()["Texture"]->SetValue(&texture);
 ```
 
 Setters validate the type and count against the reflected declaration, write the correct subrange,
-and mark the owning top-level parameter dirty. Only dirty values are uploaded before a pass, so a
-per-frame `Apply()` that changes nothing costs no upload.
+and mark the owning top-level parameter dirty. The graphics layer synchronizes only dirty parameter values to ICompiledEffectRuntime before
+a pass. Native pass/draw paths can still pack/upload register blocks or capture snapshots, so an
+unchanged Apply is not a universal zero-upload or zero-work guarantee.
 
 `SetValueTranspose` exists for the XNA row/column-major distinction, and array-element and
 structure-member views write into their parent's storage rather than into a copy.
@@ -148,9 +145,11 @@ The first reflected technique is selected on construction. `EffectPass::Apply()`
 exact pass** — it never collapses to pass 0. `Effect::Apply()` is defined as pass 0 of the current
 technique. A pass belonging to a different technique, or to a different effect, is rejected.
 
-Applying a pass, in order: validate ownership, call the overridable `OnApply()` hook, upload dirty
-values and textures, select the exact native technique and pass, apply the pass, translate its
-state assignments, then select the effect for subsequent draws.
+EffectPass.Apply validates its owner/current technique before forwarding the stored pass index.
+Effect's internal path checks disposal, calls OnApply, validates the current technique/index,
+synchronizes dirty values, selects the native technique, applies/translates the pass and then
+selects the effect for later draws. These are not transaction/rollback guarantees: user OnApply
+and native application can have side effects before a later failure.
 
 Compiled passes survive `DrawUserPrimitives`, `DrawPrimitives`, `DrawIndexedPrimitives`,
 instanced draws, and `SpriteBatch`. As in FNA, SpriteBatch binds its sprite texture to slot zero
@@ -183,9 +182,9 @@ Rules worth knowing when porting:
 - The three Direct3D filter axes collapse into XNA's eight aggregate `TextureFilter` values, with
   an anisotropic component read as its linear equivalent — the FNA behaviour, not a manufactured
   `Anisotropic` state.
-- An unknown render-state or sampler-state token raises a diagnostic naming the token rather than
-  being silently ignored, and the state groups are published only after every token translated, so
-  a rejected token never leaves half a group applied.
+- Unknown translated state tokens produce a diagnostic. Runtime translation builds the change
+  set before common publication; publication/native application and user callbacks are not a
+  globally atomic transaction across every device/native state.
 
 `Border` and `MirrorOnce` addressing have no XNA 4.0 `SamplerState` representation and are
 rejected by name.
@@ -193,18 +192,15 @@ rejected by name.
 ### Sampler state that reaches the GPU
 
 Publishing a pass's sampler state on `GraphicsDevice.SamplerStates` is only half the job; the other
-half is that the state actually filters the sampled texture. What each backend can express:
+half is that the state actually filters the sampled texture. The relevant state groups are:
 
-| State | FNA3D | SDLGPU | EasyGL / OpenGL ES 3 | EasyGL / OpenGL 3.3 |
-|---|---|---|---|---|
-| `Filter` | yes | yes | yes | yes |
-| `AddressU` / `AddressV` | yes | yes | yes | yes |
-| `AddressW` | yes | recorded, unobservable | yes (`GL_TEXTURE_WRAP_R`) | yes (`GL_TEXTURE_WRAP_R`) |
-| `MaxAnisotropy` | yes | yes | yes | yes |
-| `MaxMipLevel` | yes (`GL_TEXTURE_BASE_LEVEL`) | yes (`min_lod`) | yes (`GL_TEXTURE_MIN_LOD`) | yes (`GL_TEXTURE_MIN_LOD`) |
-| `MipMapLevelOfDetailBias` | desktop GL only | yes (`mip_lod_bias`) | **no** | yes (`GL_TEXTURE_LOD_BIAS`) |
+The common contracts distinguish Filter, AddressU/V/W, anisotropy, MaxMipLevel and
+MipMapLevelOfDetailBias from the native route that implements them. See
+[sampler state support](sampler-state-support.md) for current profile/driver boundaries; the old
+four-column table omitted later WebGPU/CPU/D3D9 work and incorrectly called SDLGPU AddressW
+unobservable after the volume path existed.
 
-The sampling entries in that table are checked by drawing, not only by reading CNA's state objects back:
+The supported sampling paths are checked by drawing, not only by reading CNA's state objects back:
 `RunCompiledEffectSamplerPixelContract` binds a real texture, applies the pass, draws, reads the
 pixel and compares it against the texel the requested sampler state selects. Addressing is probed
 from coordinates outside `[0,1]` with two probes per axis, so `Wrap`, `Clamp` and `Mirror` have
@@ -213,9 +209,10 @@ away from any boundary; `MaxMipLevel` and the LOD bias are checked against a mip
 levels are different colours (FX-093). The cube/volume contract proves the
 dimensioned paths.
 
-`MipMapLevelOfDetailBias` has no OpenGL ES equivalent at all -- `GL_TEXTURE_LOD_BIAS` is a desktop
-GL parameter -- which is why FNA3D's own OpenGL driver skips it under ES too. CNA does not
-approximate it there; it is accepted, published on the device state object, and documented as
+The current ordinary GL ES sampler path cannot use the desktop GL_TEXTURE_LOD_BIAS parameter;
+FNA3D's OpenGL ES path omits that fixed state too. This is a route limitation, not a claim that
+shader-based LOD adjustment is impossible in ES. CNA's ordinary sampling path does not approximate
+that state there; it is accepted, published on the device state object, and documented as
 unrepresentable rather than mapped onto a nearby state. The shared contract is told which subset a
 backend can represent rather than guessing, so an ES build proves everything else and skips only
 that one section. The one exception is a compiled vertex shader's `TEXLDL` on ES 3, which already
@@ -243,10 +240,10 @@ and FNA3D had that leak; `RunCompiledEffectStockDrawIsolationContract` pins the 
 std::unique_ptr<Effect> copy(effect.Clone());
 ```
 
-A clone is an independent effect on the same device: its native runtime, parameter values, strings
-and texture references are its own, `CurrentTechnique` is preserved by stable index, and either
-instance can be disposed first without disturbing the other. Only immutable compiled shader data is
-shared.
+A clone has independent mutable effect/runtime state on the same device, including parameter
+values, strings, bindings and selected technique index. Either effect may be disposed first.
+Texture bindings still refer to the same external texture resources; cloning does not deep-copy
+or independently own those textures. Native immutable shader artifacts may be shared.
 
 ## 9. Lifetime
 
@@ -254,21 +251,28 @@ shared.
   use the dead runtime.
 - Disposing the device disposes the effects it owns, in an order that never dereferences a dead
   backend.
-- `GraphicsDevice::Reset()` reconfigures the backend rather than recreating it, so an existing
-  effect keeps working across a reset.
-- Using a disposed effect throws `System::ObjectDisposedException`; disposal is idempotent.
+- Ordinary presentation-reset tests retain the logical effect. Native context/device recovery
+  is a separate path and may rebuild its runtime from retained state; a reset pass is not proof
+  of arbitrary driver-loss recovery on every renderer.
+- Apply/pass application, cloning and current-technique mutation check disposal and throw
+  ObjectDisposedException; disposal is idempotent. Do not generalize that to every metadata
+  getter: the reflected collections/values can remain accessible after disposal.
 
 ## 10. Renderer support matrix
 
-| Renderer | `CompiledEffects` | Build option | Why |
+The true entries below are conditional on the option being enabled and the selected route's
+requirements. They are not a promise to execute every Shader Model 1–3 program without refusal.
+SOFTWARE has a bounded instruction executor with named unsupported-opcode/shape paths.
+
+| Renderer | `CompiledEffects` when enabled | Build option | Implementation |
 |---|---|---|---|
-| `FNA3D` | **true** | always on | Owns the MojoShader Effect Framework runtime; passes the full shared contract including the draw matrix |
-| `SDLGPU` | **true** | `CNA_SDLGPU_COMPILED_EFFECTS` (off by default) | MojoShader's SDL_GPU adapter; passes the full shared contract, multi-stream, instanced, cube and volume draws included |
-| EasyGL family (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (off by default) | MojoShader's OpenGL adapter; passes the full shared contract, including multi-stream and instanced draws |
+| `FNA3D` | **true** | always on | MojoShader runtime with native-driver-specific execution; focused shared contracts |
+| `SDLGPU` | **true** | `CNA_SDLGPU_COMPILED_EFFECTS` (off by default) | MojoShader SDL_GPU adapter and queued compiled draw route |
+| EasyGL family (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (off by default) | MojoShader OpenGL adapter with instance-owned GL profile selection |
 | `WEBGPU` | **true** | `CNA_WEBGPU_COMPILED_EFFECTS` (off by default) | CNA's MojoShader SPIR-V binding, translated to WGSL for the browser (WEBGPU-167, WEBGPU-203/204) |
-| `SOFTWARE` | **true** | `CNA_SOFTWARE_COMPILED_EFFECTS` (off by default) | The CPU executor runs the shared public contract (SOFTWARE-162/165) |
+| `SOFTWARE` | **true** | `CNA_SOFTWARE_COMPILED_EFFECTS` (off by default) | Bounded CPU executor with named instruction/shape limits (SOFTWARE-162/165) |
 | `DIRECTX9` | **true** | `CNA_DIRECTX9_COMPILED_EFFECTS` (off by default) | Native D3D9 shader tokens from the effect; MojoShader only for the container and reflection (FX-070) |
-| every other renderer identity | false | — | No compiled-effect runtime, or no programmable shader target at all |
+| HEADLESS / STUB | false | — | Validation/windowless roles without a compiled-effect executor |
 
 EasyGL selects the MojoShader source dialect from the renderer instance that owns the GL context:
 desktop `OPENGL33` uses `glsl120`, and the ES 3/WebGL 2 identities use `glsles3`. It deliberately
@@ -276,8 +280,7 @@ does not accept `MOJOSHADER_glBestProfile` choosing `glspirv` on a newer desktop
 adapter assumes a complete vertex/pixel pair, while an XNA Effect pass may validly assign only one
 stage and inherit the other at draw time.
 
-The opt-in options exist because MojoShader is a fetched dependency those renderers do not
-otherwise need. With the option off the renderer reports `CompiledEffects == false` and refuses a
+The opt-in options control the additional parser/translation/executor dependency and code. With the option off the renderer reports `CompiledEffects == false` and refuses a
 compiled `Effect` exactly like any unsupported backend -- the capability never claims more than the
 build actually contains.
 
@@ -323,14 +326,14 @@ ps_1_4 `BEM` stays refused by name: the SPIR-V profile has no implementation of 
 ### What "passes the shared contract" means
 
 `tests/support/CNA/TestSupport/CompiledEffectConformance.hpp` is the whole gate. A backend adds one
-test file that builds its device and calls the contract sections; nothing in them is
-renderer-specific. They are:
+test file that builds its device and calls the contract sections; shared assertions are parameterized by route/profile options, and the backend tests select the
+sections they exercise. The following describes major sections, not the full current call list:
 
 | Section | What it proves |
 |---|---|
 | format | empty, MGFX, noise and every truncation boundary are rejected distinctly |
 | reflection | order, names, semantics, classes, dimensions, arrays, structures, annotations |
-| parameter API | every getter/setter round-trips: scalars, vectors, matrices and transposes, arrays, element and member views, string semantics |
+| parameter API | selected scalar/vector/matrix/transpose/array cases, element/member views and string semantics |
 | techniques/passes | first technique selected, exact pass identity, technique switching |
 | render state | every supported Direct3D 9 render-state token lands on the device's own state objects |
 | state policy | an unassigned group survives; an unknown token is refused by name |
@@ -359,11 +362,10 @@ instead of passing quietly. `RunCompiledEffectContract`'s own doc comment carrie
 list of the drawing sections a backend must run; this table is a description of what they mean, not
 a second copy of the list.
 
-**Promotion rule.** A backend reports `CompiledEffects == true` only after it has run every section
-through the public `Effect`/`GraphicsDevice` API on a real device. Parsing the bytecode or producing
-shader text proves nothing on its own, and no backend is written blind behind the capability. A
-section a backend cannot run skips on its own named refusal, never on silence or on a capability
-that does not describe the shape.
+**Evidence rule.** Promotion requires real public-API draw evidence, not only parsing or shader
+text. The capability describes the implemented route; it does not prove today's entire matrix
+was run. Backend test call sites, profile options, named refusals and individual skips determine
+what a particular pass establishes. Stock/core tests and browser/native tests remain distinct.
 
 ### 10.1 Depth convention on EasyGL
 
@@ -403,7 +405,7 @@ doing so:
 * **Stock and `ShaderEffect` sprites** mirror V in the sprite's own vertex data, because
   `SpriteBatch.Begin` may substitute a user shader whose GLSL this renderer does not own.
 * **Compiled effects** get a row-reversed **copy** of the source, made per sampler slot, because
-  MojoShader's generated GLSL cannot be given the renderer's own sampling-time correction at all.
+  the current MojoShader draw path does not consume EasyGL's stock sampling-flip flag.
 
 Only one of the two may apply to any one draw. A `SpriteBatch` batch flushing through the
 compiled route therefore leaves its sprite V alone and relies on the copy — which is also the
@@ -412,8 +414,9 @@ only one of the two that can correct a slot the sprite quad does not own, such a
 fullscreen `SpriteBatch` quads reading each other's render targets; getting it wrong turns the
 frame upside down while leaving the intermediate buffers individually correct.
 
-The copy costs a `glBlitFramebuffer` per bottom-up slot per flush, and is refused by name when the
-source is the target currently being drawn into.
+The compiled route prepares a flipped copy for a bottom-up sampled target; this can require a
+blit and is not a constant free operation. It refuses sampling the target currently being drawn
+into. Consult the actual preparation/draw path rather than assuming one copy per application frame.
 
 Found on `BloomSample_4_0`. `RunCompiledEffectSpriteBatchRenderTargetSourceContract` pins it —
 one hop, two hops, and a plain `Texture2D` that must stay untouched.
@@ -424,9 +427,10 @@ up as an uploaded texture and need no correction on either route.
 ### 10.3 Fragment-shader precision on the GL ES profiles
 
 A Direct3D 9 shader computes in full 32-bit float unless an instruction opts into partial
-precision. GLSL ES has no such default: a fragment shader must declare its own float precision,
-and MojoShader's ES profiles picked `mediump`. `mediump` guarantees only fp16 **range** —
-about ±65504 — so an expression a D3D9 shader takes for granted can overflow it.
+precision. GLSL ES fragment float precision must be declared. The old translator's mediump choice could
+have insufficient range for such expressions; mediump specifies minimum requirements and may
+use higher precision, rather than universally meaning one fixed fp16 representation.
+See GLSL ES 3.00 §4.5 in the [Khronos specification](https://registry.khronos.org/OpenGL/specs/es/3.0/GLSL_ES_Specification_3.00.pdf).
 
 That is not a small-error problem, which is what makes it worth naming here. The usual shape is
 a vector carried in world units and normalized in the pixel shader:
@@ -435,20 +439,20 @@ a vector carried in world units and normalized in the pixel shader:
 // vertex shader
 output.lightDirection = LightPosition - worldSpacePos;   // e.g. ~1000 units long
 
-// pixel shader
-input.lightDirection = normalize(input.lightDirection);  // dot(v, v) ~ 1e6  -> +inf at mediump
+// pixel shader: a limited-range mediump implementation can overflow this dot product.
+input.lightDirection = normalize(input.lightDirection);
 ```
 
-`inversesqrt(+inf)` is 0, so `normalize` returns the **zero vector**, and every term derived
-from that direction — diffuse, specular, rim, whatever the shader does with it — becomes
-exactly zero. Nothing errors. The frame still draws the geometry, still tracks the camera, and
+On the affected limited-range path, that overflow made normalization collapse and terms derived
+from the direction lose their expected lighting contribution. This was a device/path failure,
+not a guaranteed result for every mediump implementation. Nothing errors. The frame still draws the geometry, still tracks the camera, and
 still honours the terms that do not depend on the direction, so a scene lit by an ambient
 constant and nothing else can look like a working render until the light is moved and not one
 pixel changes.
 
-CNA therefore translates fragment shaders at `highp`
-(libcna/mojoshader `fragment-precision`). GLSL ES 3.00 requires fragment
-`highp`, so `WEBGL2`, `OPENGLES3` and the desktop GL profile get it unconditionally.
+CNA's pinned translator emits highp for its ES fragment path (fragment-precision). ES 3.00
+supports it; desktop GLSL uses its own profile-appropriate precision code. The qualifier is not
+an assertion that every driver will reproduce all D3D9 floating-point behavior bit-for-bit.
 
 Found on `NormalMappingSample_4_0` (FX-121).
 
@@ -481,6 +485,9 @@ Found on `PerPixelLightingSample_4_0` (FX-122). The tell was that red and
 green matched the original exactly and only blue differed, and only where blue would exceed 1.
 
 ## 11. Error guide
+
+These are diagnostic examples, not an exhaustive list or a stable message protocol. Profile,
+format, native-driver and selected instruction requirements can refuse a particular draw.
 
 | Symptom | Exception | Cause |
 |---|---|---|
@@ -522,33 +529,35 @@ applied, which is where a port keeps its per-frame parameter updates.
 
 ## 13. Dependency and licence notices
 
-Compiled-effect execution on FNA3D uses MojoShader, which FNA3D carries as a submodule. CNA links
-exactly one MojoShader — the revision FNA3D pins — and never builds a second copy.
+Compiled-effect adapters share cna_mojoshader and the common translation helper. The dependency
+integration selects MojoShader from the FNA3D pin, can publish it without linking the FNA3D
+renderer, and removes its SDL standard-library/SDL_GPU edges for supported SDL-free compositions.
+See cmake/ThirdPartyFNA3D.cmake; do not assume compiled effects require selecting FNA3D.
 
 - FNA3D: CNA's fork libcna/FNA3D, pinned by `cmake/ThirdPartyFNA3D.cmake`
   ([`fna3d-renderer.md`](fna3d-renderer.md#the-two-forks) lists the pins and why the forks exist).
-- MojoShader: CNA's fork libcna/mojoshader, FNA3D's submodule: upstream
-  `6333f74dbd5644789a63e903816441b16c1e8b60` plus CNA's commits, zlib licence. A MojoShader fix is
+- MojoShader: CNA's fork libcna/mojoshader, FNA3D's submodule: the submodule revision recorded by the current FNA3D pin, zlib licence. The historical
+  6333f74 base has since been merged with newer upstream work; it is not today's whole pin. A MojoShader fix is
   named here by its former patch name (`effect-parser-robustness` was
   `cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`); each is one commit on the
   fork's `cna` branch with that name in its `CNA-Patch:` trailer
   (`git log --grep=effect-parser-robustness`).
-- The `effect-parser-robustness` commit turns forty ways untrusted bytecode could crash the process
-  into ordinary parser errors. Thirty-nine of the forty were found by the FX-051 fuzz campaign; see
+- The effect-parser-robustness commit contains historical parser fixes. Retained counts describe
+  that campaign and do not count every later hardening change; see
   [`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md) for the list and for the exposure that
   remains. It is part of the fork's source, so a fetched checkout and an explicit
   `FETCHCONTENT_SOURCE_DIR_FNA3D` checkout of the pin both have it.
-- The stock `.fxb` fixtures under `modules/renderers/fna3d/effects/` are Microsoft's XNA stock
-  effects as redistributed by FNA under `LICENSE.StockEffects`; their provenance and hashes are
-  recorded in that directory's `README.md` and verified by a test.
+- That directory contains six redistributed Microsoft XNA stock effects under LICENSE.StockEffects
+  and six CNA-specific compiled effects on 2026-11-01. Its README/hash checks describe their
+  separate provenance; do not apply the stock-effect attribution to every .fxb in the directory.
 
 See [`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) for the full notice set.
 
 ## 14. Performance baseline (FX-053)
 
 Measured with `cna_compiled_effect_benchmark` on an FNA3D/SDLGPU (Vulkan, Intel Iris Xe) Debug
-build, `SDL_VIDEODRIVER=offscreen`, while a sanitizer build was competing for the same machine —
-so treat the absolutes as pessimistic and compare runs, not numbers.
+build, `SDL_VIDEODRIVER=offscreen`, while a sanitizer build was competing for the same machine. These are historical observations,
+not a current baseline, controlled before/after comparison or upper bound on present latency.
 
 | Operation | Iterations | Median | Mean |
 |---|---:|---:|---:|
@@ -562,7 +571,7 @@ so treat the absolutes as pessimistic and compare runs, not numbers.
 | compiled effect: apply + draw 2 triangles | 500 | 10.9 us | 13.5 us |
 | stock `BasicEffect`: apply + draw 2 triangles | 500 | 11.5 us | 12.3 us |
 
-What the numbers say:
+What that historical fixture/run illustrated:
 
 - **Construction cost tracks shader work, not file size.** The 54 KiB `SkinnedEffect` constructs
   faster than the 28 KiB `BasicEffect`; the byte count is not the predictor, the embedded programs
@@ -573,11 +582,25 @@ What the numbers say:
 - **Dirty tracking works.** A pass applied with nothing changed costs about 2.9 us; one changed
   `float4` adds ~0.4 us and a matrix plus two scalars ~2.2 us. Unchanged parameters are not
   re-uploaded.
-- **A compiled pass is not more expensive to draw with than a stock effect** (10.9 us vs 11.5 us
-  for the same geometry), so porting an effect to the compiled path costs nothing per draw.
+- The recorded compiled/stock point estimates were close (10.9 versus 11.5 us). Without retained
+  distributions and a controlled workload they establish neither equivalence nor zero per-draw
+  cost for a port; deferred submission and CPU/GPU timing boundaries also matter.
 
-**Decision on the immutable artifact cache:** not justified. The expensive step is native shader
+**Historical decision on the immutable artifact cache:** no cache was added on that evidence. The expensive step is native shader
 translation during construction, and `Clone()` already reuses it without sharing any mutable value,
 texture, selected technique or pass state. A bytecode-keyed cache would add cross-instance sharing
 risk for a case the existing API already covers. FX-053 records this as decided, to be
 revisited only if a real port shows repeated construction of identical bytecode in a hot path.
+
+## 15. 2026-11-01 verification
+
+The existing multi-tree Renderer/Graphics targets and replay/benchmark tools build. Privately,
+106 common Effect/parameter/pass/technique tests pass. FNA3D's OpenGL and SDL_GPU drivers each
+pass 66/67 selected compiled/oracle tests, with the same volume case skipped under Reach.
+CNA SDLGPU passes 61/62 (ShaderCross integration not linked); native WEBGPU passes all 64.
+Both FNA3D drivers replay all twelve current effect binaries plus fourteen crash artifacts.
+
+EasyGL and SOFTWARE compiled-effect options are OFF in that tree, DIRECTX9 is absent, and no
+browser build is executed here. This is current focused functional/replay evidence, not a new
+ASan/UBSan/LSan campaign, all-backend promotion, historical performance reproduction or proof of
+every untrusted input. Documentation changes no implementation or ABI.
