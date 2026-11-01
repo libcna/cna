@@ -134,10 +134,13 @@ generic brackets (`accept_list_int_space_in_generic`: *Cannot find type " int "*
   subsequent serialization in its combined round-trip oracle, not deserialization.
   Direct genuine-XNA evidence: cna-demos `IntermediateEnvelopeOracle.cs` (ISSUE-149), pinned by
   `XnaIntermediateSerializerCorpus.NullRootDeserializationIsSeparateFromReserialization`.
-  The existing Sharp ArgumentNullException uses modern .NET parameter formatting
+  Without a Game host or explicit compatibility switch, Sharp ArgumentNullException uses modern
+  .NET parameter formatting
   (`Value cannot be null. (Parameter 'value')`), whereas the Framework4 corpus uses
   a separate `Parameter name: value` line. Type, parameter identity and timing match;
   the corpus test retains both exact diagnostics without changing the golden data.
+  The process-wide host selection is described in
+  [`xna4-runtime-compatibility.md`](xna4-runtime-compatibility.md).
 
 ### `[ContentSerializer]` (`attributes`, `accept_*` over `Attributes`)
 

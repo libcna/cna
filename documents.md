@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 166 reviewed, 7 updated incidentally and awaiting their own audit, and 4 not yet
+Summary: 167 reviewed, 7 updated incidentally and awaiting their own audit, and 3 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -187,7 +187,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/xna-content-pipeline-parity-report.md`](docs/xna-content-pipeline-parity-report.md)
 - 🟡 **PENDING — updated incidentally** — [`docs/xna-fna-behavior-decisions.md`](docs/xna-fna-behavior-decisions.md)
 - ✅ **REVIEWED** — [`docs/xna-intermediate-xml-format.md`](docs/xna-intermediate-xml-format.md)
-- ⬜ **PENDING** — [`docs/xna4-runtime-compatibility.md`](docs/xna4-runtime-compatibility.md)
+- ✅ **REVIEWED** — [`docs/xna4-runtime-compatibility.md`](docs/xna4-runtime-compatibility.md)
 - 🟡 **PENDING — updated incidentally** — [`docs/xnb-content-pipeline-support.md`](docs/xnb-content-pipeline-support.md)
 - 🟡 **PENDING — updated incidentally** — [`docs/xnb-interoperability.md`](docs/xnb-interoperability.md)
 

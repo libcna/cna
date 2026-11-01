@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Runtime exception-profile documentation reconciliation (2026-11-01, SAMPLE-104): the page
+  now states the process-wide AppContext default/override lifetime, exception-construction timing,
+  Game constructor-body boundary and current shared Substring validation. The old 193-case and
+  seven-image campaign is retained as dated external evidence rather than a current result or ABI
+  guarantee. The XML guide receives the related standalone-versus-Game diagnostic qualification.
+  Existing CnaRuntimeTests builds; both profile regressions pass in separate private CTest
+  processes with OPENGLES3/dummy audio. No runtime change or full historical campaign rerun.
 - Content Pipeline parity-report reconciliation (2026-11-01, XNAPP-014/020): the generator
   now labels percentages as maintained classifications, distinguishes annotation/freshness gates
   from compilation/runtime proof and explains named refusal tests versus successful target/device
