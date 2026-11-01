@@ -1,9 +1,9 @@
 # glTF renderer stride conformance
 
-Status: verified 2026-08-14 (`GLTF-158`…`GLTF-160`, `GLTF-168`, `GLTF-388`, `GLTF-389`).
+Current source/test contract checked on 2026-11-01. Historical GLTF-158…389 campaign results
+remain in Git history; the table below separates declaration, draw and pixel evidence.
 
-This matrix records the complete boundary between CNA's glTF importer and the renderers in
-the glTF correctness gate. The source of truth is
+This page records the canonical importer layouts and the focused renderer-conformance boundary. The source of truth is
 `CNA/Internal/Graphics/VertexDeclarationFidelity.hpp`; the importer now constructs a real
 `VertexDeclaration` from that table before the first upload. A byte stride is no longer the only
 description passed by the glTF path.
@@ -32,56 +32,56 @@ built-in table, but the current glTF packing policy emits neither. The renderer 
 first two tests below cover the seven strides that the witness test loads (28, 32, 48, 52, 56, 60
 and 68); strides 24, 76 and 80 have no witness there.
 
-## Renderer matrix
+## Declaration and draw boundary
 
-“Draw boundary” means `Model::Draw` followed by `GraphicsDevice::Present`, so deferred
-commands are submitted rather than merely queued. “Native binding” means every declared element
-is translated to an API input attribute. It is not meaningful for the two non-rasterizing
-renderers, and is marked N/A rather than advertised as rendering support.
+The public declaration is authoritative. Some native routes translate it directly; others use a
+fixed layout plus the shared fidelity guard. A stride alone cannot prove semantic/offset/format
+compatibility. The guard requires declared fields to fit, not overlap, and match their actual
+native interpretation; an extra unused native attribute is not automatically a violation.
+Unknown layouts retain their route's explicit refusal policy.
 
-| Renderer | All seven uploads and public declarations | All seven reach draw boundary | Every element bound natively | Implementation/audit result |
-|---|---|---|---|---|
-| `STUB` | ✅ | N/A — `ThreeD=false`, explicit test skip | N/A | The common `VertexBuffer` retains and validates the complete declaration and exact upload bytes; STUB intentionally has no 3D pipeline. |
-| `HEADLESS` | ✅ | ✅ validation draw | N/A | Upload/count/index validation and the stock-effect draw route accept all seven. Optional PBR/skinned base textures follow the native renderers' neutral-white contract. No pixels or native attributes exist. |
-| `OPENGLES3` | ✅ | ✅ Mesa OpenGL ES 3.2 | ✅ | `EasyGLVertexBufferRenderer::ApplyLayout` takes the non-empty declaration path, binds one attribute per declaration element, maps `Color` to normalized `UNSIGNED_BYTE` and `Byte4` to the integer attribute path, then `RequireDeclarationFitsStockProgramEXT` checks the ordered semantic/format list against the selected shader. The old magic-stride switch remains an empty-declaration compatibility path and is no longer used by glTF. |
+EveryCanonicalStrideHasExactlyItsDeclaredElements covers the table itself. The eight-witness
+declaration test covers seven emitted strides, not every row. The two COLOR_0 fixtures exercise
+60/80 at the live draw boundary; EveryPbrAndSkinnedFixtureImportsToItsCanonicalStride provides
+broader import coverage. These distinct tests must not be collapsed into “all layouts rendered”.
 
-EasyGL consumes the declaration directly. STUB and HEADLESS keep honest non-rendering capability boundaries.
+Model.Draw followed by Present reaches deferred submission. The current ordinary-stride test
+accepts success or a named absent-shading-model refusal containing GLTF-477. The color test also
+accepts a COLOR_0 refusal. Other generic layout errors do not satisfy those allowances.
+A passing test therefore needs its capability/refusal context before it can be called rendering
+support.
 
-## Automated evidence
+## Current execution evidence
 
-- `GltfStrideAndBuffer.EveryImportedGltfStrideCarriesItsCanonicalVertexDeclaration` (the witness
-  test) loads eight corpus witnesses of those seven strides and compares stride, element count,
-  ordered offsets, formats, semantics and usage indices with the canonical table.
-- `RendererStrideConformance.EveryGltfStrideReachesTheNativeDrawBoundary` draws and presents all
-  eight on every renderer with `ThreeD`; STUB's capability skip is deliberate and checked in CI.
-  Since `GLTF-473` its contract is **reach the draw boundary, or refuse with a named layout
-  incompatibility** rather than a plain `EXPECT_NO_THROW` — which is stricter, because a
-  fixed-function renderer's failure mode is not throwing.
-- `RendererStrideConformance.AColourCarryingPbrPrimitiveEitherDrawsOrRefusesByName` (`GLTF-472`)
-  draws both colour-carrying PBR records (strides 60 and 80) through a **live device**, and
-  `RendererStrideConformance.EveryPbrAndSkinnedFixtureImportsToItsCanonicalStride` pins the stride
-  every PBR and skinned fixture imports to. These are standing renderer-conformance gates, not
-  artefacts of the glTF campaign that found the bugs, and the reason to keep them is empirical:
-  between them they found three defects (`SDLGPU`'s and `DILIGENT`'s (retired 2026-09-17)
-  unreachable `COLOR_0` shaders and `OPENGLES1`'s (retired 2026-09-17) misread PBR records) that
-  **every static inventory in this repository reported as correct**, and the search they prompted
-  found two more (`GLTF-475`). A source audit can only see what a renderer declares; only a draw
-  sees what it reads.
-- `CrossRendererContractTest.NoRendererPaintsAVertexAttributeInsteadOfTheEffectsDiffuseColour`
-  (`GLTF-475`) is the same tier applied one level lower: not "does the draw arrive?" but "is the
-  answer the one the caller asked for?". It draws a plain XNA `VertexPositionNormalTangentTexture`
-  buffer (stride 48) with a `BasicEffect` whose `DiffuseColor` is opaque red, then reads the centre
-  pixel back on every renderer in the build. A renderer may render it -- the answer must be exactly
-  that red -- or refuse it by name; a third answer is a defect. It found two, in two renderers,
-  giving two different wrong colours: `OPENGL4` painted the record's `NORMAL` and `DILIGENT` drew
-  black (both renderers have since been retired), where the plan row that opened the investigation had predicted one renderer. It needs a
-  multi-renderer build (`CNA_MULTI_RENDERER`) and colour readback, so it is not in the CI matrix
-  below; it runs in `cmake-build-multi`.
-- `.github/workflows/gltf-renderer-stride-ci.yml` builds and runs those tests for `STUB`,
-  `HEADLESS`, `OPENGLES3`, `SDLGPU` and `SOFTWARE` on every relevant push and pull request.
-- `scripts/gltf-renderer-parity.sh` compares each renderer against the same committed L1–L5
-  goldens. The 2026-08-14 run was byte-identical across renderers for all 42 selected L1–L5 tests;
-  HEADLESS and OPENGLES3 also had identical outcomes for all 507 tests in `*Gltf*`.
+On 2026-11-01 the existing multi tree builds the Content/Graphics test targets and passes the
+42-case source-policy/buffer filter. The three RendererStrideConformance cases have these results:
 
-This is an input-layout and submit oracle, not an image oracle. Corpus-wide pixel tolerances and
-reference PNGs remain the separate L7 work tracked by `GLTF-009` and `GLTF-390`.
+| Selected identity | Result | Meaning |
+|---|---|---|
+| OPENGLES3, OPENGL33 | 3/3 each | Current private Linux native GL draw routes |
+| WEBGPU, SDLGPU, FNA3D | 3/3 each | Current private Linux device draw routes; not all drivers/OSes |
+| SOFTWARE | 3/3 | CPU implementation/submit route |
+| HEADLESS | 3/3 | Upload, declaration and validation draws; no native input binding or pixels |
+| STUB | 0 passed, 3 capability skips | No 3D; upload/declaration tests are separate |
+| DIRECTX9, WEBGL2 | Not run here | Not compiled into this multi tree / requires browser build |
+
+The focused cases are not corpus-wide image oracles. The cross-renderer
+NoRendererPaintsAVertexAttributeInsteadOfTheEffectsDiffuseColour case also passes, checking a
+stride-48 BasicEffect red witness where 3D/readback is available; it permits diagnostic refusal and
+does not judge HEADLESS pixels.
+
+## CI and independent layers
+
+.github/workflows/gltf-renderer-stride-ci.yml currently selects STUB, HEADLESS, OPENGLES3,
+SDLGPU, WEBGPU and SOFTWARE. This is six identities, not every public identity or all native
+drivers. Its source describes the configured gate; a workflow file is not a newly successful
+remote run. Run local window/device tests through the private runner:
+
+```sh
+tools/platform/run_gpu_tests_private.sh --exec cmake-build-multi/CnaContentTests \
+  '--gtest_filter=GltfStrideAndBuffer.*:RendererStrideConformance.*'
+```
+
+scripts/gltf-renderer-parity.sh compares selected L1–L5 oracle results; the retained 2026-08-14
+42/507-case numbers are historical evidence. L7 pixels and per-policy goldens are separate:
+see [conformance harness](gltf-conformance.md) and [PBR contract](gltf-renderer-pbr-fallbacks.md).

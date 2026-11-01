@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 133 reviewed, 12 updated incidentally and awaiting their own audit, and 32 not yet
+Summary: 135 reviewed, 12 updated incidentally and awaiting their own audit, and 30 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -111,8 +111,8 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ⬜ **PENDING** — [`docs/gltf-conventions.md`](docs/gltf-conventions.md)
 - ⬜ **PENDING** — [`docs/gltf-limitations.md`](docs/gltf-limitations.md)
 - ⬜ **PENDING** — [`docs/gltf-performance.md`](docs/gltf-performance.md)
-- ⬜ **PENDING** — [`docs/gltf-renderer-pbr-fallbacks.md`](docs/gltf-renderer-pbr-fallbacks.md)
-- ⬜ **PENDING** — [`docs/gltf-renderer-stride-conformance.md`](docs/gltf-renderer-stride-conformance.md)
+- ✅ **REVIEWED** — [`docs/gltf-renderer-pbr-fallbacks.md`](docs/gltf-renderer-pbr-fallbacks.md)
+- ✅ **REVIEWED** — [`docs/gltf-renderer-stride-conformance.md`](docs/gltf-renderer-stride-conformance.md)
 - ✅ **REVIEWED** — [`docs/graphics-renderer-feature-matrix.md`](docs/graphics-renderer-feature-matrix.md)
 - ✅ **REVIEWED** — [`docs/graphics-resource-lifetime.md`](docs/graphics-resource-lifetime.md)
 - ✅ **REVIEWED** — [`docs/headless-renderer.md`](docs/headless-renderer.md)

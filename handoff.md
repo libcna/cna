@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- glTF renderer documentation reconciliation (2026-11-01, GLTF-374/389): PBR now inventories
+  all six shading families including FNA3D/SOFTWARE, seven map roles, GPU-neutral versus exact CPU
+  defaults, current specular/vertex-color support and material/transform/coverage contracts.
+  Obsolete register/blob/block-size/environment snapshots are replaced by current source/test
+  routing. The stride page distinguishes canonical declarations, seven-stride witness coverage,
+  allowed refusals, submission and pixels, and corrects CI to six identities including WEBGPU.
+  Content/Graphics targets build; privately all 42 policy/buffer cases pass, three stride cases
+  pass for each of seven compiled identities, and STUB skips its three for lack of 3D. The
+  cross-renderer diffuse-color witness passes. HEADLESS remains validation-only; DIRECTX9 and
+  browser WEBGL2 are not newly executed, and no whole-corpus L7 recapture, shader regeneration,
+  implementation or ABI change is claimed.
 - Diagnostics/Inspector documentation reconciliation (2026-11-01, DIAG-0001/INSP-0001): four
   pages correct the obsolete immutable-foundation claim, OFF macro type checking, explicit
   offline allocations, UTF-8/name bounds, producer teardown, resource/snapshot limits, UI batch
