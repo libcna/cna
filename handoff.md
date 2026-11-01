@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Native consumer-boundary documentation reconciliation (2026-11-01): `docs/binding.md` now
+  describes the approved native C API/C ABI scope instead of prescribing language-specific
+  binding architectures, packaging or implementations. It corrects single-game versus runtime
+  identity, per-family ownership/event rules, thread exceptions, struct prefixes, stream/completion
+  mappings and the distinction between a consistent release checker and its Not ready verdict.
+  External consumer status/pins remain their own evidence. The shared/static C ABI targets build,
+  and `CApi_InstalledConsumer` installs both package forms, builds the standalone strict-C99 sample
+  and runs successfully through the private SDLGPU runner. Local links pass; implementation and
+  ABI are unchanged.
 - C API texture/vertex-buffer contract reconciliation (2026-11-01): `TEXTURES.md`,
   `TEXTURE_VOLUMES.md` and `VERTEX_BUFFERS.md` now cover owned/pre-run devices, typed element-size
   views, BYTE/Color round trips, count-output timing, volume/cube constructor versus DDS format

@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 91 reviewed, 14 updated incidentally and awaiting their own audit, and 72 not yet
+Summary: 92 reviewed, 14 updated incidentally and awaiting their own audit, and 71 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -61,7 +61,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ⬜ **PENDING** — [`docs/avatar-demos.md`](docs/avatar-demos.md)
 - ⬜ **PENDING** — [`docs/avatars.md`](docs/avatars.md)
 - ✅ **REVIEWED** — [`docs/basiceffect-support.md`](docs/basiceffect-support.md)
-- ⬜ **PENDING** — [`docs/binding.md`](docs/binding.md)
+- ✅ **REVIEWED** — [`docs/binding.md`](docs/binding.md)
 - ⬜ **PENDING** — [`docs/browser-network-readiness.md`](docs/browser-network-readiness.md)
 - ⬜ **PENDING** — [`docs/build-performance.md`](docs/build-performance.md)
 - ⬜ **PENDING** — [`docs/cna-devices-camera-design.md`](docs/cna-devices-camera-design.md)
