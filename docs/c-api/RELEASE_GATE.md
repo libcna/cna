@@ -21,7 +21,7 @@ decided not to ship.
 
 | | Criterion | What it requires | Measured |
 |---|---|---|---|
-| ✅ | **The compatibility matrix is real, current and honest** | Every public header compiles on its own, in every declared language mode of every installed toolchain, and the published matrix matches its declaration. | 23 declared cells across 7 toolchains |
+| ✅ | **The compatibility matrix is real, current and honest** | Every public header compiles on its own, in every declared language mode of every installed toolchain, and the published matrix matches its declaration. | 26 declared cells across 8 toolchains |
 | ✅ | **No unreviewed ABI break** | Every struct layout, field offset, scalar width, constant value and exported symbol is recorded, and a change to any of them arrives as a reviewable diff. | 196 struct layouts and 3213 exported symbols recorded |
 | ❌ | **No public C++ symbol is unaccounted for** | The generated inventory has no `planned` row, and every partially mapped row carries an owner-approved disposition: every public declaration is mapped, partially mapped with its subset named and its limitation approved, or recorded as having no C form with the reason. | 633 public symbols are still unmapped |
 | ✅ | **A known-limitations matrix a reader can act on** | What the ABI does not do is published, grouped by reason, with no unclassified reason and no deferral owned by a finished task. | docs/c-api/LIMITATIONS.md is current: 15 partially mapped symbols in 9 groups, 453 unmapped in 89 groups |

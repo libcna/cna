@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "toolchains": [
     {
       "id": "cc",
@@ -49,62 +49,35 @@
       "standards": ["c99", "c11", "c17"],
       "role": "optional",
       "note": "A Windows target reached by cross-compiling. Headers only: nothing here links or runs a Windows binary, and the matrix says so rather than implying a tested platform."
+    },
+    {
+      "id": "x86_64-w64-mingw32-g++",
+      "language": "c++",
+      "standards": ["c++17", "c++20", "c++23"],
+      "role": "optional",
+      "note": "The matching Windows-target C++ driver. It proves the same public C headers remain consumable from Windows C++ translation units; like the C row, it compiles only."
     }
   ],
-  "configurations": [
+  "outside_matrix": [
     {
-      "id": "headless",
-      "renderer": "HEADLESS",
-      "devices": "OFF",
-      "role": "required",
-      "note": "No window, no GPU. Every route that needs neither is proven here, and every route that does is proven to refuse."
+      "subject": "Runtime and renderer behaviour",
+      "note": "This is a source-compatibility matrix for the public headers, not a runtime matrix. C API smoke, package, sanitizer, renderer and platform tests are registered in the applicable CMake configurations and carry their own evidence; this document does not claim that every smoke program runs under every renderer."
     },
     {
-      "id": "opengles3",
-      "renderer": "OPENGLES3",
-      "devices": "OFF",
-      "role": "required",
-      "note": "EasyGL's GL ES 3 profile with a real GL context on the private display, in the multi-renderer tree that also compiles SDLGPU, WEBGPU and FNA3D. It replaced the SDL_RENDERER configuration when that renderer was retired on 2026-10-13."
+      "subject": "MinGW linking and execution",
+      "note": "The two MinGW rows cross-compile headers for a Windows target but do not link or run a Windows binary. Native Windows and Wine/DXVK runtime evidence belongs to their platform workflows, not to these header cells."
     },
     {
-      "id": "software",
-      "renderer": "SOFTWARE",
-      "devices": "OFF",
-      "role": "required",
-      "note": "A CPU rasteriser: a third renderer answer for every capability query, and the compiled-out devices half again."
+      "subject": "MSVC and Apple Clang",
+      "note": "Neither native compiler is a declared cell. Their platform builds and tests are useful independent evidence, but do not prove this matrix's per-header, per-language-mode contract."
     },
     {
-      "id": "asan",
-      "renderer": "SOFTWARE",
-      "devices": "ON",
-      "role": "required",
-      "note": "AddressSanitizer and UndefinedBehaviorSanitizer with leak detection on. This is what catches a handle that outlives its owner or an operation nobody released. It runs the CPU rasteriser with the devices half compiled in, which is the one pairing the other three rows leave out: SOFTWARE is therefore exercised in both CNA_DEVICES states."
-    }
-  ],
-  "unsupported": [
-    {
-      "subject": "Running a Windows binary",
-      "note": "The cross-compiler proves the headers parse for a Windows target; nothing here links or executes one, so no Windows behaviour is claimed."
-    },
-    {
-      "subject": "macOS, as a cell of this matrix",
-      "note": "The matrix records the reference Linux host and its declared configurations, and macOS is not one of them. It was measured separately on Apple silicon (Apple M4 AM4-209..213): every C API test passed in the SOFTWARE and the since-retired SDL_RENDERER configurations there, the dylib exports exactly the cna_* ABI, and CApi_InstalledConsumer builds and runs the installed package, shared and static. docs/c-api/CONSUMING.md has what a macOS consumer needs to know."
-    },
-    {
-      "subject": "iOS and Android targets",
-      "note": "No mobile toolchain is a cell of this matrix, so it makes no mobile C ABI claim. iOS builds of CNA itself exist (docs/apple-platforms.md); the C ABI is not exercised on either mobile target here."
-    },
-    {
-      "subject": "Web targets, as cells of this matrix",
-      "note": "The WEBGL2 and WEBGPU Emscripten C ABI artifacts are built and exercised separately under Node and in real browsers, as documented in docs/c-api/WASM_ARTIFACT.md. They are not native compatibility configurations, and this matrix does not claim that its complete native smoke-program set runs under either web renderer."
+      "subject": "Emscripten and Android NDK Clang",
+      "note": "Neither target compiler is a declared header cell. The separately built WebAssembly artifact and Android CNA builds do not imply that every public C header has been compiled alone in each language mode with those target macros and system headers."
     },
     {
       "subject": "C89",
       "note": "The headers use `//` comments and mixed declarations, so C99 is the floor by design rather than by accident."
-    },
-    {
-      "subject": "Renderer identities absent from these configurations",
-      "note": "The configurations run HEADLESS, OPENGLES3 and SOFTWARE. Other public renderer identities share the same C surface, and capability queries are what a caller uses to discover what any active renderer supports."
     }
   ]
 }

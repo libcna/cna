@@ -1,12 +1,12 @@
-# C API compatibility matrix
+# C API header compatibility matrix
 
 This file is generated from `tools/c-api/compatibility_matrix.json` by
-`tools/c-api/generate_compatibility_matrix.py`. It records what the C ABI is **actually**
-compiled and run against, and — just as deliberately — what it is not.
+`tools/c-api/generate_compatibility_matrix.py`. It records where the public C headers are
+actually compiled as source, and — just as deliberately — what that does not prove.
 
-## How a cell is decided
+## What one cell proves
 
-The `CApi_HeaderCompatibility` test compiles every public header **on its own** and the
+The `CApiHeaderCompatibility` test compiles every public header **on its own** and the
 umbrella twice, in every declared language mode: 61 translation units per cell.
 Two rules keep the result honest:
 
@@ -17,6 +17,10 @@ Two rules keep the result honest:
 
 A `required` row is one the host toolchain always provides, so its absence is a broken
 environment rather than a narrower matrix, and fails.
+
+A passing cell proves header parsing, self-containment, include guards and language-floor
+compatibility. It does not link CNA, create a runtime or exercise a renderer; those are
+separate build, CTest and platform qualifications.
 
 ## Compilers and language modes
 
@@ -29,28 +33,15 @@ environment rather than a narrower matrix, and fails.
 | `clang` | C | `c99`, `c11`, `c17`, `c23` | optional | A second front end catches what one compiler's extensions would hide. |
 | `clang++` | C++ | `c++17`, `c++20`, `c++23` | optional | Clang's C++ driver, for the same reason. |
 | `x86_64-w64-mingw32-gcc` | C | `c99`, `c11`, `c17` | optional | A Windows target reached by cross-compiling. Headers only: nothing here links or runs a Windows binary, and the matrix says so rather than implying a tested platform. |
+| `x86_64-w64-mingw32-g++` | C++ | `c++17`, `c++20`, `c++23` | optional | The matching Windows-target C++ driver. It proves the same public C headers remain consumable from Windows C++ translation units; like the C row, it compiles only. |
 
-## Build and run configurations
+## What this matrix does not claim
 
-Compiling a header proves it parses. Running the C smoke programs is what proves the ABI
-behaves, and every one of them runs in all 4 configurations below — the same source, 4
-different answers from the runtime underneath it.
+These boundaries are part of the contract: evidence from another build or platform is not
+silently promoted into a header cell here.
 
-| Configuration | Renderer | `CNA_DEVICES` | Role | What it is for |
-|---|---|---|---|---|
-| `headless` | `HEADLESS` | OFF | required | No window, no GPU. Every route that needs neither is proven here, and every route that does is proven to refuse. |
-| `opengles3` | `OPENGLES3` | OFF | required | EasyGL's GL ES 3 profile with a real GL context on the private display, in the multi-renderer tree that also compiles SDLGPU, WEBGPU and FNA3D. It replaced the SDL_RENDERER configuration when that renderer was retired on 2026-10-13. |
-| `software` | `SOFTWARE` | OFF | required | A CPU rasteriser: a third renderer answer for every capability query, and the compiled-out devices half again. |
-| `asan` | `SOFTWARE` | ON | required | AddressSanitizer and UndefinedBehaviorSanitizer with leak detection on. This is what catches a handle that outlives its owner or an operation nobody released. It runs the CPU rasteriser with the devices half compiled in, which is the one pairing the other three rows leave out: SOFTWARE is therefore exercised in both CNA_DEVICES states. |
-
-## What is outside this matrix
-
-A matrix that only lists successes is not a matrix. These are the combinations outside
-this matrix, including ones covered by a separate qualification path:
-
-- **Running a Windows binary.** The cross-compiler proves the headers parse for a Windows target; nothing here links or executes one, so no Windows behaviour is claimed.
-- **macOS, as a cell of this matrix.** The matrix records the reference Linux host and its declared configurations, and macOS is not one of them. It was measured separately on Apple silicon (Apple M4 AM4-209..213): every C API test passed in the SOFTWARE and the since-retired SDL_RENDERER configurations there, the dylib exports exactly the cna_* ABI, and CApi_InstalledConsumer builds and runs the installed package, shared and static. docs/c-api/CONSUMING.md has what a macOS consumer needs to know.
-- **iOS and Android targets.** No mobile toolchain is a cell of this matrix, so it makes no mobile C ABI claim. iOS builds of CNA itself exist (docs/apple-platforms.md); the C ABI is not exercised on either mobile target here.
-- **Web targets, as cells of this matrix.** The WEBGL2 and WEBGPU Emscripten C ABI artifacts are built and exercised separately under Node and in real browsers, as documented in docs/c-api/WASM_ARTIFACT.md. They are not native compatibility configurations, and this matrix does not claim that its complete native smoke-program set runs under either web renderer.
+- **Runtime and renderer behaviour.** This is a source-compatibility matrix for the public headers, not a runtime matrix. C API smoke, package, sanitizer, renderer and platform tests are registered in the applicable CMake configurations and carry their own evidence; this document does not claim that every smoke program runs under every renderer.
+- **MinGW linking and execution.** The two MinGW rows cross-compile headers for a Windows target but do not link or run a Windows binary. Native Windows and Wine/DXVK runtime evidence belongs to their platform workflows, not to these header cells.
+- **MSVC and Apple Clang.** Neither native compiler is a declared cell. Their platform builds and tests are useful independent evidence, but do not prove this matrix's per-header, per-language-mode contract.
+- **Emscripten and Android NDK Clang.** Neither target compiler is a declared header cell. The separately built WebAssembly artifact and Android CNA builds do not imply that every public C header has been compiled alone in each language mode with those target macros and system headers.
 - **C89.** The headers use `//` comments and mixed declarations, so C99 is the floor by design rather than by accident.
-- **Renderer identities absent from these configurations.** The configurations run HEADLESS, OPENGLES3 and SOFTWARE. Other public renderer identities share the same C surface, and capability queries are what a caller uses to discover what any active renderer supports.

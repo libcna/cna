@@ -357,10 +357,9 @@ static int validate_base_effect(const CNA_Handle device)
     }
 
     /* CBIND-052B: an effect built by hand carries no compiled runtime, and neither does anything
-       cloned or derived from it. The true branch needs real Effect Framework bytecode on a
-       renderer that advertises CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS, which none of this
-       campaign's four verification trees provides -- recorded in LIMITATIONS.md rather than
-       faked here. */
+       cloned or derived from it. The true branch needs valid Effect Framework bytecode, which this
+       smoke does not supply -- recorded in LIMITATIONS.md rather than inferred from whichever
+       renderer configuration happens to run it. */
     {
         CNA_Bool is_compiled = UINT8_C(9);
         REQUIRE(cna_effect_get_is_compiled_ext(effect, &is_compiled) == CNA_RESULT_SUCCESS &&

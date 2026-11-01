@@ -2,9 +2,8 @@
 # SPDX-License-Identifier: MS-PL
 """Compile the public C API headers across the declared toolchain matrix.
 
-The matrix in ``compatibility_matrix.json`` declares which compilers and language modes the C ABI
-claims to support, and which renderer configurations it is exercised in.  Two things keep that
-declaration honest:
+The matrix in ``compatibility_matrix.json`` declares which compilers and language modes accept the
+public C headers. Two things keep that declaration honest:
 
 ``--run``
     Compiles every public header against every declared toolchain that is actually installed.  A
@@ -56,6 +55,81 @@ def public_headers() -> list[str]:
     if not names:
         raise SystemExit(f"No public headers were found under {HEADER_DIR}.")
     return names
+
+
+def load_matrix() -> dict:
+    """Load the declaration and reject shapes the renderer would otherwise misrepresent."""
+    matrix = json.loads(MATRIX_PATH.read_text(encoding="utf-8"))
+    problems: list[str] = []
+    expected_keys = {"schema_version", "toolchains", "outside_matrix"}
+    unexpected_keys = sorted(set(matrix) - expected_keys)
+    if unexpected_keys:
+        problems.append("unexpected top-level keys: " + ", ".join(unexpected_keys))
+    if matrix.get("schema_version") != 2:
+        problems.append("schema_version must be 2")
+    toolchains = matrix.get("toolchains")
+    outside = matrix.get("outside_matrix")
+    if not isinstance(toolchains, list) or not toolchains:
+        problems.append("toolchains must be a non-empty list")
+        toolchains = []
+    if not isinstance(outside, list) or not outside:
+        problems.append("outside_matrix must be a non-empty list")
+        outside = []
+
+    ids: set[str] = set()
+    for index, toolchain in enumerate(toolchains):
+        prefix = f"toolchains[{index}]"
+        if not isinstance(toolchain, dict):
+            problems.append(f"{prefix} must be an object")
+            continue
+        toolchain_id = toolchain.get("id")
+        if not isinstance(toolchain_id, str) or not toolchain_id:
+            problems.append(f"{prefix}.id must be a non-empty string")
+        elif toolchain_id in ids:
+            problems.append(f"duplicate toolchain id: {toolchain_id}")
+        else:
+            ids.add(toolchain_id)
+        language = toolchain.get("language")
+        if language not in {"c", "c++"}:
+            problems.append(f"{prefix}.language must be c or c++")
+        if toolchain.get("role") not in {"required", "optional"}:
+            problems.append(f"{prefix}.role must be required or optional")
+        standards = toolchain.get("standards")
+        if not isinstance(standards, list) or not standards:
+            problems.append(f"{prefix}.standards must be a non-empty list")
+        elif any(not isinstance(standard, str) or not standard for standard in standards):
+            problems.append(f"{prefix}.standards must contain non-empty strings")
+        elif len(standards) != len(set(standards)):
+            problems.append(f"{prefix}.standards contains a duplicate")
+        elif language in {"c", "c++"}:
+            wrong_language = (
+                (not standard.startswith("c") or standard.startswith("c++"))
+                if language == "c" else not standard.startswith("c++")
+                for standard in standards)
+            if any(wrong_language):
+                problems.append(f"{prefix}.standards disagrees with its language")
+        if not isinstance(toolchain.get("note"), str) or not toolchain["note"]:
+            problems.append(f"{prefix}.note must be a non-empty string")
+
+    subjects: set[str] = set()
+    for index, entry in enumerate(outside):
+        prefix = f"outside_matrix[{index}]"
+        if not isinstance(entry, dict):
+            problems.append(f"{prefix} must be an object")
+            continue
+        subject = entry.get("subject")
+        if not isinstance(subject, str) or not subject:
+            problems.append(f"{prefix}.subject must be a non-empty string")
+        elif subject in subjects:
+            problems.append(f"duplicate outside-matrix subject: {subject}")
+        else:
+            subjects.add(subject)
+        if not isinstance(entry.get("note"), str) or not entry["note"]:
+            problems.append(f"{prefix}.note must be a non-empty string")
+
+    if problems:
+        raise SystemExit("Invalid compatibility matrix:\n  " + "\n  ".join(problems))
+    return matrix
 
 
 def resolve(toolchain_id: str) -> str | None:
@@ -141,19 +215,19 @@ def run_matrix(matrix: dict) -> int:
 def render_doc(matrix: dict) -> str:
     headers = public_headers()
     lines: list[str] = []
-    lines.append("# C API compatibility matrix")
+    lines.append("# C API header compatibility matrix")
     lines.append("")
     lines.append(
         "This file is generated from `tools/c-api/compatibility_matrix.json` by")
     lines.append(
-        "`tools/c-api/generate_compatibility_matrix.py`. It records what the C ABI is **actually**")
+        "`tools/c-api/generate_compatibility_matrix.py`. It records where the public C headers are")
     lines.append(
-        "compiled and run against, and — just as deliberately — what it is not.")
+        "actually compiled as source, and — just as deliberately — what that does not prove.")
     lines.append("")
-    lines.append("## How a cell is decided")
+    lines.append("## What one cell proves")
     lines.append("")
     lines.append(
-        "The `CApi_HeaderCompatibility` test compiles every public header **on its own** and the")
+        "The `CApiHeaderCompatibility` test compiles every public header **on its own** and the")
     lines.append(
         f"umbrella twice, in every declared language mode: {len(headers) + 1} translation units per cell.")
     lines.append("Two rules keep the result honest:")
@@ -169,6 +243,12 @@ def render_doc(matrix: dict) -> str:
         "A `required` row is one the host toolchain always provides, so its absence is a broken")
     lines.append("environment rather than a narrower matrix, and fails.")
     lines.append("")
+    lines.append(
+        "A passing cell proves header parsing, self-containment, include guards and language-floor")
+    lines.append(
+        "compatibility. It does not link CNA, create a runtime or exercise a renderer; those are")
+    lines.append("separate build, CTest and platform qualifications.")
+    lines.append("")
     lines.append("## Compilers and language modes")
     lines.append("")
     lines.append("| Toolchain | Language | Modes | Role | Why |")
@@ -179,32 +259,13 @@ def render_doc(matrix: dict) -> str:
             f"| `{toolchain['id']}` | {toolchain['language'].upper()} | {modes} | "
             f"{toolchain['role']} | {toolchain['note']} |")
     lines.append("")
-    lines.append("## Build and run configurations")
+    lines.append("## What this matrix does not claim")
     lines.append("")
     lines.append(
-        "Compiling a header proves it parses. Running the C smoke programs is what proves the ABI")
-    configuration_count = len(matrix["configurations"])
-    configuration_word = "configuration" if configuration_count == 1 else "configurations"
-    answer_word = "answer" if configuration_count == 1 else "answers"
-    lines.append(
-        f"behaves, and every one of them runs in all {configuration_count} {configuration_word} below — "
-        f"the same source, {configuration_count}")
-    lines.append(f"different {answer_word} from the runtime underneath it.")
+        "These boundaries are part of the contract: evidence from another build or platform is not")
+    lines.append("silently promoted into a header cell here.")
     lines.append("")
-    lines.append("| Configuration | Renderer | `CNA_DEVICES` | Role | What it is for |")
-    lines.append("|---|---|---|---|---|")
-    for configuration in matrix["configurations"]:
-        lines.append(
-            f"| `{configuration['id']}` | `{configuration['renderer']}` | {configuration['devices']} | "
-            f"{configuration['role']} | {configuration['note']} |")
-    lines.append("")
-    lines.append("## What is outside this matrix")
-    lines.append("")
-    lines.append(
-        "A matrix that only lists successes is not a matrix. These are the combinations outside")
-    lines.append("this matrix, including ones covered by a separate qualification path:")
-    lines.append("")
-    for entry in matrix["unsupported"]:
+    for entry in matrix["outside_matrix"]:
         lines.append(f"- **{entry['subject']}.** {entry['note']}")
     lines.append("")
     return "\n".join(lines)
@@ -218,7 +279,7 @@ def main() -> int:
     group.add_argument("--check", action="store_true", help="verify the published matrix is current")
     arguments = parser.parse_args()
 
-    matrix = json.loads(MATRIX_PATH.read_text(encoding="utf-8"))
+    matrix = load_matrix()
 
     if arguments.run:
         return run_matrix(matrix)

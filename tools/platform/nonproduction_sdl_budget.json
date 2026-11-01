@@ -77,6 +77,10 @@
       "category": "audio-native-integration",
       "max_references": 1
     },
+    "modules/c-api/tests/pure_c/CoreExtSmoke.c": {
+      "category": "containment-assertion",
+      "max_references": 1
+    },
     "modules/content/tests/CNA/Internal/GltfImport/GltfFixtureCorpusTests.cpp": {
       "category": "text-evidence-assertion",
       "max_references": 3

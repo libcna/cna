@@ -35,19 +35,33 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API header-compatibility audit (2026-11-01): `docs/c-api/COMPATIBILITY.md` now describes the
+  source-level contract its generator and CI actually enforce. The unconsumed four-row runtime
+  table is gone: no tool read it, the current HEADLESS/SOFTWARE/ASan trees do not build the C API,
+  and the ASan preset is OPENGLES3 rather than the table's SOFTWARE, so its claim that every C
+  smoke ran in every row was false. Runtime, renderer, sanitizer and platform qualification are
+  now explicitly separate evidence. Schema 2 validates unique toolchains, language/standard
+  agreement, roles, notes and outside-matrix boundaries before rendering. A missing Windows C++
+  target row was added together with its CI package, bringing the measured matrix from 23 cells
+  over seven toolchains to 26/26 passing cells over eight toolchains and 60 public headers. The
+  shared limitations page now records the same honest boundary and ties the compiled-effect gap
+  to the C smoke's lack of valid bytecode rather than to obsolete renderer configurations; the
+  generated release gate remains **Not ready** solely because 633 symbols are still planned. The
+  five compatibility/limitations/export/release CTests pass, as does `CApi_EffectSmoke` under the
+  private SDLGPU runner. Reconfiguration also exposed the earlier `SDL_GPU` parser regression as
+  an unclassified SDL reference; `CoreExtSmoke.c` now has one narrowly bounded containment entry,
+  and the non-production SDL audit passes at 85 files/1,089 references.
 - Generated C API limitations audit (2026-11-01): `docs/c-api/LIMITATIONS.md` is current against
   the 8,134-symbol inventory: 15 partially mapped symbols in nine approved groups and 453 symbols
   with no C form in 89 classified groups. Its declared non-symbol limitations now record the
   foreign-thread dispatch and any-thread `SoundEffect` exceptions instead of calling every handle
   use unconditionally thread-affine; remove stale dated GNU-unique-symbol and renderer-count
-  snapshots; scope the compiled-effect gap to the compatibility matrix; and acknowledge the
+  snapshots; scope the compiled-effect gap to the C smoke suite; and acknowledge the
   separately qualified Emscripten C ABI instead of saying the web target has never been exercised.
-  The companion compatibility generator now derives its configuration count, distinguishes
-  out-of-matrix from untested targets and renders the corrected source into
-  `docs/c-api/COMPATIBILITY.md`; the limitations generator also renders singular symbol counts
-  correctly. All 23 compiler/language cells pass across the 60 public headers, the four registered
-  header/limitations/export-count/release-gate checks pass, and the renderer-identity and release
-  document gates remain green with the experimental verdict correctly **Not ready**.
+  The limitations generator also renders singular symbol counts correctly. Its shared
+  outside-the-header-matrix boundary was reconciled by the following compatibility audit. The four
+  registered header/limitations/export-count/release-gate checks pass, and the renderer-identity
+  and release document gates remain green with the experimental verdict correctly **Not ready**.
 - Experimental C ABI release-gate audit (2026-11-01): the generated
   `docs/c-api/RELEASE_GATE.md`, its ten declared criteria and every measured source are current.
   Nine criteria are met; coverage closure is correctly not met while 633 public symbols remain

@@ -82,6 +82,7 @@ def classify(record: FileRecord) -> str | None:
         return "renderer-integration-executable"
 
     if path in {
+        "modules/c-api/tests/pure_c/CoreExtSmoke.c",
         "modules/input/tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp",
         "modules/input/tests/Microsoft/Xna/Framework/Input/PublicApiInputSignatureFreezeTests.cpp",
         "modules/platform/tests/CNA/Platform/ContractIsSdlFreeTests.cpp",

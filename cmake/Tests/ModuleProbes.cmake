@@ -344,7 +344,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/test_coverage_scope.py")
 
-        # C API task CBIND-038: the pure-C compatibility matrix, also a gate.
+        # C API task CBIND-038: the public C-header compatibility matrix, also a gate.
         #
         # The declaration and the published matrix must not drift apart, for the same reason the
         # coverage matrix must not: a matrix is read as evidence, so one that lags its declaration

@@ -261,12 +261,13 @@ def render(analysis: dict) -> str:
     add("")
 
     compatibility = json.loads(COMPATIBILITY_PATH.read_text(encoding="utf-8"))
-    add("## Outside the compatibility matrix")
+    add("## Outside the header compatibility matrix")
     add("")
-    add("Taken from `tools/c-api/compatibility_matrix.json`, so the two cannot disagree. Some")
-    add("targets have a separate qualification path rather than a cell in this native matrix:")
+    add("Taken from `tools/c-api/compatibility_matrix.json`, so the two cannot disagree. This")
+    add("matrix proves source-level header compatibility; runtime and platform qualifications are")
+    add("separate evidence:")
     add("")
-    for entry in compatibility["unsupported"]:
+    for entry in compatibility["outside_matrix"]:
         note = entry["note"]
         add(f"- **{entry['subject']}.** {note}")
     add("")
