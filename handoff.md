@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Console documentation reconciliation (2026-11-01): the page now describes the absence of a
+  qualified CNA port, separates upstream SDL/framework support from CNA qualification, and
+  replaces device/SDK/certification/licensing absolutes and unmeasured first-target/memory advice
+  with concrete integration boundaries. Existing precompiled-effect paths are distinguished
+  from a missing console shader package. Platform/build sources and pinned SDL platform docs
+  are checked; public FNA/MonoGame console pages are fetched. The SDL wiki fetch failed, so its
+  pinned local counterpart is the stated evidence. No SDK, console build, handheld run or new
+  porting commitment, implementation or ABI changes.
 - Framework.Design documentation reconciliation (2026-11-01): current module/registration
   boundaries are explicit, including the concrete-header hook versus a base-only include.
   The original IL audit is separated from fresh metadata/source evidence. Local genuine XNA
