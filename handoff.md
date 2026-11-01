@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Renderer-registry documentation reconciliation (2026-11-01): the former informal overview is
+  replaced by the exact ten-identity/eight-family contract across C++, the stable gapped C ABI,
+  CMake selection and the generated runtime registry. It now records every identity's category,
+  maturity and implementation family, distinguishes SDL/FNA3D/WebGPU drivers from CNA renderers,
+  covers retired-value semantics, platform/build gates, native and browser WebGPU dependencies,
+  default and multi-renderer selection, and the difference between compile-time availability and
+  successful device creation. The identity checker now mechanically guards this page's public and
+  family counts; the README's misplaced capability reference and the old handoff heading were
+  corrected. `CnaTests` and the SDLGPU C ABI smoke target build; all three renderer-registry
+  scripts pass, as do 74 configure/retirement/default tests, 22 private-display C++ registry and
+  classification tests, and the private-display C ABI core-extension smoke test.
 - Detailed renderer-capability-profile documentation reconciliation (2026-11-01): the original
   implementation/task narrative is replaced by the current device-scoped C++ and C ABI contract.
   The page now distinguishes the legacy summary from the cached detailed snapshot, documents all
@@ -67,11 +78,12 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
   in the `WebGPU` label (188 executed passes and two declared conformance skips). The browser
   canvas-lifetime harness was not rerun because this host has Node 20.19.2 while the driver requires
   Node 22+ with global `WebSocket`; the previously recorded headless-Chrome evidence is unchanged.
-- Documentation reconciliation inventory (2026-11-01): root `documents.md` now lists all 178
+- Documentation reconciliation inventory (2026-11-01): root `documents.md` now lists all 177
   tracked `docs/**/*.md` files and distinguishes completed standalone reconciliation from pending
   work and files changed only as supporting indexes/ledgers. It records the two partially duplicate
   BasicEffect and AlphaTestEffect passes, explains the other high-touch files, and excludes six
-  historical pages retired on 2026-10-31. The inventory matches `git ls-files` exactly: every
+  historical pages retired on 2026-10-31 and the WebGPU design notes retired on 2026-11-01. The
+  inventory matches `git ls-files` exactly: every
   tracked Markdown document appears once, no extra entry exists and every link resolves.
 - `AlphaTestEffect` support-document cleanup (2026-11-01): the Phase 43 Tasks 371-379 diary and
   EasyGL-only support table are replaced by the current renderer-neutral contract. The page now
@@ -864,7 +876,7 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   and in headless Chrome only; its Windows, macOS and linux-aarch64 wgpu-native packages are
   unverified (`WEBGPU-1`, `docs/webgpu-renderer.md`).
 - `SOFTWARE` is a bounded CPU renderer, and `HEADLESS` and `STUB` make no pixel claim
-  (`docs/renderer-registry.md`, "Capability classes").
+  (`docs/renderer-registry.md`, "Categories and maturity").
 - Per-subsystem capability boundaries, by design rather than defect, are in the documents listed
   in §3.
 - In a `CNA_SHARED_LIBRARY=ON` tree, `CMAKE_LINK_DEPENDS_NO_SHARED` (`CMakeLists.txt`) keeps the

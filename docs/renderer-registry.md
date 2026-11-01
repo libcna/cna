@@ -1,79 +1,165 @@
 # CNA renderer registry
 
-CNA exposes exactly **10 public renderer identities** over 8 implementation families. EasyGL is an
-internal implementation shared by three public GL profiles and does not add a public identity.
-Internal renderer/API choices made by an abstraction such as SDLGPU or FNA3D likewise do not add
-CNA identities: SDLGPU's Vulkan, Direct3D 12 and Metal backends are SDL's, not CNA's.
+Status: reconciled with the C++ identity/category/maturity APIs, C ABI, CMake selection and
+generated runtime registry on **2026-11-01**.
 
-CNA intentionally maintains a curated renderer set. A new renderer is added only when it provides
-meaningful platform coverage, compatibility value, architectural value, or a capability not
-reasonably covered by the existing set; renderer count is not a goal in itself, and forty-one
-identities have been retired (`docs/removed-renderers.md`).
+CNA exposes exactly **10 public renderer identities** over **8 implementation families**. A public
+identity is the stable name applications select and query. An implementation family is the code
+that serves one or more identities; EasyGL serves three GL profiles, while every other family
+currently serves one identity.
 
-The C++ enum is dense. The "C ABI value" column below is intentionally **not** dense: a retired
-identity's value is permanently reserved and never reassigned, so the range has gaps at 1, 2, 5,
-7, 8, 10, 14–21, 23–30, 32–42 and 44–51. The next new identity takes value 52.
+Internal API or driver choices do not create CNA identities. Vulkan, Direct3D 12 and Metal are
+SDL's backends beneath `SDLGPU`; SDLGPU, Direct3D 11 and OpenGL are FNA3D's runtime drivers; native
+WebGPU implementations sit beneath wgpu-native or the browser. CNA calls the public layer a
+**renderer** and reserves *backend* or *driver* for those upstream choices.
+
+CNA intentionally keeps a curated set. A new identity requires an explicit owner decision and a
+meaningful platform, compatibility or architectural reason; renderer count is not a goal. The 41
+retired identities and their permanent numeric reservations are recorded in
+[`removed-renderers.md`](removed-renderers.md).
 
 ## Canonical public identities
 
-| C ABI value | Enum | Selector | Compile definition | Implementation / factory | Primary gate |
+| C ABI | C++ enum | Selector | Implementation family | Category | Maturity |
 |---:|---|---|---|---|---|
-| 3 | `OpenGLES3` | `OPENGLES3` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_OPENGLES3` | EasyGL / `EasyGLRenderer` | non-Emscripten |
-| 4 | `OpenGL33` | `OPENGL33` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_OPENGL33` | shared EasyGL factory | non-Emscripten |
-| 6 | `WebGL2` | `WEBGL2` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_WEBGL2` | shared EasyGL factory | Emscripten |
-| 9 | `WebGPU` | `WEBGPU` | `CNA_RENDERER_WEBGPU` | wgpu-native / `WebGPURenderer` | wgpu-native |
-| 11 | `Headless` | `HEADLESS` | `CNA_RENDERER_HEADLESS` | Headless / `HeadlessRenderer` | none |
-| 12 | `Software` | `SOFTWARE` | `CNA_RENDERER_SOFTWARE` | Software / `SoftwareRenderer` | none |
-| 13 | `Stub` | `STUB` | `CNA_RENDERER_STUB` | Stub / `StubRenderer` | none |
-| 22 | `DirectX9` | `DIRECTX9` | `CNA_RENDERER_DIRECTX9` | Direct3D 9 / `DirectX9Renderer` | Windows |
-| 31 | `SdlGpu` | `SDLGPU` | `CNA_RENDERER_SDLGPU` | SDL GPU / `SdlGpuRenderer` | SDL3 with a GPU driver (Vulkan, Direct3D 12 or Metal) |
-| 43 | `Fna3d` | `FNA3D` | `CNA_RENDERER_FNA3D` | FNA3D / `Fna3dRenderer` | FNA3D dependency |
+| 3 | `OpenGLES3` | `OPENGLES3` | EasyGL | Native | Production |
+| 4 | `OpenGL33` | `OPENGL33` | EasyGL | Native | Production |
+| 6 | `WebGL2` | `WEBGL2` | EasyGL | Web | Supported |
+| 9 | `WebGPU` | `WEBGPU` | WebGPU | TranslationLayer | Supported |
+| 11 | `Headless` | `HEADLESS` | Headless | Diagnostic | Supported |
+| 12 | `Software` | `SOFTWARE` | Software | Software | Experimental |
+| 13 | `Stub` | `STUB` | Stub | Diagnostic | Supported |
+| 22 | `DirectX9` | `DIRECTX9` | DirectX9 | Native | Production |
+| 31 | `SdlGpu` | `SDLGPU` | SdlGpu | TranslationLayer | Supported |
+| 43 | `Fna3d` | `FNA3D` | Fna3d | TranslationLayer | Experimental |
 
-The three GL profiles share one implementation target, macro, and factory, so 10 public identities
-map to 8 concrete implementation factories. Their public contracts remain distinct because the
-selected context, shader language/profile, and supported platform differ. `EASYGL` is not
-an accepted selector, and neither is any retired name: `cmake/RendererIdentities.cmake` refuses a
-retired selector by name, with its reserved value, rather than falling back to a default, and
-`GraphicsRendererSelection` refuses one at run time with a message that says it was retired.
-The family's own examples and tests keep the `easygl_`/`EasyGL_` prefix: it names the shared
-implementation they exercise, whichever of the three profiles builds them (GLB-14).
+The selector is the exact spelling accepted by `CNA_GRAPHICS_RENDERER`,
+`CNA_GRAPHICS_RENDERERS` and the case-insensitive runtime name parser. `EASYGL` is not a public
+selector: it names the shared implementation. The former `SDL_GPU` spelling was renamed to
+`SDLGPU` and is refused rather than kept as an alias.
 
-## Capability classes
+## Identity numbers and retirement
 
-- **No renderer:** `STUB` is a no-op; `HEADLESS` is validation/trace-oriented and makes no pixel
-  fidelity claim.
-- **CPU bounded 3D:** `SOFTWARE`.
-- **Programmable/modern, with renderer-specific limits:** `OPENGLES3`, `OPENGL33`, `WEBGL2`,
-  `WEBGPU`, `DIRECTX9` and `SDLGPU`.
-- **Abstraction layer:** `SDLGPU` is CNA's modern native path: CNA maps XNA 4.0 onto SDL's
-  `SDL_GPU` API, and
-  SDL picks Vulkan, Direct3D 12 or Metal underneath it. `FNA3D` selects SDLGPU, Direct3D 11 or
-  OpenGL at runtime. Neither internal choice is another CNA identity.
+`CNA::GraphicsRendererType` is a dense C++ enum. Its ordinals are not a stable serialized or ABI
+contract: removing an enumerator may move later ordinals. Use the enum symbol and canonical name,
+not its underlying integer.
 
-These classes are descriptive, not blanket parity claims. `WEBGPU` is validated on Linux x86_64
-(native) and in headless Chrome; its Windows, macOS and linux-aarch64 packages are unverified
-(`WEBGPU-1`). `SDLGPU`
-is validated on Linux (Vulkan) and, cross-compiled, under Wine with vkd3d-proton (Direct3D 12);
-native Windows, macOS and iOS qualification is open (`handoff.md` §5.2). A capability query and
-each renderer document remain authoritative for the narrower operation-level boundary.
+The C ABI identity is deliberately different. `CNA_GraphicsRendererType` is a fixed-width number,
+and a published value is never reassigned. `CNA_GRAPHICS_RENDERER_UNKNOWN` is 0 and is report-only;
+routes that accept an identity reject it. The live range has permanent retired gaps at 1, 2, 5, 7,
+8, 10, 14-21, 23-30, 32-42 and 44-51. The next new identity, if authorized, takes value **52**.
 
-## Registration invariants
+Consequences:
 
-`GraphicsRendererType`, its canonical name, CMake selector, compile definition/profile, selected
-target, factory branch, and platform/dependency gate must agree. No public selector/name may be
-duplicated, and no retired name or C ABI value may be reused. Every accepted selector either
-reaches its factory or rejects at its documented gate; every retired one is refused by name at
-configure time and at run time. `scripts/check_renderer_identities.py` holds the enum, the CMake
-list, the runtime registry, the C ABI table, the retired-value table and the run-time retired-name
-list to each other. The per-host default (`cmake/RendererIdentityDefault.cmake`) is `WEBGL2` under Emscripten,
-`SDLGPU` on Windows, macOS (`Darwin`) and iOS, and `OPENGLES3` on every other system -- Linux,
-Android, the BSDs and any host not named above.
+- `CNA_GRAPHICS_RENDERER_MAXIMUM` is 43 (`FNA3D`), not the number of live identities;
+- walking 0 through the maximum must expect gaps and validate each value;
+- a retired name is refused by every CMake selection route with a retirement diagnostic;
+- runtime selection refuses a retired name, and C ABI identity-taking routes refuse its reserved
+  numeric value with `CNA_RESULT_INVALID_ARGUMENT`;
+- no retired name silently falls back to the host default or aliases a survivor.
 
-CNA's own graphics code calls a CNA graphics renderer a **renderer**, never a backend:
-`GraphicsRenderer*`, `CNA_GRAPHICS_RENDERER*`, `cna_graphics_renderer_*`,
-`CNA::Internal::Renderers`. "Backend" stays for other subsystems (audio, input, `ENetBackend`,
-device test backends) and for an upstream library's own vocabulary, such as SDLGPU's backends
-above. Inside a family, a class that wraps a native API object keeps that API's prefix
-(`D3D9EffectRenderer`, `D3D9Buffers`); only the identity class and the selection surface carry
-the identity's name (`DirectX9Renderer`, `DIRECTX9`). The same check refuses the old
-graphics-backend identifiers in every active CNA-owned file.
+## Implementation families and build gates
+
+The generated registry maps the identities above to these eight families:
+
+| Family target | Public identity or identities | Compile definition | Renderer-specific build boundary |
+|---|---|---|---|
+| `cna_renderer_easygl` | `OPENGLES3`, `OPENGL33`, `WEBGL2` | `CNA_RENDERER_EASYGL` plus one `CNA_GL_PROFILE_*` for the default | sibling `easy-gl`/`meta-gl`; native profiles reject Emscripten, `WEBGL2` requires it |
+| `cna_renderer_webgpu` | `WEBGPU` | `CNA_RENDERER_WEBGPU` | pinned wgpu-native package on native targets; Emscripten `emdawnwebgpu` port in browsers |
+| `cna_renderer_headless` | `HEADLESS` | `CNA_RENDERER_HEADLESS` | no graphics dependency or window |
+| `cna_renderer_software` | `SOFTWARE` | `CNA_RENDERER_SOFTWARE` | CPU rasterizer; presentation is a separate platform service |
+| `cna_renderer_stub` | `STUB` | `CNA_RENDERER_STUB` | no graphics dependency, retained pixels or window |
+| `cna_renderer_directx9` | `DIRECTX9` | `CNA_RENDERER_DIRECTX9` | Windows target, native or cross-compiled |
+| `cna_renderer_sdl_gpu` | `SDLGPU` | `CNA_RENDERER_SDLGPU` | SDL3 and a usable SDL GPU driver; `CNA_ENABLE_SDL=OFF` is refused |
+| `cna_renderer_fna3d` | `FNA3D` | `CNA_RENDERER_FNA3D` | SDL3 plus CNA's pinned FNA3D/MojoShader forks |
+
+The EasyGL family has three descriptor accessors, one per public GL identity, so `OPENGLES3` and
+`OPENGL33` can coexist in a native multi-renderer binary while sharing one archive. `WEBGL2` is in
+the Emscripten platform partition and cannot coexist with a Windows-only identity in one target.
+
+Additional platform gates are intentional and fail during configuration:
+
+- `DIRECTX9` targets Windows only;
+- `OPENGLES3` and `OPENGL33` reject Emscripten, while `WEBGL2` requires it;
+- the `TERMINAL` platform permits only `SOFTWARE`, `HEADLESS` and `STUB`;
+- the normal iOS allow-list contains `SOFTWARE` and `SDLGPU`; other attempts require the explicit
+  unsupported experimentation override.
+
+Passing a build gate means the family can be compiled for that target. It does not prove that a
+specific native driver, adapter or platform has been qualified. Current platform evidence belongs
+in each renderer's document and current gaps belong in
+[`handoff.md` section 5](../handoff.md#5-known-bugs-and-limitations).
+
+## Categories and maturity
+
+Category and maturity are orthogonal public classifications:
+
+- `GraphicsRendererCategory` describes implementation technology: `Native`,
+  `TranslationLayer`, `Software`, `Web` or `Diagnostic`.
+- `GraphicsRendererMaturity` describes recommendation confidence: `Production`, `Supported`,
+  `Experimental`, `Historical` or `Deprecated`. No current renderer uses the last two values.
+
+The C++ queries are `getGraphicsRendererCategory()` and `getGraphicsRendererMaturity()`; each
+accepts any public identity, whether or not it is compiled into the current binary. Their
+`getCurrent*` variants describe the build's compile-time default. In a multi-renderer process,
+classify `GraphicsRendererSelection::GetActive()` when the question is about the renderer that
+actually created the device.
+
+The C ABI exposes the same model through `cna_graphics_renderer_get_category`,
+`cna_graphics_renderer_get_maturity` and their current/name-query variants in `core_ext.h`.
+
+Neither classification is a feature promise. A Production renderer can still have a
+platform-specific qualification gap, and a Supported or Experimental renderer may implement a
+particular feature completely. For operation-level decisions, use the live queries documented in
+[`renderer-capability-profiles.md`](renderer-capability-profiles.md); use
+[`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md) only as the maintained
+cross-renderer overview.
+
+## Selection and generated runtime registry
+
+`CNA_GRAPHICS_RENDERER` names the build default. With no explicit value, the default is:
+
+- `WEBGL2` under Emscripten;
+- `SDLGPU` on Windows, macOS (`Darwin`) and iOS;
+- `OPENGLES3` on Linux, Android, the BSDs and every other target.
+
+The older per-identity `CNA_RENDERER_<IDENTITY>=ON` switches remain selection inputs, but exactly
+one may be enabled. `CNA_GRAPHICS_RENDERERS` opts into a binary containing several identities; its
+default must be a member of the set and is moved to the first position without changing the
+caller's selected value.
+
+`cmake/RendererRegistry.cmake` maps each identity to a family namespace and descriptor accessor,
+then generates `CnaRendererRegistry.generated.cpp` for the configured set. An explicit table is
+used instead of static self-registration so renderer objects cannot disappear when their static
+archives are linked. A single-renderer build has one entry; a multi-renderer build has one entry
+per compiled identity, with the build default first.
+
+At runtime, availability means an identity is compiled in; it does not guarantee that device or
+surface creation will succeed on the current machine. Selection precedence, the post-success
+latch, opt-in fallback, active identity and fallback history are documented in
+[`runtime-renderer-selection.md`](runtime-renderer-selection.md).
+
+## Registration invariants and verification
+
+For every public identity, the C++ enum/name, CMake selector, implementation map, descriptor,
+factory, compile definition, category, maturity and C ABI value must agree. A new identity is not
+complete until every layer is updated and its build/platform gate is explicit.
+
+The principal checks are:
+
+- `scripts/check_renderer_identities.py`: public set, eight implementation families, descriptor
+  accessors/factories, C ABI values, retired names/values, current documented counts and renderer
+  vocabulary;
+- `scripts/check_runtime_renderer_discipline.py`: descriptor/virtual ownership of runtime choices;
+- `scripts/check_renderer_combinations.py`: configure-time combination rules and their public
+  documentation;
+- `GraphicsRendererCategoryTest`, `GraphicsRendererMaturityTest` and
+  `GraphicsRendererRegistryTest`: classifications and the compiled descriptor table;
+- `CnaRendererDefaultSelection_*` and `CnaRendererRetired_*`: default membership plus every
+  retired/renamed/unknown selection route.
+
+The full public identity table is intentionally repeated here for readers, but it is mechanically
+checked. The authoritative machine inputs are `CNA_RENDERER_PUBLIC_IDENTITIES` and
+`CNA_RENDERER_RETIRED_IDENTITIES` in `cmake/RendererIdentities.cmake`, the dense enum in
+`modules/core/include/CNA/GraphicsRendererType.hpp`, the implementation map in
+`cmake/RendererRegistry.cmake` and the fixed C constants in `modules/c-api/include/CNA/C/graphics.h`.

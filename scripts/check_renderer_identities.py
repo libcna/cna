@@ -54,6 +54,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # So a document marked True must keep stating its count in the canonical phrasing. Rewording it
 # into something this check cannot see is itself a failure, reported as such.
 COUNTED_DOCUMENTS = {
+    "docs/renderer-registry.md": True,
     "docs/runtime-renderer-selection.md": True,
     "docs/physical-modules.md": True,
     # This one deliberately states no total: it used to, and now names the registry instead, which
