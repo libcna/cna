@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 143 reviewed, 12 updated incidentally and awaiting their own audit, and 22 not yet
+Summary: 144 reviewed, 12 updated incidentally and awaiting their own audit, and 21 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -166,7 +166,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/stub-renderer.md`](docs/stub-renderer.md)
 - ✅ **REVIEWED** — [`docs/surface-format-support.md`](docs/surface-format-support.md)
 - 🟡 **PENDING — updated incidentally** — [`docs/task-id-index.md`](docs/task-id-index.md)
-- ⬜ **PENDING** — [`docs/texture-stream-formats.md`](docs/texture-stream-formats.md)
+- ✅ **REVIEWED** — [`docs/texture-stream-formats.md`](docs/texture-stream-formats.md)
 - ✅ **REVIEWED** — [`docs/texture3d-texturecube-support.md`](docs/texture3d-texturecube-support.md)
 - ✅ **REVIEWED** — [`docs/vertex-format-support.md`](docs/vertex-format-support.md)
 - ✅ **REVIEWED** — [`docs/video-backend.md`](docs/video-backend.md)

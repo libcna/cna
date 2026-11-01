@@ -35,6 +35,12 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Texture-stream documentation reconciliation (2026-11-01, SOFTWARE-304–307): the guide corrects
+  fit/cover scale selection, enlargement and integer rounding, distinguishes DXT1 fixture coverage
+  from all DDS codecs/header checks, and describes compressed-format gates, current-position/EOF
+  handling and internal DIB/BMP paths. The graphics test target builds; all 23 focused format,
+  resize and image-loader cases pass privately on SOFTWARE and OPENGLES3. No new Microsoft-XNA
+  oracle capture, runtime implementation, dependency or ABI change.
 - IEffectRenderer audit reconciliation (2026-11-01, IEFFECT-AUDIT-001): the page separates its
   original repair/microbenchmark record from the current source recheck and limits D3D9's CTAB
   search statement to implemented scalar/vector/matrix uploads. Dependency revisions and current
