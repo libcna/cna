@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- XNA media-source guide reconciliation (2026-11-01, XNAPP-201/202/220/136/043/332): the
+  guide separates the 56 retained XNA/Wine records from current FFmpeg-backed CNA policy, preserves
+  all twelve MP3 rows, states the 30 ms duration-test allowance, corrects WmaImporter/MP3 failure
+  timing and documents real WMA output/quality policy versus the native streaming-copy route.
+  Prefix-limited WMA/WMV/encoder failures are not treated as a native-Windows refusal contract.
+  Optional reproduction now uses a prepared prefix/private runner/new output, with explicit
+  partial-report/zero-exit caveats. Existing content/compiler targets build; 31 media/audio/
+  processor cases and three CLI audio-route/path cases pass privately on OPENGLES3/dummy audio
+  without skips. Stored record/duration/link/inventory and shell-syntax checks pass. A synthetic
+  driver proves wrapper exit 0 after driver exit 42 (§5.2); no Microsoft code/prefix installation,
+  fresh XNA oracle, runtime-playback, native-Windows or sanitizer qualification was run.
 - XNA Content Pipeline API-guide reconciliation (2026-11-01, XNAPP-030/038–044): the guide
   corrects exact C++ carrier checks versus CLR casts, ordered dictionary carriers, current described
   XNB writing, member/factory registration, bitmap resampling thresholds, identity-transform normal
@@ -1817,6 +1828,22 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- The media oracle wrapper does not propagate driver failure as its final status:
+  tools/xna-pipeline-oracle/media/run-media-oracle.sh captures a failed/timed-out Wine invocation,
+  publishes available partial records and finishes with echo/status 0. A temporary isolated copy
+  with synthetic mcs/Wine commands returning driver exit 42 yielded wrapper exit 0 and zero
+  report files (2026-11-01, /tmp/cna-doc-media-wrapper-sxxheq__/result.log). This is not genuine
+  media execution; check case identities/counts, SKIPPED records and diagnostics before accepting
+  a new oracle run. The script also replaces JSON files in its chosen destination. The media
+  guide is corrected; no wrapper/completeness implementation change was bundled into the audit.
+- The retained XNA/Wine wma/mp3_mono_44100_128k.mp3 record returns AudioContent labelled Wma
+  with readable metadata, then fails Data access. CNA's AudioContent::ReadThroughMediaDecoder
+  instead enforces a Windows Media codec and rejects that MP3 during Import. The current
+  XnaWmaImporter.RefusalsMatchXna test covers only missing/empty/truncated WMA, so it does not
+  qualify the cross-format call stage. docs/xna-content-pipeline-media.md records the discrepancy;
+  obtain native-Windows measurements with working WMA positive controls before treating the
+  prefix-limited result as the complete Microsoft contract. No new regression/runtime change
+  was added in this documentation task.
 - BitmapContent's lazy factory list currently omits PixelBitmapContent<Vector3>, despite its
   supported pixel trait. Constructing that concrete PixelBitmapContent or explicitly registering
   its factory enrolls it; the trait set alone is not the initial CreateBitmap factory set.
