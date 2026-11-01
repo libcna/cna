@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 174 reviewed, 3 updated incidentally and awaiting their own audit, and 0 not yet
+Summary: 175 reviewed, 2 updated incidentally and awaiting their own audit, and 0 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -160,7 +160,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/shader-effect-vs-fx-bytecode.md`](docs/shader-effect-vs-fx-bytecode.md)
 - ✅ **REVIEWED** — [`docs/skinned-model-ext.md`](docs/skinned-model-ext.md)
 - ✅ **REVIEWED** — [`docs/skinnedeffect-support.md`](docs/skinnedeffect-support.md)
-- 🟡 **PENDING — updated incidentally** — [`docs/software-easygl-parity-ledger.md`](docs/software-easygl-parity-ledger.md)
+- ✅ **REVIEWED** — [`docs/software-easygl-parity-ledger.md`](docs/software-easygl-parity-ledger.md)
 - ✅ **REVIEWED** — [`docs/software-renderer.md`](docs/software-renderer.md)
 - ✅ **REVIEWED** — [`docs/spritefont-support.md`](docs/spritefont-support.md)
 - ✅ **REVIEWED** — [`docs/stub-renderer.md`](docs/stub-renderer.md)

@@ -209,8 +209,8 @@ hardware-observation uncertainties are recorded in
 [`handoff.md` §5](../handoff.md#5-known-bugs-and-limitations), not duplicated here.
 
 The completed `SOFTWARE-1` through `SOFTWARE-485` implementation campaign is historical. Its
-task-by-task EasyGL comparison evidence remains in
-[`software-easygl-parity-ledger.md`](software-easygl-parity-ledger.md), and the deleted plan and
-individual fixes remain in Git history. Those records explain how the current contract was
+EasyGL comparison evidence map is
+[`software-easygl-parity-ledger.md`](software-easygl-parity-ledger.md); it points to the complete
+historical tables, deleted plan and individual fixes in Git history. Those records explain how the current contract was
 established; they are not a second status page and their old test totals are not current release
 criteria.

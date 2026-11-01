@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Software/EasyGL evidence-map reconciliation (2026-11-01, SOFTWARE-100/164/165/457): the
+  391,991-byte cumulative ledger is replaced by a compact maintained map; every original byte is
+  verified recoverable at 9b51bbab4. The page separates historical verdicts/counts/skip lists from
+  current contracts, routes public state/resource and optional compiled-shader evidence to its
+  owning sources/guides, preserves the invalid ps_1_4 fixture correction and qualifies old CNAEXT
+  deferrals. The renderer guide now points to that map/archive rather than promising live per-task
+  tables. All 195 executable targets in the current 196-case Software label rebuild in the existing
+  Release/compiled-effects-OFF tree; privately, 194 pass/two declared skips/zero fail, no profile
+  deaths. Links/archive/inventory checks pass. No runtime change or new compiled-effects-ON,
+  EasyGL differential, genuine-XNA, sanitizer or physical-device qualification.
 - XNB writer/interoperability guide reconciliation (2026-11-01, XNAP-12/82, XNAPP-191/192):
   the page corrects format-aware processing, XNB-only routes, PCM8/schema-2 retention, manifest
   version 10/per-reader versions, real-fxc evidence, eight writable versus 16 readable targets and
