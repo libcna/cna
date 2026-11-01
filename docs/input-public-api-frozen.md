@@ -1,108 +1,93 @@
-# Frozen public Input API surface (INPUT-API-031)
+# Input public API and signature guards (INPUT-API-031)
 
-> **Related input docs (INP-0003):** [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+> **Related input docs (INP-0003):** [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
 
-This is the **golden signature snapshot** of the public `Microsoft::Xna::Framework::Input` (and
-`…::Input::Touch`) surface. It is the human-readable companion to the enforced compile-time guard
-`tests/Microsoft/Xna/Framework/Input/PublicApiInputSignatureFreezeTests.cpp`, which pins every entry
-below through a fully-spelled function-/member-pointer type or a type trait. Any drift — a removed or
-renamed member, a changed signature, a changed constructor parameter list — fails to compile.
+This is the human-readable native Input surface and classification reference, checked against
+`modules/input/include/Microsoft/Xna/Framework/Input/` on 2026-11-01. Its compile-time companion is
+`modules/input/tests/Microsoft/Xna/Framework/Input/PublicApiInputSignatureFreezeTests.cpp`.
+The guard checks its listed signatures/traits; it is not an exhaustive inventory of the current
+surface and does not reject arbitrary added members or overloads.
 
-**Keep the two in lock-step.** When you intentionally add, remove, or change a public member, update
-**both** this document and the freeze test in the same commit.
+Keep documentation and signature checks together when changing a covered member. New public
+members should receive an explicit classification and appropriate guard/behavior coverage.
+Generated presence belongs to [xna-4-runtime-member-coverage.md](xna-4-runtime-member-coverage.md);
+a successful signature build alone is not a behavior or hardware-parity result.
 
 ## Classification — canonical API-tier glossary (INP-0001)
 
-This is the **single canonical definition** of CNA Input API tiers. Every input doc refers here rather
-than re-defining them. A member/type belongs to exactly one tier:
+API origin and compatibility behavior are related but separate:
 
-- **STRICT** — part of the **XNA 4.0** public API. Must match XNA/FNA exactly: names, signatures, enum
-  values, and behavior (modulo the documented C++ property convention `getXProperty`/`setXProperty` and
-  the accepted-deviations list in `input-fna-fidelity.md`).
-- **FNA-compatible** — a STRICT member whose *behavior* intentionally follows **FNA** (the reference SDL
-  platform layer) where XNA left it platform-defined. Same API as STRICT; the FNA source is the authority.
-- **FNAEXT** (`EXT` name suffix) — an **FNA extension** beyond stock XNA 4.0 that FNA/MonoGame expose to
-  consumers (e.g. `Keyboard::GetKeyFromScancodeEXT`, `Mouse::…IsRelativeMouseModeEXT`, the gamepad
-  `GetGUIDEXT`/`SetLightBarEXT`/`SetTriggerVibrationEXT`/`GetGyroEXT`/`GetAccelerometerEXT`, `TextInputEXT`,
-  `GestureSample::FingerId(2)EXT`). Consumer-visible; carries the `EXT` suffix and (for non-enum members)
-  the `CNAEXT` marker.
-- **CNAEXT** — a **CNA/MonoGame convenience** that is public but has **no** XNA/FNA equivalent (e.g.
-  `MouseCursor` as a whole, `KeyboardState::ToString`, value-struct default constructors, `FromButtonArray`).
-  Tagged with the `CNAEXT` marker macro.
-- **INTERNAL** — `CNA::Internal::*` implementation (`SdlInputBridge`, `InputManager`, `GestureDetector`,
-  `ISdlHapticBackend`, …). **Not public API**; must never appear in a public XNA header or signature
-  (enforced by the `PublicApiInputCompileTests` SDL/Internal-leak guard).
+- **STRICT** — part of XNA 4.0, using CNA's C++ property/type/reference conventions.
+  Measured Microsoft XNA behavior wins where it differs from FNA; see
+  [xna-fna-behavior-decisions.md](xna-fna-behavior-decisions.md).
+- **FNA-compatible** — a behavior qualifier on an XNA-shaped member, not a disjoint API tier.
+  FNA is the usual readable reference where no measured XNA disagreement exists.
+- **FNAEXT / EXT** — an extension originating in FNA, with an EXT name and CNAEXT marker.
+- **CNAEXT** — CNA-specific/MonoGame-style conveniences absent from XNA/FNA. Some also have an
+  EXT suffix; that suffix alone does not establish FNA origin.
+- **INTERNAL** — implementation plumbing, including SdlInputBridge, InputManager,
+  GestureDetector and SystemInputAccess. Detail/internal public-header hooks are not a supported
+  additional XNA game surface.
 
-## Freeze scope
+CNAEXT is the marker for non-XNA declarations in the Microsoft namespace, including FNA extensions.
+An entirely non-XNA class can carry it at class level. Existing enum extensions use EXT names.
+Explicit value default constructors, native convenience factories and non-XNA setters are marked;
+copy/move overloads representing one reference member are C++ mappings, not automatically new API.
 
-Frozen: all STRICT, EXT, and stable CNAEXT-convenience members of every public Input type.
+The 2026-07 campaign's tagging fixes and completed task log are retained in Git history.
 
-Deliberately **excluded** (internal plumbing exposed as public for the SDL bridge / tests, not API —
-so the golden file is not coupled to internal churn):
+## Freeze scope and known gaps
 
-- `TouchPanel::INTERNAL_onTouchEvent`, `TouchPanel::ResetForTests`
-- `Mouse::INTERNAL_onClicked`, `Mouse::ResetForTests`
-- `TextInputEXT::INTERNAL_OnTextInput`, `TextInputEXT::INTERNAL_OnTextEditing`, `TextInputEXT::INTERNAL_OnTextEditingCandidates`, `TextInputEXT::ResetForTests`
-- private data members (e.g. `GamePadButtons::buttons_`)
+The signature TU includes public headers, takes typed member/function addresses and checks
+constructibility, equality-expression result types and special-member traits. Different checks
+provide different strength: constructibility permits conversions, move traits do not pin noexcept,
+and an event's untyped address does not pin its full callback type. These checks do not prove
+behavior or detect every possible declaration change.
 
-Hidden-friend equality operators (`operator==` / `operator!=` on the value structs) are frozen via an
-ADL expression (`a == b` / `a != b` yielding `bool`) rather than an address-of, because they are not
-visible to qualified lookup.
+The 2026-11-01 comparison found current members outside that TU:
 
-The pure **enums** (`Keys`, `Buttons`, `ButtonState`, `KeyState`, `GamePadType`, `GamePadDeadZone`,
-`TouchLocationState`, `GestureType`) are value-frozen separately and exhaustively by INPUT-KBD-001 /
-INPUT-TEST-001 under the enum-ABI guardrail **INPUT-API-034**; they are not repeated here.
+| Present public surface | Missing signature checks |
+|---|---|
+| GamePad keyboard-emulation query/setter | Both methods |
+| GamePadState, GamePadButtons, GamePadDPad, GamePadThumbSticks, GamePadTriggers, KeyboardState, MouseState, TouchLocation | Equals(const std::any&) overloads |
+| GamePadButtons, GamePadDPad, GamePadThumbSticks, GamePadTriggers | ToString |
+| TouchPanel | Mouse-touch-emulation and input-suppression query/setter pairs |
+| TouchCollection | GetEnumerator and nested Enumerator API |
 
-## EXT / CNAEXT tagging convention (INPUT-API-032)
+These are guard-coverage gaps, not evidence that the APIs or behavior are absent. They remain
+visible below instead of being described as already mechanically frozen.
 
-Every member with **no XNA 4.0 equivalent** is tagged so it cannot be mistaken for stock XNA:
+Deliberately excluded plumbing includes INTERNAL_* methods, ResetForTests and private data.
+XmlSerializationEXT's enum metadata is a separate opt-in serialization surface, outside the
+listed signature TU. Pure enum values are checked in their enum suites; this page does not repeat
+their numeric lists.
 
-- A **non-XNA enum value** carries the `EXT` **name suffix** (e.g. `Buttons::Misc1EXT`). Enum members
-  do not take the `CNAEXT` macro.
-- A **non-XNA non-enum member** carries the `CNAEXT` marker. If it is an FNA-compatible extension it
-  **also** carries the `EXT` name suffix (e.g. `CNAEXT static ... GetGUIDEXT(...)`). A CNA-only
-  convenience carries `CNAEXT` alone.
-- An **entire non-XNA class** (`MouseCursor`, `TextInputEXT`) is marked `CNAEXT` at the class; its
-  individual members inherit that and need no per-member marker.
-- An **explicitly-declared default constructor of a value struct is `CNAEXT`.** C# structs have an
-  *implicit* parameterless constructor, so FNA declares none; CNA's explicit `Type()` is a C++
-  addition with no FNA counterpart. (The `= default` on `GamePadCapabilities` is the implicit-
-  equivalent and stays untagged.)
-- A **`ref`/`&&` overload that is the C++ rendering of one XNA member** (e.g. the two
-  `TouchCollection` vector constructors together map FNA's single `TouchCollection(TouchLocation[])`)
-  is treated as that XNA member, not as separate non-XNA API.
-- **`private` members that map FNA `internal`** (e.g. the dead-zone-applying `GamePadThumbSticks` /
-  `GamePadTriggers` constructors) are not public API and take no tag.
+## GetTypeName and header containment
 
-### Audit result (2026-07-05)
+PublicApiInputCompileTests includes public Input headers, checks SDL include leakage, namespace
+placement and the non-Object base status of its 18 listed top-level class/struct types.
+MouseCursor implements IDisposable without deriving System::Object. None of those listed types
+therefore requires an Object GetTypeName override; this statement is scoped to that checked set,
+not a reflection-based check of future/nested types.
 
-Every public Input member was scanned; each untagged public member was verified to be genuine XNA/FNA
-API (`Mouse.WindowHandle`, `TouchPanel.WindowHandle`, `TouchCollection.FindById`, the indexer
-`getItem`, etc. are all public in FNA). **Two defects were found and fixed:** `GamePadState()` and
-`GestureSample()` default constructors were untagged while their 9 value-struct siblings were `CNAEXT`;
-both are now `CNAEXT`, so all 11 explicit value-struct default constructors are uniformly tagged. This
-member-by-member table (STRICT / EXT / CNAEXT per member) is the recorded audit; the compile guards
-INPUT-API-030 (header hygiene) and INPUT-API-031 (signature freeze) keep it honest, and the enum-value
-guard INPUT-API-034 covers the enum layer.
-
-## `GetTypeName()` exemption (INPUT-API-029)
-
-CLAUDE.md requires every **concrete `System::Object` subclass** to override `CNAEXT GetTypeName()`.
-Audit result (2026-07-06): **no** public Input type inherits `System::Object`, directly or transitively.
-The value structs, static classes, and enums are all non-`Object`; the single base-class relationship,
-`MouseCursor : System::IDisposable`, inherits `IDisposable`, which is **not** an `Object` subclass. So
-`GetTypeName()` applies to none of the Input types — **all are exempt**. This exemption is pinned
-mechanically by a `static_assert(!std::is_base_of_v<System::Object, T>)` block over the 18 public
-class/struct Input types in `tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp`; if a
-type ever gains an `Object` base, that TU stops compiling — the point at which the `CNAEXT GetTypeName()`
-override must be added.
+The compile guard is not a general parser that rejects every possible internal type name in a
+new signature. Keep public declarations platform-neutral and inspect new additions directly.
 
 ---
+
+## Shared value overloads
+
+GamePadState, GamePadButtons, GamePadDPad, GamePadThumbSticks, GamePadTriggers, KeyboardState,
+MouseState and TouchLocation also declare `bool Equals(const std::any&) const` as the native
+mapping of object equality (STRICT). GamePadButtons, GamePadDPad, GamePadThumbSticks and
+GamePadTriggers additionally declare `std::string ToString() const` (STRICT). These supplement
+the per-type lists below and are among the signature-guard gaps above.
 
 ## GamePad cluster (`Microsoft::Xna::Framework::Input`)
 
 ### `GamePad` — static class (XNA + EXT)
 - `GamePad() = delete;` — STRICT
+- `static void setKeyboardEmulationEnabledEXT(bool);` / `static bool getKeyboardEmulationEnabledEXT();` — CNAEXT; not yet in the signature guard
 - `static GamePadCapabilities GetCapabilities(PlayerIndex);` — STRICT
 - `static GamePadState GetState(PlayerIndex);` — STRICT
 - `static GamePadState GetState(PlayerIndex, GamePadDeadZone);` — STRICT
@@ -194,7 +179,7 @@ override must be added.
   `HasRightYThumbStick`, `HasLeftTrigger`, `HasRightTrigger`, `HasLeftVibrationMotor`,
   `HasRightVibrationMotor`, `HasVoiceSupport`
 - `GamePadType getGamePadTypeProperty() const;` (STRICT) + `void setGamePadTypeProperty(GamePadType);` (CNAEXT)
-- EXT capability pairs — STRICT-shaped `bool get…EXTProperty() const` / EXT `void set…EXTProperty(bool)` for:
+- EXT capability pairs — `bool get…EXTProperty() const` / `void set…EXTProperty(bool)` for:
   `HasLightBarEXT`, `HasTriggerVibrationMotorsEXT`, `HasMisc1EXT`, `HasPaddle1EXT`, `HasPaddle2EXT`,
   `HasPaddle3EXT`, `HasPaddle4EXT`, `HasTouchPadEXT`, `HasGyroEXT`, `HasAccelerometerEXT` — EXT
 
@@ -279,12 +264,14 @@ override must be added.
 ## Touch cluster (`Microsoft::Xna::Framework::Input::Touch`)
 
 ### `TouchPanel` — static class (XNA + CNAEXT)
-- `TouchPanel() = delete;` — CNAEXT
+- `TouchPanel() = delete;` — C++ static-class mapping
 - `static constexpr intcs MAX_TOUCHES;` / `static constexpr intcs NO_FINGER;` — CNAEXT
-- Property pairs (STRICT get `intcs`/`GestureType`/`DisplayOrientation`/`std::uintptr_t`; CNAEXT set):
+- Static property pairs (STRICT getters and setters, using `intcs`/`GestureType`/`DisplayOrientation`/`std::uintptr_t`):
   `DisplayWidth`, `DisplayHeight`, `DisplayOrientation`, `EnabledGestures`, `WindowHandle`
-- `bool getIsGestureAvailableProperty();` — STRICT
-- `bool getTouchDeviceExistsProperty();` / `void setTouchDeviceExistsProperty(bool);` — CNAEXT
+- `static bool getIsGestureAvailableProperty();` — STRICT
+- `static bool getTouchDeviceExistsProperty();` / `static void setTouchDeviceExistsProperty(bool);` — CNAEXT
+- `static bool getMouseTouchEmulationEnabledEXT();` / `static void setMouseTouchEmulationEnabledEXT(bool);` — CNAEXT; not yet in the signature guard
+- `static bool getInputSuppressedEXT();` / `static void setInputSuppressedEXT(bool);` — CNAEXT system-input plumbing; not yet in the signature guard
 - `static TouchPanelCapabilities GetCapabilities();` — STRICT
 - `static TouchCollection GetState();` — STRICT
 - `static GestureSample ReadGesture();` — STRICT
@@ -311,6 +298,17 @@ override must be added.
 - `void RemoveAt(int);` — STRICT
 - `void Insert(int, const TouchLocation&);` — STRICT
 - `begin()` / `end()` — CNAEXT (mutable + const overloads → `std::vector<TouchLocation>::(const_)iterator`)
+- `Enumerator GetEnumerator() const;` — STRICT; not yet in the signature guard
+
+### `TouchCollection::Enumerator` — nested struct (XNA IEnumerator mapping)
+
+- `Enumerator() = default;` — native default construction
+- `const TouchLocation& Current() const;` — STRICT mapping
+- `bool MoveNext();` / `void Dispose();` — STRICT mapping
+- `void Reset();` — CNAEXT exposure of the explicit interface member
+
+The collection-taking constructor is private. All of this nested surface is currently outside
+the signature TU; see [enumerator reference](xna-4-enumerator-reference.md).
 
 ### `TouchLocation` — struct (XNA)
 - `int getIdProperty() const;` — STRICT
@@ -342,3 +340,10 @@ override must be added.
 - `GestureSample();` — CNAEXT
 - `GestureSample(GestureType, System::TimeSpan, Vector2, Vector2, Vector2, Vector2);` — STRICT
 - `GestureSample(GestureType, System::TimeSpan, Vector2, Vector2, Vector2, Vector2, int, int);` — EXT
+
+## Audit verification
+
+On 2026-11-01, CnaInputModuleTests and the CnaTests cross-module harness build in the existing
+multi-renderer tree. Both compile/link guards and all 32 keyboard-gamepad cases pass, followed by
+the three Game-pump/orientation tests on private displays. This verifies the checks actually in
+the guard, not the missing entries identified above. No API declarations or test guard were changed.

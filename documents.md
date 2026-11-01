@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 111 reviewed, 12 updated incidentally and awaiting their own audit, and 54 not yet
+Summary: 113 reviewed, 12 updated incidentally and awaiting their own audit, and 52 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -123,12 +123,12 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/input-manual-verification-results.md`](docs/input-manual-verification-results.md)
 - ✅ **REVIEWED** — [`docs/input-member-parity-matrix.md`](docs/input-member-parity-matrix.md)
 - ✅ **REVIEWED** — [`docs/input-pre-merge-checklist.md`](docs/input-pre-merge-checklist.md)
-- ⬜ **PENDING** — [`docs/input-public-api-frozen.md`](docs/input-public-api-frozen.md)
+- ✅ **REVIEWED** — [`docs/input-public-api-frozen.md`](docs/input-public-api-frozen.md)
 - ✅ **REVIEWED** — [`docs/input-test-coverage.md`](docs/input-test-coverage.md)
 - ⬜ **PENDING** — [`docs/inspector-benchmark.md`](docs/inspector-benchmark.md)
 - ⬜ **PENDING** — [`docs/inspector.md`](docs/inspector.md)
 - ✅ **REVIEWED** — [`docs/installed-cpp-sdk.md`](docs/installed-cpp-sdk.md)
-- ⬜ **PENDING** — [`docs/keyboard-device-emulation.md`](docs/keyboard-device-emulation.md)
+- ✅ **REVIEWED** — [`docs/keyboard-device-emulation.md`](docs/keyboard-device-emulation.md)
 - ⬜ **PENDING** — [`docs/link-size-architecture.md`](docs/link-size-architecture.md)
 - ✅ **REVIEWED** — [`docs/location-future-plan.md`](docs/location-future-plan.md)
 - ✅ **REVIEWED** — [`docs/location-proposal.md`](docs/location-proposal.md)

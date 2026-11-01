@@ -4,6 +4,11 @@ These are three independent, owner-requested CNA extensions, disabled by default
 selected platform's once-per-frame keyboard snapshot and Game's event pump, before Update.
 They do not add sample-specific input branches or change physical-device availability when off.
 
+The code lives in the platform software sources (`KeyboardAccelerometer.cpp`,
+`KeyboardGamepad.cpp`), the Microsoft Devices/Input wrappers and GameWindow/GraphicsDeviceManager.
+The accelerometer API here is in the base `Microsoft::Devices` module; the separate
+`CNA_DEVICES` option for `CNA::Devices` extensions is not its enable switch.
+
 ## Accelerometer
 
 ```cpp
@@ -22,14 +27,17 @@ Use ordinary Accelerometer instances, Start/Stop/Dispose, CurrentValue, IsDataVa
 CurrentValueChanged and legacy ReadingChanged. Objects constructed before the opt-in refresh
 support when Start succeeds. Per-instance TimeBetweenUpdates and callback order remain unchanged.
 Stop all running accelerometers before changing mode; otherwise InvalidOperationException is
-thrown. Independent platform sessions retain their polling and callback lifetime barriers,
+thrown. Also close independent software sensor sessions/stop polling before changing mode; the
+provider rejects a change while any such session remains open, even if no Accelerometer object
+is running. Repeating the same mode is a no-op. Independent sessions retain their polling and callback lifetime barriers,
 including reentrant close. The source requires no physical sensor subsystem acquisition.
 
 Arrows produce `(Right - Left, Up - Down, -1)` normalized to one g. No keys yields `(0,0,-1)`;
 opposite directions cancel and diagonals keep unit magnitude. Public Accelerometer values use g;
 the platform and CNA Input polling use m/s² with standard gravity 9.80665. Readings use natural
 emulation axes independently of display orientation and bypass the Android hardware-only remap.
-Focus loss supplies neutral readings. Orientation emulation is not implicitly enabled.
+Loss of Game.IsActive supplies neutral readings, including when CNA's Guide owns input.
+Orientation emulation is not implicitly enabled.
 
 New keyboard readings/events are delivered when Game pumps input, at its frame cadence. Outside
 a running/pumped game the software source retains its last value, initially neutral. This is a
@@ -45,7 +53,7 @@ getWindowProperty().setKeyboardOrientationEmulationEnabledEXT(true);
 loop thread; it can be enabled before or after device creation. Up requests Portrait, Left requests
 LandscapeLeft and Right requests LandscapeRight. XNA has no inverted-portrait value, so Down
 is unused. Release retains orientation; repeats and simultaneous ambiguous requests are ignored.
-Only a focused game accepts requests. Keys can therefore also drive an independently enabled
+Only an active game accepts requests. Keys can therefore also drive an independently enabled
 accelerometer, but the two features do not enable or update each other.
 
 Requests honor GraphicsDeviceManager.SupportedOrientations. Default follows the preferred
@@ -87,9 +95,10 @@ Opposite stick directions cancel; digital diagonals are normalized to unit lengt
 the physical pad's; each nonzero keyboard axis takes priority, otherwise the physical axis remains.
 The combined packet number changes only when this effective raw state changes. Capabilities report
 all mapped controls and preserve any real pad's extra features. BigButton, vibration, sensors,
-identity and other physical operations are not emulated; Home still opens CNA's Guide normally.
+identity and other physical operations are not emulated; Home uses the ordinary Guide route when
+the native GamerServices implementation is enabled.
 
-Unfocused games supply neutral keyboard input. While the Guide owns input, game reads are connected
+Inactive games supply neutral keyboard input. While the Guide owns input, game reads are connected
 and neutral through the ordinary system filter. The Guide's private GamePad read stays physical,
 because it already handles keyboard keys itself. Held emulated buttons at dismissal remain hidden
 from the game until released, including when the Guide made Game.IsActive false; Escape that closes
@@ -102,9 +111,16 @@ other processes. The mapped keyboard layout was approved by the owner on 2026-10
 
 ## Cost and qualification
 
-The disabled frame path performs a flag check for each feature and uses the existing snapshot;
-it does not open sensors, allocate keyboard state, start threads or make per-key native calls.
-Enabled processing scans the held-key snapshot, then publishes to the currently open streams.
+The disabled feature paths return after flag checks; the ordinary Game keyboard snapshot still
+updates. They do not open software sensor sessions or start an independent polling thread.
+Enabled processing scans held keys. Accelerometer publication builds a temporary list of live
+streams and copies callbacks, so it is not an allocation-free frame path. No native per-key queries
+are added by these software sources; frame cost has not been rebenchmarked in this audit.
 Meaningful lifecycle/unit tests and real OPENGLES3/WEBGL2 clients qualified INPUT-EMU-001
 (2026-09-28) and INPUT-EMU-002 (2026-10-03); their records are in Git history. Physical Phone
 rotation and other renderer identities are not qualification claims of this task.
+
+Audit verification (2026-11-01): both Input guards, 32 keyboard-gamepad cases and three Game-pump/
+orientation cases pass in the existing multi-renderer tree on private GL displays. The four
+KeyboardAccelerometer tests also pass in the Devices UBSan suite. The earlier real-browser
+qualification is historical; it was not rerun for this documentation-only audit.

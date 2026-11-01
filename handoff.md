@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Input API/emulation documentation reconciliation (2026-11-01): the signature reference
+  corrects disjoint-tier/all-member-freeze claims, TouchPanel setters, missing object equality,
+  formatting, emulation and nested enumerator entries, with current module paths and an explicit
+  guard-gap table. The keyboard page qualifies software-session toggle barriers, Game.IsActive,
+  native Guide availability, allocation/cost and historical browser evidence. Current headers,
+  source and local FNA are compared; InputModule and aggregate test targets build. On private
+  GL-default multi displays both compile/link guards, 32 keyboard-gamepad cases and three
+  Game-pump/orientation cases pass; the four keyboard-accelerometer cases passed in the preceding
+  Devices UBSan suite. No declarations, implementation, ABI or test guards were changed.
 - Location proposal reconciliation (2026-11-01): the scope guard defers to the owner's 2026-10-25
   AOSP-only/provider-placement/event-thread decisions, removes obsolete CNA-local System paths
   and names the real compass test seam. The proposal separates planned services from current
@@ -1413,6 +1422,12 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- The Input signature guard is not exhaustive: it omits GamePad keyboard-emulation methods,
+  eight Equals(std::any) overloads, four value ToString methods, TouchPanel emulation/suppression
+  pairs and TouchCollection's nested enumerator API. Its pointer/constructibility traits also do
+  not reject arbitrary added overloads or pin every noexcept/event callback type. Source-inspected
+  2026-11-01; passing guards are evidence for their checked entries, not a complete API freeze
+  (`docs/input-public-api-frozen.md`).
 - The SDL3 Camera wrapper does not map camera-removal events or poll permission again after
   Ready. Unplug/revocation is therefore not guaranteed to become Lost; SDL may supply blank
   frames until the session closes. Native Camera has no public reopen/device-selector route.
