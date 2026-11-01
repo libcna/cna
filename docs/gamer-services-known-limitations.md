@@ -125,7 +125,7 @@ are not replayable results. It is not a universal exactly-once transport guarant
 | 40 | Avatar baked shading and occlusion | Intentional (visual quality) | None | Only inside the renderer |
 | 41 | Avatar visual fidelity of catalog v3 | Intentional (art direction) | None | New catalog versions |
 | 42 | Avatar catalog and format edge cases | Intentional | Minor | Partly |
-| 43 | `PropertyDictionary` restricted boxed equality and NaN defect | Host-language difference / compatibility defect | Minor; NaN comparisons differ | Restricted types by design; NaN needs a fix |
+| 43 | `PropertyDictionary` restricted boxed equality | Host-language difference | Minor; unsupported matching types are refused | Restricted types by design |
 | 44 | Leaderboard columns of non-XNA C++ types | Intentional (host-language difference) | None | No |
 | 45 | Value-type `AvatarDescription` and shared `Changed` | Intentional (host-language difference) | None | No |
 | 46 | Signed-out `SignedInGamer` objects kept until the process exits | Intentional (host-language difference) | None | No |
@@ -940,31 +940,29 @@ per-user models. A server catalog pack is only the update path for a catalog a c
 - **Future work:** a newer catalog can arrive as a pack; a newer description format needs a client
   update.
 
-## Host-language differences and boxed-equality defect
+## Host-language differences
 
 These concern the C++ representation rather than the service. The restricted boxed type set is
-an intentional boundary; the NaN comparison below is a compatibility defect, not an inevitable
-consequence of using C++.
+an intentional boundary.
 
 ### 43. `PropertyDictionary` equality of an arbitrary `std::any`
 
-- **Status:** restricted type set by design; NaN comparison currently defective.
+- **Status:** restricted type set by design. Supported floating-point comparisons use .NET Equals semantics.
 - **XNA / Xbox:** .NET compares any boxed values.
 - **CNA now:** equality explicitly handles `std::string`, `int`, `long long`, `float`, `double`,
   `System::DateTime`, `System::TimeSpan`, `LeaderboardOutcome` and `System::IO::Stream*` (stream
   identity). Empty boxes compare equal; different stored types compare unequal. Other matching
   stored types throw `NotSupportedException`, even if they are other XNA or primitive types.
-  The float/double branches use C++ `==`, so two NaNs compare unequal in pair-based Contains/Remove.
-  That differs from .NET boxed floating-point Equals, where two NaNs compare equal
+  The float/double branches use Sharp Runtime's default equality comparer: two NaNs compare
+  equal and signed zeros compare equal, matching .NET boxed floating-point Equals
   ([Double.Equals](https://learn.microsoft.com/en-us/dotnet/api/system.double.equals),
   [Single.NaN comparison example](https://learn.microsoft.com/dotnet/api/system.single.nan)).
-  This is a source-inspected defect in `PropertyDictionary.cpp`, also recorded in handoff §5.1;
-  the current suite has no dedicated NaN regression. No console measurement is claimed.
+  Native pair-based Contains/Remove regressions cover both precisions, opposite-sign NaNs,
+  infinities, signed zeros, mismatches and preservation after a failed removal. No console
+  measurement is claimed.
 - **Reason:** C++ has no boxed equality for arbitrary types.
-- **Observable impact / porting impact:** custom/unsupported boxed types can be refused, and a
-  supported NaN value cannot be found/removed by an otherwise matching pair.
-- **Future work:** preserve the documented type boundary; add a discriminating NaN regression and
-  correct floating-point boxed equality in a runtime task.
+- **Observable impact / porting impact:** custom/unsupported matching boxed types can be refused.
+- **Future work:** expanding the type boundary requires an explicit equality representation.
 
 ### 44. Leaderboard columns of non-XNA C++ types
 

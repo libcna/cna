@@ -4,8 +4,10 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/Collections/Generic/EqualityComparer.hpp"
 #include <any>
 #include <string>
+#include <type_traits>
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -187,7 +189,15 @@ namespace Microsoft::Xna::Framework::GamerServices
                 return false;
             }
             const T* rightValue = std::any_cast<T>(&right);
-            equal = rightValue != nullptr && *leftValue == *rightValue;
+            if constexpr (std::is_floating_point_v<T>)
+            {
+                equal = rightValue != nullptr &&
+                    System::Collections::Generic::EqualityComparer<T>::Default().Equals(*leftValue, *rightValue);
+            }
+            else
+            {
+                equal = rightValue != nullptr && *leftValue == *rightValue;
+            }
             return true;
         }
 

@@ -80,9 +80,13 @@
       "id": "CNA-FIX-D09",
       "source_section": "5.1 Defects",
       "summary": "PropertyDictionary's BoxedValuesEqual delegates supported float/double values to operator==, so pair-based Contains/Remove treat two NaNs as unequal.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Use Sharp Runtime's existing default float/double equality comparer for supported boxed values; preserve the explicit type boundary and other comparisons.",
+      "evidence": [
+        "New native regression fails before correction for float/double NaN Contains/Remove, then passes with the existing .NET comparer.",
+        "Regression covers same/opposite-sign NaNs, signed zero, infinities, wrong values, mismatched boxed precision and unchanged state after a refused removal.",
+        "Complete native GamerServices target privately on HEADLESS/dummy audio: 744 pass, one expected renderer-capability skip out of 745. C gamer-property smoke and three ABI/header/doc gates pass. No ABI change, dependency change or new stub."
+      ]
     },
     {
       "id": "CNA-FIX-D10",

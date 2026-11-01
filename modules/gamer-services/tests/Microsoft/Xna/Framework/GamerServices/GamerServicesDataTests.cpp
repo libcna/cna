@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include <algorithm>
+#include <limits>
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/NotImplementedException.hpp"
@@ -407,6 +408,42 @@ TEST(PropertyDictionaryTest, PairContainsSeparatesValueTypes) {
     EXPECT_FALSE(dict.Contains(PropertyPair("score", std::any(42.0f))));
     EXPECT_FALSE(dict.Contains(PropertyPair("score", std::any(42.0))));
     EXPECT_TRUE(dict.Contains(PropertyPair("score", std::any(42))));
+}
+
+TEST(PropertyDictionaryTest, FloatingPairsUseDotNetEquals) {
+    const auto check = []<typename T>()
+    {
+        SCOPED_TRACE(sizeof(T));
+        const T nan = std::numeric_limits<T>::quiet_NaN();
+        const T infinity = std::numeric_limits<T>::infinity();
+        auto dict = PropertyDictionary::CreateInternal({});
+        dict.SetValue("nan", nan);
+        EXPECT_TRUE(dict.Contains(PropertyPair("nan", std::any(nan))));
+        EXPECT_TRUE(dict.Contains(PropertyPair("nan", std::any(-nan))));
+        EXPECT_FALSE(dict.Contains(PropertyPair("nan", std::any(T{0}))));
+        EXPECT_FALSE(dict.Contains(PropertyPair("nan", std::any(infinity))));
+        EXPECT_FALSE(dict.Remove(PropertyPair("nan", std::any(T{1}))));
+        EXPECT_TRUE(dict.ContainsKey("nan"));
+        EXPECT_TRUE(dict.Remove(PropertyPair("nan", std::any(-nan))));
+        EXPECT_FALSE(dict.ContainsKey("nan"));
+
+        dict.SetValue("zero", T{0});
+        EXPECT_TRUE(dict.Contains(PropertyPair("zero", std::any(-T{0}))));
+        EXPECT_TRUE(dict.Remove(PropertyPair("zero", std::any(-T{0}))));
+        dict.SetValue("infinity", infinity);
+        EXPECT_TRUE(dict.Contains(PropertyPair("infinity", std::any(infinity))));
+        EXPECT_FALSE(dict.Contains(PropertyPair("infinity", std::any(-infinity))));
+        EXPECT_FALSE(dict.Contains(PropertyPair("infinity", std::any(nan))));
+        EXPECT_TRUE(dict.Remove(PropertyPair("infinity", std::any(infinity))));
+    };
+    check.operator()<float>();
+    check.operator()<double>();
+
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.SetValue("single", std::numeric_limits<float>::quiet_NaN());
+    EXPECT_FALSE(dict.Contains(PropertyPair("single", std::any(std::numeric_limits<double>::quiet_NaN()))));
+    EXPECT_FALSE(dict.Remove(PropertyPair("single", std::any(std::numeric_limits<double>::quiet_NaN()))));
+    EXPECT_TRUE(dict.ContainsKey("single"));
 }
 
 TEST(PropertyDictionaryTest, PairContainsHandlesEveryDefinedValueType) {

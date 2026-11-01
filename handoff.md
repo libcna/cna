@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D09 (2026-11-01): supported boxed float/double comparisons now use Sharp
+  Runtime’s existing default equality comparer. The native pair regression fails before the fix
+  and passes afterwards for same/opposite-sign NaNs, signed zeros, infinities and mismatches,
+  including preservation on failed removal. The complete private HEADLESS/dummy-audio
+  GamerServices run passes 744/745 with one expected renderer-capability skip; the C gamer-property
+  smoke and three ABI/header/doc gates pass. The explicit boxed type boundary is unchanged. The
+  limitations page matches, and all local docs links resolve. No ABI/dependency change or stub.
 - CNA-FIX-D19 (2026-11-01): direct managed-device disposal now forwards DeviceDisposing
   after releasing the frame context. Later manager cleanup skips an already-delivered notification;
   teardown removes subscriptions. The new direct-device test fails before the fix; afterwards
@@ -1884,13 +1891,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   std::stof's consumed length is ignored and only value>0 is checked. Both 1trailing and inf
   exported a small temporary glTF fixture with exit 0 (2026-11-01). Require full-token and finite
   validation in a runtime/tooling task; no parser correction was bundled into the documentation audit.
-- PropertyDictionary's BoxedValuesEqual delegates supported float/double values to operator==,
-  so pair-based Contains/Remove treat two NaNs as unequal. .NET floating-point Equals treats two
-  NaNs as equal (Microsoft Double.Equals and Single.NaN documentation, linked from
-  docs/gamer-services-known-limitations.md §43). The same-type explicit comparison set is narrower
-  than arbitrary XNA/primitive boxed values; mismatched types return false, unsupported matching
-  types throw. Source-inspected 2026-11-01 in gamer-services/src/Xna/PropertyDictionary.cpp;
-  no dedicated permanent NaN regression or runtime correction was added by this documentation task.
 - CNJ numeric extraction narrows before validating representability: ParseCnjEnvelope casts
   cnjVersion's double to int before the version-range check, and ReadCnjAnimationClip casts an
   inline track's numeric boneIndex directly to int. A finite value such as 1e30 is accepted by
