@@ -30,9 +30,18 @@ void `SoundEffectInstance::Play()` contract.
 
 ## Threads, hardware and shutdown
 
-Creation, query, control and destruction calls all run on the game creation thread. A wrong-thread
-call returns `CNA_RESULT_THREAD` before touching mixer state. SDL/CNA may mix and finish tracks on
-an internal audio thread, but this initial API installs no C callback and retains no caller context.
+Creation, query, instance control and destruction use the game creation thread by default. The two
+fire-and-forget routes, `cna_sound_effect_play` and
+`cna_sound_effect_play_with_settings`, deliberately accept a live effect handle from any thread;
+every other sound-effect route keeps the owner-thread rule. The optional game-thread service queue
+can dispatch other qualifying foreign-thread handle calls. See
+[`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md) for its blocking, pumping and shutdown
+contract. Without either documented exception, a wrong-thread call returns `CNA_RESULT_THREAD`
+before touching mixer state.
+
+SDL/CNA may mix and finish tracks on an internal audio thread. User C callbacks exist only through
+documented event registrations, such as a streaming instance's buffer-needed event and a
+microphone's buffer-ready event; their declarations state which thread advances and raises them.
 
 `cna_audio_get_capabilities` is the stable preflight for playback availability. It validates an
 active game and probes CNA's real process-wide native mixer rather than guessing from a renderer,
@@ -52,13 +61,6 @@ real availability probing, mixer creation and track transitions without requirin
 separate regression process forces a nonexistent SDL audio driver and proves repeatable successful
 unavailable snapshots followed by `NOT_SUPPORTED` creation, invalid output handles, structured
 diagnostics and clean game shutdown after failed mixer initialization.
-
-## Current boundary
-
-The initial slice does not yet expose file/content sound loading, fire-and-forget overloads, master
-or 3D properties, listeners/emitters, dynamic streaming, microphones, XACT engines/banks/cues, or
-audio events. They remain planned for the complete public CNA inventory and are not implied by the
-presence of this minimal PCM/instance route.
 
 ## The complete sound-effect surface
 

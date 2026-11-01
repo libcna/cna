@@ -35,6 +35,20 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API callback, threading and shutdown reconciliation (2026-11-01):
+  `docs/c-api/CALLBACKS_AND_THREADING.md` is now a current cross-cutting contract rather than an
+  initial-ABI snapshot. It distinguishes lifecycle failure callbacks from observing event handlers
+  and synchronous contexts from retained registrations; records the owner-thread default, the two
+  any-thread SoundEffect play routes and the opt-in blocking foreign-thread service queue; names the
+  game-driving and dispatch routes that are never queued; and documents explicit pumping, error
+  transfer and shutdown cancellation. The callback-scope section now includes frame hooks,
+  components and activated/deactivated handlers, both graphics-device loan windows and the complete
+  non-reentrant driving set. Shutdown now separates blocking owned children from game/window event
+  registrations that deliberately survive disposal. The directly contradictory thread paragraph
+  and obsolete initial-slice boundary were removed from `docs/c-api/AUDIO.md`, which remains queued
+  for its own full audit. Seven focused SDLGPU C API regressions pass through the private runner:
+  lifecycle, host-driven run, component device borrow, foreign-thread calls, owner-thread refusal,
+  any-thread SoundEffect play and stress/registration teardown.
 - C API landing-page reconciliation (2026-11-01):
   `docs/c-api/README.md` is now a current entry point rather than a hand-maintained inventory of
   the initial ABI 0.1.0 slice. It records ABI 0.52.0, 3,213 exports, 60 C99/C++11-compatible public
