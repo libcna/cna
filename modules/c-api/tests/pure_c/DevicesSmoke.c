@@ -352,8 +352,9 @@ static int validate_file_dialog(const CNA_Handle game)
         CNA_RESULT_SUCCESS;
 }
 
-/* The tray takes its backend as a constructor argument, so the test tray is a second creation route
-   rather than a switch, and nothing reaches the host's own tray. */
+/* The tray takes its backend as a constructor argument, so deterministic behavior uses a second
+   creation route rather than a switch. The constructor-boundary probe below may reach the host's
+   tray, but destroys a successful handle immediately; every menu assertion uses the test backend. */
 static int validate_system_tray(const CNA_Handle game)
 {
     CNA_SystemTrayHandle tray = CNA_INVALID_HANDLE;
@@ -363,10 +364,11 @@ static int validate_system_tray(const CNA_Handle game)
     uint64_t second = UINT64_C(99);
 
     memset(&clicks, 0, sizeof(clicks));
-    /* CBIND-065: the real-backend constructors. Neither can be relied on to succeed -- no
-       verification machine has a camera, and a tray needs a desktop environment that publishes
+    /* CBIND-065: the real-backend constructors. Neither can be relied on to succeed -- a camera
+       may be absent or permission-gated, and a tray needs a desktop environment that publishes
        one -- so what is asserted is that each gives a *documented* answer rather than an
-       undefined one. The test backends below are what then drive the behaviour. */
+       undefined one. A successful handle is destroyed immediately. The test backends below are
+       what drive deterministic behavior. */
     {
         CNA_CameraHandle real_camera = UINT64_C(9);
         CNA_SystemTrayHandle real_tray = UINT64_C(9);
@@ -465,9 +467,9 @@ static int validate_system_tray(const CNA_Handle game)
         cna_system_tray_set_tooltip(tray, view("gone")) == CNA_RESULT_INVALID_HANDLE;
 }
 
-/* The real camera is deliberately never opened by this suite: on a machine that has one, creating it
-   switches on the user's webcam, which is not something a test may do. Everything below either only
-   enumerates or runs on this ABI's own backend. */
+/* The real constructor boundary is probed once in validate_system_tray and may open hardware on a
+   machine that has it. This function does not repeat that probe: it only enumerates and then runs
+   deterministic state and frame behavior on this ABI's own backend. */
 static int validate_camera(const CNA_Handle game, const CNA_Handle graphics_device)
 {
     CNA_CameraHandle camera = CNA_INVALID_HANDLE;

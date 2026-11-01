@@ -1714,6 +1714,9 @@ CNA_C_API CNA_Result cna_compass_stop(CNA_CompassHandle sensor);
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_STATE` when the sensor was already disposed.
  *
  * As with every sensor in this ABI, a second disposal is refused rather than ignored.
+ * Unlike the accelerometer and gyroscope routes, the compass routes do not add a blanket C-layer
+ * guard to every getter after disposal. Release the retained handle with `cna_compass_destroy`
+ * instead of relying on further queries to diagnose the disposed state.
  */
 CNA_C_API CNA_Result cna_compass_dispose(CNA_CompassHandle sensor);
 
@@ -1722,8 +1725,8 @@ CNA_C_API CNA_Result cna_compass_dispose(CNA_CompassHandle sensor);
  *
  * @param sensor Owned sensor handle.
  * @param out_reading Receives the reading.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the sensor is unsupported or
- *         disposed, or a documented argument/handle/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the sensor is unsupported, or a
+ *         documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_compass_get_current_value(
     CNA_CompassHandle sensor,
@@ -1952,6 +1955,10 @@ CNA_C_API CNA_Result cna_motion_stop(CNA_MotionHandle sensor);
  *
  * @param sensor Owned sensor handle.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_STATE` when the sensor was already disposed.
+ *
+ * Unlike the accelerometer and gyroscope routes, the motion routes do not add a blanket C-layer
+ * guard to every getter after disposal. Release the retained handle with `cna_motion_destroy`
+ * instead of relying on further queries to diagnose the disposed state.
  */
 CNA_C_API CNA_Result cna_motion_dispose(CNA_MotionHandle sensor);
 
@@ -1960,8 +1967,8 @@ CNA_C_API CNA_Result cna_motion_dispose(CNA_MotionHandle sensor);
  *
  * @param sensor Owned sensor handle.
  * @param out_reading Receives the reading.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the sensor is unsupported or
- *         disposed, or a documented argument/handle/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the sensor is unsupported, or a
+ *         documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_motion_get_current_value(
     CNA_MotionHandle sensor,

@@ -1,23 +1,27 @@
 # CNA C API — devices and sensors
 
-`sensors.h` and its siblings map the `Microsoft::Devices` and `CNA::Devices` modules: the device's
-own motion sensors and their readings, vibration, and the CNA system-service extensions. This page
-records only what a consumer cannot read off the headers; the general contracts live in
+Two public headers own this family. `sensors.h` maps the `Microsoft::Devices::Sensors` readings,
+sensor objects and events. `devices.h` maps `Microsoft::Devices::Environment`, vibration and the
+optional `CNA::Devices` host-service layer. Both are included by `cna.h`; the sensor and vibration
+routes are not controlled by the optional host-service switch. This page records only what a
+consumer cannot read off the headers; the general contracts live in
 [`HANDLES.md`](HANDLES.md), [`OWNERSHIP.md`](OWNERSHIP.md),
 [`STRINGS_AND_BUFFERS.md`](STRINGS_AND_BUFFERS.md), [`ERRORS.md`](ERRORS.md) and
 [`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md).
 
-The family is being mapped in slices; [`COVERAGE.md`](COVERAGE.md) reports the current counts and
-explains how to generate the authoritative per-symbol matrix.
+This page is not an export inventory. [`COVERAGE.md`](COVERAGE.md) reports the current counts and
+explains how to generate the authoritative per-symbol matrix. At this audit the only planned
+`Microsoft::Devices` declarations are the accelerometer keyboard-emulation getter and setter; their
+absence is not a reason to infer that another unlisted route is missing.
 
 ## Host identity
 
 `cna_environment_get_device_type` preserves the Windows Phone distinction used by samples to
-select physical sensor input or the emulator's keyboard controls. CNA's Android, iOS and desktop
-targets are physical hosts and report `CNA_DEVICE_TYPE_DEVICE`; the browser target reports
-`CNA_DEVICE_TYPE_EMULATOR`, because CNA deliberately exposes no physical browser sensor backend.
-The query is canonical and remains available when the optional CNA device-extension layer is
-compiled out.
+select physical sensor input or the emulator's keyboard controls. Android and iOS report
+`CNA_DEVICE_TYPE_DEVICE`; **every desktop and browser target reports
+`CNA_DEVICE_TYPE_EMULATOR`**, because those targets emulate the Windows Phone input environment.
+This is an API compatibility identity, not a claim that the computer itself is virtual. The query
+is canonical and remains available when the optional CNA device-extension layer is compiled out.
 
 ## Timestamps
 
@@ -59,23 +63,27 @@ does not model it as a type: its contract — current value, data validity, upda
 stop, dispose and the reading-changed event — appears once per concrete sensor, and the event
 delivers the **reading itself** rather than the event-argument wrapper, which holds nothing else.
 
-Three canonical behaviors are reported rather than smoothed over:
+The common surface has three important lifecycle behaviors:
 
 - **Reading the current value of an unsupported sensor fails** with `CNA_RESULT_INVALID_STATE`; the
   canonical property throws there rather than answering a default. Check the support probe first.
 - **Disposing twice is refused**, unlike most disposables in this ABI: the canonical sensor treats a
-  second disposal as use-after-disposal. Every other route reports the same failure afterwards,
-  which is how a caller observes the disposed state — the canonical flag is protected, so there is
-  no query route for it, and none was invented.
+  second disposal as use-after-disposal. For the accelerometer and gyroscope the C layer also makes
+  every ordinary route fail after disposal; only destroy and the explicit `*_for_tests_ext` hooks
+  may still use the retained handle. Compass and motion delegate their post-disposal behavior to the
+  canonical objects instead and do not impose that blanket C-layer guard, so after explicitly
+  disposing either one, destroy its handle rather than probing its remaining getters.
 - The canonical **protected** members — the interval-changed event, the disposal flag, the
   value-publishing setters and the throttle — exist for derived classes. C cannot derive, so they
   have no routes at all.
 
 **The test-support surface is mapped, deliberately.** No machine this ABI is verified on has motion
-sensors, so `cna_<sensor>_set_supported_for_tests_ext` and `cna_<sensor>_inject_synthetic_update_ext`
-are what let a C consumer — and this suite — drive the supported path and the real dispatch chain
-instead of only ever seeing "not supported". The injector takes **platform units** and the reading
-comes back in the canonical unit: inject 9.80665 m/s² into an accelerometer and read 1 g.
+sensors. For the accelerometer and gyroscope,
+`cna_<sensor>_set_supported_for_tests_ext` and `cna_<sensor>_inject_synthetic_update_ext` let a C
+consumer — and this suite — drive the supported path and the real dispatch chain instead of only
+ever seeing "not supported". The injector takes **platform units** and the reading comes back in the
+canonical unit: inject 9.80665 m/s² into an accelerometer and read 1 g. Compass and fused motion use
+the backend switches described below instead of a forced support flag.
 
 A sensor failure carries an **error identifier** the message does not spell out. The exception
 firewall records it per thread, readable with `cna_sensors_get_last_error_id_ext` — the same
@@ -187,7 +195,29 @@ creation route, exactly as the system tray's is:
 `cna_camera_set_test_state_ext`. That is the only way to reach a frame, or the refused and lost
 states, on a machine with no camera.
 
-**`cna_camera_create` is never called by this ABI's own test suite.** On a machine that has a camera,
-opening it switches on the user's webcam and may prompt for permission — the same reason
-`cna_url_launcher_open_ext` is only ever exercised through its refusals. Both gaps are recorded here
-rather than papered over with a test that would misbehave on a developer's laptop.
+`DevicesSmoke.c` does call `cna_camera_create` once as a real-backend constructor boundary probe. It
+accepts only the documented success, not-supported or platform-failure outcomes, clears the output
+on failure and immediately destroys a successfully created handle. That proves the route's boundary,
+not real-camera behavior: enumeration, permission handling and frame delivery are not qualified on
+physical hardware, and opening may still activate a webcam or prompt for permission on a machine
+that has one. The deterministic state and frame assertions therefore use
+`cna_camera_create_with_test_backend_ext`. `cna_url_launcher_open_ext` remains different: the suite
+never gives it a real URL, because doing so would launch another application.
+
+## Verification
+
+The strict-C evidence is split by responsibility:
+
+- `SensorValuesSmoke.c` covers all five reading values, equality, hashing, text and type names.
+- `SensorDeviceSmoke.c` covers accelerometer and gyroscope ownership, dispatch, error identifiers,
+  unit conversion, subscriptions, thread affinity and disposal.
+- `SensorEventsSmoke.c` covers the legacy accelerometer event plus compass and fused-motion backends,
+  readings, calibration events, instance limits and lifecycle.
+- `DevicesSmoke.c` covers host identity and vibration in every build. With `CNA_DEVICES=OFF` it
+  verifies the stable exported routes uniformly report `CNA_RESULT_NOT_SUPPORTED`; with the option
+  enabled it covers host services through deterministic test backends and the camera/tray constructor
+  boundaries described above.
+
+`generate_coverage_inventory.py --check` remains the authority that every public C++ declaration has
+an implemented, planned or reviewed-not-applicable disposition; the generated-route and ABI-header
+tests separately pin the exported C signatures and fixed-width identities.

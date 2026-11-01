@@ -35,6 +35,18 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API devices and sensors contract reconciliation (2026-11-01):
+  `docs/c-api/DEVICES.md` now separates the always-built sensor/vibration surface from the optional
+  `CNA_DEVICES` host services, names the two still-planned accelerometer keyboard-emulation members
+  and records the correct host identity: Android/iOS are `DEVICE`, while every desktop and browser
+  target is `EMULATOR`. Sensor disposal is no longer overgeneralized: accelerometer/gyroscope have
+  the C layer's blanket post-disposal guard, while compass/motion retain their canonical per-route
+  behavior. The page, public sensor Doxygen, strict-C test comments and generated coverage evidence
+  now agree that `DevicesSmoke.c` invokes the real camera/tray constructors only as boundary probes;
+  deterministic behavior remains on test backends, and physical camera behavior is not qualified.
+  All six focused SDLGPU C API tests pass through the private runner with the current
+  `CNA_DEVICES=OFF` tree; route generation, route-test coverage, limitations and the full coverage
+  inventory are current.
 - C API core contract reconciliation (2026-11-01):
   `docs/c-api/CORE.md` now covers the current three-layer foundation (`abi.h`, `core.h` and
   `core_ext.h`) instead of stopping at the original logger/platform/renderer-classification slice.
