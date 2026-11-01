@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- XNB runtime-loader guide reconciliation (2026-11-01, XNB-42/42A/45/46): the page now
+  describes typed/lazy built-in registration, current CNB/CNJ resolution, generic families and
+  VideoReader. It distinguishes ReflectiveReader generic names and binary writer order from XML,
+  documents serialized reference traits beyond shared_ptr, manifest CNB reporting and four 1500-
+  mutation cases, and qualifies format/platform/fixture and sanitizer evidence. Existing
+  CnaContentTests builds; 456 selected runtime reader/graph/manifest/ownership cases and eight
+  LZX decoder/differential/fuzz cases pass privately. Custom-reader syntax, all 16 FNA platform
+  bytes and 14 fixture manifests are checked. No runtime/wire change, fresh Mono/Microsoft,
+  Xbox/Phone, sanitizer or cross-renderer campaign.
 - SDLGPU renderer-guide reconciliation (2026-11-01, SDLGPU-39/58/92/115, GFX-165): the page
   distinguishes finite historical parity, SDL driver selection and current capability reporting;
   specifies partial active-sample-mask refusal and corrects proxy activation for pre-Present

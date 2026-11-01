@@ -1,42 +1,44 @@
 # `.xnb` binary content pipeline: support and limitations
 
-Covers CNA's real, binary-`.xnb`-compatible content loader (`Microsoft::Xna::Framework::Content::
-ContentManager`/`ContentReader`/`ContentTypeReaderManager`, plus the individual readers under
-`CNA::Internal::Xnb`) — the closing documentation task of the XNB reader work's Phase G (XNB-45),
-written once Phase A through Phase G's other tasks (XNB-42/42A/43/44/46) had landed. The numbered
-task history (`XNB-*`) is in Git history.
+Covers CNA's binary XNB runtime loader: `Microsoft::Xna::Framework::Content::ContentManager`,
+`ContentReader`, `ContentTypeReaderManager` and the individual readers under `CNA::Internal::Xnb`.
+Reader implementation does not establish support for every payload on every renderer/platform.
+The numbered task history (`XNB-*`) is in Git history.
 
 A `.xnb` file is not a source asset in a wrapper. It is the XNA Content Pipeline's serialized object
 graph: a table of type readers, then a root object, then shared resources that earlier nodes refer
 back to. .NET finds each reader by resolving its type name through reflection, which C++ does not
-have, so CNA keeps a registry of readers, each registered by hand under its normalized .NET type
+have, so CNA keeps a registry of readers, each registered in code under its normalized .NET type
 name; a game registers its own readers the same way (see "Custom readers" below).
 
-This is **CNA's second, independent content format** alongside `.cnj` (see [`cnj-format.md`](cnj-format.md)) and the older,
-CNA-original `.model.json` loose-file format (see `docs/model-content-pipeline-support.md`, which
-predates this document and does not cover the real binary `Model` reader described below —
-`ModelTypeReader`'s `.model.json` path and `ModelReader`'s real `.xnb` binary path are two
-genuinely separate systems that happen to both produce a `Model`). Per `cnj-format.md`'s resolution order,
-`ContentManager::Load<T>()` always tries a `.xnb` file first, ahead of a literal caller-given path
-or a `.cnj` sidecar/file.
+XNB is separate from CNA's [CNB container](cnb-format.md), [CNJ JSON assets](cnj-format.md) and
+loose-source routes. The `.model.json` path and real binary ModelReader are distinct loaders that
+can produce a Model; see [model content](model-content-pipeline-support.md).
+`ContentManager::Load<T>()` resolves `.xnb`, `.cnb`, a literal path, `.cnj`, then native fallbacks,
+subject to the selected type's readers and containment rules. Use separate content roots when
+comparing formats so a higher-priority asset does not hide the one being tested.
 
 ## Scope
 
 **In scope**: loading (deserializing) an already-built, real `.xnb` file at runtime — matching
 FNA's own `ContentManager`/`ContentReader`/`ContentTypeReaderManager` read-side API and protocol.
 
-**Out of scope for this document**: anything that *produces* `.xnb` files. That was once out of
-scope permanently -- this document said so, and said CNA "has no need to generate them itself" --
-and that is **no longer true**. CNA now has a native C++ XNB writer and a content pipeline that
-compiles source assets to `.xnb`: see `docs/xnb-interoperability.md` for what it writes and how
-strongly each type is verified (the task history, `XNAP-*`, is in Git history). This document
-remains about the **read** side only.
+**Out of scope for this page**: producing XNB. CNA's native C++ writer and source pipeline are
+documented in [XNB interoperability](xnb-interoperability.md) and the
+[native pipeline guide](content-pipeline.md). Writer/container agreement is separate from read-side
+and genuine-runtime qualification.
 
-## Getting started: registering the built-in readers
+## Built-in reader registration
 
-`ContentTypeReaderManager`'s registry (the process-wide `AddTypeCreator`/`CreateReader` table) is
-empty by default — CNA has no reflection to fall back on, unlike FNA, so every reader must be
-registered explicitly before the first `.xnb` load. Call this once at game startup:
+Normal typed `ContentManager::Load<T>()` registers the built-in family needed by T; plain values
+use the primitive/math family, and an unknown game-defined graph can require all built-ins.
+Game declares built-ins for lazy installation, and registry queries install declared readers.
+An application does not have to call the all-family registration function before ordinary loads.
+These boundaries keep a texture-only consumer from linking unrelated model importers/codecs;
+see [link-size architecture](link-size-architecture.md).
+
+The process-wide reader table still has no general CLR reflection fallback. Explicitly registering
+all built-ins remains available for hosts that want that complete link/registration boundary:
 
 ```cpp
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
@@ -44,12 +46,16 @@ registered explicitly before the first `.xnb` load. Call this once at game start
 CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders();
 ```
 
-This registers every reader in the "Supported readers" table below in one call (idempotent — safe
-to call more than once). It does **not** register generic collection readers for arbitrary element
+This installs the built-in reader set (idempotent when called repeatedly). It does **not** register
+generic collection readers for arbitrary element
 types (see "Generic collections" below) or any custom, game-specific reader (see "Custom readers"
 below) — both need their own explicit registration.
 
 ## Supported readers
+
+The entries below describe available decoding paths. Graphics readers still need a suitable
+GraphicsDevice/format capability; compiled effects and media playback have additional build/runtime
+requirements. "Full" is not a guarantee for every possible XNB object graph or platform.
 
 | FNA reader | CNA support | Notes |
 |---|---|---|
@@ -57,12 +63,13 @@ below) — both need their own explicit registration.
 | Math (`Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `Plane`, `Point`, `Rectangle`, `BoundingBox`, `BoundingSphere`, `BoundingFrustum`, `Ray`) | ✅ Full | |
 | `Decimal`/`DateTime`/`TimeSpan` | ✅ Full | Faithful field-for-field decoding, not a lossy `double` shortcut |
 | `Curve` | ✅ Full | |
-| `Texture2DReader` | ✅ all 20 classic XNA formats | All 17 uncompressed formats preserve the serialized format and exact mip bytes. DXT1/3/5 blocks stay compressed when the active renderer supports exact compressed transfer; other renderers losslessly software-decompress them to `Color`, matching FNA's backend-capability fallback. A non-power-of-two DXT texture under Reach takes the same `Color` path: the genuine Platformer `Fonts/Hud.xnb` is a 128×132 Dxt3 atlas that XNA loads under Reach, while the public `Texture2D` constructor still refuses Reach NPOT DXT (`SAMPLE-013`) |
-| `Texture3DReader` | ✅ all 15 legal XNA HiDef volume formats | Preserves the serialized uncompressed format and each mip's exact bytes; DXT1/3/5 are correctly refused because XNA excludes compressed volume textures. No real fixture exists anywhere in the available test-asset library (volume textures are rare in real XNA content), so all formats and a depth-dominant chain are verified through hand-constructed streams matching FNA's exact field order |
+| `Texture2DReader` | ✅ all 20 classic XNA formats | All 17 uncompressed formats preserve the serialized format and exact mip bytes. DXT1/3/5 blocks stay compressed when the active renderer supports exact compressed transfer; other renderers software-decode them to `Color`, matching FNA's backend-capability fallback. A non-power-of-two DXT texture under Reach takes the same `Color` path: the genuine Platformer `Fonts/Hud.xnb` is a 128×132 Dxt3 atlas that XNA loads under Reach, while the public `Texture2D` constructor still refuses Reach NPOT DXT (`SAMPLE-013`) |
+| `Texture3DReader` | ✅ all 15 legal XNA HiDef volume formats | Preserves the serialized uncompressed format and each mip's exact bytes; DXT1/3/5 are correctly refused because XNA excludes compressed volume textures. Reader tests cover synthetic streams, format bytes and a depth-dominant mip chain; CNA also writes volume fixtures. Distinguish these self-authored witnesses from an independently produced Microsoft volume asset |
 | `TextureCubeReader` | ✅ all 18 XNA-permitted cube formats | Preserves the 15 legal uncompressed formats and exact face/mip bytes; `NormalizedByte2/4` are rejected because XNA excludes them from ordinary cubes. DXT1/3/5 use the same exact-transfer-or-Color-fallback policy as 2D. A real MonoGame fixture covers all 6 faces and a full DXT1 mip chain, including sub-4×4 block rounding |
 | `SpriteFontReader` | ✅ Full | Depends on `Texture2DReader` and 3 closed generic-collection readers (see below) |
-| `SoundEffectReader` | ✅ PCM8/16, IEEE float, MS-ADPCM, IMA-ADPCM | Non-PCM formats are decoded through the shared WAV-import path into the PCM16 representation CNA's runtime owns. XMA2 is recognized but explicitly rejected because no decoder exists. See the support matrix below |
-| `SongReader` | ✅ Full | `Song` is always an external audio file reference (`.ogg`/etc, matching FNA), never embedded PCM |
+| `SoundEffectReader` | ✅ PCM8/16, IEEE float, MS-ADPCM, IMA-ADPCM | Decoding/conversion uses the shared audio-import path and supplies the runtime's PCM16 samples. XMA2 is recognized but rejected because CNA has no runtime XMA2 decoding route. See the support matrix below. |
+| `SongReader` | ✅ external media reference | Song data names a separate media file; playback/codec availability is a runtime requirement, not embedded PCM in XNB. |
+| `VideoReader` | ✅ external reference and serialized metadata | Registered independently of runtime video decoding. A no-video build can load metadata; playback reports its unsupported capability separately. |
 | `AlphaTestEffectReader`, `BasicEffectReader`, `DualTextureEffectReader`, `EnvironmentMapEffectReader`, `SkinnedEffectReader` (the 5 stock effects) | ✅ Full | Each targets the common `shared_ptr<Effect>` base so `ModelReader`'s polymorphic `Effect` slot dispatches correctly regardless of which concrete stock effect a model references |
 | `EffectMaterialReader`, `ExternalReferenceReader`, `DictionaryReader<String,Object>` | ✅ Full | A parameter dictionary's type-erased external reference is loaded according to the referenced XNB's concrete root reader, so `Texture2D`, `Texture3D`, and `TextureCube` parameters retain their real type and lifetime |
 | `VertexDeclarationReader`, `VertexBufferReader`, `IndexBufferReader` | ✅ Full | |
@@ -80,10 +87,11 @@ closed combinations exist (e.g. `SpriteFontReader` registers exactly the 3 combi
 collection-of-`T` combination nothing has registered fails with a clear "unregistered reader"
 `ContentLoadException`, the same as any other unsupported reader name.
 
-Registered so far, over and above `SpriteFont`'s three: `ArrayReader<Vector3>` (SAMPLE-048, a
-processor tagging a model with its world-space triangle vertices), and `ListReader<Matrix>` plus
-`ListReader<int>` (SAMPLE-051, a skinned model's bind pose, inverse bind pose and skeleton
-hierarchy). A combination over a **game's own** type -- `List<MyKeyframe>`, say -- is the game's to
+Other registered combinations include `ArrayReader<Vector3>`, `ListReader<Matrix>`,
+`ListReader<int>`, `ListReader<string>`, primitive string-key dictionaries and model/material
+dictionary shapes. Their registration lives in the primitive, math, font and model reader families;
+the three font combinations are not the entire generic inventory.
+A combination over a **game's own** type -- `List<MyKeyframe>`, say -- is the game's to
 register, because only the game has the C++ type; see the `RegisterShared()` note below for the
 shape such an element reader has to have.
 
@@ -93,6 +101,12 @@ A CNA game can register its own custom, non-built-in `.xnb` reader — no CNA-si
 special-casing needed. `ContentTypeReaderManager::AddTypeCreator()` (already public/`CNAEXT`) is the
 extension point, matching FNA's own real internal method of the same name/shape and playing the
 same role `.cnj`'s `RegisterCnjLoader<T>()` plays for CNA's JSON-based format:
+
+The following is a value-shaped root example. Include the ContentReader, ContentTypeReader and
+ContentTypeReaderManager headers under `Microsoft/Xna/Framework/Content/`; define MyLevelData
+with an integer `roomCount`, and introduce aliases for ContentReader/ContentTypeReaderManager.
+Registration runs in application code before loading the asset. Reference-shaped graphs need the
+matching shared-pointer carrier rather than assuming a copied value preserves object identity.
 
 ```cpp
 class MyLevelDataReader : public Microsoft::Xna::Framework::Content::ContentTypeReader<MyLevelData>
@@ -114,7 +128,7 @@ ContentTypeReaderManager::AddTypeCreator(
 
 Then `content.Load<MyLevelData>("level1")` works exactly like any built-in type, going through the
 same `.xnb` → `.cnb` → literal path → `.cnj` → native resolution order. See
-`tests/Microsoft/Xna/Framework/Content/CustomContentTypeReaderTests.cpp` for a complete, runnable
+[`CustomContentTypeReaderTests.cpp`](../modules/content/tests/Microsoft/Xna/Framework/Content/CustomContentTypeReaderTests.cpp) for a complete, runnable
 example (including the correct canonical-name string a real `.xnb` file compiled against your
 custom `ContentTypeWriter` would reference).
 
@@ -131,18 +145,22 @@ Real XNA/MonoGame content pipelines can compile a custom type's `.xnb` reader tw
 hand-written `ContentTypeReader<T>` subclass (a real, named class with a real assembly-qualified
 name in the file's type-reader table), or an implicit, compiler-generated `ReflectiveReader<T>`
 that uses .NET reflection at load time to walk the target type's fields automatically, with no
-separate reader class or name of its own ever appearing in the file's type-reader table under a
-game-specific name at all — instead the file just names the target type directly, letting FNA's
-`ReflectiveReader<T>` machinery introspect it.
+separate game-specific reader class. The table names the framework's `ReflectiveReader<T>` with
+the game's target type as its generic argument; FNA then reflects over that target's members.
 
 **CNA decision**: CNA does not attempt automatic runtime reflection. A game explicitly declares
 the serialized member list because C++ cannot discover arbitrary fields by name and type at run
-time. CNA can then read the original implicit-`ReflectiveReader<T>` payload directly; rebuilding
-the content with a new writer is not required.
+time. A correctly described, supported payload can then be read without rebuilding the content.
+This is not automatic support for arbitrary reflection attributes, member kinds or graphs.
 
 **What a game author does instead** (updated 2026-08-27, SAMPLE-044): declare the type's fields
 once and let CNA build the reader. `ReflectiveTypeReaderBuilder<T>` is the middle ground between
 "no reflection" and "rebuild your content":
+
+Include `Microsoft/Xna/Framework/Content/ReflectiveTypeReader.hpp` and introduce the builder's
+namespace alias. These fragments assume the game-defined types/members already exist; the
+complete cases are in
+[`ReflectiveTypeReaderTests.cpp`](../modules/content/tests/Microsoft/Xna/Framework/Content/ReflectiveTypeReaderTests.cpp).
 
 ```cpp
 ReflectiveTypeReaderBuilder<ParticleSystemSettings>("ParticlesSettings.ParticleSystemSettings")
@@ -171,10 +189,11 @@ ReflectiveTypeReaderBuilder<ModelData>("CustomModelAnimation.ModelData")
 
 The two are not interchangeable. XNA writes a reference type with its own 1-based type-reader
 index in front, and `ListReader<T>`, `DictionaryReader<TKey, TValue>` and `ModelReader::ReadTag`
-all decide between the inline and the dispatched form by whether `T` is `shared_ptr`-shaped --
-so the value-shaped reader reads the payload one index short and desynchronises everything after
-it. The registry key is the same either way: the `.xnb` names the serialized type, not the C++
-representation.
+use serialized reference/value traits. Those traits recognize shared/pointer-shaped custom
+objects and known built-in reference types such as strings, collections and by-value asset wrappers.
+A custom identity-bearing class registered as a plain value can therefore read a nested payload
+one index short. The reader key describes the serialized .NET type, not its C++ carrier; choose
+the correct carrier before registering the graph.
 
 A field marked `[ContentSerializer(SharedResource = true)]` uses the shared-resource table rather
 than the ordinary object-dispatch form. Declare it with `SharedResourceField()` and register the
@@ -194,12 +213,14 @@ The assignment runs only after the root object and every shared resource have be
 XNA's two-pass fixup order. Calling value-shaped `Register()` after declaring a shared-resource
 field is rejected because its temporary target could not safely outlive the root read.
 
-The list must be in the type's **declaration order**, because that is the order
-`IntermediateSerializer` wrote the fields in. Each member is dispatched by its C++ type:
+The list must match the **binary writer's serialized member order**, including any base-type and
+property layout. XNB's ReflectiveWriter contract is separate from IntermediateSerializer's XML
+format; a field-only example's declaration order must not be generalized to every reflected class.
+Each member is dispatched by its C++ type:
 arithmetic types and the XNA math structs are read inline as XNA writes a value type, and anything
 else goes through `ContentReader::ReadObject`, which consumes the reference type's own reader
 index first. `Register()` derives the canonical reader name — the assembly qualifiers are stripped,
-so a game never has to reproduce that string — and registers an `EnumReader` for every
+so the builder supplies that reader key — and registers an `EnumReader` for every
 `EnumField`, because **an `.xnb`'s type-reader table must resolve in full before any object is
 read**, including readers the reflective payload never dispatches to.
 
@@ -226,8 +247,9 @@ remains available and is still the right answer when you control the pipeline.
 three: Windows (`w`), Windows Phone 7 (`m`) and Xbox 360 (`x`). Every other identifier in the list
 below was introduced by a later, non-Microsoft implementation of the format; a file carrying one is
 part of the extended XNB ecosystem and was never produced or consumed by a Microsoft XNA 4.0
-runtime. CNA reads all of them, and `docs/xnb-interoperability.md` keeps the two categories apart
-on the write side as well.
+runtime. CNA accepts those header bytes subject to its whitelist; payload/reader support and
+execution on that platform are separate questions. [XNB interoperability](xnb-interoperability.md)
+keeps these categories apart on the write side as well.
 
 CNA's accepted platform-identifier list (`CNA::Internal::Xnb::XnbAcceptedPlatforms()`) matches
 FNA's own `ContentManager.targetPlatformIdentifiers` **exactly** (16 identifiers: Windows, Xbox360,
@@ -244,7 +266,8 @@ platform handling isn't Windows-only in practice, not just in the acceptance lis
 independent WebAssembly-platform (`'b'`) `.xnb` file (from a real game project) is correctly,
 cleanly rejected with `'...' has an unrecognized XNB platform identifier 'b'.` — confirming CNA's
 FNA-faithful (not MonoGame-faithful) platform policy against real content, not just a synthetic
-header. See `tests/CNA/Internal/Xnb/XnbHeaderTests.cpp`'s
+header. These retained fixture results do not qualify Mac or WebAssembly execution. See
+[`XnbHeaderTests.cpp`](../modules/content/tests/CNA/Internal/Xnb/XnbHeaderTests.cpp)'s
 `MonoGameWebAssemblyPlatformIsNotAcceptedMatchingFnaExactly`.
 
 ## Audio (`SoundEffectReader`) support matrix
@@ -256,17 +279,18 @@ header. See `tests/CNA/Internal/Xnb/XnbHeaderTests.cpp`'s
 | IEEE float | ✅ Converted to PCM16 through SDL3's WAV decoder |
 | MS-ADPCM | ✅ Converted to PCM16 through SDL3's WAV decoder; the standard coefficient table is supplied when an XNB omits it |
 | IMA-ADPCM | ✅ Converted to PCM16 through SDL3's WAV decoder; loop points are translated from compressed bytes to decoded frames |
-| XMA2 | ❌ Explicitly rejected (format-extension fields are still parsed for stream-position correctness, since CNA has no XMA2 decoder) |
+| XMA2 | ❌ Explicitly rejected; format-extension fields are parsed for stream-position correctness, but no runtime XMA2 decoding route is wired here. |
 
 `Song` is always treated as an external audio file reference (matching FNA — XNA/MonoGame never
 embed `Song` PCM data directly in a `.xnb`), so this matrix does not apply to it.
 
 ## Malformed/adversarial-file hardening
 
-A whole-container deterministic fuzz test (`XnbContainerFuzzTests.cpp`) mutates a real fixture's
+A whole-container deterministic fuzz suite (`XnbContainerFuzzTests.cpp`) mutates real fixtures'
 entire byte stream (header, type-reader table, shared-resource region, root object body) and loads
-it through the exact `ContentManager::Load<T>()` path a real game uses, 1500 iterations per run,
-also exercised under `-DCNA_SANITIZE=address,undefined`. This found and fixed a real
+them through the `ContentManager::Load<T>()` path, with four typed cases of 1500 mutations each.
+The recorded hardening work also used `-DCNA_SANITIZE=address,undefined`; a normal run is not a
+fresh sanitizer qualification. That work found and fixed a
 heap-buffer-overflow: `VertexBufferReader`/`IndexBufferReader` (and, by the same pattern,
 `Texture2D`/`Texture3D`/`TextureCube`/`SoundEffect`'s raw-byte-blob reads) read a declared byte
 count via `ReadBytes()`, which — matching real .NET's own non-throwing contract — silently trims
@@ -305,6 +329,7 @@ editor's content view. None of this is XNA API.
 * `GetContentManifest()` returns one `ContentManifestEntry` per logical asset name (the relative
   path without its extension): whether a `.xnb` and a `.cnj` exist, every other extension found,
   and `xnbReaderNames`, the type-reader names the `.xnb`'s reader table lists.
+  CNB is currently reported among `nativeExtensions`; there is no separate `hasCnb` field.
 * `GetXnbReaderUsageSummary()` aggregates those names into one `ContentManifestReaderUsage` row each:
   how many files use the reader, and whether `ContentTypeReaderManager` has it registered -- the
   quick answer to "which readers would this content need that the game has not registered".
@@ -313,6 +338,9 @@ A malformed `.xnb` is not a scan failure; its entry just has no reader names. LZ
 LZ4-compressed files are decompressed and inspected through the same bounded container decoder as
 runtime loading. The first manifest scan therefore pays the full decompression cost for each
 compressed `.xnb`; there is no partial-frame shortcut.
+
+This inventory is not a full asset validator: reader-table registration says nothing about a
+payload's semantic validity, external dependencies or the active renderer's capabilities.
 
 ## Known gaps / limitations
 
@@ -323,7 +351,7 @@ compressed `.xnb`; there is no partial-frame shortcut.
 | LZ4 compression | ✅ MonoGame's raw-block XNB representation is supported; generic LZ4 frames are intentionally not an XNB format |
 | Generic collection readers for an unregistered `T` combination | ❌ Not supported — each closed combination needs its own explicit registration |
 | `SoundEffect` XMA2 and unknown codecs | ❌ Not supported — see the audio support matrix above |
-| Platform identifiers MonoGame added after FNA's fork point (`'b'`/`'5'`/`'O'`/`'S'`/`'V'`) | ❌ Not accepted, matching FNA exactly (deliberate, not an oversight) |
+| Ecosystem identifiers outside the accepted whitelist, including `'b'`/`'5'`/`'O'`/`'S'`/`'V'` | ❌ Rejected by the current CNA/FNA-compatible header policy; header acceptance alone would not establish payload or platform support. |
 
 ## Test fixture corpus
 
@@ -336,3 +364,15 @@ was chosen. Broader real-world
 compatibility was additionally verified against two independent third-party sources
 (`prime31/Nez`, `openeggbert/speedyblupi.com`) without vendoring their larger binaries into this
 repo — see the "Platform support" and "Custom readers" sections above for what was found.
+
+## Current verification
+
+Reconciled on 2026-11-01 against typed/lazy registration, reader/reference dispatch, reflective
+builders, media/manifest routes, container limits and the retained fixture metadata. The existing
+`CnaContentTests` target builds; 456 selected XNB/reader/reflective/manifest/ownership cases plus
+eight LZX decoder/differential/fuzz cases passed privately on OPENGLES3/dummy audio. The LZX
+differential cases compare retained FNA/Mono-produced reference bytes; they do not rerun Mono.
+The custom-reader fragment passes a C++ syntax check with its stated type/header/alias setup.
+All 16 accepted platform bytes match local FNA, and all 14 retained MonoGame Windows fixtures have
+their own manifests. No fresh Microsoft/Xbox/Phone runtime, sanitizer or cross-renderer campaign
+was run; model fuzzing can skip on renderers without a 3D pipeline.
