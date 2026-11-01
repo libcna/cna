@@ -1,63 +1,123 @@
 # C IndexBuffer Contract
 
-## Scope and ownership
+## Creation and ownership
 
-`index_resources.h` maps the complete public `IndexBuffer` and `DynamicIndexBuffer` surface to an
-owned, generation/type/thread-validated `CNA_IndexBufferHandle`. A successful create call produces
-a game child that survives its lifecycle callback but must be destroyed before the game. The
-callback-scoped graphics-device handle is accepted only while that callback is active.
+[`index_resources.h`](../../modules/c-api/include/CNA/C/index_resources.h) exposes static
+`IndexBuffer` and `DynamicIndexBuffer` objects through one owned `CNA_IndexBufferHandle` kind.
+Transfers select `uint16_t` or `uint32_t` elements; this is not a generic blittable-element API.
 
-`CNA_IndexBufferCreateInfo` selects a nonnegative logical capacity, 16- or 32-bit index width,
-`BufferUsage` and static/dynamic kind. The 16-bit static `BufferUsage.None` configuration uses the
-native convenience constructor; every other valid configuration uses the explicit native
-constructor. The versioned info snapshot reports these immutable values, dynamic identity, the
-current false content-loss invariant and renderer presence. The exact native type name uses
-count/copy operations; renderer objects and native pointers never cross the ABI. Generic
-GraphicsResource name, tag, device, disposal and Disposing-event operations accept either buffer
-kind.
+`cna_index_buffer_create` accepts an independently owned graphics device or a currently valid
+borrowed device, including the game's pre-run borrowing window. A game-device buffer survives
+its creation callback and counts as a game child until typed destruction. Standalone-device
+buffers do not count as game children. Destroy buffers before their creating device; see
+[`GRAPHICS_DEVICE.md`](GRAPHICS_DEVICE.md#borrowed-and-caller-owned-lifetimes) and
+[`HANDLES.md`](HANDLES.md).
 
-## Transfers
+The version-one creation descriptor requires a **positive** `index_count`, a valid index width
+and `BufferUsage`, a canonical `dynamic` Boolean and zero reserved bytes. Capacity is fixed for
+the buffer's lifetime. ThirtyTwoBits requires HiDef; Reach rejects it with
+`CNA_RESULT_NOT_SUPPORTED`. Creation also requires the renderer's ThreeD capability and obeys
+native buffer-size limits. Failed creation leaves the output handle invalid. Newly allocated
+indices read as zero when readback is permitted.
 
-`CNA_IndexBufferTransfer` selects the stored 16- or 32-bit representation, a streaming option and a
-window in the caller's typed array. `cna_index_buffer_set_data` copies that source window into
-aligned native scratch storage before dispatching the matching count/window or dynamic overload.
-`cna_index_buffer_get_data` first completes native readback into scratch storage and only then
-copies it into the caller's destination window. Capacity, width, WriteOnly and native failures
-therefore never partially modify caller memory.
+`get_info` reports capacity, width, usage, dynamic identity and renderer presence. Its
+`is_content_lost` field currently has a defect: the C route writes constant false rather than
+reading the dynamic buffer's real flag. This is recorded in [`handoff.md` §5.1](../../handoff.md#51-defects).
+It is not a native content-loss invariant.
 
-For both directions `start_index` addresses the caller array. Upload replaces the native buffer
-from index zero, matching CNA's existing overload behavior. Readback begins at native buffer index
-zero and writes at the caller start index, matching the documented XNA destination-array contract
-without exposing CNA's internal CPU shadow. A zero-element window is a validated no-op and may use
-a null pointer with zero capacity.
+The dedicated type-name count/copy routes deliberately return `CNA_INDEX_BUFFER_TYPE_NAME`
+(`Microsoft.Xna.Framework.Graphics.IndexBuffer`) for **both** kinds. Use the snapshot's `dynamic`
+field to distinguish them. Count/copy uses UTF-8 bytes without a terminator and does not partially
+write an undersized destination. Generic GraphicsResource name, string, tag, device, disposal and
+Disposing-subscription routes accept either kind; their shared rules and the owned-device getter
+defect are documented in [`GRAPHICS_RESOURCES.md`](GRAPHICS_RESOURCES.md).
 
-Static buffers accept only `CNA_SET_DATA_NONE`. Dynamic buffers accept `None`, `Discard` and
-`NoOverwrite` for both index widths. The descriptor width must match the buffer's creation width;
-there is no implicit narrowing or widening.
+## Caller windows and buffer offsets
 
-`cna_index_buffer_set_data_at` is the one route whose offset indexes **the buffer** rather than the
-caller's array -- XNA's `offsetInBytes` overload -- so one slice of a large dynamic index buffer can
-be rewritten per frame while the rest keeps whatever it held. The descriptor's `start_index` still
-indexes the caller's array, as it does everywhere else. Two deviations, both deliberate: it accepts
-no `SetDataOptions` other than `None`, because a windowed upload promises to keep the rest of the
-buffer and `Discard` promises the opposite; and it costs a whole-buffer re-upload, because no
-renderer contract here takes a destination offset. Indices no upload has ever written read as zero.
+`CNA_IndexBufferTransfer.start_index` always selects an element in the caller's array. `capacity`
+and `element_count` are element counts, not byte counts. The descriptor's width must exactly match
+the buffer's creation width; there is no implicit narrowing or widening.
 
-## Events, disposal and evidence
+| Route | Caller window | Native buffer window |
+|---|---|---|
+| `cna_index_buffer_set_data` | Source starts at `start_index` | Destination starts at index zero |
+| `cna_index_buffer_set_data_at` | Source starts at `start_index` | Destination starts at `buffer_offset_in_bytes` |
+| `cna_index_buffer_get_data` | Destination starts at `start_index` | Source starts at index zero |
 
-`cna_index_buffer_subscribe_content_lost` retains a callback/context registration for a dynamic
-buffer. CNA's `IsContentLost` property is currently always false and `ContentLost` is never raised,
-but registration and unregistration lifetime are fully represented. A distinct event handle kind
-prevents confusion with GraphicsResource Disposing registrations, and a registration may be
-released after its buffer is destroyed.
+The C adapter copies uploads through aligned typed scratch storage. Readback reads the native
+CPU shadow into scratch and copies it into the caller's destination only after the native call
+succeeds. It does not fetch current GPU storage. A failed read leaves the destination array
+unchanged, including on width, WriteOnly and range refusals. This array guarantee does not cover
+the separate `out_element_count`: after handle/usability validation it normally receives the
+requested count even on failure, provided the transfer has a valid versioned structure prefix.
+Earlier handle/usability failures leave it unchanged.
 
-Explicit generic disposal keeps the C handle and immutable metadata alive while releasing the
-renderer; later data operations return `CNA_RESULT_INVALID_STATE`. Typed destruction invalidates
-the handle generation and releases the game-child ownership count.
+An out-of-bounds **caller** window returns `CNA_RESULT_BUFFER_TOO_SMALL`; a nonzero capacity with
+a null pointer is invalid. Counts beyond the native Int32 range return `CNA_RESULT_OVERFLOW`.
+`set_data` explicitly rejects a count beyond buffer capacity with `CNA_RESULT_OUT_OF_RANGE`.
+Nonempty `set_data_at` and `get_data` windows beyond native storage currently map the native
+size exception to `CNA_RESULT_INVALID_STATE`. These are distinct checks.
 
-`IndexBufferSmoke.c` is strict C17. Under HEADLESS it covers both index widths, count and caller-window overloads, static/dynamic construction, all three
-streaming options, WriteOnly refusal, metadata/type queries, generic resource state, event
-separation, disposal, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths.
-On a renderer that advertises no 3D capability the same suite verifies atomic
-`CNA_RESULT_NOT_SUPPORTED` creation. C17/C++23 header checks freeze all version-one layouts, and the
-focused successful flow also runs under ASan+UBSan.
+## Upload and readback behavior
+
+`set_data` writes a prefix of the fixed-capacity buffer. With `None`, untouched indices keep
+their values. Dynamic `NoOverwrite` also preserves them; dynamic `Discard` clears the full CPU
+shadow before copying the prefix, so untouched indices become zero. For example, uploading
+`[5, 6]` with `None` over `[10, 20, 30, 40]` produces `[5, 6, 30, 40]` without changing capacity.
+
+Static buffers accept only `CNA_SET_DATA_NONE`; dynamic buffers additionally accept `Discard`
+and `NoOverwrite`. The native resource-in-use guard refuses a nonempty `None` upload while the
+buffer is bound; dynamic `Discard` and `NoOverwrite` pass that guard. Partial writes compose the
+CPU shadow and re-upload the whole buffer because the renderer contract has no destination-offset
+operation. Only a full-buffer dynamic upload forwards the streaming option to the renderer.
+`NoOverwrite` therefore does not promise a smaller or unsynchronized renderer transfer.
+
+`set_data_at` writes at an explicit **byte** offset into either buffer kind and preserves all
+indices outside that window. For nonempty transfers the offset must be aligned to the buffer's
+element width (two or four bytes). The C route rejects offsets beyond Int32 with
+`CNA_RESULT_INVALID_ARGUMENT` and accepts only `None`; `Discard` and `NoOverwrite` return
+`CNA_RESULT_NOT_SUPPORTED`, even for a dynamic buffer. Its partial-write upload cost is shared
+with ordinary prefix writes.
+
+`get_data` requires `None`; other readback options return `CNA_RESULT_INVALID_ARGUMENT`.
+Positive-count readback from a WriteOnly buffer returns `CNA_RESULT_NOT_SUPPORTED`.
+
+A zero-count transfer is a C-adapter no-op after handle, disposal, descriptor, caller-window,
+width and option validation. It may use a null pointer with zero capacity. It skips native
+WriteOnly, binding and window checks; `set_data_at` still applies its C Int32-offset limit but
+does not check native alignment or destination range for an empty window. Empty uploads do not
+clear content-loss state. Uploads do not promise resource rollback on renderer failure: native
+code updates its CPU shadow before submitting to the renderer.
+
+## ContentLost, disposal and evidence
+
+`cna_index_buffer_subscribe_content_lost` supports dynamic buffers; a static buffer returns
+`CNA_RESULT_NOT_SUPPORTED`. Device recovery can notify content-losable resources, and
+`cna_graphics_device_notify_content_lost_resources_ext` can explicitly trigger that notification.
+Native `DynamicIndexBuffer` sets its loss flag and raises `ContentLost`; a subsequent nonempty
+upload clears the flag. The C snapshot defect above prevents observing the flag through
+`get_info`, but does not suppress the callback.
+
+ContentLost registrations use a different handle kind from generic Disposing registrations.
+They hold a weak native reference, can be unsubscribed after buffer destruction and still require
+explicit unsubscription. Callback/context storage remains caller-owned for the subscription's
+active lifetime; see [`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md).
+
+`cna_graphics_resource_dispose` raises Disposing, releases the native renderer and keeps the C
+handle and immutable metadata queryable. Later data operations return
+`CNA_RESULT_INVALID_STATE`. Repeated explicit disposal is a no-op. By contrast,
+`cna_index_buffer_destroy` releases the handle without calling public `Dispose`; do not rely on
+typed destruction to emit Disposing. Dispose explicitly first when that notification is needed.
+An active `ModelMeshPart` reference blocks both explicit disposal and typed destruction with
+`CNA_RESULT_INVALID_STATE`. Typed destruction invalidates the handle generation and removes any
+game-child count; it remains necessary after explicit disposal.
+
+`CApi_IndexBufferSmoke` is a strict-C17 test covering both widths, static/dynamic creation,
+caller windows, all streaming options, offset uploads, WriteOnly refusal, metadata and base type
+names, event-kind separation, disposal, failure atomicity and invalid/stale/wrong-kind/wrong-thread
+paths. Its no-ThreeD branch checks creation refusal. Header checks cover version-one layouts.
+The current audit ran this smoke with SDLGPU; it does not establish a fresh sanitizer or other
+renderer result. A separate strict-C probe on a 64×64 owned HiDef SDLGPU device confirmed prefix
+preservation, one ContentLost callback with a false C snapshot, no Disposing callback from typed
+destruction, and successful event/device cleanup. The snapshot defect has no permanent public-C
+regression test yet; the smoke checks false only before a loss notification.

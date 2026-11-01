@@ -1,7 +1,7 @@
 # Stav dokumentace v `docs/`
 
-Inventura: 2026-11-01. Rozsah: všech 176 aktuálně verzovaných souborů `docs/**/*.md`.
-Souhrn: 78 zpracovaných, 14 podpůrně aktualizovaných čekajících na vlastní audit a 84 dosud
+Inventura: 2026-11-01. Rozsah: všech 177 aktuálně verzovaných souborů `docs/**/*.md`.
+Souhrn: 79 zpracovaných, 14 podpůrně aktualizovaných čekajících na vlastní audit a 84 dosud
 samostatně nezpracovaných.
 
 Tento soubor sleduje současný dokumentační úklid. Stav neříká, že čekající dokument je nutně
@@ -115,6 +115,7 @@ Odstraněné historické soubory (`graphics-ext-scope-reduction.md`,
 - ✅ **ZPRACOVÁNO** — [`docs/graphics-renderer-feature-matrix.md`](docs/graphics-renderer-feature-matrix.md)
 - ✅ **ZPRACOVÁNO** — [`docs/graphics-resource-lifetime.md`](docs/graphics-resource-lifetime.md)
 - ✅ **ZPRACOVÁNO** — [`docs/headless-renderer.md`](docs/headless-renderer.md)
+- ⬜ **ČEKÁ** — [`docs/ieffect-renderer-audit.md`](docs/ieffect-renderer-audit.md)
 - ✅ **ZPRACOVÁNO** — [`docs/input-backend.md`](docs/input-backend.md)
 - ✅ **ZPRACOVÁNO** — [`docs/input-build-and-test.md`](docs/input-build-and-test.md)
 - ✅ **ZPRACOVÁNO** — [`docs/input-fna-fidelity.md`](docs/input-fna-fidelity.md)
@@ -211,7 +212,7 @@ Odstraněné historické soubory (`graphics-ext-scope-reduction.md`,
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/GRAPHICS_EXT.md`](docs/c-api/GRAPHICS_EXT.md)
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/GRAPHICS_RESOURCES.md`](docs/c-api/GRAPHICS_RESOURCES.md)
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/HANDLES.md`](docs/c-api/HANDLES.md)
-- ⬜ **ČEKÁ** — [`docs/c-api/INDEX_BUFFERS.md`](docs/c-api/INDEX_BUFFERS.md)
+- ✅ **ZPRACOVÁNO** — [`docs/c-api/INDEX_BUFFERS.md`](docs/c-api/INDEX_BUFFERS.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/INPUT_SNAPSHOTS.md`](docs/c-api/INPUT_SNAPSHOTS.md)
 - ✅ **ZPRACOVÁNO** — [`docs/c-api/LIMITATIONS.md`](docs/c-api/LIMITATIONS.md)
 - ⬜ **ČEKÁ** — [`docs/c-api/MATH_AND_3D_VALUES.md`](docs/c-api/MATH_AND_3D_VALUES.md)

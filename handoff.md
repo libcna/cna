@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API index-buffer contract reconciliation (2026-11-01):
+  `docs/c-api/INDEX_BUFFERS.md` now records owned/pre-run device inputs, positive fixed capacity,
+  the HiDef requirement for 32-bit indices and the dedicated base type name for both buffer kinds.
+  Caller-array windows are distinguished from byte offsets into the buffer; prefix preservation,
+  Discard zeroing, CPU-shadow readback, full-buffer upload cost, resource-in-use guards, empty
+  transfers and output-count failure behavior match the current adapters. ContentLost events work;
+  the C snapshot's constant-false defect was reproduced and is recorded in §5.1 without an
+  implementation change. Explicit disposal is separated from typed handle destruction, including
+  ModelMeshPart retention and event-registration cleanup. Matching public Doxygen and a stale
+  smoke-test comment are corrected. All selected C API targets and C17/C++23 header checks build;
+  all nine focused tests pass through the private SDLGPU runner, and all nine coverage, generation,
+  limitation, export and release gates pass. The owned-device strict-C probe also confirms prefix
+  preservation and event/cleanup behavior. Public ABI signatures, values and layouts are unchanged.
 - C API handle-contract reconciliation (2026-11-01):
   `docs/c-api/HANDLES.md` now matches the process-wide registry and family adapters. It removes
   nonexistent public runtime/generic-release/kind-query assumptions and separates the single
@@ -1075,6 +1088,16 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- `cna_index_buffer_get_info` always reports `is_content_lost = CNA_FALSE`, including after a
+  real dynamic-buffer ContentLost notification. `modules/c-api/spec/IndexBuffer.toml` hard-codes
+  the field instead of reading `DynamicIndexBuffer::getIsContentLostProperty()`. Measured on
+  2026-11-01 with a strict-C probe through the private SDLGPU runner: create a 64×64 owned HiDef
+  device and a dynamic 16-bit buffer, subscribe, then call
+  `cna_graphics_device_notify_content_lost_resources_ext`; one callback fires but the subsequent
+  successful info query returns false. Native notification sets the flag, and a nonempty upload
+  clears it. `CApi_IndexBufferSmoke` only checks the initial false snapshot; this transition has no
+  permanent public-C regression test yet. Consumers can observe the callback but cannot query
+  the true loss state through the C snapshot until the route is corrected.
 - `cna_graphics_resource_get_graphics_device` fails for a valid resource created on an independently
   owned C device. `CnaCApiGraphicsResource.cpp` passes the resource's owner token unconditionally
   to `BorrowGameGraphicsDevice`; that token is an owned-device handle on this path, so the game

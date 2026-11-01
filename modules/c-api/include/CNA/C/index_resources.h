@@ -15,14 +15,13 @@ typedef CNA_Handle CNA_IndexBufferHandle;
 /** @brief Owned handle for one dynamic index-buffer ContentLost subscription. */
 typedef CNA_Handle CNA_IndexBufferEventRegistrationHandle;
 
-/** @brief Fully qualified native type name represented by either index-buffer kind. */
+/** @brief Base type name returned by the dedicated type-name routes for either buffer kind. */
 #define CNA_INDEX_BUFFER_TYPE_NAME "Microsoft.Xna.Framework.Graphics.IndexBuffer"
 
 /**
  * @brief Receives a dynamic index-buffer ContentLost notification.
  *
- * CNA raises this on the renderers whose API can actually lose a device (DirectX9, for
- * example); families that cannot lose one never raise it.
+ * Device recovery or cna_graphics_device_notify_content_lost_resources_ext can raise this event.
  *
  * @param index_buffer Dynamic index-buffer handle supplied at registration.
  * @param context Caller-owned context supplied at registration.
@@ -63,7 +62,7 @@ typedef struct CNA_IndexBufferInfo {
     CNA_BufferUsage buffer_usage;
     /** @brief True when this handle owns a DynamicIndexBuffer. */
     CNA_Bool dynamic;
-    /** @brief Dynamic content-loss state; currently always false. */
+    /** @brief Currently constant false in the C snapshot; does not reflect the native loss flag. */
     CNA_Bool is_content_lost;
     /** @brief True while the native renderer allocation is present. */
     CNA_Bool has_renderer;
@@ -79,7 +78,7 @@ typedef struct CNA_IndexBufferTransfer {
     uint32_t struct_version;
     /** @brief Width of the pointed-to uint16_t or uint32_t elements. */
     CNA_IndexElementSize index_element_size;
-    /** @brief Streaming option; non-None values require a dynamic buffer. */
+    /** @brief Streaming option; non-None values are accepted only by dynamic set_data uploads. */
     CNA_SetDataOptions options;
     /** @brief Index of the first element in the caller's source or destination array. */
     uint64_t start_index;
@@ -88,9 +87,12 @@ typedef struct CNA_IndexBufferTransfer {
 } CNA_IndexBufferTransfer;
 
 /**
- * @brief Creates a game-owned static or dynamic index buffer.
+ * @brief Creates an owned static or dynamic index buffer on the supplied device.
  *
- * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * A game-device buffer counts as a game child until typed destruction. Destroy buffers before
+ * their creating device. Capacity must be positive, and 32-bit indices require HiDef.
+ *
+ * @param graphics_device Owned device or currently valid borrowed device, including pre-run loans.
  * @param create_info Versioned creation configuration.
  * @param out_index_buffer Receives the owned buffer handle.
  * @return A CNA result code; failure leaves @p out_index_buffer invalid.
@@ -103,13 +105,16 @@ CNA_C_API CNA_Result cna_index_buffer_create(
 /**
  * @brief Destroys an owned static or dynamic index-buffer handle.
  *
+ * Releases the handle without calling public Dispose; explicitly dispose first if a Disposing
+ * notification is needed. An active ModelMeshPart reference prevents destruction.
+ *
  * @param index_buffer Owned index-buffer handle.
  * @return A CNA result code.
  */
 CNA_C_API CNA_Result cna_index_buffer_destroy(CNA_IndexBufferHandle index_buffer);
 
 /**
- * @brief Gets index-buffer metadata and current renderer/content-loss state.
+ * @brief Gets index-buffer metadata and renderer state; the C content-loss field is currently false.
  *
  * @param index_buffer Static or dynamic index-buffer handle.
  * @param out_info Receives the versioned metadata snapshot.
@@ -120,7 +125,7 @@ CNA_C_API CNA_Result cna_index_buffer_get_info(
     CNA_IndexBufferInfo* out_info);
 
 /**
- * @brief Gets the exact byte count of the native index-buffer type name.
+ * @brief Gets the byte count of CNA_INDEX_BUFFER_TYPE_NAME for either buffer kind.
  *
  * @param index_buffer Static or dynamic index-buffer handle.
  * @param out_byte_count Receives the UTF-8 byte count without a terminator.
@@ -131,7 +136,7 @@ CNA_C_API CNA_Result cna_index_buffer_get_type_name_byte_count(
     uint64_t* out_byte_count);
 
 /**
- * @brief Copies the native index-buffer type name without a terminator.
+ * @brief Copies CNA_INDEX_BUFFER_TYPE_NAME for either buffer kind without a terminator.
  *
  * @param index_buffer Static or dynamic index-buffer handle.
  * @param destination Destination bytes, or null only for zero capacity.
@@ -149,7 +154,9 @@ CNA_C_API CNA_Result cna_index_buffer_copy_type_name(
  * @brief Uploads 16-bit or 32-bit indices from a caller-array window.
  *
  * @p data must point to uint16_t or uint32_t elements selected by the descriptor. A zero-element
- * window may use a null pointer and zero capacity.
+ * window may use a null pointer and zero capacity. The upload starts at buffer index zero and
+ * preserves untouched indices with None or dynamic NoOverwrite. Dynamic Discard zeros the rest.
+ * Static buffers accept only None. Partial uploads compose a CPU shadow and upload the full buffer.
  *
  * @param index_buffer Static or dynamic index-buffer handle.
  * @param transfer Versioned width, option and source-window descriptor.
@@ -166,6 +173,11 @@ CNA_C_API CNA_Result cna_index_buffer_set_data(
 /**
  * @brief Uploads indices into a window of the buffer, leaving the rest alone.
  *
+ * Only None is accepted; Discard and NoOverwrite return CNA_RESULT_NOT_SUPPORTED. Nonempty
+ * uploads require an element-aligned destination offset and a window within buffer capacity.
+ * As with ordinary prefix writes, the window is composed in the CPU shadow and the full buffer
+ * is re-uploaded. Indices never written by any upload read as zero.
+ *
  * @param index_buffer Static or dynamic index-buffer handle.
  * @param buffer_offset_in_bytes Byte offset into **the buffer**, a multiple of its element size.
  * @param transfer Versioned width, option and source-window descriptor; `start_index` continues to
@@ -173,15 +185,6 @@ CNA_C_API CNA_Result cna_index_buffer_set_data(
  * @param data Typed source array.
  * @param capacity Source capacity measured in selected index elements.
  * @return A CNA result code.
- *
- * `cna_index_buffer_set_data` replaces the buffer's whole contents, which is what XNA's
- * `SetData(T[], int, int)` does; this adds the `offsetInBytes` overload beside it, so one slice of
- * a large dynamic index buffer can be rewritten per frame. Indices outside the window keep
- * whatever they held; indices never written by any upload read as zero.
- *
- * **Documented deviation, about cost rather than about result.** The renderer contract underneath
- * replaces whole-buffer contents, so the window is composed on the CPU side and the whole buffer is
- * re-uploaded. The indices end up exactly where XNA puts them; the transfer is not smaller.
  */
 CNA_C_API CNA_Result cna_index_buffer_set_data_at(
     CNA_IndexBufferHandle index_buffer,
@@ -191,17 +194,18 @@ CNA_C_API CNA_Result cna_index_buffer_set_data_at(
     uint64_t capacity);
 
 /**
- * @brief Reads 16-bit or 32-bit indices into a caller-array window atomically.
+ * @brief Reads 16-bit or 32-bit indices from the CPU shadow into a caller-array window atomically.
  *
- * Native readback begins at index zero and writes into `transfer->start_index` in the caller's
- * typed destination array, matching the documented XNA overload contract.
+ * Readback begins at buffer index zero and writes into `transfer->start_index` in the caller's
+ * typed destination array. Positive-count readback from WriteOnly buffers is not supported.
  *
  * @param index_buffer Static or dynamic index-buffer handle.
  * @param transfer Versioned width and destination-window descriptor; options must be None.
  * @param destination Typed destination array, or null only for zero capacity.
  * @param capacity Destination capacity measured in selected index elements.
- * @param out_element_count Receives the required element count.
- * @return A CNA result code; insufficient capacity or readback failure performs no partial write.
+ * @param out_element_count Receives the requested count after handle/usability validation when the
+ *        transfer has a valid versioned prefix, including on later failures.
+ * @return A CNA result code; failure leaves the destination array unchanged.
  */
 CNA_C_API CNA_Result cna_index_buffer_get_data(
     CNA_IndexBufferHandle index_buffer,
@@ -213,9 +217,9 @@ CNA_C_API CNA_Result cna_index_buffer_get_data(
 /**
  * @brief Subscribes to a dynamic index buffer's ContentLost event.
  *
- * CNA raises this on the renderers whose API can actually lose a device (DirectX9, for
- * example); families that cannot lose one never raise it. The callback and context remain caller-owned
- * until unregistration or buffer destruction.
+ * Device recovery or cna_graphics_device_notify_content_lost_resources_ext can raise this event.
+ * The callback and context remain caller-owned until unregistration or buffer destruction.
+ * The registration does not retain the buffer and must be unsubscribed even after its destruction.
  *
  * @param index_buffer Dynamic index-buffer handle.
  * @param callback Non-null callback.

@@ -156,9 +156,8 @@ static int validate_transfer(
                 CNA_RESULT_SUCCESS) {
             return 0;
         }
-        /* CBIND-059: a windowed upload indexes the BUFFER, not the caller's array, so the index
-           it does not name keeps whatever it held -- which is exactly what every other transfer
-           route here destroys. */
+        /* CBIND-059: the byte offset selects the destination in the buffer; start_index still
+           selects the caller's source window. Indices outside the destination window survive. */
         {
             const uint16_t window[1] = {UINT16_C(77)};
             uint16_t after[2] = {0U, 0U};
