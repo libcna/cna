@@ -210,7 +210,7 @@ static int validate_preferences(const CNA_GraphicsDeviceManagerHandle manager)
             CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    /* The canonical setter records whatever it is given; negotiation happens on apply, not here. */
+    /* Positive preferences are recorded here; device negotiation happens on apply. */
     if (cna_graphics_device_manager_set_preferred_back_buffer_width(manager, 640) !=
             CNA_RESULT_SUCCESS ||
         cna_graphics_device_manager_get_preferred_back_buffer_width(manager, &value) !=
@@ -222,6 +222,19 @@ static int validate_preferences(const CNA_GraphicsDeviceManagerHandle manager)
             CNA_RESULT_SUCCESS ||
         value != 400) {
         return 0;
+    }
+    static const int32_t invalid_sizes[] = {0, -1, INT32_MIN};
+    for (size_t i = 0U; i != sizeof(invalid_sizes) / sizeof(invalid_sizes[0]); ++i) {
+        if (cna_graphics_device_manager_set_preferred_back_buffer_width(manager, invalid_sizes[i]) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            cna_graphics_device_manager_get_preferred_back_buffer_width(manager, &value) !=
+                CNA_RESULT_SUCCESS || value != 640 ||
+            cna_graphics_device_manager_set_preferred_back_buffer_height(manager, invalid_sizes[i]) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            cna_graphics_device_manager_get_preferred_back_buffer_height(manager, &value) !=
+                CNA_RESULT_SUCCESS || value != 400) {
+            return 0;
+        }
     }
     if (cna_graphics_device_manager_get_synchronize_with_vertical_retrace(manager, &flag) !=
             CNA_RESULT_SUCCESS ||

@@ -13,7 +13,9 @@
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
+#include <limits>
 #include <string>
 
 using namespace Microsoft::Xna::Framework;
@@ -78,4 +80,60 @@ TEST(GraphicsDeviceManagerPlatformTest, PreferredBackBufferSizeRoundTrips)
 
     EXPECT_EQ(manager.getPreferredBackBufferWidthProperty(), 1280);
     EXPECT_EQ(manager.getPreferredBackBufferHeightProperty(), 720);
+}
+
+TEST(GraphicsDeviceManagerPlatformTest, PreferredBackBufferWidthRejectsNonpositiveValues)
+{
+    GraphicsDeviceManager manager;
+    manager.setPreferredBackBufferWidthProperty(1280);
+    for (const SharpRuntime::intcs value : {0, -1, std::numeric_limits<SharpRuntime::intcs>::min()})
+    {
+        SCOPED_TRACE(value);
+        try
+        {
+            manager.setPreferredBackBufferWidthProperty(value);
+            FAIL() << "Nonpositive backbuffer width was accepted";
+        }
+        catch (const System::ArgumentOutOfRangeException& exception)
+        {
+            EXPECT_EQ(exception.getParamNameProperty(), "value");
+            EXPECT_TRUE(exception.getMessageProperty().starts_with(
+                "BackBufferWidth and BackBufferHeight must be greater than zero."));
+        }
+        EXPECT_EQ(manager.getPreferredBackBufferWidthProperty(), 1280);
+    }
+}
+
+TEST(GraphicsDeviceManagerPlatformTest, PreferredBackBufferHeightRejectsNonpositiveValues)
+{
+    GraphicsDeviceManager manager;
+    manager.setPreferredBackBufferHeightProperty(720);
+    for (const SharpRuntime::intcs value : {0, -1, std::numeric_limits<SharpRuntime::intcs>::min()})
+    {
+        SCOPED_TRACE(value);
+        try
+        {
+            manager.setPreferredBackBufferHeightProperty(value);
+            FAIL() << "Nonpositive backbuffer height was accepted";
+        }
+        catch (const System::ArgumentOutOfRangeException& exception)
+        {
+            EXPECT_EQ(exception.getParamNameProperty(), "value");
+            EXPECT_TRUE(exception.getMessageProperty().starts_with(
+                "BackBufferWidth and BackBufferHeight must be greater than zero."));
+        }
+        EXPECT_EQ(manager.getPreferredBackBufferHeightProperty(), 720);
+    }
+}
+
+TEST(GraphicsDeviceManagerPlatformTest, PreferredBackBufferPositiveBoundarySizesAreAccepted)
+{
+    GraphicsDeviceManager manager;
+    for (const SharpRuntime::intcs value : {1, std::numeric_limits<SharpRuntime::intcs>::max()})
+    {
+        EXPECT_NO_THROW(manager.setPreferredBackBufferWidthProperty(value));
+        EXPECT_NO_THROW(manager.setPreferredBackBufferHeightProperty(value));
+        EXPECT_EQ(manager.getPreferredBackBufferWidthProperty(), value);
+        EXPECT_EQ(manager.getPreferredBackBufferHeightProperty(), value);
+    }
 }

@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 
 namespace Microsoft::Xna::Framework
@@ -175,6 +176,11 @@ namespace Microsoft::Xna::Framework
 
     void GraphicsDeviceManager::setPreferredBackBufferHeightProperty(SharpRuntime::intcs value)
     {
+        if (value <= 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "value", "BackBufferWidth and BackBufferHeight must be greater than zero.");
+        }
         preferredBackBufferHeight_ = value;
         markPreferencesChanged();
     }
@@ -186,6 +192,11 @@ namespace Microsoft::Xna::Framework
 
     void GraphicsDeviceManager::setPreferredBackBufferWidthProperty(SharpRuntime::intcs value)
     {
+        if (value <= 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "value", "BackBufferWidth and BackBufferHeight must be greater than zero.");
+        }
         preferredBackBufferWidth_ = value;
         markPreferencesChanged();
     }

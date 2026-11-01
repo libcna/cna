@@ -177,7 +177,8 @@ namespace Microsoft::Xna::Framework
 
         /**
          * @brief Sets the preferred back buffer height.
-         * @param value The desired height in pixels.
+         * @param value The positive desired height in pixels.
+         * @throws System::ArgumentOutOfRangeException If value is zero or negative.
          */
         void setPreferredBackBufferHeightProperty(SharpRuntime::intcs value);
 
@@ -189,7 +190,8 @@ namespace Microsoft::Xna::Framework
 
         /**
          * @brief Sets the preferred back buffer width.
-         * @param value The desired width in pixels.
+         * @param value The positive desired width in pixels.
+         * @throws System::ArgumentOutOfRangeException If value is zero or negative.
          */
         void setPreferredBackBufferWidthProperty(SharpRuntime::intcs value);
 

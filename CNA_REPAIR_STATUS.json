@@ -167,9 +167,13 @@
       "id": "CNA-FIX-D18",
       "source_section": "5.1 Defects",
       "summary": "`GraphicsDeviceManager::setPreferredBackBufferWidthProperty` and `setPreferredBackBufferHeightProperty` accept zero and negative values.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Reject nonpositive preferred backbuffer sizes with ArgumentOutOfRangeException before changing stored preferences, matching the FNA setters.",
+      "evidence": [
+        "Strict-C preference regression fails before the fix and passes after it for zero, -1 and INT32_MIN on both setters; previous dimensions remain unchanged.",
+        "All 16 native GraphicsDeviceManager property/lifecycle tests pass privately, including parameter name, message, unchanged values and accepted positive boundaries 1/INT32_MAX without allocating a backbuffer.",
+        "Existing affected targets build; C API manager smoke and ABI/header/doc-export gates pass. No ABI signature/layout change or new stub."
+      ]
     },
     {
       "id": "CNA-FIX-D19",

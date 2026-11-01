@@ -7,10 +7,10 @@ precedence where the two differ. The CNA declaration is
 `modules/runtime/include/Microsoft/Xna/Framework/GraphicsDeviceManager.hpp`; its implementation is
 `modules/runtime/src/GraphicsDeviceManager.cpp`.
 
-As of 2026-10-31, the XNA/FNA surface is present and `ApplyChanges()` reaches a real
+As of 2026-11-01, the XNA/FNA surface is present and `ApplyChanges()` reaches a real
 `GraphicsDevice::Reset()`. The former limitations that said multisampling, back-buffer format and
-depth/stencil format changed only stored `PresentationParameters` are closed. Two current API
-defects are called out below and are also recorded in [`handoff.md` §5.1](../handoff.md#51-defects).
+depth/stencil format changed only stored `PresentationParameters` are closed. One current API
+defect is called out below and is also recorded in [`handoff.md` §5.1](../handoff.md#51-defects).
 
 ## Public surface and defaults
 
@@ -21,7 +21,7 @@ defects are called out below and are also recorded in [`handoff.md` §5.1](../ha
 | `IsFullScreen` | Supported | Becomes `PresentationParameters::IsFullScreen` and a platform fullscreen/windowed request during reset. A platform may refuse a physical mode change. |
 | `PreferMultiSampling` | Supported | `false` requests zero samples. `true` requests up to 8; the renderer chooses a supported value and the applied value is written back to the device's presentation parameters. |
 | `PreferredBackBufferFormat` | Supported | Reaches the renderer's presentation-format reset. The device reports the renderer-normalized applied format. |
-| `PreferredBackBufferWidth`, `PreferredBackBufferHeight` | **Defective validation** | Defaults and positive values work, but CNA currently accepts zero and negative values. FNA throws `ArgumentOutOfRangeException` for `value <= 0`. |
+| `PreferredBackBufferWidth`, `PreferredBackBufferHeight` | Supported | Defaults are 800×480. Nonpositive values throw `ArgumentOutOfRangeException` with parameter `value` before changing the preference. Positive values are stored for later device negotiation. |
 | `PreferredDepthStencilFormat` | Supported | Reaches the renderer's presentation-format reset and recreates or reconfigures its depth/stencil storage as required. The device reports the normalized applied format. |
 | `SynchronizeWithVerticalRetrace` | Supported | Maps to `PresentInterval::One` or `Immediate`; reset forwards the corresponding swap interval to the renderer. |
 | `SupportedOrientations` | Supported | Applied on orientation-aware mobile platforms and by CNA's keyboard-orientation test mode. Desktop back-buffer dimensions otherwise remain in the requested order. |
@@ -124,7 +124,9 @@ The focused regression evidence includes:
   `PreferMultiSampling` transition and applied-count write-back;
 - `easygl_depth_format_test` and `software_presentation_reset_contract_test` for live depth-format
   replacement;
-- `GraphicsDeviceManagerSmoke.c` for the C ABI preferences, operations and subscriptions.
+- `GraphicsDeviceManagerSmoke.c` for the C ABI preferences, operations and subscriptions. Native
+  and strict-C regressions cover zero/negative rejection and unchanged prior sizes; native tests
+  also check exception metadata and accepted positive boundaries without allocating those sizes.
 
 Renderer-specific format/MSAA availability is not a manager promise. See
 [`rendertarget-support.md`](rendertarget-support.md),

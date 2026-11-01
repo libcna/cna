@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D18 (2026-11-01): both preferred backbuffer dimension setters now reject
+  nonpositive values before changing preferences, with the FNA exception type, parameter and
+  message. The strict-C regression fails before the correction and passes after it for zero, -1
+  and INT32_MIN. All 16 native manager property/lifecycle cases pass privately, including
+  unchanged values and accepted positive boundaries without allocating them; the C manager smoke
+  and three ABI/header/doc gates pass. Public Doxygen and the manager guide match. No ABI change
+  or stub. Direct-device disposal forwarding remains a separate open defect below.
 - CNA-FIX-D01 (2026-11-01): all seven affected SDLGPU stock fragments now multiply fog
   color by completed output alpha. The registered shared fog contract expands to 41 pixel cases
   across five stock effects, including texture/vertex alpha, lit/unlit BasicEffect, both dual
@@ -1909,12 +1916,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   output sentinel. Player/device/game cleanup succeeds. `CApi_VideoSmoke` checks continued player
   state after original-handle release, but not this getter transition; no permanent regression
   test covers it yet. Keep the original Video handle while relying on association queries.
-- `GraphicsDeviceManager::setPreferredBackBufferWidthProperty` and
-  `setPreferredBackBufferHeightProperty` accept zero and negative values. FNA rejects `value <= 0`
-  with `ArgumentOutOfRangeException("value", "BackBufferWidth and BackBufferHeight must be greater
-  than zero.")`, and no measured XNA disagreement exists. Found by the 2026-10-31
-  `docs/gdm-coverage.md` reconciliation; positive-value round trips are tested, invalid values are
-  not.
 - A direct `Dispose()` of the `GraphicsDevice` managed by `GraphicsDeviceManager` does not forward
   `GraphicsDevice::Disposing` to `GraphicsDeviceManager::DeviceDisposing`. `CreateDevice()` installs
   a device `Disposing` subscription only to release the renderer-context lease, whereas FNA wires
