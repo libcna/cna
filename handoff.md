@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Standalone graphics-extension documentation reconciliation (2026-11-01):
+  `docs/cnaext-engine-layer.md` now distinguishes the always-registered module target from
+  CNA_CNAEXT-guarded APIs, lists the actual umbrella composition, qualifies shader/readback support
+  and preserves the sole DebugGizmos design constraint. `docs/ascii-post-process-effect.md` is now
+  a current usage/control/alpha/cost contract instead of an extended migration rationale, correcting
+  universal-renderer and unconditional GPU-readback claims. The focused module target builds and
+  runs 73 tests on private SDLGPU: 71 pass, two HLSL-specific cases skip. All four ASCII quantizer,
+  atlas, pixel and 3D-source oracle targets build and pass through the private runner. Local links
+  and documentation inventory are checked; no runtime code or ABI changes.
 - ALSA audio documentation reconciliation (2026-11-01): `docs/audio-alsa.md` now describes
   current selection/dependencies, negotiated playback/capture, bounded queues, mixer rules and
   encoded-memory streaming. Host ALSA plugin routing and hardware/latency claims are qualified;

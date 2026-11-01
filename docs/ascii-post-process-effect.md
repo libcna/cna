@@ -1,153 +1,104 @@
-# AsciiPostProcessEffect — renderer-neutral ASCII post-process
+# AsciiPostProcessEffect
 
-`CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) is CNA's renderer-neutral
-ASCII/glyph-grid image post-process effect. It replaces the former public `ASCII` graphics-renderer
-identity (`CNA_GRAPHICS_RENDERER=ASCII`, removed 2026-08).
+`CNA::Graphics::AsciiPostProcessEffect` transforms a completed texture into a graphical glyph
+grid. Enable `CNA_CNAEXT=ON` and include `CNA/Graphics/AsciiPostProcessEffect.hpp` (or
+`CNA/Graphics/CNAEXT.hpp`). Its device must outlive the effect and its internal atlas/SpriteBatch.
 
-The former renderer's implementation campaign covered `ASCII-1`..`ASCII-82` and completed on
-2026-07-15. Commit `a7ba983dd` migrated its reusable quantizer and font atlas, `75df3b838` preserved
-its rendering oracles, `ea31cabc1` removed the renderer identity, and `58b131ec7` added this effect.
-The historical plan was deleted on 2026-10-28 and remains in Git history only. Its optional
-perf-only dirty-cell diff (`ASCII-42`) was not carried forward as active work; any future
-optimization starts with new measurements against the current effect.
-
-## Why ASCII became an effect, not a renderer
-
-The former `ASCII` renderer was never a genuine terminal/TTY renderer. It was architecturally a
-thin decorator around `SDL_RENDERER`'s own `SdlRenderer`: the game drew normally into a private
-offscreen target, and `Present()` read that frame back, quantized it into a glyph/color grid, and
-drew the grid onto the real window instead of the game's actual pixels.
-
-That is a post-processing operation on an already-rendered image, not a distinct graphics API
-implementation — `ASCII` never had its own texture/vertex/present pipeline; every actual draw
-call was forwarded to the wrapped `SdlRenderer`. Keeping it as a public renderer identity meant:
-
-- an application had to opt into `CNA_GRAPHICS_RENDERER=ASCII` at compile time to get the glyph-grid
-  look, which silently also opted it into that renderer's 2D-only limitation (every 3D draw call
-  threw `ThrowNo3D`, inherited unmodified from `SDL_RENDERER`'s own 2D-only reality);
-- the glyph-grid look could never be applied to a 3D scene, or composed with any other renderer, or
-  applied to only part of a frame.
-
-As a renderer-neutral post-process effect instead, the identical quantization/glyph-atlas logic
-applies to the completed output of **any** renderer and **any** scene — 2D or 3D — because the
-effect only ever reads finished pixels back through the public `Texture2D::GetData()`/`SpriteBatch`
-APIs, never a renderer-internal type.
+The effect uses public graphics abstractions rather than a concrete renderer. It still requires
+working source readback, atlas textures and SpriteBatch rendering on the selected device. Renderer
+neutrality does not guarantee that every declared renderer can execute or read back the pass.
 
 ## Usage
 
 ```cpp
-using CNA::Graphics::AsciiPostProcessEffect;
-using CNA::Graphics::AsciiQuantizeMode;
+#include "CNA/Graphics/AsciiPostProcessEffect.hpp"
 
-AsciiPostProcessEffect asciiEffect(device);
-asciiEffect.setQuantizeMode(AsciiQuantizeMode::Color); // or BlackWhite
-asciiEffect.setCellSize(8, 8);                          // source pixels averaged per glyph cell
+// device and sceneTarget belong to the application and outlive this effect.
+CNA::Graphics::AsciiPostProcessEffect asciiEffect(device);
+asciiEffect.setCellSize(8, 8);
+asciiEffect.setQuantizeMode(CNA::Graphics::AsciiQuantizeMode::Color);
 
-// ... draw a normal 2D or 3D scene into sceneTarget (a RenderTarget2D) ...
-
-device.SetRenderTarget(nullptr); // back to the real backbuffer
-asciiEffect.Draw(sceneTarget);   // stretched to fill the current viewport
-// or: asciiEffect.Draw(sceneTarget, Rectangle(x, y, w, h)); // an explicit destination rectangle
+// Render the source image into sceneTarget first, then select a different destination.
+device.SetRenderTarget(nullptr);
+asciiEffect.Draw(sceneTarget);
+// An explicit destination is also available:
+// asciiEffect.Draw(sceneTarget, Microsoft::Xna::Framework::Rectangle(x, y, width, height));
 ```
 
-No special `CNA_GRAPHICS_RENDERER` selection is needed — this is ordinary CNAEXT application code
-(`#ifdef CNA_CNAEXT` gated, same as `CRTEffect`/`DepthEffect`), usable with whichever renderer the
-application already selected.
+`Draw(source)` uses the current viewport's width/height as the destination size; the rectangle
+overload selects an explicit destination. It draws into the currently bound output target.
+The application owns target selection and normal graphics-state setup around the pass.
 
-### Public controls
+The source may have been produced by 2D drawing or a full 3D scene. A readable completed image is
+the boundary: the effect does not render the source geometry or supply a 3D pipeline itself.
 
-Preserves the former renderer's own controls, now as effect properties instead of an
-environment-variable-only renderer setting:
+## Controls and grid
 
-- `setCellSize(int width, int height)` / `getCellSize(int&, int&)` — source pixels averaged per
-  glyph cell (default 8×8, throws `std::invalid_argument` for a non-positive size).
-- `setQuantizeMode(AsciiQuantizeMode)` / `getQuantizeMode()` — `BlackWhite` (fixed white
-  foreground, no background fill) or `Color` (default; foreground = the cell's averaged color,
-  background = that color at quarter brightness). Defaults from the `CNA_ASCII_MODE` environment
-  variable at construction time, same parsing (`BLACKWHITE`/`COLOR`, case-insensitive, unset/
-  unrecognized → `Color`) the former renderer used.
-- `Draw(Texture2D& source)` / `Draw(Texture2D& source, const Rectangle& destinationRectangle)`.
-- `GetLastGridDimensions(int& columns, int& rows)` — the glyph grid's column/row count as of the
-  most recent `Draw()` call (testing/diagnostics).
+| API | Behavior |
+|---|---|
+| `setCellSize(width, height)` / `getCellSize(width, height)` | Source pixels per cell; defaults to 8×8. Nonpositive dimensions throw `std::invalid_argument` without changing the previous size. |
+| `setQuantizeMode(mode)` / `getQuantizeMode()` | Color or BlackWhite quantization. |
+| `Draw(source)` / `Draw(source, rectangle)` | Read, quantize and draw one image. |
+| `GetLastGridDimensions(columns, rows)` | Initially zero; updated when Draw finishes quantization, before SpriteBatch submission, so a later draw failure need not preserve the old values. |
 
-### Alpha contract
+At construction, `CNA_ASCII_MODE` selects `COLOR` or `BLACKWHITE`, case-insensitively. Unset or
+unrecognized text defaults to Color. Later environment changes do not mutate an existing effect.
 
-Source alpha is intentionally ignored. Each cell averages only the source RGB channels; those
-averages select the glyph and, in `Color` mode, its foreground and background colors. Every
-destination cell is then painted with an opaque background (quarter-brightness color in `Color`
-mode, black in `BlackWhite` mode) and an opaque glyph. Consequently the complete destination
-rectangle is opaque after the pass. `AsciiPostProcessEffect` is a full-area stylization pass, not
-an alpha-preserving compositing operation.
+The grid rounds up to `ceil(source_width / cell_width)` columns and
+`ceil(source_height / cell_height)` rows. Partial edge cells average only their actual source
+pixels. RGB averages use integer division; luminance selects the nearest density-ramp glyph.
+Destination cell edges are computed from their grid indices, avoiding accumulated rounding gaps.
 
-Not carried forward: the former renderer's own `gameTarget_`/`SetRenderTarget(nullptr)` redirect
-and 3D-call `ThrowNo3D` policy. Those were properties of being a whole renderer identity, not of
-the glyph-grid quantization itself — an application using the effect now manages its own
-`RenderTarget2D`s directly, with full XNA `SetRenderTarget` semantics, and 3D rendering is fully
-available (see below).
+## Color and alpha
 
-## Renderer neutrality
+Source alpha is ignored. Color mode uses each cell's averaged RGB foreground and a quarter-bright
+background. BlackWhite uses a white foreground; although the quantizer marks that cell as having no
+colored background, the public effect explicitly paints black behind it.
 
-The effect does not depend on any specific renderer as its architectural owner. It operates entirely through ordinary CNA graphics abstractions:
-`Texture2D`/`RenderTarget2D` (source), `GraphicsDevice` (owns the font-atlas texture and the
-currently-bound render target the effect draws into), and `SpriteBatch` (draws the glyph quads).
-It never downcasts to a concrete renderer type and never touches a renderer-internal API.
+Both modes draw opaque cell backgrounds and opaque glyph pixels. With an ordinary positive
+destination rectangle, the rendered area is opaque subject to normal viewport/clipping behavior;
+source transparency is not preserved. PointClamp atlas sampling prevents glyph-edge bleed.
 
-## 2D and 3D source-image support
+## Cost and renderer boundary
 
-Because the effect's input is a completed `Texture2D`/`RenderTarget2D`, it does not matter whether
-that image came from 2D `SpriteBatch` drawing or a full 3D scene (`BasicEffect`/`SkinnedEffect`/
-custom shaders, depth-tested geometry, etc.) — the effect never sees how the source was produced.
-This makes the following a valid, supported pipeline, which the former `ASCII` renderer identity
-could never express (it was itself 2D-only and could not run any 3D-capable renderer's draw calls
-at all):
+Each Draw reads the complete source via `Texture2D::GetData`, converts native Color values to
+packed RGBA bytes, builds the grid and submits background/glyph quads through SpriteBatch.
+There are per-draw native arrays/grid allocations and up to two sprite commands per cell.
+C++ Color objects are converted channel by channel; their memory is not assumed to be four packed
+bytes.
 
-```text
-any 3D-capable renderer's 3D scene
-    -> RenderTarget2D
-    -> AsciiPostProcessEffect
-    -> backbuffer
-```
+A GPU-backed source can require a GPU-to-CPU readback on every call. A CPU-backed renderer can
+serve its own data instead, so neither the transfer cost nor observable renderer behavior is
+identical everywhere. Unsupported readback/draw behavior follows the underlying graphics contract.
+No shader-only ASCII path or dirty-cell incremental update is implemented.
 
-This is verified by a permanent regression, not just architectural inference:
-`AsciiPostProcessEffect_3DSource` (`modules/graphics-ext/examples/ascii_posteffect_3d_source_test.cpp`)
-renders two depth-tested, overlapping triangles into a `RenderTarget2D` via `BasicEffect` + a real
-`VertexBuffer` + `GraphicsDevice::DrawPrimitives`, then applies the effect and confirms the
-near/far occlusion relationship (proven by real depth-buffer testing, not draw-submission order)
-survives the `GetData()` → `AsciiQuantizer` → `SpriteBatch` round-trip. It self-skips (exit 77) via
-`GraphicsDevice::SupportsCapability(GraphicsCapability::ThreeD)` on renderers with no real 3D
-pipeline.
+The C API's owned handle, device lifetime, inputs and refusal behavior are in
+[c-api/GRAPHICS_EXT.md](c-api/GRAPHICS_EXT.md). General texture readback is described in
+[c-api/TEXTURES.md](c-api/TEXTURES.md).
 
-## Portable CPU implementation (v1)
+## Verification
 
-`Draw()` reads the source texture back to the CPU (`Texture2D::GetData()`), quantizes it there
-(the migrated `AsciiQuantizer`/`AsciiFontAtlas` logic), then re-uploads the result as textured
-quads via `SpriteBatch`. This is a real
-GPU-to-CPU readback on every `Draw()` call — the same cost class the former `ASCII` renderer's own
-`Present()` already paid every frame (it read `gameTarget_` back on every present too). This
-implementation intentionally does not depend on the retired modern graphics layer, compute shaders, or any
-renderer-specific functionality — it works identically on every CNA renderer, including non-shader
-ones (`HEADLESS`, `SOFTWARE`, ...).
+The current regression sources are:
 
-## FUTURE ASCII GPU acceleration
+| Test/target | Evidence |
+|---|---|
+| `AsciiPostProcessEffectTest.*` | Constructor/defaults, controls, validation and initial grid state. |
+| `Ascii_Quantizer` | CPU glyph/color selection and edge-cell behavior. |
+| `Ascii_FontAtlas` | Atlas content/layout. |
+| `AsciiPostProcessEffect_Pixel` | End-to-end rendered pixels and alpha/background behavior. |
+| `AsciiPostProcessEffect_3DSource` | A depth-tested BasicEffect/VertexBuffer scene survives the readback/quantize/draw path. |
 
-A shader-only GPU path (source texture → fragment shader → cell luminance/color selection → glyph
-atlas sampling, with no per-frame CPU readback) is architecturally possible on shader-capable
-renderers via `Microsoft::Xna::Framework::Graphics::ShaderEffect` (the same GLSL-effect mechanism
-`CRTEffect`/`DepthEffect` already use). It is deliberately deferred, not implemented in this
-migration:
+The example/oracle registration is in `modules/graphics-ext/examples/CMakeLists.txt`.
+Build the relevant targets and run them through `tools/platform/run_gpu_tests_private.sh`.
+The 3D source oracle skips without a real 3D pipeline; raster/readback refusals can skip the pixel
+path too. Those skips do not qualify a renderer.
 
-- it would not run on non-shader renderers (`HEADLESS`, `SOFTWARE`, ...),
-  which this effect must keep supporting uniformly, the same way `CRTEffect`/`DepthEffect` fall
-  back to a no-op on those renderers today;
-- it is a genuinely new rendering-architecture investment (a GLSL luminance/glyph-selection shader,
-  glyph-atlas texture sampling logic in GLSL), out of scope for a correctness-preserving migration.
+## Historical boundary
 
-If ever built, it stays a second implementation strategy behind the same public
-`AsciiPostProcessEffect` API — not a prerequisite for it, and not a new public renderer identity.
+The retired `ASCII` renderer wrapped the former `SDL_RENDERER` implementation and applied the
+look to a whole presented frame. Its reusable quantizer/atlas became this explicit texture effect;
+the old renderer selector is refused. See [removed-renderers.md](removed-renderers.md).
+Migration commits and the completed ASCII-1..ASCII-82 campaign remain in Git history.
 
-## Not a terminal renderer
-
-`AsciiPostProcessEffect` produces an ASCII-*looking* graphical framebuffer — real textured quads on
-a real render target — not actual character-cell terminal/TTY output. A possible future genuine
-terminal renderer (real ANSI/TTY output) would be an entirely separate, unrelated concept; none is
-implemented or planned as part of this effect.
+Any future acceleration is a separate measured implementation change behind this effect API.
+The effect produces textured framebuffer pixels, not ANSI/TTY character output.

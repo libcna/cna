@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 94 reviewed, 14 updated incidentally and awaiting their own audit, and 69 not yet
+Summary: 96 reviewed, 12 updated incidentally and awaiting their own audit, and 69 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -55,7 +55,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/alphatesteffect-support.md`](docs/alphatesteffect-support.md)
 - ✅ **REVIEWED** — [`docs/android-graphics-limitations.md`](docs/android-graphics-limitations.md)
 - ⬜ **PENDING** — [`docs/apple-platforms.md`](docs/apple-platforms.md)
-- 🟡 **PENDING — updated incidentally** — [`docs/ascii-post-process-effect.md`](docs/ascii-post-process-effect.md)
+- ✅ **REVIEWED** — [`docs/ascii-post-process-effect.md`](docs/ascii-post-process-effect.md)
 - ✅ **REVIEWED** — [`docs/audio-alsa.md`](docs/audio-alsa.md)
 - ⬜ **PENDING** — [`docs/avatar-art-direction.md`](docs/avatar-art-direction.md)
 - ⬜ **PENDING** — [`docs/avatar-demos.md`](docs/avatar-demos.md)
@@ -65,7 +65,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ⬜ **PENDING** — [`docs/browser-network-readiness.md`](docs/browser-network-readiness.md)
 - ⬜ **PENDING** — [`docs/build-performance.md`](docs/build-performance.md)
 - ⬜ **PENDING** — [`docs/cna-devices-camera-design.md`](docs/cna-devices-camera-design.md)
-- 🟡 **PENDING — updated incidentally** — [`docs/cnaext-engine-layer.md`](docs/cnaext-engine-layer.md)
+- ✅ **REVIEWED** — [`docs/cnaext-engine-layer.md`](docs/cnaext-engine-layer.md)
 - ⬜ **PENDING** — [`docs/cnb-compression-measurements.md`](docs/cnb-compression-measurements.md)
 - 🟡 **PENDING — updated incidentally** — [`docs/cnb-format.md`](docs/cnb-format.md)
 - ⬜ **PENDING** — [`docs/cnb-mmap-measurements.md`](docs/cnb-mmap-measurements.md)
