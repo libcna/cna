@@ -8,7 +8,7 @@ This gate governs publishing an **experimental** C ABI release. ABI 1.0 -- the p
 
 ## Verdict
 
-**Not ready.** 1 criteria are unmet.
+**Not ready.** 1 criterion is unmet.
 
 - ❌ **No public C++ symbol is unaccounted for** — 633 public symbols are still unmapped.
 

@@ -12,11 +12,11 @@ The agreement is enforced **in both directions**, and the second one is the poin
 * a criterion recorded as blocked that has quietly become met — the failure mode a release gate
   actually dies of, because nobody re-reads a document that says "not yet".
 
-Two criteria are owner decisions. They are not defects, they cannot be settled by whoever is
-implementing, and they **block the release** until somebody with the authority rules on them. This
-tool measures whether they are still open by reading ``limitations.json``; ruling on one there makes
-this check fail until the gate declaration is updated to match, which is exactly the behavior a
-decision record should have.
+A criterion may instead be an owner decision. Such a decision is not a defect, cannot be settled
+by whoever is implementing, and **blocks the release** until somebody with the authority rules on
+it. The tool measures a declared owner decision through ``limitations.json``; ruling on one there
+makes this check fail until the gate declaration is updated to match, which is exactly the behavior
+a decision record should have.
 """
 
 from __future__ import annotations
@@ -310,14 +310,18 @@ def render(evaluation: dict) -> str:
     if evaluation["ready"]:
         add("**Ready.** Every criterion below is met.")
     else:
+        unmet_text = (f"{len(failed)} criterion is unmet" if len(failed) == 1
+                      else f"{len(failed)} criteria are unmet")
+        decision_text = (f"{len(blocked)} decision" if len(blocked) == 1
+                         else f"{len(blocked)} decisions")
+        decision_wait = f"{decision_text} {'awaits' if len(blocked) == 1 else 'await'}"
         if failed and blocked:
-            add(f"**Not ready.** {len(failed)} criteria are unmet, and {len(blocked)} await a "
-                "decision that is not an implementer's to make.")
+            add(f"**Not ready.** {unmet_text}, and {decision_wait} an owner ruling.")
         elif failed:
-            add(f"**Not ready.** {len(failed)} criteria are unmet.")
+            add(f"**Not ready.** {unmet_text}.")
         else:
-            add("**Not ready.** Every mechanical criterion is met. What remains is "
-                f"{len(blocked)} decision(s) that no implementer may make alone.")
+            add("**Not ready.** Every mechanical criterion is met. What remains: "
+                f"{decision_text} that no implementer may make alone.")
         add("")
         for result in blocked:
             add(f"- ⏸ **{result['title']}** — {result['detail']}.")

@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Experimental C ABI release-gate audit (2026-11-01): the generated
+  `docs/c-api/RELEASE_GATE.md`, its ten declared criteria and every measured source are current.
+  Nine criteria are met; coverage closure is correctly not met while 633 public symbols remain
+  planned, so the experimental ABI remains **Not ready**. The generator's public help no longer
+  claims that two owner-decision criteria exist when the current declaration has none, and its
+  verdict now renders the singular correctly as "1 criterion is unmet." The document was
+  regenerated only through `check_release_gate.py --write`; `--check`, `--run` and the registered
+  `CApiReleaseGate` CTest all pass without changing the decision or reclassifying a criterion.
 - Generated C API coverage audit (2026-11-01): the mandatory
   `generate_coverage_inventory.py --check` gate found `docs/c-api/COVERAGE.md` stale after recent
   public-header documentation changes. Regeneration changes only the full-matrix SHA-256; its 466
