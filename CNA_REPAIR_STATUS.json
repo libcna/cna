@@ -109,9 +109,14 @@
       "id": "CNA-FIX-D11",
       "source_section": "5.1 Defects",
       "summary": "Native FileDialog moves its callback into the platform request, then suppresses a thrown PlatformException without completing the callback.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Retain shared once-only completion state across all three file-dialog routes and deliver an empty result on PlatformException rejection; preserve prior completion and empty-callback refusal.",
+      "evidence": [
+        "With CNA_DEVICES ON, ten dialog tests run under UBSan: the new rejection and duplicate-completion groups fail before correction, then pass afterwards on all three routes.",
+        "Regressions cover retained late callbacks after rejection, completion before rejection, deferred provider-thread completion, duplicate results and empty callbacks remaining empty at the provider.",
+        "The complete private CnaDevicesExtTests target passes all 60 cases with UBSan/float-cast-overflow halting on findings, dummy audio and no native dialogs. Final affected target build passes; the initial dependency rebuild was interrupted by SIGTERM and completed on incremental resume.",
+        "Public callback/class Doxygen and devices guide match; local docs links resolve. No API/ABI layout/signature change, dependency change or new stub."
+      ]
     },
     {
       "id": "CNA-FIX-D12",

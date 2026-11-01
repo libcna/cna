@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D11 (2026-11-02): all three native FileDialog wrappers retain shared
+  once-only completion state and return an empty result on provider PlatformException rejection.
+  Results delivered before rejection are preserved; late/duplicate callbacks are ignored and an
+  empty callback remains empty at the provider. The active CNA_DEVICES/UBSan dialog regressions
+  fail before correction and pass after it, including deferred completion on another thread.
+  All 60 DevicesExt cases pass privately with dummy audio and halt-on-error UBSan/float-cast-overflow;
+  only canned dialogs are used. Final target build passes after incrementally resuming an initial
+  SIGTERM interruption. Public Doxygen, devices guide and local links match; no API/ABI change or
+  stub, and no claim of new physical dialog qualification.
 - CNA-FIX-D10 (2026-11-02): CNJ version extraction now checks representability before
   narrowing and retains the raw unsupported value; validation avoids an integer cast. Inline
   AnimationClip indices must be finite whole Int32 values before conversion. Both new regression
@@ -1903,12 +1912,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   fixture based on mat-unlit and the dual-texture image inputs exported unlit=true, stride 28,
   DualTextureEffect and texture2 successfully (2026-11-01). No permanent framebuffer regression
   or runtime fix was added during the docs/gltf-conventions.md audit.
-- Native FileDialog moves its callback into the platform request, then suppresses a thrown
-  PlatformException without completing the callback. Normal cancellation/native error callbacks
-  and the absent-service route deliver an empty result, but provider rejection can leave a
-  caller waiting. Found by source inspection on 2026-11-01 in devices-ext/src/FileDialog.cpp;
-  the canned tests do not inject this throwing-provider transition. No runtime fix or physical
-  dialog failure reproduction is claimed (`docs/devices-ext.md`).
 - Standalone C network-gamer factories do not retain their session or, for a local gamer, its
   signed-in gamer. `NetworkGamerResource` owns the gamer but stores only the session token, and
   native gamer state holds raw pointers. Source inspection during the 2026-11-01 networking

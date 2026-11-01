@@ -8,6 +8,8 @@
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/TargetPlatform.hpp"
 
+#include <atomic>
+#include <memory>
 #include <utility>
 
 namespace
@@ -24,7 +26,7 @@ namespace
         return converted;
     }
 
-    /// The dialog service, or null when this platform has no native file dialogs.
+    // The dialog service, or null when this platform has no native file dialogs.
     CNA::Platform::IPlatformDialogs* Dialogs()
     {
         CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
@@ -33,12 +35,28 @@ namespace
                    : nullptr;
     }
 
-    /// Delivers "the user chose nothing" to a caller waiting on a dialog that will never appear.
-    ///
-    /// A caller has already registered a continuation by the time it learns the dialog is
-    /// unavailable, so silently dropping the callback leaves that continuation pending forever --
-    /// a hang rather than a refusal. An empty result is what a cancel produces, which every
-    /// caller of this API already handles.
+    CNA::Devices::Detail::FileDialogResultCallback CompleteOnce(
+        CNA::Devices::Detail::FileDialogResultCallback onResult)
+    {
+        if (!onResult) { return {}; }
+        struct Completion
+        {
+            std::atomic<bool> completed{false};
+            CNA::Devices::Detail::FileDialogResultCallback callback;
+        };
+        auto completion = std::make_shared<Completion>();
+        completion->callback = std::move(onResult);
+        return [completion](const std::vector<std::string>& paths)
+        {
+            // A provider callback can race rejection, or arrive after the rejection was handled.
+            if (!completion->completed.exchange(true))
+            {
+                auto callback = std::move(completion->callback);
+                callback(paths);
+            }
+        };
+    }
+
     void ReportUnavailable(const CNA::Devices::Detail::FileDialogResultCallback& onResult)
     {
         if (onResult)
@@ -82,16 +100,15 @@ namespace CNA::Devices
             return;
         }
 
+        onResult = CompleteOnce(std::move(onResult));
         try
         {
-            dialogs->ShowOpenFileDialog(std::move(onResult), ToPlatformFilters(filters),
+            dialogs->ShowOpenFileDialog(onResult, ToPlatformFilters(filters),
                                         defaultLocation, allowMultiple, nullptr);
         }
         catch (const Platform::PlatformException&)
         {
-            // The callback was moved from and cannot be reported to here. A throw at this point
-            // means the request was rejected rather than shown, which the caller sees as a dialog
-            // that never opened.
+            ReportUnavailable(onResult);
         }
     }
 
@@ -107,13 +124,15 @@ namespace CNA::Devices
             return;
         }
 
+        onResult = CompleteOnce(std::move(onResult));
         try
         {
-            dialogs->ShowSaveFileDialog(std::move(onResult), ToPlatformFilters(filters),
+            dialogs->ShowSaveFileDialog(onResult, ToPlatformFilters(filters),
                                         defaultLocation, nullptr);
         }
         catch (const Platform::PlatformException&)
         {
+            ReportUnavailable(onResult);
         }
     }
 
@@ -129,13 +148,15 @@ namespace CNA::Devices
             return;
         }
 
+        onResult = CompleteOnce(std::move(onResult));
         try
         {
-            dialogs->ShowOpenFolderDialog(std::move(onResult), defaultLocation, allowMultiple,
+            dialogs->ShowOpenFolderDialog(onResult, defaultLocation, allowMultiple,
                                           nullptr);
         }
         catch (const Platform::PlatformException&)
         {
+            ReportUnavailable(onResult);
         }
     }
 } // namespace CNA::Devices

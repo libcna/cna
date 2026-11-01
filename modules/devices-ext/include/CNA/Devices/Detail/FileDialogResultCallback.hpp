@@ -15,10 +15,10 @@ namespace CNA::Devices::Detail
      * In `Detail` rather than nested inside `FileDialog` so the signature can be named without
      * pulling in the whole class, which the platform-facing plumbing needs.
      *
-     * Receives the selected paths, or an empty list when the user cancelled — and also when the
-     * platform has no file dialogs at all. Those two are deliberately the same answer: a caller
-     * has already registered a continuation by the time it could learn the dialog is unavailable,
-     * so anything other than invoking it would leave that continuation pending forever.
+     * Receives the first selected-path result, or an empty list on cancellation, native error,
+     * an unavailable service or provider rejection. Unavailability and rejection can complete
+     * synchronously; native completion may use a provider thread. Later provider results for
+     * an already-completed request are ignored.
      */
     using FileDialogResultCallback = std::function<void(const std::vector<std::string>& files)>;
 }

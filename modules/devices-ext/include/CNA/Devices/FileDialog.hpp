@@ -15,9 +15,10 @@ namespace CNA::Devices
      * @brief Shows native open-file/save-file/open-folder dialogs.
      *
      * CNA extension — no XNA/WP7 equivalent exists. Calls straight through to the platform's
-     * dialog service. Every dialog call is **asynchronous**: it returns immediately, and the
-     * result arrives later via `onResult`, possibly on a different thread than the one the call
-     * was made from.
+     * dialog service. Native results arrive via `onResult`, possibly on a provider thread.
+     * An unavailable service or provider rejection completes immediately with an empty result.
+     * Each supplied callback receives only the first completion, including rejection; a later
+     * provider callback cannot complete the same request again.
      *
      * A test must never reach a real dialog — it launches an interactive native window (a real
      * `zenity` process on Linux) that waits for a human forever, which happened once during this
@@ -56,8 +57,8 @@ namespace CNA::Devices
          * @brief Gets whether native file dialogs are supported on the current
          * platform.
          *
-         * @return true on Desktop (Windows/Linux/macOS) and Android; false on iOS and
-         * Web/Emscripten, where no native dialog backend exists.
+         * @return true when the build target permits native dialogs and the current platform
+         * reports that capability; false on iOS and Web/Emscripten.
          */
         [[nodiscard]] static bool getIsSupportedProperty();
 

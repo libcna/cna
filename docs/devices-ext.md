@@ -46,16 +46,17 @@ native file dialogs, tray icon, message boxes and camera capture. The real XNA s
 | `UrlLauncher` | `Open(url)` through the platform's external-URL service. | Desktop shell, mobile intent or browser; false when nothing could handle it. |
 | `SystemInfo` | Logical CPU cores, system RAM in MB. | SDL supplies native queries; generic system RAM is zero and core count can be unknown/zero. SIMD flags are not exposed. |
 | `DisplayInfo` | Content scale and safe area of the game's own `GameWindow`. | Read-only over the existing window; never creates one. |
-| `FileDialog` | Asynchronous open-file, save-file and open-folder dialogs. | Native SDL desktop/Android route; support query excludes iOS/Web. Non-modal. Normal cancel/error results are empty; see the callback limitation below. |
+| `FileDialog` | Asynchronous open-file, save-file and open-folder dialogs. | Native SDL desktop/Android route; support query excludes iOS/Web. Non-modal. Cancel/error/rejection results are empty; see completion semantics below. |
 | `SystemTray` | One tray icon with a flat menu, owned by the instance. | Desktop only. |
 | `MessageBox` | `ShowSimple` and `Show` with custom buttons. Synchronous: it blocks the calling thread. | Requires the platform dialog capability. Unsupported/native PlatformException gives no-op for ShowSimple and -1 for Show. A capability bit does not qualify every OS dialog implementation. |
 | `Camera` | Enumerates cameras, opens the first and polls RGBA8 into a correctly sized caller-owned Texture2D. | Provider/permission dependent; Closed is defined but not returned, and SDL removal/revocation is not tracked after Ready. See [camera contract](cna-devices-camera-design.md). |
 
-An unavailable file-dialog service invokes the callback immediately with an empty result, so the
-API is not guaranteed to complete asynchronously. Native completion may use a provider thread;
-marshal application work as needed. If the provider throws PlatformException after the callback
-has been moved into the request, the wrapper catches it without completing that callback. There
-is therefore no unconditional exactly-once completion guarantee on provider rejection.
+An unavailable file-dialog service or a provider request rejected with `PlatformException`
+invokes the supplied callback immediately with an empty result. Native completion may use a
+provider thread, so marshal application work as needed. The first completion wins: a result
+already delivered before rejection is preserved, and late or duplicate provider callbacks are
+ignored. The wrapper retains completion state for asynchronous requests; a provider that neither
+completes nor rejects still leaves a request pending.
 
 These are wrapper/source boundaries, not physical-device qualification on every SDL target.
 Use [devices-build.md](devices-build.md) and the dedicated camera contract for tested scope.
