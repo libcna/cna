@@ -1,5 +1,14 @@
 # XNA 4.0 runtime member coverage — baseline
 
+> **Frozen historical baseline — XNA-MEMBER-001, commit `a17e954c8`.**
+> This page renders [the retained JSON snapshot](xna-4-runtime-member-coverage-baseline.json).
+> Its missing-member counts, tier assignments and implementation advice describe that
+> pre-fix checkout, not the current backlog. Use [current coverage](xna-4-runtime-member-coverage.md)
+> and [handoff](../handoff.md) §5 for the current surface and known defects.
+> Preserve the baseline JSON; do not run `--baseline --write-reports` against today's headers
+> to refresh historical evidence. Prose can be regenerated from the retained JSON using
+> `tools/xna_runtime_members.py::markdown(..., baseline=True)`.
+
 Microsoft runtime XML defines the documented census. Matching Microsoft DLL metadata supplies
 return types, static ownership, visibility, accessor shape, and enum values. Clang parses CNA
 public headers. Content Pipeline XML is excluded. API representation does not establish behavior.
@@ -33,15 +42,15 @@ C++-applicable members: **3463 / 3627** (95.48%)
 Only `NOT_APPLICABLE` is removed from the C++-applicable denominator.
 `NEEDS_REVIEW` is excluded from both numerators. Every exception requires a per-entry reason.
 
-## Gap review
+## Historical gap review
 
-Tier A gaps remaining: **4**; Tier B: **153**; Tier C: **7**.
-Tier B needs type-specific implementation and behavior tests. Tier C requires CLR
-serialization/resources, historical device selection, or presentation architecture.
-All remaining `MISSING` entries are real absent native contracts under the stated
-normalization. Matcher false negatives were corrected before production changes.
+Baseline Tier A gaps: **4**; Tier B: **153**; Tier C: **7**.
+The baseline review grouped type-specific implementation/behaviour work as Tier B and
+CLR serialization/resources, historical device selection or presentation work as Tier C.
+The captured `MISSING` entries were classified under the stated normalization;
+they are historical findings, not instructions to repeat the completed fixes.
 
-## Remaining missing members
+## Missing members at the baseline
 
 ### Audio: `Microsoft.Xna.Framework.Audio.SoundEffectInstance`
 

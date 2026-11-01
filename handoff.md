@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Runtime member-baseline documentation reconciliation (2026-11-01, XNA-MEMBER-001): the
+  generated page clearly labels its 3463/3627 representation and 164 gaps as the frozen pre-fix
+  snapshot, links current coverage and explains how to render retained evidence without rerunning
+  a baseline audit against today's headers. All 3627 entries, tier totals (4/153/7), XML/DLL hashes
+  and unassessed-behaviour flags were checked; baseline JSON is byte-identical to a17e954c8.
+  Only Markdown rendering changed in xna_runtime_members.py; audit logic and current report output
+  are unchanged. All 22 existing audit-tool tests pass. No historical missing-member work repeated
+  or new runtime behaviour claim.
 - Runtime exception-profile documentation reconciliation (2026-11-01, SAMPLE-104): the page
   now states the process-wide AppContext default/override lifetime, exception-construction timing,
   Game constructor-body boundary and current shared Substring validation. The old 193-case and

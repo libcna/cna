@@ -896,7 +896,18 @@ def markdown(report: dict, type_total: int, type_represented: int, baseline: boo
         marker = "`" * (max((len(run) for run in runs), default=0) + 1)
         return marker + " " + value + " " + marker if runs else marker + value + marker
 
-    lines = ["# XNA 4.0 runtime member coverage" + (" — baseline" if baseline else ""), "",
+    lines = ["# XNA 4.0 runtime member coverage" + (" — baseline" if baseline else ""), ""]
+    if baseline:
+        lines += [
+            "> **Frozen historical baseline — XNA-MEMBER-001, commit `a17e954c8`.**",
+            "> This page renders [the retained JSON snapshot](xna-4-runtime-member-coverage-baseline.json).",
+            "> Its missing-member counts, tier assignments and implementation advice describe that",
+            "> pre-fix checkout, not the current backlog. Use [current coverage](xna-4-runtime-member-coverage.md)",
+            "> and [handoff](../handoff.md) §5 for the current surface and known defects.",
+            "> Preserve the baseline JSON; do not run `--baseline --write-reports` against today's headers",
+            "> to refresh historical evidence. Prose can be regenerated from the retained JSON using",
+            "> `tools/xna_runtime_members.py::markdown(..., baseline=True)`.", ""]
+    lines += [
              "Microsoft runtime XML defines the documented census. Matching Microsoft DLL metadata supplies",
              "return types, static ownership, visibility, accessor shape, and enum values. Clang parses CNA",
              "public headers. Content Pipeline XML is excluded. API representation does not establish behavior.", "",
@@ -934,12 +945,15 @@ def markdown(report: dict, type_total: int, type_represented: int, baseline: boo
                       f"Newly represented entries: **{len(newly_represented)}**.", ""]
             lines += [f"- {code(item['xna_signature'])}" for item in newly_represented]
             lines.append("")
-    lines += ["## Gap review", "",
-              f"Tier A gaps remaining: **{gap_tiers['A']}**; Tier B: **{gap_tiers['B']}**; Tier C: **{gap_tiers['C']}**."]
+    lines += ["## Historical gap review" if baseline else "## Gap review", "",
+              f"{'Baseline Tier A gaps' if baseline else 'Tier A gaps remaining'}: **{gap_tiers['A']}**; Tier B: **{gap_tiers['B']}**; Tier C: **{gap_tiers['C']}**."]
     if any(gap_tiers.values()):
-        lines += ["Tier B needs type-specific implementation and behavior tests. Tier C requires CLR",
+        lines += ["The baseline review grouped type-specific implementation/behaviour work as Tier B and" if baseline else "Tier B needs type-specific implementation and behavior tests. Tier C requires CLR",
+                  "CLR serialization/resources, historical device selection or presentation work as Tier C." if baseline else
                   "serialization/resources, historical device selection, or presentation architecture.",
+                  "The captured `MISSING` entries were classified under the stated normalization;" if baseline else
                   "All remaining `MISSING` entries are real absent native contracts under the stated",
+                  "they are historical findings, not instructions to repeat the completed fixes." if baseline else
                   "normalization. Matcher false negatives were corrected before production changes."]
     else:
         lines += ["No documented runtime member is unrepresented, and the denominator is unchanged: the",
@@ -947,7 +961,7 @@ def markdown(report: dict, type_total: int, type_represented: int, baseline: boo
                   "and no ignore list. This measures representation of the documented member surface",
                   "only. Behavior, exception detail, renderer results and historical online-service",
                   "availability are separate measures, and none of them is claimed here."]
-    lines += ["", "## Remaining missing members", ""]
+    lines += ["", "## Missing members at the baseline" if baseline else "## Remaining missing members", ""]
     missing = defaultdict(list)
     for item in report["findings"]:
         if item["classification"] == "MISSING":
