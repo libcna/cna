@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Skinned-model documentation reconciliation (2026-11-01, Task 11.3/11.5): the page distinguishes
+  the independent container from Model's current skinning support, owned resources from public
+  descriptors, count-only attachment checks, palette target space, sampling order and the separate
+  72-bone draw ceiling. It corrects outside-root bundle containment, raw/.cnj clip references,
+  52-byte declarations and partial binary validation/converter scope. Graphics/content/probe
+  targets build; 46 graphics and 14 manifest tests plus the attached-part pixel probe pass privately
+  on OPENGLES3. Python converter tests cannot start without pygltflib in the active environment;
+  no new converter/other-renderer/big-endian qualification, implementation or ABI change.
 - Texture-stream documentation reconciliation (2026-11-01, SOFTWARE-304–307): the guide corrects
   fit/cover scale selection, enlargement and integer rounding, distinguishes DXT1 fixture coverage
   from all DDS codecs/header checks, and describes compressed-format gates, current-position/EOF
@@ -1600,6 +1608,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- SkinnedModelEXT attachment verifies bone count only, leaving joint order/bind-pose/device
+  compatibility to callers; its sampler also assumes palette-space, time-ordered keys without
+  checking AnimationClipEXT::TargetSpace. The shared raw .clip.bin reader reserves from
+  nonnegative track/key counts before checking their payload lengths, so bounds-checked reads
+  alone do not guarantee bounded allocation. Legacy skeleton/vertex scalars are native copies
+  of little-endian converter output, with no big-endian qualification (source audit 2026-11-01,
+  `docs/skinned-model-ext.md`).
 - The compiled-effect fuzzer walks bounded metadata, clones and applies passes, but does not
   fuzz all typed accessors/setters or draw. It skips empty/oversized/no-capability inputs and
   catches std::exception (including candidate-side bad_alloc); standalone corpus reads occur
