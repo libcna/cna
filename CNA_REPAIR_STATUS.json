@@ -179,9 +179,13 @@
       "id": "CNA-FIX-D19",
       "source_section": "5.1 Defects",
       "summary": "A direct `Dispose()` of the `GraphicsDevice` managed by `GraphicsDeviceManager` does not forward `GraphicsDevice::Disposing` to `GraphicsDeviceManager::DeviceDisposing`.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Forward direct device Disposing after releasing the frame lease; skip synthetic manager notifications for an already-disposed device and remove subscriptions before manager teardown.",
+      "evidence": [
+        "Direct-device regression fails before the change (no manager event or Game.UnloadContent); after it all 18 native manager tests pass privately on OPENGLES3 and SDLGPU.",
+        "Regression checks repeated CreateDevice, sender identity, one notification/UnloadContent, active-frame lease release, repeated device/manager cleanup and removal of subscriptions before manager destruction.",
+        "SDLGPU combined manager/game event run: 19 pass, four capability skips out of 23. C manager/game smoke and three ABI/header/doc gates pass. No ABI layout/signature change or new stub."
+      ]
     },
     {
       "id": "CNA-FIX-D20",

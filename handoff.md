@@ -35,6 +35,13 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D19 (2026-11-01): direct managed-device disposal now forwards DeviceDisposing
+  after releasing the frame context. Later manager cleanup skips an already-delivered notification;
+  teardown removes subscriptions. The new direct-device test fails before the fix; afterwards
+  all 18 native manager tests pass privately on OPENGLES3 and SDLGPU, covering repeated device
+  setup, sender identity, one UnloadContent, active-frame disposal and subscription removal. The
+  combined SDLGPU game-event run passes 19 cases with four capability skips; C manager/game smoke
+  and three ABI/header/doc gates pass. The manager guide matches; no ABI change or stub.
 - CNA-FIX-D18 (2026-11-01): both preferred backbuffer dimension setters now reject
   nonpositive values before changing preferences, with the FNA exception type, parameter and
   message. The strict-C regression fails before the correction and passes after it for zero, -1
@@ -1916,12 +1923,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   output sentinel. Player/device/game cleanup succeeds. `CApi_VideoSmoke` checks continued player
   state after original-handle release, but not this getter transition; no permanent regression
   test covers it yet. Keep the original Video handle while relying on association queries.
-- A direct `Dispose()` of the `GraphicsDevice` managed by `GraphicsDeviceManager` does not forward
-  `GraphicsDevice::Disposing` to `GraphicsDeviceManager::DeviceDisposing`. `CreateDevice()` installs
-  a device `Disposing` subscription only to release the renderer-context lease, whereas FNA wires
-  the same device event to `OnDeviceDisposing`; manager-initiated disposal does raise the manager
-  event once. Found by the 2026-10-31 `docs/gdm-coverage.md` reconciliation; the direct-device path
-  has no regression test.
 - `Microphone::Start` reports `MicrophoneState::Started` even when the capture device failed to
   open: `modules/audio/src/Xna/Microphone.cpp` swallows the failure (`catch (...)`, following FNA)
   and sets the state unconditionally. Microsoft XNA's `Microphone.Start` hands the native start's

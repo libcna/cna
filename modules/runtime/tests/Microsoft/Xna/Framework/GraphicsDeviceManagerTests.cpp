@@ -43,7 +43,16 @@ namespace
     // Game::DoInitialize() without blocking in the loop.
     class OneFrameGame : public Game
     {
+    public:
+        int unloadCount = 0;
+
     protected:
+        void UnloadContent() override
+        {
+            ++unloadCount;
+            Game::UnloadContent();
+        }
+
         void Draw(const GameTime& gameTime) override
         {
             Game::Draw(gameTime);
@@ -181,6 +190,69 @@ TEST(GraphicsDeviceManagerTest, RepeatedDisposeDoesNotReraiseDeviceDisposing)
     ASSERT_NO_THROW(gdm.Dispose());
 
     EXPECT_EQ(disposingCount, 1);
+}
+
+TEST(GraphicsDeviceManagerTest, DirectDeviceDisposalIsForwardedOnceAndReleasesTheFrame)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+    {
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
+    }
+
+    OneFrameGame game;
+    GraphicsDeviceManager gdm(&game);
+    ASSERT_NO_THROW(game.Run());
+    ASSERT_NO_THROW(gdm.CreateDevice());
+    auto* device = gdm.getGraphicsDeviceProperty();
+    ASSERT_NE(device, nullptr);
+
+    int disposingCount = 0;
+    System::Object* disposingSender = nullptr;
+    gdm.DeviceDisposing += [&](System::Object* sender, const System::EventArgs&)
+    {
+        ++disposingCount;
+        disposingSender = sender;
+    };
+
+    ASSERT_TRUE(gdm.BeginDraw());
+    ASSERT_NO_THROW(device->Dispose());
+    EXPECT_TRUE(device->getIsDisposedProperty());
+    EXPECT_EQ(disposingCount, 1);
+    EXPECT_EQ(disposingSender, static_cast<System::Object*>(&gdm));
+    EXPECT_EQ(game.unloadCount, 1);
+    EXPECT_NO_THROW(gdm.EndDraw());
+
+    EXPECT_NO_THROW(device->Dispose());
+    EXPECT_NO_THROW(gdm.Dispose());
+    EXPECT_NO_THROW(gdm.Dispose());
+    EXPECT_EQ(disposingCount, 1);
+    EXPECT_EQ(game.unloadCount, 1);
+}
+
+TEST(GraphicsDeviceManagerTest, DisposedManagerUnsubscribesFromTheGameOwnedDevice)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+    {
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
+    }
+
+    OneFrameGame game;
+    int disposingCount = 0;
+    Graphics::GraphicsDevice* device = nullptr;
+    {
+        GraphicsDeviceManager gdm(&game);
+        ASSERT_NO_THROW(game.Run());
+        device = gdm.getGraphicsDeviceProperty();
+        ASSERT_NE(device, nullptr);
+        gdm.DeviceDisposing += [&](System::Object*, const System::EventArgs&) { ++disposingCount; };
+        gdm.Dispose();
+        EXPECT_EQ(disposingCount, 1);
+        EXPECT_FALSE(game.getGraphicsDeviceProperty().getIsDisposedProperty());
+    }
+
+    ASSERT_NO_THROW(device->Dispose());
+    EXPECT_EQ(disposingCount, 1);
+    EXPECT_EQ(game.unloadCount, 1);
 }
 
 // XNA's GraphicsDevice.Viewport is the backbuffer, whatever shape the window is; the presentation

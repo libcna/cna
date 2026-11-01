@@ -9,8 +9,8 @@ precedence where the two differ. The CNA declaration is
 
 As of 2026-11-01, the XNA/FNA surface is present and `ApplyChanges()` reaches a real
 `GraphicsDevice::Reset()`. The former limitations that said multisampling, back-buffer format and
-depth/stencil format changed only stored `PresentationParameters` are closed. One current API
-defect is called out below and is also recorded in [`handoff.md` §5.1](../handoff.md#51-defects).
+depth/stencil format changed only stored `PresentationParameters` are closed. Preferred-size validation and direct-device disposal forwarding follow the reference behavior
+and are covered by native and C API regressions below.
 
 ## Public surface and defaults
 
@@ -74,7 +74,7 @@ MSAA path.
 |---|---|
 | `Disposed` | Raised once when the manager is disposed. |
 | `DeviceCreated` | Raised after initial `CreateDevice()` setup. As in FNA, its supplied sender is forwarded. |
-| `DeviceDisposing` | Raised by manager disposal, with the manager as sender. **Known defect:** disposal initiated directly on the managed `GraphicsDevice` releases the frame lease but is not forwarded to this event. |
+| `DeviceDisposing` | Raised with the manager as sender on manager disposal or forwarded from direct disposal of the managed device after `CreateDevice()`. Direct device disposal releases the frame lease before notification; subsequent manager cleanup does not repeat that notification. |
 | `DeviceResetting`, `DeviceReset` | Forward the managed device's events after `CreateDevice()` installs subscriptions; both use the manager as sender, matching FNA's `On*` asymmetry. |
 | `PreparingDeviceSettings` | Raised before both initial setup and a later reset, with the mutable candidate described above. |
 | `BeginDraw()` | Returns false without a device or while renderer recovery says drawing is unsafe; otherwise acquires the renderer-thread context for the frame. The recovery gate and context lease are CNA adaptations. |
@@ -117,7 +117,9 @@ definitions live in `modules/c-api/spec/GraphicsDeviceManager.toml`.
 The focused regression evidence includes:
 
 - `GraphicsDeviceManagerTests`, `GraphicsDeviceManagerPlatformTests` and the orientation suites for
-  defaults, service/device lifecycle, event count/sender semantics and orientation;
+  defaults, service/device lifecycle, event count/sender semantics and orientation. Direct-device
+  disposal checks notification, `Game::UnloadContent()`, lease release, repeated cleanup and
+  subscription removal before manager destruction;
 - `PresentationLifecycleTests` and `viewport_reset_after_resize_test` for reset ordering, applied
   parameters, repeated resize and viewport behavior;
 - `msaa_runtime_change_test`, `presentation_msaa_contract_test` and renderer MSAA tests for a live

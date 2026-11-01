@@ -306,7 +306,11 @@ namespace Microsoft::Xna::Framework
     {
         if (graphicsDevice_ != nullptr && ownsGraphicsDevice_)
         {
-            OnDeviceDisposing(this, System::EventArgs::Empty);
+            unsubscribeDeviceEvents();
+            if (!graphicsDevice_->getIsDisposedProperty())
+            {
+                OnDeviceDisposing(this, System::EventArgs::Empty);
+            }
             graphicsDevice_->Dispose();
             delete graphicsDevice_;
             graphicsDevice_ = nullptr;
@@ -370,13 +374,14 @@ namespace Microsoft::Xna::Framework
         if (!deviceEventsSubscribed_)
         {
             deviceDisposingToken_ = graphicsDevice_->Disposing.Add(
-                [this](System::Object*, const System::EventArgs&)
+                [this](System::Object* sender, const System::EventArgs& args)
                 {
                     // A game may explicitly dispose its device from Draw(). Release the frame's
                     // renderer-context lease while the renderer and its native context still
                     // exist; EndDraw must then neither present nor release a dangling lease.
                     frameContextLease_.reset();
                     drawBegun_ = false;
+                    OnDeviceDisposing(sender, args);
                 });
             deviceResettingToken_ = graphicsDevice_->DeviceResetting.Add(
                 [this](System::Object* sender, const System::EventArgs& args) { OnDeviceResetting(sender, args); });
@@ -446,16 +451,12 @@ namespace Microsoft::Xna::Framework
 
         if (disposing && graphicsDevice_ != nullptr)
         {
-            // This raise must not be gated on ownsGraphicsDevice_. CNA's Game
-            // always pre-owns its GraphicsDevice_ (unlike FNA, where GraphicsDeviceManager always
-            // owns the device it manages), so ownsGraphicsDevice_ is correctly false for every
-            // Game-attached manager -- gating the raise on it left DeviceDisposing permanently
-            // dead for the one configuration this whole codebase actually constructs, which in
-            // turn left the Game::Initialize() subscription with nothing to ever
-            // invoke. Only the actual delete below stays ownsGraphicsDevice_-gated: graphicsDevice_
-            // may point at a Game-owned value member, and deleting a non-heap object is memory
-            // corruption.
-            OnDeviceDisposing(this, System::EventArgs::Empty);
+            // Game owns its device value, so manager teardown reports disposal without deleting
+            // it. A device disposed directly has already forwarded this notification.
+            if (!graphicsDevice_->getIsDisposedProperty())
+            {
+                OnDeviceDisposing(this, System::EventArgs::Empty);
+            }
 
             if (ownsGraphicsDevice_)
             {
