@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- GamerServices deployment/architecture reconciliation (2026-11-01, GS-003–009/GSP-O6/GSH):
+  the guide replaces its staged construction diary with current control/relay/session ownership,
+  packet/resource bounds, origin capture, retries, APM and validation boundaries. It corrects
+  configuration precedence/failure, profile paths/durability, independent gamer zone/reputation,
+  keyring timeout scope, event reconnect timing, live policy refresh and cache budget claims;
+  database migration numbers are no longer presented as a client compatibility selector.
+  The canonical six-file protocol drift check passes against companion fb357f0; current targets
+  build, 53 focused GamerServices and 80 Net tests pass privately with HEADLESS/dummy audio, and
+  links/inventory pass. Cache capacity concurrency is recorded in §5.2. No companion build or
+  deployment, live accounts/keyring, physical audio, WAN/NAT or Windows/macOS qualification.
 - GamerServices manual-qualification reconciliation (2026-11-01, GS-AUDIT-P4/GSH-16): the plan
   names the actual service/fake/voice targets, required build features, synchronized harness
   barriers/departure order, external crash coordination and recovery-clock scope. It distinguishes
@@ -1690,6 +1700,11 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
+- GamerServices AssetDiskCache's default 256 MiB capacity is an eviction target, not a strict
+  cross-process budget: separate writers scan and evict without a shared capacity lock and can
+  concurrently admit different entries. mtime updates also make LRU approximate. Existing tests
+  cover serial eviction and concurrent same-entry completeness, not a simultaneous different-
+  entry capacity bound (source audit 2026-11-01, `docs/gamer-services-server.md`).
 - tools/net/voice_physical_check.sh prints capture/playback child statuses, spectral measurements
   and Guide sound counts but does not aggregate every failure into its shell exit status. A zero
   exit alone does not qualify real capture/output; the manual plan requires phase results and

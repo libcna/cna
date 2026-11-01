@@ -7,7 +7,22 @@ Everything it does not do, does only in part or decides differently from Xbox is
 server (GS-*), avatar-polish (GSP-*), Xbox-fidelity (GSX-*) and final-hardening (GSH-*) passes are
 in Git history.
 
-Configure outside ported gameplay code. Precedence is complete `CNA::GamerServices::setConfigurationOverride` (deployment/test hosts only), environment fields, title manifest, user settings. User settings default to `$XDG_CONFIG_HOME/cna/gamer-services.json` or `$HOME/.config/cna/gamer-services.json`. Title manifest defaults to `cna-title.json` in launch CWD or explicit `CNA_GAMER_SERVICES_MANIFEST`. No credential fields are accepted. Endpoint is full `https://host:port/cna/v1`; `gameId` must be administrator-provisioned and stable. Optional `caBundle` configures trust, never bypasses TLS checks. Optional `titleVersion` (environment `CNA_GAME_VERSION`; one to four dot-separated numbers such as `1.2.0`) states the game's version to a service that checks it: an administrator can set the oldest version a title accepts (`title-minimum-version`), and older games are then refused at sign-in (the Guide says the game must be updated) and when a network session starts (`GameUpdateRequiredException`, as XNA threw when Xbox LIVE no longer accepted a title version). CNA installs no title updates itself, so `GamerServicesDispatcher.InstallingTitleUpdate` is never raised; `GamerServicesComponent` still exits the game on it, as XNA's does.
+Configure outside ported gameplay code. A complete
+`CNA::GamerServices::setConfigurationOverride` bypasses file/environment resolution; it is for
+deployment/test hosts. Otherwise CNA reads user settings first, then the title manifest, then
+nonempty environment fields. User settings default to `$XDG_CONFIG_HOME/cna/gamer-services.json`
+or `$HOME/.config/cna/gamer-services.json`; the manifest is `cna-title.json` in launch CWD or the
+explicit `CNA_GAMER_SERVICES_MANIFEST` path. An explicitly named missing manifest fails.
+Unknown JSON fields and malformed present files fail rather than being rescued by a later
+override. Neither file accepts credentials. Empty environment strings do not clear file values.
+
+The endpoint is the full `https://host:port/cna/v1`; `gameId` must be provisioned and stable.
+`caBundle` configures trust without disabling chain/hostname checks. `titleVersion`
+(`CNA_GAME_VERSION`, one to four dot-separated numbers such as `1.2.0`) is sent when the service
+advertises `title-version`. An administrator can set `title-minimum-version`; an older or
+unstated version can then be refused at sign-in and session creation with the update-required
+path. CNA installs no title updates itself and does not raise `InstallingTitleUpdate`; the
+component retains its handler for that event.
 
 Environment: `CNA_GAMER_SERVICES_ENDPOINT`, `CNA_GAME_ID`, `CNA_GAME_VERSION`, `CNA_GAMER_SERVICES_CA_BUNDLE`, `CNA_GAMER_SERVICES_INSECURE_LOOPBACK=1` (explicit development only). Insecure HTTP is restricted to numeric `127.0.0.1` or `[::1]`, proxies and redirects disabled. No insecure Internet/LAN default. No endpoint means no service accounts, never fabricated Stub Gamers after backend migration. Credentials are user data, never title manifest values.
 
@@ -28,8 +43,9 @@ EndGame transition also saves subsequent column changes before GameEnded, includ
 through retained streams. Unchanged cached rows are not written over another writer's updates.
 Profiles are stored in `CNA_GAMER_SERVICES_PROFILES_DIR/profiles.json`, else
 `$XDG_DATA_HOME/cna/gamer-services/profiles.json` or `$HOME/.local/share/cna/gamer-services/profiles.json`
-(`%LOCALAPPDATA%\CNA\gamer-services` on Windows); writes are atomic and serialized between
-processes, and a store that cannot be read is never overwritten. Profiles whose `"autoSignIn"` is
+(`%LOCALAPPDATA%\CNA\gamer-services\profiles.json` is the fallback after XDG/HOME, including on
+Windows). Cooperating processes serialize writes and replace whole files; an unreadable store is
+not overwritten. This is not an fsync/power-loss durability guarantee. Profiles whose `"autoSignIn"` is
 `true` in that file, or the comma-separated names in `CNA_GAMER_SERVICES_AUTO_SIGN_IN` (up to four,
 created when missing; for unattended runs and CI), are signed in when gamer services start and
 appear, raising `SignedIn`, at the first `Dispatcher.Update`, as XNA reports profiles already signed
@@ -62,8 +78,8 @@ profile reports the `GamerZone` its member chose in the system Guide (Gamer zone
 of 0-5 stars. Its source data are real CNA player reviews (`prefer` or `avoid`); its numerical
 policy is CNA's: 5 x prefer / (prefer + avoid), rounded to the nearest quarter star. XNA exposes the
 stars, not how Xbox LIVE computed them, and CNA does not claim to reproduce that. A member nobody has
-reviewed, and every local profile, reports `GamerZone.Unknown` and 0, XNA's unset values -- no
-rating is invented (GSP-M1).
+reviewed reports reputation 0; its independently chosen gamer zone is retained. Local profiles
+report `GamerZone.Unknown` and reputation 0. No review-derived rating is invented (GSP-M1).
 
 **System Guide.** In a game that draws (a `GamerServicesComponent` with a graphics device service),
 the Home key, as in Games for Windows LIVE, or a controller's Guide button opens the Guide for that
@@ -75,7 +91,13 @@ sticks and triggers and the mouse buttons; the game reads them released, and inp
 Guide closes stays hidden from the game until it is released. `CNA_GAMER_SERVICES_GUIDE_BUTTON=0`
 disables the Home/Guide-button shortcut for a game that needs the Home key.
 
-Server canonical protocol and administration commands live in sibling `cna-gamer-services-server/README.md` and `protocol/v1.md`; its README also records the measured capacity and the 2026-09-29 production audit (GSP-O). Desktop client depends on libcurl with TLS support and nlohmann/json and keeps one connection to the service open between requests, sparing a TCP and TLS handshake per request (GSP-O6). A browser build has no service transport (outside the current scope, see `docs/browser-network-readiness.md`); the online client paths were tested on Linux only.
+Canonical service protocols and administration commands live in the companion
+`cna-gamer-services-server/README.md`, `protocol/v1.md` and `protocol/relay-v1.md`; the README
+also retains dated capacity/audit records. Database migration numbers are internal server history,
+not CNA client configuration or a compatibility selector: clients negotiate capabilities on v1.
+The native client needs libcurl with TLS and nlohmann/json; relay/events additionally need
+WebSockets as described below. A browser build has no service transport (see
+[browser readiness](browser-network-readiness.md)); Linux is the qualified online-client host.
 
 **Current state.** With a service: four local authenticated players, standard Guide sign-in,
 profiles and lookup, achievements (metadata, awards, pictures), mutual friends with joinable and
@@ -100,7 +122,11 @@ its first local gamer), speech is detected, encoded with Opus at 16 kHz in 20 ms
 unreliably to each remote machine allowed to hear it (the host relays, like game data); received
 speech plays through the SoundEffect path. `NetworkGamer.HasVoice`, `IsTalking` and
 `IsMutedByLocalUser` follow it, `LocalNetworkGamer.EnableSendVoice` switches one direction, and the
-Guide gamer card's Mute stops both. The microphone opens only while someone could hear it;
+Guide gamer card's Mute stops both. Service communication/block snapshots reach existing gamers
+on a successful `policy-refresh` heartbeat and Dispatcher.Update; voice then rechecks permissions
+on its five-second interval. Service loss retains the last known policy, and queued sound is not
+retroactively erased. The relay does not inspect or instantly revoke voice packets on privacy
+changes. The microphone opens only while someone could hear it;
 `CNA_VOICE=0` turns voice off, and a build without libopus carries none (`CNA_ENABLE_VOICE`).
 Voice media is not a Gamer Services control-plane feature: the control protocol has no voice
 operation, and NetworkSession voice is carried as realtime session traffic through SystemLink or the
@@ -112,9 +138,11 @@ coming online, and invitations to games and parties. **Push:** a signed-in clien
 authenticated WebSocket per account to the service's event channel (`/cna/v1/events`, capability
 `events`; the access token goes in the first message and is re-checked every minute). The service
 sends small "something changed" hints -- `invitations`, `messages`, `friends`, `party` -- only after
-the request that caused them succeeded; the client then immediately re-reads the authoritative state
-with the ordinary requests. Hints carry no data and no sequence: nothing is applied from a hint, so a
-lost or duplicated one costs nothing. The client reconnects with back-off (4 to 60 seconds) and with
+the request that caused them succeeded; the client then schedules a fresh authoritative read
+with the ordinary requests as the update pump processes them. Hints carry topics rather than
+authoritative entity data or a replay sequence; duplicates can cause extra reads and lost hints
+are recovered by a later successful poll. Failed connection attempts back off from 4 to 60 seconds;
+an established channel loss initially retries after 2 seconds. Reconnect uses
 its renewed token; `CNA_GAMER_SERVICES_EVENTS=0` turns the channel off. Polling remains the fallback
 and recovery path: invitations and parties are read every 5 seconds, messages and friends every 15;
 a friend coming online, presence, the session directory and leaderboards are only read, never pushed.
@@ -142,15 +170,18 @@ event/validation parity across every method is claimed.
 Achievement and profile picture streams read immutable SHA-256 resources from the service. The
 per-user cache defaults to `$XDG_CACHE_HOME/cna/gamer-services/assets` or
 `$HOME/.cache/cna/gamer-services/assets`; CI can override `CNA_GAMER_SERVICES_CACHE_DIR`.
-Only content hashes form filenames; data is verified on download and on every cache read (a damaged
-entry is a miss and is deleted), entries are written to a temporary and renamed into place (an
-interrupted write leaves no entry; temporaries older than ten minutes are deleted by later writes),
-and each API call returns a separate read-only stream at position zero. The cache keeps at most
-256 MiB, evicting the least recently used entries (a read counts as a use); several processes may
-share it. A full or unwritable cache still allows retrieval. PNG assets are bounded to 512x512/512 KiB; larger version-2 GLB resources have a 16-MiB
+Only content hashes form entry filenames. Reads verify the bytes; hash/read failures are misses
+and the damaged entry is removed, while invalid file type/size is a miss without guaranteed
+deletion. Entries are staged and renamed into place; an interrupted write can leave a temporary,
+which later writes remove after ten minutes. API picture reads return separate read-only streams
+at position zero. The default cache target is 256 MiB with mtime-based least-recent-use eviction;
+independent processes can race the scan/eviction, so this is not a strict shared capacity budget.
+Whole-entry sharing does not imply power-loss durability.
+A full/unwritable cache can still retrieve from the service. PNG assets are bounded to
+512x512/512 KiB; larger version-2 GLB resources have a 16-MiB
 transport ceiling. Hashes do not make malformed image/model content valid.
 
-Avatars (`avatars` capability, server schema 12): the service stores one CNA-encoded description
+Avatars (`avatars` capability): the service stores one CNA-encoded description
 per account and imports CNA's avatar catalogs (`cna-gamer-services-admin <db> avatar-catalog
 <CNA>/modules/gamer-services/assets/avatars/v3`; catalog v3 is the baseline, and the service
 refuses catalogs and descriptions below it). `AvatarDescription.BeginGetFromGamer` reads a
@@ -182,7 +213,7 @@ concurrent use of one refresh family. Where it is kept:
 
 | Host | Store |
 |---|---|
-| Linux, default location, a desktop keyring answering | The freedesktop Secret Service (GNOME Keyring, KWallet, ...), loaded at run time (libsecret-1.so.0; no build dependency). A record left in a file by an older CNA moves into it. A keyring that refuses a write (locked) leaves the record in the private file below; one that does not answer within two seconds counts as absent for the run |
+| Linux, default location, a desktop keyring answering | The freedesktop Secret Service (GNOME Keyring, KWallet, ...), loaded at run time (libsecret-1.so.0; no build dependency). Older private records can migrate into it. A refused write falls back to the private file below. The initial availability probe has a two-second bound; this is not a deadline on every later synchronous keyring operation |
 | Linux without a keyring (headless, no session bus), macOS, other POSIX | Owner-only 0700 directory, 0600 atomic files, no-follow opens, hard-link and size checks: protected plaintext, not encrypted at rest. macOS does not use the Keychain (not integrated) |
 | Windows | `%LOCALAPPDATA%\cna\gamer-services\credentials`, each record sealed to the Windows user with DPAPI (the endpoint/title binding as entropy); checked under Wine, never on Windows itself |
 | Browser | Nothing is kept |
@@ -259,182 +290,111 @@ Evidence: `OnlineNetworkSessionTest` (host and client adds, a refused add), serv
 tests, and `service_cna_session_add_gamer` (two processes in separate NAT namespaces; the joiner
 adds its second gamer, then exchanges data and plays a Ranked round with it).
 
-## Construction history (historical)
+## Transport and ownership contracts
 
-The notes below were written slice by slice while the service was built (2026-09-28/29, GS-003 to
-GS-009). They are kept for their design detail. Where one calls something unfinished, pending or
-not yet done, the sections above and
-[`gamer-services-known-limitations.md`](gamer-services-known-limitations.md) state what is current.
+The staged GS-* construction record is in Git history. The current layers have distinct
+responsibilities:
 
-The server now implements a persistent control-only PlayerMatch/Ranked directory with authenticated
-multi-local membership, property filtering and leased host revisions. Standard online Create, Find,
-Join and JoinInvited use this directory (GS-007/008); public Internet deployment acceptance is not
-claimed. Membership in this directory alone cannot establish Internet connectivity.
+| Layer | Contract |
+|---|---|
+| HTTPS control | Configuration, capabilities, authenticated accounts, directory membership, invitations and durable service data |
+| WSS relay | One-use grants bound to title/session/machine and the exact authenticated local group; opaque ENet datagrams with server-provided source identity |
+| Native session engine | ENet reliability/fragmentation, roster admission, host forwarding, lobby/game observations, recovery and resource ownership |
+| Public XNA layer | NetworkSession/Gamer/Guide objects and events published on their owning update thread |
 
-NetworkSessionProperties follows the fixed XNA eight-slot shape: Count=8, nullable signed integers
-at indices 0..7. Add/Insert/Remove/RemoveAt/Clear throw NotSupportedException; use the ordinary indexer
-for configuration. IsReadOnly reports false as the managed reference does. Live-session writes
-require the current host and reject disposed owners; advertised snapshots reject writes. C API
-symbols remain available and map structural refusal to CNA_RESULT_NOT_SUPPORTED. CNA range helpers
-expose only const iterators so writes cannot bypass ownership checks. Rebuild all consumers with
-sharp-runtime's GS-007b proxy layout (16->24 bytes on the measured 64-bit ABI).
+Membership in the directory does not establish direct Internet connectivity. Online game and voice
+traffic uses the relay; SystemLink retains its direct IPv4 ENet/discovery route. No STUN/ICE or
+direct-Internet fallback is implemented.
 
-The invitation control service now persists recipient-bound pending/accepted invitations and
-atomically joins up to four authenticated local users through an explicitly accepted invite,
-using available private then public slots. The Guide's invitation prompts, InviteAccepted and
-JoinInvited use it (GS-007e3); the private WSS relay is implemented and measured separately below. Invitations are CNA service IDs, not Xbox LIVE tokens.
+### Native prerequisites and captured authority
 
-CNA's private backend now provides typed directory create/find/join/get/touch/update/leave and
-recipient send/list/get/accept/dismiss invitation operations with strict response validation.
-Public XNA classes receive logical snapshots, not JSON, credentials or persistence objects.
-An explicitly selected deterministic fake covers leases, host revisions, fixed-property filtering,
-private slot allocation, consent, replay and quotas. It never substitutes for the real online backend.
-Multi-local requests collect current credentials under the transport lock and can refresh expired
-secondary players without signing out a valid machine owner. The real two-CNA-process TLS probe
-uses internal control APIs for this validation; it is not a standard-API gameplay acceptance sample
-and it proves neither relay nor Internet realtime connectivity.
+Control transport uses libcurl with TLS and nlohmann/json; a native build without the transport
+refuses a configured endpoint. Relay transport additionally needs libcurl >= 7.86 built with
+WebSockets and the required ws/wss protocols. A version number alone is insufficient: the client
+checks actual runtime capabilities. Browser builds have no service transport.
 
-The private backend can now request one-use, short-lived relay authority for its owning machine
-and exact authenticated local group. Server grants bind all members' revocable login families;
-ordinary access refresh preserves authority, while revocation/leave/host expiry invalidates it.
-Tickets are ephemeral and never part of gameplay source, URLs, logs or persistent client files.
-The secure WSS endpoint and private CNA ENet bridge are implemented; ticket issuance alone
-does not enable public PlayerMatch/Ranked sessions.
+The relay derives its authority/path from the validated configuration retained by the originating
+backend. Changing environment variables or the global override later cannot redirect that
+backend's credentials or tickets. TLS verifies chain/hostname and requires TLS >= 1.2; redirects
+and proxies are disabled. Only explicit insecure numeric-loopback configuration permits ws/http.
+Tickets are ephemeral and are not gameplay configuration, persistent refresh records or URLs.
 
-The sibling server now provides a separate authenticated WSS datagram relay at `/cna/relay/v1`.
-Its canonical header/handshake golden vectors are synchronized with CNA. One-use authority binds
-all local users, title, session and machine; outgoing frames carry server-injected source identity.
-Application queues reserve bounded space before executor posting and revalidate revocable grants.
-Standalone verified-WSS forwarding tests are server transport evidence. The private CNA libcurl
-bridge now carries genuine ENet datagrams through stable per-machine loopback UDP routes; two CNA
-processes/four local accounts exchange reliable, unreliable and 32KiB fragmented application data
-for both categories/titles. CA/hostname refusals, local UDP source/length guards, secondary revocation
-and server failure are tested. Public online NetworkSession and invitations followed (GS-007/008),
-with relay recovery inside a bounded window; public Internet deployment acceptance is not claimed.
-Control HTTPS, directory membership and realtime datagrams are separate responsibilities; service
-membership alone does not make direct ENet reachable across NAT. No new XNA or C transport API.
+Control exchanges reuse a serialized curl handle, allowing connection reuse; a permanently open
+connection or one handshake for the process lifetime is not guaranteed. With the service's
+request-outcomes capability, selected lost-response transport errors can retry once using the same
+request ID. Login, refresh and relay-ticket issuance are excluded because their secret-bearing
+outcomes are not replayed. This is not a retry using a fresh mutation ID.
 
-Private client relay requires libcurl >=7.86 built with TLS and ws/wss protocols; actual runtime
-capabilities are checked before authentication. It derives the WSS authority/path from existing
-validated deployment configuration, verifies certificate/hostname/TLS >=1.2 and disables redirects
-and proxies. Explicit insecure numeric-loopback settings alone permit ws. One owned worker handles
-nonblocking partial frames/sends, rolling outgoing limits, bounded 64-frame queues and fair UDP
-drain; wrong local source ports/oversize/queue saturation drop datagrams. Authoritative remote
-machine routes alone accept incoming packets. Ready/failure snapshots are consumed by the owner;
-no XNA events or object mutations occur on the worker. No native C ABI addition. Windows/macOS/
-browser provider behavior is not yet verified; SystemLink continues using its direct ENet path.
+### Packet admission and limits
 
-Build `cna_service_relay_client_harness` and set `CNA_SERVICE_RELAY_CLIENT_HARNESS` to that absolute
-binary path when running the sibling server's `service_cna_relay` CTest. The test explicitly skips
-without its harness; an unconfigured skip is not accepted as cross-repository validation.
-This private transport probe is not a standard-API acceptance sample or public online lifecycle proof.
+The relay bridge uses stable per-machine loopback UDP routes inside the native client; that local
+carrier does not make the external WSS route loopback-only. One worker owns its socket/partial
+frame state and publishes observations rather than mutating XNA objects on that worker.
+Local UDP source/length checks, bounded queues and ENet datagram validation run before injection.
 
-GS-008d1 now verifies these real CNA/ENet peers in separate Linux user/network namespaces, each
-with its own external slirp4netns outbound NAT, identical private 10.0.2.100 address and no inbound
-port mappings. The test checks namespace inodes, interface addresses and default routes; HTTPS/
-WSS uses the gateway's matching certificate IP SAN. Reliable fragmentation, unreliable data,
-UDP source/size guards, multi-local revocation and server loss pass for both title/category pairs.
-This is shared-host NAT-isolation evidence, not public Internet deployment or standard online
-NetworkSession acceptance. See sibling server README's optional `service_cna_relay_nat` setup.
-Test helpers are external optional prerequisites; production CNA/server neither link nor require
-GPL slirp4netns. No host network/package/desktop changes. Public online sessions, invitations and
-standard avatars followed in later slices.
+The session engine validates authenticated source-machine identity, complete local gamer groups,
+host-owned properties, known sender/target IDs and control direction before applying observations.
+Service ordinals map to wire gamer IDs 1..31. The host still relays game payloads and is trusted:
+membership validation is not malicious-host anti-cheat.
 
-GS-007e1 adds a private authenticated roster gate: service ordinals map to 1..31 wire IDs,
-only the actual host account receives the host flag, machine hello claims must exactly match
-its 1..4 local accounts, and welcome identities/properties/represented groups are checked before
-gamer mutation. The real native probe now exchanges the existing Net ClientHello/ServerWelcome
-and AppData codec through ENet, rejects a cross-machine account spoof and verifies application
-sender/target IDs. Controls are preflighted for bounded counts/strings/UTF-8/canonical booleans/
-IDs/eight properties/exact length before decode/allocation. Public PlayerMatch/Ranked create/join
-and Net Update roster/lease handling were built on these private helpers later (GS-007).
-Caller-owned APM metadata and public service Find are implemented as described below.
+Current private relay policies include a 1 MiB logical packet ceiling, 4 MiB ENet waiting data per
+peer and at most 2,048 fragment bitmap slots. Engine pending/local data and globally unacknowledged
+outgoing data each have 128-message/4 MiB bounds; outgoing control has a separate 64-message,
+256 KiB allowance. These are CNA resource policies, not measured Xbox packet-size guarantees.
+The public payload includes protocol overhead, so the entire logical ceiling is not caller data.
 
+Destruction closes owned transport/preparation resources and releases service membership.
+Short service/relay outages can recover within the engine's 15-second recovery window; host
+migration has its separate 30-second wait and the service's relay grace. These are detected-state
+deadlines, not a promise that every wall-clock outage shorter than 15 seconds succeeds.
 
-Standard PlayerMatch/Ranked Find/BeginFind/EndFind now uses the authenticated directory, including
-nullable filters, local capacity, category and title isolation. BeginFind is pending until
-Dispatcher.Update publishes completion, wait signal and callback on the update thread. End waits
-by pumping and can consume a result once. The raw C++ Begin result is caller-owned (use
-`std::unique_ptr<System::IAsyncResult>`); its metadata remains valid after End. Synchronous and C API
-adapters release metadata themselves. The existing C API `_async` functions remain blocking
-Begin/End adapters with a completion callback; they do not expose an asynchronous-result handle.
-Net Begin/End/result release and Dispatcher.Update currently belong on the owning update thread.
-Dropping a pending search suppresses its callback and releases the Net busy slot; background
-read-only work can still finish. Search refuses more than 256 matches with LIMIT_EXCEEDED.
-Create/Join/JoinInvited followed (GS-007); listings carry private service identity rather than a
-purported direct Internet endpoint. SystemLink transport is unchanged. Legacy offline
-immediate actions report CompletedSynchronously=true; online actions false. SystemLink's existing
-Join preparation still happens in End and awaits the separate APM/lifecycle audit.
+### Begin/End and update ownership
 
-Service profile/lookup/achievement/leaderboard Begin results also retain their backend until the
-caller releases the result. Queued work carries owned logical values and borrows its executor;
-it does not retain its own backend queue. EndRead creates public reader/gamer objects on the
-caller thread. A service reader keeps its original title/backend for subsequent paging; Dispose
-releases that context while existing gamer snapshots remain owned until the reader is destroyed.
-Guide owns pending social operations internally. These operations and result release belong on
-the dispatcher owner thread. Broader measured Xbox APM/error-order parity remains incomplete.
+Online Find/Create/Join/JoinInvited begin pending and publish completion/callbacks on the owner
+through Dispatcher.Update; End can pump that origin while waiting. Preparation is complete only
+after host resources or the joiner's exact authenticated welcome. Abandoning a pending result
+suppresses its callback and releases owned/busy state; already queued read-only work can finish.
+An unconsumed prepared result continues pumping/renewing and can fail before consumption.
 
-The private relay client now checks ENet datagrams before UDP injection, including command/payload
-lengths and reassembly fragment bounds. Its separate native loopback host caps logical packets
-at 1 MiB, waiting data at 4 MiB per peer and fragment bitmaps at 2,048 slots (including minimum
-ENet MTU support). These are CNA resource policies, not measured Xbox packet-size compatibility.
-The server continues forwarding opaque datagrams; the control and CNR v1 protocols are unchanged.
-Malformed remote fragments are refused in both native and separate-NAT E2E while valid ENet
-exchange succeeds. Direct SystemLink retains its existing host and transport behavior.
+Native raw Net Begin results are caller-owned; use std::unique_ptr<System::IAsyncResult> where
+that API returns a raw pointer. End consumes the operation once; result metadata remains alive
+until the caller releases it. Synchronous wrappers release their metadata. The C API's existing
+_async functions are blocking Begin/End adapters with completion callbacks, not independently
+polled asynchronous-result handles. See [the C ABI contract](c-api/README.md).
 
-Authenticated relay connections use the endpoint, title and trust configuration captured by their
-originating online backend. Later environment or programmatic changes cannot redirect that
-backend's credentials/tickets. Fake and unconfigured backends cannot silently acquire a network
-authority. This is an internal deployment boundary; XNA gameplay and the C API gain no transport
-configuration methods.
+Service profile/achievement/leaderboard results retain their originating backend; a reader retains
+the original title/backend for subsequent paging. Dispose releases that paging context, while
+already returned gamer snapshots remain owned by the reader until its destruction.
+Result release, public object/event publication and Net updates belong to the owning update
+thread. Retained superseded origins can progress without publishing stale identity events.
+This does not establish all-method Microsoft XNA APM/error-order parity.
 
-Private dispatcher subscriptions now drive preparation/lease observations after the backend event
-batch, including nested End waits. Cancellation suppresses copied callback snapshots, self-entry
-is skipped and other pending operations can progress. Callback errors do not starve the batch.
-Automatic presence retains its dirty revision when the service queue is full and retries after
-queued work drains. Public online sessions and their XNA lifecycle events are built on this
-boundary. Pending service and Net End calls also drain their retained origin after backend replacement;
-superseded identity events have no authority to replace current signed-in gamers.
+NetworkSessionProperties keeps eight nullable signed-integer slots. Structural collection edits
+throw NotSupportedException; host-owned live writes and immutable advertised snapshots have their
+own guards. Const range helpers prevent bypassing those writes. No historical object-size number
+is a stable public C++ ABI promise; rebuild consumers when changing the dependency/runtime ABI.
 
-Service-bound game packet admission validates the authenticated relay source, complete machine
-hello/welcome/broadcast groups, directory-owned state/properties and established realtime groups.
-Application sender IDs must belong to the source machine on the host; client deliveries arrive
-from the host for known remote senders and their own local targets. Length/tag/options/channel,
-1 MiB logical-packet ceiling and membership checks precede the single payload copy. Leave broadcasts from the authenticated host must name complete admitted remote groups; arbitrary
-unknown/partial leave or end claims cannot replace authority reconciliation. Genuine native and isolated-NAT probes
-reject both a forged existing sender ID and an unknown target, while fragmented and unreliable
-application exchange still passes. The service host remains trusted to relay game payloads; this
-is membership validation, not malicious-host anti-cheat. Public Create/Join, lifecycle conversion
-and relay recovery followed; online host migration followed later (GSP-K1). SystemLink keeps its existing codec and transport behavior.
+## Verification and deployment boundary
 
-The private owned `ServiceENetSession` now consumes prepared membership and TLS/WSS/native ENet
-resources. Hosts become ready after transport preparation; joining clients become ready only after
-an exact authenticated welcome. Stable service ordinals produce all local/remote IDs, with one
-primary host. Complete connected groups produce owned join/leave observations; directory removal
-revokes delivery before later packets. Directory revisions trigger bounded welcome recovery.
-The owner pump combines lease renewal, source admission, host forwarding between clients,
-local-target data and a single safe failure. Destruction closes transport and releases membership.
-Pending/local deliveries are bounded to 128 data messages and 4 MiB; global unacknowledged outgoing
-data has the same limits, with a separate 64-message control allowance. This preserves room for
-control even under game-data pressure. Existing SystemLink transport is unchanged.
+Useful source locations are ServiceConfiguration.cpp, GamerServicesBackend.cpp, CredentialStore.cpp
+and AssetDiskCache.cpp under modules/gamer-services/src/Internal, and ServiceENetSession,
+ServiceGamePacketPolicy, RelayTransport, RelayWebSocket and RelayEnetPolicy under
+modules/net/src/Internal. Public adapters and tests live in their respective module trees.
 
-Thirteen deterministic engine cases include three-machine forwarding, both local player slots,
-handshake timeout, authority removal and acknowledged-packet ownership limits. Real-server CTests
-`service_cna_owned_enet` and `service_cna_owned_enet_nat` use two separate processes, four accounts,
-both categories/titles, owned preparation, verified welcome, fragmented/unreliable delivery,
-secondary-account revocation, group departure and server failure. Use the same harness and NAT
-helper environment as the raw relay tests. They explicitly skip if the required harness/helpers
-are absent; a skip is not multiplayer evidence. The raw relay cases separately retain malicious
-fragments, source/size and forged incoming ID tests. These are private-engine acceptance; the
-public NetworkSession tests and samples (SAMPLE-096, SAMPLE-075) cover the standard API, and no public
-Internet deployment is claimed.
+Check vendored parser/header/golden bytes against a local companion checkout:
 
-A private `OnlineSessionOperation` now joins these stages under a weak dispatcher progress
-subscription. Begin-style construction stays pending; completion is published once on the owner
-only after prepared host resources or the exact client welcome. End-style consumption transfers
-the engine and bounded initial roster/data observations. Retained superseded origins progress
-without publishing their identity events. Unconsumed resources continue pumping/renewing; loss
-before consumption becomes a deferred error. Callback exceptions preserve the result, while
-nested progress, take/destruction inside a callback and abandoned joins are covered. Thirteen
-new coordinator cases pass; the real owned probes now use this coordinator through Dispatcher.Update.
-This is the private asynchronous lifetime boundary the public NetworkSession adapter uses.
+```sh
+python3 tools/net/check_service_protocol.py ../cna-gamer-services-server
+```
+
+That checks six files; it does not prove that every client operation, server feature, deployed
+binary or database migration is compatible. Configuration, asset-cache, credential, typed-directory,
+online-session and update-subscription tests provide focused software evidence.
+
+The companion service registers raw relay, owned-engine and public-session/invite/restart/migration/
+add-gamer CTests. Several require absolute CNA harness paths; the stronger NAT cases require real
+Linux namespaces and slirp4netns and return 77 when prerequisites are missing. Historical loopback
+or isolated shared-host passes are not new public-Internet, physical audio, Windows/macOS or Xbox
+qualification. Follow [the manual qualification plan](gamer-services-manual-qualification.md) for
+the exact seven namespace gates and 19 remaining lab scenarios, and retain individual pass/skip
+outcomes. This documentation review does not deploy a service or qualify a production release.

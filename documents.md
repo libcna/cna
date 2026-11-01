@@ -1,7 +1,7 @@
 # Documentation status in `docs/`
 
 Inventory: 2026-11-01. Scope: all 177 currently tracked `docs/**/*.md` files.
-Summary: 154 reviewed, 11 updated incidentally and awaiting their own audit, and 12 not yet
+Summary: 155 reviewed, 11 updated incidentally and awaiting their own audit, and 11 not yet
 independently reviewed.
 
 This file tracks the current documentation cleanup. A pending status does not imply that a
@@ -102,7 +102,7 @@ Removed historical files (`graphics-ext-scope-reduction.md`,
 - ✅ **REVIEWED** — [`docs/fx-compiled-effects.md`](docs/fx-compiled-effects.md)
 - 🟡 **PENDING — updated incidentally** — [`docs/gamer-services-known-limitations.md`](docs/gamer-services-known-limitations.md)
 - ✅ **REVIEWED** — [`docs/gamer-services-manual-qualification.md`](docs/gamer-services-manual-qualification.md)
-- ⬜ **PENDING** — [`docs/gamer-services-server.md`](docs/gamer-services-server.md)
+- ✅ **REVIEWED** — [`docs/gamer-services-server.md`](docs/gamer-services-server.md)
 - ✅ **REVIEWED** — [`docs/gdm-coverage.md`](docs/gdm-coverage.md)
 - ✅ **REVIEWED** — [`docs/gltf-api-change-review.md`](docs/gltf-api-change-review.md)
 - ✅ **REVIEWED** — [`docs/gltf-campaign-retrospective.md`](docs/gltf-campaign-retrospective.md)
