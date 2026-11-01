@@ -35,6 +35,18 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- C API media-contract reconciliation (2026-11-01): `docs/c-api/MEDIA.md` now describes owned
+  catalog/queue view handles, explicit view destruction, real thumbnail generation/fallbacks,
+  cleared absent-relation outputs, disposal-query exceptions and queue path/name copies rather
+  than full metadata clones. Video creation recognizes owned/pre-run devices; frame borrow
+  validation timing, descriptor outputs and decoded-frame generation are explicit. Matching
+  public-header and spec comments are corrected. A strict-C real-playback probe reproduced the
+  stale association token returned after original Video handle release; §5.1 records the open
+  defect and workaround without an implementation change. All selected media/video, content,
+  lifetime, ABI and C17/C++23 header targets build; nine focused tests and all seven teardown
+  variants pass through the private SDLGPU runner, including VideoSmoke's real-decode branch.
+  All nine coverage, generation, limitation, export and release gates pass. Public ABI and runtime
+  behavior are unchanged, and `documents.md` records completion in English.
 - Documentation inventory language correction (2026-11-01): `documents.md` is entirely in
   English, including status labels, audit guidance and duplicate-review notes, on the owner's
   request. Its tracked file list and review states are preserved; future updates stay in English.
@@ -1117,6 +1129,16 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- `cna_video_player_get_video` can return a stale handle with `out_available = CNA_TRUE` after
+  the caller destroys the Video handle used for Play. `VideoPlayerResource` retains the native
+  video but stores the original token in `playingVideoHandle`; the getter returns that token
+  without checking or republishing it. Measured on 2026-11-01 with a strict-C probe through the
+  private SDLGPU runner and `tests/assets/media/video/chroma_420.mkv`: playback succeeds on an
+  owned Reach device, original video destruction succeeds, get_video returns success/available
+  true/the same token, and `cna_video_get_width` on it returns INVALID_HANDLE (2), preserving its
+  output sentinel. Player/device/game cleanup succeeds. `CApi_VideoSmoke` checks continued player
+  state after original-handle release, but not this getter transition; no permanent regression
+  test covers it yet. Keep the original Video handle while relying on association queries.
 - `cna_index_buffer_get_info` always reports `is_content_lost = CNA_FALSE`, including after a
   real dynamic-buffer ContentLost notification. `modules/c-api/spec/IndexBuffer.toml` hard-codes
   the field instead of reading `DynamicIndexBuffer::getIsContentLostProperty()`. Measured on

@@ -440,9 +440,9 @@ CNA_C_API CNA_Result cna_song_get_is_disposed(CNA_SongHandle song, CNA_Bool* out
  * @param song Song handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * As in XNA, every member but `cna_song_get_is_disposed` then answers
- * `CNA_RESULT_INVALID_STATE`, and disposing twice is a successful no-op. Release the handle with
- * `cna_song_destroy`.
+ * Ordinary metadata/comparison/string queries then return CNA_RESULT_INVALID_STATE. IsDisposed,
+ * type-name and stored-path queries remain available; duration/play-count extension setters also
+ * do not check disposal. Repeated disposal is a no-op. Release the handle with cna_song_destroy.
  */
 CNA_C_API CNA_Result cna_song_dispose(CNA_SongHandle song);
 

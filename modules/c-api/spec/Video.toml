@@ -16,8 +16,7 @@ cna_video_get_soundtrack_type = { get = "object->value->getVideoSoundtrackTypePr
 cna_video_get_duration = { get = "object->value->getDurationProperty().getTicksProperty()" }
 cna_video_get_file_name_size = { size = "object->value->getFileNameProperty()" }
 cna_video_copy_file_name = { copy = "object->value->getFileNameProperty()" }
-# Presence only: a borrowed device handle is valid solely inside the callback that
-# produced it, so handing one back later would be a promise this ABI cannot keep.
+# This route reports only a stored native device pointer's presence, not its lifetime or a C handle.
 cna_video_get_has_graphics_device = { get = "object->value->getGraphicsDeviceProperty() != nullptr" }
 cna_video_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_video_copy_type_name = { copy = "object->value->GetTypeName()" }

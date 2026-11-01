@@ -51,7 +51,7 @@ CNA_C_API CNA_Result cna_video_info_init(CNA_VideoInfo* out_info);
 /**
  * @brief Creates a video from a file, probing the file for its metadata.
  *
- * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param graphics_device Owned device or currently valid borrowed device, including pre-run loans.
  * @param file_name UTF-8 path to the video file.
  * @param out_video Receives an owned video handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` when no file exists at that path,
@@ -70,7 +70,7 @@ CNA_C_API CNA_Result cna_video_create(
 /**
  * @brief Creates a video with explicit, trusted metadata.
  *
- * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param graphics_device Owned device or currently valid borrowed device, including pre-run loans.
  * @param file_name UTF-8 path to the video file.
  * @param duration_milliseconds Declared duration in milliseconds.
  * @param width Declared frame width in pixels.
@@ -98,7 +98,7 @@ CNA_C_API CNA_Result cna_video_create_with_metadata(
 /**
  * @brief Creates a video from a file URI or plain path.
  *
- * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param graphics_device Owned device or currently valid borrowed device, including pre-run loans.
  * @param uri UTF-8 `file:` URI or plain path.
  * @param out_video Receives an owned video handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` when the resolved path does not name a file,
@@ -265,9 +265,8 @@ CNA_C_API CNA_Result cna_video_copy_file_name(
  * @param out_bound Receives `CNA_TRUE` when the video carries a device.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * The device itself is not handed back: a borrowed device handle is valid only inside the callback
- * that produced it, so a video created in one frame cannot hand out a usable one later. This
- * reports presence, which is what the canonical getter's null check is for.
+ * This route reports only whether the Video stores a native device pointer. It does not return
+ * a device handle, retain the creating device or prove that the device is still alive.
  */
 CNA_C_API CNA_Result cna_video_get_has_graphics_device(
     CNA_VideoHandle video,
@@ -401,7 +400,9 @@ CNA_C_API CNA_Result cna_video_player_get_state(
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * The handle refers to the same video the caller passed to `cna_video_player_play`; it does not
- * transfer ownership. Stop retains the association. A video whose file the platform could not open is **not** reported: the
+ * transfer ownership. Keep the original handle alive when querying: the current adapter can return
+ * its stale token after release even though native playback is retained. Stop retains the
+ * association. A video whose file the platform could not open is **not** reported: the
  * canonical player clears its video when the decoder fails, so the answer is `CNA_FALSE` and the
  * player is left stopped.
  */
@@ -594,9 +595,9 @@ CNA_C_API CNA_Result cna_video_player_set_video_track_ext(
  * @param player Owned player handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
  *
- * Disposal releases the decoder and audio resources. Every playback route then refuses with
- * `CNA_RESULT_INVALID_STATE`, which is the canonical disposed-object failure; the disposal query
- * itself keeps answering.
+ * Disposal releases decoder/audio resources. Transport, state, position, frame queries and
+ * configuration setters then return CNA_RESULT_INVALID_STATE. IsDisposed, associated Video,
+ * configuration getters and type-name queries remain available. The handle still needs destruction.
  */
 CNA_C_API CNA_Result cna_video_player_dispose(CNA_VideoPlayerHandle player);
 

@@ -18,28 +18,28 @@ extern "C" {
  */
 typedef CNA_Handle CNA_MediaLibraryHandle;
 
-/** @brief Borrowed handle to one album in a media library. */
+/** @brief Owned C view handle to one album in a media library. */
 typedef CNA_Handle CNA_AlbumHandle;
 
-/** @brief Borrowed handle to one ordered, read-only collection of albums. */
+/** @brief Owned C view handle to one ordered, read-only collection of albums. */
 typedef CNA_Handle CNA_AlbumCollectionHandle;
 
-/** @brief Borrowed handle to one artist in a media library. */
+/** @brief Owned C view handle to one artist in a media library. */
 typedef CNA_Handle CNA_ArtistHandle;
 
-/** @brief Borrowed handle to one ordered, read-only collection of artists. */
+/** @brief Owned C view handle to one ordered, read-only collection of artists. */
 typedef CNA_Handle CNA_ArtistCollectionHandle;
 
-/** @brief Borrowed handle to one genre in a media library. */
+/** @brief Owned C view handle to one genre in a media library. */
 typedef CNA_Handle CNA_GenreHandle;
 
-/** @brief Borrowed handle to one ordered, read-only collection of genres. */
+/** @brief Owned C view handle to one ordered, read-only collection of genres. */
 typedef CNA_Handle CNA_GenreCollectionHandle;
 
-/** @brief Borrowed handle to one playlist in a media library. */
+/** @brief Owned C view handle to one playlist in a media library. */
 typedef CNA_Handle CNA_PlaylistHandle;
 
-/** @brief Borrowed handle to one ordered, read-only collection of playlists. */
+/** @brief Owned C view handle to one ordered, read-only collection of playlists. */
 typedef CNA_Handle CNA_PlaylistCollectionHandle;
 
 /**
@@ -94,9 +94,9 @@ CNA_C_API CNA_Result cna_media_library_get_is_disposed(
  * @param library Owned library handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * As in XNA, every library member but `cna_media_library_get_is_disposed` then answers
- * `CNA_RESULT_INVALID_STATE`, while collection and entity handles taken before keep working.
- * Disposing twice is a successful no-op.
+ * Catalog/source queries then return CNA_RESULT_INVALID_STATE, while collection/entity handles
+ * taken before keep working. IsDisposed and type-name queries remain available. Repeated disposal
+ * is a successful no-op; the library handle still needs destruction.
  */
 CNA_C_API CNA_Result cna_media_library_dispose(CNA_MediaLibraryHandle library);
 
@@ -156,11 +156,12 @@ CNA_C_API CNA_Result cna_media_library_copy_media_source_name(
  * @brief Returns the collection of every song in a library.
  *
  * @param library Owned library handle.
- * @param out_songs Receives a borrowed collection handle.
+ * @param out_songs Receives an owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * The returned handle keeps the library alive. Its elements are library-owned songs, so a song
- * handle taken out of it is a borrowed view rather than something the caller must keep.
+ * handle taken out of it is a separately owned C view retaining the library. Release every view
+ * through its matching destroy route.
  */
 CNA_C_API CNA_Result cna_media_library_get_songs(
     CNA_MediaLibraryHandle library,
@@ -170,7 +171,7 @@ CNA_C_API CNA_Result cna_media_library_get_songs(
  * @brief Returns the collection of every album in a library.
  *
  * @param library Owned library handle.
- * @param out_albums Receives a borrowed collection handle.
+ * @param out_albums Receives an owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_media_library_get_albums(
@@ -181,7 +182,7 @@ CNA_C_API CNA_Result cna_media_library_get_albums(
  * @brief Returns the collection of every artist in a library.
  *
  * @param library Owned library handle.
- * @param out_artists Receives a borrowed collection handle.
+ * @param out_artists Receives an owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_media_library_get_artists(
@@ -192,7 +193,7 @@ CNA_C_API CNA_Result cna_media_library_get_artists(
  * @brief Returns the collection of every genre in a library.
  *
  * @param library Owned library handle.
- * @param out_genres Receives a borrowed collection handle.
+ * @param out_genres Receives an owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_media_library_get_genres(
@@ -203,7 +204,7 @@ CNA_C_API CNA_Result cna_media_library_get_genres(
  * @brief Returns the collection of every playlist in a library.
  *
  * @param library Owned library handle.
- * @param out_playlists Receives a borrowed collection handle.
+ * @param out_playlists Receives an owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_media_library_get_playlists(
@@ -242,7 +243,7 @@ CNA_C_API CNA_Result cna_media_library_copy_type_name(
 /**
  * @brief Returns the byte count of an album's display name.
  *
- * @param album Borrowed album handle.
+ * @param album Owned album view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
@@ -253,7 +254,7 @@ CNA_C_API CNA_Result cna_album_get_name_size(CNA_AlbumHandle album, uint64_t* ou
 /**
  * @brief Copies an album's display name.
  *
- * @param album Borrowed album handle.
+ * @param album Owned album view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -269,7 +270,7 @@ CNA_C_API CNA_Result cna_album_copy_name(
 /**
  * @brief Reports whether an album has been disposed.
  *
- * @param album Borrowed album handle.
+ * @param album Owned album view handle.
  * @param out_disposed Receives `CNA_TRUE` when the album has been disposed.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -278,11 +279,11 @@ CNA_C_API CNA_Result cna_album_get_is_disposed(CNA_AlbumHandle album, CNA_Bool* 
 /**
  * @brief Disposes an album without releasing its handle.
  *
- * @param album Borrowed album handle.
+ * @param album Owned album view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * An album is a view into the library's data and owns nothing of its own; as in XNA,
- * every other member but its IsDisposed query then answers `CNA_RESULT_INVALID_STATE`, and
+ * ordinary metadata/comparison/string queries return CNA_RESULT_INVALID_STATE; type-name queries remain available, and
  * disposing twice is a successful no-op.
  */
 CNA_C_API CNA_Result cna_album_dispose(CNA_AlbumHandle album);
@@ -290,7 +291,7 @@ CNA_C_API CNA_Result cna_album_dispose(CNA_AlbumHandle album);
 /**
  * @brief Releases an album handle.
  *
- * @param album Borrowed album handle.
+ * @param album Owned album view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  *
  * The album itself belongs to its media library and is untouched.
@@ -300,7 +301,7 @@ CNA_C_API CNA_Result cna_album_destroy(CNA_AlbumHandle album);
 /**
  * @brief Returns an album's hash code.
  *
- * @param album Borrowed album handle.
+ * @param album Owned album view handle.
  * @param out_hash Receives the hash code.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -309,7 +310,7 @@ CNA_C_API CNA_Result cna_album_get_hash_code(CNA_AlbumHandle album, int32_t* out
 /**
  * @brief Returns the byte count of the album type's fully-qualified .NET type name.
  *
- * @param album Borrowed album handle.
+ * @param album Owned album view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -318,7 +319,7 @@ CNA_C_API CNA_Result cna_album_get_type_name_size(CNA_AlbumHandle album, uint64_
 /**
  * @brief Copies the album type's fully-qualified .NET type name.
  *
- * @param album Borrowed album handle.
+ * @param album Owned album view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -334,8 +335,8 @@ CNA_C_API CNA_Result cna_album_copy_type_name(
 /**
  * @brief Returns the collection of songs on an album.
  *
- * @param album Borrowed album handle.
- * @param out_songs Receives a borrowed collection handle.
+ * @param album Owned album view handle.
+ * @param out_songs Receives an owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * The collection belongs to the media library; the returned handle keeps that library alive.
@@ -347,7 +348,7 @@ CNA_C_API CNA_Result cna_album_get_songs(
 /**
  * @brief Returns how many albums a collection holds.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_count Receives the element count.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -358,9 +359,9 @@ CNA_C_API CNA_Result cna_album_collection_get_count(
 /**
  * @brief Returns a handle to the album at an index.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param index Zero-based index below the current count.
- * @param out_album Receives a borrowed album handle.
+ * @param out_album Receives an owned album view handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output or an index at or
  *         past the count, or a documented handle/thread failure.
  */
@@ -372,7 +373,7 @@ CNA_C_API CNA_Result cna_album_collection_get_at(
 /**
  * @brief Reports whether a album collection has been disposed.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_disposed Receives `CNA_TRUE` when the collection has been disposed.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -383,7 +384,7 @@ CNA_C_API CNA_Result cna_album_collection_get_is_disposed(
 /**
  * @brief Disposes a album collection without releasing its handle.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * As in XNA, its count and every index then answer `CNA_RESULT_INVALID_STATE`. Its elements are
@@ -395,7 +396,7 @@ CNA_C_API CNA_Result cna_album_collection_dispose(CNA_AlbumCollectionHandle coll
 /**
  * @brief Releases a album collection handle.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_album_collection_destroy(CNA_AlbumCollectionHandle collection);
@@ -403,7 +404,7 @@ CNA_C_API CNA_Result cna_album_collection_destroy(CNA_AlbumCollectionHandle coll
 /**
  * @brief Returns the byte count of the album-collection type's fully-qualified .NET type name.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -414,7 +415,7 @@ CNA_C_API CNA_Result cna_album_collection_get_type_name_size(
 /**
  * @brief Copies the album-collection type's fully-qualified .NET type name.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -432,7 +433,7 @@ CNA_C_API CNA_Result cna_album_collection_copy_type_name(
 /**
  * @brief Returns the byte count of an artist's display name.
  *
- * @param artist Borrowed artist handle.
+ * @param artist Owned artist view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
@@ -443,7 +444,7 @@ CNA_C_API CNA_Result cna_artist_get_name_size(CNA_ArtistHandle artist, uint64_t*
 /**
  * @brief Copies an artist's display name.
  *
- * @param artist Borrowed artist handle.
+ * @param artist Owned artist view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -459,7 +460,7 @@ CNA_C_API CNA_Result cna_artist_copy_name(
 /**
  * @brief Reports whether an artist has been disposed.
  *
- * @param artist Borrowed artist handle.
+ * @param artist Owned artist view handle.
  * @param out_disposed Receives `CNA_TRUE` when the artist has been disposed.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -468,11 +469,11 @@ CNA_C_API CNA_Result cna_artist_get_is_disposed(CNA_ArtistHandle artist, CNA_Boo
 /**
  * @brief Disposes an artist without releasing its handle.
  *
- * @param artist Borrowed artist handle.
+ * @param artist Owned artist view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * An artist is a view into the library's data and owns nothing of its own; as in XNA,
- * every other member but its IsDisposed query then answers `CNA_RESULT_INVALID_STATE`, and
+ * ordinary metadata/comparison/string queries return CNA_RESULT_INVALID_STATE; type-name queries remain available, and
  * disposing twice is a successful no-op.
  */
 CNA_C_API CNA_Result cna_artist_dispose(CNA_ArtistHandle artist);
@@ -480,7 +481,7 @@ CNA_C_API CNA_Result cna_artist_dispose(CNA_ArtistHandle artist);
 /**
  * @brief Releases an artist handle.
  *
- * @param artist Borrowed artist handle.
+ * @param artist Owned artist view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  *
  * The artist itself belongs to its media library and is untouched.
@@ -490,7 +491,7 @@ CNA_C_API CNA_Result cna_artist_destroy(CNA_ArtistHandle artist);
 /**
  * @brief Returns an artist's hash code.
  *
- * @param artist Borrowed artist handle.
+ * @param artist Owned artist view handle.
  * @param out_hash Receives the hash code.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -499,7 +500,7 @@ CNA_C_API CNA_Result cna_artist_get_hash_code(CNA_ArtistHandle artist, int32_t* 
 /**
  * @brief Returns the byte count of the artist type's fully-qualified .NET type name.
  *
- * @param artist Borrowed artist handle.
+ * @param artist Owned artist view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -508,7 +509,7 @@ CNA_C_API CNA_Result cna_artist_get_type_name_size(CNA_ArtistHandle artist, uint
 /**
  * @brief Copies the artist type's fully-qualified .NET type name.
  *
- * @param artist Borrowed artist handle.
+ * @param artist Owned artist view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -524,8 +525,8 @@ CNA_C_API CNA_Result cna_artist_copy_type_name(
 /**
  * @brief Returns the collection of songs by an artist.
  *
- * @param artist Borrowed artist handle.
- * @param out_songs Receives a borrowed collection handle.
+ * @param artist Owned artist view handle.
+ * @param out_songs Receives an owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * The collection belongs to the media library; the returned handle keeps that library alive.
@@ -537,7 +538,7 @@ CNA_C_API CNA_Result cna_artist_get_songs(
 /**
  * @brief Returns how many artists a collection holds.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_count Receives the element count.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -548,9 +549,9 @@ CNA_C_API CNA_Result cna_artist_collection_get_count(
 /**
  * @brief Returns a handle to the artist at an index.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param index Zero-based index below the current count.
- * @param out_artist Receives a borrowed artist handle.
+ * @param out_artist Receives an owned artist view handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output or an index at or
  *         past the count, or a documented handle/thread failure.
  */
@@ -562,7 +563,7 @@ CNA_C_API CNA_Result cna_artist_collection_get_at(
 /**
  * @brief Reports whether a artist collection has been disposed.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_disposed Receives `CNA_TRUE` when the collection has been disposed.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -573,7 +574,7 @@ CNA_C_API CNA_Result cna_artist_collection_get_is_disposed(
 /**
  * @brief Disposes a artist collection without releasing its handle.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * As in XNA, its count and every index then answer `CNA_RESULT_INVALID_STATE`. Its elements are
@@ -585,7 +586,7 @@ CNA_C_API CNA_Result cna_artist_collection_dispose(CNA_ArtistCollectionHandle co
 /**
  * @brief Releases a artist collection handle.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_artist_collection_destroy(CNA_ArtistCollectionHandle collection);
@@ -593,7 +594,7 @@ CNA_C_API CNA_Result cna_artist_collection_destroy(CNA_ArtistCollectionHandle co
 /**
  * @brief Returns the byte count of the artist-collection type's fully-qualified .NET type name.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -604,7 +605,7 @@ CNA_C_API CNA_Result cna_artist_collection_get_type_name_size(
 /**
  * @brief Copies the artist-collection type's fully-qualified .NET type name.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -622,7 +623,7 @@ CNA_C_API CNA_Result cna_artist_collection_copy_type_name(
 /**
  * @brief Returns the byte count of a genre's display name.
  *
- * @param genre Borrowed genre handle.
+ * @param genre Owned genre view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
@@ -633,7 +634,7 @@ CNA_C_API CNA_Result cna_genre_get_name_size(CNA_GenreHandle genre, uint64_t* ou
 /**
  * @brief Copies a genre's display name.
  *
- * @param genre Borrowed genre handle.
+ * @param genre Owned genre view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -649,7 +650,7 @@ CNA_C_API CNA_Result cna_genre_copy_name(
 /**
  * @brief Reports whether a genre has been disposed.
  *
- * @param genre Borrowed genre handle.
+ * @param genre Owned genre view handle.
  * @param out_disposed Receives `CNA_TRUE` when the genre has been disposed.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -658,11 +659,11 @@ CNA_C_API CNA_Result cna_genre_get_is_disposed(CNA_GenreHandle genre, CNA_Bool* 
 /**
  * @brief Disposes a genre without releasing its handle.
  *
- * @param genre Borrowed genre handle.
+ * @param genre Owned genre view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * A genre is a view into the library's data and owns nothing of its own; as in XNA,
- * every other member but its IsDisposed query then answers `CNA_RESULT_INVALID_STATE`, and
+ * ordinary metadata/comparison/string queries return CNA_RESULT_INVALID_STATE; type-name queries remain available, and
  * disposing twice is a successful no-op.
  */
 CNA_C_API CNA_Result cna_genre_dispose(CNA_GenreHandle genre);
@@ -670,7 +671,7 @@ CNA_C_API CNA_Result cna_genre_dispose(CNA_GenreHandle genre);
 /**
  * @brief Releases a genre handle.
  *
- * @param genre Borrowed genre handle.
+ * @param genre Owned genre view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  *
  * The genre itself belongs to its media library and is untouched.
@@ -680,7 +681,7 @@ CNA_C_API CNA_Result cna_genre_destroy(CNA_GenreHandle genre);
 /**
  * @brief Returns a genre's hash code.
  *
- * @param genre Borrowed genre handle.
+ * @param genre Owned genre view handle.
  * @param out_hash Receives the hash code.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -689,7 +690,7 @@ CNA_C_API CNA_Result cna_genre_get_hash_code(CNA_GenreHandle genre, int32_t* out
 /**
  * @brief Returns the byte count of the genre type's fully-qualified .NET type name.
  *
- * @param genre Borrowed genre handle.
+ * @param genre Owned genre view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -698,7 +699,7 @@ CNA_C_API CNA_Result cna_genre_get_type_name_size(CNA_GenreHandle genre, uint64_
 /**
  * @brief Copies the genre type's fully-qualified .NET type name.
  *
- * @param genre Borrowed genre handle.
+ * @param genre Owned genre view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -714,8 +715,8 @@ CNA_C_API CNA_Result cna_genre_copy_type_name(
 /**
  * @brief Returns the collection of songs in a genre.
  *
- * @param genre Borrowed genre handle.
- * @param out_songs Receives a borrowed collection handle.
+ * @param genre Owned genre view handle.
+ * @param out_songs Receives an owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * The collection belongs to the media library; the returned handle keeps that library alive.
@@ -727,7 +728,7 @@ CNA_C_API CNA_Result cna_genre_get_songs(
 /**
  * @brief Returns how many genres a collection holds.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_count Receives the element count.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -738,9 +739,9 @@ CNA_C_API CNA_Result cna_genre_collection_get_count(
 /**
  * @brief Returns a handle to the genre at an index.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param index Zero-based index below the current count.
- * @param out_genre Receives a borrowed genre handle.
+ * @param out_genre Receives an owned genre view handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output or an index at or
  *         past the count, or a documented handle/thread failure.
  */
@@ -752,7 +753,7 @@ CNA_C_API CNA_Result cna_genre_collection_get_at(
 /**
  * @brief Reports whether a genre collection has been disposed.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_disposed Receives `CNA_TRUE` when the collection has been disposed.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -763,7 +764,7 @@ CNA_C_API CNA_Result cna_genre_collection_get_is_disposed(
 /**
  * @brief Disposes a genre collection without releasing its handle.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * As in XNA, its count and every index then answer `CNA_RESULT_INVALID_STATE`. Its elements are
@@ -775,7 +776,7 @@ CNA_C_API CNA_Result cna_genre_collection_dispose(CNA_GenreCollectionHandle coll
 /**
  * @brief Releases a genre collection handle.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_genre_collection_destroy(CNA_GenreCollectionHandle collection);
@@ -783,7 +784,7 @@ CNA_C_API CNA_Result cna_genre_collection_destroy(CNA_GenreCollectionHandle coll
 /**
  * @brief Returns the byte count of the genre-collection type's fully-qualified .NET type name.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -794,7 +795,7 @@ CNA_C_API CNA_Result cna_genre_collection_get_type_name_size(
 /**
  * @brief Copies the genre-collection type's fully-qualified .NET type name.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -812,7 +813,7 @@ CNA_C_API CNA_Result cna_genre_collection_copy_type_name(
 /**
  * @brief Returns the byte count of a playlist's display name.
  *
- * @param playlist Borrowed playlist handle.
+ * @param playlist Owned playlist view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
@@ -823,7 +824,7 @@ CNA_C_API CNA_Result cna_playlist_get_name_size(CNA_PlaylistHandle playlist, uin
 /**
  * @brief Copies a playlist's display name.
  *
- * @param playlist Borrowed playlist handle.
+ * @param playlist Owned playlist view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -839,7 +840,7 @@ CNA_C_API CNA_Result cna_playlist_copy_name(
 /**
  * @brief Reports whether a playlist has been disposed.
  *
- * @param playlist Borrowed playlist handle.
+ * @param playlist Owned playlist view handle.
  * @param out_disposed Receives `CNA_TRUE` when the playlist has been disposed.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -848,11 +849,11 @@ CNA_C_API CNA_Result cna_playlist_get_is_disposed(CNA_PlaylistHandle playlist, C
 /**
  * @brief Disposes a playlist without releasing its handle.
  *
- * @param playlist Borrowed playlist handle.
+ * @param playlist Owned playlist view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * A playlist is a view into the library's data and owns nothing of its own; as in XNA,
- * every other member but its IsDisposed query then answers `CNA_RESULT_INVALID_STATE`, and
+ * ordinary metadata/comparison/string queries return CNA_RESULT_INVALID_STATE; type-name queries remain available, and
  * disposing twice is a successful no-op.
  */
 CNA_C_API CNA_Result cna_playlist_dispose(CNA_PlaylistHandle playlist);
@@ -860,7 +861,7 @@ CNA_C_API CNA_Result cna_playlist_dispose(CNA_PlaylistHandle playlist);
 /**
  * @brief Releases a playlist handle.
  *
- * @param playlist Borrowed playlist handle.
+ * @param playlist Owned playlist view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  *
  * The playlist itself belongs to its media library and is untouched.
@@ -870,7 +871,7 @@ CNA_C_API CNA_Result cna_playlist_destroy(CNA_PlaylistHandle playlist);
 /**
  * @brief Returns a playlist's hash code.
  *
- * @param playlist Borrowed playlist handle.
+ * @param playlist Owned playlist view handle.
  * @param out_hash Receives the hash code.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -879,7 +880,7 @@ CNA_C_API CNA_Result cna_playlist_get_hash_code(CNA_PlaylistHandle playlist, int
 /**
  * @brief Returns the byte count of the playlist type's fully-qualified .NET type name.
  *
- * @param playlist Borrowed playlist handle.
+ * @param playlist Owned playlist view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -888,7 +889,7 @@ CNA_C_API CNA_Result cna_playlist_get_type_name_size(CNA_PlaylistHandle playlist
 /**
  * @brief Copies the playlist type's fully-qualified .NET type name.
  *
- * @param playlist Borrowed playlist handle.
+ * @param playlist Owned playlist view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -904,8 +905,8 @@ CNA_C_API CNA_Result cna_playlist_copy_type_name(
 /**
  * @brief Returns the collection of songs in a playlist.
  *
- * @param playlist Borrowed playlist handle.
- * @param out_songs Receives a borrowed collection handle.
+ * @param playlist Owned playlist view handle.
+ * @param out_songs Receives an owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * The collection belongs to the media library; the returned handle keeps that library alive.
@@ -917,7 +918,7 @@ CNA_C_API CNA_Result cna_playlist_get_songs(
 /**
  * @brief Returns how many playlists a collection holds.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_count Receives the element count.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -928,9 +929,9 @@ CNA_C_API CNA_Result cna_playlist_collection_get_count(
 /**
  * @brief Returns a handle to the playlist at an index.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param index Zero-based index below the current count.
- * @param out_playlist Receives a borrowed playlist handle.
+ * @param out_playlist Receives an owned playlist view handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output or an index at or
  *         past the count, or a documented handle/thread failure.
  */
@@ -942,7 +943,7 @@ CNA_C_API CNA_Result cna_playlist_collection_get_at(
 /**
  * @brief Reports whether a playlist collection has been disposed.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_disposed Receives `CNA_TRUE` when the collection has been disposed.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -953,7 +954,7 @@ CNA_C_API CNA_Result cna_playlist_collection_get_is_disposed(
 /**
  * @brief Disposes a playlist collection without releasing its handle.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * As in XNA, its count and every index then answer `CNA_RESULT_INVALID_STATE`. Its elements are
@@ -965,7 +966,7 @@ CNA_C_API CNA_Result cna_playlist_collection_dispose(CNA_PlaylistCollectionHandl
 /**
  * @brief Releases a playlist collection handle.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_playlist_collection_destroy(CNA_PlaylistCollectionHandle collection);
@@ -973,7 +974,7 @@ CNA_C_API CNA_Result cna_playlist_collection_destroy(CNA_PlaylistCollectionHandl
 /**
  * @brief Returns the byte count of the playlist-collection type's fully-qualified .NET type name.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -984,7 +985,7 @@ CNA_C_API CNA_Result cna_playlist_collection_get_type_name_size(
 /**
  * @brief Copies the playlist-collection type's fully-qualified .NET type name.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -1066,8 +1067,8 @@ CNA_C_API CNA_Result cna_playlist_equals(
 /**
  * @brief Returns the artist an album belongs to.
  *
- * @param album Borrowed album handle.
- * @param out_artist Receives a borrowed artist handle when one is available; untouched otherwise.
+ * @param album Owned album view handle.
+ * @param out_artist Receives an owned artist view handle when one is available; invalid otherwise.
  * @param out_available Receives `CNA_TRUE` when the album has an artist.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
@@ -1082,8 +1083,8 @@ CNA_C_API CNA_Result cna_album_get_artist(
 /**
  * @brief Returns the genre an album belongs to.
  *
- * @param album Borrowed album handle.
- * @param out_genre Receives a borrowed genre handle when one is available; untouched otherwise.
+ * @param album Owned album view handle.
+ * @param out_genre Receives an owned genre view handle when one is available; invalid otherwise.
  * @param out_available Receives `CNA_TRUE` when the album has a genre.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1095,7 +1096,7 @@ CNA_C_API CNA_Result cna_album_get_genre(
 /**
  * @brief Returns an album's total duration.
  *
- * @param album Borrowed album handle.
+ * @param album Owned album view handle.
  * @param out_ticks Receives the duration in 100-nanosecond ticks.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1104,7 +1105,7 @@ CNA_C_API CNA_Result cna_album_get_duration(CNA_AlbumHandle album, int64_t* out_
 /**
  * @brief Reports whether an album has cover art.
  *
- * @param album Borrowed album handle.
+ * @param album Owned album view handle.
  * @param out_has_art Receives `CNA_TRUE` when cover art is available.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
@@ -1115,7 +1116,7 @@ CNA_C_API CNA_Result cna_album_get_has_art(CNA_AlbumHandle album, CNA_Bool* out_
 /**
  * @brief Returns the byte count of an album's cover-art image.
  *
- * @param album Borrowed album handle.
+ * @param album Owned album view handle.
  * @param out_bytes Receives the image's byte count.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the album has no art, or a
  *         documented argument/handle/thread/native failure.
@@ -1129,7 +1130,7 @@ CNA_C_API CNA_Result cna_album_get_art_size(CNA_AlbumHandle album, uint64_t* out
 /**
  * @brief Copies an album's cover-art image.
  *
- * @param album Borrowed album handle.
+ * @param album Owned album view handle.
  * @param destination Buffer receiving the image bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count.
@@ -1146,20 +1147,20 @@ CNA_C_API CNA_Result cna_album_copy_art(
 /**
  * @brief Returns the byte count of an album's thumbnail image.
  *
- * @param album Borrowed album handle.
+ * @param album Owned album view handle.
  * @param out_bytes Receives the image's byte count.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the album has no art, or a
  *         documented argument/handle/thread/native failure.
  *
- * CNA generates no separate thumbnail, so this is the same image the cover-art routes return. That
- * is the canonical behavior, not a C limitation.
+ * Large decodable file images are downscaled and encoded as PNG. Small/unsupported images and
+ * embedded album art fall back to original bytes.
  */
 CNA_C_API CNA_Result cna_album_get_thumbnail_size(CNA_AlbumHandle album, uint64_t* out_bytes);
 
 /**
  * @brief Copies an album's thumbnail image.
  *
- * @param album Borrowed album handle.
+ * @param album Owned album view handle.
  * @param destination Buffer receiving the image bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count.
@@ -1178,8 +1179,8 @@ CNA_C_API CNA_Result cna_album_copy_thumbnail(
 /**
  * @brief Returns the collection of albums by an artist.
  *
- * @param artist Borrowed artist handle.
- * @param out_albums Receives a borrowed collection handle.
+ * @param artist Owned artist view handle.
+ * @param out_albums Receives an owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_artist_get_albums(
@@ -1189,8 +1190,8 @@ CNA_C_API CNA_Result cna_artist_get_albums(
 /**
  * @brief Returns the collection of albums in a genre.
  *
- * @param genre Borrowed genre handle.
- * @param out_albums Receives a borrowed collection handle.
+ * @param genre Owned genre view handle.
+ * @param out_albums Receives an owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_genre_get_albums(
@@ -1200,7 +1201,7 @@ CNA_C_API CNA_Result cna_genre_get_albums(
 /**
  * @brief Returns a playlist's total duration.
  *
- * @param playlist Borrowed playlist handle.
+ * @param playlist Owned playlist view handle.
  * @param out_ticks Receives the duration in 100-nanosecond ticks.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1212,7 +1213,7 @@ CNA_C_API CNA_Result cna_playlist_get_duration(CNA_PlaylistHandle playlist, int6
  * @brief Returns the album a song appears on.
  *
  * @param song Song handle.
- * @param out_album Receives a borrowed album handle when one is available; untouched otherwise.
+ * @param out_album Receives an owned album view handle when one is available; invalid otherwise.
  * @param out_available Receives `CNA_TRUE` when the song belongs to a library album.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
@@ -1228,7 +1229,7 @@ CNA_C_API CNA_Result cna_song_get_album(
  * @brief Returns the artist of a song.
  *
  * @param song Song handle.
- * @param out_artist Receives a borrowed artist handle when one is available; untouched otherwise.
+ * @param out_artist Receives an owned artist view handle when one is available; invalid otherwise.
  * @param out_available Receives `CNA_TRUE` when the song belongs to a library artist.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1241,7 +1242,7 @@ CNA_C_API CNA_Result cna_song_get_artist(
  * @brief Returns the genre of a song.
  *
  * @param song Song handle.
- * @param out_genre Receives a borrowed genre handle when one is available; untouched otherwise.
+ * @param out_genre Receives an owned genre view handle when one is available; invalid otherwise.
  * @param out_available Receives `CNA_TRUE` when the song belongs to a library genre.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1252,22 +1253,22 @@ CNA_C_API CNA_Result cna_song_get_genre(
 
 /* ---- Pictures ---- */
 
-/** @brief Borrowed handle to one picture in a media library. */
+/** @brief Owned C view handle to one picture in a media library. */
 typedef CNA_Handle CNA_PictureHandle;
 
-/** @brief Borrowed handle to one ordered, read-only collection of pictures. */
+/** @brief Owned C view handle to one ordered, read-only collection of pictures. */
 typedef CNA_Handle CNA_PictureCollectionHandle;
 
-/** @brief Borrowed handle to one picture album in a media library. */
+/** @brief Owned C view handle to one picture album in a media library. */
 typedef CNA_Handle CNA_PictureAlbumHandle;
 
-/** @brief Borrowed handle to one ordered, read-only collection of picture albums. */
+/** @brief Owned C view handle to one ordered, read-only collection of picture albums. */
 typedef CNA_Handle CNA_PictureAlbumCollectionHandle;
 
 /**
  * @brief Returns the byte count of a picture's display name.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
@@ -1278,7 +1279,7 @@ CNA_C_API CNA_Result cna_picture_get_name_size(CNA_PictureHandle picture, uint64
 /**
  * @brief Copies a picture's display name.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -1294,7 +1295,7 @@ CNA_C_API CNA_Result cna_picture_copy_name(
 /**
  * @brief Returns the byte count of a picture's library token.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
@@ -1308,7 +1309,7 @@ CNA_C_API CNA_Result cna_picture_get_token_size_ext(
 /**
  * @brief Copies a picture's library token.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -1324,8 +1325,8 @@ CNA_C_API CNA_Result cna_picture_copy_token_ext(
 /**
  * @brief Returns the album that contains a picture.
  *
- * @param picture Borrowed picture handle.
- * @param out_album Receives a borrowed album handle when one is available; untouched otherwise.
+ * @param picture Owned picture view handle.
+ * @param out_album Receives an owned album view handle when one is available; invalid otherwise.
  * @param out_available Receives `CNA_TRUE` when the picture belongs to an album.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1337,7 +1338,7 @@ CNA_C_API CNA_Result cna_picture_get_album(
 /**
  * @brief Returns when a picture was taken.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @param out_unix_ticks Receives the time as 100-nanosecond ticks since 1970-01-01 UTC.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
@@ -1352,7 +1353,7 @@ CNA_C_API CNA_Result cna_picture_get_date_unix_ticks(
 /**
  * @brief Returns a picture's width in pixels.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @param out_width Receives the width, or zero when the image could not be measured.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1361,7 +1362,7 @@ CNA_C_API CNA_Result cna_picture_get_width(CNA_PictureHandle picture, int32_t* o
 /**
  * @brief Returns a picture's height in pixels.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @param out_height Receives the height, or zero when the image could not be measured.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1370,7 +1371,7 @@ CNA_C_API CNA_Result cna_picture_get_height(CNA_PictureHandle picture, int32_t* 
 /**
  * @brief Returns the byte count of a picture's full-size image.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @param out_bytes Receives the image's byte count.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
@@ -1383,7 +1384,7 @@ CNA_C_API CNA_Result cna_picture_get_image_size(CNA_PictureHandle picture, uint6
 /**
  * @brief Copies a picture's full-size image.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @param destination Buffer receiving the image bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count.
@@ -1399,12 +1400,12 @@ CNA_C_API CNA_Result cna_picture_copy_image(
 /**
  * @brief Returns the byte count of a picture's thumbnail image.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @param out_bytes Receives the image's byte count.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
- * CNA generates no separate thumbnail, so this is the same image the full-size routes return —
- * canonical behavior rather than a C limitation.
+ * Large decodable images are downscaled and encoded as PNG. Small or unsupported images fall
+ * back to original bytes.
  */
 CNA_C_API CNA_Result cna_picture_get_thumbnail_size(
     CNA_PictureHandle picture,
@@ -1413,7 +1414,7 @@ CNA_C_API CNA_Result cna_picture_get_thumbnail_size(
 /**
  * @brief Copies a picture's thumbnail image.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @param destination Buffer receiving the image bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count.
@@ -1429,7 +1430,7 @@ CNA_C_API CNA_Result cna_picture_copy_thumbnail(
 /**
  * @brief Reports whether a picture has been disposed.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @param out_disposed Receives `CNA_TRUE` when the picture has been disposed.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1440,18 +1441,18 @@ CNA_C_API CNA_Result cna_picture_get_is_disposed(
 /**
  * @brief Disposes a picture without releasing its handle.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * As in XNA, every other member but its IsDisposed query then answers
- * `CNA_RESULT_INVALID_STATE`, and disposing twice is a successful no-op.
+ * Ordinary metadata/comparison/string queries return CNA_RESULT_INVALID_STATE; IsDisposed and
+ * type-name queries remain available, and disposing twice is a successful no-op.
  */
 CNA_C_API CNA_Result cna_picture_dispose(CNA_PictureHandle picture);
 
 /**
  * @brief Releases a picture handle.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_picture_destroy(CNA_PictureHandle picture);
@@ -1475,7 +1476,7 @@ CNA_C_API CNA_Result cna_picture_equals(
 /**
  * @brief Returns a picture's hash code.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @param out_hash Receives the hash code.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1484,7 +1485,7 @@ CNA_C_API CNA_Result cna_picture_get_hash_code(CNA_PictureHandle picture, int32_
 /**
  * @brief Returns the byte count of the picture type's fully-qualified .NET type name.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1495,7 +1496,7 @@ CNA_C_API CNA_Result cna_picture_get_type_name_size(
 /**
  * @brief Copies the picture type's fully-qualified .NET type name.
  *
- * @param picture Borrowed picture handle.
+ * @param picture Owned picture view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -1511,7 +1512,7 @@ CNA_C_API CNA_Result cna_picture_copy_type_name(
 /**
  * @brief Returns the byte count of a picture album's display name.
  *
- * @param album Borrowed picture album handle.
+ * @param album Owned picture-album view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
@@ -1524,7 +1525,7 @@ CNA_C_API CNA_Result cna_picture_album_get_name_size(
 /**
  * @brief Copies a picture album's display name.
  *
- * @param album Borrowed picture album handle.
+ * @param album Owned picture-album view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -1540,8 +1541,8 @@ CNA_C_API CNA_Result cna_picture_album_copy_name(
 /**
  * @brief Returns a picture album's parent album.
  *
- * @param album Borrowed picture album handle.
- * @param out_parent Receives a borrowed album handle when one is available; untouched otherwise.
+ * @param album Owned picture-album view handle.
+ * @param out_parent Receives an owned album view handle when one is available; invalid otherwise.
  * @param out_available Receives `CNA_TRUE` when the album has a parent.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
@@ -1556,8 +1557,8 @@ CNA_C_API CNA_Result cna_picture_album_get_parent(
 /**
  * @brief Returns a picture album's child albums.
  *
- * @param album Borrowed picture album handle.
- * @param out_albums Receives a borrowed collection handle.
+ * @param album Owned picture-album view handle.
+ * @param out_albums Receives an owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_picture_album_get_albums(
@@ -1567,8 +1568,8 @@ CNA_C_API CNA_Result cna_picture_album_get_albums(
 /**
  * @brief Returns the pictures directly in a picture album.
  *
- * @param album Borrowed picture album handle.
- * @param out_pictures Receives a borrowed collection handle.
+ * @param album Owned picture-album view handle.
+ * @param out_pictures Receives an owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_picture_album_get_pictures(
@@ -1578,7 +1579,7 @@ CNA_C_API CNA_Result cna_picture_album_get_pictures(
 /**
  * @brief Reports whether a picture album has been disposed.
  *
- * @param album Borrowed picture album handle.
+ * @param album Owned picture-album view handle.
  * @param out_disposed Receives `CNA_TRUE` when the album has been disposed.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1589,18 +1590,18 @@ CNA_C_API CNA_Result cna_picture_album_get_is_disposed(
 /**
  * @brief Disposes a picture album without releasing its handle.
  *
- * @param album Borrowed picture album handle.
+ * @param album Owned picture-album view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * As in XNA, every other member but its IsDisposed query then answers
- * `CNA_RESULT_INVALID_STATE`, and disposing twice is a successful no-op.
+ * Ordinary metadata/comparison/string queries return CNA_RESULT_INVALID_STATE; IsDisposed and
+ * type-name queries remain available, and disposing twice is a successful no-op.
  */
 CNA_C_API CNA_Result cna_picture_album_dispose(CNA_PictureAlbumHandle album);
 
 /**
  * @brief Releases a picture album handle.
  *
- * @param album Borrowed picture album handle.
+ * @param album Owned picture-album view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_picture_album_destroy(CNA_PictureAlbumHandle album);
@@ -1623,7 +1624,7 @@ CNA_C_API CNA_Result cna_picture_album_equals(
 /**
  * @brief Returns a picture album's hash code.
  *
- * @param album Borrowed picture album handle.
+ * @param album Owned picture-album view handle.
  * @param out_hash Receives the hash code.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1634,7 +1635,7 @@ CNA_C_API CNA_Result cna_picture_album_get_hash_code(
 /**
  * @brief Returns the byte count of the picture-album type's fully-qualified .NET type name.
  *
- * @param album Borrowed picture album handle.
+ * @param album Owned picture-album view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1645,7 +1646,7 @@ CNA_C_API CNA_Result cna_picture_album_get_type_name_size(
 /**
  * @brief Copies the picture-album type's fully-qualified .NET type name.
  *
- * @param album Borrowed picture album handle.
+ * @param album Owned picture-album view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -1662,7 +1663,7 @@ CNA_C_API CNA_Result cna_picture_album_copy_type_name(
  * @brief Returns every picture in a library.
  *
  * @param library Owned library handle.
- * @param out_pictures Receives a borrowed collection handle.
+ * @param out_pictures Receives an owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_media_library_get_pictures(
@@ -1673,7 +1674,7 @@ CNA_C_API CNA_Result cna_media_library_get_pictures(
  * @brief Returns the pictures this application saved into the library.
  *
  * @param library Owned library handle.
- * @param out_pictures Receives a borrowed collection handle.
+ * @param out_pictures Receives an owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_media_library_get_saved_pictures(
@@ -1684,7 +1685,7 @@ CNA_C_API CNA_Result cna_media_library_get_saved_pictures(
  * @brief Returns the root of a library's picture-album tree.
  *
  * @param library Owned library handle.
- * @param out_album Receives a borrowed album handle when one is available; untouched otherwise.
+ * @param out_album Receives an owned album view handle when one is available; invalid otherwise.
  * @param out_available Receives `CNA_TRUE` when the library built a picture tree.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
@@ -1701,7 +1702,7 @@ CNA_C_API CNA_Result cna_media_library_get_root_picture_album(
  *
  * @param library Owned library handle.
  * @param token UTF-8 token, as returned by `cna_picture_copy_token_ext`.
- * @param out_picture Receives a borrowed picture handle when one matches; untouched otherwise.
+ * @param out_picture Receives an owned picture view handle when one matches; invalid otherwise.
  * @param out_available Receives `CNA_TRUE` when a picture matched.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_ENCODING` for a token that is not valid UTF-8, or a
  *         documented argument/handle/thread failure.
@@ -1722,7 +1723,7 @@ CNA_C_API CNA_Result cna_media_library_get_picture_from_token(
  * @param name UTF-8 display name for the new picture.
  * @param image_data Image bytes; may be null only when @p image_byte_count is zero.
  * @param image_byte_count Number of bytes in @p image_data.
- * @param out_picture Receives a borrowed handle to the saved picture.
+ * @param out_picture Receives an owned view handle to the saved picture.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` when the picture could not be written,
  *         `CNA_RESULT_ENCODING`, or a documented argument/handle/thread failure.
  *
@@ -1743,7 +1744,7 @@ CNA_C_API CNA_Result cna_media_library_save_picture(
  * @param library Owned library handle.
  * @param name UTF-8 display name for the new picture.
  * @param source Open storage stream handle to read the image from.
- * @param out_picture Receives a borrowed handle to the saved picture.
+ * @param out_picture Receives an owned view handle to the saved picture.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO`, `CNA_RESULT_ENCODING`, or a documented
  *         argument/handle/thread failure.
  *
@@ -1760,7 +1761,7 @@ CNA_C_API CNA_Result cna_media_library_save_picture_from_stream(
 /**
  * @brief Returns how many pictures a collection holds.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_count Receives the element count.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1771,9 +1772,9 @@ CNA_C_API CNA_Result cna_picture_collection_get_count(
 /**
  * @brief Returns a handle to the picture at an index.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param index Zero-based index below the current count.
- * @param out_picture Receives a borrowed picture handle.
+ * @param out_picture Receives an owned picture view handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output or an index at or
  *         past the count, or a documented handle/thread failure.
  */
@@ -1785,7 +1786,7 @@ CNA_C_API CNA_Result cna_picture_collection_get_at(
 /**
  * @brief Reports whether a picture collection has been disposed.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_disposed Receives `CNA_TRUE` when the collection has been disposed.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1796,7 +1797,7 @@ CNA_C_API CNA_Result cna_picture_collection_get_is_disposed(
 /**
  * @brief Disposes a picture collection without releasing its handle.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * As in XNA, its count and every index then answer `CNA_RESULT_INVALID_STATE`, while its
@@ -1807,7 +1808,7 @@ CNA_C_API CNA_Result cna_picture_collection_dispose(CNA_PictureCollectionHandle 
 /**
  * @brief Releases a picture collection handle.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_picture_collection_destroy(CNA_PictureCollectionHandle collection);
@@ -1815,7 +1816,7 @@ CNA_C_API CNA_Result cna_picture_collection_destroy(CNA_PictureCollectionHandle 
 /**
  * @brief Returns the byte count of the picture-collection type's fully-qualified .NET type name.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1826,7 +1827,7 @@ CNA_C_API CNA_Result cna_picture_collection_get_type_name_size(
 /**
  * @brief Copies the picture-collection type's fully-qualified .NET type name.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
@@ -1842,7 +1843,7 @@ CNA_C_API CNA_Result cna_picture_collection_copy_type_name(
 /**
  * @brief Returns how many albums a picture-album collection holds.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_count Receives the element count.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1853,9 +1854,9 @@ CNA_C_API CNA_Result cna_picture_album_collection_get_count(
 /**
  * @brief Returns a handle to the picture album at an index.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param index Zero-based index below the current count.
- * @param out_album Receives a borrowed album handle.
+ * @param out_album Receives an owned album view handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output or an index at or
  *         past the count, or a documented handle/thread failure.
  */
@@ -1867,7 +1868,7 @@ CNA_C_API CNA_Result cna_picture_album_collection_get_at(
 /**
  * @brief Reports whether a picture-album collection has been disposed.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_disposed Receives `CNA_TRUE` when the collection has been disposed.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1878,7 +1879,7 @@ CNA_C_API CNA_Result cna_picture_album_collection_get_is_disposed(
 /**
  * @brief Disposes a picture-album collection without releasing its handle.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * As in XNA, its count and every index then answer `CNA_RESULT_INVALID_STATE`, while its albums
@@ -1890,7 +1891,7 @@ CNA_C_API CNA_Result cna_picture_album_collection_dispose(
 /**
  * @brief Releases a picture-album collection handle.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_picture_album_collection_destroy(
@@ -1899,7 +1900,7 @@ CNA_C_API CNA_Result cna_picture_album_collection_destroy(
 /**
  * @brief Returns the byte count of the picture-album-collection type's .NET type name.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -1910,7 +1911,7 @@ CNA_C_API CNA_Result cna_picture_album_collection_get_type_name_size(
 /**
  * @brief Copies the picture-album-collection type's fully-qualified .NET type name.
  *
- * @param collection Borrowed collection handle.
+ * @param collection Owned collection view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.

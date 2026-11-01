@@ -10,11 +10,11 @@ extern "C" {
 #endif
 
 /**
- * @brief Borrowed handle to the process-wide media queue.
+ * @brief Owned C view handle to the process-wide media queue.
  *
  * There is exactly one queue, owned by the media player for the lifetime of the process, so this
- * handle is a view of it rather than something a caller owns — the same shape a stock mouse cursor
- * uses. Releasing the handle releases only the view.
+ * handle owns a view, not the native queue. Every returned handle must be released through
+ * cna_media_queue_destroy; releasing it leaves the singleton and its contents intact.
  */
 typedef CNA_Handle CNA_MediaQueueHandle;
 
@@ -173,7 +173,7 @@ CNA_C_API CNA_Result cna_media_player_get_visualization_data(
  * @brief Returns a view of the process-wide media queue.
  *
  * @param game Active owned or callback-borrowed game handle.
- * @param out_queue Receives a borrowed queue handle.
+ * @param out_queue Receives an owned view handle; release it with cna_media_queue_destroy.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_media_player_get_queue(CNA_Handle game, CNA_MediaQueueHandle* out_queue);
@@ -366,7 +366,7 @@ CNA_C_API CNA_Result cna_media_player_raise_media_state_changed_ext(CNA_Handle g
 /**
  * @brief Returns how many songs the queue holds.
  *
- * @param queue Borrowed queue handle.
+ * @param queue Owned queue view handle.
  * @param out_count Receives the song count.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -375,7 +375,7 @@ CNA_C_API CNA_Result cna_media_queue_get_count(CNA_MediaQueueHandle queue, int32
 /**
  * @brief Returns the zero-based index of the active song.
  *
- * @param queue Borrowed queue handle.
+ * @param queue Owned queue view handle.
  * @param out_index Receives the index, which is -1 when the queue is empty.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -386,7 +386,7 @@ CNA_C_API CNA_Result cna_media_queue_get_active_song_index(
 /**
  * @brief Sets the zero-based index of the active song.
  *
- * @param queue Borrowed queue handle.
+ * @param queue Owned queue view handle.
  * @param index New active song index.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
  *
@@ -399,7 +399,7 @@ CNA_C_API CNA_Result cna_media_queue_set_active_song_index(
 /**
  * @brief Returns a copy of the active song.
  *
- * @param queue Borrowed queue handle.
+ * @param queue Owned queue view handle.
  * @param out_song Receives an owned song handle when a song is active, or
  *        `CNA_INVALID_HANDLE` when none is active. An existing handle stored in this output
  *        variable is not released by the call.
@@ -420,7 +420,7 @@ CNA_C_API CNA_Result cna_media_queue_get_active_song(
 /**
  * @brief Returns a copy of the song at an index.
  *
- * @param queue Borrowed queue handle.
+ * @param queue Owned queue view handle.
  * @param index Zero-based index below the current count.
  * @param out_song Receives an owned song handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output or an index at or
@@ -436,7 +436,7 @@ CNA_C_API CNA_Result cna_media_queue_get_at(
 /**
  * @brief Appends a copy of a song to the queue.
  *
- * @param queue Borrowed queue handle.
+ * @param queue Owned queue view handle.
  * @param song Song to append; it stays the caller's.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` when the song's file has disappeared, or a
  *         documented argument/handle/thread/native failure.
@@ -450,7 +450,7 @@ CNA_C_API CNA_Result cna_media_queue_add(CNA_MediaQueueHandle queue, CNA_SongHan
 /**
  * @brief Removes every song from the queue and resets its active index.
  *
- * @param queue Borrowed queue handle.
+ * @param queue Owned queue view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_media_queue_clear(CNA_MediaQueueHandle queue);
@@ -458,7 +458,7 @@ CNA_C_API CNA_Result cna_media_queue_clear(CNA_MediaQueueHandle queue);
 /**
  * @brief Releases a queue handle.
  *
- * @param queue Borrowed queue handle.
+ * @param queue Owned queue view handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  *
  * Only the view is released; the process-wide queue itself is untouched.
@@ -468,7 +468,7 @@ CNA_C_API CNA_Result cna_media_queue_destroy(CNA_MediaQueueHandle queue);
 /**
  * @brief Returns the byte count of the queue type's fully-qualified .NET type name.
  *
- * @param queue Borrowed queue handle.
+ * @param queue Owned queue view handle.
  * @param out_bytes Receives the UTF-8 byte count, without a terminator.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
@@ -479,7 +479,7 @@ CNA_C_API CNA_Result cna_media_queue_get_type_name_size(
 /**
  * @brief Copies the queue type's fully-qualified .NET type name.
  *
- * @param queue Borrowed queue handle.
+ * @param queue Owned queue view handle.
  * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the required byte count, without a terminator.
