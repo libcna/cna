@@ -128,9 +128,17 @@ void RemoveOwnedGraphicsResource() noexcept;
 
 [[nodiscard]] bool HasOwnedGraphicsResources() noexcept;
 
-void AddOwnedContentManager() noexcept;
+/**
+ * @brief Counts a content manager only when its owner is a C-owned game.
+ * @param owner The creating game or standalone-device token.
+ */
+void AddOwnedContentManager(CNA_Handle owner) noexcept;
 
-void RemoveOwnedContentManager() noexcept;
+/**
+ * @brief Removes a game-owned content manager from the game-shutdown count.
+ * @param owner The creating game or standalone-device token.
+ */
+void RemoveOwnedContentManager(CNA_Handle owner) noexcept;
 
 [[nodiscard]] bool HasOwnedContentManagers() noexcept;
 

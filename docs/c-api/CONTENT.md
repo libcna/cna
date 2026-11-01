@@ -40,9 +40,11 @@ CNA constructs both C-created and game-owned managers without an `IServiceProvid
 uses the explicitly associated graphics device. The device setter requires the same creating
 owner token: the same game, or the same standalone device.
 
-There is a current accounting defect: all C-created managers increment a process-wide manager
-counter, and `cna_game_destroy` refuses while it is nonzero. A standalone manager can therefore
-block destruction of an unrelated game; see [handoff.md §5](../../handoff.md#5-known-bugs-and-limitations).
+Only managers created for a game count toward its shutdown guard. Standalone ordinary and
+resource-backed managers do not block destruction of an unrelated game, and destroying one does
+not decrement the count of a live game-owned manager. CNA-FIX-D02's strict-C regression verifies
+both standalone constructor routes and this mixed-owner case on OPENGLES3 and SDLGPU. The device
+lifetime requirement above still applies.
 
 `cna_game_get_content_manager_ext` instead returns the stable borrowed handle for the game's value
 member. It accepts all ordinary content-manager operations, cannot be destroyed and becomes invalid

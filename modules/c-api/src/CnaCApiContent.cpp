@@ -222,7 +222,7 @@ namespace {
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    AddOwnedContentManager();
+    AddOwnedContentManager(graphicsDevice->parentGame);
     return CNA_RESULT_SUCCESS;
 }
 
@@ -316,7 +316,7 @@ namespace {
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    AddOwnedContentManager();
+    AddOwnedContentManager(graphicsDevice->parentGame);
     return CNA_RESULT_SUCCESS;
 }
 
@@ -820,7 +820,7 @@ namespace {
         releaseResult != CNA_RESULT_SUCCESS) {
         return releaseResult;
     }
-    RemoveOwnedContentManager();
+    RemoveOwnedContentManager(contentManager->parentGame);
     return CNA_RESULT_SUCCESS;
 }
 

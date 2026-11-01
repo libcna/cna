@@ -657,15 +657,21 @@ bool HasOwnedGameComponents() noexcept
     return state.ownedGameComponentCount != 0U;
 }
 
-void AddOwnedContentManager() noexcept
+void AddOwnedContentManager(const CNA_Handle owner) noexcept
 {
+    if (!IsGameOwnedResource(owner)) {
+        return;
+    }
     RuntimeState& state = GetRuntimeState();
     std::lock_guard lock(state.mutex);
     ++state.ownedContentManagerCount;
 }
 
-void RemoveOwnedContentManager() noexcept
+void RemoveOwnedContentManager(const CNA_Handle owner) noexcept
 {
+    if (!IsGameOwnedResource(owner)) {
+        return;
+    }
     RuntimeState& state = GetRuntimeState();
     std::lock_guard lock(state.mutex);
     if (state.ownedContentManagerCount != 0U) {

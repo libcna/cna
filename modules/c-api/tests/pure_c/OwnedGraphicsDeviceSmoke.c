@@ -31,6 +31,48 @@ static CNA_PresentationParameters make_parameters(void)
     return parameters;
 }
 
+static int validate_content_manager_owners(const CNA_Handle standalone_device)
+{
+    const CNA_ContentManagerCreateInfo content_info = {
+        sizeof(CNA_ContentManagerCreateInfo), UINT32_C(1), {NULL, 0U}, 0U};
+    const CNA_GameCreateInfo game_info = {
+        sizeof(CNA_GameCreateInfo), UINT32_C(1), CNA_TRUE,
+        {0U, 0U, 0U, 0U, 0U, 0U, 0U}, INT64_C(166667), {NULL, 0U}, NULL};
+
+    for (int resource_manager = 0; resource_manager != 2; ++resource_manager) {
+        CNA_Handle manager = CNA_INVALID_HANDLE;
+        CNA_Handle game = CNA_INVALID_HANDLE;
+        const CNA_Result created = resource_manager == 0
+            ? cna_content_manager_create(standalone_device, &content_info, &manager)
+            : cna_content_manager_create_resource(standalone_device, &content_info, &manager);
+        uint64_t root_size = UINT64_MAX;
+        if (created != CNA_RESULT_SUCCESS ||
+            cna_game_create(&game_info, &game) != CNA_RESULT_SUCCESS ||
+            cna_game_destroy(game) != CNA_RESULT_SUCCESS ||
+            cna_content_manager_get_root_directory_size(manager, &root_size) != CNA_RESULT_SUCCESS ||
+            root_size != 0U || cna_content_manager_destroy(manager) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+
+    CNA_Handle game = CNA_INVALID_HANDLE;
+    CNA_Handle game_device = CNA_INVALID_HANDLE;
+    CNA_Handle game_manager = CNA_INVALID_HANDLE;
+    CNA_Handle standalone_manager = CNA_INVALID_HANDLE;
+    if (cna_game_create(&game_info, &game) != CNA_RESULT_SUCCESS ||
+        cna_game_get_graphics_device(game, &game_device) != CNA_RESULT_SUCCESS ||
+        cna_content_manager_create(game_device, &content_info, &game_manager) != CNA_RESULT_SUCCESS ||
+        cna_content_manager_create(standalone_device, &content_info, &standalone_manager) !=
+            CNA_RESULT_SUCCESS ||
+        cna_content_manager_destroy(standalone_manager) != CNA_RESULT_SUCCESS ||
+        cna_game_destroy(game) != CNA_RESULT_INVALID_STATE ||
+        cna_content_manager_destroy(game_manager) != CNA_RESULT_SUCCESS ||
+        cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return 1;
+}
+
 int main(void)
 {
     CNA_PresentationParameters parameters = make_parameters();
@@ -101,6 +143,11 @@ int main(void)
             CNA_RESULT_SUCCESS || resource_device != second) {
         (void)fprintf(stderr, "resource device query did not preserve its standalone owner\n");
         return 12;
+    }
+
+    if (!validate_content_manager_owners(first)) {
+        (void)fprintf(stderr, "content manager accounting did not preserve creating owners\n");
+        return 14;
     }
 
     /*

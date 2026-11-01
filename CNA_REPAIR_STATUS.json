@@ -15,9 +15,13 @@
       "id": "CNA-FIX-D02",
       "source_section": "5.1 Defects",
       "summary": "C API owned ContentManagers use a process-wide count (CnaCApiContent.cpp's unconditional AddOwnedContentManager; CnaCApiRuntime.cpp's HasOwnedContentManagers game-destroy guard).",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Count only game-owned managers in the single-game shutdown guard; both creation routes and destruction use the creating owner token. Existing standalone device lifetime contract is unchanged.",
+      "evidence": [
+        "Strict-C regression fails before fix and passes afterwards for standalone ContentManager and ResourceContentManager surviving unrelated game teardown.",
+        "Mixed-owner regression preserves game-child shutdown refusal after standalone manager destruction, then allows shutdown after game-manager destruction.",
+        "Private OPENGLES3: OwnedGraphicsDeviceSmoke, ContentSmoke, RuntimeGameSmoke all pass. Private SDLGPU: OwnedGraphicsDeviceSmoke and ContentSmoke pass."
+      ]
     },
     {
       "id": "CNA-FIX-D03",

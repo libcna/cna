@@ -35,6 +35,14 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D02 (2026-11-01): content-manager creation/destruction counts only game owner
+  tokens, using the existing owner-kind check. Both standalone constructor routes no longer block
+  an unrelated game's teardown, and destroying a standalone manager cannot decrement a live
+  game-child count. The strict-C regression fails before the fix and passes afterwards; it also
+  proves the standalone managers survive game destruction and a genuine game-owned manager
+  blocks shutdown until destroyed. Owned-device/content/runtime-game suites pass on OPENGLES3,
+  and owned-device/content suites pass on SDLGPU, all privately. Internal helper signatures change;
+  the public ABI is unchanged. Standalone device lifetime remains the caller's documented duty.
 - CNA-FIX-D17 (2026-11-01): the generic resource-device query now resolves an independently
   owned device token and checks its native identity before returning the existing handle. Game
   borrowing and device-less declarations retain their behavior. The strict-C regression fails
@@ -1812,14 +1820,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   loaded-artifact provenance, not a new pixel oracle or D3D12/Metal qualification. Existing
   opaque-alpha fog fixtures do not test this distinction. The renderer, matrix and five effect
   pages now state the gap; no runtime shader fix or new fractional-alpha regression was added.
-- C API owned ContentManagers use a process-wide count (CnaCApiContent.cpp's unconditional
-  AddOwnedContentManager; CnaCApiRuntime.cpp's HasOwnedContentManagers game-destroy guard).
-  Consequently a manager created for a standalone device can block destruction of an unrelated
-  game. Source-inspected during independent docs review, 2026-11-01; existing ContentSmoke cases
-  exercise the same-game refusal, not this cross-owner case. No runtime fix or new execution
-  regression was added. A standalone device must also outlive its manager and loaded GPU resources:
-  the manager stores a raw native device association and device destruction does not enforce that
-  caller-lifetime requirement; the C content contract now states it.
 - XNB DateTime writing emits getTicksProperty() only (content/src/Xnb/XnbBuiltInWriters.cpp),
   and DateTimeReader masks the top Kind bits and constructs DateTime(ticks). Sharp Runtime now
   stores DateTimeKind (#1941), so their comments blaming an absent runtime capability are stale:
