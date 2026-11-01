@@ -35,6 +35,15 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- Physical-module documentation reconciliation (2026-11-01): current direct CNA/Sharp Runtime
+  dependencies replace the obsolete table, adding Platform/ContentPipelineBuild, optional
+  GamerServices and avatar/C API boundaries. Static/shared umbrella composition, mixed-C singleton
+  placement, compiled renderer families, focused versus aggregate tests, root harness ownership
+  and the validator's actual modules-only scope are explicit. All fifteen minimal-link targets
+  build in the existing multi tree; all 43 module probe/closure checks and three renderer registry/
+  combination/target checks pass privately. The registry's first run caught the rewritten numeric
+  count format; the corrected page passes its recheck. Current configuration evidence does not
+  requalify every static/shared/cross-target composition. No implementation or ABI changes.
 - Console documentation reconciliation (2026-11-01): the page now describes the absence of a
   qualified CNA port, separates upstream SDL/framework support from CNA qualification, and
   replaces device/SDK/certification/licensing absolutes and unmeasured first-target/memory advice
