@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <memory>
 
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -22,6 +23,7 @@ namespace {
         NetworkSession* session = NetworkSession::Create(
             NetworkSessionType::Local, std::vector<SignedInGamer*>{&signedIn}, 8, 0, NetworkSessionProperties{}
         );
+        std::unique_ptr<NetworkSession> sessionOwner{session};
         LocalNetworkGamer* gamer = session->getLocalGamersProperty()[0];
 
         ~LocalGamerFixture() { session->Dispose(); }
@@ -32,6 +34,7 @@ namespace {
         NetworkSession* session = NetworkSession::Create(
             NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&signedIn}, 8, 0, NetworkSessionProperties{}
         );
+        std::unique_ptr<NetworkSession> sessionOwner{session};
         LocalNetworkGamer* gamer = session->getLocalGamersProperty()[0];
 
         SystemLinkGamerFixture() { session->Update(); }
@@ -283,6 +286,7 @@ TEST(LocalNetworkGamerTest, IsGuestFollowsTheSignedInProfile) {
     auto second = SignedInGamer::CreateInternal("Alice (2)", true, true, Microsoft::Xna::Framework::PlayerIndex::Three);
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&account, &guest}, 8, 0, NetworkSessionProperties{});
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     session->AddLocalGamer(&second);
     auto& locals = session->getLocalGamersProperty();
     ASSERT_EQ(locals.getCountProperty(), 3);

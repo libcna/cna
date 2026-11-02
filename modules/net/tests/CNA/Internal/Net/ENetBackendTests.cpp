@@ -65,6 +65,7 @@ namespace {
     struct SystemLinkSessionFixture {
         SignedInGamer signedIn;
         NetworkSession* session;
+        std::unique_ptr<NetworkSession> sessionOwner{session};
 
         explicit SystemLinkSessionFixture(const std::string& gamertag)
             : signedIn(SignedInGamer::CreateInternal(gamertag))
@@ -162,6 +163,7 @@ namespace {
         SignedInGamer signedIn{SignedInGamer::CreateInternal("ClientPlayer")};
         ENetHostHandle fakeHost{ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2)};
         NetworkSession* session{nullptr};
+        std::unique_ptr<NetworkSession> sessionOwner;
         ENetPeer* peer{nullptr}; // the client, as the fake host sees it
         NetworkGamer* otherPlayer{nullptr};
 
@@ -170,6 +172,7 @@ namespace {
                 new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&signedIn}))
             );
             session = NetworkSession::Create(NetworkSessionType::SystemLink, 2, 8, 0, NetworkSessionProperties{});
+            sessionOwner.reset(session);
             session->Update();
             ENetBackend::ConnectToHost(session, "127.0.0.1", fakeHost.getBoundPortProperty());
             // Waiting for the hello fixes which gamers it names.
@@ -285,6 +288,7 @@ TEST(ENetBackendTest, TeardownAndPumpOnUnregisteredSessionAreSafeNoOps) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     // Local sessions never get registered with ENetBackend at all.
     EXPECT_NO_THROW(ENetBackend::TeardownSession(session));
@@ -299,6 +303,7 @@ TEST(ENetBackendTest, StartHostingIsIdempotent) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     uint16_t port = ENetBackend::GetBoundPort(session);
     ASSERT_GT(port, 0);
@@ -316,6 +321,7 @@ TEST(ENetBackendTest, StartHostingIsNoOpForNonSystemLinkTypes) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     ENetBackend::StartHosting(session);
     EXPECT_EQ(ENetBackend::GetBoundPort(session), 0);
@@ -330,6 +336,7 @@ TEST(ENetBackendTest, ConnectToHostIsNoOpForNonSystemLinkTypes) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     EXPECT_NO_THROW(ENetBackend::ConnectToHost(session, "127.0.0.1", 12345));
     EXPECT_EQ(session->getAllGamersProperty().getCountProperty(), 1);
@@ -518,7 +525,7 @@ TEST(ENetBackendTest, HostLocalGamerAddedMidSessionIsAnnouncedAndSendsAtOnce) {
     NetworkSession* hostSession = NetworkSession::Create(NetworkSessionType::SystemLink, 2, 8, 0, NetworkSessionProperties{});
     struct DisposeGuard {
         NetworkSession* s;
-        ~DisposeGuard() { s->Dispose(); }
+        ~DisposeGuard() { s->Dispose(); delete s; }
     } disposeGuard{hostSession};
     hostSession->Update();
 
@@ -721,7 +728,7 @@ TEST(ENetBackendTest, GamerLeaveBroadcastPurgesPendingAppDataNamingTheDepartedGa
         NetworkSession::Create(NetworkSessionType::SystemLink, 2, 8, 0, NetworkSessionProperties{});
     struct DisposeGuard {
         NetworkSession* s;
-        ~DisposeGuard() { s->Dispose(); }
+        ~DisposeGuard() { s->Dispose(); delete s; }
     } disposeGuard{clientSession};
     ASSERT_EQ(clientSession->getLocalGamersProperty().getCountProperty(), 1);
     clientSession->Update();
@@ -1035,6 +1042,7 @@ TEST(ENetBackendTest, DisposeWithPendingAppDataInQueueIsSafe) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{signedIn}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     session->Update();
     ENetBackend::ConnectToHost(session, "127.0.0.1", fakeHostPort);
 

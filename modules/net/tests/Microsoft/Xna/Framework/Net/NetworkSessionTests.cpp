@@ -42,6 +42,7 @@ TEST(NetworkSessionTest, CreateWithExplicitLocalGamers) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 2, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     EXPECT_EQ(session->getSessionTypeProperty(), NetworkSessionType::Local);
     EXPECT_EQ(session->getMaxGamersProperty(), 8);
@@ -68,6 +69,7 @@ TEST(NetworkSessionTest, SessionPropertiesGetterExposesMutableXnaIndexerCollecti
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     NetworkSessionProperties& mutableProperties = session->getSessionPropertiesProperty();
     mutableProperties[0] = 7;
@@ -93,6 +95,7 @@ TEST(NetworkSessionTest, RetainedPropertyProxyChecksCurrentHostRoleBeforeEachWri
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local,
         std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{});
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     auto& properties = session->getSessionPropertiesProperty();
     auto retained = properties[7];
     retained = 12;
@@ -120,6 +123,7 @@ TEST(NetworkSessionTest, CreateDoesNotLeakNetworkSessionAction) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     EXPECT_EQ(NetworkSession::GetActiveActionInstanceCountForTesting(), before);
 
@@ -162,6 +166,7 @@ TEST(NetworkSessionTest, BeginCreateInvokesCallbackExactlyOnceWithCorrectIdentit
     EXPECT_EQ(std::any_cast<int>(result->getAsyncStateProperty()), 42);
 
     NetworkSession* session = NetworkSession::EndCreate(result);
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     EXPECT_EQ(session->getMaxGamersProperty(), 8);
     session->Dispose();
 }
@@ -181,11 +186,11 @@ TEST(NetworkSessionTest, BeginCreateCallbackCanReentrantlyCallEndCreate) {
         }
     } restoreGuard;
 
-    NetworkSession* completedSession = nullptr;
+    std::unique_ptr<NetworkSession> completedSession;
     auto* result=NetworkSession::BeginCreate(
         NetworkSessionType::Local, 1, 8,
         [&completedSession](System::IAsyncResult& ar) {
-            completedSession = NetworkSession::EndCreate(&ar);
+            completedSession.reset(NetworkSession::EndCreate(&ar));
         },
         std::any{}
     );
@@ -208,6 +213,7 @@ TEST(NetworkSessionTest, BeginCreateCallbackCanReentrantlyCallEndCreate) {
             NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer2}, 8, 0, NetworkSessionProperties{}
         )
     );
+    std::unique_ptr<NetworkSession> secondOwner(second);
     ASSERT_NE(second, nullptr);
     second->Dispose();
 }
@@ -294,6 +300,7 @@ TEST(NetworkSessionTest, AllowHostMigrationAndJoinInProgressGetSet) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     session->setAllowHostMigrationProperty(true);
     EXPECT_TRUE(session->getAllowHostMigrationProperty());
@@ -308,6 +315,7 @@ TEST(NetworkSessionTest, MaxGamersAndPrivateGamerSlotsGetSet) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     session->setMaxGamersProperty(16);
     EXPECT_EQ(session->getMaxGamersProperty(), 16);
@@ -322,6 +330,7 @@ TEST(NetworkSessionTest, SimulatedLatencyAndPacketLossGetSet) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     session->setSimulatedLatencyProperty(System::TimeSpan::FromMilliseconds(50));
     EXPECT_EQ(session->getSimulatedLatencyProperty(), System::TimeSpan::FromMilliseconds(50));
@@ -344,6 +353,7 @@ TEST(NetworkSessionTest, IsEveryoneReadyReflectsLocalGamers) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     EXPECT_FALSE(session->getIsEveryoneReadyProperty());
     session->getLocalGamersProperty()[0]->setIsReadyProperty(true);
@@ -357,6 +367,7 @@ TEST(NetworkSessionTest, IsReadyIsSetOnlyInTheLobbyAndClearsWhenTheGameEnds) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     auto* local = session->getLocalGamersProperty()[0];
 
     local->setIsReadyProperty(true);
@@ -382,6 +393,7 @@ TEST(NetworkSessionTest, ResetReadySetsAllGamersNotReady) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     session->getLocalGamersProperty()[0]->setIsReadyProperty(true);
     session->ResetReady();
@@ -395,6 +407,7 @@ TEST(NetworkSessionTest, StartGameThenEndGameTransitionsState) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     session->StartGame();
     session->Update();
@@ -417,6 +430,7 @@ TEST(NetworkSessionTest, WriteLeaderboardAndTrueSkillEventsAreNeverRaised) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     int arbitratedCount = 0;
     int unarbitratedCount = 0;
@@ -443,6 +457,7 @@ TEST(NetworkSessionTest, StartGameWhileNotInLobbyThrows) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     session->StartGame();
     session->Update();
@@ -458,6 +473,7 @@ TEST(NetworkSessionTest, EndGameWhileNotPlayingThrows) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     EXPECT_THROW(session->EndGame(), System::InvalidOperationException);
 
@@ -475,6 +491,7 @@ TEST(NetworkSessionTest, AddLocalGamerThrowsAtMaxLimit) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer, &gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
 
     session->AddLocalGamer(&second);
@@ -520,6 +537,7 @@ TEST(NetworkSessionTest, FindGamerByIdMatchesSoleLocalGamer) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     EXPECT_EQ(session->FindGamerById(0), session->getAllGamersProperty()[0]);
     EXPECT_EQ(session->FindGamerById(1), nullptr);
@@ -536,6 +554,7 @@ TEST(NetworkSessionTest, MultipleLocalGamersGetDistinctIdsAndFindGamerByIdRoutes
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer1, &gamer2}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     LocalNetworkGamer* first = session->getLocalGamersProperty()[0];
     LocalNetworkGamer* second = session->getLocalGamersProperty()[1];
@@ -556,6 +575,7 @@ TEST(NetworkSessionTest, CreateMakesLocalGamersReportIsHostTrue) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     EXPECT_TRUE(session->getLocalGamersProperty()[0]->getIsHostProperty());
     EXPECT_TRUE(session->getIsHostProperty());
@@ -637,6 +657,7 @@ TEST(NetworkSessionTest, FailedCreateDoesNotPermanentlyStrandActiveAction) {
     );
     std::unique_ptr<System::IAsyncResult> recoveryOwner(recovery);
     NetworkSession* session = NetworkSession::EndCreate(recovery);
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     ASSERT_NE(session, nullptr);
     session->Dispose();
 }
@@ -718,10 +739,11 @@ TEST(NetworkSessionTest, AddLocalGamerRaisesGamerJoinedForAnAlreadySubscribedHan
 
     // maxLocalGamers=2, but only 1 gamer (extraGamer) is actually signed in globally, so the
     // constructor only fills 1 of the 2 local-gamer slots - leaving room for AddLocalGamer below.
+    auto newGamer = MakeSignedInGamer("NewLocalPlayer");
     NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local, 2, 8);
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
 
-    auto newGamer = MakeSignedInGamer("NewLocalPlayer");
     int joinCount = 0;
     NetworkGamer* joinedGamer = nullptr;
     session->GamerJoined += [&joinCount, &joinedGamer](System::Object*, const GamerJoinedEventArgs& e) {
@@ -764,7 +786,9 @@ TEST(NetworkSessionTest, RemoveThenAddLocalGamerChurnNeverProducesAnIdCollision)
         }
     } restoreGuard;
 
+    auto newSignedIn = MakeSignedInGamer("D");
     NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local, 3, 8);
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 3);
     LocalNetworkGamer* local0 = session->getLocalGamersProperty()[0];
     LocalNetworkGamer* local1 = session->getLocalGamersProperty()[1];
@@ -779,7 +803,6 @@ TEST(NetworkSessionTest, RemoveThenAddLocalGamerChurnNeverProducesAnIdCollision)
 
     // Without Task 2.4's fix, this would derive the new id from allGamers_.getCountProperty()
     // (now 2) - colliding with local2, which already owns id 2.
-    auto newSignedIn = MakeSignedInGamer("D");
     session->AddLocalGamer(&newSignedIn);
     ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 3); // local0, local2, newGamer
     NetworkGamer* newGamer = session->getLocalGamersProperty()[2];
@@ -799,6 +822,7 @@ TEST(NetworkSessionTest, UpdateAfterDisposeThrows) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     session->Dispose();
     EXPECT_THROW(session->Update(), System::ObjectDisposedException);
@@ -809,6 +833,7 @@ TEST(NetworkSessionTest, ResetReadyAfterDisposeThrows) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     session->Dispose();
     EXPECT_THROW(session->ResetReady(), System::ObjectDisposedException);
@@ -819,6 +844,7 @@ TEST(NetworkSessionTest, StartAndEndGameAfterDisposeThrow) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     session->Dispose();
     EXPECT_THROW(session->StartGame(), System::ObjectDisposedException);
@@ -836,6 +862,7 @@ TEST(NetworkSessionTest, GamerJoinedReplaysImmediatelyOnSubscriptionForConstruct
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     int joinCount = 0;
     // Task 2.1: sender must be the raising NetworkSession itself (real XNA passes the raising
@@ -863,6 +890,7 @@ TEST(NetworkSessionTest, GamerJoinedReplaysForALateSubscriber) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     session->Update();
     session->Update();
 
@@ -961,6 +989,7 @@ TEST(NetworkSessionTest, BeginCreateWhileActionPendingThrows) {
     );
 
     NetworkSession* session = NetworkSession::EndCreate(result);
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     session->Dispose();
 }
 
@@ -976,6 +1005,7 @@ TEST(NetworkSessionTest, EndCreateWithMismatchedResultThrows) {
     EXPECT_THROW((void)NetworkSession::EndCreate(bogus), System::ArgumentException);
 
     NetworkSession* session = NetworkSession::EndCreate(result);
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     session->Dispose();
 }
 
@@ -1238,6 +1268,7 @@ TEST(NetworkSessionTest, SystemLinkSessionHostsRealNetworkingAndUpdatesCleanly) 
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     // Update() drains the real ENet transport (no peers connected yet) as well as the local
     // event queue; neither should throw.
@@ -1252,6 +1283,7 @@ TEST(NetworkSessionTest, LocalSessionTypeDoesNotStartRealNetworking) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     EXPECT_EQ(CNA::Internal::Net::ENetBackend::GetBoundPort(session), 0);
 
@@ -1263,6 +1295,7 @@ TEST(NetworkSessionTest, SystemLinkSessionGetsARealBoundPort) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     EXPECT_GT(CNA::Internal::Net::ENetBackend::GetBoundPort(session), 0);
 
@@ -1276,6 +1309,7 @@ TEST(NetworkSessionTest, AddRemoteGamerJoinsRostersAndRaisesGamerJoined) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
 
     // Subscribing here replays once for the local gamer that already joined during
     // construction (Task 12.3) - tracked separately from the remote join below, which is a
@@ -1308,6 +1342,7 @@ TEST(NetworkSessionTest, AddRemoteGamerThrowsWhenSessionIsAlreadyAtMaxGamers) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     ASSERT_EQ(session->getAllGamersProperty().getCountProperty(), 1);
     // This setter deliberately exercises the full-session branch with the host already occupying
     // the only slot; XNA creation itself requires a maximum between 2 and 31.
@@ -1326,6 +1361,7 @@ TEST(NetworkSessionTest, RemoveGamerOnRemoteGamerRaisesGamerLeftAndMigratesToPre
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     session->Update();
 
     NetworkGamer remote = NetworkGamer::CreateInternal(session, "RemotePlayer");
@@ -1359,6 +1395,7 @@ TEST(NetworkSessionTest, RemoveGamerOnLocalGamerRaisesSessionEndedWithReason) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     session->Update();
 
     int endedCount = 0;
@@ -1405,11 +1442,12 @@ TEST(NetworkSessionTest, DisposeFreesEveryGamerTheSessionEverOwned) {
 
     // maxLocalGamers=2, but only 1 gamer is actually signed in globally - leaves room for
     // AddLocalGamer below (see Task 2.3's identical setup for why this is needed at all).
+    auto newGamer = MakeSignedInGamer("NewLocalPlayer");
     NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local, 2, 8);
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
     EXPECT_EQ(session->GetOwnedGamerCountForTesting(), 1u);
 
-    auto newGamer = MakeSignedInGamer("NewLocalPlayer");
     session->AddLocalGamer(&newGamer);
     EXPECT_EQ(session->GetOwnedGamerCountForTesting(), 2u);
 
@@ -1428,6 +1466,7 @@ TEST(NetworkSessionTest, DisposeCalledTwiceDirectlyIsSafeAndIdempotent) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     session->Update();
 
     EXPECT_NO_THROW(session->Dispose());
@@ -1461,10 +1500,11 @@ TEST(NetworkSessionTest, DisposeClearsPreviousGamersSoNoDanglingPointerIsObserva
         }
     } restoreGuard;
 
+    auto newGamer = MakeSignedInGamer("NewLocalPlayer");
     NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local, 2, 8);
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
 
-    auto newGamer = MakeSignedInGamer("NewLocalPlayer");
     session->AddLocalGamer(&newGamer);
     NetworkGamer* leaving = session->getLocalGamersProperty()[1];
     ASSERT_EQ(session->GetOwnedGamerCountForTesting(), 2u);
@@ -1490,6 +1530,7 @@ TEST(NetworkSessionTest, DisposeClearsHostProperty) {
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
     );
+    std::unique_ptr<NetworkSession> sessionOwner(session);
     ASSERT_NE(session->getHostProperty(), nullptr);
 
     session->Dispose();

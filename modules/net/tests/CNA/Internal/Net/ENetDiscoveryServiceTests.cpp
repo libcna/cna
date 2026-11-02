@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Copyright (c) Robert Vokac and contributors
 #include <gtest/gtest.h>
+#include <memory>
 
 #include "CNA/Internal/Net/ENetBackend.hpp"
 #include "CNA/Internal/Net/ENetDiscoveryService.hpp"
@@ -41,6 +42,7 @@ namespace {
     struct SystemLinkSessionFixture {
         SignedInGamer signedIn;
         NetworkSession* session;
+        std::unique_ptr<NetworkSession> sessionOwner{session};
 
         explicit SystemLinkSessionFixture(const std::string& gamertag)
             : signedIn(SignedInGamer::CreateInternal(gamertag))

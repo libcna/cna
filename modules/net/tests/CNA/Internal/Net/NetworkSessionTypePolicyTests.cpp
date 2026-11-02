@@ -11,6 +11,7 @@
 // spot-checks (e.g. ENetBackendTests.cpp's *IsNoOpForNonSystemLinkTypes tests, each covering only
 // NetworkSessionType::Local) becoming a single systematic sweep over all four non-LAN types.
 #include <gtest/gtest.h>
+#include <memory>
 
 #include "CNA/Internal/Net/ENetBackend.hpp"
 #include "CNA/Internal/Net/ENetDiscoveryService.hpp"
@@ -66,6 +67,7 @@ namespace {
     struct SyntheticSessionFixture {
         SignedInGamer signedIn;
         NetworkSession* session;
+        std::unique_ptr<NetworkSession> sessionOwner{session};
 
         SyntheticSessionFixture(NetworkSessionType type, const std::string& gamertag)
             : signedIn(SignedInGamer::CreateInternal(gamertag))
