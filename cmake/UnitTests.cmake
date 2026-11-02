@@ -697,7 +697,8 @@ if(CNA_BUILD_TESTS)
 
         # Focused executables are developer iteration targets, not additional CTest registrations;
         # the full CnaTests discovery remains the single default suite and is therefore not run
-        # twice in CI.
+        # twice in CI. The exception is CnaInputModuleTests, registered as CnaInputTests below
+        # (INP-AUD) and therefore built by default.
         add_executable(${_cna_focused_test_target} EXCLUDE_FROM_ALL
             "$<TARGET_OBJECTS:${_cna_test_object_target}>"
             ${CNA_TEST_HARNESS_SOURCES})
@@ -1411,6 +1412,11 @@ if(CNA_BUILD_TESTS)
     # unbounded stall into one reported failure. 1200s is generous against the measured range: 221s
     # alone, 628s as the slowest healthy run seen under -j6. The deadlock itself was a separate row.
     add_custom_target(cna_input_test_gate DEPENDS CnaInputModuleTests CnaTests)
+    # The one focused executable that is also a CTest registration, so it is part of `all`: a
+    # default build followed by an unfiltered ctest (general-tests-ci, and any local tree) reported
+    # CnaInputTests as "Not Run" because the executable had never been built. It reuses the
+    # objects CnaTests already compiles, so this adds one link.
+    set_target_properties(CnaInputModuleTests PROPERTIES EXCLUDE_FROM_ALL FALSE)
     cna_register_renderer_test(NAME CnaInputTests
         COMMAND CnaInputModuleTests --gtest_shuffle --gtest_repeat=5
         TIMEOUT 1200 LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy"
