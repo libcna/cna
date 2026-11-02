@@ -19,7 +19,9 @@ Each row identifies the kind of evidence this script inspects:
 What this cannot do is re-run the whole suite, and it does not pretend to: a test that exists but
 fails is a red suite, and the suite is where that is answered. This answers the other question --
 whether each condition has its requested metadata/source witness. Regex matches can include
-comments or inactive source; a positive match is not proof that a configured binary runs it.
+unknown conditional branches; a positive match is not proof that a configured binary runs it.
+Comments, literals and literal false branches are excluded cheaply. Optional configured and
+validated execution layers never establish assertion coverage or semantic runtime qualification.
 
 Usage:
     final_audit.py --repo <root> [--output docs/xna-content-pipeline-final-audit.md] [--check]
@@ -35,21 +37,22 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+from evidence_layers import add_arguments, report_layers, source_text
 import parity_report  # noqa: E402  (path is set above on purpose)
 
 
 def test_names_in(repo, names):
     """Finds requested TEST/TEST_F/TEST_P patterns in modules/tests C++ source text."""
     found = set()
-    wanted = {n.split(".", 1)[1] if "." in n else n: n for n in names}
     for root in ("modules", "tests"):
         for base, _, files in os.walk(os.path.join(repo, root)):
             for name in files:
                 if not name.endswith(".cpp"):
                     continue
                 with open(os.path.join(base, name), encoding="utf-8", errors="replace") as handle:
-                    text = handle.read()
-                for short, full in wanted.items():
+                    text = source_text(handle.read())
+                for full in names:
+                    short = full.split(".", 1)[-1]
                     suite = full.split(".", 1)[0] if "." in full else None
                     pattern = r"TEST(?:_F|_P)?\(\s*%s\s*,\s*%s\s*\)" % (
                         re.escape(suite) if suite else r"\w+", re.escape(short))
@@ -65,10 +68,10 @@ def ctest_names_in(repo, names):
         for name in files:
             if name.endswith(".cmake"):
                 with open(os.path.join(base, name), encoding="utf-8", errors="replace") as handle:
-                    text += handle.read()
+                    text += source_text(handle.read(), cmake=True) + "\n"
     with open(os.path.join(repo, "CMakeLists.txt"), encoding="utf-8", errors="replace") as handle:
-        text += handle.read()
-    return {n for n in names if re.search(r"add_test\(\s*NAME\s+%s\b" % re.escape(n), text)}
+        text += source_text(handle.read(), cmake=True) + "\n"
+    return {n for n in names if re.search(r'add_test\(\s*NAME\s+"?%s(?:"|\s|\))' % re.escape(n), text)}
 
 
 # The twenty-six, in the mission's own order and words. Each is (group, statement, kind, argument).
@@ -196,12 +199,12 @@ def run(repo, summary, inputs):
             found = test_names_in(repo, argument)
             missing = sorted(set(argument) - found)
             answers.append((not missing, "%d named test(s), %s" % (
-                len(argument), "source patterns found" if not missing else "not found: " + ", ".join(missing))))
+                len(argument), "declaration patterns found" if not missing else "not found: " + ", ".join(missing))))
         elif kind == "ctests":
             found = ctest_names_in(repo, argument)
             missing = sorted(set(argument) - found)
             answers.append((not missing, "%d ctest(s), %s" % (
-                len(argument), "CMake source patterns found" if not missing
+                len(argument), "CMake declaration patterns found" if not missing
                 else "source pattern absent: " + ", ".join(missing))))
         elif kind == "gate":
             command = [sys.executable, os.path.join(HERE, argument[0])]
@@ -228,12 +231,33 @@ def render(answers):
              " no compiled API or runtime rediscovery.\n"
              "- `inputs`: eighteen recorded IMPLEMENTED+TESTED flags; no source-asset execution.\n"
              "- `files`: path existence, not content validity, freshness or documentation completeness.\n"
-             "- `tests`: TEST/TEST_F/TEST_P source-pattern matches, not compiled or passing cases.\n"
+             "- `tests`: TEST/TEST_F/TEST_P declaration presence, not compiled or passing cases.\n"
              "- `ctests`: add_test name patterns, not configured registrations or passing jobs.\n"
              "- `gate`: executes the named helper; here it compares processor-default annotations"
              " with recorded measurements, without running the C++ assertions.\n",
-             "Source patterns can match comments/inactive code. Use `ctest -N` for the configured"
-             " inventory and actual run results for execution; GPU/window runs must use the private"
+             "Comments, string literals and literal `#if 0` branches are excluded from C/C++ scans;"
+             " CMake scans exclude comments and literal `if(FALSE)`/`if(0)` branches. Unknown"
+             " conditions, macros and build inclusion are not evaluated. Declaration presence is"
+             " separate from configured CTest registration and actual execution.\n",
+             "Use `--configured-inventory configured.json` for registration candidates, and repeat"
+             " `--execution-record /path/to/record.json` to join retained runs from"
+             " [ctest_evidence.py](execution-evidence.md). `--evidence-report layers.json` writes"
+             " the separate layers; `--require-execution` fails unless every named witness below"
+             " (except this self-audit) has validated passing execution. C++ cases and Runtime-group"
+             " CTests require runtime-kind captures; metadata captures cannot substitute. Aggregate"
+             " gtest commands also need exact RUN/OK case output, not a zero-case exit. Entries labelled"
+             " `metadata`/`declaration-presence` cannot substitute for runtime witnesses. All captures"
+             " must describe the same source/build/configuration identity and configured inventory; record paths,"
+             " hashes and identities are retained.\n",
+             "**Runtime qualification: not established by this audit**, even with passing execution."
+             " CTest does not count assertions or prove semantic acceptance: an empty test body can"
+             " pass. Missing assertion evidence stays unknown, never a zero-assertion qualification."
+             " The helper gates, declarations and recorded status flags remain metadata; the"
+             " self-audit is excluded from required execution to avoid circular evidence. Without"
+             " optional artifacts, registration and execution are not established. Retained captures"
+             " are historical observations, not proof that current binaries were rebuilt or that"
+             " dirty source bytes are unchanged.\n",
+             "GPU/window runs must use the private"
              " runner described in [content-pipeline.md](content-pipeline.md). Current defects and"
              " external qualification limits remain in [handoff.md](../handoff.md),"
              " [the pipeline guide](content-pipeline.md) and"
@@ -255,6 +279,7 @@ def main(argv):
     ap.add_argument("--repo", required=True)
     ap.add_argument("--output", default=None)
     ap.add_argument("--check", action="store_true")
+    add_arguments(ap)
     args = ap.parse_args(argv[1:])
 
     reference = os.path.join(args.repo, "tests", "reference", "xna40")
@@ -264,6 +289,11 @@ def main(argv):
     _, _, summary = parity_report.build_report(inventory, pmap, inputs)
 
     answers = run(args.repo, summary, inputs)
+    required = {name: kind == "tests" or group == "Runtime"
+                for group, _, kind, names in CHECKS if kind in ("tests", "ctests")
+                for name in names if name != "XnaPipelineFinalAuditIsGreen"}
+    layers = report_layers({"passed": sum(ok for ok, _ in answers), "total": len(answers),
+                            "scope": "source/metadata predicates only"}, required, args)
     document = render(answers)
     output = args.output or os.path.join(args.repo, "docs", "xna-content-pipeline-final-audit.md")
 
@@ -287,7 +317,8 @@ def main(argv):
         print("  FAIL %d: %s" % (index, statement))
     print("final audit: %d of %d source/metadata checks pass" %
           (len(answers) - len(failed), len(answers)))
-    return 1 if failed or stale else 0
+    return 1 if failed or stale or (args.require_execution and
+                                  layers["actual_execution"]["status"] != "observed") else 0
 
 
 if __name__ == "__main__":

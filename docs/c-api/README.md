@@ -85,6 +85,50 @@ python3 tools/c-api/generate_coverage_inventory.py --approve-rule-symbols
 This is a separate mode on purpose. The routine `--write` a developer runs to refresh the inventory
 must not be able to widen a rule's authority (CBIND-050).
 
+### Route presence and execution evidence
+
+`CApiRouteTestCoverage` runs `tools/c-api/check_route_test_coverage.py --check`. Its
+ratchet measures **declaration/name presence**: exported header names mentioned in C/C++
+test/example source. Comments, string literals and literal `#if 0` branches are excluded;
+unknown conditions, build inclusion and macro expansion are not evaluated. An unused function,
+address reference or generated refusal test can satisfy this census. It cannot prove a route
+was called, an assertion ran or the required semantic categories were exercised. The unchanged
+zero-uncovered budget is a source maintenance gate, not runtime coverage.
+
+The tool prints separate declaration presence, configured registration, actual execution and
+runtime qualification layers. Optional `--evidence-report layers.json` retains these as JSON.
+For registration candidates, pass `--configured-inventory configured.json`, produced by
+`ctest --test-dir cmake-build-software -N --show-only=json-v1`. Disabled entries do not satisfy a
+required registration; an aggregate gtest filter identifies only potential cases.
+
+For actual execution, retain runs using [the CTest evidence adapter](../execution-evidence.md),
+then join them explicitly:
+
+```bash
+python3 tools/c-api/check_route_test_coverage.py --check \
+  --required-ctest '<configured semantic CTest name>' \
+  --execution-record /path/to/retained-run/record.json \
+  --evidence-report /tmp/c-api-evidence-layers.json --require-execution
+```
+
+Repeat `--required-ctest` for **every required category** under review and `--execution-record`
+for its captures. There is no inferred route-to-runtime-test mapping. The execution requirement
+fails without explicit witnesses, when any witness is absent/disabled/skipped/not run, or when
+artifacts fail validation. Required C API witnesses need runtime-kind records; metadata-kind
+captures and entries labelled `metadata`/`declaration-presence` cannot substitute. Aggregate
+gtest witnesses also require exact RUN/OK output, so zero selected gtest cases cannot pass this
+layer. Captures must share source/build/configuration identity; an explicitly supplied inventory
+must match the retained one. Captures must also share their full configured inventory. Record
+paths, hashes, identities and errors are retained in the JSON report.
+
+**A successful execution requirement is still not runtime qualification.** CTest counts entries,
+not assertions or C route calls. An empty test body can pass; `executed_assertions` remains
+unknown and `runtime_qualification.status` stays `not-established`. Captures describe their
+recorded snapshot, not proof that current binaries were rebuilt or dirty source bytes stayed
+unchanged. Review semantic assertions and independent observations separately. The default CTest
+is labelled `metadata;declaration-presence` and needs no execution artifacts. Its regression
+suite is `CApiRouteTestCoverageToolTests` (CPU only).
+
 ### Admitting a new C route
 
 Before adding a family or function, establish:

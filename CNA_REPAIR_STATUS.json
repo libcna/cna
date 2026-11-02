@@ -396,9 +396,13 @@
       "id": "CNA-FIX-L05",
       "source_section": "5.2 Limitations",
       "summary": "XnaPipelineFinalAuditIsGreen is an evidence-metadata gate, not current runtime qualification.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "MTH-PRE-005 separates declaration presence, configured CTest registration and retained actual execution in both the pipeline audit and C API route census. Exclude comments, literals and literal false branches cheaply; validate CTest evidence artifacts and required witness names/categories for the optional execution gate. Runtime qualification and assertion counts remain explicitly unestablished, including for a passing empty test.",
+      "evidence": [
+        "Before-change synthetic injections showed both source scanners accepted commented tests, literal #if 0 code and zero-assertion witnesses; source declarations also survived absent configured registration or a missing required execution category. The pipeline separately refused a missing add_test declaration but accepted a commented one.",
+        "Twenty-three new CPU-only regressions cover the three evidence layers, unknown conditional limits, empty bodies/zero gtest selections, missing categories, disabled/skipped tests, metadata versus runtime evidence, tampered artifacts and incompatible capture identities. Existing route budget remains zero uncovered; all 26 pipeline source/metadata predicates pass.",
+        "The software tree reconfigures successfully. A retained metadata-kind CTest capture passes all five selected checks (5 passed, 0 failed/skipped/not-run), including the 23 new regressions and 17 existing execution-adapter tests. Both original checks carry metadata/declaration-presence labels. Joining that metadata capture with --require-execution refuses missing runtime witnesses; no GPU, window or runtime qualification is claimed."
+      ]
     },
     {
       "id": "CNA-FIX-L06",

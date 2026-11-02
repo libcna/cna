@@ -1948,13 +1948,17 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
   obtain native-Windows measurements with working WMA positive controls before treating the
   prefix-limited result as the complete Microsoft contract. No new regression/runtime change
   was added in this documentation task.
-- XnaPipelineFinalAuditIsGreen is an evidence-metadata gate, not current runtime qualification.
-  It joins maintained parity counts/status flags, checks paths and TEST/add_test source patterns,
-  and executes the processor-default annotation checker. Source matchers do not preprocess C++ or
-  evaluate CMake conditions and can match commented-out declarations (temporary probe confirmed
-  2026-11-01). Its regenerated report now states these limits. Use configured test inventories
-  and actual test/interop/sanitizer results to substantiate the original acceptance conditions;
-  no source-matcher hardening or broad new qualification was bundled into the docs audit.
+- XnaPipelineFinalAuditIsGreen remains an evidence-metadata gate, not runtime qualification
+  (CNA-FIX-L05 / MTH-PRE-005). Both it and CApiRouteTestCoverage now separate declaration presence,
+  configured CTest registration and validated retained execution. Source scans exclude comments,
+  literals and literal false branches; unknown conditions, macro expansion and build inclusion
+  remain unevaluated. Optional --execution-record joins ctest_evidence.py artifacts; the explicit
+  --require-execution gate refuses missing/disabled/skipped witnesses and wrong evidence categories.
+  Passing empty bodies still establish no assertion coverage: runtime qualification stays
+  not-established and assertion counts unknown. The 23 new CPU-only regression cases and five
+  selected metadata CTests pass in the software tree; no broader runtime/interop/sanitizer or GPU
+  qualification is claimed. See docs/xna-content-pipeline-final-audit.md and the route-presence
+  evidence section in docs/c-api/README.md for scope and capture identity limits.
 - CNB read limits are not a total process-memory budget. Owned input, expanded chunks, decoded
   objects and GPU resources can coexist, and concurrent asset loads remain application-owned.
   Shared animation ranges additionally obey materialized track/key element totals; see

@@ -312,6 +312,8 @@ when the public surface changes. Do not add a second definition beside a generat
 The generated contract test supplements the hand-written semantic tests. Its invalid-handle
 probes sometimes accept an earlier argument refusal or a compiled-out feature; such a result does
 not prove handle lookup ran. `CApiRouteTestCoverage` measures name references in tests, including
-generated tests, not behavioral coverage. Regenerating `GeneratedRoutesSmoke.c` therefore makes a
-new generated route satisfy that name census automatically; review and extend the family's
+generated tests, not behavioral coverage. Its [separate evidence layers](README.md#route-presence-and-execution-evidence)
+exclude comments/literal disabled code and can join configured inventories and validated CTest
+captures, while assertion counts and runtime qualification remain unestablished. Regenerating
+`GeneratedRoutesSmoke.c` therefore makes a new generated route satisfy that name census automatically; review and extend the family's
 semantic tests as part of the same change.
