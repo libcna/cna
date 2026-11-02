@@ -4797,6 +4797,71 @@ namespace Microsoft::Xna::Framework::Content
         // (docs/skinned-model-ext.md). Not part of the XNA 4.0 content pipeline.
         // ---------------------------------------------------------------------------
 
+        // The manifest is read as a JSON document, so its strings arrive decoded:
+        // convert_avatar.py writes Python's json.dump defaults, which escape a non-ASCII part
+        // name ("Cône" -> "Cône"), while the part files on disk keep the real name
+        // (galaxy-eggbert UB-004). A raw substring kept the backslash, which then read as a
+        // path separator.
+        CNA::Internal::JsonValue ParseSkinnedModelManifestEXT(const std::string& json,
+                                                              const std::string& path)
+        {
+            CNA::Internal::JsonValue document;
+            try
+            {
+                document = CNA::Internal::ParseJson(json);
+            }
+            catch (const CNA::Internal::JsonParseException& error)
+            {
+                throw ContentLoadException(
+                    "SkinnedModel descriptor is not valid JSON (" + std::string(error.what()) +
+                    "): " + path);
+            }
+            if (!document.IsObject())
+            {
+                throw ContentLoadException(
+                    "SkinnedModel descriptor must be a JSON object: " + path);
+            }
+            return document;
+        }
+
+        // A string member of a manifest object; empty when the member is absent or null.
+        std::string SkinnedModelManifestStringEXT(const CNA::Internal::JsonValue& object,
+                                                  const char* key, const std::string& path)
+        {
+            const CNA::Internal::JsonValue* value = object.FindMember(key);
+            if (value == nullptr || value->type == CNA::Internal::JsonType::Null) { return {}; }
+            if (!value->IsString())
+            {
+                throw ContentLoadException(
+                    std::string("SkinnedModel descriptor field '") + key +
+                    "' must be a string: " + path);
+            }
+            return value->stringValue;
+        }
+
+        // The objects of a manifest array member; none when the member is absent.
+        std::vector<const CNA::Internal::JsonValue*> SkinnedModelManifestObjectsEXT(
+            const CNA::Internal::JsonValue& document, const char* key, const std::string& path)
+        {
+            std::vector<const CNA::Internal::JsonValue*> result;
+            const CNA::Internal::JsonValue* array = document.FindMember(key);
+            if (array == nullptr || array->type == CNA::Internal::JsonType::Null) { return result; }
+            const auto refuse = [&]
+            {
+                throw ContentLoadException(
+                    std::string("SkinnedModel descriptor field '") + key +
+                    "' must be an array of objects: " + path);
+            };
+            if (array->type != CNA::Internal::JsonType::Array) { refuse(); }
+            result.reserve(array->arrayValue.size());
+            for (const CNA::Internal::JsonValue& element : array->arrayValue)
+            {
+                if (!element.IsObject()) { refuse(); }
+                result.push_back(&element);
+            }
+            return result;
+        }
+
         class SkinnedModelTypeReader
             : public LooseFileContentTypeReader<std::shared_ptr<Graphics::SkinnedModelEXT>>
         {
@@ -4818,9 +4883,11 @@ namespace Microsoft::Xna::Framework::Content
                 Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
 
                 auto model = std::make_shared<Graphics::SkinnedModelEXT>();
+                const CNA::Internal::JsonValue document = ParseSkinnedModelManifestEXT(json, path);
 
                 // --- Skeleton ---
-                const std::string skeletonRel = ExtractJsonStringField(json, "skeleton");
+                const std::string skeletonRel =
+                    SkinnedModelManifestStringEXT(document, "skeleton", path);
                 if (skeletonRel.empty())
                 {
                     throw ContentLoadException(
@@ -4867,13 +4934,26 @@ namespace Microsoft::Xna::Framework::Content
                 }
 
                 // --- Parts ---
-                for (const std::string& pg : ParseFlatObjectArrayEXT(json, "parts"))
+                for (const CNA::Internal::JsonValue* partJson :
+                     SkinnedModelManifestObjectsEXT(document, "parts", path))
                 {
-                    const std::string name     = ExtractJsonStringField(pg, "name");
-                    const std::string vertFile = ExtractJsonStringField(pg, "vertices");
-                    const std::string idxFile  = ExtractJsonStringField(pg, "indices");
-                    const int stride           = JsonInt(pg, "vertexStride", 52);
-                    const std::string texFile  = ExtractJsonStringField(pg, "texture");
+                    const std::string name     = SkinnedModelManifestStringEXT(*partJson, "name", path);
+                    const std::string vertFile = SkinnedModelManifestStringEXT(*partJson, "vertices", path);
+                    const std::string idxFile  = SkinnedModelManifestStringEXT(*partJson, "indices", path);
+                    const std::string texFile  = SkinnedModelManifestStringEXT(*partJson, "texture", path);
+                    int stride = 52;
+                    if (const CNA::Internal::JsonValue* strideJson = partJson->FindMember("vertexStride"))
+                    {
+                        if (!strideJson->IsNumber() || !std::isfinite(strideJson->numberValue) ||
+                            std::trunc(strideJson->numberValue) != strideJson->numberValue ||
+                            std::fabs(strideJson->numberValue) > 1.0e6)
+                        {
+                            throw ContentLoadException(
+                                "SkinnedModel part '" + name +
+                                "' vertexStride must be an integer: " + path);
+                        }
+                        stride = static_cast<int>(strideJson->numberValue);
+                    }
 
                     if (vertFile.empty() || idxFile.empty()) { continue; }
                     if (stride <= 0) { continue; }
@@ -4902,8 +4982,7 @@ namespace Microsoft::Xna::Framework::Content
                     }
                     // The material's base colour (glTF baseColorFactor); white when absent.
                     Vector4 diffuseColor(1.0f, 1.0f, 1.0f, 1.0f);
-                    const CNA::Internal::JsonValue partJson = CNA::Internal::ParseJson(pg);
-                    if (const CNA::Internal::JsonValue* color = partJson.FindMember("diffuseColor"))
+                    if (const CNA::Internal::JsonValue* color = partJson->FindMember("diffuseColor"))
                     {
                         std::array<float, 4> rgba{};
                         const bool valid = color->type == CNA::Internal::JsonType::Array &&
@@ -4984,10 +5063,13 @@ namespace Microsoft::Xna::Framework::Content
                 }
 
                 // --- Animations ---
-                for (const std::string& ag : ParseFlatObjectArrayEXT(json, "animations"))
+                for (const CNA::Internal::JsonValue* animationJson :
+                     SkinnedModelManifestObjectsEXT(document, "animations", path))
                 {
-                    const std::string name     = ExtractJsonStringField(ag, "name");
-                    const std::string clipFile = ExtractJsonStringField(ag, "clip");
+                    const std::string name =
+                        SkinnedModelManifestStringEXT(*animationJson, "name", path);
+                    const std::string clipFile =
+                        SkinnedModelManifestStringEXT(*animationJson, "clip", path);
                     if (name.empty() || clipFile.empty()) { continue; }
                     const std::string clipPath = ResolveManifestRelativeSidecarPath(
                         cm, path, "clip", clipFile);

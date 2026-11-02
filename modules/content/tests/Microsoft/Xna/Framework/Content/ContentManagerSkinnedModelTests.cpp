@@ -438,6 +438,51 @@ TEST_F(ContentManagerSkinnedModelTest, APartWithoutDiffuseColorIsWhite)
     EXPECT_EQ(model->Parts[0].DiffuseColor, Microsoft::Xna::Framework::Vector4::One);
 }
 
+// galaxy-eggbert UB-004: convert_avatar.py writes the manifest with json.dump's defaults, so a part
+// named after the texture "Cône" is spelled "Cône" in the manifest while its files on disk keep
+// the real name. The escape is decoded rather than read as a backslash and a path separator.
+TEST_F(ContentManagerSkinnedModelTest, EscapedNonAsciiPartNamesAndFilesAreDecoded)
+{
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    ScratchContentRoot root;
+    WriteFile(root.path() / "avatar.skinnedmodel.json",
+              R"({"skeleton": "skeleton.bin", "parts": [)"
+              R"({"name": "Cône", "vertices": "Cône.verts.bin", )"
+              R"("indices": "Cône.idx.bin", "vertexStride": 52},)"
+              R"({"name": "Say \"hi\"", "vertices": "b.verts.bin", "indices": "b.idx.bin", "vertexStride": 52}]})");
+    WriteSkeletonWithBoneCount(root.path() / "skeleton.bin", 0);
+    WriteBytes(root.path() / std::filesystem::path(u8"Cône.verts.bin"), std::vector<std::uint8_t>(52, 0));
+    WriteBytes(root.path() / std::filesystem::path(u8"Cône.idx.bin"), kOneTriangleIndices);
+    WriteBytes(root.path() / "b.verts.bin", std::vector<std::uint8_t>(52, 0));
+    WriteBytes(root.path() / "b.idx.bin", kOneTriangleIndices);
+
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+    const auto model = cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar");
+
+    ASSERT_EQ(2u, model->Parts.size());
+    EXPECT_EQ("C\xC3\xB4ne", model->Parts[0].Name); // "Cône" in UTF-8
+    EXPECT_EQ("Say \"hi\"", model->Parts[1].Name);
+}
+
+TEST_F(ContentManagerSkinnedModelTest, AMalformedManifestThrowsContentLoadException)
+{
+    for (const char* manifest : {R"({"skeleton": "skeleton.bin", )", R"(["skeleton.bin"])",
+                                 R"({"skeleton": 7})", R"({"skeleton": "skeleton.bin", "parts": {}})",
+                                 R"({"skeleton": "skeleton.bin", "parts": ["a"]})"})
+    {
+        SCOPED_TRACE(manifest);
+        ScratchContentRoot root;
+        WriteFile(root.path() / "avatar.skinnedmodel.json", manifest);
+        WriteSkeletonWithBoneCount(root.path() / "skeleton.bin", 0);
+        ContentManager cm(nullptr, root.path().string());
+        cm.setGraphicsDevice(gd);
+        EXPECT_THROW(cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar"), ContentLoadException);
+    }
+}
+
 TEST_F(ContentManagerSkinnedModelTest, AMalformedDiffuseColorThrows)
 {
     for (const char* field : {R"(, "diffuseColor": [1, 0, 0])", R"(, "diffuseColor": [1, 0, 0, "x"])",

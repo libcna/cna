@@ -74,6 +74,13 @@ inconsistent skeleton-array sizes and forward/self parent references throw
 }
 ```
 
+The manifest is parsed as one JSON document, so its strings are decoded: a part name or file
+written as `"Cône.verts.bin"` (Python's `json.dump` default, which `convert_avatar.py` uses)
+names `Cône.verts.bin`. Invalid JSON, a non-object root, a non-string `name`/`skeleton`/`vertices`/
+`indices`/`texture`/`clip`, a `parts`/`animations` member that is not an array of objects, or a
+nonintegral `vertexStride` is refused with `ContentLoadException`; an absent or `null` field reads
+as empty.
+
 The reader requires the 52-byte skinned declaration for a populated part. Indices are unsigned
 16-bit triangle-list indices. Missing vertex/index paths or a nonpositive stride skip the entry;
 a different positive stride, nonintegral buffer record count or out-of-range index is refused.
