@@ -5,9 +5,13 @@
 // so a capability describing a promise this specific ("values above 1.0 survive a render-to-target")
 // has to be opt-in, or every renderer in the tree would claim it the moment the enumerator existed.
 
+#include <array>
+#include <cstdint>
+
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
@@ -68,7 +72,30 @@ TEST(GraphicsCapabilityFloatRenderTargetTest, NonColourNonFloatFormatsAreNotRend
     EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Dxt1));
     EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Dxt5));
     EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Bgr565));
-    EXPECT_FALSE(gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Alpha8));
+}
+
+TEST(GraphicsCapabilityFloatRenderTargetTest, AnAlpha8RenderTargetKeepsItsFormatWhereItIsStored)
+{
+    // L22: XNA's HiDef render-target formats include Alpha8. A renderer that stores it keeps the
+    // format and its one-byte texels; one that cannot falls back to Color, as the preferred-format
+    // rule allows -- and the capability answers which of the two happens.
+    GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    RenderTarget2D target(gd, 4, 4, false, SurfaceFormat::Alpha8, DepthFormat::None);
+    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Alpha8))
+    {
+        EXPECT_EQ(target.getFormatProperty(), SurfaceFormat::Color);
+        return;
+    }
+    ASSERT_EQ(target.getFormatProperty(), SurfaceFormat::Alpha8);
+
+    gd.SetRenderTarget(&target);
+    gd.Clear(Microsoft::Xna::Framework::Color(10, 20, 30, 128));
+    gd.SetRenderTarget(nullptr);
+    std::array<std::uint8_t, 16> alpha{};
+    target.GetData(alpha.data(), static_cast<int>(alpha.size()));
+    for (const std::uint8_t value : alpha)
+        EXPECT_EQ(value, 128u) << "an Alpha8 target keeps exactly its alpha channel";
 }
 
 TEST(GraphicsCapabilityFloatRenderTargetTest, ASupportedFloatFormatReallyConstructsARenderTarget)

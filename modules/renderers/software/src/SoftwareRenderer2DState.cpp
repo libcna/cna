@@ -342,6 +342,9 @@ namespace CNA::Internal::Renderers::Software
         switch (static_cast<SurfaceFormat>(surfaceFormat))
         {
             case SurfaceFormat::Color:
+            // L22: stored in its declared one-byte texel (SoftwareFramebuffer), sampled as
+            // (0, 0, 0, A) like every other Alpha8 surface.
+            case SurfaceFormat::Alpha8:
             case SurfaceFormat::Rgba1010102:
             case SurfaceFormat::Rg32:
             case SurfaceFormat::Rgba64:
@@ -361,7 +364,6 @@ namespace CNA::Internal::Renderers::Software
             case SurfaceFormat::Dxt5:
             case SurfaceFormat::NormalizedByte2:
             case SurfaceFormat::NormalizedByte4:
-            case SurfaceFormat::Alpha8:
                 return RendererFormatVerdict::Unsupported;
             default:
                 return RendererFormatVerdict::Defer;

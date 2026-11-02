@@ -222,6 +222,8 @@ namespace CNA::Internal::Renderers::Software
                 return 4;
             case SurfaceFormat::HalfSingle:
                 return 2;
+            case SurfaceFormat::Alpha8:
+                return 1;
             case SurfaceFormat::Vector2:
             case SurfaceFormat::Rgba64:
             case SurfaceFormat::HalfVector4:
@@ -261,6 +263,9 @@ namespace CNA::Internal::Renderers::Software
                         ToUnorm(value[3], 65535u) / 65535.0f};
             case SurfaceFormat::Single:
                 return {value[0], 1.0f, 1.0f, 1.0f};
+            case SurfaceFormat::Alpha8:
+                // L22: one unorm8 alpha channel; Direct3D 9 samples it as (0, 0, 0, A).
+                return {0.0f, 0.0f, 0.0f, ToUnorm8(value[3]) / 255.0f};
             case SurfaceFormat::Vector2:
                 return {value[0], value[1], 1.0f, 1.0f};
             case SurfaceFormat::Vector4:
@@ -305,6 +310,8 @@ namespace CNA::Internal::Renderers::Software
                         ReadUInt16(bytes + 6) / 65535.0f};
             case SurfaceFormat::Single:
                 return {ReadFloat(bytes), 1.0f, 1.0f, 1.0f};
+            case SurfaceFormat::Alpha8:
+                return {0.0f, 0.0f, 0.0f, bytes[0] / 255.0f};
             case SurfaceFormat::Vector2:
                 return {ReadFloat(bytes), ReadFloat(bytes + 4), 1.0f, 1.0f};
             case SurfaceFormat::Vector4:
@@ -363,6 +370,9 @@ namespace CNA::Internal::Renderers::Software
                 return;
             case SurfaceFormat::Single:
                 WriteFloat(bytes, stored[0]);
+                return;
+            case SurfaceFormat::Alpha8:
+                bytes[0] = ToUnorm8(stored[3]);
                 return;
             case SurfaceFormat::Vector2:
                 WriteFloat(bytes, stored[0]);

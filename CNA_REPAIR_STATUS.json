@@ -584,9 +584,11 @@
       "id": "CNA-FIX-L22",
       "source_section": "5.2 Limitations",
       "summary": "Native `SurfaceFormat::Alpha8` render-target storage is unavailable on every renderer: `GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Alpha8)` is false, and a render target preferring Alpha8 falls back to `Color` as XNA's preferred-format rule allows (`GraphicsCapabilityFloatRenderTargetTests.cpp`).",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "partial",
+      "resolution": "SOFTWARE now stores Alpha8 render targets natively (declared one-byte texels, quantized and sampled as (0, 0, 0, A)) and answers SupportsSurfaceFormatAsRenderTargetEXT(Alpha8) true. The GPU renderers keep the XNA-permitted fallback to Color, with the reason recorded in handoff 5.2 (no renderable alpha-only GL format; SDL A8 on Vulkan is a swizzled R8 an attachment does not honour).",
+      "evidence": [
+        "GraphicsCapabilityFloatRenderTargetTest.AnAlpha8RenderTargetKeepsItsFormatWhereItIsStored, RenderTargetFormatAgreement and RenderTargetReadbackLayout pass on SOFTWARE (43/43 in that filter); the whole CnaGraphicsTests on SOFTWARE: 3092 pass, 83 skip, 0 failures."
+      ]
     },
     {
       "id": "CNA-FIX-L23",

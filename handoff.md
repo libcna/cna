@@ -1999,11 +1999,13 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
   (DC-R2, owner decision, `c7f6c68e5`). `RendererFeature::MultiSampleMask` reports each renderer's
   answer; `ColorWriteChannels` is honoured.
 
-- Native `SurfaceFormat::Alpha8` render-target storage is unavailable on every renderer:
-  `GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Alpha8)` is false, and a
-  render target preferring Alpha8 falls back to `Color` as XNA's preferred-format rule allows
-  (`GraphicsCapabilityFloatRenderTargetTests.cpp`). Alpha is kept; the one-byte-per-pixel storage
-  is not (`Color` is four). How the Xbox 360 allocated an Alpha8 target was never captured.
+- `SurfaceFormat::Alpha8` render targets are stored natively by SOFTWARE only (L22, 2026-11-02:
+  one-byte declared texels, sampled as (0, 0, 0, A)). The GPU renderers answer
+  `SupportsSurfaceFormatAsRenderTargetEXT(Alpha8)` false and fall back to `Color` as XNA's
+  preferred-format rule allows (`GraphicsCapabilityFloatRenderTargetTests.cpp`): GL has no
+  renderable alpha-only format, SDL maps `A8_UNORM` to a swizzled `R8` on Vulkan that a colour
+  attachment does not honour, and the shaders would have to route alpha to the stored channel.
+  How the Xbox 360 allocated an Alpha8 target was never captured.
 - Online sessions and invitations are native-only; a browser build refuses them explicitly
   (`docs/browser-network-readiness.md`, `docs/gamer-services-known-limitations.md` §26).
 - `DIRECTX9` is validated under Wine (+DXVK) only. `SDLGPU`'s Direct3D 12 backend is validated

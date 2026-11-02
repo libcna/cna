@@ -191,7 +191,8 @@ to a single GL depth format as the former version of this page claimed.
 ## Remaining limitations
 
 - EasyGL does not currently promote any of the seven FNA extension resource formats (20–26).
-- Native `Alpha8` render-target storage is unavailable; preferred `Alpha8` targets become `Color`.
+- EasyGL has no native `Alpha8` render-target storage; preferred `Alpha8` targets become `Color`.
+  SOFTWARE stores the format itself (L22).
 - `Rg32` and `Rgba64` ordinary textures and render targets depend on the live context's normalized
   16-bit texture support. A context that cannot prove it rejects the format or selects the defined
   render-target fallback.

@@ -98,7 +98,7 @@ must still be queried from the selected device.
 | Effects | All five stock effects, `PbrEffect`, `SkinnedPbrEffect`, fog, lighting, shadows, image-based lighting and stock-effect `Model.Draw()`. |
 | 2D | `SpriteBatch`, sorting modes, source rectangles, transforms, `SpriteEffects`, `SpriteFont` and render-target composition. |
 | Resources | `Texture2D`, `TextureCube` and HiDef `Texture3D`, mip chains, typed transfers and the supported classic compressed, packed, normalized, float and half-float formats. |
-| Targets | `RenderTarget2D`, `RenderTargetCube`, ordered two-to-four-target MRT under HiDef, target sampling, readback, mip generation and supported float/half-float formats. |
+| Targets | `RenderTarget2D`, `RenderTargetCube`, ordered two-to-four-target MRT under HiDef, target sampling, readback, mip generation, supported float/half-float formats and `Alpha8` (one-byte declared texels, sampled as (0, 0, 0, A); L22). |
 | MSAA | One real CPU mode: a four-sample 2x2 grid. Requests of four or more are clamped to 4; requests below four become 0 rather than another sample count. |
 | Queries | Exact CPU occlusion sample counts with XNA-style lifecycle validation. |
 
