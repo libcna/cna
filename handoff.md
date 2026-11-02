@@ -2010,12 +2010,6 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
   render target preferring Alpha8 falls back to `Color` as XNA's preferred-format rule allows
   (`GraphicsCapabilityFloatRenderTargetTests.cpp`). Alpha is kept; the one-byte-per-pixel storage
   is not (`Color` is four). How the Xbox 360 allocated an Alpha8 target was never captured.
-- `FNA3D` refuses a `PbrEffect` or `SkinnedPbrEffect` draw whose vertex declaration has no
-  `TANGENT0` with `System::NotSupportedException` (`FNA3D-MISSING-STOCK-INPUT`,
-  `modules/renderers/fna3d/src/Fna3dDraw.cpp`) wherever FNA3D picks its SDLGPU or Direct3D 11
-  driver, which cannot build a pipeline with a missing input; its OpenGL driver and every other
-  renderer supply the GL neutral tangent (`91612a0a3`). Measured by the museum's `rv-shading` on
-  RADV, 2026-10-25.
 - Online sessions and invitations are native-only; a browser build refuses them explicitly
   (`docs/browser-network-readiness.md`, `docs/gamer-services-known-limitations.md` §26).
 - `DIRECTX9` is validated under Wine (+DXVK) only. `SDLGPU`'s Direct3D 12 backend is validated

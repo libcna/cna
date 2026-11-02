@@ -209,10 +209,15 @@ The renderer intentionally refuses unsupported operations instead of advertising
 
 Important current boundaries are deliberately not expanded into a second defect ledger:
 
-- `RasterizerState.MultiSampleAntiAlias` is currently a renderer-seam no-op; this is separate from
+- `RasterizerState.MultiSampleAntiAlias` is forwarded in `FNA3D_RasterizerState` (CNA-FIX-L20):
+  the OpenGL driver toggles `GL_MULTISAMPLE` (`Fna3d_MsaaFragmentContract`), D3D11 sets
+  `MultisampleEnable`, and the SDL_GPU-based drivers have no such switch. This is separate from
   creating and resolving multisampled backbuffers and render targets.
-- PBR and SkinnedPBR input without `TANGENT0` is refused on the SDL_GPU and D3D11 routes; the
-  OpenGL route supplies the measured neutral default.
+- PBR and SkinnedPBR input without `TANGENT0` reads the neutral (0, 0, 0, 1) tangent on every
+  driver (CNA-FIX-L23): the OpenGL driver supplies it as GL's default attribute, and on the
+  SDL_GPU and D3D11 drivers, which cannot build a pipeline with a missing input, the renderer binds
+  it as a one-element per-instance stream. `Fna3d_PbrVertexContract` (configured driver) and
+  `Fna3d_PbrVertexContract_SdlGpuDriver` pin that a mesh with and without tangents draws alike.
 - Same-frame update visibility for cube, volume and mipped 2D textures follows FNA3D's SDL_GPU
   driver ordering, which differs from XNA in the cases listed in `handoff.md`.
 - Integer pixel-centre correction is established for ordinary triangles. Lines and points remain

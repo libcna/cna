@@ -590,9 +590,11 @@
       "id": "CNA-FIX-L23",
       "source_section": "5.2 Limitations",
       "summary": "`FNA3D` refuses a `PbrEffect` or `SkinnedPbrEffect` draw whose vertex declaration has no `TANGENT0` with `System::NotSupportedException` (`FNA3D-MISSING-STOCK-INPUT`, `modules/renderers/fna3d/src/Fna3dDraw.cpp`) wherever FNA3D picks its SDLGPU or Direct3D 11 driver, which cannot build a pipeline with a missing input; its OpenGL driver and every other renderer supply the GL neutral tangent (`91612a0a3`).",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "FNA3D binds the neutral (0, 0, 0, 1) TANGENT0 as a one-element per-instance stream when a stock PBR/SkinnedPBR draw's declaration lacks it on the SDLGPU/D3D11 drivers, matching its OpenGL driver and every other renderer, instead of refusing the draw.",
+      "evidence": [
+        "pbr_vertex_contract (meshes with and without tangents draw identically) passes on FNA3D with the OpenGL and the SDLGPU driver (built against cmake-build-multi's libcna.so); registered as Fna3d_PbrVertexContract and Fna3d_PbrVertexContract_SdlGpuDriver; Fna3d* renderer tests 116 pass, 1 skip on both drivers. The D3D11 driver is untested here."
+      ]
     },
     {
       "id": "CNA-FIX-L24",

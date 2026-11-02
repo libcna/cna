@@ -111,6 +111,22 @@ namespace CNA::Internal::Renderers::Fna3d
             return buffer != nullptr && hasColor(*buffer, 0);
         }
 
+        bool DeclaresVertexInput(const FNA3D_VertexBufferBinding* bindings, int bindingCount,
+                                 FNA3D_VertexElementUsage usage, int index)
+        {
+            for (int b = 0; b < bindingCount; ++b)
+            {
+                const FNA3D_VertexDeclaration& declaration = bindings[b].vertexDeclaration;
+                for (int e = 0; e < declaration.elementCount; ++e)
+                {
+                    if (declaration.elements[e].vertexElementUsage == usage &&
+                        declaration.elements[e].usageIndex == index)
+                        return true;
+                }
+            }
+            return false;
+        }
+
         /**
          * Apple M4 AM4-190: the inputs the selected XNA stock vertex shader reads,
          * from the stock effects' own HLSL (BasicEffect.fx and its siblings), as (usage, index).
@@ -434,7 +450,7 @@ namespace CNA::Internal::Renderers::Fna3d
             declaration.elements = elementStorage[bindingIndex].data();
         };
 
-        const int bindingCount = params.vertexStreamCount > 0 ? params.vertexStreamCount : 1;
+        int bindingCount = params.vertexStreamCount > 0 ? params.vertexStreamCount : 1;
         if (params.vertexStreamCount > 0)
         {
             for (int i = 0; i < bindingCount; ++i)
@@ -466,8 +482,40 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         if (params.compiledEffectRuntime == nullptr && !driverDefaultsMissingVertexInputs_)
-            RequireStockVertexInputsDeclared(
-                params, bindings.data(), bindingCount, VertexColorDeclared(vb, params));
+        {
+            const bool vertexColor = VertexColorDeclared(vb, params);
+            const StockEffectKind kind = SelectStockEffect(params, vertexColor);
+            // CNA-FIX-L23: PbrEffect/SkinnedPbrEffect read TANGENT0, which most glTF-free meshes
+            // lack. FNA3D's OpenGL driver and every other CNA renderer read the GL default
+            // (0, 0, 0, 1) for it; the SDLGPU and Direct3D 11 drivers cannot build a pipeline with
+            // a missing input, so the same value is bound here as a one-element per-instance
+            // stream (stock effects are never instanced, so instance 0 is the only one read).
+            if ((kind == StockEffectKind::Pbr || kind == StockEffectKind::SkinnedPbr) &&
+                bindingCount < kMaxVertexStreams &&
+                !DeclaresVertexInput(bindings.data(), bindingCount,
+                                     FNA3D_VERTEXELEMENTUSAGE_TANGENT, 0))
+            {
+                if (neutralTangent_ == nullptr)
+                {
+                    auto buffer = std::make_unique<Fna3dVertexBufferRenderer>(
+                        deviceState_, 1, static_cast<int>(sizeof(float) * 4));
+                    const std::array<float, 4> tangent{0.0f, 0.0f, 0.0f, 1.0f};
+                    buffer->SetData(tangent.data(), 1, sizeof(tangent));
+                    neutralTangent_ = std::move(buffer);
+                }
+                static const FNA3D_VertexElement kTangentElement{
+                    0, FNA3D_VERTEXELEMENTFORMAT_VECTOR4, FNA3D_VERTEXELEMENTUSAGE_TANGENT, 0};
+                FNA3D_VertexBufferBinding& tangent =
+                    bindings[static_cast<std::size_t>(bindingCount++)];
+                tangent.vertexBuffer = neutralTangent_->GetFna3dBufferEXT();
+                tangent.vertexOffset = 0;
+                tangent.instanceFrequency = 1;
+                tangent.vertexDeclaration.vertexStride = static_cast<int32_t>(sizeof(float) * 4);
+                tangent.vertexDeclaration.elementCount = 1;
+                tangent.vertexDeclaration.elements = const_cast<FNA3D_VertexElement*>(&kTangentElement);
+            }
+            RequireStockVertexInputsDeclared(params, bindings.data(), bindingCount, vertexColor);
+        }
         FNA3D_ApplyVertexBufferBindings(device_, bindings.data(), bindingCount, 1, baseVertex);
     }
 

@@ -1860,6 +1860,10 @@ namespace CNA::Internal::Renderers::Fna3d
         /// input the declaration lacks -- FNA3D's OpenGL driver does; its SDLGPU and Direct3D 11
         /// drivers fail the pipeline instead, so a stock draw missing an input is refused first.
         bool driverDefaultsMissingVertexInputs_ = false;
+        /// CNA-FIX-L23: one (0, 0, 0, 1) Vector4, bound per instance as TANGENT0 when a stock PBR
+        /// draw's declaration has none, on the drivers that do not read a default themselves.
+        /// Created on first use.
+        std::unique_ptr<Fna3dVertexBufferRenderer> neutralTangent_;
         /// Whether FNA3D selected its OpenGL driver, the one with glSampleMaski.
         bool driverIsOpenGl_ = false;
         int maxTextureSlots_ = 0;

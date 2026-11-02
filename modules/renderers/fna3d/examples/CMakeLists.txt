@@ -180,9 +180,22 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     # directory must exercise the configured arm. The oracle script has its own OpenGL default,
     # but this explicit property overrides it and keeps `ctest -L Fna3d` uniform and visible in
     # `ctest -V` for every qualification lane.
+    # CNA-FIX-L23: PBR results must not depend on whether a mesh stores TANGENT0. Registered after
+    # the blanket driver property so its SDLGPU arm keeps the driver whose missing-input refusal it
+    # pins; the plain registration runs on the configured arm like every other test here.
+    cna_fna3d_test(cna_test_fna3d_pbr_vertex_contract
+                   ${CNA_GRAPHICS_EXAMPLES_DIR}/pbr_vertex_contract_test.cpp)
     get_property(_cna_fna3d_tests DIRECTORY PROPERTY TESTS)
+    cna_register_renderer_test(NAME Fna3d_PbrVertexContract
+        COMMAND cna_test_fna3d_pbr_vertex_contract TIMEOUT 120 LABELS "Fna3d")
+    list(APPEND _cna_fna3d_tests Fna3d_PbrVertexContract)
     set_tests_properties(${_cna_fna3d_tests} PROPERTIES
         ENVIRONMENT "FNA3D_FORCE_DRIVER=${CNA_FNA3D_TEST_DRIVER}")
+    if(NOT CNA_FNA3D_TEST_DRIVER STREQUAL "SDLGPU")
+        cna_register_renderer_test(NAME Fna3d_PbrVertexContract_SdlGpuDriver
+            COMMAND cna_test_fna3d_pbr_vertex_contract TIMEOUT 120 LABELS "Fna3d"
+            ENVIRONMENT "FNA3D_FORCE_DRIVER=SDLGPU")
+    endif()
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot
