@@ -2727,6 +2727,14 @@ namespace CNA::Internal::Renderers::SdlGpu
                     static_cast<int>(depthStencilFormat_), counts(depthStencilFormat_).c_str(),
                     static_cast<int>(SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM),
                     counts(SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM).c_str());
+            // A GraphicsDeviceManager asking for Depth24Stencil8 switches the back buffer to one of
+            // the two stencil formats after construction (UpdatePresentationFormatEXT), so report
+            // those too: the hosted Direct3D 12 runner still answers no MSAA once that happens.
+            SDL_Log("[SDLGPU] Sample counts: depth-stencil format %d: %s; depth-stencil format %d: %s",
+                    static_cast<int>(SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT),
+                    counts(SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT).c_str(),
+                    static_cast<int>(SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT),
+                    counts(SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT).c_str());
         }
     }
 
@@ -4269,6 +4277,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (nativeFormatChanged)
         {
             ReleaseBackbufferDepthAndMsaaAttachments();
+            SDL_Log("[SDLGPU] Back buffer depth format %d -> %d (XNA DepthFormat %d)",
+                    static_cast<int>(depthStencilFormat_), static_cast<int>(info.nativeFormat),
+                    depthStencilFormat);
             depthStencilFormat_ = info.nativeFormat;
         }
         backbufferHasStencil_ = info.hasStencil;
