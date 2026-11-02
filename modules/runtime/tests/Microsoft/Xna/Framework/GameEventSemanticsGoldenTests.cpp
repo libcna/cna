@@ -285,8 +285,21 @@ TEST(GameEventSemanticsTest, DesktopFocusTransitionsRaiseActivityEventsExactlyOn
 
     int activated = 0;
     int deactivated = 0;
-    game.Activated += [&activated](System::Object*, const System::EventArgs&) { ++activated; };
-    game.Deactivated += [&deactivated](System::Object*, const System::EventArgs&) { ++deactivated; };
+    std::vector<std::string> transitions;
+    game.Activated += [&](System::Object* sender, const System::EventArgs&)
+    {
+        EXPECT_EQ(sender, &game);
+        EXPECT_TRUE(game.getIsActiveProperty());
+        transitions.emplace_back("activated");
+        ++activated;
+    };
+    game.Deactivated += [&](System::Object* sender, const System::EventArgs&)
+    {
+        EXPECT_EQ(sender, &game);
+        EXPECT_FALSE(game.getIsActiveProperty());
+        transitions.emplace_back("deactivated");
+        ++deactivated;
+    };
 
     RunFrameWith(game, *scriptedPlatform,
                  {WindowEvent(Platform::WindowEventKind::FocusLost, ownWindow)});
@@ -318,6 +331,8 @@ TEST(GameEventSemanticsTest, DesktopFocusTransitionsRaiseActivityEventsExactlyOn
     EXPECT_TRUE(game.getIsActiveProperty());
     EXPECT_EQ(deactivated, 2);
     EXPECT_EQ(activated, 2);
+    EXPECT_EQ(transitions, (std::vector<std::string>{
+        "deactivated", "activated", "deactivated", "activated"}));
 #endif
 }
 

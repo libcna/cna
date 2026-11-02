@@ -186,3 +186,50 @@ TEST(GameServiceContainerTest, ContainerDoesNotOwnRegisteredServiceLifetime)
     // impl is now destroyed; the container must not retain a lookup for it.
     EXPECT_EQ(c.GetService<IFakeService>(), nullptr);
 }
+
+TEST(GameServiceContainerTest, FailedRegistrationPreservesBothTheOriginalAndUnrelatedService)
+{
+    GameServiceContainer container;
+    FakeServiceImpl original, replacement;
+    IOtherService unrelated;
+    container.AddService<IFakeService>(&original);
+    container.AddService<IOtherService>(&unrelated);
+
+    EXPECT_THROW(container.AddService<IFakeService>(&replacement), System::ArgumentException);
+    EXPECT_EQ(container.GetService<IFakeService>(), &original);
+    EXPECT_EQ(container.GetService<IOtherService>(), &unrelated);
+    EXPECT_THROW(container.AddService<IFakeService>(nullptr), System::ArgumentNullException);
+    EXPECT_EQ(container.GetService<IFakeService>(), &original);
+    EXPECT_EQ(container.GetService<IOtherService>(), &unrelated);
+
+    container.RemoveService<IFakeService>();
+    container.AddService<IFakeService>(&replacement);
+    EXPECT_EQ(container.GetService<IFakeService>(), &replacement);
+    EXPECT_EQ(container.GetService<IOtherService>(), &unrelated);
+}
+
+TEST(GameServiceContainerTest, RuntimeTypeOperationsInteroperateWithTypedAndProviderLookups)
+{
+    GameServiceContainer container;
+    HostileMultipleInheritanceImpl service;
+    INonPrimaryService* adjusted = &service;
+    IOtherService unrelated;
+    container.AddService(typeid(INonPrimaryService), adjusted);
+    container.AddService<IOtherService>(&unrelated);
+    const System::IServiceProvider& provider = container;
+
+    EXPECT_EQ(container.GetService<INonPrimaryService>(), adjusted);
+    EXPECT_EQ(provider.GetService(typeid(INonPrimaryService)), adjusted);
+    EXPECT_THROW(container.AddService(typeid(INonPrimaryService), &unrelated), System::ArgumentException);
+    EXPECT_THROW(container.AddService(typeid(INonPrimaryService), nullptr), System::ArgumentNullException);
+    EXPECT_EQ(provider.GetService(typeid(INonPrimaryService)), adjusted);
+    EXPECT_EQ(provider.GetService(typeid(IOtherService)), &unrelated);
+
+    container.RemoveService(typeid(INonPrimaryService));
+    EXPECT_EQ(container.GetService<INonPrimaryService>(), nullptr);
+    EXPECT_EQ(provider.GetService(typeid(INonPrimaryService)), nullptr);
+    EXPECT_NO_THROW(container.RemoveService(typeid(INonPrimaryService)));
+    EXPECT_EQ(container.GetService<IOtherService>(), &unrelated);
+    container.AddService<INonPrimaryService>(&service);
+    EXPECT_EQ(container.GetService(typeid(INonPrimaryService)), adjusted);
+}

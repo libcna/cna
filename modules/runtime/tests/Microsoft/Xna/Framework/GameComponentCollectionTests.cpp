@@ -4,6 +4,7 @@
 #include <memory>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 #include "Microsoft/Xna/Framework/GameComponentCollection.hpp"
 #include "Microsoft/Xna/Framework/GameComponentCollectionEventArgs.hpp"
 #include "Microsoft/Xna/Framework/IGameComponent.hpp"
@@ -467,4 +468,97 @@ TEST(GameComponentCollectionTest, RangeForIteratesAllComponents)
         ++count;
     }
     EXPECT_EQ(count, 2);
+}
+
+TEST(GameComponentCollectionTest, FailedMutationsPreserveOrderAndRaiseNoEvents)
+{
+    GameComponentCollection collection;
+    StubComponent first, second, absent;
+    collection.Add(&first);
+    collection.Add(&second);
+    int events = 0;
+    collection.ComponentAdded += [&](System::Object*, const GameComponentCollectionEventArgs&) { ++events; };
+    collection.ComponentRemoved += [&](System::Object*, const GameComponentCollectionEventArgs&) { ++events; };
+    const auto unchanged = [&]
+    {
+        ASSERT_EQ(collection.getCountProperty(), 2U);
+        EXPECT_EQ(collection[0], &first);
+        EXPECT_EQ(collection[1], &second);
+        EXPECT_EQ(events, 0);
+    };
+
+    EXPECT_THROW(collection.Add(&first), System::ArgumentException);
+    unchanged();
+    EXPECT_THROW(collection.Insert(1, &second), System::ArgumentException);
+    unchanged();
+    EXPECT_THROW(collection.Insert(3, &absent), System::ArgumentOutOfRangeException);
+    unchanged();
+    EXPECT_THROW(collection.RemoveAt(2), System::ArgumentOutOfRangeException);
+    unchanged();
+    EXPECT_FALSE(collection.Remove(&absent));
+    unchanged();
+    collection.Insert(1, &absent);
+    ASSERT_EQ(collection.getCountProperty(), 3U);
+    EXPECT_EQ(collection[0], &first);
+    EXPECT_EQ(collection[1], &absent);
+    EXPECT_EQ(collection[2], &second);
+    EXPECT_EQ(events, 1);
+}
+
+TEST(GameComponentCollectionTest, CallbacksSeeInsertedAndRemovedStateButClearNotifiesBeforeErasing)
+{
+    GameComponentCollection collection;
+    StubComponent first, second;
+    int added = 0;
+    collection.ComponentAdded += [&](System::Object* sender, const GameComponentCollectionEventArgs& args)
+    {
+        EXPECT_EQ(sender, &collection);
+        EXPECT_TRUE(collection.Contains(args.getGameComponentProperty()));
+        EXPECT_EQ(collection.getCountProperty(), static_cast<std::size_t>(++added));
+    };
+    collection.Add(&first);
+    collection.Add(&second);
+    bool clearing = false;
+    int removed = 0;
+    collection.ComponentRemoved += [&](System::Object* sender, const GameComponentCollectionEventArgs& args)
+    {
+        EXPECT_EQ(sender, &collection);
+        EXPECT_EQ(collection.Contains(args.getGameComponentProperty()), clearing);
+        EXPECT_EQ(collection.getCountProperty(), 1U);
+        EXPECT_EQ(args.getGameComponentProperty(), clearing ? &second : &first);
+        ++removed;
+    };
+    EXPECT_TRUE(collection.Remove(&first));
+    clearing = true;
+    collection.Clear();
+    EXPECT_EQ(removed, 2);
+    EXPECT_EQ(collection.getCountProperty(), 0U);
+    collection.Clear();
+    EXPECT_EQ(removed, 2);
+}
+
+TEST(GameComponentCollectionTest, ThrowingClearCallbackPreservesMembershipAndCanBeRetried)
+{
+    GameComponentCollection collection;
+    StubComponent first, second;
+    collection.Add(&first);
+    collection.Add(&second);
+    bool fail = true;
+    std::vector<IGameComponent*> removed;
+    collection.ComponentRemoved += [&](System::Object*, const GameComponentCollectionEventArgs& args)
+    {
+        removed.push_back(args.getGameComponentProperty());
+        if (fail) throw std::runtime_error("clear callback");
+    };
+
+    EXPECT_THROW(collection.Clear(), std::runtime_error);
+    ASSERT_EQ(collection.getCountProperty(), 2U);
+    EXPECT_EQ(collection[0], &first);
+    EXPECT_EQ(collection[1], &second);
+    EXPECT_EQ(removed, (std::vector<IGameComponent*>{&first}));
+    fail = false;
+    removed.clear();
+    EXPECT_NO_THROW(collection.Clear());
+    EXPECT_EQ(removed, (std::vector<IGameComponent*>{&first, &second}));
+    EXPECT_EQ(collection.getCountProperty(), 0U);
 }
