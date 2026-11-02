@@ -25,14 +25,51 @@ else()
     set_target_properties(cna_shared PROPERTIES EXPORT_NAME Shared)
     set_target_properties(runtime PROPERTIES EXPORT_NAME Runtime)
     install(TARGETS cna_shared runtime CNA EXPORT FixtureTargets
-        LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
-    install(EXPORT FixtureTargets NAMESPACE CNA:: DESTINATION lib/cmake/fixture)
-    install(FILES data_api.hpp DESTINATION include)
+        LIBRARY DESTINATION lib COMPONENT CNACpp ARCHIVE DESTINATION lib COMPONENT CNACpp)
+    install(EXPORT FixtureTargets NAMESPACE CNA:: DESTINATION lib/cmake/fixture COMPONENT CNACpp)
+    install(FILES data_api.hpp DESTINATION include COMPONENT CNACpp)
     file(WRITE "${CMAKE_BINARY_DIR}/features.cmake"
         "set(CMAKE_LINK_LIBRARY_USING_cna_shared_needed \"${CMAKE_LINK_LIBRARY_USING_cna_shared_needed}\")\n"
         "set(CMAKE_LINK_LIBRARY_USING_cna_shared_needed_SUPPORTED TRUE)\n"
         "set(CMAKE_LINK_LIBRARY_cna_shared_needed_ATTRIBUTES \"${CMAKE_LINK_LIBRARY_cna_shared_needed_ATTRIBUTES}\")\n")
-    install(FILES "${CMAKE_BINARY_DIR}/features.cmake" DESTINATION lib/cmake/fixture)
+    install(FILES "${CMAKE_BINARY_DIR}/features.cmake" DESTINATION lib/cmake/fixture COMPONENT CNACpp)
+
+    # Exercise the C-only package's real archive generator, not just C++ target exports.
+    # Defined after the runtime so the tiny fixture needs no optional CNA modules.
+    add_library(cna_c_api SHARED EXCLUDE_FROM_ALL c_api.cpp)
+    target_link_libraries(cna_c_api PRIVATE CNA)
+    set_target_properties(cna_c_api PROPERTIES EXPORT_NAME CApi INSTALL_RPATH "$ORIGIN")
+    set_target_properties(cna_shared PROPERTIES INSTALL_RPATH "$ORIGIN")
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_custom_command(
+        OUTPUT "${CMAKE_BINARY_DIR}/libcna_c_api_static.a" "${CMAKE_BINARY_DIR}/CNACStaticTargets.cmake"
+        COMMAND Python3::Interpreter "${CNA_FIXTURE_SOURCE_DIR}/tools/c-api/generate_static_archive.py"
+            --build-dir "${CMAKE_BINARY_DIR}" --module-binary-dir "${CMAKE_BINARY_DIR}"
+            --shared-runtime-library "$<TARGET_FILE:cna_shared>"
+            --shared-runtime-binary-dir "${CMAKE_BINARY_DIR}"
+            --output "${CMAKE_BINARY_DIR}/libcna_c_api_static.a"
+            --targets-file "${CMAKE_BINARY_DIR}/CNACStaticTargets.cmake"
+            --work-dir "${CMAKE_BINARY_DIR}/static-archive"
+        DEPENDS cna_c_api cna_shared
+            "${CNA_FIXTURE_SOURCE_DIR}/tools/c-api/generate_static_archive.py"
+        VERBATIM)
+    add_custom_target(cna_c_api_static
+        DEPENDS "${CMAKE_BINARY_DIR}/libcna_c_api_static.a" "${CMAKE_BINARY_DIR}/CNACStaticTargets.cmake")
+    install(TARGETS cna_c_api EXPORT CNACTargets LIBRARY DESTINATION lib COMPONENT CNACApi)
+    install(TARGETS cna_shared LIBRARY DESTINATION lib COMPONENT CNACApi)
+    install(EXPORT CNACTargets NAMESPACE CNA:: DESTINATION lib/cmake/CNA COMPONENT CNACApi)
+    install(FILES "${CMAKE_BINARY_DIR}/libcna_c_api_static.a" DESTINATION lib COMPONENT CNACApi)
+    install(FILES "${CMAKE_BINARY_DIR}/CNACStaticTargets.cmake"
+        DESTINATION lib/cmake/CNA COMPONENT CNACApi)
+    install(FILES data_api.hpp DESTINATION include COMPONENT CNACApi)
+    include(CMakePackageConfigHelpers)
+    set(CNA_INSTALL_LIBDIR lib)
+    set(CNA_INSTALL_INCLUDEDIR include)
+    configure_package_config_file(
+        "${CNA_FIXTURE_SOURCE_DIR}/modules/c-api/cmake/CNAConfig.cmake.in"
+        "${CMAKE_BINARY_DIR}/CNAConfig.cmake"
+        INSTALL_DESTINATION lib/cmake/CNA PATH_VARS CNA_INSTALL_LIBDIR CNA_INSTALL_INCLUDEDIR)
+    install(FILES "${CMAKE_BINARY_DIR}/CNAConfig.cmake" DESTINATION lib/cmake/CNA COMPONENT CNACApi)
 endif()
 foreach(_name IN ITEMS data layout virtual opaque)
     add_executable(${_name}_consumer ${_name}_consumer.cpp)

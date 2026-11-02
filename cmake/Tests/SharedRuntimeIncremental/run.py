@@ -96,12 +96,20 @@ class Case:
         require(old in text, f"Missing edit anchor in {path}")
         path.write_text(text.replace(old, new))
 
+    def relocate(self, prefix, name):
+        destination = self.work / name
+        if destination.exists():
+            shutil.rmtree(destination)
+        prefix.rename(destination)
+        return destination
+
     def run(self):
         ccache = shutil.which("ccache")
         require(ccache, "ccache is required; use the shared cache")
         linker_flags = f"-fuse-ld={self.args.linker}" if self.args.linker else ""
         self.command("configure", [self.args.cmake, "-S", self.source, "-B", self.build,
                      "-G", self.args.generator, f"-DCNA_SOURCE_DIR={self.args.policy_source or self.args.source}",
+                     f"-DCNA_FIXTURE_SOURCE_DIR={self.args.source}",
                      f"-DCNA_FIXTURE_POLICY_ONLY={'ON' if self.args.policy_only else 'OFF'}",
                      "-DCNA_SHARED_LIBRARY=ON", f"-DCMAKE_CXX_COMPILER={self.args.compiler}",
                      f"-DCMAKE_EXE_LINKER_FLAGS={linker_flags}",
@@ -146,8 +154,12 @@ class Case:
         else:
             print("SKIP: forced non-PIC link rejection requires x86-64", flush=True)
         if not self.args.policy_only:
+            self.command("c-api-archive", [self.args.cmake, "--build", self.build,
+                         "--parallel", "4", "--target", "cna_c_api_static"])
             prefix = self.work / "install"
-            self.command("install", [self.args.cmake, "--install", self.build, "--prefix", prefix])
+            self.command("install", [self.args.cmake, "--install", self.build,
+                         "--prefix", prefix, "--component", "CNACpp"])
+            prefix = self.relocate(prefix, "relocated cpp")
             installed = self.work / "installed-build"
             self.command("installed-configure", [self.args.cmake, "-S",
                          self.args.source / "cmake/Tests/SharedRuntimeIncremental/InstalledConsumer",
@@ -156,11 +168,30 @@ class Case:
                          f"-DCMAKE_EXE_LINKER_FLAGS={linker_flags}",
                          f"-DCMAKE_CXX_COMPILER_LAUNCHER={ccache}"])
             self.command("installed-build", [self.args.cmake, "--build", installed, "--parallel", "4"])
-            self.command("installed-run", [installed / "installed_consumer"])
+            self.command("installed-run", [self.args.cmake, "-E", "env", "--unset=LD_LIBRARY_PATH",
+                                            installed / "installed_consumer"])
             result, _ = self.command("installed-relocations", ["readelf", "-Wr",
                                                                installed / "installed_consumer"])
             if "COPY" in result.stdout:
                 self.failures.append("Installed consumer contains a COPY relocation")
+            c_prefix = self.work / "c-install"
+            self.command("c-install", [self.args.cmake, "--install", self.build,
+                         "--prefix", c_prefix, "--component", "CNACApi"])
+            c_prefix = self.relocate(c_prefix, "relocated-c")
+            c_installed = self.work / "c-installed-build"
+            self.command("c-installed-configure", [self.args.cmake, "-S",
+                         self.args.source / "cmake/Tests/SharedRuntimeIncremental/InstalledConsumer/CApi",
+                         "-B", c_installed, "-G", self.args.generator,
+                         f"-DCMAKE_PREFIX_PATH={c_prefix}", f"-DCMAKE_EXE_LINKER_FLAGS={linker_flags}",
+                         f"-DCMAKE_C_COMPILER_LAUNCHER={ccache}"])
+            self.command("c-installed-build", [self.args.cmake, "--build", c_installed, "--parallel", "4"])
+            self.command("c-installed-shared-run", [self.args.cmake, "-E", "env", "--unset=LD_LIBRARY_PATH",
+                                                    c_installed / "installed_c_shared"])
+            self.command("c-installed-static-run", [self.args.cmake, "-E", "env", "--unset=LD_LIBRARY_PATH",
+                                                    c_installed / "installed_c_static"])
+            result, _ = self.command("c-static-needed", ["readelf", "-Wd", c_installed / "installed_c_static"])
+            require("libcna.so" not in result.stdout and "libcna_c_api.so" not in result.stdout,
+                    "Standalone static C consumer unexpectedly needs a CNA DSO")
         for failure in self.failures:
             print(f"FAIL: {failure}", flush=True)
         require(not self.failures, f"{len(self.failures)} regression failures")

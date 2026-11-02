@@ -153,29 +153,18 @@ function(cna_define_shared_runtime umbrella)
     # module archives for module-only consumers. Through a STATIC/OBJECT framework,
     # CMake may order those archives before the umbrella's transitive DSO, extracting
     # a second runtime whose interposed globals are then destroyed twice (ISSUE-016).
-    # Inject the DSO into shared consumers' direct dependencies. Use its link name:
-    # a target already explicitly named later in the direct list is not reinjected,
-    # while a TARGET_FILE item defeats LINK_DEPENDS_NO_SHARED with a file dependency.
+    # Inject the DSO as a driver-forwarded linker input: a target already explicitly
+    # named later is not reinjected, and a bare TARGET_FILE defeats NO_SHARED with
+    # a file dependency. An absolute linker argument also avoids an extra -lcna
+    # escaping the C API's static-archive closure expansion as an external library.
     # The ordinary cna_shared dependency below still supplies build dependencies and
     # transitive usage requirements. Static-only consumers never see this interface.
     # An opaque STATIC consumer may introduce its first CNA reference only later.
     # GNU ld --as-needed would otherwise discard this early DSO. Scope the needed
     # state to this library, rather than changing consumers' other dependencies.
-    # Cache scope is necessary because add_subdirectory consumers can be defined
-    # outside CNA's directory; custom link features are evaluated in their scope.
-    set(CMAKE_LINK_LIBRARY_USING_cna_shared_needed
-        "LINKER:--push-state,--no-as-needed" "<LINK_ITEM>" "LINKER:--pop-state"
-        CACHE INTERNAL "CNA shared-runtime consumer link feature" FORCE)
-    set(CMAKE_LINK_LIBRARY_USING_cna_shared_needed_SUPPORTED TRUE
-        CACHE INTERNAL "CNA shared-runtime consumer link feature support" FORCE)
-    set(CMAKE_LINK_LIBRARY_cna_shared_needed_ATTRIBUTES "LIBRARY_TYPE=SHARED;OVERRIDE=DEFAULT"
-        CACHE INTERNAL "CNA shared-runtime consumer link feature attributes" FORCE)
     set_property(TARGET cna_shared APPEND PROPERTY INTERFACE_LINK_LIBRARIES_DIRECT
-        "$<BUILD_INTERFACE:$<LINK_LIBRARY:cna_shared_needed,$<TARGET_FILE_BASE_NAME:cna_shared>>>"
-        "$<INSTALL_INTERFACE:$<LINK_LIBRARY:cna_shared_needed,$<TARGET_FILE_BASE_NAME:CNA::Shared>>>")
-    target_link_directories(cna_shared INTERFACE
-        "$<BUILD_INTERFACE:$<TARGET_FILE_DIR:cna_shared>>"
-        "$<INSTALL_INTERFACE:$<TARGET_FILE_DIR:CNA::Shared>>")
+        "$<BUILD_INTERFACE:-Wl,--push-state,--no-as-needed,\"$<TARGET_FILE:cna_shared>\",--pop-state>"
+        "$<INSTALL_INTERFACE:-Wl,--push-state,--no-as-needed,\"$<TARGET_FILE:CNA::Shared>\",--pop-state>")
     # Explicit module targets must not extract objects before the injected DSO.
     # Their transitive occurrences after the DSO are harmless and retain external
     # dependency closure; COMPILE_ONLY below retains public compile requirements.

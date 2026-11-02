@@ -345,12 +345,16 @@ PIC removes that extra link-time size dependency. Ordinary incremental builds no
 covered cases without deleting executables. Applying this policy to an existing tree requires its
 normal reconfigure/build once so consumers acquire the compile and link options.
 
-The early DSO injection uses a link name and target-derived search directory. Its former
-`$<TARGET_FILE:cna_shared>` input accidentally defeated `LINK_DEPENDS_NO_SHARED`: the current
+The early DSO injection forwards the target's absolute path as a quoted linker argument. A bare
+`$<TARGET_FILE:cna_shared>` link-library item accidentally defeated `LINK_DEPENDS_NO_SHARED`: the
 pre-fix helper relinked **every** shared consumer even for an implementation-only edit. The fixture
 therefore tests both the complete helper and, for reproduction, the plain shared-library policy
 that exposes the historical stale-copy defect. The ordinary target dependency still brings the
-DSO up to date before consumers; the injected name preserves the early scoped `--no-as-needed`.
+DSO up to date before consumers; the injected argument preserves the early scoped `--no-as-needed`.
+Using a bare `-lcna` instead caused a separate installed-static-C regression: the archive generator
+expanded the runtime file into its archive but retained the name as an external dependency. The
+forwarded argument avoids that extra dependency; the ordinary target path still supplies the
+generator's runtime closure. Installed C++ consumers resolve the relocated imported target's path.
 
 A global dynamic-symbol-size stamp was not selected: it would relink unrelated consumers and
 cannot replace header tracking for same-size field or virtual-slot changes. Turning off the
@@ -362,6 +366,10 @@ no symbol-scanning step and no new production tool dependency. GNU ld documents 
 Linux x86-64 (2026-11-02; CMake 3.31.6, Ninja 1.12.1, GCC 14.2 / Clang 19.1, shared ccache), it
 checks exported-data growth, inline layout, derived virtual dispatch, opaque consumers, mixed
 module/shared ordering, installed usage requirements, non-PIC refusal and three no-op builds.
+The installed checks include the production C API static-archive generator and package template,
+separate C++/C API component installs, relocated prefixes (including a space), and pure-C shared
+and static consumers. The static target and executable must have no CNA DSO dependency, and
+installed programs run with `LD_LIBRARY_PATH` unset.
 GCC with Unix Makefiles, GCC with Mold and Clang with LLD also pass. Fixture-scale
 implementation-edit measurements follow; these are single runs on a shared host, not a speed
 comparison or a real CNA-tree performance qualification:
@@ -369,15 +377,16 @@ comparison or a real CNA-tree performance qualification:
 | Configuration | Wall time | Shared consumers relinked | Static control relinked |
 | --- | ---: | ---: | ---: |
 | Pre-fix full helper, GCC/Ninja, five shared consumers | 1.260 s | 5 | 1 |
-| Fixed helper, GCC/Ninja, five shared consumers | 0.268 s | 0 | 1 |
-| Fixed helper, Clang/Ninja, five shared consumers | 0.361 s | 0 | 1 |
-| Fixed helper, GCC/Makefiles, five shared consumers | 0.522 s | 0 | 1 |
+| Fixed helper, GCC/Ninja, five shared consumers | 0.105 s | 0 | 1 |
+| Fixed helper, Clang/Ninja, five shared consumers | 0.133 s | 0 | 1 |
+| Fixed helper, GCC/Makefiles, five shared consumers | 0.255 s | 0 | 1 |
 
 The fixed edit changes one runtime object, its archive, the DSO and the static control (71,436
 bytes of output files with GCC/Ninja, versus 162,172 before; these sizes exclude linker temporaries
 and cache I/O). Shared consumer objects and executables retain their timestamps. Header edits
 relink exactly the one affected shared consumer plus the static control; no-op builds change no object/archive/DSO or
-consumer output (GCC/Ninja 0.030–0.031 s in the recorded run). Run the fixture without configuring
+consumer output (GCC/Ninja 0.012–0.015 s in the recorded run). The tiny C adapter/archive is built
+explicitly during the install checks, outside this incremental-edit measurement. Run the fixture without configuring
 the full runtime, using an approved existing work directory:
 
 ```bash
