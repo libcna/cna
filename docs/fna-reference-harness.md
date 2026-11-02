@@ -195,7 +195,7 @@ validation and golden regeneration remain separate integration-owner work.
 `ValueEdgeReference.cs` and the native dump add **Vector2Edges** and
 **MatrixPerspectiveEdges**. They call each implementation directly with identical inputs;
 the strict comparator is unchanged. These categories are explicit opt-ins to its CLI,
-and mandatory in the recipe's nine-category FNA repeatability check alongside the follow-up categories below.
+and mandatory in the recipe's ten-category FNA repeatability check alongside the follow-up categories below.
 
 | Family | Reviewed input domain and operations |
 |---|---|
@@ -227,7 +227,7 @@ fresh FNA run. No genuine XNA binaries were run for CONF-003.
 
 On Linux x86_64, Release/SOFTWARE/shared CNA and the pinned FNA/net8 reference, the strict
 initial zero-tolerance edge comparison reported **60 differences**, all retained.
-Follow-up 1 expanded the audit to **155**; follow-up 2 below brings the current total to **566**:
+Follow-up 1 expanded the audit to **155**; follow-up 2 brought it to **566**. The current geometry batch has **680 retained and zero undecided** diagnostics; see follow-up 3 below:
 
 | Witnesses | Count of comparator diagnostics | Disposition |
 |---|---:|---|
@@ -248,10 +248,11 @@ After generating fresh dumps with the recipe and `cna_reference_dump`, run:
 python3 scripts/compare-fna-reference.py "$FNA_EDGE_REFERENCE" "$CNA_EDGE_CANDIDATE" \
   --category Vector2Edges --category MatrixPerspectiveEdges \
   --category Vector3Edges --category Vector4Edges --category QuaternionEdges \
-  --category MatrixEdges --tolerance 0
-# Expected exit 1: the 566 documented retained differences, preserved in the raw diagnostic.
+  --category MatrixEdges --category GeometryEdges --tolerance 0
+# Expected exit 1: 680 documented retained diagnostics, preserved in the raw diagnostic.
 python3 tools/fna-reference/check-value-edges.py "$FNA_EDGE_REFERENCE" "$CNA_EDGE_CANDIDATE"
-# Expected exit 0: exactly the reviewed dispositions, all other selected fields equal.
+# Expected exit 0: exactly 680 retained differences; every other selected field matches.
+# Unlisted, changed or disappearing differences fail review.
 export FNA_EDGE_REFERENCE CNA_EDGE_CANDIDATE
 python3 -B tools/fna-reference/test_value_edges.py -v
 ```
@@ -383,7 +384,7 @@ The remaining **411 Matrix diagnostics** are retained under verified existing de
 
 `matrix_retained_differences()` freezes every path and **both observed values**, with overload
 expansion only for explicitly named cases/operations. A changed, additional or disappearing
-retained difference fails. The complete audit now has **566 diagnostics** (155 earlier + 411).
+retained difference fails. The audit after follow-up 2 had **566 diagnostics** (155 earlier + 411).
 No axis-angle difference is accepted; all remaining selected fields match at zero tolerance.
 Camera, determinant, transpose and Lerp results have no observed differences in this domain.
 This is a bounded disposition audit, **not FNA parity** or a new Microsoft XNA binary run.
@@ -401,3 +402,76 @@ This batch stops after Matrix. Plane/BoundingBox/BoundingSphere/BoundingFrustum/
 Color/PackedVector edge expansion and Curve remain for subsequent batches. In particular,
 BoundingFrustum::Intersects(Ray) was neither implemented nor probed. No C ABI, language binding,
 GPU, browser or native-Windows qualification is claimed.
+
+
+### Follow-up 3: Plane, BoundingBox, BoundingSphere, BoundingFrustum and Ray
+
+`GeometryEdgeReference.cs` and the native dump add **GeometryEdges**: **49 cases and 3,902
+scalar leaves**, with identical fixed/seeded inputs and explicit signed-zero/nonfinite strings.
+No new probe calls or changes a frustum-ray method. Null managed references have no counterpart in
+these C++ value/reference inputs and are outside the selected domain.
+
+| Group | Cases | Reviewed domain |
+|---|---:|---|
+| planes | 13 | Normalize instance/value/out/in-place, Dot/DotCoordinate/DotNormal value/out, matrix/quaternion Transform value/out/in-place. Unit/scaled/zero/near-unit/large/tiny/NaN/infinite normals, four seeded normal/D pairs and a singular matrix. The ordinary matrix is diagonal (2,4,-1,1) with translation (7,8,9); quaternion (0.5,-0.5,0.5,-0.5); dot point (1,-2,3), homogeneous W=2. |
+| relations | 20 | Box/sphere/frustum Contains against points and volumes; box/sphere/ray/plane/frustum intersections in every selected value/out form available on both APIs; CreateMerged box/sphere, CreateFromSphere and CreateFromBoundingBox value/out. Inside, touching, disjoint, zero-volume/zero-direction, inside-out box, mutated negative radius, stationary ray, parallel outside, six direction thresholds and six seeded centers/radii. Fixed comparison box is [-1,1]^3, sphere center (0,0,0.5)/radius 1 and frustum identity. |
+| pointSets | 11 | Box and sphere CreateFromPoints on empty, single, repeated, axis pair, tied right triangle, large/tiny pairs and four seeded five-point sets. Empty-input exception names and point counts/coordinates are explicit. No null enumerable or array-overload claim. |
+| frustums | 5 | Identity, touching (X translation 2), separated (3), enclosing/enclosed scales 0.5/2; bidirectional Contains/Intersects, all eight GetCorners value/output, CreateFromFrustum. Matrices are literal, so previous trigonometric precision decisions do not obscure the geometry comparisons. |
+
+Each group resets the existing **0xC0FFEE03** LCG. Plane cases draw normal XYZ then D;
+relation cases draw center XYZ divided by eight, then abs(draw)/8 as radius, with fixed box
+half-extents (0.25,0.5,0.75), ray direction UnitX and plane Up/D=0. Point sets draw five XYZ
+triples. The six fixed ray-direction X values are 0.5e-6, 1e-6, 2e-6, 9e-6, 1e-5 and 1.1e-5.
+A negative radius is assigned through the public mutable field after valid construction; no
+constructor refusal is bypassed or changed in CNA production code.
+
+After correcting a native probe helper to update its JsonWriter by reference, the strict
+geometry comparison reported **117 diagnostics**. Three were a new confirmed mismatch:
+`BoundingFrustum::Intersects(Plane)` classified zero-distance corners separately from negative
+corners; the inspected FNA method compares only `distance > 0`, grouping zero with the
+nonpositive side. A zero plane returned Intersecting rather than Back, also through the
+Plane forwarding method. CNA now uses the same boolean classification. The focused native
+regression failed six assertions before the fix (zero plane and a nonzero plane coplanar with
+the far face, each through the three public routes). All three dumped fields now match.
+This follows the reference; no new genuine-XNA measurement is claimed.
+
+The remaining **114 geometry diagnostics** are inventoried as follows:
+
+| Disposition | Count | Existing evidence |
+|---|---:|---|
+| Plane normalization | 48 retained | `e4ddea6e0`: wide magnitude/reciprocal with Single sqrt store, over all four forms. |
+| Ray-box stationary and parallel threshold | 12 retained | `e1377c437`: nonnegative parameter interval and strict abs(direction)<1e-6. Both box/ray value/output routes are explicit. |
+| Sphere point/sphere containment and external tangency | 8 retained | `5ab1c7729`: strict point surface exclusion, signed radius difference for Contains(sphere), external tangent spheres do not intersect. |
+| Box/sphere Contains(frustum) | 8 retained | `5ab1c7729`: actual convex separation precedes corner containment. Includes distant and inside-out boxes. |
+| Sphere construction / CreateFromFrustum | 31 retained | `52f797f60`, `f46f26ea8`, `f5063e08c`: later-axis seed ties, wide distances/half-span radius, growth storage order and Distance-based span selection. Existing sphere-oracle tests remain authoritative for the XNA model; these are new FNA/CNA observations. |
+| Touching frustum pair | 4 retained | `5ab1c7729`: GJK intersection rather than conservative Contains planes. |
+| Negative-radius/frustum intersection | 3 retained | FNA false, CNA true for sphere.Intersects(frustum), frustum.Intersects(sphere), and its out form. Integration-owner decision (2026-11-02), under `5ab1c7729`: "algorithmic consequence of the measured XNA GJK port; negative radii were not separately measured against XNA". CNA's support mapping is center + v * Radius / length(v), while FNA uses a plane-distance test. Production behavior is unchanged. |
+
+The seven-edge-category raw comparison reports **680 retained diagnostics and zero undecided**
+(the prior 566 + 114 retained geometry). The audit pins every path and both values, then
+**exits 0** only when those exact dispositions match and every other selected field equals the
+reference at zero tolerance. The temporary undecided inventory and its test-only bypass were
+removed after the integration-owner decision. Mutation controls still reject unlisted changes,
+altered retained values and disappearing differences; the three negative-radius paths are
+frozen separately in the evidence assertions. This is a disposition audit, not FNA parity.
+
+Verification on 2026-11-02: both allowed native targets built; reference recipe **10/10**
+categories reproduce at zero tolerance and its two dumps are byte-identical. Source revision,
+assembly SHA-256 and unloaded native-library identities are unchanged from above. CnaMathTests
+**1,020 passed, zero failed, two skipped** (the same external ShipGame XML fixtures), including
+**10 new geometry tests**. Real-dump evidence suite: **22 passed**; recipe tests: **5 passed**.
+The comparator implementation is unchanged; its 49 tests already passed in the Matrix batch.
+Runs unset DISPLAY/WAYLAND_DISPLAY and use offscreen video/dummy audio. No GPU/window, C ABI,
+language binding, dependency or new XNA-oracle execution is included.
+
+Follow-up verification after the integration-owner decision: the default exact audit passes
+with **680 retained differences, zero undecided**; the **22** real-dump evidence tests and
+CnaMathTests (**1,020 passed, zero failed, two existing fixture skips**) pass again using the
+same dumps and native binary. No production change or new XNA measurement was made to resolve
+the three fields. Their caveat remains: "algorithmic consequence of the measured XNA GJK port; negative radii were not separately measured against XNA".
+
+The geometry batch stops here for the owner to commit. Color and all PackedVector edge
+expansion, then Curve, remain unstarted. General geometry precision, invalid frustum matrices,
+nonfinite convex-volume inputs and unselected array/aliasing routes are not qualified by this
+comparison. The negative-radius disposition preserves the ported algorithm; it is not a
+separate empirical qualification of that input against Microsoft XNA.

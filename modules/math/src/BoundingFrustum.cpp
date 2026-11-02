@@ -259,16 +259,17 @@ bool ConvexIntersects(const std::array<Vector3, 8> &vertices, Vector3 direction,
 
     void BoundingFrustum::Intersects(const Plane& plane, PlaneIntersectionType& result) const
     {
-        result = plane.IntersectsPoint(corners[0]);
+        const bool isInFront = plane.DotCoordinate(corners[0]) > 0.0f;
 
         for (int i = 1; i < CornerCount; i += 1)
         {
-            if (plane.IntersectsPoint(corners[i]) != result)
+            if ((plane.DotCoordinate(corners[i]) > 0.0f) != isInFront)
             {
                 result = PlaneIntersectionType::Intersecting;
                 return;
             }
         }
+        result = isInFront ? PlaneIntersectionType::Front : PlaneIntersectionType::Back;
     }
 
     std::optional<float> BoundingFrustum::Intersects(Ray ray) const

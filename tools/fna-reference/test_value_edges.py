@@ -23,7 +23,8 @@ class ValueEdgeEvidenceTests(unittest.TestCase):
         cls.candidate = audit.compare.load_dump(candidate)
 
     def test_reviewed_dispositions_and_zero_tolerance_remainder(self):
-        self.assertEqual(audit.audit(self.reference, self.candidate), 566)
+        self.assertEqual(audit.audit(self.reference, self.candidate), 680)
+        self.assertEqual(len(audit.retained_differences()), 680)
 
     def test_independent_literal_witnesses_on_both_implementations(self):
         for document in (self.reference, self.candidate):
@@ -171,6 +172,65 @@ class ValueEdgeEvidenceTests(unittest.TestCase):
         del changed["MatrixEdges"]
         with self.assertRaisesRegex(ValueError, "required category"):
             audit.audit(self.reference, changed)
+
+    def test_geometry_literal_witnesses_on_both_implementations(self):
+        for document in (self.reference, self.candidate):
+            value = document["GeometryEdges"]
+            self.assertEqual(value["seed"], 3237998083)
+            unit = value["planes"]["unit"]
+            self.assertEqual([unit[key] for key in ("dot", "dotOut", "dotCoordinate", "dotCoordinateOut",
+                                                   "dotNormal", "dotNormalOut")], [-6, -6, -4, -4, -2, -2])
+            for method in ("matrixTransform", "matrixTransformOut", "matrixTransformAliased"):
+                self.assertEqual(unit[method], {"normal": {"X": "+zero", "Y": 0.25, "Z": "+zero"}, "d": -4})
+            for method in ("frustumIntersectsPlane", "frustumIntersectsPlaneOut", "planeIntersectsFrustum"):
+                self.assertEqual(value["relations"]["zero"][method], 1)
+            self.assertEqual(value["pointSets"]["empty"]["boxException"], "ArgumentException")
+            self.assertEqual(value["pointSets"]["empty"]["sphereException"], "ArgumentException")
+            self.assertEqual(value["pointSets"]["pair"]["sphere"],
+                             {"center": dict.fromkeys("XYZ", "+zero"), "radius": 2})
+            self.assertEqual(value["frustums"]["identity"]["corners"]["p0"], {"X": -1, "Y": 1, "Z": "-zero"})
+            self.assertEqual(value["relations"]["inside"]["rayIntersectsBox"], "+zero")
+            self.assertEqual(value["relations"]["threshold1"]["rayIntersectsBox"], 1000000)
+
+    def test_geometry_coplanar_plane_defect_cannot_be_retained(self):
+        changed = copy.deepcopy(self.candidate)
+        changed["GeometryEdges"]["relations"]["zero"]["frustumIntersectsPlane"] = 2
+        with self.assertRaisesRegex(ValueError, "unreviewed differences"):
+            audit.audit(self.reference, changed)
+
+    def test_geometry_omissions_are_rejected_on_both_sides(self):
+        for group, case, field in (("planes", "unit", "dotOut"), ("relations", "inside", "rayIntersectsPlaneOut"),
+                                   ("pointSets", "pair", "sphere"), ("frustums", "identity", "cornersOut")):
+            reference = copy.deepcopy(self.reference)
+            candidate = copy.deepcopy(self.candidate)
+            for document in (reference, candidate):
+                del document["GeometryEdges"][group][case][field]
+            with self.assertRaisesRegex(ValueError, "incomplete edge witness shape"):
+                audit.audit(reference, candidate)
+
+    def test_geometry_retained_values_are_frozen(self):
+        for path in ("/GeometryEdges/planes/large/normalize/d",
+                     "/GeometryEdges/relations/stationary/rayIntersectsBox",
+                     "/GeometryEdges/pointSets/triangleTie/sphere/center/X",
+                     "/GeometryEdges/relations/negativeRadius/frustumIntersectsSphere"):
+            changed = copy.deepcopy(self.candidate)
+            target = changed
+            for key in path.strip("/").split("/")[:-1]:
+                target = target[key]
+            target[path.split("/")[-1]] = 123
+            with self.assertRaisesRegex(ValueError, "unreviewed differences"):
+                audit.audit(self.reference, changed)
+        retained = audit.geometry_retained_differences()
+        prefix = "/GeometryEdges/relations/negativeRadius/"
+        self.assertEqual({path: pair for path, pair in retained.items()
+                          if path.startswith(prefix) and "Intersects" in path}, {
+            prefix + "sphereIntersectsFrustum": (False, True),
+            prefix + "frustumIntersectsSphere": (False, True),
+            prefix + "frustumIntersectsSphereOut": (False, True),
+        })
+        for method in ("sphereIntersectsFrustum", "frustumIntersectsSphere", "frustumIntersectsSphereOut"):
+            self.assertIs(self.reference["GeometryEdges"]["relations"]["negativeRadius"][method], False)
+            self.assertIs(self.candidate["GeometryEdges"]["relations"]["negativeRadius"][method], True)
 
     def test_unexpected_change_is_rejected(self):
         changed = copy.deepcopy(self.candidate)

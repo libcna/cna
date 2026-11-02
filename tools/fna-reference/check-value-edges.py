@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""Audit MTH-CONF-003's exact retained differences; a pass is NOT FNA parity.
+"""Audit MTH-CONF-003's exact retained dispositions; unlisted differences fail closed.
+
+A pass is NOT FNA parity.
 
 Run the strict comparator first to retain its unfiltered diagnostic. This separate audit uses
 that same comparator at zero tolerance and accepts only the exact reviewed path/value pairs.
@@ -16,7 +18,7 @@ COMPARATOR = Path(__file__).resolve().parents[2] / "scripts/compare-fna-referenc
 SPEC = importlib.util.spec_from_file_location("compare_fna_reference", COMPARATOR)
 compare = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(compare)
-CATEGORIES = ("Vector2Edges", "MatrixPerspectiveEdges", "Vector3Edges", "Vector4Edges", "QuaternionEdges", "MatrixEdges")
+CATEGORIES = ("Vector2Edges", "MatrixPerspectiveEdges", "Vector3Edges", "Vector4Edges", "QuaternionEdges", "MatrixEdges", "GeometryEdges")
 REVISION = "00498b0b81425b14bf8da23e68655215b9b5daa7"
 
 
@@ -303,6 +305,101 @@ def matrix_retained_differences():
     return expected
 
 
+def geometry_retained_differences():
+    # Frozen paired observations under existing decisions, not a new XNA run:
+    # e4ddea6e0: Plane.Normalize wide magnitude, reciprocal, Single sqrt store.
+    # e1377c437: Ray/box nonnegative interval and strict parallel threshold.
+    # 5ab1c7729: strict sphere surface/tangency, signed radius containment, GJK volumes.
+    # 52f797f60, f46f26ea8, f5063e08c: sphere seed ties, wide growth and span selection.
+    expected = {'/GeometryEdges/planes/large/normalize/normal/X': ('+zero', 1),
+ '/GeometryEdges/planes/large/normalize/d': ('-zero', -9.999999682655225e-21),
+ '/GeometryEdges/planes/tiny/normalize/normal/X': ('+inf', 1),
+ '/GeometryEdges/planes/tiny/normalize/normal/Y': ('nan', '+zero'),
+ '/GeometryEdges/planes/tiny/normalize/normal/Z': ('nan', '+zero'),
+ '/GeometryEdges/planes/tiny/normalize/d': ('-inf', -1.0000000150474662e+30),
+ '/GeometryEdges/planes/seeded0/normalize/normal/X': (-0.492067813873291, -0.4920678436756134),
+ '/GeometryEdges/planes/seeded0/normalize/normal/Y': (-0.08857220411300659, -0.08857221156358719),
+ '/GeometryEdges/planes/seeded0/normalize/d': (0.2460339069366455, 0.2460339218378067),
+ '/GeometryEdges/planes/seeded1/normalize/d': (0.590658962726593, 0.5906590223312378),
+ '/GeometryEdges/planes/seeded2/normalize/d': (3.3036186695098877, 3.303618907928467),
+ '/GeometryEdges/planes/seeded3/normalize/normal/Z': (0.3028634190559387, 0.30286338925361633),
+ '/GeometryEdges/relations/boundary/sphereIntersectsSphere': (True, False),
+ '/GeometryEdges/relations/boundary/sphereIntersectsSphereOut': (True, False),
+ '/GeometryEdges/relations/disjoint/boxContainsFrustum': (2, 0),
+ '/GeometryEdges/relations/disjoint/sphereContainsFrustum': (2, 0),
+ '/GeometryEdges/relations/zero/sphereContainsSphere': (1, 2),
+ '/GeometryEdges/relations/zero/sphereContainsSphereOut': (1, 2),
+ '/GeometryEdges/relations/zero/sphereContainsPoint': (2, 0),
+ '/GeometryEdges/relations/zero/sphereContainsPointOut': (2, 0),
+ '/GeometryEdges/relations/zero/boxIntersectsRay': ('none', '+zero'),
+ '/GeometryEdges/relations/zero/boxIntersectsRayOut': ('none', '+zero'),
+ '/GeometryEdges/relations/zero/rayIntersectsBox': ('none', '+zero'),
+ '/GeometryEdges/relations/zero/rayIntersectsBoxOut': ('none', '+zero'),
+ '/GeometryEdges/relations/insideOut/boxContainsFrustum': (2, 0),
+ '/GeometryEdges/relations/negativeRadius/sphereContainsPoint': (2, 0),
+ '/GeometryEdges/relations/negativeRadius/sphereContainsPointOut': (2, 0),
+ '/GeometryEdges/relations/stationary/boxIntersectsRay': ('none', '+zero'),
+ '/GeometryEdges/relations/stationary/boxIntersectsRayOut': ('none', '+zero'),
+ '/GeometryEdges/relations/stationary/rayIntersectsBox': ('none', '+zero'),
+ '/GeometryEdges/relations/stationary/rayIntersectsBoxOut': ('none', '+zero'),
+ '/GeometryEdges/relations/threshold0/boxIntersectsRay': (2000000, 'none'),
+ '/GeometryEdges/relations/threshold0/boxIntersectsRayOut': (2000000, 'none'),
+ '/GeometryEdges/relations/threshold0/rayIntersectsBox': (2000000, 'none'),
+ '/GeometryEdges/relations/threshold0/rayIntersectsBoxOut': (2000000, 'none'),
+ '/GeometryEdges/relations/seeded1/boxContainsFrustum': (2, 0),
+ '/GeometryEdges/relations/seeded3/boxContainsFrustum': (2, 0),
+ '/GeometryEdges/relations/seeded4/sphereContainsFrustum': (2, 0),
+ '/GeometryEdges/relations/seeded5/boxContainsFrustum': (2, 0),
+ '/GeometryEdges/relations/seeded5/sphereContainsFrustum': (2, 0),
+ '/GeometryEdges/pointSets/triangleTie/sphere/center/X': (0.36180341243743896, 0.27639320492744446),
+ '/GeometryEdges/pointSets/triangleTie/sphere/center/Y': (0.27639320492744446, 0.36180341243743896),
+ '/GeometryEdges/pointSets/largePair/sphere/radius': ('+inf', 1.0000000200408773e+20),
+ '/GeometryEdges/pointSets/tinyPair/sphere/radius': ('+zero', 1.0000000031710769e-30),
+ '/GeometryEdges/pointSets/seeded0/sphere/center/X': (-4.443966865539551, -0.5894544124603271),
+ '/GeometryEdges/pointSets/seeded0/sphere/center/Y': (-2.781680107116699, -0.4585781693458557),
+ '/GeometryEdges/pointSets/seeded0/sphere/center/Z': (7.745290279388428, 7.6943888664245605),
+ '/GeometryEdges/pointSets/seeded0/sphere/radius': (14.372993469238281, 13.917911529541016),
+ '/GeometryEdges/pointSets/seeded3/sphere/center/X': (-3.6574785709381104, -3.6574783325195312),
+ '/GeometryEdges/pointSets/seeded3/sphere/center/Y': (1.7255644798278809, 1.7255642414093018),
+ '/GeometryEdges/pointSets/seeded3/sphere/center/Z': (-3.630509376525879, -3.6305088996887207),
+ '/GeometryEdges/frustums/identity/sphere/center/X': (-0.012568414211273193, -0.012568328529596329),
+ '/GeometryEdges/frustums/identity/sphere/center/Y': (0.07666969299316406, 0.07666976004838943),
+ '/GeometryEdges/frustums/identity/sphere/center/Z': (0.15762576460838318, 0.15762582421302795),
+ '/GeometryEdges/frustums/identity/sphere/radius': (1.7012075185775757, 1.7012073993682861),
+ '/GeometryEdges/frustums/touching/contains': (2, 0),
+ '/GeometryEdges/frustums/touching/reverseContains': (2, 0),
+ '/GeometryEdges/frustums/touching/intersects': (True, False),
+ '/GeometryEdges/frustums/touching/reverseIntersects': (True, False),
+ '/GeometryEdges/frustums/touching/sphere/center/X': (1.987431526184082, 1.9874316453933716),
+ '/GeometryEdges/frustums/touching/sphere/center/Y': (0.07666969299316406, 0.07666976004838943),
+ '/GeometryEdges/frustums/touching/sphere/center/Z': (0.15762576460838318, 0.15762582421302795),
+ '/GeometryEdges/frustums/touching/sphere/radius': (1.7012075185775757, 1.7012073993682861),
+ '/GeometryEdges/frustums/separated/sphere/center/X': (2.987431764602661, 2.987431526184082),
+ '/GeometryEdges/frustums/separated/sphere/center/Y': (0.07666969299316406, 0.07666968554258347),
+ '/GeometryEdges/frustums/separated/sphere/center/Z': (0.15762576460838318, 0.15762588381767273),
+ '/GeometryEdges/frustums/separated/sphere/radius': (1.7012072801589966, 1.7012073993682861),
+ '/GeometryEdges/frustums/enclosing/sphere/center/X': (-0.025136828422546387, -0.025136657059192657),
+ '/GeometryEdges/frustums/enclosing/sphere/center/Y': (0.15333938598632812, 0.15333952009677887),
+ '/GeometryEdges/frustums/enclosing/sphere/center/Z': (0.31525152921676636, 0.3152516484260559),
+ '/GeometryEdges/frustums/enclosing/sphere/radius': (3.4024150371551514, 3.4024147987365723),
+ '/GeometryEdges/frustums/enclosed/sphere/center/X': (-0.006284207105636597, -0.006284164264798164),
+ '/GeometryEdges/frustums/enclosed/sphere/center/Y': (0.03833484649658203, 0.03833488002419472),
+ '/GeometryEdges/frustums/enclosed/sphere/center/Z': (0.07881288230419159, 0.07881291210651398),
+ '/GeometryEdges/frustums/enclosed/sphere/radius': (0.8506037592887878, 0.8506036996841431)}
+    # Integration-owner decision, 2026-11-02, under 5ab1c7729:
+    # algorithmic consequence of the measured XNA GJK port; negative radii were not separately measured against XNA
+    expected.update({
+        '/GeometryEdges/relations/negativeRadius/sphereIntersectsFrustum': (False, True),
+        '/GeometryEdges/relations/negativeRadius/frustumIntersectsSphere': (False, True),
+        '/GeometryEdges/relations/negativeRadius/frustumIntersectsSphereOut': (False, True),
+    })
+    for path, pair in list(expected.items()):
+        if "/planes/" in path and "/normalize/" in path:
+            for form in ("normalizeOut", "normalizeInstance", "normalizeAliased"):
+                expected[path.replace("/normalize/", "/" + form + "/")] = pair
+    return expected
+
+
 def retained_differences():
     """Exact witnesses, not wildcard paths or relaxed numeric tolerances."""
     expected = {}
@@ -342,6 +439,7 @@ def retained_differences():
             expected[prefix + "/out/" + field] = (projection[field], sentinel[field])
     expected.update(quaternion_retained_differences())
     expected.update(matrix_retained_differences())
+    expected.update(geometry_retained_differences())
     return expected
 
 
@@ -472,7 +570,89 @@ def validate_matrix_shape(value):
         require_keys(case["rotation"], "XYZW")
 
 
+def validate_geometry_shape(value):
+    require_keys(value, ("seed", "planes", "relations", "pointSets", "frustums"))
+    def plane(item):
+        require_keys(item, ("normal", "d"))
+        require_keys(item["normal"], "XYZ")
+    def box(item):
+        require_keys(item, ("min", "max"))
+        require_keys(item["min"], "XYZ")
+        require_keys(item["max"], "XYZ")
+    def sphere(item):
+        require_keys(item, ("center", "radius"))
+        require_keys(item["center"], "XYZ")
+    plane_names = ["unit", "scaled", "zero", "nearUnit", "large", "tiny", "nan", "infinity", "singular"]
+    require_keys(value["planes"], plane_names + [f"seeded{i}" for i in range(4)])
+    outputs = ["normalize", "normalizeOut", "normalizeInstance", "normalizeAliased", "matrixTransform",
+               "matrixTransformOut", "matrixTransformAliased", "quaternionTransform", "quaternionTransformOut",
+               "quaternionTransformAliased"]
+    for case in value["planes"].values():
+        require_keys(case, outputs + ["input", "point", "matrix", "quaternion", "dot", "dotOut", "dotCoordinate",
+                                     "dotCoordinateOut", "dotNormal", "dotNormalOut"])
+        for field in outputs + ["input"]:
+            plane(case[field])
+        require_keys(case["point"], "XYZ")
+        require_keys(case["matrix"], matrix({}))
+        require_keys(case["quaternion"], "XYZW")
+    require_keys(value["relations"], ["inside", "boundary", "disjoint", "zero", "insideOut", "negativeRadius",
+                 "stationary", "parallelOutside"] + [f"threshold{i}" for i in range(6)] +
+                 [f"seeded{i}" for i in range(6)])
+    fields = ['box', 'sphere', 'origin', 'direction', 'plane', 'point', 'boxContainsBox', 'boxContainsBoxOut',
+ 'boxContainsSphere', 'boxContainsSphereOut', 'boxContainsPoint', 'boxContainsPointOut',
+ 'boxContainsFrustum', 'sphereContainsBox', 'sphereContainsBoxOut', 'sphereContainsSphere',
+ 'sphereContainsSphereOut', 'sphereContainsPoint', 'sphereContainsPointOut', 'sphereContainsFrustum',
+ 'frustumContainsBox', 'frustumContainsBoxOut', 'frustumContainsSphere', 'frustumContainsSphereOut',
+ 'frustumContainsPoint', 'frustumContainsPointOut', 'boxIntersectsBox', 'boxIntersectsBoxOut',
+ 'boxIntersectsSphere', 'boxIntersectsSphereOut', 'boxIntersectsPlane', 'boxIntersectsPlaneOut',
+ 'boxIntersectsRay', 'boxIntersectsRayOut', 'boxIntersectsFrustum', 'sphereIntersectsBox',
+ 'sphereIntersectsBoxOut', 'sphereIntersectsSphere', 'sphereIntersectsSphereOut',
+ 'sphereIntersectsPlane', 'sphereIntersectsPlaneOut', 'sphereIntersectsRay', 'sphereIntersectsRayOut',
+ 'sphereIntersectsFrustum', 'rayIntersectsBox', 'rayIntersectsBoxOut', 'rayIntersectsSphere',
+ 'rayIntersectsSphereOut', 'rayIntersectsPlane', 'rayIntersectsPlaneOut', 'planeIntersectsBox',
+ 'planeIntersectsBoxOut', 'planeIntersectsSphere', 'planeIntersectsSphereOut', 'planeIntersectsFrustum',
+ 'frustumIntersectsBox', 'frustumIntersectsBoxOut', 'frustumIntersectsSphere',
+ 'frustumIntersectsSphereOut', 'frustumIntersectsPlane', 'frustumIntersectsPlaneOut', 'mergedBox',
+ 'mergedBoxOut', 'boxFromSphere', 'boxFromSphereOut', 'sphereFromBox', 'sphereFromBoxOut',
+ 'mergedSphere', 'mergedSphereOut']
+    for case in value["relations"].values():
+        require_keys(case, fields)
+        for field in ("box", "mergedBox", "mergedBoxOut", "boxFromSphere", "boxFromSphereOut"):
+            box(case[field])
+        for field in ("sphere", "sphereFromBox", "sphereFromBoxOut", "mergedSphere", "mergedSphereOut"):
+            sphere(case[field])
+        plane(case["plane"])
+        for field in ("origin", "direction", "point"):
+            require_keys(case[field], "XYZ")
+    point_counts = {"empty": 0, "single": 1, "repeated": 3, "pair": 2, "triangleTie": 3,
+                    "largePair": 2, "tinyPair": 2, **{f"seeded{i}": 5 for i in range(4)}}
+    require_keys(value["pointSets"], point_counts)
+    for name, count in point_counts.items():
+        case = value["pointSets"][name]
+        fields = ["points", "count", "boxException", "sphereException"]
+        require_keys(case, fields + (["box", "sphere"] if count else []))
+        require_keys(case["points"], [f"p{i}" for i in range(count)])
+        if type(case["count"]) is not int or case["count"] != count:
+            raise ValueError("incomplete edge witness shape; point count changed")
+        for item in case["points"].values():
+            require_keys(item, "XYZ")
+        if count:
+            box(case["box"])
+            sphere(case["sphere"])
+    require_keys(value["frustums"], ("identity", "touching", "separated", "enclosing", "enclosed"))
+    for case in value["frustums"].values():
+        require_keys(case, ("matrix", "contains", "reverseContains", "intersects", "reverseIntersects", "corners",
+                            "cornersOut", "sphere"))
+        require_keys(case["matrix"], matrix({}))
+        sphere(case["sphere"])
+        for field in ("corners", "cornersOut"):
+            require_keys(case[field], [f"p{i}" for i in range(8)])
+            for point in case[field].values():
+                require_keys(point, "XYZ")
+
+
 def validate_witness_shape(document, is_reference):
+    validate_geometry_shape(document["GeometryEdges"])
     validate_matrix_shape(document["MatrixEdges"])
     validate_quaternion_shape(document["QuaternionEdges"])
     for dimension in (2, 3, 4):

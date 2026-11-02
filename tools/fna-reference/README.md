@@ -21,10 +21,10 @@ python3 tools/fna-reference/run-reference.py --output-dir /path/to/fresh/evidenc
 The recipe verifies a clean tracked source tree and its revision, rebuilds FNA.Core.csproj,
 gets its actual TargetPath from MSBuild, hashes FNA.dll, builds this probe, and runs the values
 probe twice. It compares NonRenderingApis, PackedVector, Viewport, Vector2Edges,
-MatrixPerspectiveEdges, Vector3Edges, Vector4Edges, QuaternionEdges and MatrixEdges separately at **zero**
+MatrixPerspectiveEdges, Vector3Edges, Vector4Edges, QuaternionEdges, MatrixEdges and GeometryEdges separately at **zero**
 tolerance with scripts/compare-fna-reference.py. It exits nonzero if any build, run, provenance
 check or comparison fails. Both dumps remain in the requested output directory as
-values-1.json and values-2.json. No window or GraphicsDevice is needed for these nine probes.
+values-1.json and values-2.json. No window or GraphicsDevice is needed for these ten probes.
 No timestamps or random seeds enter their metadata.
 
 By default, existing outputs and all output directories inside the CNA checkout are refused.
@@ -91,10 +91,13 @@ for example `{"tool":"cna_reference_dump","cnaRevision":"<full-CNA-commit>"}`. I
 candidate independently of the FNA oracle and is printed in the PASS/FAIL comparison summary.
 Malformed producer metadata is rejected. The current native CNA dump has no producer metadata;
 adding an accurate build revision needs separate build integration. It remains a valid candidate.
-`--compare-to /path/to/cna.json` compares all nine recipe categories with the ordinary numeric
+`--compare-to /path/to/cna.json` compares all ten recipe categories with the ordinary numeric
 tolerance. It fails on retained XNA-over-FNA differences; it is not the disposition audit. See
 [bounded edge coverage](../../docs/fna-reference-harness.md#bounded-value-and-exception-edges-mth-conf-003)
-for the raw zero-tolerance comparison, exact retained-difference audit and real-dump tests.
+for the raw zero-tolerance comparison, exact disposition audit and real-dump tests. The current
+audit passes only on the 680 exact retained differences and an equal remainder. The owner
+retains three negative-radius/frustum fields under `5ab1c7729` as an "algorithmic consequence of the measured XNA GJK port; negative radii were not separately measured against XNA".
+See the geometry follow-up in that document for this evidence boundary.
 
 The default categories are NonRenderingApis (graphics enums/state presets), PackedVector
 (17 types) and Viewport (Project/Unproject). Integer pairs compare exactly; finite floats use

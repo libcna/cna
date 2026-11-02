@@ -58,6 +58,12 @@
 
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/BoundingBox.hpp"
+#include "Microsoft/Xna/Framework/BoundingSphere.hpp"
+#include "Microsoft/Xna/Framework/BoundingFrustum.hpp"
+#include "Microsoft/Xna/Framework/Ray.hpp"
+#include "Microsoft/Xna/Framework/ContainmentType.hpp"
+#include "Microsoft/Xna/Framework/PlaneIntersectionType.hpp"
 #include "Microsoft/Xna/Framework/Plane.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -1556,6 +1562,288 @@ namespace
             .Add("planes", planes).Add("algebra", algebra).Add("decomposition", decomposition);
     }
 
+    JsonWriter GeometryPlaneFields(Plane value)
+    {
+        auto result = JsonWriter{}.Add("normal", EdgeVector(value.Normal));
+        EdgeScalar(result, "d", value.D);
+        return result;
+    }
+
+    JsonWriter GeometryBoxFields(BoundingBox value)
+    {
+        return JsonWriter{}.Add("min", EdgeVector(value.Min)).Add("max", EdgeVector(value.Max));
+    }
+
+    JsonWriter GeometrySphereFields(BoundingSphere value)
+    {
+        auto result = JsonWriter{}.Add("center", EdgeVector(value.Center));
+        EdgeScalar(result, "radius", value.Radius);
+        return result;
+    }
+
+    JsonWriter GeometryCorners(const std::vector<Vector3>& values)
+    {
+        auto result = JsonWriter{};
+        for (int i = 0; i < std::size(values); ++i) result.Add("p" + std::to_string(i), EdgeVector(values[i]));
+        return result;
+    }
+
+    void GeometryDistance(JsonWriter& output, const std::string& name, std::optional<float> value)
+    {
+        if (value.has_value()) EdgeScalar(output, name, value.value());
+        else output.Add(name, std::string("none"));
+    }
+
+    JsonWriter GeometryPlaneCase(Plane plane, Vector3 point, Matrix matrix, Quaternion quaternion)
+    {
+        auto output = JsonWriter{}.Add("input", GeometryPlaneFields(plane)).Add("point", EdgeVector(point))
+            .Add("matrix", EdgeMatrixFields(matrix)).Add("quaternion", EdgeRotation(quaternion));
+        auto vector = Vector4{point, 2};
+        EdgeScalar(output, "dot", plane.Dot(vector));
+        float dot;
+        plane.Dot(vector, dot);
+        EdgeScalar(output, "dotOut", dot);
+        EdgeScalar(output, "dotCoordinate", plane.DotCoordinate(point));
+        plane.DotCoordinate(point, dot);
+        EdgeScalar(output, "dotCoordinateOut", dot);
+        EdgeScalar(output, "dotNormal", plane.DotNormal(point));
+        plane.DotNormal(point, dot);
+        EdgeScalar(output, "dotNormalOut", dot);
+        output.Add("normalize", GeometryPlaneFields(Plane::Normalize(plane)));
+        Plane result;
+        Plane::Normalize(plane, result);
+        output.Add("normalizeOut", GeometryPlaneFields(result));
+        auto copy = plane; copy.Normalize();
+        output.Add("normalizeInstance", GeometryPlaneFields(copy));
+        copy = plane; Plane::Normalize(copy, copy);
+        output.Add("normalizeAliased", GeometryPlaneFields(copy));
+        output.Add("matrixTransform", GeometryPlaneFields(Plane::Transform(plane, matrix)));
+        Plane::Transform(plane, matrix, result);
+        output.Add("matrixTransformOut", GeometryPlaneFields(result));
+        copy = plane; Plane::Transform(copy, matrix, copy);
+        output.Add("matrixTransformAliased", GeometryPlaneFields(copy));
+        output.Add("quaternionTransform", GeometryPlaneFields(Plane::Transform(plane, quaternion)));
+        Plane::Transform(plane, quaternion, result);
+        output.Add("quaternionTransformOut", GeometryPlaneFields(result));
+        copy = plane; Plane::Transform(copy, quaternion, copy);
+        output.Add("quaternionTransformAliased", GeometryPlaneFields(copy));
+        return output;
+    }
+
+    JsonWriter GeometryRelation(BoundingBox box, BoundingSphere sphere, Ray ray, Plane plane, Vector3 point)
+    {
+        auto output = JsonWriter{}.Add("box", GeometryBoxFields(box)).Add("sphere", GeometrySphereFields(sphere))
+            .Add("origin", EdgeVector(ray.Position)).Add("direction", EdgeVector(ray.Direction))
+            .Add("plane", GeometryPlaneFields(plane)).Add("point", EdgeVector(point));
+        auto otherBox = BoundingBox{Vector3{-1}, Vector3{1}};
+        auto otherSphere = BoundingSphere{Vector3{0, 0, 0.5f}, 1};
+        auto frustum = BoundingFrustum{Matrix::getIdentityProperty()};
+        ContainmentType containment;
+        PlaneIntersectionType side;
+        bool hit;
+        std::optional<float> distance;
+        output.Add("boxContainsBox", static_cast<int>(box.Contains(otherBox)));
+        box.Contains(otherBox, containment);
+        output.Add("boxContainsBoxOut", static_cast<int>(containment));
+        output.Add("boxContainsSphere", static_cast<int>(box.Contains(sphere)));
+        box.Contains(sphere, containment);
+        output.Add("boxContainsSphereOut", static_cast<int>(containment));
+        output.Add("boxContainsPoint", static_cast<int>(box.Contains(point)));
+        box.Contains(point, containment);
+        output.Add("boxContainsPointOut", static_cast<int>(containment));
+        output.Add("boxContainsFrustum", static_cast<int>(box.Contains(frustum)));
+        output.Add("sphereContainsBox", static_cast<int>(sphere.Contains(box)));
+        sphere.Contains(box, containment);
+        output.Add("sphereContainsBoxOut", static_cast<int>(containment));
+        output.Add("sphereContainsSphere", static_cast<int>(sphere.Contains(otherSphere)));
+        sphere.Contains(otherSphere, containment);
+        output.Add("sphereContainsSphereOut", static_cast<int>(containment));
+        output.Add("sphereContainsPoint", static_cast<int>(sphere.Contains(point)));
+        sphere.Contains(point, containment);
+        output.Add("sphereContainsPointOut", static_cast<int>(containment));
+        output.Add("sphereContainsFrustum", static_cast<int>(sphere.Contains(frustum)));
+        output.Add("frustumContainsBox", static_cast<int>(frustum.Contains(box)));
+        frustum.Contains(box, containment);
+        output.Add("frustumContainsBoxOut", static_cast<int>(containment));
+        output.Add("frustumContainsSphere", static_cast<int>(frustum.Contains(sphere)));
+        frustum.Contains(sphere, containment);
+        output.Add("frustumContainsSphereOut", static_cast<int>(containment));
+        output.Add("frustumContainsPoint", static_cast<int>(frustum.Contains(point)));
+        frustum.Contains(point, containment);
+        output.Add("frustumContainsPointOut", static_cast<int>(containment));
+        output.Add("boxIntersectsBox", box.Intersects(otherBox));
+        box.Intersects(otherBox, hit);
+        output.Add("boxIntersectsBoxOut", hit);
+        output.Add("boxIntersectsSphere", box.Intersects(sphere));
+        box.Intersects(sphere, hit);
+        output.Add("boxIntersectsSphereOut", hit);
+        output.Add("boxIntersectsPlane", static_cast<int>(box.Intersects(plane)));
+        box.Intersects(plane, side);
+        output.Add("boxIntersectsPlaneOut", static_cast<int>(side));
+        GeometryDistance(output, "boxIntersectsRay", box.Intersects(ray));
+        box.Intersects(ray, distance);
+        GeometryDistance(output, "boxIntersectsRayOut", distance);
+        output.Add("boxIntersectsFrustum", box.Intersects(frustum));
+        output.Add("sphereIntersectsBox", sphere.Intersects(box));
+        sphere.Intersects(box, hit);
+        output.Add("sphereIntersectsBoxOut", hit);
+        output.Add("sphereIntersectsSphere", sphere.Intersects(otherSphere));
+        sphere.Intersects(otherSphere, hit);
+        output.Add("sphereIntersectsSphereOut", hit);
+        output.Add("sphereIntersectsPlane", static_cast<int>(sphere.Intersects(plane)));
+        sphere.Intersects(plane, side);
+        output.Add("sphereIntersectsPlaneOut", static_cast<int>(side));
+        GeometryDistance(output, "sphereIntersectsRay", sphere.Intersects(ray));
+        sphere.Intersects(ray, distance);
+        GeometryDistance(output, "sphereIntersectsRayOut", distance);
+        output.Add("sphereIntersectsFrustum", sphere.Intersects(frustum));
+        GeometryDistance(output, "rayIntersectsBox", ray.Intersects(box));
+        ray.Intersects(box, distance);
+        GeometryDistance(output, "rayIntersectsBoxOut", distance);
+        GeometryDistance(output, "rayIntersectsSphere", ray.Intersects(sphere));
+        ray.Intersects(sphere, distance);
+        GeometryDistance(output, "rayIntersectsSphereOut", distance);
+        GeometryDistance(output, "rayIntersectsPlane", ray.Intersects(plane));
+        ray.Intersects(plane, distance);
+        GeometryDistance(output, "rayIntersectsPlaneOut", distance);
+        output.Add("planeIntersectsBox", static_cast<int>(plane.Intersects(box)));
+        plane.Intersects(box, side);
+        output.Add("planeIntersectsBoxOut", static_cast<int>(side));
+        output.Add("planeIntersectsSphere", static_cast<int>(plane.Intersects(sphere)));
+        plane.Intersects(sphere, side);
+        output.Add("planeIntersectsSphereOut", static_cast<int>(side));
+        output.Add("planeIntersectsFrustum", static_cast<int>(plane.Intersects(frustum)));
+        output.Add("frustumIntersectsBox", frustum.Intersects(box));
+        frustum.Intersects(box, hit);
+        output.Add("frustumIntersectsBoxOut", hit);
+        output.Add("frustumIntersectsSphere", frustum.Intersects(sphere));
+        frustum.Intersects(sphere, hit);
+        output.Add("frustumIntersectsSphereOut", hit);
+        output.Add("frustumIntersectsPlane", static_cast<int>(frustum.Intersects(plane)));
+        frustum.Intersects(plane, side);
+        output.Add("frustumIntersectsPlaneOut", static_cast<int>(side));
+        output.Add("mergedBox", GeometryBoxFields(BoundingBox::CreateMerged(box, otherBox)));
+        BoundingBox boxResult;
+        BoundingBox::CreateMerged(box, otherBox, boxResult);
+        output.Add("mergedBoxOut", GeometryBoxFields(boxResult));
+        output.Add("boxFromSphere", GeometryBoxFields(BoundingBox::CreateFromSphere(sphere)));
+        BoundingBox::CreateFromSphere(sphere, boxResult);
+        output.Add("boxFromSphereOut", GeometryBoxFields(boxResult));
+        output.Add("sphereFromBox", GeometrySphereFields(BoundingSphere::CreateFromBoundingBox(box)));
+        BoundingSphere sphereResult;
+        BoundingSphere::CreateFromBoundingBox(box, sphereResult);
+        output.Add("sphereFromBoxOut", GeometrySphereFields(sphereResult));
+        output.Add("mergedSphere", GeometrySphereFields(BoundingSphere::CreateMerged(sphere, otherSphere)));
+        BoundingSphere::CreateMerged(sphere, otherSphere, sphereResult);
+        output.Add("mergedSphereOut", GeometrySphereFields(sphereResult));
+        return output;
+    }
+
+    JsonWriter GeometryPointSet(const std::vector<Vector3>& points)
+    {
+        auto output = JsonWriter{}.Add("points", GeometryCorners(points)).Add("count", static_cast<int>(std::size(points)));
+        try { output.Add("box", GeometryBoxFields(BoundingBox::CreateFromPoints(points))).Add("boxException", std::string("none")); }
+        catch (const System::ArgumentException&) { output.Add("boxException", std::string("ArgumentException")); }
+        try { output.Add("sphere", GeometrySphereFields(BoundingSphere::CreateFromPoints(points))).Add("sphereException", std::string("none")); }
+        catch (const System::ArgumentException&) { output.Add("sphereException", std::string("ArgumentException")); }
+        return output;
+    }
+
+    JsonWriter GeometryFrustumCase(Matrix matrix)
+    {
+        auto frustum = BoundingFrustum{matrix};
+        auto other = BoundingFrustum{Matrix::getIdentityProperty()};
+        auto output = JsonWriter{}.Add("matrix", EdgeMatrixFields(matrix))
+            .Add("contains", static_cast<int>(frustum.Contains(other))).Add("reverseContains", static_cast<int>(other.Contains(frustum)))
+            .Add("intersects", frustum.Intersects(other)).Add("reverseIntersects", other.Intersects(frustum))
+            .Add("corners", GeometryCorners(frustum.GetCorners()))
+            .Add("sphere", GeometrySphereFields(BoundingSphere::CreateFromFrustum(frustum)));
+        auto corners = std::vector<Vector3>(8); frustum.GetCorners(corners);
+        output.Add("cornersOut", GeometryCorners(corners));
+        return output;
+    }
+
+    BoundingSphere NegativeGeometrySphere()
+    {
+        auto result = BoundingSphere{Vector3::Zero, 1};
+        result.Radius = -1;
+        return result;
+    }
+
+    JsonWriter DumpGeometryEdges()
+    {
+        auto planes = JsonWriter{};
+        Plane inputs[] = { Plane{Vector3::Up, -2}, Plane{Vector3{0, 2, 0}, -4},
+            Plane{Vector3::Zero, 1}, Plane{Vector3{0.8414709568023682f, 0.5403022766113281f, 0}, -2},
+            Plane{Vector3{1e20f, 0, 0}, -1}, Plane{Vector3{1e-30f, 0, 0}, -1},
+            Plane{Vector3{std::numeric_limits<float>::quiet_NaN(), 0, 0}, 1}, Plane{Vector3{std::numeric_limits<float>::infinity(), 0, 0}, 1} };
+        const char* names[] = { "unit", "scaled", "zero", "nearUnit", "large", "tiny", "nan", "infinity" };
+        auto transform = Matrix{2, 0, 0, 0, 0, 4, 0, 0, 0, 0, -1, 0, 7, 8, 9, 1};
+        auto rotation = Quaternion{0.5f, -0.5f, 0.5f, -0.5f};
+        for (int i = 0; i < std::size(inputs); ++i)
+            planes.Add(names[i], GeometryPlaneCase(inputs[i], Vector3{1, -2, 3}, transform, rotation));
+        std::uint32_t state = EdgeSeed;
+        for (int i = 0; i < 4; ++i)
+        {
+            auto normal = Vector3{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            float d = NextEdgeValue(state);
+            planes.Add("seeded" + std::to_string(i), GeometryPlaneCase(Plane{normal, d}, Vector3{1, -2, 3}, transform, rotation));
+        }
+        planes.Add("singular", GeometryPlaneCase(inputs[0], Vector3::One, Matrix{}, rotation));
+
+        auto relations = JsonWriter{};
+        auto unitBox = BoundingBox{Vector3{-1}, Vector3{1}};
+        auto unitSphere = BoundingSphere{Vector3{0, 0, 0.5f}, 1};
+        auto unitPlane = Plane{Vector3::Up, 0};
+        relations.Add("inside", GeometryRelation(unitBox, unitSphere, Ray{Vector3::Zero, Vector3::Right}, unitPlane, Vector3::Zero));
+        relations.Add("boundary", GeometryRelation(unitBox, BoundingSphere{Vector3{2, 0, 0.5f}, 1}, Ray{Vector3::Right, Vector3::Right}, unitPlane, Vector3::Right));
+        relations.Add("disjoint", GeometryRelation(BoundingBox{Vector3{3}, Vector3{4}}, BoundingSphere{Vector3{5}, 1}, Ray{Vector3{5}, Vector3::Right}, unitPlane, Vector3{5}));
+        relations.Add("zero", GeometryRelation(BoundingBox{Vector3::Zero, Vector3::Zero}, BoundingSphere{Vector3::Zero, 0}, Ray{Vector3::Zero, Vector3::Zero}, Plane{Vector3::Zero, 0}, Vector3::Zero));
+        relations.Add("insideOut", GeometryRelation(BoundingBox{Vector3::One, -Vector3::One}, unitSphere, Ray{Vector3::Zero, Vector3::Right}, unitPlane, Vector3::Zero));
+        relations.Add("negativeRadius", GeometryRelation(unitBox, NegativeGeometrySphere(), Ray{Vector3::Zero, Vector3::Right}, unitPlane, Vector3::Right));
+        relations.Add("stationary", GeometryRelation(unitBox, unitSphere, Ray{Vector3::Zero, Vector3::Zero}, unitPlane, Vector3::Zero));
+        relations.Add("parallelOutside", GeometryRelation(unitBox, unitSphere, Ray{Vector3{2, 0, 0}, Vector3::Up}, unitPlane, Vector3{0, 0, -0.000005f}));
+        float thresholds[] = { 0.0000005f, 0.000001f, 0.000002f, 0.000009f, 0.00001f, 0.000011f };
+        for (int i = 0; i < std::size(thresholds); ++i)
+            relations.Add("threshold" + std::to_string(i), GeometryRelation(unitBox, unitSphere,
+                Ray{Vector3{-2, 0, 0}, Vector3{thresholds[i], 0, 0}}, Plane{Vector3::Right, 1}, Vector3::Right));
+        state = EdgeSeed;
+        for (int i = 0; i < 6; ++i)
+        {
+            auto center = Vector3{NextEdgeValue(state) / 8, NextEdgeValue(state) / 8, NextEdgeValue(state) / 8};
+            float radius = std::abs(NextEdgeValue(state)) / 8;
+            auto extent = Vector3{0.25f, 0.5f, 0.75f};
+            relations.Add("seeded" + std::to_string(i), GeometryRelation(BoundingBox{center - extent, center + extent},
+                BoundingSphere{center, radius}, Ray{center, Vector3::Right}, unitPlane, center));
+        }
+
+        auto sets = JsonWriter{};
+        sets.Add("empty", GeometryPointSet(std::vector<Vector3>{}));
+        sets.Add("single", GeometryPointSet(std::vector<Vector3>{ Vector3{1, 2, 3} }));
+        sets.Add("repeated", GeometryPointSet(std::vector<Vector3>{ Vector3::One, Vector3::One, Vector3::One }));
+        sets.Add("pair", GeometryPointSet(std::vector<Vector3>{ Vector3{-2, 0, 0}, Vector3{2, 0, 0} }));
+        sets.Add("triangleTie", GeometryPointSet(std::vector<Vector3>{ Vector3::Zero, Vector3::Right, Vector3::Up }));
+        sets.Add("largePair", GeometryPointSet(std::vector<Vector3>{ Vector3{-1e20f, 0, 0}, Vector3{1e20f, 0, 0} }));
+        sets.Add("tinyPair", GeometryPointSet(std::vector<Vector3>{ Vector3{-1e-30f, 0, 0}, Vector3{1e-30f, 0, 0} }));
+        state = EdgeSeed;
+        for (int i = 0; i < 4; ++i)
+        {
+            auto points = std::vector<Vector3>(5);
+            for (int j = 0; j < std::size(points); ++j)
+                points[j] = Vector3{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            sets.Add("seeded" + std::to_string(i), GeometryPointSet(points));
+        }
+        auto frustums = JsonWriter{};
+        frustums.Add("identity", GeometryFrustumCase(Matrix::getIdentityProperty()));
+        frustums.Add("touching", GeometryFrustumCase(Matrix{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -2, 0, 0, 1}));
+        frustums.Add("separated", GeometryFrustumCase(Matrix{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -3, 0, 0, 1}));
+        frustums.Add("enclosing", GeometryFrustumCase(Matrix{0.5f, 0, 0, 0, 0, 0.5f, 0, 0, 0, 0, 0.5f, 0, 0, 0, 0, 1}));
+        frustums.Add("enclosed", GeometryFrustumCase(Matrix{2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1}));
+        return JsonWriter{}.Add("seed", static_cast<double>(EdgeSeed)).Add("planes", planes).Add("relations", relations)
+            .Add("pointSets", sets).Add("frustums", frustums);
+    }
+
+
 }
 
 int main(int argc, char** argv)
@@ -1575,6 +1863,7 @@ int main(int argc, char** argv)
     root.Add("Vector4Edges", DumpVector4Edges());
     root.Add("QuaternionEdges", DumpQuaternionEdges());
     root.Add("MatrixEdges", DumpMatrixEdges());
+    root.Add("GeometryEdges", DumpGeometryEdges());
     root.Add("MatrixPerspectiveEdges", DumpMatrixPerspectiveEdges());
 
     std::string json = root.ToString();
