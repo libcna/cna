@@ -108,6 +108,65 @@ class CnjAnimationClipTest : public ::testing::Test
 {
 };
 
+TEST_F(CnjAnimationClipTest, RawSidecarCountsArePreflightedBeforeAnyTrackDecode)
+{
+    ScratchContentRoot root;
+    WriteFile(root.path() / "clip.cnj", R"({"cnjVersion":1,"type":"AnimationClip","clipFile":"clip.bin"})");
+    auto refuse = [&](const std::vector<std::uint8_t>& bytes, const char* diagnostic) {
+        std::ofstream stream(root.path() / "clip.bin", std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        stream.close();
+        ContentManager cm(nullptr, root.path().string());
+        try { (void)cm.Load<AnimationClipEXT>("clip"); FAIL() << "accepted malformed sidecar"; }
+        catch (const ContentLoadException& error) {
+            EXPECT_NE(std::string(error.what()).find(diagnostic), std::string::npos) << error.what();
+        }
+    };
+    std::vector<std::uint8_t> bytes;
+    AppendDouble(bytes, 1.0); AppendInt32(bytes, 1024);
+    refuse(bytes, "track count");
+    bytes.clear();
+    AppendDouble(bytes, 1.0); AppendInt32(bytes, 1);
+    AppendInt32(bytes, 0); AppendInt32(bytes, 1024);
+    refuse(bytes, "key count");
+    // A malformed second track must be found before the first track's NaN time is decoded.
+    bytes.clear();
+    AppendDouble(bytes, 1.0); AppendInt32(bytes, 2);
+    AppendInt32(bytes, 0); AppendInt32(bytes, 1);
+    AppendDouble(bytes, std::numeric_limits<double>::quiet_NaN());
+    for (int i = 0; i < 10; ++i) { AppendFloat(bytes, 0.0f); }
+    AppendInt32(bytes, 1); AppendInt32(bytes, 1024);
+    refuse(bytes, "key count");
+}
+
+TEST_F(CnjAnimationClipTest, RawSidecarRefusesInvalidTimesOrderAndTrailingBytes)
+{
+    ScratchContentRoot root;
+    WriteFile(root.path() / "clip.cnj", R"({"cnjVersion":1,"type":"AnimationClip","clipFile":"clip.bin"})");
+    auto load = [&](double duration, double first, double second, bool trailing, float translation = 1.f) {
+        std::vector<std::uint8_t> bytes;
+        AppendDouble(bytes, duration); AppendInt32(bytes, 1);
+        AppendInt32(bytes, 0); AppendInt32(bytes, 2);
+        for (double time : {first, second}) {
+            AppendDouble(bytes, time);
+            for (float value : {translation, 2.f, 3.f, 0.f, 0.f, 0.f, 1.f, 1.f, 1.f, 1.f}) { AppendFloat(bytes, value); }
+        }
+        if (trailing) { bytes.push_back(1); }
+        std::ofstream stream(root.path() / "clip.bin", std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        stream.close();
+        ContentManager cm(nullptr, root.path().string());
+        return cm.Load<AnimationClipEXT>("clip");
+    };
+    EXPECT_THROW(load(std::numeric_limits<double>::infinity(), 0.0, 1.0, false), ContentLoadException);
+    EXPECT_THROW(load(1.0, 0.0, std::numeric_limits<double>::quiet_NaN(), false), ContentLoadException);
+    EXPECT_THROW(load(1.0, 0.0, 1e100, false), ContentLoadException);
+    EXPECT_THROW(load(1.0, 1.0, 0.0, false), ContentLoadException);
+    EXPECT_THROW(load(1.0, 0.0, 1.0, true), ContentLoadException);
+    EXPECT_THROW(load(1.0, 0.0, 1.0, false, std::numeric_limits<float>::infinity()), ContentLoadException);
+    EXPECT_NO_THROW(load(1.0, 0.5, 0.5, false));
+}
+
 TEST_F(CnjAnimationClipTest, LoadsInlineTracksFixture)
 {
     ScratchContentRoot root;

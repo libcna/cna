@@ -7,6 +7,8 @@
 
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Model.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/ArgumentException.hpp"
@@ -55,6 +57,49 @@ TEST(AnimationPlayerTest, SamplesStartOfClip)
     player.Update(System::TimeSpan::FromSeconds(0.0), false, false);
     ASSERT_EQ(player.GetWorldTransforms().size(), 2u);
     EXPECT_FLOAT_EQ(player.GetWorldTransforms()[0].getTranslationProperty().X, 0.0f);
+}
+
+TEST(AnimationPlayerTest, WrongTargetAndUnorderedMutableKeysAreRefused)
+{
+    auto data = MakeTwoBoneSkinningData();
+    AnimationPlayer player(data);
+    auto& clip = data.AnimationClips.at("Move");
+    clip.TargetSpace = Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT::SceneNode;
+    EXPECT_THROW(player.StartClip(clip), System::ArgumentException);
+    EXPECT_EQ(player.getCurrentClipProperty(), nullptr);
+    clip.TargetSpace = Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT::JointPalette;
+    player.StartClip(clip);
+    std::swap(clip.Tracks[0].Keys[0], clip.Tracks[0].Keys[1]);
+    EXPECT_THROW(player.Update(System::TimeSpan::Zero, false), System::ArgumentException);
+}
+
+TEST(AnimationPlayerTest, SamplesFullTickRangeAndRefusesNegativeBoneCountBeforeAllocation)
+{
+    auto data = MakeTwoBoneSkinningData();
+    AnimationPlayer player(data);
+    auto& clip = data.AnimationClips.at("Move");
+    clip.Tracks[0].Keys[0].Time = System::TimeSpan::MinValue;
+    clip.Tracks[0].Keys[1].Time = System::TimeSpan::MaxValue;
+    EXPECT_NO_THROW(player.StartClip(clip));
+    EXPECT_NEAR(player.GetSkinTransforms()[0].M41, 1.0f, 1e-5f);
+    data.BoneCount = -1;
+    EXPECT_THROW(AnimationPlayer bad(data), System::ArgumentException);
+}
+
+TEST(AnimationPlayerTest, RigidSceneSamplingUsesTheSameValidatedInterpolation)
+{
+    using namespace Microsoft::Xna::Framework::Graphics;
+    ModelBone bone(0, "root");
+    Model model(nullptr, {&bone}, {});
+    auto data = MakeTwoBoneSkinningData();
+    auto clip = data.AnimationClips.at("Move");
+    clip.TargetSpace = ClipTargetSpaceEXT::SceneNode;
+    ApplyClipToBonesEXT(model, clip, System::TimeSpan::FromSeconds(0.5));
+    EXPECT_NEAR(bone.getTransformProperty().M41, 1.0f, 1e-5f);
+    const auto before = bone.getTransformProperty();
+    std::swap(clip.Tracks[0].Keys[0], clip.Tracks[0].Keys[1]);
+    EXPECT_THROW(ApplyClipToBonesEXT(model, clip, System::TimeSpan::Zero), System::ArgumentException);
+    EXPECT_EQ(bone.getTransformProperty(), before);
 }
 
 TEST(AnimationPlayerTest, SamplesMidClipInterpolated)

@@ -5,45 +5,44 @@
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "System/ArgumentException.hpp"
 
+#include <cmath>
+#include "../Internal/AnimationClipSampling.hpp"
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     namespace
     {
-        Matrix SampleTrack(const BoneTrackEXT& track, System::TimeSpan pos)
+        bool FiniteMatrix(const Matrix& matrix)
         {
-            const auto& keys = track.Keys;
-            if (keys.size() == 1 || pos <= keys.front().Time)
+            for (const float value : {matrix.M11, matrix.M12, matrix.M13, matrix.M14,
+                     matrix.M21, matrix.M22, matrix.M23, matrix.M24,
+                     matrix.M31, matrix.M32, matrix.M33, matrix.M34,
+                     matrix.M41, matrix.M42, matrix.M43, matrix.M44})
             {
-                const auto& k = keys.front();
-                return Matrix::CreateScale(k.Scale) * Matrix::CreateFromQuaternion(k.Rotation)
-                     * Matrix::CreateTranslation(k.Translation);
+                if (!std::isfinite(value)) { return false; }
             }
-            if (pos >= keys.back().Time)
+            return true;
+        }
+
+        void ValidateSkeleton(const SkinnedModelEXT& model)
+        {
+            if (model.BoneCount < 0
+                || model.ParentBoneIndices.size() != static_cast<std::size_t>(model.BoneCount)
+                || model.BindPoseLocal.size() != static_cast<std::size_t>(model.BoneCount)
+                || model.InverseBindPoseGlobal.size() != static_cast<std::size_t>(model.BoneCount))
             {
-                const auto& k = keys.back();
-                return Matrix::CreateScale(k.Scale) * Matrix::CreateFromQuaternion(k.Rotation)
-                     * Matrix::CreateTranslation(k.Translation);
+                throw System::ArgumentException("SkinnedModelEXT skeleton arrays must match a nonnegative BoneCount.");
             }
-
-            std::size_t next = 1;
-            while (next < keys.size() && keys[next].Time < pos)
+            for (int index = 0; index < model.BoneCount; ++index)
             {
-                ++next;
+                const auto slot = static_cast<std::size_t>(index);
+                if (model.ParentBoneIndices[slot] >= index
+                    || !FiniteMatrix(model.BindPoseLocal[slot])
+                    || !FiniteMatrix(model.InverseBindPoseGlobal[slot]))
+                {
+                    throw System::ArgumentException("SkinnedModelEXT requires topologically ordered parents and finite bind poses.");
+                }
             }
-            const auto& a = keys[next - 1];
-            const auto& b = keys[next];
-
-            const double spanSeconds = (b.Time - a.Time).getTotalSecondsProperty();
-            const float amount = spanSeconds > 0.0
-                ? static_cast<float>((pos - a.Time).getTotalSecondsProperty() / spanSeconds)
-                : 0.0f;
-
-            const Vector3 translation = Vector3::Lerp(a.Translation, b.Translation, amount);
-            const Vector3 scale = Vector3::Lerp(a.Scale, b.Scale, amount);
-            const Quaternion rotation = Quaternion::Slerp(a.Rotation, b.Rotation, amount);
-
-            return Matrix::CreateScale(scale) * Matrix::CreateFromQuaternion(rotation)
-                 * Matrix::CreateTranslation(translation);
         }
     }
 
@@ -108,12 +107,58 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SkinnedModelEXT::AttachPartEXT(SkinnedModelEXT&& other)
     {
+        if (this == &other)
+        {
+            throw System::ArgumentException("A SkinnedModelEXT cannot attach its own parts.", "other");
+        }
         if (other.BoneCount != BoneCount)
         {
             throw System::ArgumentException(
                 "AttachPartEXT: other.BoneCount (" + std::to_string(other.BoneCount)
                     + ") does not match this model's BoneCount (" + std::to_string(BoneCount) + ")",
                 "other");
+        }
+
+        if (other.Parts.empty()) { return; }
+        ValidateSkeleton(*this);
+        ValidateSkeleton(other);
+        if (ParentBoneIndices != other.ParentBoneIndices
+            || BindPoseLocal != other.BindPoseLocal
+            || InverseBindPoseGlobal != other.InverseBindPoseGlobal)
+        {
+            throw System::ArgumentException("Attached SkinnedModelEXT parts require identical indexed skeletons.", "other");
+        }
+        const GraphicsDevice* device = nullptr;
+        const auto checkResource = [&](const GraphicsResource* resource) {
+            if (resource == nullptr) { return; }
+            const auto* candidate = resource->getGraphicsDeviceProperty();
+            if (candidate == nullptr) { return; }
+            if (device != nullptr && candidate != device)
+            {
+                throw System::ArgumentException("Attached SkinnedModelEXT resources must belong to one graphics device.", "other");
+            }
+            device = candidate;
+        };
+        for (const auto* model : {this, &other})
+        {
+            if (model->Parts.size() != model->vertexBuffers_.size()
+                || model->Parts.size() != model->indexBuffers_.size()
+                || model->Parts.size() != model->ownedParts_.size())
+            {
+                throw System::ArgumentException("SkinnedModelEXT public parts no longer match their owned resources.");
+            }
+            for (const auto& buffer : model->vertexBuffers_) { checkResource(buffer.get()); }
+            for (const auto& buffer : model->indexBuffers_) { checkResource(buffer.get()); }
+            for (const auto& texture : model->textures_) { checkResource(texture.get()); }
+            for (const auto& part : model->Parts)
+            {
+                checkResource(part.Texture);
+                if (part.Part != nullptr)
+                {
+                    checkResource(part.Part->getVertexBufferProperty());
+                    checkResource(part.Part->getIndexBufferProperty());
+                }
+            }
         }
 
         // Task 11.4: replace-by-name - remove any part(s) this model already has under an
@@ -153,22 +198,8 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         const AnimationClipEXT& clip = it->second;
 
-        // Task 11.3: ParentBoneIndices/BindPoseLocal/InverseBindPoseGlobal are all populated
-        // straight from file content and then indexed up to BoneCount below with no check that
-        // .size() == BoneCount - a corrupt/truncated .skeleton.bin (or a hand-constructed model,
-        // e.g. in a test) previously produced real out-of-bounds std::vector::operator[] reads
-        // instead of a clean, catchable error.
-        if (static_cast<int>(ParentBoneIndices.size()) != BoneCount
-            || static_cast<int>(BindPoseLocal.size()) != BoneCount
-            || static_cast<int>(InverseBindPoseGlobal.size()) != BoneCount)
-        {
-            throw System::ArgumentException(
-                "SkinnedModelEXT's BoneCount (" + std::to_string(BoneCount)
-                    + ") does not match ParentBoneIndices.size() (" + std::to_string(ParentBoneIndices.size())
-                    + "), BindPoseLocal.size() (" + std::to_string(BindPoseLocal.size())
-                    + "), or InverseBindPoseGlobal.size() (" + std::to_string(InverseBindPoseGlobal.size()) + ")"
-            );
-        }
+        ValidateSkeleton(*this);
+        CNA::Internal::ValidateAnimationClip(clip, ClipTargetSpaceEXT::JointPalette);
 
         System::TimeSpan pos = position;
         if (clip.Duration > System::TimeSpan::Zero)
@@ -203,7 +234,7 @@ namespace Microsoft::Xna::Framework::Graphics
             if (!track.Keys.empty() && track.BoneIndex >= 0
                 && track.BoneIndex < static_cast<int>(localTransforms.size()))
             {
-                localTransforms[static_cast<std::size_t>(track.BoneIndex)] = SampleTrack(track, pos);
+                localTransforms[static_cast<std::size_t>(track.BoneIndex)] = CNA::Internal::SampleAnimationTrack(track, pos);
             }
         }
 
@@ -213,20 +244,6 @@ namespace Microsoft::Xna::Framework::Graphics
         for (int i = 0; i < BoneCount; ++i)
         {
             const int parent = ParentBoneIndices[static_cast<std::size_t>(i)];
-            // Task 11.2: "topological order" above is a convention enforced only by the content
-            // pipeline, never checked here - malformed/future content with parent[i] >= i (which
-            // also transitively rules out any cycle: a cycle's maximum-index member would need a
-            // parent with a strictly greater index than itself, violating this same check)
-            // otherwise silently read a not-necessarily-finalized worldTransforms[parent] with no
-            // error.
-            if (parent >= i)
-            {
-                throw System::ArgumentException(
-                    "ParentBoneIndices is not topologically ordered: bone " + std::to_string(i)
-                        + " has parent index " + std::to_string(parent)
-                        + ", which must be less than the bone's own index"
-                );
-            }
             worldTransforms[static_cast<std::size_t>(i)] = parent < 0
                 ? localTransforms[static_cast<std::size_t>(i)]
                 : localTransforms[static_cast<std::size_t>(i)] * worldTransforms[static_cast<std::size_t>(parent)];

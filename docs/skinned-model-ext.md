@@ -16,7 +16,8 @@ Loading a glTF `Model` does not produce a `SkinnedModelEXT`.
 - `VertexPositionNormalTextureSkinned` is a declared 52-byte record: position at byte 0, normal
   at 12, UV at 24, four float weights at 32 and four byte joint indices at 48.
 - `BoneCount`, `ParentBoneIndices`, `BindPoseLocal` and `InverseBindPoseGlobal` describe one
-  skeleton. Parents precede children; negative parent indices are treated as roots.
+  skeleton. Sampling requires a nonnegative count, complete arrays and finite matrices.
+  Parents precede children; negative parent indices are treated as roots.
 - `Parts` holds names, borrowed `ModelMeshPart*`/`Texture2D*` descriptors and `DiffuseColor`.
   The model owns the underlying parts, vertex/index buffers and optional textures.
   `AddPartEXT` transfers ownership and appends; it does not replace duplicate names.
@@ -24,21 +25,32 @@ Loading a glTF `Model` does not produce a `SkinnedModelEXT`.
   public `Parts` vector directly: removal relies on its alignment with the private resource arrays.
 - `AttachPartEXT(std::move(other))` replaces existing same-named parts and transfers the incoming
   parts/resources, leaving `other.Parts` empty. It retains this model's skeleton and clips.
-  **Only equal bone counts are checked**; matching joint order, bind poses and graphics-device
-  ownership remain the caller's responsibility. There is no skeleton retargeting.
+  Before replacement, it checks complete, finite, topologically ordered skeleton arrays,
+  equal bone counts, identical parent/local-bind/inverse-bind arrays and one graphics device for
+  the present resources. Self-attachment and inconsistent owned-part arrays are refused too.
+  Validation refusal preserves both models' parts. Empty incoming parts are a no-op after
+  self/count checks. Joint names are not stored: equivalent numeric skeletons alone cannot prove
+  semantic joint identity, so pieces still need a common source rig. There is no retargeting.
 - `Clips` maps names to `AnimationClipEXT`: duration, per-bone `BoneTrackEXT` keyframes and an
   explicit `TargetSpace`. This container expects `JointPalette` indices. `SceneNode` clips belong
-  to the separate rigid-`Model` path; `ComputeBoneTransformsEXT` does not validate that tag.
+  to the separate rigid-`Model` path; `ComputeBoneTransformsEXT` rejects them and unknown tags.
 
 `ComputeBoneTransformsEXT(clipName, position, loop, outWorldBones)` uses linear translation and
-scale interpolation and `Quaternion::Slerp` for rotation. Keys must be in ascending time order;
-the sampler does not sort them. Empty/out-of-range tracks are ignored and untracked bones retain
+scale interpolation and `Quaternion::Slerp` for rotation. Before sampling, it requires
+nondecreasing key times and finite transforms; equal times remain legal. It does not sort keys.
+After validation, empty/out-of-range tracks are ignored and untracked bones retain
 their local bind pose. Positive-duration clips wrap in ticks (including negative positions) when
 looping, otherwise clamp to the clip; nonpositive durations sample time zero.
 
+`AnimationPlayer` and rigid `ApplyClipToBonesEXT` use the same validated interpolation, with
+`JointPalette` and `SceneNode` respectively. Ordered tick distances use unsigned arithmetic so
+even an interval from `TimeSpan::MinValue` to `MaxValue` does not overflow. Mutable borrowed clips
+are checked again when sampled; validation therefore scans their keys each time.
+
 With row-vector matrices, local transforms are `Scale * Rotation * Translation`, a child's global
 transform is `local * parentGlobal`, and the output is `InverseBindPoseGlobal * global`.
-Unknown clip names, inconsistent skeleton-array sizes and forward/self parent references throw
+Unknown clip names, invalid target spaces, descending key times, nonfinite transforms,
+inconsistent skeleton-array sizes and forward/self parent references throw
 `System::ArgumentException`. The routine sizes its output to `BoneCount`; it does not impose
 `SkinnedEffect::MaxBones`. The subsequent `SkinnedEffect::SetBoneTransforms` requires 1–72 matrices.
 
@@ -87,10 +99,16 @@ preserves relocation without treating every absolute top-level asset as forbidde
 ([path contract](filesystem-path-model.md)).
 
 Bounds-checked binary reads reject truncation with `ContentLoadException`; the skeleton reader
-also bounds the bone count to 0–100,000. This is not complete resource budgeting: the shared raw-clip
-reader reserves vectors from nonnegative track/key counts before proving that the file contains
-them, and neither the manifest nor the sampler validates every key order, joint/weight or
-same-count skeleton relationship. No claim of arbitrary-input allocation safety is made.
+also bounds the bone count to 0–100,000. The shared raw-clip reader checks file size before
+allocating its owned input and proves every track/key byte range before reserving output vectors.
+It uses the default CNB sanity limits: at most 512 MiB of input, 16,777,216 tracks and 16,777,216
+aggregate keys. It also requires representable times, nondecreasing key order, finite transforms
+and exact consumption without trailing bytes. Runtime and model-CNB compilation use this reader.
+
+These are bounded input/count checks, not a total process/GPU memory budget: source bytes and
+decoded arrays coexist, and concurrent loads remain application-owned. Vertex joint indices,
+weights and semantic same-rig identity are not exhaustively validated. Big-endian skeleton/vertex
+execution remains unqualified.
 
 ## Conversion and drawing
 
@@ -116,3 +134,10 @@ pass, together with the two-part pixel probe. The Python converter regression co
 start because the active Python environment lacks pygltflib; its implementation was checked by
 source inspection. These results do not establish big-endian, every-renderer or arbitrary-asset
 qualification.
+
+The 2026-11-02 `CNA-FIX-L13` regressions first reproduce eight failing sampling/attachment/raw-read
+cases against the preceding code. The corrected 46 sampling/ownership tests pass on each of
+OPENGLES3, SOFTWARE and SDLGPU, and all 454 selected CNB/clip/model-loading tests pass privately.
+The strict-C skinned-model/player smokes cover indexed-skeleton mismatch, retained resource counts,
+finite bind matrices and wrong-space refusal; the two-part pixel probe and project gates pass.
+No native Windows, big-endian, arbitrary-character or every-renderer qualification is claimed.

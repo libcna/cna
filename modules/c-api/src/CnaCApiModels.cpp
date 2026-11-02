@@ -698,6 +698,16 @@ void SetSkinnedPartDiffuseColor(
             return InvalidArgument(
                 "SkinnedModelEXT parent indices must be -1 or precede their child.");
         }
+        for (const auto& matrix : {bindPoseLocal[index], inverseBindPoseGlobal[index]}) {
+            for (const float value : {matrix.m11, matrix.m12, matrix.m13, matrix.m14,
+                     matrix.m21, matrix.m22, matrix.m23, matrix.m24,
+                     matrix.m31, matrix.m32, matrix.m33, matrix.m34,
+                     matrix.m41, matrix.m42, matrix.m43, matrix.m44}) {
+                if (!std::isfinite(value)) {
+                    return InvalidArgument("Skeleton bind poses must contain only finite values.");
+                }
+            }
+        }
         copiedParents.push_back(parent);
         copiedBindPose.push_back(ToNative(bindPoseLocal[index]));
         copiedInverseBindPose.push_back(ToNative(inverseBindPoseGlobal[index]));
@@ -3219,6 +3229,12 @@ const std::string& SelectMessage(const GltfImportDiagnosticEXT& value) { return 
     }
     if (other->parts.empty()) {
         return CNA_RESULT_SUCCESS;
+    }
+    if (model->value->ParentBoneIndices != other->value->ParentBoneIndices ||
+        model->value->BindPoseLocal != other->value->BindPoseLocal ||
+        model->value->InverseBindPoseGlobal != other->value->InverseBindPoseGlobal) {
+        return InvalidArgument(
+            "Attached SkinnedModelEXT instances must have identical indexed skeletons.");
     }
     if (other->parts.size() > model->parts.max_size() - model->parts.size()) {
         return Overflow("The attached SkinnedModelEXT part count is too large.");

@@ -201,6 +201,13 @@ static int validate_all(void)
                 player, transforms, 2U, &count) == CNA_RESULT_SUCCESS &&
             transforms[0].m43 == 3.0F);
 
+    REQUIRE(cna_skinning_data_set_clip_target_space_ext(
+                data, 0U, CNA_CLIP_TARGET_SPACE_SCENE_NODE_EXT) == CNA_RESULT_SUCCESS &&
+            cna_animation_player_start_clip(player, string_view("Walk")) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_animation_player_get_current_clip_info(
+                player, &has_clip, &duration, &track_count) == CNA_RESULT_SUCCESS && has_clip == CNA_FALSE &&
+            cna_skinning_data_set_clip_target_space_ext(
+                data, 0U, CNA_CLIP_TARGET_SPACE_JOINT_PALETTE_EXT) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_animation_player_start_clip(player, string_view("Missing")) ==
                 CNA_RESULT_INVALID_ARGUMENT &&
             cna_animation_player_start_clip(player, string_view("Walk")) ==

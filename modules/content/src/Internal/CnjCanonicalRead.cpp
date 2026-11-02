@@ -9,6 +9,7 @@
 #include <limits>
 
 #include "CNA/Content/Cnb/CnbByteReader.hpp"
+#include "CNA/Content/Cnb/CnbAnimationClipCodec.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
@@ -369,52 +370,88 @@ namespace CNA::Internal
     Microsoft::Xna::Framework::Graphics::AnimationClipEXT ReadCnjAnimationClipSidecar(
         const std::filesystem::path& path)
     {
-        std::ifstream stream(path, std::ios::binary);
+        std::ifstream stream(path, std::ios::binary | std::ios::ate);
         if (!stream)
         {
             throw ContentLoadException("Cannot open binary file: " +
                                        CNA::Internal::ContentPathToUtf8(path));
         }
-        const std::vector<std::uint8_t> bytes{
-            std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+        const auto length = stream.tellg();
+        if (length < 0 || static_cast<std::uint64_t>(length) > CNA::Content::Cnb::DefaultCnbReadLimits().maxFileSize)
+        {
+            throw ContentLoadException("AnimationClip sidecar exceeds the supported file size: " +
+                                       CNA::Internal::ContentPathToUtf8(path));
+        }
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(length));
+        stream.seekg(0);
+        if (!stream.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()))
+            || stream.peek() != std::char_traits<char>::eof() || stream.bad())
+        {
+            throw ContentLoadException("Cannot read complete AnimationClip sidecar: " +
+                                       CNA::Internal::ContentPathToUtf8(path));
+        }
         CNA::Content::Cnb::CnbByteReader reader(
             bytes, "AnimationClip sidecar '" + CNA::Internal::ContentPathToUtf8(path) + "'");
 
         using namespace Microsoft::Xna::Framework;
         using namespace Microsoft::Xna::Framework::Graphics;
+        const auto readCount = [](CNA::Content::Cnb::CnbByteReader& cursor,
+                                    std::size_t stride, const char* name) {
+            const std::int32_t count = cursor.ReadI32();
+            if (count < 0 || static_cast<std::uint32_t>(count)
+                    > CNA::Content::Cnb::DefaultCnbReadLimits().maxArrayElementCount
+                || static_cast<std::uint64_t>(count) > cursor.Remaining() / stride)
+            {
+                cursor.Fail(std::string(name) + " is negative, exceeds the element limit or cannot fit in the remaining bytes.");
+            }
+            return count;
+        };
+        const double duration = CNA::Content::Cnb::ReadCnbSeconds(reader, "clip duration");
+        const std::int32_t trackCount = readCount(reader, 8u, "track count");
+        // Walk every range before reserving any output: a later truncated track must not make
+        // earlier declared counts an allocation instruction.
+        auto preflight = reader;
+        std::uint64_t totalKeys = 0;
+        for (std::int32_t index = 0; index < trackCount; ++index)
+        {
+            (void)preflight.ReadI32();
+            const auto count = readCount(preflight, 48u, "key count");
+            totalKeys += static_cast<std::uint32_t>(count);
+            if (totalKeys > CNA::Content::Cnb::DefaultCnbReadLimits().maxArrayElementCount)
+            {
+                preflight.Fail("total key count exceeds the element limit.");
+            }
+            preflight.Skip(static_cast<std::uint64_t>(count) * 48u);
+        }
+        preflight.RequireExhausted();
+
         AnimationClipEXT clip;
-        clip.Duration = System::TimeSpan::FromSeconds(reader.ReadF64());
-        const std::int32_t trackCount = reader.ReadI32();
-        if (trackCount < 0) { reader.Fail("track count is negative."); }
+        clip.Duration = System::TimeSpan::FromSeconds(duration);
         clip.Tracks.reserve(static_cast<std::size_t>(trackCount));
         for (std::int32_t trackIndex = 0; trackIndex < trackCount; ++trackIndex)
         {
             BoneTrackEXT track;
             track.BoneIndex = reader.ReadI32();
-            const std::int32_t keyCount = reader.ReadI32();
-            if (keyCount < 0) { reader.Fail("key count is negative."); }
+            const std::int32_t keyCount = readCount(reader, 48u, "key count");
             track.Keys.reserve(static_cast<std::size_t>(keyCount));
             for (std::int32_t keyIndex = 0; keyIndex < keyCount; ++keyIndex)
             {
-                KeyframeEXT key;
-                key.Time = System::TimeSpan::FromSeconds(reader.ReadF64());
-                const float tx = reader.ReadF32();
-                const float ty = reader.ReadF32();
-                const float tz = reader.ReadF32();
-                key.Translation = Vector3(tx, ty, tz);
-                const float qx = reader.ReadF32();
-                const float qy = reader.ReadF32();
-                const float qz = reader.ReadF32();
-                const float qw = reader.ReadF32();
-                key.Rotation = Quaternion(qx, qy, qz, qw);
-                const float sx = reader.ReadF32();
-                const float sy = reader.ReadF32();
-                const float sz = reader.ReadF32();
-                key.Scale = Vector3(sx, sy, sz);
+                KeyframeEXT key = CNA::Content::Cnb::ReadCnbKeyframe(reader);
+                if (!track.Keys.empty() && key.Time < track.Keys.back().Time)
+                {
+                    reader.Fail("keyframe times must be nondecreasing.");
+                }
+                for (const float value : {key.Translation.X, key.Translation.Y, key.Translation.Z,
+                         key.Rotation.X, key.Rotation.Y, key.Rotation.Z, key.Rotation.W,
+                         key.Scale.X, key.Scale.Y, key.Scale.Z})
+                {
+                    if (!std::isfinite(value)) { reader.Fail("keyframe transforms must be finite."); }
+                }
                 track.Keys.push_back(key);
             }
             clip.Tracks.push_back(std::move(track));
         }
+        reader.RequireExhausted();
         return clip;
     }
 

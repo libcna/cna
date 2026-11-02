@@ -46,7 +46,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         /** @brief Index of the bone this track drives, into SkinnedModelEXT's bone arrays. */
         int BoneIndex = -1;
-        /** @brief Keyframes for this track, in ascending Time order. */
+        /** @brief Keyframes for this track, in nondecreasing Time order. */
         std::vector<KeyframeEXT> Keys;
     };
 
@@ -160,7 +160,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param loop     Whether to wrap @p position around Duration instead of clamping.
          * @param outWorldBones Receives BoneCount skinning matrices, ready for
          * SkinnedEffect::SetBoneTransforms.
-         * @throws System::ArgumentException if clipName is not present in Clips.
+         * @throws System::ArgumentException if the clip is absent, does not target JointPalette,
+         * has descending key times or nonfinite transforms, or the skeleton is malformed.
          */
         void ComputeBoneTransformsEXT(const std::string& clipName,
                                        System::TimeSpan position,
@@ -203,11 +204,13 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param other Another SkinnedModelEXT sharing this model's exact bone layout;
          *              left with no parts of its own afterward (moved-from).
-         * @throws System::ArgumentException if @p other's BoneCount differs from this
-         *         model's — the one cheap, always-available check that a mismatched
-         *         skeleton wasn't passed; it cannot detect a same-count-but-different
-         *         skeleton, so callers are still responsible for only attaching pieces
-         *         built from the same canonical skeleton as this model.
+         * Empty incoming parts are a no-op after the self/count checks. With incoming parts,
+         * both skeletons must have complete, finite, topologically ordered arrays and equal
+         * parent indices and bind/inverse-bind matrices. Present resources must share one device.
+         * Joint names are not stored, so semantic joint identity still requires a common source rig.
+         *
+         * @throws System::ArgumentException on self-attachment, unequal bone counts or an
+         * incompatible skeleton, device or owned-part layout. Validation precedes replacement.
          */
         void AttachPartEXT(SkinnedModelEXT&& other);
 

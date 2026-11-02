@@ -1787,7 +1787,14 @@ CNA_C_API CNA_Result cna_skinned_model_ext_add_part(
     CNA_ModelMeshPartHandle part,
     CNA_Handle texture);
 
-/** @brief Moves all parts from a same-skeleton model with replace-by-name semantics. */
+/**
+ * @brief Moves parts from a model with equal indexed skeleton arrays and a compatible device.
+ *
+ * @param model Destination model; existing same-named parts are replaced after validation.
+ * @param other Source model, emptied on success; an empty source is a no-op after count checks.
+ * @return CNA_RESULT_INVALID_ARGUMENT for self-attachment, mismatched skeleton arrays or device;
+ *         CNA_RESULT_SUCCESS on success. A refused attachment preserves both models' parts.
+ */
 CNA_C_API CNA_Result cna_skinned_model_ext_attach_parts(
     CNA_SkinnedModelEXTHandle model,
     CNA_SkinnedModelEXTHandle other);

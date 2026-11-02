@@ -13,6 +13,7 @@
 
 #include "CNA/Content/Cnb/CnbArithmetic.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
+#include "CNA/Internal/CnjCanonicalRead.hpp"
 #include "CNA/Internal/CnjMorphSidecarEXT.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
@@ -246,49 +247,7 @@ namespace CNA::Content::Cnb
 
         AnimationClipEXT ReadClipBin(const fs::path& path)
         {
-            SidecarReader reader(ReadBinary(path), "clip sidecar '" + PathText(path) + "'");
-            AnimationClipEXT clip;
-            const double duration = reader.F64();
-            if (!std::isfinite(duration))
-            {
-                reader.Fail("declares a non-finite duration.");
-            }
-            clip.Duration = System::TimeSpan::FromSeconds(duration);
-            const std::int32_t trackCount = reader.I32();
-            if (trackCount < 0) { reader.Fail("declares a negative track count."); }
-            clip.Tracks.reserve(static_cast<std::size_t>(std::min(trackCount, 4096)));
-            for (std::int32_t t = 0; t < trackCount; ++t)
-            {
-                BoneTrackEXT track;
-                track.BoneIndex = reader.I32();
-                const std::int32_t keyCount = reader.I32();
-                if (keyCount < 0) { reader.Fail("declares a negative key count."); }
-                track.Keys.reserve(static_cast<std::size_t>(std::min(keyCount, 65536)));
-                for (std::int32_t k = 0; k < keyCount; ++k)
-                {
-                    KeyframeEXT key;
-                    const double time = reader.F64();
-                    if (!std::isfinite(time)) { reader.Fail("has a non-finite keyframe time."); }
-                    key.Time = System::TimeSpan::FromSeconds(time);
-                    const float tx = reader.F32();
-                    const float ty = reader.F32();
-                    const float tz = reader.F32();
-                    key.Translation = Microsoft::Xna::Framework::Vector3(tx, ty, tz);
-                    const float qx = reader.F32();
-                    const float qy = reader.F32();
-                    const float qz = reader.F32();
-                    const float qw = reader.F32();
-                    key.Rotation = Microsoft::Xna::Framework::Quaternion(qx, qy, qz, qw);
-                    const float sx = reader.F32();
-                    const float sy = reader.F32();
-                    const float sz = reader.F32();
-                    key.Scale = Microsoft::Xna::Framework::Vector3(sx, sy, sz);
-                    track.Keys.push_back(key);
-                }
-                clip.Tracks.push_back(std::move(track));
-            }
-            reader.RequireExhausted();
-            return clip;
+            return CNA::Internal::ReadCnjAnimationClipSidecar(path);
         }
 
         AnimationClipEXT ReadClipCnj(const fs::path& path)

@@ -115,6 +115,10 @@ static int validate_animation_state(void)
     REQUIRE(cna_skinned_model_ext_create(&descriptor, &invalid) ==
                 CNA_RESULT_INVALID_ARGUMENT && invalid == CNA_INVALID_HANDLE);
     descriptor.reserved = 0U;
+    bind_pose[0].m11 = INFINITY;
+    REQUIRE(cna_skinned_model_ext_create(&descriptor, &invalid) ==
+                CNA_RESULT_INVALID_ARGUMENT && invalid == CNA_INVALID_HANDLE);
+    bind_pose[0].m11 = 1.0F;
     REQUIRE(cna_skinned_model_ext_create(&descriptor, &model) == CNA_RESULT_SUCCESS);
     keys[1].translation.x = 9.0F;
     parents[1] = -1;
@@ -317,6 +321,48 @@ static int set_and_check_part_color(
         part_color_is(replacement, replacement_tint);
 }
 
+static int validate_skeleton_attachment(const CNA_Handle device)
+{
+    int variant;
+    for (variant = 0; variant < 3; ++variant) {
+        int32_t parents[2] = {-1, 0};
+        CNA_Matrix bind[2] = {identity_matrix(), identity_matrix()};
+        CNA_Matrix inverse[2] = {identity_matrix(), identity_matrix()};
+        CNA_SkinnedModelEXTDescriptor descriptor = {0};
+        CNA_SkinnedModelEXTHandle host = CNA_INVALID_HANDLE;
+        CNA_SkinnedModelEXTHandle piece = CNA_INVALID_HANDLE;
+        CNA_ModelMeshPartHandle part = CNA_INVALID_HANDLE;
+        CNA_VertexBufferHandle vertex = CNA_INVALID_HANDLE;
+        CNA_IndexBufferHandle index = CNA_INVALID_HANDLE;
+        uint64_t count = UINT64_MAX;
+        descriptor.bone_count = 2;
+        descriptor.parent_bone_indices = parents;
+        descriptor.bind_pose_local = bind;
+        descriptor.inverse_bind_pose_global = inverse;
+        REQUIRE(cna_skinned_model_ext_create(&descriptor, &host) == CNA_RESULT_SUCCESS);
+        if (variant == 0) { parents[1] = -1; }
+        if (variant == 1) { bind[1].m42 = 1.0F; }
+        if (variant == 2) { inverse[0].m11 = 2.0F; }
+        REQUIRE(cna_skinned_model_ext_create(&descriptor, &piece) == CNA_RESULT_SUCCESS &&
+                create_vertex_buffer(device, &vertex) == CNA_RESULT_SUCCESS &&
+                create_index_buffer(device, &index) == CNA_RESULT_SUCCESS &&
+                cna_model_mesh_part_create_default(&part) == CNA_RESULT_SUCCESS &&
+                cna_skinned_model_ext_add_part(piece, string_view("Body"), vertex, index,
+                    part, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS &&
+                cna_model_mesh_part_destroy(part) == CNA_RESULT_SUCCESS &&
+                cna_skinned_model_ext_attach_parts(host, piece) == CNA_RESULT_INVALID_ARGUMENT &&
+                cna_skinned_model_ext_get_part_count(host, &count) == CNA_RESULT_SUCCESS && count == 0U &&
+                cna_skinned_model_ext_get_part_count(piece, &count) == CNA_RESULT_SUCCESS && count == 1U &&
+                cna_vertex_buffer_destroy(vertex) == CNA_RESULT_INVALID_STATE &&
+                cna_index_buffer_destroy(index) == CNA_RESULT_INVALID_STATE &&
+                cna_skinned_model_ext_destroy(host) == CNA_RESULT_SUCCESS &&
+                cna_skinned_model_ext_destroy(piece) == CNA_RESULT_SUCCESS &&
+                cna_vertex_buffer_destroy(vertex) == CNA_RESULT_SUCCESS &&
+                cna_index_buffer_destroy(index) == CNA_RESULT_SUCCESS);
+    }
+    return 1;
+}
+
 static int validate_resources(const CNA_Handle device)
 {
     const CNA_Texture2DCreateInfo texture_info = {
@@ -352,6 +398,7 @@ static int validate_resources(const CNA_Handle device)
     if (vertex_result == CNA_RESULT_NOT_SUPPORTED) {
         return 1;
     }
+    REQUIRE(validate_skeleton_attachment(device));
     REQUIRE(cna_texture2d_create(device, &texture_info, &texture) == CNA_RESULT_SUCCESS &&
             cna_model_mesh_part_create_default(&part) == CNA_RESULT_SUCCESS &&
             cna_skinned_model_ext_create_default(&model) == CNA_RESULT_SUCCESS &&

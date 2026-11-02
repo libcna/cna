@@ -1980,13 +1980,12 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   input. Matching before/after snapshots cannot exclude transient source changes. RSS remains a
   sampled process-tree sum; the CI report's cache counts are cumulative and its executed-edge
   counts parse console descriptions. See `docs/build-performance.md` for measurement scope.
-- SkinnedModelEXT attachment verifies bone count only, leaving joint order/bind-pose/device
-  compatibility to callers; its sampler also assumes palette-space, time-ordered keys without
-  checking AnimationClipEXT::TargetSpace. The shared raw .clip.bin reader reserves from
-  nonnegative track/key counts before checking their payload lengths, so bounds-checked reads
-  alone do not guarantee bounded allocation. Legacy skeleton/vertex scalars are native copies
-  of little-endian converter output, with no big-endian qualification (source audit 2026-11-01,
-  `docs/skinned-model-ext.md`).
+- SkinnedModelEXT's indexed-skeleton and device checks cannot prove semantic joint identity:
+  joint names are absent, and callers still need pieces from a common source rig. Raw clips have
+  file/count/range preflight, but input and decoded arrays coexist and do not constitute a total
+  process/GPU budget. Vertex joints/weights are not exhaustively validated. Legacy skeleton/vertex
+  scalars remain native copies of little-endian converter output, without big-endian execution
+  qualification; see `docs/skinned-model-ext.md` for the current validation scope.
 - The compiled-effect fuzzer walks bounded metadata, clones and applies passes, but does not
   fuzz all typed accessors/setters or draw. It skips empty/oversized/no-capability inputs and
   catches std::exception (including candidate-side bad_alloc); standalone corpus reads occur

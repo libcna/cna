@@ -166,7 +166,7 @@ break a retained attachment.
 
 `CNA_SkinnedModelEXTHandle` owns skeleton arrays, named animation clips and an ordered retained
 part list. Skeleton arrays contain one parent index, local bind matrix and inverse global bind
-matrix per bone. Parent indices must be -1 or precede the child. Clip/track/keyframe descriptors
+matrix per bone. Bind matrices must be finite; parent indices must be -1 or precede the child. Clip/track/keyframe descriptors
 are deeply copied; names are unique at construction and enumerate in lexicographic order.
 
 ComputeBoneTransforms validates the clip name and TimeSpan-representable finite time, checks
@@ -178,8 +178,11 @@ Resources must be usable and share the model's device identity. Adapter retentio
 native unique-pointer ownership; graphics resource guards block premature disposal/destruction.
 Part aliases can be released independently because the entry retains the part object.
 
-AttachParts requires matching bone counts and compatible device identities, replaces same-named
-destination entries and transfers all source entries. Remove releases every matching entry.
+AttachParts requires matching bone counts and compatible device identities. With incoming parts,
+parent/local-bind/inverse-bind arrays must also be equal, before replacing any same-named entry
+or transferring resources. Validation refusal preserves both part lists and their retention counts.
+An empty source remains a no-op after self/count checks. Joint names are not stored, so numeric
+array equality does not replace the caller's common-rig requirement. Remove releases every matching entry.
 Move construction/assignment transfer the sidecar and native state. Part lookup creates an owned
 part alias but returns the existing optional texture token. Each entry starts with white
 DiffuseColor; indexed mutation and attach/move preserve its color for the caller's draw path.
@@ -191,7 +194,7 @@ optional root-prefix array and named clips. Root-prefix count must be zero or Bo
 clip access, declared skeleton-root metadata and clip target-space routes accompany the arrays.
 
 AnimationPlayer retains SkinningData after the original data handle is released. StartClip uses an
-exact copied UTF-8 name; Update accepts TimeSpan-representable finite seconds and canonical
+exact copied UTF-8 name and refuses a SceneNode clip; Update accepts TimeSpan-representable finite seconds and canonical
 relative/absolute and loop/clamp flags. Position/current-clip queries and local/world/skin-matrix
 copies expose state without native containers.
 

@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "System/ArgumentException.hpp"
+#include "../Internal/AnimationClipSampling.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -26,62 +27,16 @@ namespace Microsoft::Xna::Framework::Graphics
         return typeName;
     }
 
-    namespace
-    {
-        // Mirrors SkinnedModelEXT.cpp's own identical SampleTrack helper (same keyframe
-        // interpolation math, same BoneTrackEXT/KeyframeEXT types via the Keyframe alias) --
-        // deliberately a separate, small, self-contained copy rather than a shared function
-        // across the two systems, matching SkinnedModelEXT's own documented design decision to
-        // stay independent of Model/ModelBone/ModelMesh (see SkinnedModelEXT.hpp).
-        Matrix SampleTrack(const BoneTrackEXT& track, System::TimeSpan pos)
-        {
-            const auto& keys = track.Keys;
-            if (keys.size() == 1 || pos <= keys.front().Time)
-            {
-                const auto& k = keys.front();
-                return Matrix::CreateScale(k.Scale) * Matrix::CreateFromQuaternion(k.Rotation)
-                     * Matrix::CreateTranslation(k.Translation);
-            }
-            if (pos >= keys.back().Time)
-            {
-                const auto& k = keys.back();
-                return Matrix::CreateScale(k.Scale) * Matrix::CreateFromQuaternion(k.Rotation)
-                     * Matrix::CreateTranslation(k.Translation);
-            }
-
-            std::size_t next = 1;
-            while (next < keys.size() && keys[next].Time < pos)
-            {
-                ++next;
-            }
-            const auto& a = keys[next - 1];
-            const auto& b = keys[next];
-
-            const double spanSeconds = (b.Time - a.Time).getTotalSecondsProperty();
-            const float amount = spanSeconds > 0.0
-                ? static_cast<float>((pos - a.Time).getTotalSecondsProperty() / spanSeconds)
-                : 0.0f;
-
-            const Vector3 translation = Vector3::Lerp(a.Translation, b.Translation, amount);
-            const Vector3 scale = Vector3::Lerp(a.Scale, b.Scale, amount);
-            const Quaternion rotation = Quaternion::Slerp(a.Rotation, b.Rotation, amount);
-
-            return Matrix::CreateScale(scale) * Matrix::CreateFromQuaternion(rotation)
-                 * Matrix::CreateTranslation(translation);
-        }
-    }
-
     AnimationPlayer::AnimationPlayer(const SkinningData& skinningData)
         : skinningData_(&skinningData)
     {
         boneTransforms_  = skinningData_->BindPose;
-        worldTransforms_.assign(static_cast<std::size_t>(skinningData_->BoneCount), Matrix::getIdentityProperty());
-        skinTransforms_.assign(static_cast<std::size_t>(skinningData_->BoneCount), Matrix::getIdentityProperty());
         RecomputeTransforms();
     }
 
     void AnimationPlayer::StartClip(const AnimationClip& clip)
     {
+        CNA::Internal::ValidateAnimationClip(clip, ClipTargetSpaceEXT::JointPalette);
         currentClip_ = &clip;
         currentPosition_ = System::TimeSpan::Zero;
         RecomputeTransforms();
@@ -121,9 +76,10 @@ namespace Microsoft::Xna::Framework::Graphics
     void AnimationPlayer::RecomputeTransforms()
     {
         const int boneCount = skinningData_->BoneCount;
-        if (static_cast<int>(skinningData_->SkeletonHierarchy.size()) != boneCount
-            || static_cast<int>(skinningData_->BindPose.size()) != boneCount
-            || static_cast<int>(skinningData_->InverseBindPose.size()) != boneCount)
+        if (boneCount < 0
+            || skinningData_->SkeletonHierarchy.size() != static_cast<std::size_t>(boneCount)
+            || skinningData_->BindPose.size() != static_cast<std::size_t>(boneCount)
+            || skinningData_->InverseBindPose.size() != static_cast<std::size_t>(boneCount))
         {
             throw System::ArgumentException(
                 "AnimationPlayer's SkinningData BoneCount (" + std::to_string(boneCount)
@@ -146,6 +102,10 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         const bool hasPrefix = prefixSize != 0;
 
+        if (currentClip_ != nullptr)
+        {
+            CNA::Internal::ValidateAnimationClip(*currentClip_, ClipTargetSpaceEXT::JointPalette);
+        }
         boneTransforms_ = skinningData_->BindPose;
         if (currentClip_ != nullptr)
         {
@@ -155,7 +115,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     && track.BoneIndex < static_cast<int>(boneTransforms_.size()))
                 {
                     boneTransforms_[static_cast<std::size_t>(track.BoneIndex)] =
-                        SampleTrack(track, currentPosition_);
+                        CNA::Internal::SampleAnimationTrack(track, currentPosition_);
                 }
             }
         }
@@ -214,6 +174,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 "would pose the wrong bones silently.");
         }
 
+        CNA::Internal::ValidateAnimationClip(clip, ClipTargetSpaceEXT::SceneNode);
+
         if (time < System::TimeSpan::Zero) { time = System::TimeSpan::Zero; }
         if (time > clip.Duration) { time = clip.Duration; }
 
@@ -226,7 +188,7 @@ namespace Microsoft::Xna::Framework::Graphics
             if (track.BoneIndex < 0 || track.BoneIndex >= bones.getCountProperty()) { continue; }
             // Only tracked bones are written. A clip animating one node of a large model must not
             // reset every other bone to a pose it never mentioned.
-            bones[track.BoneIndex]->setTransformProperty(SampleTrack(track, time));
+            bones[track.BoneIndex]->setTransformProperty(CNA::Internal::SampleAnimationTrack(track, time));
         }
     }
 

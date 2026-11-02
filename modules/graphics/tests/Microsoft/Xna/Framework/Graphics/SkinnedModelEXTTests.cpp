@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <chrono>
+#include <limits>
 #include <gtest/gtest.h>
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -214,6 +215,63 @@ TEST(SkinnedModelEXTTest, UnknownClipThrows)
         System::ArgumentException);
 }
 
+TEST(SkinnedModelEXTTest, RefusesWrongTargetSpaceAndUnorderedKeysWithoutChangingOutput)
+{
+    auto model = MakeTwoBoneModel();
+    const std::vector<Matrix> sentinel{Matrix::CreateTranslation(8.0f, 9.0f, 10.0f)};
+    auto bones = sentinel;
+    auto& clip = model.Clips.at("Move");
+    clip.TargetSpace = Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT::SceneNode;
+    EXPECT_THROW(model.ComputeBoneTransformsEXT("Move", System::TimeSpan::Zero, false, bones),
+                 System::ArgumentException);
+    EXPECT_EQ(bones, sentinel);
+    clip.TargetSpace = static_cast<Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT>(99);
+    EXPECT_THROW(model.ComputeBoneTransformsEXT("Move", System::TimeSpan::Zero, false, bones),
+                 System::ArgumentException);
+    clip.TargetSpace = Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT::JointPalette;
+    std::swap(clip.Tracks[0].Keys[0], clip.Tracks[0].Keys[1]);
+    EXPECT_THROW(model.ComputeBoneTransformsEXT("Move", System::TimeSpan::Zero, false, bones),
+                 System::ArgumentException);
+    EXPECT_EQ(bones, sentinel);
+}
+
+TEST(SkinnedModelEXTTest, EqualKeyTimesRemainValidAndExtremeTickIntervalsCanBeSampled)
+{
+    auto model = MakeTwoBoneModel();
+    auto& keys = model.Clips.at("Move").Tracks[0].Keys;
+    keys.insert(keys.begin() + 1, keys.front());
+    std::vector<Matrix> bones;
+    EXPECT_NO_THROW(model.ComputeBoneTransformsEXT("Move", System::TimeSpan::FromSeconds(0.5), false, bones));
+    ASSERT_EQ(bones.size(), 2u);
+    EXPECT_NEAR(bones[0].M41, 1.0f, 1e-5f);
+    keys.erase(keys.begin() + 1);
+    keys.front().Time = System::TimeSpan::MinValue;
+    keys.back().Time = System::TimeSpan::MaxValue;
+    EXPECT_NO_THROW(model.ComputeBoneTransformsEXT("Move", System::TimeSpan::Zero, false, bones));
+    EXPECT_NEAR(bones[0].M41, 1.0f, 1e-5f);
+    keys.front().Time = System::TimeSpan::FromTicks(System::TimeSpan::MaxValue.getTicksProperty() - 2);
+    model.Clips.at("Move").Duration = System::TimeSpan::MaxValue;
+    EXPECT_NO_THROW(model.ComputeBoneTransformsEXT("Move",
+        System::TimeSpan::FromTicks(System::TimeSpan::MaxValue.getTicksProperty() - 1), false, bones));
+    EXPECT_NEAR(bones[0].M41, 1.0f, 1e-5f);
+}
+
+TEST(SkinnedModelEXTTest, RefusesNonfiniteKeyTransforms)
+{
+    auto model = MakeTwoBoneModel();
+    model.Clips.at("Move").Tracks[0].Keys[1].Translation.X = std::numeric_limits<float>::infinity();
+    std::vector<Matrix> bones;
+    EXPECT_THROW(model.ComputeBoneTransformsEXT("Move", System::TimeSpan::Zero, false, bones),
+                 System::ArgumentException);
+    EXPECT_TRUE(bones.empty());
+}
+
+TEST(SkinnedModelEXTTest, SelfAttachmentIsRefusedEvenWhenEmpty)
+{
+    SkinnedModelEXT model;
+    EXPECT_THROW(model.AttachPartEXT(std::move(model)), System::ArgumentException);
+}
+
 // Task 11.3: ParentBoneIndices/BindPoseLocal/InverseBindPoseGlobal are all indexed up to
 // BoneCount with no check that their .size() actually matches - a corrupt/truncated
 // .skeleton.bin (or, as here, a deliberately size-mismatched hand-built model) must be rejected
@@ -397,16 +455,14 @@ TEST_F(SkinnedModelEXTPartTest, RepeatedAddPartGrowsOwnershipVectorsByOneEachTim
 // swapping hairstyles at runtime used to leave two overlapping parts both rendered.
 TEST_F(SkinnedModelEXTPartTest, AttachingSameNamedPartReplacesTheOldOne)
 {
-    SkinnedModelEXT host;
-    host.BoneCount = 1;
+    auto host = MakeTwoBoneModel();
     host.AddPartEXT("CNAAvatarHair",
                      std::make_unique<VertexBuffer>(gd, 1),
                      std::make_unique<IndexBuffer>(gd, 1),
                      std::make_unique<ModelMeshPart>());
     ASSERT_EQ(1u, host.Parts.size());
 
-    SkinnedModelEXT wardrobe;
-    wardrobe.BoneCount = 1;
+    auto wardrobe = MakeTwoBoneModel();
     wardrobe.AddPartEXT("CNAAvatarHair",
                          std::make_unique<VertexBuffer>(gd, 1),
                          std::make_unique<IndexBuffer>(gd, 1),
@@ -418,6 +474,68 @@ TEST_F(SkinnedModelEXTPartTest, AttachingSameNamedPartReplacesTheOldOne)
     EXPECT_EQ(1u, host.GetOwnedPartCountForTesting());
     EXPECT_EQ(1u, host.GetOwnedVertexBufferCountForTesting());
     EXPECT_EQ(1u, host.GetOwnedIndexBufferCountForTesting());
+}
+
+TEST_F(SkinnedModelEXTPartTest, IncompatibleSameCountSkeletonsRefuseBeforeReplacingResources)
+{
+    auto host = MakeTwoBoneModel();
+    auto piece = MakeTwoBoneModel();
+    host.AddPartEXT("body", std::make_unique<VertexBuffer>(gd, 1),
+                    std::make_unique<IndexBuffer>(gd, 1), std::make_unique<ModelMeshPart>());
+    piece.AddPartEXT("body", std::make_unique<VertexBuffer>(gd, 1),
+                     std::make_unique<IndexBuffer>(gd, 1), std::make_unique<ModelMeshPart>());
+    const auto* original = host.Parts[0].Part;
+    const auto* incoming = piece.Parts[0].Part;
+    piece.ParentBoneIndices[1] = -1;
+    EXPECT_THROW(host.AttachPartEXT(std::move(piece)), System::ArgumentException);
+    ASSERT_EQ(host.Parts.size(), 1u);
+    ASSERT_EQ(piece.Parts.size(), 1u);
+    EXPECT_EQ(host.Parts[0].Part, original);
+    EXPECT_EQ(piece.Parts[0].Part, incoming);
+    piece.ParentBoneIndices = host.ParentBoneIndices;
+    piece.BindPoseLocal[1].M42 += 1.0f;
+    EXPECT_THROW(host.AttachPartEXT(std::move(piece)), System::ArgumentException);
+    piece.BindPoseLocal = host.BindPoseLocal;
+    piece.InverseBindPoseGlobal[0].M11 = 2.0f;
+    EXPECT_THROW(host.AttachPartEXT(std::move(piece)), System::ArgumentException);
+    piece.InverseBindPoseGlobal = host.InverseBindPoseGlobal;
+    piece.BindPoseLocal.clear();
+    EXPECT_THROW(host.AttachPartEXT(std::move(piece)), System::ArgumentException);
+    piece.BindPoseLocal = host.BindPoseLocal;
+    host.ParentBoneIndices[0] = 0;
+    piece.ParentBoneIndices[0] = 0;
+    EXPECT_THROW(host.AttachPartEXT(std::move(piece)), System::ArgumentException);
+    host.ParentBoneIndices[0] = -1;
+    piece.ParentBoneIndices[0] = -1;
+    piece.BindPoseLocal[0].M11 = std::numeric_limits<float>::infinity();
+    EXPECT_THROW(host.AttachPartEXT(std::move(piece)), System::ArgumentException);
+    piece.BindPoseLocal = host.BindPoseLocal;
+    EXPECT_NO_THROW(host.AttachPartEXT(std::move(piece)));
+    EXPECT_TRUE(piece.Parts.empty());
+    EXPECT_EQ(host.Parts[0].Part, incoming);
+}
+
+TEST_F(SkinnedModelEXTPartTest, AttachmentRefusesResourcesFromDifferentDevices)
+{
+    GraphicsDevice otherDevice;
+    auto host = MakeTwoBoneModel();
+    auto piece = MakeTwoBoneModel();
+    host.AddPartEXT("body", std::make_unique<VertexBuffer>(gd, 1),
+                    std::make_unique<IndexBuffer>(gd, 1), std::make_unique<ModelMeshPart>());
+    piece.AddPartEXT("body", std::make_unique<VertexBuffer>(otherDevice, 1),
+                     std::make_unique<IndexBuffer>(otherDevice, 1), std::make_unique<ModelMeshPart>());
+    const auto* original = host.Parts[0].Part;
+    EXPECT_THROW(host.AttachPartEXT(std::move(piece)), System::ArgumentException);
+    ASSERT_EQ(host.Parts.size(), 1u);
+    ASSERT_EQ(piece.Parts.size(), 1u);
+    EXPECT_EQ(host.Parts[0].Part, original);
+    piece = MakeTwoBoneModel();
+    piece.AddPartEXT("body", std::make_unique<VertexBuffer>(gd, 1),
+                     std::make_unique<IndexBuffer>(gd, 1), std::make_unique<ModelMeshPart>(),
+                     Texture2D(otherDevice, 1, 1));
+    EXPECT_THROW(host.AttachPartEXT(std::move(piece)), System::ArgumentException);
+    EXPECT_EQ(host.Parts[0].Part, original);
+    ASSERT_EQ(piece.Parts.size(), 1u);
 }
 
 // Task 11.5: erasing directly from the public Parts vector (the previous only available

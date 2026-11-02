@@ -494,9 +494,14 @@
       "id": "CNA-FIX-L13",
       "source_section": "5.2 Limitations",
       "summary": "SkinnedModelEXT attachment verifies bone count only, leaving joint order/bind-pose/device compatibility to callers; its sampler also assumes palette-space, time-ordered keys without checking AnimationClipEXT::TargetSpace.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Validate joint/scene target space, key order and finite transforms before sampling; share overflow-safe interpolation across SkinnedModelEXT, AnimationPlayer and rigid scene posing. Preflight bounded raw-clip files and every count/range before output reserves, with one runtime/compiler reader. Refuse incompatible indexed skeletons, device/resource layouts and self-attachment before moving parts; align the native C adapter guards.",
+      "evidence": [
+        "Eight initial regression cases fail against the preceding production code: wrong target space, unordered/nonfinite keys, full-range TimeSpan interpolation, self-attachment, same-count incompatible skeletons, different graphics devices, count preflight ordering and raw-sidecar order/trailing-byte acceptance (some concerns share one gtest case). Corrected sampling tests also cover equal key times, adjacent ticks near Int64 maximum, mutable borrowed clips, negative player bone counts and rigid scene posing.",
+        "All 46 sampling/ownership/player tests pass privately on each of OPENGLES3, SOFTWARE and SDLGPU with no skips. All 454 selected content tests pass privately, including the full 427-test CNB selection, runtime/compiler sidecar consumers, shared clips and the skinned-model manifest cases. The raw reader enforces default 512 MiB file and 16,777,216 track/aggregate-key sanity bounds, exact I/O/consumption, representable times and finite nondecreasing keys; all byte ranges are walked before output vector reserves.",
+        "Native attachment checks complete finite topological skeleton arrays and exact indexed hierarchy/bind/inverse-bind agreement, owned-resource alignment and one graphics-device identity before replacement. Strict-C smokes reject three independent same-count skeleton mismatches while preserving part counts and resource retention, reject nonfinite bind matrices and reject a SceneNode clip at player start without starting playback. The existing two-part pixel probe still passes. No new dependency/stub, public signature, descriptor layout, wire field or ABI change. Numeric rigs cannot establish joint-name identity; vertex joints/weights, total process/GPU budgets and big-endian skeleton/vertex execution remain explicit limits.",
+        "Existing CnaGraphicsTests, CnaContentTests, CnaTests, both strict-C smoke targets and the attachment pixel target build successfully. All 61 final registered sampling/raw-sidecar/C API/pixel/provenance/pipeline/ABI/header/doc gates pass privately. Generated routes remain current (3,205 in 57 files); documentation links and staged whitespace pass. No native Windows, big-endian, arbitrary-character or every-renderer qualification is claimed."
+      ]
     },
     {
       "id": "CNA-FIX-L14",

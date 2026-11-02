@@ -165,6 +165,13 @@ API with bytes from an `.fxb`; the loose Effect reader declares `.cnj`, not auto
 loading. `SkinnedModelEXT` retains its separate `.skinnedmodel.json` format for its existing
 offline tooling ([guide](skinned-model-ext.md)).
 
+Raw `clipFile` and model `.clip.bin` references share one bounded reader. It checks the default
+CNB file/count limits and every track/key byte range before output allocation, then requires
+representable, nondecreasing times, finite transforms and no trailing bytes. Equal key times are
+legal. This validation belongs to raw sidecars; inline clip loading is not a substitute for the
+target-space and key validation performed by the animation samplers. See the
+[skinned-model guide](skinned-model-ext.md#loose-content-format) for limits and memory scope.
+
 ### A `SpriteFont` document
 
 ```json

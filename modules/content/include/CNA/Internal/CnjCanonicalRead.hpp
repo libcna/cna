@@ -183,6 +183,10 @@ namespace CNA::Internal
     /**
      * @brief Reads the established little-endian `.clip.bin` source representation.
      *
+     * File bytes, track counts and aggregate key counts obey the default CNB sanity limits.
+     * Every track/key byte range is checked before output vectors are reserved. Times must be
+     * representable and nondecreasing, transforms finite, and the sidecar exactly consumed.
+     *
      * @param path Resolved native sidecar path.
      * @return The decoded animation clip.
      */
