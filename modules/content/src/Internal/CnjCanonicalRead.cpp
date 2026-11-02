@@ -137,16 +137,22 @@ namespace CNA::Internal
         {
             Fail(what, "is " + Describe(number) + ", which is not a whole number.");
         }
-        // Compared as doubles before the cast: converting a double outside int64's range to
-        // int64 is undefined behaviour, so the range test cannot be done on the result.
-        if (number < static_cast<double>(minInclusive) ||
-            number > static_cast<double>(maxInclusive))
+        // INT64_MAX rounds up to 2^63 as a double, so it is not a safe inclusive bound
+        // for this cast. Check the exactly representable half-open Int64 range first.
+        constexpr double int64Limit = 0x1p63;
+        if (number < -int64Limit || number >= int64Limit)
         {
             Fail(what, "is " + Describe(number) + ", outside the accepted range " +
-                           std::to_string(minInclusive) + " to " + std::to_string(maxInclusive) +
-                           ".");
+                           std::to_string(minInclusive) + " to " + std::to_string(maxInclusive) + ".");
         }
-        return static_cast<std::int64_t>(number);
+        const auto integer = static_cast<std::int64_t>(number);
+        // Integer comparisons also preserve caller bounds above double's exact-integer range.
+        if (integer < minInclusive || integer > maxInclusive)
+        {
+            Fail(what, "is " + Describe(number) + ", outside the accepted range " +
+                           std::to_string(minInclusive) + " to " + std::to_string(maxInclusive) + ".");
+        }
+        return integer;
     }
 
     const JsonValue& RequireCnjNumberArray(const JsonValue& object, const char* member,
@@ -252,6 +258,18 @@ namespace CNA::Internal
             if (value == "Step") { return CurveContinuity::Step; }
             throw ContentLoadException(
                 "Curve .cnj '" + path + "' has an unrecognized CurveContinuity '" + value + "'.");
+        }
+
+        System::TimeSpan ReadCnjTime(const JsonValue* value, const std::string& what)
+        {
+            const double seconds = RequireCnjFiniteNumber(value, what);
+            constexpr double maxSeconds =
+                static_cast<double>(std::numeric_limits<std::int64_t>::max()) / 10'000'000.0;
+            if (seconds < -maxSeconds || seconds > maxSeconds)
+            {
+                Fail(what, "is not representable as a System::TimeSpan.");
+            }
+            return System::TimeSpan::FromSeconds(seconds);
         }
 
         bool TryReadClipArray(const JsonValue& object, const char* field,
@@ -492,7 +510,7 @@ namespace CNA::Internal
                 "AnimationClip .cnj '" + path + "' is missing a numeric 'duration' field.");
         }
         AnimationClipEXT clip;
-        clip.Duration = System::TimeSpan::FromSeconds(duration->numberValue);
+        clip.Duration = ReadCnjTime(duration, "AnimationClip .cnj '" + path + "' duration");
         if (const JsonValue* targetSpace = root.FindMember("targetSpace");
             targetSpace != nullptr && targetSpace->IsString() &&
             targetSpace->stringValue == "SceneNode")
@@ -549,7 +567,7 @@ namespace CNA::Internal
                         "AnimationClip .cnj '" + path +
                         "' has a keyframe missing a numeric 'time'.");
                 }
-                key.Time = System::TimeSpan::FromSeconds(time->numberValue);
+                key.Time = ReadCnjTime(time, "AnimationClip .cnj '" + path + "' keyframe time");
                 if (TryReadClipArray(keyValue, "translation", 3u, array, path))
                 {
                     key.Translation = Vector3(array[0], array[1], array[2]);

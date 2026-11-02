@@ -92,6 +92,12 @@ clips retain signed indices, as binary sidecars do; a player ignores indices out
 bone/node collection. Extreme-version and fractional/out-of-range index regressions cover these
 conversions. This does not claim complete hostile-JSON or numeric-range safety for every field.
 
+A document may nest at most 128 objects/arrays; deeper input is refused before the parser recurses
+(`CNA::Internal::ParseJson`). Integer members of `Model` documents (bone parents, `vertexStride`,
+mesh-part grouping, sampler fields) and animation durations/key times must be finite values of
+their field's range, checked before conversion; the runtime loader and `cna_tool_cnj_to_cnb` apply
+the same checks, and a model's referenced AnimationClip goes through the one canonical reader.
+
 ## References to other assets
 
 There are two mechanisms. Asset references such as a SpriteFont atlas or a model's external

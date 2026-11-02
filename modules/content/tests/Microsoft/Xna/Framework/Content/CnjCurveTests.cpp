@@ -13,6 +13,9 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
+#include "CNA/Content/Cnb/CnjToCnb.hpp"
+#include "CNA/Content/Cnb/CnbCurveCodec.hpp"
+#include "CNA/Content/Cnb/CnbAnimationClipCodec.hpp"
 
 using Microsoft::Xna::Framework::Curve;
 using Microsoft::Xna::Framework::CurveContinuity;
@@ -152,4 +155,102 @@ TEST_F(CnjCurveTest, SourceFileRejected)
     ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_THROW(cm.Load<Curve>("wrong"), ContentLoadException);
+}
+
+
+TEST_F(CnjCurveTest, Safe002StructuredTypesAndDuplicateKeysAgreeAndRecover)
+{
+    namespace Cnb = CNA::Content::Cnb;
+    ScratchContentRoot root;
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    const auto path = root.path() / "candidate.cnj";
+    const std::string valid = R"({"cnjVersion":1,"type":"Curve","keys":[{"position":0,"value":7}]})";
+    for (const auto bad : {
+             R"({"cnjVersion":-1,"type":"Curve","keys":[]})",
+             R"({"cnjVersion":1e300,"type":"Curve","keys":[]})",
+             R"({"cnjVersion":1.5,"type":"Curve","keys":[]})",
+             R"({"cnjVersion":1,"type":"Curve","keys":{}})",
+             R"({"cnjVersion":1,"type":"Curve","keys":[false]})",
+             R"({"cnjVersion":1,"type":"Curve","keys":[{"position":[],"value":1}]})"})
+    {
+        SCOPED_TRACE(bad);
+        WriteFile(path, bad);
+        EXPECT_THROW((void)cm.Load<Curve>("candidate"), ContentLoadException);
+        EXPECT_THROW((void)Cnb::CompileCnjToCnb(CNA::Internal::PathToUtf8(path)), ContentLoadException);
+        WriteFile(path, valid);
+        const auto recovered = cm.Load<Curve>("candidate");
+        ASSERT_EQ(recovered.getKeysProperty().getCountProperty(), 1);
+        EXPECT_FLOAT_EQ(recovered.getKeysProperty()[0].getValueProperty(), 7.0f);
+        const auto compiled = Cnb::CompileCnjToCnb(CNA::Internal::PathToUtf8(path));
+        const auto decoded = Cnb::DecodeCurveFromCnb(Cnb::CnbDocument::Parse(compiled.bytes, "safe002.cnb"));
+        EXPECT_FLOAT_EQ(decoded.getKeysProperty()[0].getValueProperty(), 7.0f);
+        cm.Unload();
+    }
+    // JsonValue::FindMember resolves the first occurrence, including escaped equivalent keys.
+    WriteFile(path, R"({"cnjVersion":1,"cnjVersion":false,"type":"Curve","type":"Model",
+                        "keys":[{"position":0,"value":7,"val\u0075e":99}]})");
+    const auto duplicate = cm.Load<Curve>("candidate");
+    EXPECT_FLOAT_EQ(duplicate.getKeysProperty()[0].getValueProperty(), 7.0f);
+    const auto compiled = Cnb::CompileCnjToCnb(CNA::Internal::PathToUtf8(path));
+    EXPECT_FLOAT_EQ(Cnb::DecodeCurveFromCnb(Cnb::CnbDocument::Parse(compiled.bytes, "safe002.cnb"))
+                        .getKeysProperty()[0].getValueProperty(), 7.0f);
+}
+
+TEST_F(CnjCurveTest, Safe002AnimationTimeExtremesRefuseAsContentErrorsAndRecover)
+{
+    namespace Cnb = CNA::Content::Cnb;
+    using Microsoft::Xna::Framework::Graphics::AnimationClipEXT;
+    ScratchContentRoot root;
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    const auto path = root.path() / "clip.cnj";
+    const std::string valid = R"({"cnjVersion":1,"type":"AnimationClip","duration":1,
+                                 "tracks":[{"boneIndex":0,"keys":[{"time":0}]}]})";
+    for (const bool keyTime : {false, true})
+    {
+        for (const auto token : {"1e300", "-1e300", "1e400", "null", "[]"})
+        {
+            SCOPED_TRACE(keyTime);
+            SCOPED_TRACE(token);
+            std::string bad = valid;
+            const std::string field = keyTime ? "\"time\":0" : "\"duration\":1";
+            const auto at = bad.find(field);
+            ASSERT_NE(at, std::string::npos);
+            bad.replace(at, field.size(), (keyTime ? "\"time\":" : "\"duration\":") + std::string(token));
+            WriteFile(path, bad);
+            EXPECT_THROW((void)cm.Load<AnimationClipEXT>("clip"), ContentLoadException);
+            EXPECT_THROW((void)Cnb::CompileCnjToCnb(CNA::Internal::PathToUtf8(path)), ContentLoadException);
+            WriteFile(path, valid);
+            const auto recovered = cm.Load<AnimationClipEXT>("clip");
+            EXPECT_DOUBLE_EQ(recovered.Duration.getTotalSecondsProperty(), 1.0);
+            ASSERT_EQ(recovered.Tracks.size(), 1u);
+            EXPECT_EQ(recovered.Tracks[0].Keys.size(), 1u);
+            const auto compiled = Cnb::CompileCnjToCnb(CNA::Internal::PathToUtf8(path));
+            EXPECT_EQ(Cnb::DecodeAnimationClipFromCnb(Cnb::CnbDocument::Parse(compiled.bytes, "safe002.cnb"))
+                          .Tracks[0].Keys.size(), 1u);
+            cm.Unload();
+        }
+    }
+}
+
+TEST_F(CnjCurveTest, Safe002DeepDocumentsRefuseThroughBothRoutesAndRecover)
+{
+    namespace Cnb = CNA::Content::Cnb;
+    ScratchContentRoot root;
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    const auto path = root.path() / "curve.cnj";
+    const std::string prefix = R"({"cnjVersion":1,"type":"Curve","keys":[{"position":0,"value":7}],"unused":)";
+    for (const std::size_t depth : {128u, 16384u})
+    {
+        WriteFile(path, prefix + std::string(depth, '[') + "0" + std::string(depth, ']') + "}");
+        EXPECT_THROW((void)cm.Load<Curve>("curve"), ContentLoadException);
+        EXPECT_THROW((void)Cnb::CompileCnjToCnb(CNA::Internal::PathToUtf8(path)), ContentLoadException);
+        WriteFile(path, prefix + "null}");
+        const auto recovered = cm.Load<Curve>("curve");
+        ASSERT_EQ(recovered.getKeysProperty().getCountProperty(), 1);
+        EXPECT_FLOAT_EQ(recovered.getKeysProperty()[0].getValueProperty(), 7.0f);
+        const auto compiled = Cnb::CompileCnjToCnb(CNA::Internal::PathToUtf8(path));
+        EXPECT_EQ(Cnb::DecodeCurveFromCnb(Cnb::CnbDocument::Parse(compiled.bytes, "recovery.cnb"))
+                      .getKeysProperty().getCountProperty(), 1);
+        cm.Unload();
+    }
 }

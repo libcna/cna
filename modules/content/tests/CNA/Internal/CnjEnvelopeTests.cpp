@@ -365,3 +365,36 @@ TEST(ValidateCnjEnvelopeTest, MissingTypeThrows)
 
     EXPECT_THROW(ValidateCnjEnvelope(env, "SpriteFont", "Fonts/Consolas.cnj"), ContentLoadException);
 }
+
+TEST(ParseCnjEnvelopeTest, Safe002NestedContainersHaveABoundedDepth)
+{
+    for (const bool objects : {false, true})
+    {
+        const std::string open = objects ? "{\"n\":" : "[";
+        const std::string close = objects ? "}" : "]";
+        for (const int depth : {128, 129, 16384})
+        {
+            SCOPED_TRACE(objects);
+            SCOPED_TRACE(depth);
+            std::string nested;
+            for (int i = 1; i < depth; ++i) { nested += open; }
+            nested += "0";
+            for (int i = 1; i < depth; ++i) { nested += close; }
+            const std::string document =
+                R"({"cnjVersion":1,"type":"Curve","unused":)" + nested + "}";
+            const auto envelope = ParseCnjEnvelope(document);
+            if (depth <= 128)
+            {
+                EXPECT_NO_THROW(ValidateCnjEnvelope(envelope, "Curve", "nested.cnj"));
+            }
+            else
+            {
+                EXPECT_NE(envelope.parseErrorDetail.find("nesting"), std::string::npos);
+                EXPECT_THROW(ValidateCnjEnvelope(envelope, "Curve", "nested.cnj"),
+                             ContentLoadException);
+            }
+            const auto valid = ParseCnjEnvelope(R"({"cnjVersion":1,"type":"Curve"})");
+            EXPECT_NO_THROW(ValidateCnjEnvelope(valid, "Curve", "recovery.cnj"));
+        }
+    }
+}

@@ -17,6 +17,7 @@
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <cstring>
+#include <cmath>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -984,4 +985,180 @@ TEST(CnbCompilerStrictnessTest, TheCanonicalNumericHelpersRefuseWhatTheyPromiseT
     EXPECT_EQ(RequireCnjInteger(&top, "x", 0, 255), 255);
     EXPECT_EQ(RequireCnjInteger(&bottom, "x", 0, 255), 0);
     EXPECT_EQ(RequireCnjInteger(&signedValue, "x", -10, 10), -3);
+}
+
+TEST(CnbCompilerStrictnessTest, Safe002IntegerWidthsAreCheckedBeforeNarrowing)
+{
+    using CNA::Internal::ParseJson;
+    using CNA::Internal::RequireCnjInteger;
+    struct Range { std::int64_t low; std::int64_t high; };
+    for (const auto range : {Range{0, 255}, Range{-128, 127}, Range{0, 65535},
+                             Range{-32768, 32767}, Range{0, 4294967295LL},
+                             Range{-2147483648LL, 2147483647LL}})
+    {
+        for (const auto token : {std::to_string(range.low - 1), std::to_string(range.high + 1),
+                                 std::string("0.5"), std::string("1e300"), std::string("\"1\"")})
+        {
+            SCOPED_TRACE(token);
+            const auto bad = ParseJson(token);
+            EXPECT_THROW((void)RequireCnjInteger(&bad, "width", range.low, range.high),
+                         ContentLoadException);
+            for (const auto bound : {range.low, range.high})
+            {
+                const auto good = ParseJson(std::to_string(bound));
+                EXPECT_EQ(RequireCnjInteger(&good, "width", range.low, range.high), bound);
+            }
+        }
+    }
+    const double floatMax = std::numeric_limits<float>::max();
+    for (const double sign : {-1.0, 1.0})
+    {
+        CNA::Internal::JsonValue number;
+        number.type = CNA::Internal::JsonType::Number;
+        number.numberValue = sign * std::nextafter(floatMax, std::numeric_limits<double>::infinity());
+        EXPECT_THROW((void)CNA::Internal::RequireCnjSingle(&number, "Single"), ContentLoadException);
+        number.numberValue = sign * floatMax;
+        EXPECT_FLOAT_EQ(CNA::Internal::RequireCnjSingle(&number, "Single"), sign * std::numeric_limits<float>::max());
+    }
+
+    const auto low = std::numeric_limits<std::int64_t>::min();
+    const auto high = std::numeric_limits<std::int64_t>::max();
+    for (const auto token : {"9223372036854775808", "-9223372036854777856"})
+    {
+        const auto bad = ParseJson(token);
+        EXPECT_THROW((void)RequireCnjInteger(&bad, "Int64", low, high), ContentLoadException);
+        const auto good = ParseJson("-9223372036854775808");
+        EXPECT_EQ(RequireCnjInteger(&good, "Int64", low, high), low);
+    }
+    // These bounds round toward an adjacent double; comparing only converted bounds admits it.
+    const auto roundedDown = ParseJson("9007199254740992");
+    EXPECT_THROW((void)RequireCnjInteger(&roundedDown, "lower", 9007199254740993LL, high),
+                 ContentLoadException);
+    EXPECT_EQ(RequireCnjInteger(&roundedDown, "recovery", low, high), 9007199254740992LL);
+    const auto roundedUp = ParseJson("9007199254740996");
+    EXPECT_THROW((void)RequireCnjInteger(&roundedUp, "upper", low, 9007199254740995LL),
+                 ContentLoadException);
+    EXPECT_EQ(RequireCnjInteger(&roundedUp, "recovery", low, high), 9007199254740996LL);
+}
+
+TEST(CnbCompilerStrictnessTest, Safe002ModelIntegerFieldsRefuseStructuredExtremesAndRecover)
+{
+    ScratchDir dir("safe002_numbers");
+    WriteGoodAsset(dir.path());
+    const auto originalBytes = ReadBytes(dir.path() / "m.cnj");
+    const std::string original(originalBytes.begin(), originalBytes.end());
+    struct Field { const char* text; const char* replacementPrefix; };
+    const Field fields[] = {
+        {"\"vertexStride\": 32", "\"vertexStride\": "},
+        {"\"parentBone\": 1", "\"parentBone\": "},
+        {"\"parent\": 0", "\"parent\": "},
+        {"\"effect\": \"BasicEffect\"", "\"effect\":\"BasicEffect\",\"partOfMesh\":"},
+        {"\"effect\": \"BasicEffect\"", "\"effect\":\"BasicEffect\",\"sampler0Filter\":"},
+        {"\"effect\": \"BasicEffect\"", "\"effect\":\"BasicEffect\",\"sampler0AddressU\":"},
+        {"\"effect\": \"BasicEffect\"", "\"effect\":\"BasicEffect\",\"sampler0AddressV\":"}};
+    for (const auto& field : fields)
+    {
+        for (const auto token : {"0.5", "1e300", "-1e300", "4294967296", "\"1\"", "[]"})
+        {
+            SCOPED_TRACE(field.replacementPrefix);
+            SCOPED_TRACE(token);
+            std::string mutated = original;
+            const auto at = mutated.find(field.text);
+            ASSERT_NE(at, std::string::npos);
+            mutated.replace(at, std::strlen(field.text), std::string(field.replacementPrefix) + token);
+            WriteText(dir.path() / "m.cnj", mutated);
+            EXPECT_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8(dir.path() / "m.cnj")),
+                         ContentLoadException);
+            WriteText(dir.path() / "m.cnj", original);
+            const auto good = CompileCnjToCnb(CNA::Internal::PathToUtf8(dir.path() / "m.cnj"));
+            const auto model = DecodeModelFromCnb(CnbDocument::Parse(good.bytes, "safe002.cnb"));
+            ASSERT_EQ(model.parts.size(), 1u);
+            EXPECT_EQ(model.parts[0].vertexCount, kVertexCount);
+            ASSERT_EQ(model.meshes.size(), 1u);
+            EXPECT_EQ(model.meshes[0].parentBone, 1);
+        }
+    }
+}
+
+TEST(CnbCompilerStrictnessTest, Safe002SidecarMutationsRecoverWithTheSamePaths)
+{
+    ScratchDir dir("safe002_sidecars");
+    for (const char* sidecar : {"m_verts.bin", "m_idx.bin", "m.skeleton.bin", "m_walk.clip.bin",
+                                "m_morph.bin"})
+    {
+        for (const int mutation : {0, 1, 2})
+        {
+            SCOPED_TRACE(sidecar);
+            SCOPED_TRACE(mutation);
+            WriteGoodAsset(dir.path());
+            auto bytes = ReadBytes(dir.path() / sidecar);
+            if (mutation == 0) { std::filesystem::remove(dir.path() / sidecar); }
+            else
+            {
+                if (mutation == 1) { bytes.resize(1); }
+                else if (std::string(sidecar) == "m_verts.bin") { bytes.push_back(0xFF); }
+                else { bytes.assign(bytes.size(), 0xFF); }
+                WriteBytes(dir.path() / sidecar, bytes);
+            }
+            EXPECT_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8(dir.path() / "m.cnj")),
+                         ContentLoadException);
+            WriteGoodAsset(dir.path());
+            const auto result = CompileCnjToCnb(CNA::Internal::PathToUtf8(dir.path() / "m.cnj"));
+            const auto model = DecodeModelFromCnb(CnbDocument::Parse(result.bytes, "safe002.cnb"));
+            ASSERT_EQ(model.parts.size(), 1u);
+            EXPECT_EQ(model.parts[0].indexCount, kIndexCount);
+            ASSERT_EQ(model.animations.size(), 1u);
+            EXPECT_EQ(model.animations[0].clip.Tracks.size(), 1u);
+        }
+    }
+}
+
+TEST(CnbCompilerStrictnessTest, Safe002SharedGeometrySidecarsAreAcceptedWithCheckedContent)
+{
+    ScratchDir dir("safe002_shared");
+    WriteGoodAsset(dir.path());
+    WriteText(dir.path() / "m.cnj", R"({"cnjVersion":1,"type":"Model","meshes":[
+        {"name":"one","vertices":"m_verts.bin","indices":"m_idx.bin","vertexStride":32},
+        {"name":"two","vertices":"m_verts.bin","indices":"m_idx.bin","vertexStride":32}]})");
+    const auto result = CompileCnjToCnb(CNA::Internal::PathToUtf8(dir.path() / "m.cnj"));
+    const auto model = DecodeModelFromCnb(CnbDocument::Parse(result.bytes, "shared.cnb"));
+    ASSERT_EQ(model.parts.size(), 2u);
+    for (const auto& part : model.parts)
+    {
+        EXPECT_EQ(part.vertexBytes, GoodVerts());
+        EXPECT_EQ(part.indexBytes, GoodIndices());
+    }
+}
+
+TEST(CnbCompilerStrictnessTest, Safe002ReferencedClipUsesTheCanonicalNumericChecksAndRecovers)
+{
+    ScratchDir dir("safe002_clip_cnj");
+    WriteGoodAsset(dir.path());
+    auto modelBytes = ReadBytes(dir.path() / "m.cnj");
+    std::string model(modelBytes.begin(), modelBytes.end());
+    const auto reference = model.find("m_walk.clip.bin");
+    ASSERT_NE(reference, std::string::npos);
+    model.replace(reference, std::strlen("m_walk.clip.bin"), "walk.cnj");
+    WriteText(dir.path() / "m.cnj", model);
+    const std::string valid = R"({"cnjVersion":1,"type":"AnimationClip","duration":1,
+                                 "tracks":[{"boneIndex":0,"keys":[{"time":0}]}]})";
+    for (const auto field : {"\"duration\":1", "\"boneIndex\":0", "\"time\":0"})
+    {
+        auto bad = valid;
+        const std::string original = field;
+        const auto at = bad.find(original);
+        ASSERT_NE(at, std::string::npos);
+        bad.replace(at, original.size(), original.substr(0, original.find(':') + 1) +
+                    (original.find("boneIndex") != std::string::npos ? "0.5" : "1e300"));
+        WriteText(dir.path() / "walk.cnj", bad);
+        EXPECT_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8(dir.path() / "m.cnj")),
+                     ContentLoadException);
+        WriteText(dir.path() / "walk.cnj", valid);
+        const auto compiled = CompileCnjToCnb(CNA::Internal::PathToUtf8(dir.path() / "m.cnj"));
+        const auto recovered = DecodeModelFromCnb(CnbDocument::Parse(compiled.bytes, "recovery.cnb"));
+        ASSERT_EQ(recovered.animations.size(), 1u);
+        EXPECT_DOUBLE_EQ(recovered.animations[0].clip.Duration.getTotalSecondsProperty(), 1.0);
+        ASSERT_EQ(recovered.animations[0].clip.Tracks.size(), 1u);
+        EXPECT_EQ(recovered.animations[0].clip.Tracks[0].BoneIndex, 0);
+    }
 }

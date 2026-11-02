@@ -247,14 +247,21 @@ namespace CNA::Internal
                 return false;
             }
 
-            JsonValue ParseValue()
+            JsonValue ParseValue(std::size_t depth = 0)
             {
                 SkipWhitespace();
                 if (AtEnd()) throw JsonParseException("Unexpected end of JSON document.");
 
                 const char c = Peek();
-                if (c == '{') return ParseObject();
-                if (c == '[') return ParseArray();
+                if (c == '{' || c == '[')
+                {
+                    // Bound parsing and the recursive destruction/copying of the resulting tree.
+                    if (depth >= 128u)
+                    {
+                        throw JsonParseException("JSON nesting exceeds the limit of 128 containers.");
+                    }
+                    return c == '{' ? ParseObject(depth + 1u) : ParseArray(depth + 1u);
+                }
                 if (c == '"') return ParseStringValue();
                 if (c == 't' || c == 'f') return ParseBoolean();
                 if (c == 'n') return ParseNull();
@@ -265,7 +272,7 @@ namespace CNA::Internal
                     std::to_string(pos_) + ".");
             }
 
-            JsonValue ParseObject()
+            JsonValue ParseObject(std::size_t depth)
             {
                 Expect('{');
                 JsonValue result;
@@ -287,7 +294,7 @@ namespace CNA::Internal
                     SkipWhitespace();
                     Expect(':');
 
-                    JsonValue value = ParseValue();
+                    JsonValue value = ParseValue(depth);
                     result.objectValue.push_back(
                         JsonMember{std::move(key.stringValue), std::move(value)});
 
@@ -303,7 +310,7 @@ namespace CNA::Internal
                 return result;
             }
 
-            JsonValue ParseArray()
+            JsonValue ParseArray(std::size_t depth)
             {
                 Expect('[');
                 JsonValue result;
@@ -314,7 +321,7 @@ namespace CNA::Internal
 
                 while (true)
                 {
-                    result.arrayValue.push_back(ParseValue());
+                    result.arrayValue.push_back(ParseValue(depth));
                     SkipWhitespace();
                     if (AtEnd()) throw JsonParseException("Unterminated JSON array.");
                     const char next = Advance();
@@ -552,7 +559,7 @@ namespace CNA::Internal
      * @param text Raw JSON document text.
      * @return The parsed root value.
      * @throws JsonParseException if @p text is not a single, complete, valid JSON document
-     *         (including trailing content after the root value).
+     *         (including trailing content after the root value), or nesting exceeds 128 containers.
      */
     inline JsonValue ParseJson(const std::string& text)
     {

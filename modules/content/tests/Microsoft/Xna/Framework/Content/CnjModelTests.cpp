@@ -14,6 +14,8 @@
 #include <string>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Content/Cnb/CnjToCnb.hpp"
+#include "CNA/Content/Cnb/CnbModelCodec.hpp"
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -223,4 +225,73 @@ TEST_F(CnjModelTest, MismatchedTypeThrowsContentLoadException)
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<Model>("wrong"), ContentLoadException);
+}
+
+TEST_F(CnjModelTest, Safe002IntegerMutationsRefuseAndTheSameManagerRecovers)
+{
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline";
+    ScratchContentRoot root;
+    WriteQuadModelFixture(root.path());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    cm.setGraphicsDevice(gd);
+    for (const auto field : {"vertexStride", "partOfMesh", "parentBone", "sampler0Filter",
+                             "sampler0AddressU", "sampler0AddressV"})
+    {
+        for (const auto token : {"0.5", "1e300", "-1e300", "4294967296", "[]", "\"1\""})
+        {
+            SCOPED_TRACE(field);
+            SCOPED_TRACE(token);
+            WriteFile(root.path() / "quad.cnj", std::string(R"({"cnjVersion":1,"type":"Model","meshes":[{
+                "vertices":"quad_verts.bin","indices":"quad_idx.bin",
+                "effect":"BasicEffect",")") + field + "\":" + token + "}]}");
+            EXPECT_THROW((void)cm.Load<Model>("quad"), ContentLoadException);
+            EXPECT_THROW((void)CNA::Content::Cnb::CompileCnjToCnb(
+                CNA::Internal::PathToUtf8(root.path() / "quad.cnj")), ContentLoadException);
+            WriteQuadModelFixture(root.path());
+            const auto recovered = cm.Load<Model>("quad");
+            ASSERT_EQ(recovered.getMeshesProperty().getCountProperty(), 1);
+            EXPECT_EQ(recovered.getMeshesProperty()[0]->getMeshPartsProperty().getCountProperty(), 1);
+            const auto compiled = CNA::Content::Cnb::CompileCnjToCnb(
+                CNA::Internal::PathToUtf8(root.path() / "quad.cnj"));
+            const auto decoded = CNA::Content::Cnb::DecodeModelFromCnb(
+                CNA::Content::Cnb::CnbDocument::Parse(compiled.bytes, "recovery.cnb"));
+            ASSERT_EQ(decoded.parts.size(), 1u);
+            EXPECT_EQ(decoded.parts[0].vertexCount, 4u);
+            cm.Unload();
+        }
+    }
+    WriteFile(root.path() / "quad.cnj", R"({"cnjVersion":1,"type":"Model","meshes":[{
+        "vertices":"quad_verts.bin","indices":"quad_idx.bin",
+        "vertexStride":3.2e1,"effect":"BasicEffect"}]})");
+    const auto scientific = cm.Load<Model>("quad");
+    ASSERT_EQ(scientific.getMeshesProperty().getCountProperty(), 1);
+    EXPECT_EQ(scientific.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getNumVerticesProperty(), 4);
+    const auto compiled = CNA::Content::Cnb::CompileCnjToCnb(
+        CNA::Internal::PathToUtf8(root.path() / "quad.cnj"));
+    EXPECT_EQ(CNA::Content::Cnb::DecodeModelFromCnb(
+        CNA::Content::Cnb::CnbDocument::Parse(compiled.bytes, "scientific.cnb")).parts[0].vertexStride, 32u);
+
+}
+
+TEST_F(CnjModelTest, Safe002QuotedBracesKeepTheMeshIntegerFieldScope)
+{
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline";
+    ScratchContentRoot root;
+    WriteQuadModelFixture(root.path());
+    WriteFile(root.path() / "quad.cnj", R"({"cnjVersion":1,"type":"Model","meshes":[{
+        "name":"Quad}{","vertices":"quad_verts.bin","indices":"quad_idx.bin",
+        "vertexStride":32,"effect":"BasicEffect"}]})");
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    cm.setGraphicsDevice(gd);
+    const auto loaded = cm.Load<Model>("quad");
+    ASSERT_EQ(loaded.getMeshesProperty().getCountProperty(), 1);
+    EXPECT_EQ(loaded.getMeshesProperty()[0]->getNameProperty(), "Quad}{");
+    const auto compiled = CNA::Content::Cnb::CompileCnjToCnb(
+        CNA::Internal::PathToUtf8(root.path() / "quad.cnj"));
+    const auto decoded = CNA::Content::Cnb::DecodeModelFromCnb(
+        CNA::Content::Cnb::CnbDocument::Parse(compiled.bytes, "quoted.cnb"));
+    ASSERT_EQ(decoded.meshes.size(), 1u);
+    EXPECT_EQ(decoded.meshes[0].name, "Quad}{");
 }

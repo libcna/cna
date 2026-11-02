@@ -111,15 +111,12 @@ namespace Microsoft::Xna::Framework::Content
 
         static int JsonInt(const std::string& j, const std::string& key, int def = 0)
         {
-            const std::string needle = "\"" + key + "\"";
-            auto pos = j.find(needle);
-            if (pos == std::string::npos) return def;
-            pos = j.find(':', pos + needle.size());
-            if (pos == std::string::npos) return def;
-            ++pos;
-            while (pos < j.size() && std::isspace(static_cast<unsigned char>(j[pos]))) ++pos;
-            if (pos >= j.size()) return def;
-            try { return std::stoi(j.substr(pos)); } catch (...) { return def; }
+            const auto object = CNA::Internal::ParseJson(j);
+            const auto* value = object.FindMember(key);
+            if (value == nullptr) { return def; }
+            return static_cast<int>(CNA::Internal::RequireCnjInteger(
+                value, "Model .cnj field '" + key + "'",
+                std::numeric_limits<int>::min(), std::numeric_limits<int>::max()));
         }
 
         static bool JsonBool(const std::string& j, const std::string& key, bool def = false)
@@ -3402,13 +3399,7 @@ namespace Microsoft::Xna::Framework::Content
                         while (true) {
                             const std::size_t os = json.find('{', pos);
                             if (os == std::string::npos) break;
-                            int depth = 1;
-                            std::size_t oe = os + 1;
-                            while (oe < json.size() && depth > 0) {
-                                if (json[oe] == '{') ++depth;
-                                else if (json[oe] == '}') --depth;
-                                ++oe;
-                            }
+                            const std::size_t oe = FindMatchingBracketEXT(json, os, '{', '}');
                             const std::string mg = json.substr(os, oe - os);
                             pos = oe;
 

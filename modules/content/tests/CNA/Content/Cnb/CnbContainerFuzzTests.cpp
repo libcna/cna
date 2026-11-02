@@ -21,6 +21,12 @@
 #include <exception>
 #include <iostream>
 #include <typeinfo>
+#include <stdexcept>
+#include <span>
+#include "CNA/Content/Cnb/CnbCrc32c.hpp"
+#include "CNA/Content/Cnb/CnbTextureCodec.hpp"
+#include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
+#include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
 #include <gtest/gtest.h>
 #include <string>
 #include <vector>
@@ -303,5 +309,259 @@ TEST(CnbContainerFuzzTest, ArbitraryBytesAreNeverMistakenForACnbFile)
             bytes[0] = 0x43u; bytes[1] = 0x4Eu; bytes[2] = 0x42u; bytes[3] = 0x1Au;
         }
         (void)TryLoad(bytes, Kind::Model, 0x2545F4914F6CDD1Dull, i);
+    }
+}
+
+namespace
+{
+    namespace Cnb = CNA::Content::Cnb;
+
+    // Repairs CRCs after structured edits so semantic mutations reach the codec itself.
+    struct StructuredCnb
+    {
+        std::vector<std::uint8_t> bytes;
+
+        std::uint64_t Read(std::size_t at, std::size_t width) const
+        {
+            std::uint64_t value = 0;
+            for (std::size_t i = 0; i < width; ++i) { value |= std::uint64_t(bytes.at(at + i)) << (8u * i); }
+            return value;
+        }
+        void Put(std::size_t at, std::uint64_t value, std::size_t width = 4)
+        {
+            for (std::size_t i = 0; i < width; ++i) { bytes.at(at + i) = static_cast<std::uint8_t>(value >> (8u * i)); }
+        }
+        std::size_t Entry(std::size_t ordinal) const
+        {
+            return static_cast<std::size_t>(Read(32, 8)) + ordinal * Cnb::Format::TocEntrySize;
+        }
+        std::size_t Entry(Cnb::CnbChunkId id) const
+        {
+            for (std::size_t i = 0; i < Read(20, 4); ++i)
+            {
+                if (Read(Entry(i), 4) == id.value) { return Entry(i); }
+            }
+            throw std::logic_error("missing structured test chunk");
+        }
+        std::size_t Payload(Cnb::CnbChunkId id) const
+        {
+            return static_cast<std::size_t>(Read(Entry(id) + 8, 8));
+        }
+        void Repair(bool payloads = true)
+        {
+            const auto view = std::span<const std::uint8_t>(bytes);
+            if (payloads)
+            {
+                for (std::size_t i = 0; i < Read(20, 4); ++i)
+                {
+                    const auto entry = Entry(i);
+                    Put(entry + 32, Cnb::Crc32c(view.subspan(
+                        static_cast<std::size_t>(Read(entry + 8, 8)),
+                        static_cast<std::size_t>(Read(entry + 16, 8)))));
+                }
+            }
+            Put(40, Cnb::Crc32c(view.subspan(static_cast<std::size_t>(Read(32, 8)),
+                                             static_cast<std::size_t>(Read(20, 4)) * Cnb::Format::TocEntrySize)));
+            Put(44, Cnb::Crc32c(view.first(Cnb::Format::HeaderChecksumCoverage)));
+        }
+    };
+
+    Cnb::CnbReadLimits StructuredLimits()
+    {
+        Cnb::CnbReadLimits limits;
+        limits.maxFileSize = 4u * 1024u * 1024u;
+        limits.maxChunkSize = 2u * 1024u * 1024u;
+        limits.maxTotalUncompressedSize = 32u * 1024u * 1024u;
+        limits.maxChunkCount = 128;
+        limits.maxArrayElementCount = 1024;
+        return limits;
+    }
+
+    void CheckStructuredSeed(const std::vector<std::uint8_t>& bytes, Kind kind)
+    {
+        const auto document = CnbDocument::Parse(bytes, "recovery.cnb", StructuredLimits());
+        if (kind == Kind::Curve)
+        {
+            const auto value = Cnb::DecodeCurveFromCnb(document);
+            ASSERT_EQ(value.getKeysProperty().getCountProperty(), 6);
+            EXPECT_FLOAT_EQ(value.getKeysProperty()[5].getValueProperty(), 10.0f);
+        }
+        else if (kind == Kind::Clip)
+        {
+            const auto value = Cnb::DecodeAnimationClipFromCnb(document);
+            ASSERT_EQ(value.Tracks.size(), 4u);
+            ASSERT_EQ(value.Tracks[3].Keys.size(), 5u);
+            EXPECT_FLOAT_EQ(value.Tracks[3].Keys[4].Translation.X, 4.0f);
+        }
+        else
+        {
+            const auto value = Cnb::DecodeModelFromCnb(document);
+            ASSERT_EQ(value.parts.size(), 1u);
+            EXPECT_EQ(value.parts[0].vertexCount, 6u);
+            ASSERT_EQ(value.bones.size(), 2u);
+            EXPECT_EQ(value.bones[1].parent, 0);
+            ASSERT_EQ(value.animations.size(), 1u);
+            EXPECT_EQ(value.animations[0].clip.Tracks.size(), 1u);
+        }
+    }
+}
+
+TEST(CnbContainerFuzzTest, Safe002ContainerLimitsAcceptExactAndRefuseOnePastThenRecover)
+{
+    const auto seed = ValidCurveFile();
+    const auto document = CnbDocument::Parse(seed, "safe002.cnb");
+    for (const int field : {0, 1, 2, 3})
+    {
+        auto limits = StructuredLimits();
+        std::uint64_t largest = 0, total = 0;
+        for (std::size_t i = 0; i < document.ChunkCount(); ++i)
+        {
+            largest = std::max(largest, document.ChunkAt(i).uncompressedSize);
+            total += document.ChunkAt(i).uncompressedSize;
+        }
+        if (field == 0) { limits.maxFileSize = seed.size(); }
+        if (field == 1) { limits.maxChunkCount = static_cast<std::uint32_t>(document.ChunkCount()); }
+        if (field == 2) { limits.maxChunkSize = largest; }
+        if (field == 3) { limits.maxTotalUncompressedSize = total; }
+        EXPECT_EQ(Cnb::DecodeCurveFromCnb(CnbDocument::Parse(seed, "exact.cnb", limits))
+                      .getKeysProperty().getCountProperty(), 6);
+        if (field == 0) { --limits.maxFileSize; }
+        if (field == 1) { --limits.maxChunkCount; }
+        if (field == 2) { --limits.maxChunkSize; }
+        if (field == 3) { --limits.maxTotalUncompressedSize; }
+        EXPECT_THROW((void)CnbDocument::Parse(seed, "past.cnb", limits), ContentLoadException);
+        CheckStructuredSeed(seed, Kind::Curve);
+    }
+}
+
+TEST(CnbContainerFuzzTest, Safe002RechecksummedTocRangesRefuseAndRecover)
+{
+    const auto seed = ValidCurveFile();
+    for (const int mutation : {0, 1, 2, 3, 4, 5, 6})
+    {
+        SCOPED_TRACE(mutation);
+        StructuredCnb candidate{seed};
+        const auto entry = candidate.Entry(Cnb::CnbCurveChunk::Keys);
+        if (mutation == 0) { candidate.Put(entry + 8, 0, 8); }
+        if (mutation == 1) { candidate.Put(entry + 8, candidate.Read(32, 8), 8); }
+        if (mutation == 2) { candidate.Put(entry + 8, (seed.size() + 7u) & ~7ull, 8); }
+        if (mutation == 3) { candidate.Put(entry + 8, 0xFFFFFFFFFFFFFFFCull, 8); }
+        if (mutation == 4) { candidate.Put(entry + 8, candidate.Read(candidate.Entry(Cnb::CnbCurveChunk::Header) + 8, 8), 8); }
+        if (mutation == 5) { candidate.Put(entry + 24, candidate.Read(entry + 16, 8) + 1, 8); }
+        if (mutation == 6) { candidate.Put(entry + 16, 0xFFFFFFFFFFFFFFFFull, 8); }
+        candidate.Repair(false);
+        EXPECT_THROW((void)CnbDocument::Parse(candidate.bytes, "ranges.cnb", StructuredLimits()),
+                     ContentLoadException);
+        CheckStructuredSeed(seed, Kind::Curve);
+    }
+    for (const std::uint32_t count : {129u, 0xFFFFFFFFu})
+    {
+        StructuredCnb candidate{seed};
+        candidate.Put(20, count);
+        candidate.Put(44, Cnb::Crc32c(std::span<const std::uint8_t>(candidate.bytes)
+                                       .first(Cnb::Format::HeaderChecksumCoverage)));
+        EXPECT_THROW((void)CnbDocument::Parse(candidate.bytes, "counts.cnb", StructuredLimits()),
+                     ContentLoadException);
+        CheckStructuredSeed(seed, Kind::Curve);
+    }
+}
+
+TEST(CnbContainerFuzzTest, Safe002SemanticMutationsPassContainerChecksBeforeRefusalAndRecover)
+{
+    struct Edit { Kind kind; Cnb::CnbChunkId chunk; std::size_t offset; std::uint32_t value; };
+    const Edit edits[] = {
+        {Kind::Curve, Cnb::CnbCurveChunk::Header, 0, 5},
+        {Kind::Curve, Cnb::CnbCurveChunk::Header, 8, 7},
+        {Kind::Curve, Cnb::CnbCurveChunk::Header, 8, 0xFFFFFFFFu},
+        {Kind::Curve, Cnb::CnbCurveChunk::Keys, 16, 2},
+        {Kind::Clip, Cnb::CnbAnimationClipChunk::Header, 8, 2},
+        {Kind::Clip, Cnb::CnbAnimationClipChunk::Header, 12, 5},
+        {Kind::Clip, Cnb::CnbAnimationClipChunk::Header, 16, 0xFFFFFFFFu},
+        {Kind::Clip, Cnb::CnbAnimationClipChunk::Tracks, 4, 0xFFFFFFFFu},
+        {Kind::Clip, Cnb::CnbAnimationClipChunk::Tracks, 8, 0xFFFFFFFFu},
+        {Kind::Model, Cnb::CnbModelChunk::Header, 4, 0xFFFFFFFFu},
+        {Kind::Model, Cnb::CnbModelChunk::Bones, 4, 0}, // self-cycle
+        {Kind::Model, Cnb::CnbModelChunk::Bones, 4, 1}, // root -> child -> root
+        {Kind::Model, Cnb::CnbModelChunk::Bones, 76, 2}, // missing parent
+        {Kind::Model, Cnb::CnbModelChunk::Meshes, 8, 0xFFFFFFFFu},
+        {Kind::Model, Cnb::CnbModelChunk::Materials, 4, 2}, // missing XREF
+        {Kind::Model, Cnb::CnbModelChunk::IndexData, 0, 6}};
+    const auto curve = ValidCurveFile(), clip = ValidClipFile(), model = ValidModelFile();
+    for (const auto& edit : edits)
+    {
+        SCOPED_TRACE(Cnb::ChunkIdToString(edit.chunk));
+        SCOPED_TRACE(edit.offset);
+        const auto& seed = edit.kind == Kind::Curve ? curve : edit.kind == Kind::Clip ? clip : model;
+        StructuredCnb candidate{seed};
+        candidate.Put(candidate.Payload(edit.chunk) + edit.offset, edit.value);
+        candidate.Repair();
+        const auto document = CnbDocument::Parse(candidate.bytes, "semantic.cnb", StructuredLimits());
+        if (edit.kind == Kind::Curve) { EXPECT_THROW((void)Cnb::DecodeCurveFromCnb(document), ContentLoadException); }
+        if (edit.kind == Kind::Clip) { EXPECT_THROW((void)Cnb::DecodeAnimationClipFromCnb(document), ContentLoadException); }
+        if (edit.kind == Kind::Model) { EXPECT_THROW((void)Cnb::DecodeModelFromCnb(document), ContentLoadException); }
+        CheckStructuredSeed(seed, edit.kind);
+    }
+    // Removing a required chunk's identity must get past the container, too.
+    for (const auto& seed : {curve, clip, model})
+    {
+        const auto kind = seed == curve ? Kind::Curve : seed == clip ? Kind::Clip : Kind::Model;
+        const auto id = kind == Kind::Curve ? Cnb::CnbCurveChunk::Keys :
+                        kind == Kind::Clip ? Cnb::CnbAnimationClipChunk::Keys : Cnb::CnbModelChunk::VertexData;
+        StructuredCnb candidate{seed};
+        const auto entry = candidate.Entry(id);
+        candidate.Put(entry, Cnb::MakeChunkId('M', 'I', 'S', 'S').value);
+        candidate.Put(entry + 4, 0); // optional unknown chunk; the schema must notice the absence
+        candidate.Repair();
+        const auto document = CnbDocument::Parse(candidate.bytes, "missing.cnb", StructuredLimits());
+        if (kind == Kind::Curve) { EXPECT_THROW((void)Cnb::DecodeCurveFromCnb(document), ContentLoadException); }
+        if (kind == Kind::Clip) { EXPECT_THROW((void)Cnb::DecodeAnimationClipFromCnb(document), ContentLoadException); }
+        if (kind == Kind::Model) { EXPECT_THROW((void)Cnb::DecodeModelFromCnb(document), ContentLoadException); }
+        CheckStructuredSeed(seed, kind);
+    }
+}
+
+TEST(CnbContainerFuzzTest, Safe002TextureCubeFontAndSoundReachSemanticDecodersAndRecover)
+{
+    const auto texture = Cnb::MakeRgba8Texture2DData(1, 1, {11, 22, 33, 255});
+    auto cube = texture;
+    cube.faceCount = 6;
+    cube.representations[0].levels.assign(6, {11, 22, 33, 255});
+    Cnb::CnbSpriteFontData font;
+    font.atlas = texture;
+    font.characters = {u'A'};
+    font.glyphBounds.emplace_back(0, 0, 1, 1);
+    font.cropping = font.glyphBounds;
+    font.kerning.emplace_back(0.0f, 1.0f, 0.0f);
+    font.lineSpacing = 1;
+    Cnb::CnbSoundEffectData sound;
+    sound.frameCount = 2;
+    sound.samples = {0, 1, 2, 3};
+    const std::vector<std::vector<std::uint8_t>> seeds = {
+        Cnb::EncodeTexture2DToCnb(texture), Cnb::EncodeTextureCubeToCnb(cube),
+        Cnb::EncodeSpriteFontToCnb(font), Cnb::EncodeSoundEffectToCnb(sound)};
+    for (std::size_t kind = 0; kind < seeds.size(); ++kind)
+    {
+        for (const std::uint32_t value : {0u, 0xFFFFFFFFu})
+        {
+            SCOPED_TRACE(kind);
+            SCOPED_TRACE(value);
+            StructuredCnb candidate{seeds[kind]};
+            const auto id = kind < 2 ? Cnb::CnbTextureChunk::Header : kind == 2 ?
+                Cnb::CnbSpriteFontChunk::Header : Cnb::CnbSoundEffectChunk::Header;
+            // Width, glyph count, or sample rate: valid seeds have a nonzero bounded value.
+            const auto offset = kind == 3 ? 4u : 0u;
+            candidate.Put(candidate.Payload(id) + offset, value);
+            candidate.Repair();
+            const auto document = CnbDocument::Parse(candidate.bytes, "semantic.cnb", StructuredLimits());
+            if (kind == 0) { EXPECT_THROW((void)Cnb::DecodeTexture2DFromCnb(document), ContentLoadException); }
+            if (kind == 1) { EXPECT_THROW((void)Cnb::DecodeTextureCubeFromCnb(document), ContentLoadException); }
+            if (kind == 2) { EXPECT_THROW((void)Cnb::DecodeSpriteFontFromCnb(document), ContentLoadException); }
+            if (kind == 3) { EXPECT_THROW((void)Cnb::DecodeSoundEffectFromCnb(document), ContentLoadException); }
+            const auto recovered = CnbDocument::Parse(seeds[kind], "recovery.cnb", StructuredLimits());
+            if (kind == 0) { EXPECT_EQ(Cnb::DecodeTexture2DFromCnb(recovered).representations[0].levels[0], texture.representations[0].levels[0]); }
+            if (kind == 1) { EXPECT_EQ(Cnb::DecodeTextureCubeFromCnb(recovered).representations[0].levels, cube.representations[0].levels); }
+            if (kind == 2) { EXPECT_EQ(Cnb::DecodeSpriteFontFromCnb(recovered).characters, font.characters); }
+            if (kind == 3) { EXPECT_EQ(Cnb::DecodeSoundEffectFromCnb(recovered).samples, sound.samples); }
+        }
     }
 }

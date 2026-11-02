@@ -533,3 +533,40 @@ TEST(CnbChunkCompressionTest, ACompressedChunkWhoseLogicalSizeIsZeroReadsBackEmp
         << "a compressed chunk with no logical bytes must read as no bytes, not as its frame";
     EXPECT_EQ(document.OpenChunk(chunk).Size(), 0u);
 }
+
+TEST(CnbChunkCompressionTest, Safe002HighRatioFramesHonorExactDecodedLimitsAndRecover)
+{
+    if (!HasZstd()) { GTEST_SKIP() << "this build has no Zstandard codec"; }
+    const std::vector<std::uint8_t> payload(64u * 1024u, 0x2A);
+    const auto frame = CNA::Content::Cnb::CompressCnbChunk(payload, CnbCompression::Zstd, 3);
+    ASSERT_LT(frame.size() * 100u, payload.size());
+    const auto valid = MakeHandBuiltCompressedFile(frame, CnbCompression::Zstd, payload.size(), 1);
+    CNA::Content::Cnb::CnbReadLimits limits;
+    limits.maxFileSize = 1024u * 1024u;
+    limits.maxChunkSize = payload.size();
+    limits.maxTotalUncompressedSize = payload.size();
+    for (const auto declared : {payload.size() - 1u, payload.size() + 1u})
+    {
+        auto bad = MakeHandBuiltCompressedFile(frame, CnbCompression::Zstd, declared, 1);
+        EXPECT_THROW((void)CnbDocument::Parse(bad.bytes, "size-disagreement.cnb", limits),
+                     ContentLoadException);
+        const auto recovered = CnbDocument::Parse(valid.bytes, "recovery.cnb", limits);
+        EXPECT_EQ(std::vector<std::uint8_t>(recovered.ChunkData(0).begin(), recovered.ChunkData(0).end()), payload);
+    }
+    auto shortLimit = limits;
+    --shortLimit.maxTotalUncompressedSize;
+    EXPECT_THROW((void)CnbDocument::Parse(valid.bytes, "ratio.cnb", shortLimit), ContentLoadException);
+    EXPECT_EQ(CnbDocument::Parse(valid.bytes, "recovery.cnb", limits).ChunkData(0).size(), payload.size());
+    // A larger declaration under the ceiling must still be checked against the frame's actual output.
+    auto permissive = limits;
+    ++permissive.maxChunkSize;
+    ++permissive.maxTotalUncompressedSize;
+    const auto overDeclared = MakeHandBuiltCompressedFile(frame, CnbCompression::Zstd, payload.size() + 1, 1);
+    EXPECT_THROW((void)CnbDocument::Parse(overDeclared.bytes, "over-declared.cnb", permissive), ContentLoadException);
+    EXPECT_EQ(CnbDocument::Parse(valid.bytes, "recovery.cnb", limits).ChunkData(0).front(), 0x2A);
+    auto truncatedFrame = frame;
+    truncatedFrame.pop_back();
+    const auto truncated = MakeHandBuiltCompressedFile(truncatedFrame, CnbCompression::Zstd, payload.size(), 1);
+    EXPECT_THROW((void)CnbDocument::Parse(truncated.bytes, "truncated.cnb", limits), ContentLoadException);
+    EXPECT_EQ(CnbDocument::Parse(valid.bytes, "recovery.cnb", limits).ChunkData(0).back(), 0x2A);
+}

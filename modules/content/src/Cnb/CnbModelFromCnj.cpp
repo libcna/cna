@@ -196,6 +196,16 @@ namespace CNA::Content::Cnb
             return value->numberValue;
         }
 
+        std::int64_t IntegerField(const Json::JsonValue& object, const char* key,
+                                  const std::string& cnjPath, std::int64_t fallback)
+        {
+            const auto* value = Member(object, key);
+            if (value == nullptr) { return fallback; }
+            return Internal::RequireCnjInteger(value, "cnj-to-cnb: '" + cnjPath + "' field '" + key + "'",
+                                               std::numeric_limits<std::int32_t>::min(),
+                                               std::numeric_limits<std::int32_t>::max());
+        }
+
         bool BoolField(const Json::JsonValue& object, const char* key, const std::string& cnjPath,
                        bool fallback)
         {
@@ -258,74 +268,9 @@ namespace CNA::Content::Cnb
             Internal::ValidateCnjEnvelope(envelope, "AnimationClip", pathText);
 
             const Json::JsonValue root = Json::ParseJson(json);
-            if (const Json::JsonValue* clipFile = root.FindMember("clipFile");
-                clipFile != nullptr && clipFile->IsString())
-            {
-                // A .cnj AnimationClip may itself defer to a raw sidecar; the compiler follows the
-                // one indirection the runtime reader follows, and no further.
-                return ReadClipBin(
-                    ResolveSidecar(path.parent_path(), clipFile->stringValue, "clipFile",
-                                   pathText));
-            }
-
-            AnimationClipEXT clip;
-            clip.Duration = System::TimeSpan::FromSeconds(
-                NumberField(root, "duration", pathText, 0.0));
-            if (StringField(root, "targetSpace", pathText) == "SceneNode")
-            {
-                clip.TargetSpace = ClipTargetSpaceEXT::SceneNode;
-            }
-            const Json::JsonValue* tracks = root.FindMember("tracks");
-            if (tracks == nullptr || tracks->type != Json::JsonType::Array)
-            {
-                throw ContentLoadException(
-                    "cnj-to-cnb: AnimationClip '" + pathText + "' has no 'tracks' array.");
-            }
-            for (const Json::JsonValue& trackValue : tracks->arrayValue)
-            {
-                BoneTrackEXT track;
-                track.BoneIndex =
-                    static_cast<int>(NumberField(trackValue, "boneIndex", pathText, -1.0));
-                const Json::JsonValue* keys = Member(trackValue, "keys");
-                if (keys == nullptr || keys->type != Json::JsonType::Array)
-                {
-                    throw ContentLoadException(
-                        "cnj-to-cnb: AnimationClip '" + pathText +
-                        "' has a track with no 'keys'.");
-                }
-                for (const Json::JsonValue& keyValue : keys->arrayValue)
-                {
-                    KeyframeEXT key;
-                    key.Time = System::TimeSpan::FromSeconds(
-                        NumberField(keyValue, "time", pathText, 0.0));
-                    const std::vector<float> translation =
-                        FloatArrayField(keyValue, "translation", pathText);
-                    if (!translation.empty())
-                    {
-                        RequireExactLength(translation, 3u, "translation", pathText);
-                        key.Translation = Microsoft::Xna::Framework::Vector3(
-                            translation[0], translation[1], translation[2]);
-                    }
-                    const std::vector<float> rotation =
-                        FloatArrayField(keyValue, "rotation", pathText);
-                    if (!rotation.empty())
-                    {
-                        RequireExactLength(rotation, 4u, "rotation", pathText);
-                        key.Rotation = Microsoft::Xna::Framework::Quaternion(
-                            rotation[0], rotation[1], rotation[2], rotation[3]);
-                    }
-                    const std::vector<float> scale = FloatArrayField(keyValue, "scale", pathText);
-                    if (!scale.empty())
-                    {
-                        RequireExactLength(scale, 3u, "scale", pathText);
-                        key.Scale =
-                            Microsoft::Xna::Framework::Vector3(scale[0], scale[1], scale[2]);
-                    }
-                    track.Keys.push_back(key);
-                }
-                clip.Tracks.push_back(std::move(track));
-            }
-            return clip;
+            return Internal::ReadCnjAnimationClip(
+                root, pathText, [&](const std::string& name)
+                { return ResolveSidecar(path.parent_path(), name, "clipFile", pathText); });
         }
 
         CnbMorphData ReadMorphSidecar(const fs::path& path, std::uint32_t partVertexCount,
@@ -473,7 +418,7 @@ namespace CNA::Content::Cnb
                 // Entry 0 defaults to the root; every later entry defaults to a child of it,
                 // matching the runtime reader's own defaults for a hand-written document.
                 bone.parent = static_cast<std::int32_t>(
-                    NumberField(entry, "parent", cnjPath, b == 0 ? -1.0 : 0.0));
+                    IntegerField(entry, "parent", cnjPath, b == 0 ? -1 : 0));
                 const std::vector<float> transform = FloatArrayField(entry, "transform", cnjPath);
                 if (!transform.empty())
                 {
@@ -673,8 +618,8 @@ namespace CNA::Content::Cnb
 
             CnbModelPart part;
             part.name = StringField(entry, "name", cnjPath);
-            const double strideValue = NumberField(entry, "vertexStride", cnjPath, 16.0);
-            if (strideValue <= 0.0 || strideValue > 4096.0)
+            const auto strideValue = IntegerField(entry, "vertexStride", cnjPath, 16);
+            if (strideValue <= 0 || strideValue > 4096)
             {
                 throw ContentLoadException(
                     "cnj-to-cnb: Model '" + cnjPath + "' mesh '" + part.name +
@@ -861,16 +806,16 @@ namespace CNA::Content::Cnb
             {
                 const std::string prefix = "sampler" + std::to_string(slot);
                 const auto filter = static_cast<int>(
-                    NumberField(entry, (prefix + "Filter").c_str(), cnjPath,
-                                static_cast<double>(
+                    IntegerField(entry, (prefix + "Filter").c_str(), cnjPath,
+                                static_cast<std::int64_t>(
                                     Microsoft::Xna::Framework::Graphics::TextureFilter::Linear)));
-                const auto addressU = static_cast<int>(NumberField(
+                const auto addressU = static_cast<int>(IntegerField(
                     entry, (prefix + "AddressU").c_str(), cnjPath,
-                    static_cast<double>(
+                    static_cast<std::int64_t>(
                         Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap)));
-                const auto addressV = static_cast<int>(NumberField(
+                const auto addressV = static_cast<int>(IntegerField(
                     entry, (prefix + "AddressV").c_str(), cnjPath,
-                    static_cast<double>(
+                    static_cast<std::int64_t>(
                         Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap)));
 
                 using Filter = Microsoft::Xna::Framework::Graphics::TextureFilter;
@@ -939,7 +884,7 @@ namespace CNA::Content::Cnb
 
             // GLTF-139's grouping rule, verbatim: consecutive entries sharing a "partOfMesh"
             // value become one ModelMesh, and an entry without the field gets its own.
-            const int partOfMesh = static_cast<int>(NumberField(entry, "partOfMesh", cnjPath, -1.0));
+            const int partOfMesh = static_cast<int>(IntegerField(entry, "partOfMesh", cnjPath, -1));
             if (partOfMesh >= 0 && !pending.empty() && pending.back().group == partOfMesh)
             {
                 pending.back().partIndices.push_back(partIndex);
@@ -951,7 +896,7 @@ namespace CNA::Content::Cnb
                 mesh.name = partName.empty() ? "mesh" : partName;
                 mesh.group = partOfMesh;
                 mesh.parentBone =
-                    static_cast<std::int32_t>(NumberField(entry, "parentBone", cnjPath, 0.0));
+                    static_cast<std::int32_t>(IntegerField(entry, "parentBone", cnjPath, 0));
                 mesh.partIndices.push_back(partIndex);
                 pending.push_back(std::move(mesh));
             }
