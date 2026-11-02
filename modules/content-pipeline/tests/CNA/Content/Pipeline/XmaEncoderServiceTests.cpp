@@ -184,9 +184,24 @@ import struct, sys
 source = open(sys.argv[1], 'rb').read()
 at = source.index(b'data')
 pcm = source[at + 8:]
-payload = pcm[:len(pcm) // 4]
-# An XMA2WAVEFORMATEX: the sixteen WAVEFORMATEX bytes, cbSize, then 34 more.
+frames = len(pcm) // 2
+# An XMA2WAVEFORMATEX as the measured Xbox fixture shapes it: the play region is the source, the
+# encoded length and the loop are rounded to 128 samples, the data is whole 2048-byte packets.
+encoded = (frames + 127) // 128 * 128
+ext = struct.pack('<HIIIIIIIBBH', 1, 1, encoded, 2048, 0, frames, 128,
+                  frames // 128 * 128 - 128, 0, 4, 1)
+fmt = struct.pack('<HHIIHHH', 0x0166, 1, 8000, 4000, 2, 16, 34) + ext
+payload = bytes(2048)
+body = b'WAVE' + b'fmt ' + struct.pack('<I', len(fmt)) + fmt + \
+       b'data' + struct.pack('<I', len(payload)) + payload
+open(sys.argv[2], 'wb').write(b'RIFF' + struct.pack('<I', len(body)) + body)
+)";
+
+    /** @brief The stub whose XMA2 extension is all zeros: a tag, but no description. */
+    const char* kZeroExtensionStub = R"(#!/usr/bin/env python3
+import struct, sys
 fmt = struct.pack('<HHIIHHH', 0x0166, 1, 8000, 4000, 2, 16, 34) + bytes(34)
+payload = bytes(2048)
 body = b'WAVE' + b'fmt ' + struct.pack('<I', len(fmt)) + fmt + \
        b'data' + struct.pack('<I', len(payload)) + payload
 open(sys.argv[2], 'wb').write(b'RIFF' + struct.pack('<I', len(body)) + body)
@@ -289,7 +304,11 @@ TEST(XmaEncoderService, AnAttachedEncoderIsDrivenByTheDocumentedContract)
     EXPECT_EQ(audio.getFormatProperty()->getSampleRateProperty(), 8000);
     EXPECT_EQ(audio.getFormatProperty()->getNativeWaveFormatProperty().size() - 18u, 34u)
         << "the XMA2 extension travels with the format";
-    EXPECT_EQ(audio.getDataProperty().size(), pcmBytes / 4u);
+    EXPECT_EQ(audio.getDataProperty().size(), 2048u);
+    // L16: the loop is the encoder's measured one, not the request's whole-sound 0/400.
+    EXPECT_EQ(audio.getLoopStartProperty(), 128);
+    EXPECT_EQ(audio.getLoopLengthProperty(), 256);
+    (void)pcmBytes;
 }
 
 // An encoder that writes something else is refused, and the refusal says what was wrong with it.
@@ -354,8 +373,9 @@ assert sys.argv[1] == '--quality', sys.argv
 quality = sys.argv[2]
 source = open(sys.argv[4], 'rb').read()
 at = source.index(b'data')
-payload = source[at + 8:][:16]
-fmt = struct.pack('<HHIIHHH', 0x0166, 1, 8000, 4000, 2, 16, 34) + bytes(34)
+payload = bytes(2048)
+ext = struct.pack('<HIIIIIIIBBH', 1, 1, 512, 2048, 0, 400, 0, 0, 0, 4, 1)
+fmt = struct.pack('<HHIIHHH', 0x0166, 1, 8000, 4000, 2, 16, 34) + ext
 body = b'WAVE' + b'fmt ' + struct.pack('<I', len(fmt)) + fmt + \
        b'data' + struct.pack('<I', len(payload)) + payload
 open(sys.argv[6], 'wb').write(b'RIFF' + struct.pack('<I', len(body)) + body)
@@ -376,7 +396,7 @@ sys.stderr.write('quality=' + quality + '\n')
     request.quality = Build::XmaEncodeQuality::Medium;
     const Build::XmaEncodeResult result = encoder->Encode(request);
     ASSERT_TRUE(result.succeeded) << (result.diagnostics.empty() ? "" : result.diagnostics.front());
-    EXPECT_EQ(result.data.size(), 16u);
+    EXPECT_EQ(result.data.size(), 2048u);
     bool sawQuality = false;
     for (const std::string& line : result.diagnostics)
     {
@@ -497,4 +517,59 @@ TEST(XmaEncoderService, TheGenuineXboxSoundEffectDecomposesAsABigEndianXma2WaveF
         }
     }
     EXPECT_TRUE(sawPcmTag) << "the Windows build is little-endian PCM at the source's own rate";
+}
+
+// L16: the adapter checks the XMA2 extension an encoder declared, not only its RIFF framing.
+TEST(XmaEncoderService, AnXma2BlockThatDescribesNothingIsRefused)
+{
+    const Scratch scratch("zero_extension");
+    Build::ExternalXmaEncoderOptions options;
+    options.executable = WriteStubEncoder(scratch.Path(), "stub-encoder", kZeroExtensionStub);
+    UseStubLauncher(options);
+    if (!StubLauncherRuns(options))
+    {
+        GTEST_SKIP() << "the stub encoders need a Python interpreter this host cannot start";
+    }
+    const AttachedEncoder attached(Build::MakeExternalXmaEncoder(options));
+    Audio::AudioContent audio(WriteWav(scratch.Path(), "tone.wav"), Audio::AudioFileType::Wav);
+    try
+    {
+        audio.ConvertFormat(Audio::ConversionFormat::Xma, Audio::ConversionQuality::Best, "");
+        FAIL() << "a zeroed XMA2WAVEFORMATEX extension was accepted";
+    }
+    catch (const InvalidContentException& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("XMA2 format block is inconsistent"),
+                  std::string::npos)
+            << error.what();
+    }
+}
+
+// L16: the identity fingerprints what decides the output -- the program's bytes and how it is run.
+TEST(XmaEncoderService, TheIdentityFollowsTheProgramsBytesAndItsArguments)
+{
+    const Scratch scratch("fingerprint");
+    const std::filesystem::path firstDirectory = scratch.Path() / "a";
+    const std::filesystem::path secondDirectory = scratch.Path() / "b";
+    std::filesystem::create_directories(firstDirectory);
+    std::filesystem::create_directories(secondDirectory);
+
+    Build::ExternalXmaEncoderOptions same;
+    same.executable = WriteStubEncoder(firstDirectory, "encoder", kGoodStub);
+    Build::ExternalXmaEncoderOptions copy;
+    copy.executable = WriteStubEncoder(secondDirectory, "encoder", kGoodStub);
+    Build::ExternalXmaEncoderOptions changed;
+    changed.executable = WriteStubEncoder(secondDirectory, "encoder-changed", kZeroExtensionStub);
+    Build::ExternalXmaEncoderOptions differentlyRun = same;
+    differentlyRun.arguments = {"--best", "{input}", "{output}"};
+
+    const std::string base = Build::MakeExternalXmaEncoder(same)->Identity().ToString();
+    EXPECT_NE(base.find("sha256:"), std::string::npos) << base;
+    EXPECT_EQ(Build::MakeExternalXmaEncoder(copy)->Identity().version,
+              Build::MakeExternalXmaEncoder(same)->Identity().version)
+        << "the same program copied elsewhere produces the same output";
+    EXPECT_NE(Build::MakeExternalXmaEncoder(changed)->Identity().version,
+              Build::MakeExternalXmaEncoder(same)->Identity().version);
+    EXPECT_NE(Build::MakeExternalXmaEncoder(differentlyRun)->Identity().version,
+              Build::MakeExternalXmaEncoder(same)->Identity().version);
 }

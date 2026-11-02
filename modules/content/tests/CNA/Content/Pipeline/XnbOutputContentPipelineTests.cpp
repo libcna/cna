@@ -5,6 +5,7 @@
 // The point of these tests is that nothing about the source side changes: the same importers and
 // processors that produce a .cnb produce a .xnb, and only the writer differs.
 
+#include <algorithm>
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
@@ -450,6 +451,109 @@ TEST(XnbOutputContentPipelineTest, AWavSourceBuildsToSoundEffectXnb)
     EXPECT_EQ(sound.blockAlign, 2u);
     EXPECT_EQ(sound.averageBytesPerSecond, 44100u);
     EXPECT_EQ(sound.samples, samples);
+}
+
+namespace
+{
+    /// L16: stands in for the content-pipeline XMA service. Fills a recognisable XMA2 block.
+    class FakeXboxEncoder final : public Pipeline::XboxSoundEffectEncoder
+    {
+    public:
+        [[nodiscard]] std::string Identity() const override { return "fake-xma 1"; }
+        [[nodiscard]] Pipeline::EncodedSoundEffectFormat Encode(
+            const Pipeline::ProcessedSoundEffect& sound) const override
+        {
+            Pipeline::EncodedSoundEffectFormat encoded;
+            encoded.formatTag = 0x0166u;
+            encoded.channels = static_cast<std::uint16_t>(sound.channels);
+            encoded.sampleRate = 44032u;
+            encoded.averageBytesPerSecond = 12200u;
+            encoded.blockAlign = 2u;
+            encoded.bitsPerSample = 16u;
+            // NumStreams 1, ChannelMask 1, SamplesEncoded 512, BytesPerBlock 2048, PlayBegin 0,
+            // PlayLength 200, LoopBegin 128, LoopLength 256, LoopCount 0, EncoderVersion 4,
+            // BlockCount 1 -- little-endian, as an encoder writes them.
+            const std::uint32_t fields[] = {1u, 512u, 2048u, 0u, 200u, 128u, 256u};
+            encoded.extension = {0x01u, 0x00u};
+            for (const std::uint32_t field : fields)
+                for (int shift = 0; shift < 32; shift += 8)
+                    encoded.extension.push_back(static_cast<std::uint8_t>((field >> shift) & 0xFFu));
+            encoded.extension.insert(encoded.extension.end(), {0x00u, 0x04u, 0x01u, 0x00u});
+            encoded.data.assign(2048u, 0x5Au);
+            encoded.loopStart = 128;
+            encoded.loopLength = 256;
+            return encoded;
+        }
+    };
+
+    class AttachedXboxEncoder
+    {
+    public:
+        AttachedXboxEncoder() { Pipeline::SetXboxSoundEffectEncoder(std::make_shared<FakeXboxEncoder>()); }
+        ~AttachedXboxEncoder() { Pipeline::SetXboxSoundEffectEncoder(nullptr); }
+        AttachedXboxEncoder(const AttachedXboxEncoder&) = delete;
+        AttachedXboxEncoder& operator=(const AttachedXboxEncoder&) = delete;
+    };
+
+    Pipeline::ContentBuildResult BuildFor(const std::filesystem::path& root,
+                                          const Pipeline::ContentTargetPlatform platform,
+                                          const Xnb::XnbTargetPlatform container)
+    {
+        Xnb::XnbFileOptions options;
+        options.platform = container;
+        const Pipeline::ContentPipeline pipeline(MakeDualFormatRegistry(options));
+        Pipeline::ContentBuildRequest request;
+        request.sourceRoot = root;
+        request.source = "beep.wav";
+        request.logicalName = "beep";
+        request.outputFormat = Pipeline::ContentOutputFormat::Xnb;
+        request.environment.targetPlatform = platform;
+        return pipeline.Build(request);
+    }
+}
+
+TEST(XnbOutputContentPipelineTest, AnAttachedXboxEncoderMakesTheXboxWavRouteWriteXma)
+{
+    ScratchDirectory scratch("xbox_xma");
+    std::vector<std::uint8_t> samples(400u);
+    for (std::size_t index = 0u; index < samples.size(); ++index)
+        samples[index] = static_cast<std::uint8_t>((index * 7u) & 0xFFu);
+    WriteBytes(scratch.Path() / "beep.wav", MakeWav(1u, 22050u, samples));
+
+    const AttachedXboxEncoder attached;
+    // The encoder's identity is part of the processor version, so replacing it rebuilds.
+    EXPECT_EQ(Pipeline::SoundEffectProcessor{}.Identity().version, "3+xbox:fake-xma 1");
+
+    const Pipeline::ContentBuildResult xbox = BuildFor(
+        scratch.Path(), Pipeline::ContentTargetPlatform::Xbox360, Xnb::XnbTargetPlatform::Xbox360);
+    // The XMA2 block reaches the file big-endian, extension fields included, as in the genuine
+    // audio_wav_soundeffect_xbox360.xnb: the WAVEFORMATEX starts right after the 4-byte length.
+    const std::vector<std::uint8_t>& bytes = xbox.output.bytes;
+    // The block's Int32 length (52, little-endian like every XNB length) then the swapped tag.
+    const std::vector<std::uint8_t> header{0x34u, 0x00u, 0x00u, 0x00u, 0x01u, 0x66u};
+    const auto tag = std::search(bytes.begin(), bytes.end(), header.begin(), header.end());
+    ASSERT_NE(tag, bytes.end()) << "no 52-byte XMA2 WAVEFORMATEX with a big-endian tag";
+    const std::size_t extension = static_cast<std::size_t>(tag - bytes.begin()) + 4u + 18u;
+    ASSERT_LE(extension + 34u, bytes.size());
+    // NumStreams 1 and LoopBegin 128 / LoopLength 256, each big-endian.
+    EXPECT_EQ(bytes[extension + 0u], 0x00u);
+    EXPECT_EQ(bytes[extension + 1u], 0x01u);
+    EXPECT_EQ((std::vector<std::uint8_t>(bytes.begin() + static_cast<std::ptrdiff_t>(extension + 22u),
+                                         bytes.begin() + static_cast<std::ptrdiff_t>(extension + 30u))),
+              (std::vector<std::uint8_t>{0x00u, 0x00u, 0x00u, 0x80u, 0x00u, 0x00u, 0x01u, 0x00u}));
+    EXPECT_EQ(bytes[extension + 31u], 0x04u) << "EncoderVersion is one byte and is not swapped";
+
+    // A Windows build keeps PCM with the encoder attached: XMA is the Xbox's codec only.
+    const Pipeline::ContentBuildResult windows = BuildFor(
+        scratch.Path(), Pipeline::ContentTargetPlatform::Windows, Xnb::XnbTargetPlatform::Windows);
+    const Xnb::XnbCanonicalAsset asset = DecodeResult(scratch, windows, "beep");
+    const auto& sound = std::get<Xnb::XnbSoundEffectData>(asset.value);
+    EXPECT_EQ(sound.formatTag, 1u);
+    EXPECT_EQ(sound.samples, samples);
+
+    // Without an encoder the Xbox build is the recorded PCM divergence, unchanged.
+    Pipeline::SetXboxSoundEffectEncoder(nullptr);
+    EXPECT_EQ(Pipeline::SoundEffectProcessor{}.Identity().version, "3");
 }
 
 TEST(XnbOutputContentPipelineTest, ContainerOptionsChangeTheWriterIdentityAndTheBytes)

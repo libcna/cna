@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace CNA::Content::Pipeline
@@ -85,6 +86,37 @@ namespace CNA::Content::Pipeline
      * Everything a writer needs is here and nothing either container invented is: no
      * WAVEFORMATEX field that is not an audio fact, no chunk identifier, no schema version.
      */
+    /**
+     * @brief A sound effect a build-time service encoded to a console-native format (L16).
+     *
+     * The XNA Xbox 360 build writes XMA rather than PCM. With an external XMA encoder attached,
+     * the SoundEffect processor fills this for that target; the XNB writer then emits these fields
+     * instead of the PCM description. The extension is little-endian, as the encoder wrote it.
+     */
+    struct EncodedSoundEffectFormat
+    {
+        /** @brief WAVEFORMATEX format tag (0x0166 for XMA2). */
+        std::uint16_t formatTag = 0u;
+        /** @brief Channel count. */
+        std::uint16_t channels = 0u;
+        /** @brief Sample rate in Hz, as the encoder declared it. */
+        std::uint32_t sampleRate = 0u;
+        /** @brief Average bytes per second. */
+        std::uint32_t averageBytesPerSecond = 0u;
+        /** @brief Block alignment. */
+        std::uint16_t blockAlign = 0u;
+        /** @brief Bits per sample. */
+        std::uint16_t bitsPerSample = 0u;
+        /** @brief The format extension after cbSize, little-endian. */
+        std::vector<std::uint8_t> extension;
+        /** @brief The encoded payload. */
+        std::vector<std::uint8_t> data;
+        /** @brief The loop start the encoder measured, in its own frames. */
+        std::int32_t loopStart = 0;
+        /** @brief The loop length the encoder measured. */
+        std::int32_t loopLength = 0;
+    };
+
     struct ProcessedSoundEffect
     {
         /** @brief The sample encoding, preserved from the source. */
@@ -107,6 +139,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Headerless little-endian sample bytes in `encoding`. */
         std::vector<std::uint8_t> samples;
+
+        /** @brief The target-native encoding, when the build produced one (L16). */
+        std::optional<EncodedSoundEffectFormat> encoded;
     };
 
     /**

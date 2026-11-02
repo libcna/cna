@@ -11,13 +11,18 @@
 // and folded into the build fingerprint by its own reported identity.
 #include "CNA/Content/Pipeline/XmaEncoderService.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
+#include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
+#include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "System/Environment.hpp"
 
 #include <atomic>
 #include <mutex>
 #include <cstdint>
 #include <cstdlib>
+#include <algorithm>
 #include <cstring>
+#include <limits>
 #include <fstream>
 #include <iterator>
 #include <sstream>
@@ -236,6 +241,89 @@ namespace CNA::Content::Pipeline
             return true;
         }
 
+        [[nodiscard]] std::uint16_t ReadU16(const std::vector<std::uint8_t>& bytes, const std::size_t at)
+        {
+            return static_cast<std::uint16_t>(bytes[at] | (bytes[at + 1u] << 8));
+        }
+
+        /// One XMA packet: the unit an XMA2 data chunk and its blocks are made of.
+        constexpr std::uint32_t kXmaPacketBytes = 2048u;
+
+        /**
+         * @brief Checks the XMA2WAVEFORMATEX an encoder declared and reads its loop region (L16).
+         *
+         * The rules are those every XMA2 stream obeys and the measured XNA Xbox fixture shows
+         * (docs/xma-encoder-backend.md): the 34-byte extension is present, the data is whole
+         * 2048-byte packets that fit the declared blocks, the play region lies inside the encoded
+         * samples, and so does the loop -- which, in the fixture, runs past PlayLength (384 +
+         * 22016 > 22050) but not past SamplesEncoded. Bitstream contents are not decoded.
+         *
+         * @param format The `fmt ` chunk, little-endian as the adapter contract requires.
+         * @param data The `data` chunk.
+         * @param channels The channel count the request asked for.
+         * @param loopStart Receives the encoder's LoopBegin.
+         * @param loopLength Receives the encoder's LoopLength.
+         * @param failure Receives why the block was refused.
+         * @return Whether the block is a usable XMA2 description of @p data.
+         */
+        [[nodiscard]] bool ReadXma2Extension(const std::vector<std::uint8_t>& format,
+                                             const std::vector<std::uint8_t>& data,
+                                             const int channels, int& loopStart,
+                                             int& loopLength, std::string& failure)
+        {
+            constexpr std::size_t kHeader = 18u;
+            constexpr std::size_t kExtension = 34u;
+            if (format.size() < kHeader + kExtension || ReadU16(format, 16u) < kExtension)
+            {
+                failure = "the encoder's XMA2 format block has no 34-byte XMA2WAVEFORMATEX extension";
+                return false;
+            }
+            const std::uint16_t declaredChannels = ReadU16(format, 2u);
+            const std::uint32_t sampleRate = ReadU32(format, 4u);
+            const std::uint16_t streams = ReadU16(format, kHeader + 0u);
+            const std::uint32_t samplesEncoded = ReadU32(format, kHeader + 6u);
+            const std::uint32_t bytesPerBlock = ReadU32(format, kHeader + 10u);
+            const std::uint32_t playBegin = ReadU32(format, kHeader + 14u);
+            const std::uint32_t playLength = ReadU32(format, kHeader + 18u);
+            const std::uint32_t loopBegin = ReadU32(format, kHeader + 22u);
+            const std::uint32_t loopSpan = ReadU32(format, kHeader + 26u);
+            const std::uint16_t blockCount = ReadU16(format, kHeader + 32u);
+            const auto fail = [&failure](std::string why) {
+                failure = "the encoder's XMA2 format block is inconsistent: " + std::move(why);
+                return false;
+            };
+            if (declaredChannels != static_cast<std::uint16_t>(channels))
+                return fail("it declares " + std::to_string(declaredChannels) + " channel(s) for a " +
+                            std::to_string(channels) + "-channel source");
+            if (sampleRate == 0u) return fail("its sample rate is zero");
+            if (streams == 0u || streams > declaredChannels)
+                return fail("NumStreams is " + std::to_string(streams));
+            if (bytesPerBlock == 0u || bytesPerBlock % kXmaPacketBytes != 0u)
+                return fail("BytesPerBlock " + std::to_string(bytesPerBlock) +
+                            " is not a whole number of 2048-byte packets");
+            if (blockCount == 0u) return fail("BlockCount is zero");
+            if (data.empty() || data.size() % kXmaPacketBytes != 0u)
+                return fail("its data chunk holds " + std::to_string(data.size()) +
+                            " bytes, not whole 2048-byte packets");
+            if (static_cast<std::uint64_t>(data.size()) >
+                static_cast<std::uint64_t>(bytesPerBlock) * blockCount)
+                return fail("its data chunk is larger than BlockCount x BytesPerBlock");
+            if (playLength == 0u ||
+                static_cast<std::uint64_t>(playBegin) + playLength > samplesEncoded)
+                return fail("the play region " + std::to_string(playBegin) + "+" +
+                            std::to_string(playLength) + " is outside SamplesEncoded " +
+                            std::to_string(samplesEncoded));
+            if (static_cast<std::uint64_t>(loopBegin) + loopSpan > samplesEncoded)
+                return fail("the loop " + std::to_string(loopBegin) + "+" + std::to_string(loopSpan) +
+                            " is outside SamplesEncoded " + std::to_string(samplesEncoded));
+            if (loopBegin > static_cast<std::uint32_t>(std::numeric_limits<int>::max()) ||
+                loopSpan > static_cast<std::uint32_t>(std::numeric_limits<int>::max()))
+                return fail("the loop does not fit a SoundEffect's Int32 fields");
+            loopStart = static_cast<int>(loopBegin);
+            loopLength = static_cast<int>(loopSpan);
+            return true;
+        }
+
         /** @brief The backend a build has when no encoder is attached. */
         class UnavailableXmaEncoder final : public XmaEncoderService
         {
@@ -317,12 +405,15 @@ namespace CNA::Content::Pipeline
                     result.diagnostics.push_back(failure);
                     return result;
                 }
-                // Loop points are the request's, in the encoder's own frames: the backend contract
-                // does not carry them back, and an encoder that resamples the loop region has to
-                // say so in its own container. Recorded so the caller can see they are pass-through
-                // rather than measured (docs/xma-encoder-backend.md).
-                result.loopStart = request.loopStart;
-                result.loopLength = request.loopLength;
+                // L16: the loop region is the encoder's, read out of its own XMA2 extension. XMA
+                // quantizes it -- the genuine Xbox fixture asked for 0/22050 and carries 384/22016
+                // -- so the request's values would describe a loop the stream does not have.
+                if (!ReadXma2Extension(result.formatBlock, result.data, request.channelCount,
+                                       result.loopStart, result.loopLength, failure))
+                {
+                    result.diagnostics.push_back(failure);
+                    return result;
+                }
                 result.succeeded = true;
                 return result;
             }
@@ -421,19 +512,92 @@ namespace CNA::Content::Pipeline
         identity.backend = CNA::Internal::PathToUtf8(executable.filename());
         // No version probe: unlike `fxc -help`, there is no command every encoder for this codec
         // answers, and inventing one would make a build depend on a convention nothing follows.
-        // The file's own last-write time is what distinguishes two builds of one encoder.
-        const auto written = std::filesystem::last_write_time(executable, error);
-        if (!error)
+        // L16: what decides the output instead is the program's own bytes and how it is run --
+        // the launcher and the argument template -- so those are the fingerprint. A filename and
+        // a timestamp collided for two different programs and missed a copied-in replacement.
+        std::string fingerprint;
+        try
         {
-            identity.version = std::to_string(
-                static_cast<long long>(written.time_since_epoch().count()));
+            fingerprint = "sha256:" + ContentFileSha256(executable);
         }
+        catch (const std::exception&)
+        {
+            const auto written = std::filesystem::last_write_time(executable, error);
+            fingerprint = error ? std::string("unreadable")
+                                : "mtime:" + std::to_string(static_cast<long long>(
+                                                 written.time_since_epoch().count()));
+        }
+        if (!launcher.empty())
+            fingerprint += " launcher:" + CNA::Internal::PathToUtf8(launcher);
+        std::string templateText;
+        for (const std::string& argument : arguments)
+            templateText += (templateText.empty() ? "" : " ") + argument;
+        fingerprint += " args:" + templateText;
+        identity.version = std::move(fingerprint);
         return std::make_shared<const ExternalXmaEncoder>(std::move(executable), std::move(launcher),
                                                           std::move(arguments), std::move(identity));
     }
 
     namespace
     {
+        /**
+         * @brief Lets CNA.SoundEffectProcessor (content module) use the build's XMA encoder for an
+         *        Xbox 360 target, as XNA's own processor writes XMA there (L16).
+         */
+        class XmaXboxSoundEffectEncoder final : public XboxSoundEffectEncoder
+        {
+        public:
+            explicit XmaXboxSoundEffectEncoder(std::shared_ptr<const XmaEncoderService> encoder)
+                : encoder_(std::move(encoder))
+            {
+            }
+
+            [[nodiscard]] std::string Identity() const override
+            {
+                return encoder_->Identity().ToString();
+            }
+
+            [[nodiscard]] EncodedSoundEffectFormat Encode(const ProcessedSoundEffect& sound) const override
+            {
+                XmaEncodeRequest request;
+                request.pcm = sound.samples;
+                request.channelCount = static_cast<int>(sound.channels);
+                request.sampleRate = static_cast<int>(sound.sampleRate);
+                request.bitsPerSample = static_cast<int>(ProcessedPcmBitsPerSample(sound.encoding));
+                request.loopStart = static_cast<int>(sound.loopStart);
+                request.loopLength = static_cast<int>(sound.loopLength);
+                // The canonical processor takes no parameters; XNA's default quality is Best.
+                request.quality = XmaEncodeQuality::Best;
+                const XmaEncodeResult result = encoder_->Encode(request);
+                if (!result.succeeded || result.formatBlock.size() < 18u)
+                {
+                    std::string message = "the Xbox 360 SoundEffect could not be encoded to XMA by " +
+                                          encoder_->Identity().ToString();
+                    for (const std::string& line : result.diagnostics) message += "\n" + line;
+                    throw Microsoft::Xna::Framework::Content::ContentLoadException(message);
+                }
+                const std::vector<std::uint8_t>& block = result.formatBlock;
+                EncodedSoundEffectFormat encoded;
+                encoded.formatTag = ReadU16(block, 0u);
+                encoded.channels = ReadU16(block, 2u);
+                encoded.sampleRate = ReadU32(block, 4u);
+                encoded.averageBytesPerSecond = ReadU32(block, 8u);
+                encoded.blockAlign = ReadU16(block, 12u);
+                encoded.bitsPerSample = ReadU16(block, 14u);
+                const std::size_t extension =
+                    std::min<std::size_t>(ReadU16(block, 16u), block.size() - 18u);
+                encoded.extension.assign(block.begin() + 18,
+                                         block.begin() + 18 + static_cast<std::ptrdiff_t>(extension));
+                encoded.data = result.data;
+                encoded.loopStart = result.loopStart;
+                encoded.loopLength = result.loopLength;
+                return encoded;
+            }
+
+        private:
+            std::shared_ptr<const XmaEncoderService> encoder_;
+        };
+
         std::mutex& BuildEncoderMutex()
         {
             static std::mutex mutex;
@@ -450,6 +614,10 @@ namespace CNA::Content::Pipeline
     void SetBuildXmaEncoder(std::shared_ptr<const XmaEncoderService> encoder)
     {
         const std::lock_guard<std::mutex> lock(BuildEncoderMutex());
+        // L16: the built-in Xbox 360 WAV route follows the attached encoder.
+        SetXboxSoundEffectEncoder(encoder != nullptr && encoder->Available()
+                                      ? std::make_shared<const XmaXboxSoundEffectEncoder>(encoder)
+                                      : nullptr);
         BuildEncoderSlot() = std::move(encoder);
     }
 

@@ -120,3 +120,21 @@ foreach(_cna_fxc_setting IN ITEMS CNA_FXC_EXECUTABLE CNA_FXC_LAUNCHER)
     endif()
 endforeach()
 unset(_cna_fxc_setting)
+
+# L16: the XMA encoder's configure-time tier, for the same reason. XmaEncoderService reads
+# CNA_XMA_ENCODER_EXECUTABLE / CNA_XMA_ENCODER_LAUNCHER as compile definitions after the
+# --xma-encoder option and the CNA_XMA_ENCODER environment variable; without this block a
+# -DCNA_XMA_ENCODER_EXECUTABLE=... cache entry was accepted and silently ignored.
+set(CNA_XMA_ENCODER_EXECUTABLE "" CACHE STRING
+    "Path to an external XMA encoder, baked in as the XMA route's configure-time default")
+set(CNA_XMA_ENCODER_LAUNCHER "" CACHE STRING
+    "Program to run the XMA encoder through (typically 'wine'), as the configure-time default")
+
+foreach(_cna_xma_setting IN ITEMS CNA_XMA_ENCODER_EXECUTABLE CNA_XMA_ENCODER_LAUNCHER)
+    if(${_cna_xma_setting})
+        target_compile_definitions(cna_content_pipeline PRIVATE
+            ${_cna_xma_setting}="${${_cna_xma_setting}}")
+        message(STATUS "CNA: ${_cna_xma_setting}=${${_cna_xma_setting}}")
+    endif()
+endforeach()
+unset(_cna_xma_setting)

@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -54,6 +55,43 @@ namespace CNA::Content::Pipeline
     };
 
     /** @brief Converts imported WAV semantics into canonical runtime-oriented SoundEffect data. */
+    /**
+     * @brief Encodes a processed sound effect for a console target (L16).
+     *
+     * The content module cannot reach the content-pipeline's external XMA encoder service, so
+     * that service installs one of these with SetXboxSoundEffectEncoder(); CNA.SoundEffectProcessor
+     * uses it for an Xbox 360 build, as XNA's own processor writes XMA there.
+     */
+    class XboxSoundEffectEncoder
+    {
+    public:
+        virtual ~XboxSoundEffectEncoder() = default;
+        /**
+         * @brief Gets what identifies this encoder's output, folded into the processor version.
+         * @return A non-empty fingerprint of the encoder and how it is run.
+         */
+        [[nodiscard]] virtual std::string Identity() const = 0;
+        /**
+         * @brief Encodes @p sound.
+         * @param sound The processed PCM sound effect.
+         * @return The encoded format, data and measured loop.
+         * @throws Microsoft::Xna::Framework::Content::ContentLoadException When encoding fails.
+         */
+        [[nodiscard]] virtual EncodedSoundEffectFormat Encode(const ProcessedSoundEffect& sound) const = 0;
+    };
+
+    /**
+     * @brief Installs the encoder Xbox 360 sound effects are built with; null restores PCM.
+     * @param encoder The encoder, or null.
+     */
+    void SetXboxSoundEffectEncoder(std::shared_ptr<const XboxSoundEffectEncoder> encoder);
+
+    /**
+     * @brief Gets the installed Xbox 360 sound-effect encoder.
+     * @return The encoder, or null when Xbox builds keep PCM.
+     */
+    [[nodiscard]] std::shared_ptr<const XboxSoundEffectEncoder> GetXboxSoundEffectEncoder();
+
     class SoundEffectProcessor final : public ContentProcessor
     {
     public:

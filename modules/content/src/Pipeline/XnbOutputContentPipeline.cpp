@@ -291,6 +291,31 @@ namespace CNA::Content::Pipeline
                 // no loop, Windows, Windows Phone and HiDef
                 // (`tests/reference/xna40/differential-sound-widths/`,
                 // `XNASWEEP-197`).
+                if (sound.encoded.has_value())
+                {
+                    // L16: a target-native encoding replaces the PCM description outright; the
+                    // writer swaps the extension for Xbox (XnbAssetTypeWriters.cpp).
+                    const EncodedSoundEffectFormat& encoded = *sound.encoded;
+                    Xnb::XnbSoundEffectData native;
+                    native.formatTag = encoded.formatTag;
+                    native.channels = encoded.channels;
+                    native.sampleRate = encoded.sampleRate;
+                    native.averageBytesPerSecond = encoded.averageBytesPerSecond;
+                    native.blockAlign = encoded.blockAlign;
+                    native.bitsPerSample = encoded.bitsPerSample;
+                    native.extensionData = encoded.extension;
+                    native.samples = encoded.data;
+                    native.loopStart = encoded.loopStart;
+                    native.loopLength = encoded.loopLength;
+                    native.storedDurationMs =
+                        sound.sampleRate == 0u
+                            ? 0u
+                            : static_cast<std::uint32_t>(
+                                  (static_cast<std::uint64_t>(sound.frameCount) * 1000ull) /
+                                  sound.sampleRate);
+                    return MakeResult(
+                        Xnb::WriteXnbAssetWithIdentity(native, Options(), logicalName));
+                }
                 const std::uint16_t sampleBytes =
                     static_cast<std::uint16_t>(ProcessedPcmSampleBytes(sound.encoding));
                 Xnb::XnbSoundEffectData converted;

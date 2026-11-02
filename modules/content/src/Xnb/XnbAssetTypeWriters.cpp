@@ -1012,7 +1012,11 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbSoundEffectData& value)
             {
-                output.RequireVerifiedPlatformPayload("SoundEffectWriter", true);
+                // L16: an XMA2 payload is the encoder's console bitstream and its whole format
+                // block, extension included, is swapped below -- nothing is half converted. A PCM
+                // payload's sample bytes still are not, so that stays refused without the opt-in.
+                if (value.formatTag != 0x0166u)
+                    output.RequireVerifiedPlatformPayload("SoundEffectWriter", true);
                 const bool swap = output.Platform() == 'x';
                 // Always the full 18-byte WAVEFORMATEX, with cbSize present and zero when there
                 // is no extension -- not the 16-byte PCMWAVEFORMAT that omits cbSize entirely.
@@ -1036,7 +1040,27 @@ namespace CNA::Internal::Xnb
                 output.WriteUInt16(Swap16(swap, value.bitsPerSample));
                 output.WriteUInt16(
                     Swap16(swap, static_cast<std::uint16_t>(value.extensionData.size())));
-                if (!value.extensionData.empty()) { output.WriteBytes(value.extensionData); }
+                if (swap && value.formatTag == 0x0166u && value.extensionData.size() >= 34u)
+                {
+                    // L16: the XMA2WAVEFORMATEX extension is fields, not bytes -- the genuine
+                    // Xbox fixture stores every one big-endian like the header above
+                    // (docs/xma-encoder-backend.md). Widths: NumStreams 2, ChannelMask,
+                    // SamplesEncoded, BytesPerBlock, PlayBegin, PlayLength, LoopBegin, LoopLength
+                    // 4 each, LoopCount and EncoderVersion 1, BlockCount 2.
+                    std::vector<std::uint8_t> extension = value.extensionData;
+                    const auto reverse = [&extension](std::size_t at, std::size_t width) {
+                        std::reverse(extension.begin() + static_cast<std::ptrdiff_t>(at),
+                                     extension.begin() + static_cast<std::ptrdiff_t>(at + width));
+                    };
+                    reverse(0u, 2u);
+                    for (std::size_t at = 2u; at < 30u; at += 4u) reverse(at, 4u);
+                    reverse(32u, 2u);
+                    output.WriteBytes(extension);
+                }
+                else if (!value.extensionData.empty())
+                {
+                    output.WriteBytes(value.extensionData);
+                }
                 output.WriteLengthPrefixedBytes(value.samples);
                 output.WriteInt32(value.loopStart);
                 output.WriteInt32(value.loopLength);

@@ -1976,13 +1976,9 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
   process/GPU budget. Vertex joints/weights are not exhaustively validated. Legacy skeleton/vertex
   scalars remain native copies of little-endian converter output, without big-endian execution
   qualification; see `docs/skinned-model-ext.md` for the current validation scope.
-- The external XMA adapter validates only RIFF/chunk/tag structure, preserves requested loop
-  fields rather than extracting measured quantized ones, and does not make the built-in Xbox WAV
-  route select XMA. Its filename/mtime identity is neither a full dependency fingerprint nor
-  consumed by a compiler component-version path. Source has optional compile-definition
-  fallbacks but current CMake has no matching cache-option wiring. Source-inspected 2026-11-01;
-  stub tests do not qualify real encoder output, incremental invalidation or console playback
-  (`docs/xma-encoder-backend.md`).
+- No real XMA encoder output or console playback is qualified: the external adapter's XMA2
+  checks, measured loop, fingerprint, processor version and Xbox WAV routing (L16, 2026-11-02) are
+  verified with stub and fake encoders only (`docs/xma-encoder-backend.md`).
 - Native Camera has no public reopen/device-selector route after Lost. SDL3 removal and denial
   events and a revoked permission now end a session (CNA-FIX-L18), verified with pushed SDL events
   only: no physical unplug or revocation has been run (`docs/cna-devices-camera-design.md`).

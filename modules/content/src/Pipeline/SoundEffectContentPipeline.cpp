@@ -2,6 +2,7 @@
 
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
 
+#include <mutex>
 #include <stdexcept>
 
 #include "CNA/Content/Cnb/CnbFormat.hpp"
@@ -65,11 +66,42 @@ namespace CNA::Content::Pipeline
         return ContentValue::Create(ImportedSoundType, std::move(imported));
     }
 
+    namespace
+    {
+        std::mutex& XboxEncoderMutex()
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
+
+        std::shared_ptr<const XboxSoundEffectEncoder>& XboxEncoderSlot()
+        {
+            static std::shared_ptr<const XboxSoundEffectEncoder> encoder;
+            return encoder;
+        }
+    }
+
+    void SetXboxSoundEffectEncoder(std::shared_ptr<const XboxSoundEffectEncoder> encoder)
+    {
+        const std::lock_guard<std::mutex> lock(XboxEncoderMutex());
+        XboxEncoderSlot() = std::move(encoder);
+    }
+
+    std::shared_ptr<const XboxSoundEffectEncoder> GetXboxSoundEffectEncoder()
+    {
+        const std::lock_guard<std::mutex> lock(XboxEncoderMutex());
+        return XboxEncoderSlot();
+    }
+
     ContentComponentIdentity SoundEffectProcessor::Identity() const
     {
         // Build version 3: the processed value is container-neutral and keeps the source's own
         // sample width, so an 8-bit source built by version 2 -- which widened it to 16 -- is a
         // different asset (`XNASWEEP-197`).
+        // L16: with an Xbox encoder attached, what that encoder is decides an Xbox build's bytes,
+        // so its fingerprint is part of the version and replacing it invalidates the output.
+        if (const auto encoder = GetXboxSoundEffectEncoder(); encoder != nullptr)
+            return {kSoundEffectProcessorName, "3+xbox:" + encoder->Identity()};
         return {kSoundEffectProcessorName, "3"};
     }
 
@@ -181,6 +213,20 @@ namespace CNA::Content::Pipeline
                         ProcessedPcmEncodingName(sound.encoding) + " data with " +
                         std::to_string(sound.frameCount) + " frame(s) at " +
                         std::to_string(sound.sampleRate) + " Hz.");
+        // L16: XNA's Xbox 360 build writes XMA. With an encoder attached, so does this one;
+        // without one the PCM it writes is the recorded divergence
+        // (`audio_wav_soundeffect_xbox360`, docs/xma-encoder-backend.md).
+        if (context.Environment().targetPlatform == ContentTargetPlatform::Xbox360)
+        {
+            if (const auto encoder = GetXboxSoundEffectEncoder(); encoder != nullptr)
+            {
+                sound.encoded = encoder->Encode(sound);
+                context.LogInfo("encoded the Xbox 360 SoundEffect with " + encoder->Identity() +
+                                ": " + std::to_string(sound.encoded->data.size()) + " byte(s), loop " +
+                                std::to_string(sound.encoded->loopStart) + "+" +
+                                std::to_string(sound.encoded->loopLength) + ".");
+            }
+        }
         return ContentValue::Create(ProcessedSoundEffectType, std::move(sound));
     }
 
@@ -207,8 +253,15 @@ namespace CNA::Content::Pipeline
     ContentWriteResult SoundEffectContentWriter::Write(const ContentValue& input,
                                                        const std::string& logicalName) const
     {
-        const Cnb::CnbSoundEffectData sound =
-            ToCnbSoundEffect(input.Get<ProcessedSoundEffect>());
+        const ProcessedSoundEffect& processed = input.Get<ProcessedSoundEffect>();
+        if (processed.encoded.has_value())
+        {
+            // L16: CNB stores PCM for CNA's own runtime, which cannot play XMA.
+            throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                "'" + logicalName + "': an Xbox 360 XMA-encoded SoundEffect has no CNB form; "
+                "build it as .xnb, or without an XMA encoder attached.");
+        }
+        const Cnb::CnbSoundEffectData sound = ToCnbSoundEffect(processed);
         return {Cnb::EncodeSoundEffectToCnb(sound, logicalName),
                 Cnb::CnbAssetTypeId::SoundEffect,
                 "Microsoft.Xna.Framework.Audio.SoundEffect",

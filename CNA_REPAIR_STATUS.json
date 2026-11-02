@@ -528,9 +528,12 @@
       "id": "CNA-FIX-L16",
       "source_section": "5.2 Limitations",
       "summary": "The external XMA adapter validates only RIFF/chunk/tag structure, preserves requested loop fields rather than extracting measured quantized ones, and does not make the built-in Xbox WAV route select XMA.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "The external XMA adapter now checks the encoder's XMA2WAVEFORMATEX (extension present, channels, NumStreams, whole 2048-byte packets within BlockCount x BytesPerBlock, play region and loop inside SamplesEncoded) and returns the encoder's own measured loop; its identity fingerprints the program's SHA-256, launcher and argument template; CNA_XMA_ENCODER_EXECUTABLE/LAUNCHER are CMake cache options; and with an encoder attached the built-in Xbox 360 WAV route (CNA.SoundEffectProcessor) writes XMA, its version carrying the encoder identity, with the XNB writer swapping the whole XMA2 block big-endian. Real encoder output and console playback stay unqualified (handoff 5.2).",
+      "evidence": [
+        "XmaEncoderService.* 11/11 (stub encoders: valid block, zeroed extension refused, measured loop, fingerprint by bytes/arguments); XnbOutputContentPipelineTest.AnAttachedXboxEncoderMakesTheXboxWavRouteWriteXma (fake encoder: big-endian XMA2 header and extension, Windows stays PCM, version 3+xbox:<identity>).",
+        "cmake-build-software: CnaContentPipelineTests 579 pass + 1 SDK skip; CnaContentTests 2090 pass, failures only the no-audio-device baseline plus GltfRendererPbrFallbackPolicy, fixed separately (evidence strings after L46)."
+      ]
     },
     {
       "id": "CNA-FIX-L17",

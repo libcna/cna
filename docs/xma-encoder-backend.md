@@ -68,10 +68,14 @@ documents XMA buffer alignment constraints, separately from this fixture's measu
 
 ## Current CNA routes
 
-The built-in default/Best WAV sound-effect route writes PCM for all three target identities. For the measured
-Windows/Phone corpus it agrees with XNA; for Xbox the PCM/XMA difference is recorded as
-audio_wav_soundeffect_xbox360 in `tools/xna-pipeline-oracle/differential/decisions.json`.
-Attaching an encoder does not automatically make that built-in route choose XMA.
+The built-in WAV sound-effect route (`CNA.SoundEffectProcessor`) writes PCM for Windows and Windows
+Phone, which agrees with XNA for the measured corpus. For an Xbox 360 build it writes XMA when an
+encoder is attached (L16, 2026-11-02): `SetBuildXmaEncoder` installs an
+`XboxSoundEffectEncoder` that the processor uses for that target, and the XNB writer emits the
+encoder's XMA2WAVEFORMATEX with every field, extension included, big-endian as in the genuine
+fixture. Without an encoder the Xbox build stays PCM, and that difference remains recorded as
+audio_wav_soundeffect_xbox360 in `tools/xna-pipeline-oracle/differential/decisions.json`. A
+`.cnb` build refuses an XMA-encoded sound effect: CNB stores PCM for CNA's own runtime.
 
 Explicit AudioContent.ConvertFormat(ConversionFormat::Xma, ...) uses the process-wide
 BuildXmaEncoder service. Without an available service it throws InvalidContentException including
@@ -90,11 +94,10 @@ external service before source discovery.
 --xma-encoder-arg <argument>      repeatable; CNA_XMA_ENCODER_ARGS is the fallback
 ```
 
-Executable resolution is explicit option, then environment, then a
-CNA_XMA_ENCODER_EXECUTABLE compile-definition default if supplied; no encoder PATH search is
-performed. Launcher resolution similarly has a compile-definition fallback. The service contains
-those fallbacks, but current CMake files do not wire matching cache options/definitions; passing
-an arbitrary -DCNA_XMA_ENCODER_EXECUTABLE cache variable alone does not attach an encoder.
+Executable resolution is explicit option, then environment, then the configure-time default:
+the `CNA_XMA_ENCODER_EXECUTABLE` and `CNA_XMA_ENCODER_LAUNCHER` cache entries, which
+`modules/content-pipeline/CMakeLists.txt` turns into compile definitions when set. No encoder PATH
+search is performed.
 Environment argument text is split on
 whitespace, without shell quoting; repeated CLI arguments preserve individual argument boundaries.
 The default template is two arguments, {input} and {output}. Substitutions also include {quality}
@@ -106,23 +109,29 @@ guarantee that every tool's .xma output satisfies it. Use a wrapper for other co
 
 Available currently means the configured path exists, not that it is executable, correctly
 licensed, able to start or capable of encoding. Encode reports launch/nonzero-exit/parse failures.
-The parser checks RIFF/WAVE, chunk bounds, required chunks and the tag; it does not fully validate
-XMA2 extension semantics, playable bitstream contents or console acceptance.
+The parser checks RIFF/WAVE, chunk bounds, required chunks and the tag, and then the XMA2
+extension: present (cbSize at least 34), its channel count the source's, NumStreams within it,
+BytesPerBlock and the data in whole 2048-byte packets, the data within BlockCount x BytesPerBlock,
+and both the play region and the loop inside SamplesEncoded (the fixture's loop, 384 + 22016,
+runs past its PlayLength of 22050 but not past SamplesEncoded). It does not decode the bitstream
+or qualify console acceptance.
 
-The adapter currently copies requested loopStart/loopLength into its result rather than extracting
-the encoder's quantized loop region. AudioContent adopts the returned format/data/loop fields.
-Do not infer fixture-equivalent loop behavior from a successful stub conversion.
+The loop the result carries is the encoder's own LoopBegin/LoopLength, read from that extension:
+XMA quantizes the loop (the fixture asked for 0/22050 and carries 384/22016), so the requested
+values would describe a loop the stream does not have. AudioContent adopts the returned
+format/data/loop fields.
 
-## Identity and incremental-build limitation
+## Identity and incremental builds
 
-XmaEncoderIdentity currently contains the executable's filename and last-write timestamp.
-It is not a content hash, full-path identity or common encoder version query, and does not include
-launcher/template/environment inputs. Equal filenames/timestamps can collide.
+XmaEncoderIdentity is the executable's filename plus a fingerprint of what decides the output: the
+SHA-256 of the program's bytes, the launcher, and the argument template (L16). The same program
+copied elsewhere fingerprints the same; a changed program or a differently run one does not. There
+is still no version query, because no command is common to every encoder.
 
-The source comparison also found no compiler component-version consumer of BuildXmaEncoder's
-Identity; the service test checks identity differences, not a real incremental rebuild after
-replacing an encoder. The older promise of automatic encoder-change invalidation was therefore
-too strong. Qualify/integrate that dependency before relying on cached custom-processor output.
+With an encoder attached, `CNA.SoundEffectProcessor`'s component version is
+`3+xbox:<identity>`, so the incremental manifest rebuilds sound effects when the encoder changes
+(conservatively for every target, not only Xbox). Custom processors that call
+`AudioContent::ConvertFormat(Xma, ...)` must fold the identity into their own version themselves.
 
 ## Verification and future qualification
 
@@ -131,6 +140,8 @@ the per-target audio processor case pass on the private runner. Tests use Python
 and the committed genuine fixture; no real XMA encoding or console playback is qualified.
 The independent parser also accepts all three target fixture files.
 
-A future real-encoder integration still needs built-in Xbox routing, measured loop handling,
-complete format/target-byte-order handling, dependency fingerprinting and genuine output/playback
-comparisons. Only remove the recorded divergence when those comparisons actually pass.
+L16 (2026-11-02) added the extension checks, the measured loop, the fingerprint, the processor
+version, the CMake options and the Xbox routing, verified with stub encoders and a fake encoder
+(`XmaEncoderService.*`, `XnbOutputContentPipelineTest.AnAttachedXboxEncoderMakesTheXboxWavRouteWriteXma`).
+A real encoder's output and console playback are still unqualified; only remove the recorded
+divergence when genuine output/playback comparisons actually pass.
