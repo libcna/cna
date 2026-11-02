@@ -9,6 +9,43 @@
 #include "../CnaCApiMarshal.hpp"
 #include "../CnaCApiOutput.hpp"
 
+CNA_Result cna_gamer_get_type_name_size(
+    const CNA_GamerHandle gamer,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_get_type_name_size: out_bytes is null.");
+        }
+        Gamer* object{};
+        if (const CNA_Result routeResult = BorrowGamerBase(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->GetTypeName(), out_bytes);
+    });
+}
+
+CNA_Result cna_gamer_copy_type_name(
+    const CNA_GamerHandle gamer,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Gamer* object{};
+        if (const CNA_Result routeResult = BorrowGamerBase(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->GetTypeName(), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_gamer_get_display_name_size(
     const CNA_GamerHandle gamer,
     uint64_t* const out_bytes)

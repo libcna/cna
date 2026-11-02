@@ -23211,6 +23211,531 @@
       "approved_symbols": [
         "CPP-AD96BA8A4080"
       ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-config-cpp-ff40e7e44ed5",
+      "qualified_name_regex": "^CNA::GamerServices::Configuration$",
+      "signature_regex": "^$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "CNA_GamerServicesConfiguration and cna_gamer_services_configuration_{init,validate,set_override,resolve}_ext expose copied bounded UTF-8 settings, defaults, reset and native resolution. First-caller serialization and late initialization refusal are explicit.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-FF40E7E44ED5"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-config-cpp-d3ff14cf1f60",
+      "qualified_name_regex": "^CNA::GamerServices::Configuration::endpoint$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_GamerServicesConfiguration and cna_gamer_services_configuration_{init,validate,set_override,resolve}_ext expose copied bounded UTF-8 settings, defaults, reset and native resolution. First-caller serialization and late initialization refusal are explicit.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D3FF14CF1F60"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-config-cpp-198bcbb07d53",
+      "qualified_name_regex": "^CNA::GamerServices::Configuration::gameId$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_GamerServicesConfiguration and cna_gamer_services_configuration_{init,validate,set_override,resolve}_ext expose copied bounded UTF-8 settings, defaults, reset and native resolution. First-caller serialization and late initialization refusal are explicit.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-198BCBB07D53"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-config-cpp-e146e76d37a0",
+      "qualified_name_regex": "^CNA::GamerServices::Configuration::caBundle$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_GamerServicesConfiguration and cna_gamer_services_configuration_{init,validate,set_override,resolve}_ext expose copied bounded UTF-8 settings, defaults, reset and native resolution. First-caller serialization and late initialization refusal are explicit.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E146E76D37A0"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-config-cpp-be531f08e6b0",
+      "qualified_name_regex": "^CNA::GamerServices::Configuration::insecureLoopback$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_GamerServicesConfiguration and cna_gamer_services_configuration_{init,validate,set_override,resolve}_ext expose copied bounded UTF-8 settings, defaults, reset and native resolution. First-caller serialization and late initialization refusal are explicit.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-BE531F08E6B0"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-config-cpp-1fa0cf32b5de",
+      "qualified_name_regex": "^CNA::GamerServices::Configuration::avatarCatalogUpdates$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_GamerServicesConfiguration and cna_gamer_services_configuration_{init,validate,set_override,resolve}_ext expose copied bounded UTF-8 settings, defaults, reset and native resolution. First-caller serialization and late initialization refusal are explicit.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1FA0CF32B5DE"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-config-cpp-ad49b78853f5",
+      "qualified_name_regex": "^CNA::GamerServices::Configuration::maxAvatarCatalogBytes$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_GamerServicesConfiguration and cna_gamer_services_configuration_{init,validate,set_override,resolve}_ext expose copied bounded UTF-8 settings, defaults, reset and native resolution. First-caller serialization and late initialization refusal are explicit.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-AD49B78853F5"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-config-cpp-989bfe986108",
+      "qualified_name_regex": "^CNA::GamerServices::Configuration::titleVersion$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_GamerServicesConfiguration and cna_gamer_services_configuration_{init,validate,set_override,resolve}_ext expose copied bounded UTF-8 settings, defaults, reset and native resolution. First-caller serialization and late initialization refusal are explicit.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-989BFE986108"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-config-cpp-d858f581fed2",
+      "qualified_name_regex": "^CNA::GamerServices::setConfigurationOverride$",
+      "signature_regex": "^\\(std::optional<\\ Configuration\\ >\\ configuration\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "CNA_GamerServicesConfiguration and cna_gamer_services_configuration_{init,validate,set_override,resolve}_ext expose copied bounded UTF-8 settings, defaults, reset and native resolution. First-caller serialization and late initialization refusal are explicit.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D858F581FED2"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-config-cpp-881bdc81429d",
+      "qualified_name_regex": "^CNA::GamerServices::resolveConfiguration$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "CNA_GamerServicesConfiguration and cna_gamer_services_configuration_{init,validate,set_override,resolve}_ext expose copied bounded UTF-8 settings, defaults, reset and native resolution. First-caller serialization and late initialization refusal are explicit.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-881BDC81429D"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-config-cpp-8d90d1f4dfda",
+      "qualified_name_regex": "^CNA::GamerServices::validateConfiguration$",
+      "signature_regex": "^\\(const\\ Configuration\\ \\&configuration\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "CNA_GamerServicesConfiguration and cna_gamer_services_configuration_{init,validate,set_override,resolve}_ext expose copied bounded UTF-8 settings, defaults, reset and native resolution. First-caller serialization and late initialization refusal are explicit.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-8D90D1F4DFDA"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-names-cpp-9863c9cf560c",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::FriendGamer::GetTypeName$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_gamer_get_type_name_size and cna_gamer_copy_type_name dispatch virtual names through all five gamer kinds with existing loan/session guards.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9863C9CF560C"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-names-cpp-8f7e484904e0",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::Gamer::GetTypeName$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_gamer_get_type_name_size and cna_gamer_copy_type_name dispatch virtual names through all five gamer kinds with existing loan/session guards.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-8F7E484904E0"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-properties-cpp-80c7918a1ea8",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::PropertyDictionary::Add$",
+      "signature_regex": "^\\(const\\ System::Collections::Generic::KeyValuePair<\\ std::string,\\ std::any\\ >\\ \\&item\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_property_dictionary_add_pair_ext, cna_property_dictionary_contains_pair_ext and cna_property_dictionary_remove_pair_ext copy an existing source dictionary value without erasing its native type or stream reference identity.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-80C7918A1EA8"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-properties-cpp-720da85049f4",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::PropertyDictionary::Contains$",
+      "signature_regex": "^\\(const\\ System::Collections::Generic::KeyValuePair<\\ std::string,\\ std::any\\ >\\ \\&item\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_property_dictionary_add_pair_ext, cna_property_dictionary_contains_pair_ext and cna_property_dictionary_remove_pair_ext copy an existing source dictionary value without erasing its native type or stream reference identity.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-720DA85049F4"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-properties-cpp-d7f570987996",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::PropertyDictionary::Remove$",
+      "signature_regex": "^\\(const\\ System::Collections::Generic::KeyValuePair<\\ std::string,\\ std::any\\ >\\ \\&item\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_property_dictionary_add_pair_ext, cna_property_dictionary_contains_pair_ext and cna_property_dictionary_remove_pair_ext copy an existing source dictionary value without erasing its native type or stream reference identity.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D7F570987996"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-names-cpp-6b048579ce1d",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::SignedInGamer::GetTypeName$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_gamer_get_type_name_size and cna_gamer_copy_type_name dispatch virtual names through all five gamer kinds with existing loan/session guards.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6B048579CE1D"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-clipboard-cpp-90adb04767bb",
+      "qualified_name_regex": "^CNA::Input::Clipboard::GetPrimarySelectionTextEXT$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ClipboardOffer and cna_clipboard_{set_data,set_formats,has_data,get_data_size,copy_data,get_mime_type_count,get_mime_type_size_at,copy_mime_type_at}_ext plus primary-selection size/copy/set/has routes preserve native empty/refusal behavior and copy binary payloads.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-90ADB04767BB"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-clipboard-cpp-98ed7ed49e46",
+      "qualified_name_regex": "^CNA::Input::Clipboard::SetPrimarySelectionTextEXT$",
+      "signature_regex": "^\\(const\\ std::string\\ \\&text\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ClipboardOffer and cna_clipboard_{set_data,set_formats,has_data,get_data_size,copy_data,get_mime_type_count,get_mime_type_size_at,copy_mime_type_at}_ext plus primary-selection size/copy/set/has routes preserve native empty/refusal behavior and copy binary payloads.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-98ED7ED49E46"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-clipboard-cpp-cf68b06f793d",
+      "qualified_name_regex": "^CNA::Input::Clipboard::HasPrimarySelectionTextEXT$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ClipboardOffer and cna_clipboard_{set_data,set_formats,has_data,get_data_size,copy_data,get_mime_type_count,get_mime_type_size_at,copy_mime_type_at}_ext plus primary-selection size/copy/set/has routes preserve native empty/refusal behavior and copy binary payloads.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-CF68B06F793D"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-clipboard-cpp-84e74adc2bdd",
+      "qualified_name_regex": "^CNA::Input::Clipboard::GetMimeTypesEXT$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ClipboardOffer and cna_clipboard_{set_data,set_formats,has_data,get_data_size,copy_data,get_mime_type_count,get_mime_type_size_at,copy_mime_type_at}_ext plus primary-selection size/copy/set/has routes preserve native empty/refusal behavior and copy binary payloads.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-84E74ADC2BDD"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-clipboard-cpp-aced2401fe52",
+      "qualified_name_regex": "^CNA::Input::Clipboard::HasDataEXT$",
+      "signature_regex": "^\\(const\\ std::string\\ \\&mimeType\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ClipboardOffer and cna_clipboard_{set_data,set_formats,has_data,get_data_size,copy_data,get_mime_type_count,get_mime_type_size_at,copy_mime_type_at}_ext plus primary-selection size/copy/set/has routes preserve native empty/refusal behavior and copy binary payloads.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-ACED2401FE52"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-clipboard-cpp-8baa85a62f71",
+      "qualified_name_regex": "^CNA::Input::Clipboard::GetDataEXT$",
+      "signature_regex": "^\\(const\\ std::string\\ \\&mimeType\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ClipboardOffer and cna_clipboard_{set_data,set_formats,has_data,get_data_size,copy_data,get_mime_type_count,get_mime_type_size_at,copy_mime_type_at}_ext plus primary-selection size/copy/set/has routes preserve native empty/refusal behavior and copy binary payloads.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-8BAA85A62F71"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-clipboard-cpp-51a28e2c2ae4",
+      "qualified_name_regex": "^CNA::Input::Clipboard::SetDataEXT$",
+      "signature_regex": "^\\(const\\ std::string\\ \\&mimeType,\\ const\\ std::vector<\\ std::uint8_t\\ >\\ \\&data\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ClipboardOffer and cna_clipboard_{set_data,set_formats,has_data,get_data_size,copy_data,get_mime_type_count,get_mime_type_size_at,copy_mime_type_at}_ext plus primary-selection size/copy/set/has routes preserve native empty/refusal behavior and copy binary payloads.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-51A28E2C2AE4"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-clipboard-cpp-eda814093a4f",
+      "qualified_name_regex": "^CNA::Input::Clipboard::SetDataEXT$",
+      "signature_regex": "^\\(const\\ std::vector<\\ std::pair<\\ std::string,\\ std::vector<\\ std::uint8_t\\ >\\ >\\ >\\ \\&formats\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ClipboardOffer and cna_clipboard_{set_data,set_formats,has_data,get_data_size,copy_data,get_mime_type_count,get_mime_type_size_at,copy_mime_type_at}_ext plus primary-selection size/copy/set/has routes preserve native empty/refusal behavior and copy binary payloads.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-EDA814093A4F"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-names-cpp-ab41d4d2a034",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::LocalNetworkGamer::GetTypeName$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_gamer_get_type_name_size and cna_gamer_copy_type_name dispatch virtual names through all five gamer kinds with existing loan/session guards.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-AB41D4D2A034"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-gamer-names-cpp-b6c79f2021f8",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkGamer::GetTypeName$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_gamer_get_type_name_size and cna_gamer_copy_type_name dispatch virtual names through all five gamer kinds with existing loan/session guards.",
+      "tests": "ServiceFamiliesSmoke.c + ServiceFamiliesNative.cpp: strict C17 executable passed with injected local service; native virtual-name comparison, typed pair/NaN cases, error preservation, thread and late initialization refusal.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B6C79F2021F8"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-window-callbacks-cpp-ed7fa2780ab1",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::FileDropEventArgsEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "cna_game_window_subscribe_{file,text}_drop_ext and cna_game_window_raise_{file,text}_drop_ext carry scoped UTF-8 payloads and owned cancellable registrations. Logical-size provider remains unbound: protected native access requires a separate runtime decision.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-ED7FA2780AB1"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-window-callbacks-cpp-82b14b0d964b",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::FileDropEventArgsEXT::FileDropEventArgsEXT$",
+      "signature_regex": "^\\(std::vector<\\ SharpRuntime::String\\ >\\ files\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "cna_game_window_subscribe_{file,text}_drop_ext and cna_game_window_raise_{file,text}_drop_ext carry scoped UTF-8 payloads and owned cancellable registrations. Logical-size provider remains unbound: protected native access requires a separate runtime decision.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-82B14B0D964B"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-window-callbacks-cpp-e669cde5a0c5",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::FileDropEventArgsEXT::getFilesProperty$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_game_window_subscribe_{file,text}_drop_ext and cna_game_window_raise_{file,text}_drop_ext carry scoped UTF-8 payloads and owned cancellable registrations. Logical-size provider remains unbound: protected native access requires a separate runtime decision.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E669CDE5A0C5"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-window-callbacks-cpp-f40f1b3920f7",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameWindow::FileDropEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "event"
+      ],
+      "mapping": "cna_game_window_subscribe_{file,text}_drop_ext and cna_game_window_raise_{file,text}_drop_ext carry scoped UTF-8 payloads and owned cancellable registrations. Logical-size provider remains unbound: protected native access requires a separate runtime decision.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F40F1B3920F7"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-window-callbacks-cpp-63ea6833f7bf",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameWindow::TextDropEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "event"
+      ],
+      "mapping": "cna_game_window_subscribe_{file,text}_drop_ext and cna_game_window_raise_{file,text}_drop_ext carry scoped UTF-8 payloads and owned cancellable registrations. Logical-size provider remains unbound: protected native access requires a separate runtime decision.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-63EA6833F7BF"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-window-callbacks-cpp-f8a240f1cf70",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::TextDropEventArgsEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "cna_game_window_subscribe_{file,text}_drop_ext and cna_game_window_raise_{file,text}_drop_ext carry scoped UTF-8 payloads and owned cancellable registrations. Logical-size provider remains unbound: protected native access requires a separate runtime decision.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F8A240F1CF70"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-window-callbacks-cpp-02eafc410417",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::TextDropEventArgsEXT::TextDropEventArgsEXT$",
+      "signature_regex": "^\\(SharpRuntime::String\\ text\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "cna_game_window_subscribe_{file,text}_drop_ext and cna_game_window_raise_{file,text}_drop_ext carry scoped UTF-8 payloads and owned cancellable registrations. Logical-size provider remains unbound: protected native access requires a separate runtime decision.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-02EAFC410417"
+      ]
+    },
+    {
+      "id": "mth-cabi-008-window-callbacks-cpp-411abdca2a64",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::TextDropEventArgsEXT::getTextProperty$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_game_window_subscribe_{file,text}_drop_ext and cna_game_window_raise_{file,text}_drop_ext carry scoped UTF-8 payloads and owned cancellable registrations. Logical-size provider remains unbound: protected native access requires a separate runtime decision.",
+      "tests": "ServiceWindowSmoke.c + ServiceWindowNative.cpp: strict C17 executable built, runtime execution reserved to integration owner. Injected clipboard and native drop payload comparisons, owner thread, self-unregister, reentrancy and source teardown checks; no physical clipboard qualification claimed.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-411ABDCA2A64"
+      ]
     }
   ]
 }

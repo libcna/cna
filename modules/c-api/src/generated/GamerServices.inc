@@ -63,6 +63,38 @@ CNA_Result cna_signed_in_gamer_copy_gamertag(
     });
 }
 
+CNA_Result cna_gamer_services_configuration_resolve_ext(
+    CNA_GamerServicesConfiguration* const configuration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ConfigurationResolve(configuration);
+    });
+}
+
+CNA_Result cna_gamer_services_configuration_set_override_ext(
+    const CNA_GamerServicesConfiguration* const configuration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ConfigurationSetOverride(configuration);
+    });
+}
+
+CNA_Result cna_gamer_services_configuration_validate_ext(
+    const CNA_GamerServicesConfiguration* const configuration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ConfigurationValidate(configuration);
+    });
+}
+
+CNA_Result cna_gamer_services_configuration_init_ext(
+    CNA_GamerServicesConfiguration* const configuration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ConfigurationInit(configuration);
+    });
+}
+
 CNA_Result cna_signed_in_gamer_create_ext(
     const CNA_StringView gamertag,
     const CNA_Bool is_signed_in_to_live,

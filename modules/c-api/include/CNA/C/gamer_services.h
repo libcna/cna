@@ -4351,6 +4351,159 @@ CNA_C_API CNA_Result cna_avatar_renderer_draw_bones(
     uint64_t bone_count,
     const CNA_AvatarExpression* expression);
 
+/**
+ * @brief Queries the virtual native gamer type name.
+ *
+ * @param gamer Owned or callback-borrowed gamer of any derived kind.
+ * @param out_bytes Required UTF-8 byte count, excluding a terminator.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Runs on the handle owner thread. Callback loans expire at callback return.
+ */
+CNA_C_API CNA_Result cna_gamer_get_type_name_size(CNA_GamerHandle gamer, uint64_t* out_bytes);
+
+/**
+ * @brief Queries the virtual native gamer type name.
+ *
+ * @param gamer Owned or callback-borrowed gamer of any derived kind.
+ * @param destination Caller buffer; null only with zero capacity.
+ * @param capacity Buffer capacity in bytes.
+ * @param out_bytes Required byte count; short buffers are untouched.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Runs on the handle owner thread. Callback loans expire at callback return.
+ */
+CNA_C_API CNA_Result cna_gamer_copy_type_name(CNA_GamerHandle gamer, char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/**
+ * @brief Adds a key/value pair using a value from another dictionary.
+ *
+ * @param dictionary Destination dictionary handle.
+ * @param key Destination UTF-8 key, no embedded NUL.
+ * @param source Source dictionary handle, possibly the destination itself.
+ * @param source_key UTF-8 key whose current value supplies the pair value.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Copies the native boxed value, preserving its runtime type and stream identity.
+ * The source must contain source_key. Add refuses duplicate destination keys; mismatches
+ * do not mutate either dictionary. Adding a stream retains its native owner pools until
+ * destination handle destruction, including through chained pair copies; releasing or
+ * clearing the source cannot invalidate it. Owner-thread only; outputs unchanged on failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_add_pair_ext(CNA_PropertyDictionaryHandle dictionary, CNA_StringView key, CNA_PropertyDictionaryHandle source, CNA_StringView source_key);
+
+/**
+ * @brief Tests an exact key/value pair using a value from another dictionary.
+ *
+ * @param dictionary Destination dictionary handle.
+ * @param key Destination UTF-8 key, no embedded NUL.
+ * @param source Source dictionary handle, possibly the destination itself.
+ * @param source_key UTF-8 key whose current value supplies the pair value.
+ * @param out_matches Receives whether the exact typed pair exists.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Copies the native boxed value, preserving its runtime type and stream identity.
+ * The source must contain source_key. Add refuses duplicate destination keys; mismatches
+ * do not mutate either dictionary. Adding a stream retains its native owner pools until
+ * destination handle destruction, including through chained pair copies; releasing or
+ * clearing the source cannot invalidate it. Owner-thread only; outputs unchanged on failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_contains_pair_ext(CNA_PropertyDictionaryHandle dictionary, CNA_StringView key, CNA_PropertyDictionaryHandle source, CNA_StringView source_key, CNA_Bool* out_matches);
+
+/**
+ * @brief Removes a key/value pair using a value from another dictionary.
+ *
+ * @param dictionary Destination dictionary handle.
+ * @param key Destination UTF-8 key, no embedded NUL.
+ * @param source Source dictionary handle, possibly the destination itself.
+ * @param source_key UTF-8 key whose current value supplies the pair value.
+ * @param out_matches Receives whether the exact typed pair was removed.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Copies the native boxed value, preserving its runtime type and stream identity.
+ * The source must contain source_key. Add refuses duplicate destination keys; mismatches
+ * do not mutate either dictionary. Adding a stream retains its native owner pools until
+ * destination handle destruction, including through chained pair copies; releasing or
+ * clearing the source cannot invalidate it. Owner-thread only; outputs unchanged on failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_remove_pair_ext(CNA_PropertyDictionaryHandle dictionary, CNA_StringView key, CNA_PropertyDictionaryHandle source, CNA_StringView source_key, CNA_Bool* out_matches);
+
+/** @brief Version-one copied deployment settings. Text is NUL-terminated UTF-8; limits exclude the terminator. */
+typedef struct CNA_GamerServicesConfiguration {
+    /** @brief Structure size in bytes. */
+    uint32_t struct_size;
+    /** @brief Structure version, one. */
+    uint32_t struct_version;
+    /** @brief Copied endpoint text; at most 2048 UTF-8 bytes. */
+    char endpoint[2049];
+    /** @brief Copied game id text; at most 64 UTF-8 bytes. */
+    char game_id[65];
+    /** @brief Copied ca bundle text; at most 4096 UTF-8 bytes. */
+    char ca_bundle[4097];
+    /** @brief Copied title version text; at most 32 UTF-8 bytes. */
+    char title_version[33];
+    /** @brief Permit insecure numeric loopback only; canonical boolean. */
+    CNA_Bool insecure_loopback;
+    /** @brief Enable avatar catalog updates; canonical boolean. */
+    CNA_Bool avatar_catalog_updates;
+    /** @brief Reserved bytes, zero. */
+    uint8_t reserved[6];
+    /** @brief Maximum catalog pack size in bytes. */
+    uint64_t max_avatar_catalog_bytes;
+} CNA_GamerServicesConfiguration;
+/**
+ * @brief Initializes offline configuration defaults.
+ *
+ * @param configuration Caller structure; required.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * All fields are copied. Set, reset and resolve are serialized on their first caller
+ * thread and refused while GamerServicesDispatcher is initialized. Reset restores native
+ * environment/manifest resolution, not empty defaults. Resolve requires an initialized
+ * version-one output and preserves it on failure; oversized native strings return OVERFLOW.
+ * Validation and init are stateless. No connection or credential is created.
+ */
+CNA_C_API CNA_Result cna_gamer_services_configuration_init_ext(CNA_GamerServicesConfiguration* configuration);
+/**
+ * @brief Validates configuration without contacting a service.
+ *
+ * @param configuration Caller structure; required.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * All fields are copied. Set, reset and resolve are serialized on their first caller
+ * thread and refused while GamerServicesDispatcher is initialized. Reset restores native
+ * environment/manifest resolution, not empty defaults. Resolve requires an initialized
+ * version-one output and preserves it on failure; oversized native strings return OVERFLOW.
+ * Validation and init are stateless. No connection or credential is created.
+ */
+CNA_C_API CNA_Result cna_gamer_services_configuration_validate_ext(const CNA_GamerServicesConfiguration* configuration);
+/**
+ * @brief Atomically replaces or resets the deployment override.
+ *
+ * @param configuration Caller structure; null resets the override.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * All fields are copied. Set, reset and resolve are serialized on their first caller
+ * thread and refused while GamerServicesDispatcher is initialized. Reset restores native
+ * environment/manifest resolution, not empty defaults. Resolve requires an initialized
+ * version-one output and preserves it on failure; oversized native strings return OVERFLOW.
+ * Validation and init are stateless. No connection or credential is created.
+ */
+CNA_C_API CNA_Result cna_gamer_services_configuration_set_override_ext(const CNA_GamerServicesConfiguration* configuration);
+/**
+ * @brief Copies the resolved deployment configuration.
+ *
+ * @param configuration Caller structure; required.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * All fields are copied. Set, reset and resolve are serialized on their first caller
+ * thread and refused while GamerServicesDispatcher is initialized. Reset restores native
+ * environment/manifest resolution, not empty defaults. Resolve requires an initialized
+ * version-one output and preserves it on failure; oversized native strings return OVERFLOW.
+ * Validation and init are stateless. No connection or credential is created.
+ */
+CNA_C_API CNA_Result cna_gamer_services_configuration_resolve_ext(CNA_GamerServicesConfiguration* configuration);
+
 #ifdef __cplusplus
 }
 #endif

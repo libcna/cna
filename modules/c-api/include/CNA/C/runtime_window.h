@@ -403,6 +403,64 @@ CNA_C_API CNA_Result cna_game_window_set_keyboard_orientation_emulation_enabled_
     CNA_Bool enabled);
 
 
+/**
+ * @brief Receives file/text drops synchronously on the game owner thread.
+ * @param context Caller context.
+ * @param items Borrowed UTF-8 views, valid only for this invocation; text drops have one item.
+ * @param count Number of items.
+ *
+ * May query game state and unsubscribe, including itself. Do not destroy the game or
+ * throw/longjmp through CNA. Context remains valid through callback return and until
+ * unregister/replacement/source destruction; no new invocation starts after these return.
+ */
+typedef void (*CNA_GameWindowDropCallback)(void* context, const CNA_StringView* items, uint64_t count);
+/**
+ * @brief Registers the native window file drop.
+ *
+ * @param game Active game handle; owner thread.
+ * @param callback Required callback.
+ * @param context Caller-owned context, possibly null.
+ * @param out_registration Owned registration released with cna_game_unsubscribe; failed output is invalid.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Registration does not block game teardown and remains releasable after source death.
+ */
+CNA_C_API CNA_Result cna_game_window_subscribe_file_drop_ext(CNA_Handle game, CNA_GameWindowDropCallback callback, void* context, CNA_GameEventRegistrationHandle* out_registration);
+/**
+ * @brief Registers the native window text drop.
+ *
+ * @param game Active game handle; owner thread.
+ * @param callback Required callback.
+ * @param context Caller-owned context, possibly null.
+ * @param out_registration Owned registration released with cna_game_unsubscribe; failed output is invalid.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Registration does not block game teardown and remains releasable after source death.
+ */
+CNA_C_API CNA_Result cna_game_window_subscribe_text_drop_ext(CNA_Handle game, CNA_GameWindowDropCallback callback, void* context, CNA_GameEventRegistrationHandle* out_registration);
+/**
+ * @brief Raises a native file drop synchronously.
+ *
+ * @param game Active game handle; owner thread.
+ * @param files Call-only array of UTF-8 paths; null only for zero count.
+ * @param count Number of paths.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * All input is validated and copied before dispatch. Embedded NUL is rejected.
+ * Subscribers may unsubscribe during dispatch; cancelled subscribers are not invoked later.
+ */
+CNA_C_API CNA_Result cna_game_window_raise_file_drop_ext(CNA_Handle game, const CNA_StringView* files, uint64_t count);
+/**
+ * @brief Raises a native text drop synchronously.
+ *
+ * @param game Active game handle; owner thread.
+ * @param text Call-only UTF-8 drop text.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * All input is validated and copied before dispatch. Embedded NUL is rejected.
+ * Subscribers may unsubscribe during dispatch; cancelled subscribers are not invoked later.
+ */
+CNA_C_API CNA_Result cna_game_window_raise_text_drop_ext(CNA_Handle game, CNA_StringView text);
 #ifdef __cplusplus
 }
 #endif

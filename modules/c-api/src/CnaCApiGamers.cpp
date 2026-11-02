@@ -112,7 +112,10 @@ struct GamerEnumeratorResource final {
 [[nodiscard]] CNA_Result BorrowGamerBase(const CNA_Handle handle, Gamer** const outGamer)
 {
     std::shared_ptr<GamerResource> gamer;
-    if (GetGamerResource(handle, &gamer) == CNA_RESULT_SUCCESS) {
+    const auto ownedResult = GetGamerResource(handle, &gamer);
+    if (ownedResult == CNA_RESULT_THREAD)
+        return Fail(ownedResult, CNA_ERROR_CATEGORY_THREAD, "Gamer belongs to another thread.");
+    if (ownedResult == CNA_RESULT_SUCCESS) {
         *outGamer = gamer->value.get();
         return CNA_RESULT_SUCCESS;
     }
@@ -121,6 +124,8 @@ struct GamerEnumeratorResource final {
         result == CNA_RESULT_SUCCESS) {
         *outGamer = signedInGamer;
         return CNA_RESULT_SUCCESS;
+    } else if (result == CNA_RESULT_THREAD) {
+        return Fail(result, CNA_ERROR_CATEGORY_THREAD, "Gamer belongs to another thread.");
     }
     // A NetworkGamer is a Gamer, and for a remote one these routes are the only way to its
     // gamertag and display name.

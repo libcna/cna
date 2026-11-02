@@ -592,6 +592,47 @@ CNA_Result cna_signed_in_gamer_get_game_defaults(
     });
 }
 
+CNA_Result cna_property_dictionary_remove_pair_ext(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView key,
+    const CNA_PropertyDictionaryHandle source,
+    const CNA_StringView source_key,
+    CNA_Bool* const out_matches)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_matches == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_remove_pair_ext: out_matches is null.");
+        }
+        return PropertyDictionaryPair(dictionary, key, source, source_key, 2, out_matches);
+    });
+}
+
+CNA_Result cna_property_dictionary_contains_pair_ext(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView key,
+    const CNA_PropertyDictionaryHandle source,
+    const CNA_StringView source_key,
+    CNA_Bool* const out_matches)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_matches == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_property_dictionary_contains_pair_ext: out_matches is null.");
+        }
+        return PropertyDictionaryPair(dictionary, key, source, source_key, 1, out_matches);
+    });
+}
+
+CNA_Result cna_property_dictionary_add_pair_ext(
+    const CNA_PropertyDictionaryHandle dictionary,
+    const CNA_StringView key,
+    const CNA_PropertyDictionaryHandle source,
+    const CNA_StringView source_key)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return PropertyDictionaryPair(dictionary, key, source, source_key, 0, nullptr);
+    });
+}
+
 CNA_Result cna_property_dictionary_try_get_value_kind_ext(
     const CNA_PropertyDictionaryHandle dictionary,
     const CNA_StringView key,

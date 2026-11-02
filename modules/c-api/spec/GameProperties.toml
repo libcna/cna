@@ -88,6 +88,10 @@ cna_game_fps_to_milliseconds_per_frame_ext = { value = "Game::fpsToMillisecondsP
 raw = true
 
 [helpers.routes]
+cna_game_window_raise_text_drop_ext = { result = "WindowRaiseText(game, text)" }
+cna_game_window_raise_file_drop_ext = { result = "WindowRaiseFile(game, files, count)" }
+cna_game_window_subscribe_text_drop_ext = { result = "WindowTextDrop(game, callback, context, out_registration)" }
+cna_game_window_subscribe_file_drop_ext = { result = "WindowFileDrop(game, callback, context, out_registration)" }
 cna_game_subscribe = { result = "GameSubscribe(game, event, callback, context, out_registration)" }
 cna_title_container_read_ext = { result = "TitleContainerReadExt(game, name, destination, capacity, out_bytes)" }
 cna_game_window_get_client_bounds = { result = "GameWindowGetClientBounds(game, out_bounds)" }

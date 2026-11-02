@@ -597,6 +597,176 @@ CNA_C_API CNA_Result cna_power_get_info(
     int32_t* out_seconds_left,
     int32_t* out_percent);
 
+/** @brief One copied MIME offer. Inputs are borrowed only until SetData returns. */
+typedef struct CNA_ClipboardOffer {
+    /** @brief Nonempty UTF-8 MIME identifier without embedded NUL. */
+    CNA_StringView mime_type;
+    /** @brief Binary payload; null only with zero byte_count. */
+    const uint8_t* data;
+    /** @brief Payload length in bytes. */
+    uint64_t byte_count;
+} CNA_ClipboardOffer;
+
+/**
+ * @brief Accesses the native clipboard get primary selection text size.
+ *
+ * @param game Active game handle; owner-thread only.
+ * @param out_bytes Required UTF-8 byte count, excluding terminator.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Absent primary selection reads empty/false and ignores writes, matching native behavior.
+ * No caller context is retained; platform write refusals follow the native Clipboard contract.
+ */
+CNA_C_API CNA_Result cna_clipboard_get_primary_selection_text_size_ext(CNA_Handle game, uint64_t* out_bytes);
+/**
+ * @brief Accesses the native clipboard copy primary selection text.
+ *
+ * @param game Active game handle; owner-thread only.
+ * @param destination Caller buffer, null only with zero capacity.
+ * @param capacity Byte capacity; short buffers stay untouched.
+ * @param out_bytes Required byte count.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Absent primary selection reads empty/false and ignores writes, matching native behavior.
+ * No caller context is retained; platform write refusals follow the native Clipboard contract.
+ */
+CNA_C_API CNA_Result cna_clipboard_copy_primary_selection_text_ext(CNA_Handle game, char* destination, uint64_t capacity, uint64_t* out_bytes);
+/**
+ * @brief Accesses the native clipboard set primary selection text.
+ *
+ * @param game Active game handle; owner-thread only.
+ * @param text UTF-8 text copied synchronously, no embedded NUL.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Absent primary selection reads empty/false and ignores writes, matching native behavior.
+ * No caller context is retained; platform write refusals follow the native Clipboard contract.
+ */
+CNA_C_API CNA_Result cna_clipboard_set_primary_selection_text_ext(CNA_Handle game, CNA_StringView text);
+/**
+ * @brief Accesses the native clipboard get has primary selection text.
+ *
+ * @param game Active game handle; owner-thread only.
+ * @param out_value Receives whether text is available.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Absent primary selection reads empty/false and ignores writes, matching native behavior.
+ * No caller context is retained; platform write refusals follow the native Clipboard contract.
+ */
+CNA_C_API CNA_Result cna_clipboard_get_has_primary_selection_text_ext(CNA_Handle game, CNA_Bool* out_value);
+/**
+ * @brief Accesses the native clipboard has data.
+ *
+ * @param game Active game handle; owner-thread only.
+ * @param mime_type UTF-8 MIME identifier.
+ * @param out_value Receives availability.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Absent primary selection reads empty/false and ignores writes, matching native behavior.
+ * No caller context is retained; platform write refusals follow the native Clipboard contract.
+ */
+CNA_C_API CNA_Result cna_clipboard_has_data_ext(CNA_Handle game, CNA_StringView mime_type, CNA_Bool* out_value);
+/**
+ * @brief Accesses the native clipboard get mime type count.
+ *
+ * @param game Active game handle; owner-thread only.
+ * @param out_count Current MIME count; subsequent queries are separate observations.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Absent primary selection reads empty/false and ignores writes, matching native behavior.
+ * No caller context is retained; platform write refusals follow the native Clipboard contract.
+ */
+CNA_C_API CNA_Result cna_clipboard_get_mime_type_count_ext(CNA_Handle game, uint64_t* out_count);
+/**
+ * @brief Accesses native clipboard MIME payloads.
+ *
+ * @param game Active game handle; owner-thread only.
+ * @param index Index in the current MIME list.
+ * @param out_bytes Required byte count, no text terminator.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Owner-thread only. Each read is a separate observation. No OS pointers or callbacks
+ * are retained from the caller. Duplicate MIME offers are rejected before mutation.
+ * A validated multi-format offer is passed to the platform as one native operation;
+ * platform refusal returns success with out_accepted false, matching native behavior.
+ */
+CNA_C_API CNA_Result cna_clipboard_get_mime_type_size_at_ext(CNA_Handle game, uint64_t index, uint64_t* out_bytes);
+/**
+ * @brief Accesses native clipboard MIME payloads.
+ *
+ * @param game Active game handle; owner-thread only.
+ * @param index Index in the current MIME list.
+ * @param destination Caller buffer, null only with zero capacity.
+ * @param capacity Byte capacity; short buffers stay untouched.
+ * @param out_bytes Required byte count, no text terminator.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Owner-thread only. Each read is a separate observation. No OS pointers or callbacks
+ * are retained from the caller. Duplicate MIME offers are rejected before mutation.
+ * A validated multi-format offer is passed to the platform as one native operation;
+ * platform refusal returns success with out_accepted false, matching native behavior.
+ */
+CNA_C_API CNA_Result cna_clipboard_copy_mime_type_at_ext(CNA_Handle game, uint64_t index, char* destination, uint64_t capacity, uint64_t* out_bytes);
+/**
+ * @brief Accesses native clipboard MIME payloads.
+ *
+ * @param game Active game handle; owner-thread only.
+ * @param mime_type UTF-8 MIME identifier.
+ * @param out_bytes Required byte count, no text terminator.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Owner-thread only. Each read is a separate observation. No OS pointers or callbacks
+ * are retained from the caller. Duplicate MIME offers are rejected before mutation.
+ * A validated multi-format offer is passed to the platform as one native operation;
+ * platform refusal returns success with out_accepted false, matching native behavior.
+ */
+CNA_C_API CNA_Result cna_clipboard_get_data_size_ext(CNA_Handle game, CNA_StringView mime_type, uint64_t* out_bytes);
+/**
+ * @brief Accesses native clipboard MIME payloads.
+ *
+ * @param game Active game handle; owner-thread only.
+ * @param mime_type UTF-8 MIME identifier.
+ * @param destination Caller buffer, null only with zero capacity.
+ * @param capacity Byte capacity; short buffers stay untouched.
+ * @param out_bytes Required byte count, no text terminator.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Owner-thread only. Each read is a separate observation. No OS pointers or callbacks
+ * are retained from the caller. Duplicate MIME offers are rejected before mutation.
+ * A validated multi-format offer is passed to the platform as one native operation;
+ * platform refusal returns success with out_accepted false, matching native behavior.
+ */
+CNA_C_API CNA_Result cna_clipboard_copy_data_ext(CNA_Handle game, CNA_StringView mime_type, uint8_t* destination, uint64_t capacity, uint64_t* out_bytes);
+/**
+ * @brief Accesses native clipboard MIME payloads.
+ *
+ * @param game Active game handle; owner-thread only.
+ * @param mime_type Nonempty UTF-8 MIME identifier.
+ * @param data Call-only binary bytes; null only for empty payload.
+ * @param byte_count Payload length.
+ * @param out_accepted Native platform acceptance.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Owner-thread only. Each read is a separate observation. No OS pointers or callbacks
+ * are retained from the caller. Duplicate MIME offers are rejected before mutation.
+ * A validated multi-format offer is passed to the platform as one native operation;
+ * platform refusal returns success with out_accepted false, matching native behavior.
+ */
+CNA_C_API CNA_Result cna_clipboard_set_data_ext(CNA_Handle game, CNA_StringView mime_type, const uint8_t* data, uint64_t byte_count, CNA_Bool* out_accepted);
+/**
+ * @brief Accesses native clipboard MIME payloads.
+ *
+ * @param game Active game handle; owner-thread only.
+ * @param formats Call-only MIME offers; all validated and copied before the native write.
+ * @param count Number of offers; zero clears the offer.
+ * @param out_accepted Native platform acceptance; false for absent/unsupported clipboard.
+ * @return CNA_RESULT_SUCCESS or a documented argument, handle, thread or native failure.
+ *
+ * Owner-thread only. Each read is a separate observation. No OS pointers or callbacks
+ * are retained from the caller. Duplicate MIME offers are rejected before mutation.
+ * A validated multi-format offer is passed to the platform as one native operation;
+ * platform refusal returns success with out_accepted false, matching native behavior.
+ */
+CNA_C_API CNA_Result cna_clipboard_set_formats_ext(CNA_Handle game, const CNA_ClipboardOffer* formats, uint64_t count, CNA_Bool* out_accepted);
 #ifdef __cplusplus
 }
 #endif

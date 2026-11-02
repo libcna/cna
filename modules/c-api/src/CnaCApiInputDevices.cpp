@@ -466,6 +466,65 @@ using SensorRead = bool (*)(Microsoft::Xna::Framework::Vector3&);
     return CNA_RESULT_SUCCESS;
 }
 
+CNA_Result ClipboardMime(CNA_Handle game, uint64_t index, char* destination,
+    uint64_t capacity, uint64_t* outBytes, bool sizeOnly)
+{
+    if (const auto result = CNA::C::Detail::ValidateCopyOutput(destination, capacity, outBytes);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (const auto result = ValidateActiveGameHandle(game); result != CNA_RESULT_SUCCESS) return result;
+    const auto types = Clipboard::GetMimeTypesEXT();
+    if (index >= types.size()) return InvalidArgument("MIME index is outside the clipboard list.");
+    if (sizeOnly) { *outBytes = types[index].size(); return CNA_RESULT_SUCCESS; }
+    return CopyText(types[index], destination, capacity, outBytes);
+}
+
+CNA_Result ClipboardData(CNA_Handle game, CNA_StringView mime, uint8_t* destination,
+    uint64_t capacity, uint64_t* outBytes, bool sizeOnly)
+{
+    if (const auto result = CNA::C::Detail::ValidateCopyOutput(destination, capacity, outBytes);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (const auto result = ValidateActiveGameHandle(game); result != CNA_RESULT_SUCCESS) return result;
+    std::string type;
+    if (const auto result = ReadText(mime, "Invalid MIME identifier.", &type, CNA::C::Detail::EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) return result;
+    const auto bytes = Clipboard::GetDataEXT(type);
+    if (sizeOnly) { *outBytes = bytes.size(); return CNA_RESULT_SUCCESS; }
+    return CNA::C::Detail::CopyBytes(bytes, destination, capacity, outBytes);
+}
+
+CNA_Result ClipboardFormats(CNA_Handle game, const CNA_ClipboardOffer* formats,
+    uint64_t count, CNA_Bool* outAccepted)
+{
+    if (count > SIZE_MAX / sizeof(CNA_ClipboardOffer)) return CNA::C::Detail::Overflow("Too many MIME offers.");
+    if (count && !formats) return InvalidArgument("Null MIME offers.");
+    if (const auto result = ValidateActiveGameHandle(game); result != CNA_RESULT_SUCCESS) return result;
+    std::vector<std::pair<std::string, std::vector<uint8_t>>> offers;
+    if (count > offers.max_size()) return CNA::C::Detail::Overflow("Too many MIME offers.");
+    offers.reserve(static_cast<std::size_t>(count));
+    for (uint64_t i = 0; i < count; ++i) {
+        const auto& input = formats[i];
+        std::string mime;
+        if (const auto result = ReadText(input.mime_type, "Invalid MIME identifier.", &mime, CNA::C::Detail::EmbeddedNul::Refused);
+            result != CNA_RESULT_SUCCESS) return result;
+        if (mime.empty()) return InvalidArgument("Empty MIME identifier.");
+        for (const auto& offer : offers) if (offer.first == mime) return InvalidArgument("Duplicate MIME identifier.");
+        std::vector<uint8_t> bytes;
+        if (input.byte_count > bytes.max_size()) return CNA::C::Detail::Overflow("MIME payload is too large.");
+        if (input.byte_count && !input.data) return InvalidArgument("Null MIME payload.");
+        if (input.byte_count) bytes.assign(input.data, input.data + static_cast<std::size_t>(input.byte_count));
+        offers.emplace_back(std::move(mime), std::move(bytes));
+    }
+    *outAccepted = ToCBool(Clipboard::SetDataEXT(offers));
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result ClipboardDataSet(CNA_Handle game, CNA_StringView mime, const uint8_t* bytes,
+    uint64_t count, CNA_Bool* outAccepted)
+{
+    const CNA_ClipboardOffer offer{mime, bytes, count};
+    return ClipboardFormats(game, &offer, 1, outAccepted);
+}
+
 } // namespace
 
 // The routes generated from modules/c-api/spec/InputDevices.toml.

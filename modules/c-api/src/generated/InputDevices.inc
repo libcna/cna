@@ -9,6 +9,117 @@
 #include "../CnaCApiMarshal.hpp"
 #include "../CnaCApiOutput.hpp"
 
+CNA_Result cna_clipboard_get_mime_type_count_ext(
+    const CNA_Handle game,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_clipboard_get_mime_type_count_ext: out_count is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<uint64_t>(Clipboard::GetMimeTypesEXT().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_clipboard_has_data_ext(
+    const CNA_Handle game,
+    const CNA_StringView c_mime_type,
+    CNA_Bool* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_clipboard_has_data_ext: out_value is null.");
+        }
+        std::string mime_type;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_mime_type, "cna_clipboard_has_data_ext: mime_type is not valid text.", &mime_type, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = CNA::C::Detail::ToCBool(Clipboard::HasDataEXT(mime_type));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_clipboard_get_has_primary_selection_text_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_clipboard_get_has_primary_selection_text_ext: out_value is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_value = CNA::C::Detail::ToCBool(Clipboard::HasPrimarySelectionTextEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_clipboard_set_primary_selection_text_ext(
+    const CNA_Handle game,
+    const CNA_StringView c_text)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string text;
+        if (const CNA_Result routeResult = CNA::C::Detail::ReadText(c_text, "cna_clipboard_set_primary_selection_text_ext: text is not valid text.", &text, CNA::C::Detail::EmbeddedNul::Refused);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Clipboard::SetPrimarySelectionTextEXT(text);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_clipboard_copy_primary_selection_text_ext(
+    const CNA_Handle game,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(Clipboard::GetPrimarySelectionTextEXT(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_clipboard_get_primary_selection_text_size_ext(
+    const CNA_Handle game,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_clipboard_get_primary_selection_text_size_ext: out_bytes is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(Clipboard::GetPrimarySelectionTextEXT(), out_bytes);
+    });
+}
+
 CNA_Result cna_input_devices_reset_for_tests_ext(
     const CNA_Handle game)
 {
@@ -409,6 +520,91 @@ CNA_Result cna_input_device_info_init(
         }
         *out_info = MapDeviceInfo(InputDeviceInfoEXT());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_clipboard_set_formats_ext(
+    const CNA_Handle game,
+    const CNA_ClipboardOffer* const formats,
+    const uint64_t count,
+    CNA_Bool* const out_accepted)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_accepted == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_clipboard_set_formats_ext: out_accepted is null.");
+        }
+        return ClipboardFormats(game, formats, count, out_accepted);
+    });
+}
+
+CNA_Result cna_clipboard_set_data_ext(
+    const CNA_Handle game,
+    const CNA_StringView mime_type,
+    const uint8_t* const data,
+    const uint64_t byte_count,
+    CNA_Bool* const out_accepted)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_accepted == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_clipboard_set_data_ext: out_accepted is null.");
+        }
+        return ClipboardDataSet(game, mime_type, data, byte_count, out_accepted);
+    });
+}
+
+CNA_Result cna_clipboard_copy_data_ext(
+    const CNA_Handle game,
+    const CNA_StringView mime_type,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_clipboard_copy_data_ext: out_bytes is null.");
+        }
+        return ClipboardData(game, mime_type, destination, capacity, out_bytes, false);
+    });
+}
+
+CNA_Result cna_clipboard_get_data_size_ext(
+    const CNA_Handle game,
+    const CNA_StringView mime_type,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_clipboard_get_data_size_ext: out_bytes is null.");
+        }
+        return ClipboardData(game, mime_type, nullptr, 0, out_bytes, true);
+    });
+}
+
+CNA_Result cna_clipboard_copy_mime_type_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_clipboard_copy_mime_type_at_ext: out_bytes is null.");
+        }
+        return ClipboardMime(game, index, destination, capacity, out_bytes, false);
+    });
+}
+
+CNA_Result cna_clipboard_get_mime_type_size_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_clipboard_get_mime_type_size_at_ext: out_bytes is null.");
+        }
+        return ClipboardMime(game, index, nullptr, 0, out_bytes, true);
     });
 }
 

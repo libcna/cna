@@ -80,6 +80,9 @@ RetainPublishedSignedInGamers();
 // needs the same resource layout and the same factory the property adapter publishes.
 struct PropertyDictionaryResource final {
     std::shared_ptr<Microsoft::Xna::Framework::GamerServices::PropertyDictionary> value;
+    // Native pair values hold raw Stream pointers. Copies keep the owning native pools alive;
+    // flattening the source's retained pools avoids cycles between dictionary resources.
+    std::vector<std::shared_ptr<Microsoft::Xna::Framework::GamerServices::PropertyDictionary>> pairStreamOwners;
 };
 
 [[nodiscard]] CNA_Result CreateOwnedPropertyDictionary(

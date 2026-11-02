@@ -15,6 +15,7 @@
 #include "System/DateTime.hpp"
 #include "System/TimeSpan.hpp"
 
+#include <algorithm>
 #include <any>
 #include <cstring>
 #include <memory>
@@ -282,6 +283,38 @@ namespace {
         destination,
         capacity,
         outBytes);
+}
+
+[[nodiscard]] CNA_Result PropertyDictionaryPair(CNA_Handle handle, CNA_StringView key,
+    CNA_Handle sourceHandle, CNA_StringView sourceKey, int operation, CNA_Bool* outMatches)
+{
+    std::shared_ptr<CNA::C::Detail::PropertyDictionaryResource> destination, source;
+    std::string nativeKey, nativeSourceKey;
+    if (const auto result = ReadText(key, "Invalid pair key.", &nativeKey, CNA::C::Detail::EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (const auto result = ReadText(sourceKey, "Invalid source key.", &nativeSourceKey, CNA::C::Detail::EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (const auto result = BorrowDictionary(handle, &destination); result != CNA_RESULT_SUCCESS) return result;
+    if (const auto result = BorrowDictionary(sourceHandle, &source); result != CNA_RESULT_SUCCESS) return result;
+    std::any value;
+    if (!source->value->TryGetValue(nativeSourceKey, value))
+        return InvalidArgument("The source dictionary does not hold that key.");
+    if (KindOf(value) == CNA_PROPERTY_VALUE_KIND_UNKNOWN)
+        return InvalidArgument("The source value has no supported C property kind.");
+    const System::Collections::Generic::KeyValuePair<std::string, std::any> pair(nativeKey, value);
+    if (operation == 0) {
+        auto owners = destination->pairStreamOwners;
+        if (KindOf(value) == CNA_PROPERTY_VALUE_KIND_STREAM && source != destination) {
+            owners.push_back(std::make_shared<PropertyDictionary>(*source->value));
+            for (const auto& owner : source->pairStreamOwners)
+                if (std::find(owners.begin(), owners.end(), owner) == owners.end()) owners.push_back(owner);
+        }
+        destination->value->Add(pair);
+        destination->pairStreamOwners.swap(owners);
+    }
+    else *outMatches = ToCBool(operation == 1 ? destination->value->Contains(pair)
+                                             : destination->value->Remove(pair));
+    return CNA_RESULT_SUCCESS;
 }
 
 } // namespace

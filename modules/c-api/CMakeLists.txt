@@ -1973,6 +1973,27 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
         ENVIRONMENT "SDL_AUDIODRIVER=dummy"
     )
 
+    add_executable(cna_c_api_service_families_smoke
+        tests/pure_c/ServiceFamiliesSmoke.c tests/cpp/ServiceFamiliesNative.cpp)
+    set_target_properties(cna_c_api_service_families_smoke PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_service_families_smoke PRIVATE cna_c_api CNA Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_service_families_smoke)
+    add_test(NAME CApi_ServiceFamiliesSmoke COMMAND cna_c_api_service_families_smoke)
+
+    add_executable(cna_c_api_service_window_smoke
+        tests/pure_c/ServiceWindowSmoke.c tests/cpp/ServiceWindowNative.cpp)
+    set_target_properties(cna_c_api_service_window_smoke PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_service_window_smoke PRIVATE cna_c_api CNA Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_service_window_smoke)
+    add_test(NAME CApi_ServiceWindowSmoke COMMAND cna_c_api_service_window_smoke)
+    if(NOT MSVC)
+        # Native reference headers use SharpRuntime's documented __int128 extension.
+        target_compile_options(cna_c_api_service_families_smoke PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-pedantic>)
+        target_compile_options(cna_c_api_service_window_smoke PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-pedantic>)
+    endif()
+
     add_executable(cna_c_api_gamer_identities_smoke
         tests/pure_c/GamerIdentitiesSmoke.c
     )

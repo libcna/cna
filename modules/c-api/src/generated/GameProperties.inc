@@ -849,6 +849,55 @@ CNA_Result cna_game_fps_to_milliseconds_per_frame_ext(
     });
 }
 
+CNA_Result cna_game_window_raise_text_drop_ext(
+    const CNA_Handle game,
+    const CNA_StringView text)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return WindowRaiseText(game, text);
+    });
+}
+
+CNA_Result cna_game_window_raise_file_drop_ext(
+    const CNA_Handle game,
+    const CNA_StringView* const files,
+    const uint64_t count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return WindowRaiseFile(game, files, count);
+    });
+}
+
+CNA_Result cna_game_window_subscribe_text_drop_ext(
+    const CNA_Handle game,
+    const CNA_GameWindowDropCallback callback,
+    void* const context,
+    CNA_GameEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_window_subscribe_text_drop_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return WindowTextDrop(game, callback, context, out_registration);
+    });
+}
+
+CNA_Result cna_game_window_subscribe_file_drop_ext(
+    const CNA_Handle game,
+    const CNA_GameWindowDropCallback callback,
+    void* const context,
+    CNA_GameEventRegistrationHandle* const out_registration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_registration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_window_subscribe_file_drop_ext: out_registration is null.");
+        }
+        *out_registration = CNA_INVALID_HANDLE;
+        return WindowFileDrop(game, callback, context, out_registration);
+    });
+}
+
 CNA_Result cna_game_subscribe(
     const CNA_Handle game,
     const CNA_GameEvent event,

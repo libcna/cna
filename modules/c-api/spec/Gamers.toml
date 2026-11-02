@@ -6,6 +6,8 @@ lookup = "BorrowGamerBase"
 object = "Gamer*"
 
 [gamer_base.routes]
+cna_gamer_get_type_name_size = { size = "object->GetTypeName()" }
+cna_gamer_copy_type_name = { copy = "object->GetTypeName()" }
 cna_gamer_get_display_name_size = { size = "object->getDisplayNameProperty()" }
 cna_gamer_copy_display_name = { copy = "object->getDisplayNameProperty()" }
 cna_gamer_get_gamertag_size = { size = "object->getGamertagProperty()" }

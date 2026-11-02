@@ -13,6 +13,11 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 
+#include "CNA/GamerServices/Configuration.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
+#include <mutex>
+#include <thread>
+#include <algorithm>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -242,6 +247,109 @@ namespace {
     *outCount = collection == nullptr
         ? INT32_C(0)
         : static_cast<int32_t>(collection->getCountProperty());
+    return CNA_RESULT_SUCCESS;
+}
+
+using ServiceConfiguration = CNA::GamerServices::Configuration;
+std::mutex configurationMutex;
+std::thread::id configurationThread;
+
+CNA_Result ConfigurationAccess()
+{
+    if (configurationThread != std::thread::id{} && configurationThread != std::this_thread::get_id())
+        return CNA::C::Detail::Fail(CNA_RESULT_THREAD, CNA_ERROR_CATEGORY_THREAD,
+            "Configuration belongs to its first caller thread.");
+    if (Microsoft::Xna::Framework::GamerServices::GamerServicesDispatcher::getIsInitializedProperty())
+        return CNA::C::Detail::InvalidState("Configuration cannot change while the dispatcher is initialized.");
+    configurationThread = std::this_thread::get_id();
+    return CNA_RESULT_SUCCESS;
+}
+
+template<std::size_t N>
+CNA_Result ConfigurationText(const char (&text)[N], std::string* output)
+{
+    const auto end = std::find(text, text + N, '\0');
+    if (end == text + N) return InvalidArgument("Configuration text is not terminated.");
+    return ReadText({text, static_cast<uint64_t>(end - text)}, "Invalid configuration UTF-8.", output);
+}
+
+CNA_Result ReadConfiguration(const CNA_GamerServicesConfiguration* input, ServiceConfiguration* output)
+{
+    if (const auto result = ValidateVersionedStructure(input, "Invalid configuration structure.", 1);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (const auto result = ValidateCanonicalBool(input->insecure_loopback, "insecure_loopback"); result != CNA_RESULT_SUCCESS) return result;
+    if (const auto result = ValidateCanonicalBool(input->avatar_catalog_updates, "avatar_catalog_updates"); result != CNA_RESULT_SUCCESS) return result;
+    for (auto byte : input->reserved) if (byte) return InvalidArgument("Configuration reserved bytes must be zero.");
+    if (const auto result = ConfigurationText(input->endpoint, &output->endpoint); result != CNA_RESULT_SUCCESS) return result;
+    if (const auto result = ConfigurationText(input->game_id, &output->gameId); result != CNA_RESULT_SUCCESS) return result;
+    if (const auto result = ConfigurationText(input->ca_bundle, &output->caBundle); result != CNA_RESULT_SUCCESS) return result;
+    if (const auto result = ConfigurationText(input->title_version, &output->titleVersion); result != CNA_RESULT_SUCCESS) return result;
+    output->insecureLoopback = input->insecure_loopback != CNA_FALSE;
+    output->avatarCatalogUpdates = input->avatar_catalog_updates != CNA_FALSE;
+    output->maxAvatarCatalogBytes = input->max_avatar_catalog_bytes;
+    CNA::GamerServices::validateConfiguration(*output);
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result ConfigurationInit(CNA_GamerServicesConfiguration* output)
+{
+    if (!output) return InvalidArgument("Configuration output is null.");
+    CNA_GamerServicesConfiguration value{};
+    value.struct_size = sizeof(value);
+    value.struct_version = 1;
+    value.avatar_catalog_updates = CNA_TRUE;
+    value.max_avatar_catalog_bytes = ServiceConfiguration{}.maxAvatarCatalogBytes;
+    *output = value;
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result ConfigurationValidate(const CNA_GamerServicesConfiguration* input)
+{
+    ServiceConfiguration value;
+    return ReadConfiguration(input, &value);
+}
+
+CNA_Result ConfigurationSetOverride(const CNA_GamerServicesConfiguration* input)
+{
+    std::lock_guard lock(configurationMutex);
+    if (const auto result = ConfigurationAccess(); result != CNA_RESULT_SUCCESS) return result;
+    std::optional<ServiceConfiguration> value;
+    if (input) {
+        value.emplace();
+        if (const auto result = ReadConfiguration(input, &*value); result != CNA_RESULT_SUCCESS) return result;
+    }
+    CNA::GamerServices::setConfigurationOverride(std::move(value));
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result ConfigurationResolve(CNA_GamerServicesConfiguration* output)
+{
+    if (const auto result = ValidateVersionedStructure(output, "Invalid configuration output.", 1);
+        result != CNA_RESULT_SUCCESS) return result;
+    std::lock_guard lock(configurationMutex);
+    if (const auto result = ConfigurationAccess(); result != CNA_RESULT_SUCCESS) return result;
+    const auto native = CNA::GamerServices::resolveConfiguration();
+    CNA_GamerServicesConfiguration value{};
+    ConfigurationInit(&value);
+    if (native.endpoint.size() >= sizeof(value.endpoint) || native.gameId.size() >= sizeof(value.game_id) ||
+        native.caBundle.size() >= sizeof(value.ca_bundle) || native.titleVersion.size() >= sizeof(value.title_version))
+        return CNA::C::Detail::Overflow("Resolved configuration exceeds the C text limits.");
+    for (const auto* text : {&native.endpoint, &native.gameId, &native.caBundle, &native.titleVersion}) {
+        std::string checkedText;
+        if (const auto result = ReadText({text->data(), text->size()},
+                "Invalid resolved configuration UTF-8.", &checkedText, EmbeddedNul::Refused);
+            result != CNA_RESULT_SUCCESS) return result;
+    }
+    std::memcpy(value.endpoint, native.endpoint.data(), native.endpoint.size());
+    std::memcpy(value.game_id, native.gameId.data(), native.gameId.size());
+    std::memcpy(value.ca_bundle, native.caBundle.data(), native.caBundle.size());
+    std::memcpy(value.title_version, native.titleVersion.data(), native.titleVersion.size());
+    value.insecure_loopback = CNA::C::Detail::ToCBool(native.insecureLoopback);
+    value.avatar_catalog_updates = CNA::C::Detail::ToCBool(native.avatarCatalogUpdates);
+    value.max_avatar_catalog_bytes = native.maxAvatarCatalogBytes;
+    ServiceConfiguration checked;
+    if (const auto result = ReadConfiguration(&value, &checked); result != CNA_RESULT_SUCCESS) return result;
+    *output = value;
     return CNA_RESULT_SUCCESS;
 }
 

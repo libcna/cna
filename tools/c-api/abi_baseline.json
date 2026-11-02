@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 14336,
+  "encoded": 14592,
   "major": 0,
-  "minor": 56,
+  "minor": 57,
   "patch": 0,
-  "runtime": 14336
+  "runtime": 14592
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -1196,9 +1196,21 @@
   "cna_camera_set_test_frame_ext",
   "cna_camera_set_test_state_ext",
   "cna_camera_try_acquire_frame_ext",
+  "cna_clipboard_copy_data_ext",
+  "cna_clipboard_copy_mime_type_at_ext",
+  "cna_clipboard_copy_primary_selection_text_ext",
   "cna_clipboard_copy_text",
+  "cna_clipboard_get_data_size_ext",
+  "cna_clipboard_get_has_primary_selection_text_ext",
   "cna_clipboard_get_has_text",
+  "cna_clipboard_get_mime_type_count_ext",
+  "cna_clipboard_get_mime_type_size_at_ext",
+  "cna_clipboard_get_primary_selection_text_size_ext",
   "cna_clipboard_get_text_size",
+  "cna_clipboard_has_data_ext",
+  "cna_clipboard_set_data_ext",
+  "cna_clipboard_set_formats_ext",
+  "cna_clipboard_set_primary_selection_text_ext",
   "cna_clipboard_set_text",
   "cna_cnb_animation_clip_copy_keyframes",
   "cna_cnb_animation_clip_destroy",
@@ -2029,11 +2041,15 @@
   "cna_game_window_get_title_size",
   "cna_game_window_get_type_name_size",
   "cna_game_window_minimize_ext",
+  "cna_game_window_raise_file_drop_ext",
+  "cna_game_window_raise_text_drop_ext",
   "cna_game_window_restore_ext",
   "cna_game_window_set_allow_user_resizing",
   "cna_game_window_set_is_borderless_ext",
   "cna_game_window_set_keyboard_orientation_emulation_enabled_ext",
   "cna_game_window_subscribe",
+  "cna_game_window_subscribe_file_drop_ext",
+  "cna_game_window_subscribe_text_drop_ext",
   "cna_gamepad_apply_dead_zone",
   "cna_gamepad_buttons_copy_string",
   "cna_gamepad_buttons_equals",
@@ -2129,6 +2145,7 @@
   "cna_gamer_copy_gamertag",
   "cna_gamer_copy_partner_token",
   "cna_gamer_copy_text",
+  "cna_gamer_copy_type_name",
   "cna_gamer_destroy",
   "cna_gamer_enumerator_destroy",
   "cna_gamer_enumerator_get_current",
@@ -2145,6 +2162,7 @@
   "cna_gamer_get_signed_in_gamer_count",
   "cna_gamer_get_tag",
   "cna_gamer_get_text_size",
+  "cna_gamer_get_type_name_size",
   "cna_gamer_joined_event_info_init",
   "cna_gamer_left_event_info_init",
   "cna_gamer_presence_init",
@@ -2157,6 +2175,10 @@
   "cna_gamer_profile_get_picture_size",
   "cna_gamer_profile_get_region_name_size",
   "cna_gamer_services_component_create",
+  "cna_gamer_services_configuration_init_ext",
+  "cna_gamer_services_configuration_resolve_ext",
+  "cna_gamer_services_configuration_set_override_ext",
+  "cna_gamer_services_configuration_validate_ext",
   "cna_gamer_services_dispatcher_get_freed_gamer_count_ext",
   "cna_gamer_services_dispatcher_get_is_initialized",
   "cna_gamer_services_dispatcher_get_window_handle",
@@ -3362,8 +3384,10 @@
   "cna_primitive_type_get_vertex_count",
   "cna_project_graphics_profile_get_ext",
   "cna_project_graphics_profile_set_ext",
+  "cna_property_dictionary_add_pair_ext",
   "cna_property_dictionary_clear",
   "cna_property_dictionary_contains_key",
+  "cna_property_dictionary_contains_pair_ext",
   "cna_property_dictionary_copy_key_at",
   "cna_property_dictionary_copy_string",
   "cna_property_dictionary_create_ext",
@@ -3381,6 +3405,7 @@
   "cna_property_dictionary_get_string_size",
   "cna_property_dictionary_get_time_span_ticks",
   "cna_property_dictionary_remove",
+  "cna_property_dictionary_remove_pair_ext",
   "cna_property_dictionary_set_date_time_ticks",
   "cna_property_dictionary_set_double",
   "cna_property_dictionary_set_int32",
@@ -4205,9 +4230,9 @@
   "CNA_MATH_TWO_PI": 6.2831854820251465
  },
  "integers": {
-  "CNA_ABI_VERSION": 14336,
+  "CNA_ABI_VERSION": 14592,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 56,
+  "CNA_ABI_VERSION_MINOR": 57,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -7626,6 +7651,24 @@
    },
    "size": 12
   },
+  "CNA_ClipboardOffer": {
+   "align": 8,
+   "fields": {
+    "byte_count": [
+     24,
+     8
+    ],
+    "data": [
+     16,
+     8
+    ],
+    "mime_type": [
+     0,
+     16
+    ]
+   },
+   "size": 32
+  },
   "CNA_CnbChunkEntry": {
    "align": 8,
    "fields": {
@@ -10241,6 +10284,52 @@
     ]
    },
    "size": 32
+  },
+  "CNA_GamerServicesConfiguration": {
+   "align": 8,
+   "fields": {
+    "avatar_catalog_updates": [
+     6253,
+     1
+    ],
+    "ca_bundle": [
+     2122,
+     4097
+    ],
+    "endpoint": [
+     8,
+     2049
+    ],
+    "game_id": [
+     2057,
+     65
+    ],
+    "insecure_loopback": [
+     6252,
+     1
+    ],
+    "max_avatar_catalog_bytes": [
+     6264,
+     8
+    ],
+    "reserved": [
+     6254,
+     6
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "title_version": [
+     6219,
+     33
+    ]
+   },
+   "size": 6272
   },
   "CNA_GestureSample": {
    "align": 8,

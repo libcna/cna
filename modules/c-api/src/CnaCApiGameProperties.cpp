@@ -17,6 +17,9 @@
 #include "System/ArgumentException.hpp"
 #include "System/TimeSpan.hpp"
 
+#include "Microsoft/Xna/Framework/FileDropEventArgsEXT.hpp"
+#include "Microsoft/Xna/Framework/TextDropEventArgsEXT.hpp"
+#include <functional>
 #include <algorithm>
 #include <cstring>
 #include <mutex>
@@ -90,6 +93,7 @@ public:
     GameRegistrationBase(const GameRegistrationBase&) = delete;
     GameRegistrationBase& operator=(const GameRegistrationBase&) = delete;
     virtual ~GameRegistrationBase() = default;
+    virtual void Invalidate() noexcept = 0;
 };
 
 // A registration names a handler inside the game -- the game's own event, or its window's -- and the
@@ -117,7 +121,7 @@ public:
         source_->Remove(token_);
     }
 
-    void Invalidate() noexcept
+    void Invalidate() noexcept override
     {
         subscribed_ = false;
     }
@@ -130,7 +134,7 @@ private:
 
 struct LiveGameRegistrations final {
     std::mutex mutex;
-    std::vector<std::weak_ptr<GameRegistration>> entries;
+    std::vector<std::weak_ptr<GameRegistrationBase>> entries;
 };
 
 [[nodiscard]] LiveGameRegistrations& GetLiveGameRegistrations()
@@ -143,11 +147,11 @@ struct LiveGameRegistrations final {
 // entries are swept on the way in, so a program that subscribes and unsubscribes for hours does not
 // accumulate dead weak pointers.
 [[nodiscard]] std::shared_ptr<GameRegistrationBase> TrackGameRegistration(
-    std::shared_ptr<GameRegistration> registration)
+    std::shared_ptr<GameRegistrationBase> registration)
 {
     LiveGameRegistrations& live = GetLiveGameRegistrations();
     std::lock_guard lock(live.mutex);
-    std::erase_if(live.entries, [](const std::weak_ptr<GameRegistration>& entry) {
+    std::erase_if(live.entries, [](const std::weak_ptr<GameRegistrationBase>& entry) {
         return entry.expired();
     });
     live.entries.push_back(registration);
@@ -162,8 +166,8 @@ void ResetGameEventRegistrationState() noexcept
 {
     LiveGameRegistrations& live = GetLiveGameRegistrations();
     std::lock_guard lock(live.mutex);
-    for (const std::weak_ptr<GameRegistration>& entry : live.entries) {
-        if (const std::shared_ptr<GameRegistration> registration = entry.lock()) {
+    for (const std::weak_ptr<GameRegistrationBase>& entry : live.entries) {
+        if (const std::shared_ptr<GameRegistrationBase> registration = entry.lock()) {
             registration->Invalidate();
         }
     }
@@ -507,6 +511,98 @@ template<typename TAction>
     return CreateHandle(ObjectKind::GameEventRegistration,
         TrackGameRegistration(std::make_shared<GameRegistration>(source, token)),
         outRegistration);
+}
+
+using Microsoft::Xna::Framework::GameWindow;
+using Microsoft::Xna::Framework::FileDropEventArgsEXT;
+using Microsoft::Xna::Framework::TextDropEventArgsEXT;
+
+struct WindowCallbackState {
+    bool active = true;
+};
+
+class WindowRegistration final : public GameRegistrationBase {
+public:
+    std::shared_ptr<WindowCallbackState> state = std::make_shared<WindowCallbackState>();
+    std::function<void()> detach;
+    ~WindowRegistration() override { if (state->active && detach) detach(); state->active = false; }
+    void Invalidate() noexcept override { state->active = false; }
+};
+
+struct WindowCallbackScope {
+    Game& game;
+    explicit WindowCallbackScope(Game& value) : game(value) { CNA::C::Detail::EnterGameCallbackScope(game); }
+    ~WindowCallbackScope() { CNA::C::Detail::LeaveGameCallbackScope(game); }
+};
+
+CNA_Result WindowFileDrop(CNA_Handle gameHandle, CNA_GameWindowDropCallback callback,
+    void* context, CNA_GameEventRegistrationHandle* output)
+{
+    if (!callback) return InvalidArgument("Null drop callback.");
+    Game* game = nullptr;
+    if (const auto result = BorrowGame(gameHandle, &game); result != CNA_RESULT_SUCCESS) return result;
+    auto* window = &game->getWindowProperty();
+    auto registration = std::make_shared<WindowRegistration>();
+    const auto token = window->FileDropEXT.Add([state = registration->state, callback, context, game]
+        (System::Object*, const FileDropEventArgsEXT& args) {
+        if (!state->active) return;
+        std::vector<CNA_StringView> views;
+        for (const auto& file : args.getFilesProperty()) views.push_back({file.data(), file.size()});
+        WindowCallbackScope scope(*game);
+        callback(context, views.data(), views.size());
+    });
+    registration->detach = [window, token] { window->FileDropEXT.Remove(token); };
+    return CreateHandle(ObjectKind::GameEventRegistration, TrackGameRegistration(registration), output);
+}
+
+CNA_Result WindowTextDrop(CNA_Handle gameHandle, CNA_GameWindowDropCallback callback,
+    void* context, CNA_GameEventRegistrationHandle* output)
+{
+    if (!callback) return InvalidArgument("Null drop callback.");
+    Game* game = nullptr;
+    if (const auto result = BorrowGame(gameHandle, &game); result != CNA_RESULT_SUCCESS) return result;
+    auto* window = &game->getWindowProperty();
+    auto registration = std::make_shared<WindowRegistration>();
+    const auto token = window->TextDropEXT.Add([state = registration->state, callback, context, game]
+        (System::Object*, const TextDropEventArgsEXT& args) {
+        if (!state->active) return;
+        const auto& text = args.getTextProperty();
+        const CNA_StringView view{text.data(), text.size()};
+        WindowCallbackScope scope(*game);
+        callback(context, &view, 1);
+    });
+    registration->detach = [window, token] { window->TextDropEXT.Remove(token); };
+    return CreateHandle(ObjectKind::GameEventRegistration, TrackGameRegistration(registration), output);
+}
+
+CNA_Result WindowRaiseFile(CNA_Handle gameHandle, const CNA_StringView* files, uint64_t count)
+{
+    if (count > SIZE_MAX / sizeof(CNA_StringView)) return CNA::C::Detail::Overflow("Too many dropped paths.");
+    if (count && !files) return InvalidArgument("Null dropped paths.");
+    GameWindow* window = nullptr;
+    if (const auto result = GetGameWindow(gameHandle, &window); result != CNA_RESULT_SUCCESS) return result;
+    std::vector<std::string> paths;
+    if (count > paths.max_size()) return CNA::C::Detail::Overflow("Too many dropped paths.");
+    paths.reserve(static_cast<std::size_t>(count));
+    for (uint64_t i = 0; i < count; ++i) {
+        std::string path;
+        if (const auto result = ReadText(files[i], "Invalid dropped path.", &path, CNA::C::Detail::EmbeddedNul::Refused); result != CNA_RESULT_SUCCESS) return result;
+        paths.push_back(std::move(path));
+    }
+    const FileDropEventArgsEXT args(std::move(paths));
+    window->FileDropEXT.Raise(window, args);
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result WindowRaiseText(CNA_Handle gameHandle, CNA_StringView text)
+{
+    GameWindow* window = nullptr;
+    if (const auto result = GetGameWindow(gameHandle, &window); result != CNA_RESULT_SUCCESS) return result;
+    std::string value;
+    if (const auto result = ReadText(text, "Invalid dropped text.", &value, CNA::C::Detail::EmbeddedNul::Refused); result != CNA_RESULT_SUCCESS) return result;
+    const TextDropEventArgsEXT args(std::move(value));
+    window->TextDropEXT.Raise(window, args);
+    return CNA_RESULT_SUCCESS;
 }
 
 } // namespace
