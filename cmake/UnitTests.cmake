@@ -1723,6 +1723,19 @@ if(CNA_BUILD_TESTS)
                 -P ${CMAKE_SOURCE_DIR}/cmake/Tests/SdlPrebuiltPublicationCase.cmake)
         set_tests_properties(CnaSdlPrebuiltPublication PROPERTIES
             LABELS "build;platform;configuration" TIMEOUT 180)
+
+        # MTH-BUILD-001: tiny ELF consumers, including copy relocations and ABI edits.
+        if(_cna_shared_library_supported AND CMAKE_GENERATOR MATCHES "^(Ninja|Unix Makefiles)$")
+            add_test(NAME CnaSharedRuntimeIncremental
+                COMMAND ${CMAKE_COMMAND}
+                    -DCNA_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+                    -DCNA_WORK_DIR=${CMAKE_BINARY_DIR}/CnaSharedRuntimeIncremental
+                    "-DCNA_GENERATOR=${CMAKE_GENERATOR}"
+                    "-DCNA_FIXTURE_ARGS=--compiler;${CMAKE_CXX_COMPILER}"
+                    -P ${CMAKE_SOURCE_DIR}/cmake/Tests/SharedRuntimeIncrementalCase.cmake)
+            set_tests_properties(CnaSharedRuntimeIncremental PROPERTIES
+                LABELS "build;configuration;shared-runtime" TIMEOUT 120)
+        endif()
     endif()
 
     # 2026-10-26 dependency audit C-01: the FNA3D repository/commit pair of a build tree follows

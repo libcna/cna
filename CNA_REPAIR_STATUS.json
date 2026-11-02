@@ -694,9 +694,14 @@
       "id": "CNA-FIX-L34",
       "source_section": "5.2 Limitations",
       "summary": "In a `CNA_SHARED_LIBRARY=ON` tree, `CMAKE_LINK_DEPENDS_NO_SHARED` (`CMakeLists.txt`) keeps the executables from relinking when `libcna.so` changes.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "MTH-BUILD-001: shared consumers inherit -fPIC and -z nocopyreloc/-z text, so exported data stays in libcna.so instead of being copied into executables at its link-time size (the stale copy relocation behind 'Symbol ... has different size'), and unsafe non-PIC inputs are refused. The early DSO injection uses a link name instead of the library file, which had silently defeated CMAKE_LINK_DEPENDS_NO_SHARED and relinked every consumer. Header changes to class layouts/vtables still recompile and relink their consumers as before. No guarantee for external stale binaries or missing source dependencies.",
+      "evidence": [
+        "CnaSharedRuntimeIncremental: actual production policy reproduces a growing exported array's copy-relocation loader warning and exit 1 with no consumer header change. The pre-fix full helper instead relinks every consumer, defeating its optimization.",
+        "Fixed GCC 14.2/Ninja, Clang 19.1/Ninja and GCC/Unix Makefiles fixtures pass: no shared-consumer relinks on implementation or opaque-data growth; exactly the affected shared consumer rebuilds on inline layout and virtual insertion; three no-op builds change no output.",
+        "Mixed module/shared ordering, installed usage requirements and forced non-PIC link refusal pass, including GCC/Mold and Clang/LLD; existing SharedRuntimeCase DEFAULT/ON/OFF/DIRECT probes pass with CMake 3.31.6. No real CNA build, GPU run or real-tree I/O measurement was performed.",
+        "Real tree cmake-build-multi (2026-11-02, after one adopting rebuild): of 531 executables needing libcna.so none carries a COPY relocation to a CNA symbol (the only one found, viewer-l7-reference/cna_gltf_viewer, is an out-of-graph binary from before the change); touching modules/storage/src/StorageContainer.cpp relinked libcna.so and only static-archive consumers, not CnaRendererTests/cna_test_easygl_textured_quad/cna_demo_2d; CnaSharedRuntimeIncremental, CnaSdlPrebuiltState and CnaSdlPrebuiltPublication pass there, and ctest -R ^EasyGL_ (OPENGLES3, private runner) passes 448/448 with no loader size warning; the build-asan parser suites ran on consumers linked with the new flags."
+      ]
     },
     {
       "id": "CNA-FIX-L35",

@@ -2053,13 +2053,6 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
   (`docs/renderer-registry.md`, "Categories and maturity").
 - Per-subsystem capability boundaries, by design rather than defect, are in the documents listed
   in §3.
-- In a `CNA_SHARED_LIBRARY=ON` tree, `CMAKE_LINK_DEPENDS_NO_SHARED` (`CMakeLists.txt`) keeps the
-  executables from relinking when `libcna.so` changes. After a commit that changes a class layout
-  or a vtable, the executables linked before it run against a library they were not linked for
-  (the loader warns `Symbol ... has different size in shared object`) and fail for no reason of
-  their own; delete and relink them before reading the suite. Seen on 2026-10-13 in
-  `cmake-build-multi` after the link-boundary work's virtual-function additions: 237 bogus
-  failures from 1,245 stale executables.
 - **Pixel-centre bias.** Every renderer moves 3D triangles 63/128 of a pixel, not 1/2, to emulate
   Direct3D 9's integer pixel centres (2026-10-26 audit B2-07). The 1/128 keeps a fill edge that
   falls exactly on a host sample on XNA's side; it is the value DXVK itself applies, and the XNA 4.0

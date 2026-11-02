@@ -329,8 +329,72 @@ reference comes from a later static framework; the previous linker state is rest
 Module-only consumers do not inherit this shared-target interface and remain static.
 The original `nm` investigation recorded only copy-relocated public data
 (`R_X86_64_COPY`, such as `BlendState::Opaque`) rather than independently live strong copies.
-That is historical binary evidence. Current mixed-consumer and C API runtime-identity tests protect
-the relevant singleton contracts, rather than proving every future consumer's symbol table.
+That is historical binary evidence. Shared consumers now inherit `-fPIC`, keeping these objects
+in the DSO, and `-z nocopyreloc -z text`, refusing incompatible precompiled inputs instead of
+embedding a copy or dynamic text relocation. `CMAKE_POSITION_INDEPENDENT_CODE=ON` alone is
+insufficient: executable objects use PIE, which permits copy relocations on x86-64 GCC.
+Current mixed-consumer and C API runtime-identity tests protect the relevant singleton contracts.
+
+**Incremental ABI changes (MTH-BUILD-001 / CNA-FIX-L34).** The tracked-header dependency graph
+remains responsible for compiler ABI assumptions. A changed class layout used inline, or an added
+virtual in a base class, recompiles and relinks consumers that include that header. A consumer
+using only opaque declarations need not recompile. Previously, even such a consumer could reserve
+an exported object's old size through an ELF copy relocation; growing the object produced the
+loader's `Symbol ... has different size in shared object` warning and truncated its initialization.
+PIC removes that extra link-time size dependency. Ordinary incremental builds now handle the
+covered cases without deleting executables. Applying this policy to an existing tree requires its
+normal reconfigure/build once so consumers acquire the compile and link options.
+
+The early DSO injection uses a link name and target-derived search directory. Its former
+`$<TARGET_FILE:cna_shared>` input accidentally defeated `LINK_DEPENDS_NO_SHARED`: the current
+pre-fix helper relinked **every** shared consumer even for an implementation-only edit. The fixture
+therefore tests both the complete helper and, for reproduction, the plain shared-library policy
+that exposes the historical stale-copy defect. The ordinary target dependency still brings the
+DSO up to date before consumers; the injected name preserves the early scoped `--no-as-needed`.
+
+A global dynamic-symbol-size stamp was not selected: it would relink unrelated consumers and
+cannot replace header tracking for same-size field or virtual-slot changes. Turning off the
+optimization also relinks unrelated consumers on every implementation edit. The chosen rule has
+no symbol-scanning step and no new production tool dependency. GNU ld documents the
+[copy-relocation and text-relocation guards](https://sourceware.org/binutils/docs/ld/Options.html).
+
+`CnaSharedRuntimeIncremental` runs a tiny fixture using the production CMake policy/helper. On
+Linux x86-64 (2026-11-02; CMake 3.31.6, Ninja 1.12.1, GCC 14.2 / Clang 19.1, shared ccache), it
+checks exported-data growth, inline layout, derived virtual dispatch, opaque consumers, mixed
+module/shared ordering, installed usage requirements, non-PIC refusal and three no-op builds.
+GCC with Unix Makefiles, GCC with Mold and Clang with LLD also pass. Fixture-scale
+implementation-edit measurements follow; these are single runs on a shared host, not a speed
+comparison or a real CNA-tree performance qualification:
+
+| Configuration | Wall time | Shared consumers relinked | Static control relinked |
+| --- | ---: | ---: | ---: |
+| Pre-fix full helper, GCC/Ninja, five shared consumers | 1.260 s | 5 | 1 |
+| Fixed helper, GCC/Ninja, five shared consumers | 0.268 s | 0 | 1 |
+| Fixed helper, Clang/Ninja, five shared consumers | 0.361 s | 0 | 1 |
+| Fixed helper, GCC/Makefiles, five shared consumers | 0.522 s | 0 | 1 |
+
+The fixed edit changes one runtime object, its archive, the DSO and the static control (71,436
+bytes of output files with GCC/Ninja, versus 162,172 before; these sizes exclude linker temporaries
+and cache I/O). Shared consumer objects and executables retain their timestamps. Header edits
+relink exactly the one affected shared consumer plus the static control; no-op builds change no object/archive/DSO or
+consumer output (GCC/Ninja 0.030–0.031 s in the recorded run). Run the fixture without configuring
+the full runtime, using an approved existing work directory:
+
+```bash
+export CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv
+cmake -DCNA_SOURCE_DIR="$PWD" -DCNA_WORK_DIR=<approved-fixture-workdir> \
+      -P cmake/Tests/SharedRuntimeIncrementalCase.cmake
+```
+
+`commands.json`, per-command logs and `measurements.json` retain exits, timings, relink sets and
+changed output sizes. `CNA_FIXTURE_ARGS` accepts `--compiler;clang++`; `--policy-only` deliberately
+isolates the unsafe old dependency policy, and fails on the x86-64 GCC copy-relocation witness.
+
+**Boundary.** This is not a C++ ABI compatibility promise for already-built external binaries,
+untracked/incorrect headers, ABI-changing flags outside the build graph, or replacing libraries
+without rebuilding their dependent sources. An ABI fingerprint could not make those compiler
+assumptions safe by relinking alone. The whole CNA-tree rebuild/test and its real I/O cost remain
+integration checks; the lane qualification above used tiny CPU-only fixtures.
 
 **Scope.** The policy enables this by default only for native non-Apple Unix GNU/Clang with
 CMake ≥3.30, excluding Android, Emscripten and cross compilation. Other toolchains keep the static

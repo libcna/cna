@@ -20,5 +20,8 @@ if(CNA_SHARED_LIBRARY)
             "Configure with -DCNA_SHARED_LIBRARY=OFF or upgrade CMake.")
     endif()
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    # Shared consumers receive -fPIC and a no-copy-relocation link guard from
+    # cna_shared. PIE alone can embed a DSO object's old size in an executable.
+    # Header dependencies still rebuild consumers of changed C++ declarations.
     set(CMAKE_LINK_DEPENDS_NO_SHARED ON)
 endif()
