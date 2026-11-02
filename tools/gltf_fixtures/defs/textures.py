@@ -269,16 +269,9 @@ def sampler_trilinear() -> Fixture:
 
 
 def tex_dual_texture_stride() -> Fixture:
-    """The one texture combination that changes the vertex stride -- `GLTF-149`'s last gap.
+    """Unlit ignores its fallback occlusion map and keeps BasicEffect's stride-32 layout.
 
-    Stride 28 is `DualTextureEffect`'s layout (Position + TextureCoordinate0 + TextureCoordinate1,
-    no normal at all), and it is selected only by a **non-PBR** material carrying *both* a
-    base-colour and an occlusion map. Every other textured material lands on the stride its material model already chose, which
-    is why this was the last of the seven strides with no golden bytes: it needs two textures and a
-    material model, and the corpus had no texture at all.
-
-    The two images are deliberately different -- the reference texture and a flat mid-grey -- so a
-    swap of the two slots is visible in the golden's own bytes rather than only on screen.
+    The historical fixture ID is retained; its former stride-28 golden encoded CNA-FIX-D07.
     """
     b = GltfBuilder("tex-dual-texture-stride")
     base_image = b.add_image(reference_texture(), name="BaseColor")
@@ -298,12 +291,11 @@ def tex_dual_texture_stride() -> Fixture:
     b.set_default_scene(0)
     return Fixture(
         id="tex-dual-texture-stride", audit_fixture=None, owning_group="textures",
-        description="A non-PBR material with both a base-colour and an occlusion texture, which "
-                    "selects DualTextureEffect's stride-28 layout -- the only stride a texture "
-                    "combination decides, and the last of the seven with no golden bytes.",
+        description="An unlit material with base-colour and fallback occlusion textures. "
+                    "Occlusion must not affect the effect choice or BasicEffect's stride-32 layout.",
         builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
         features=["base-colour texture", "occlusion texture", "KHR_materials_unlit",
-                  "vertex stride 28"],
+                  "vertex stride 32"],
         spec_anchors=_SPEC,
         l3={"primitives": [l3_primitive(
             mesh=mesh, mesh_name="DualTexturedQuad", primitive=0, mode=TRIANGLES,
@@ -311,12 +303,8 @@ def tex_dual_texture_stride() -> Fixture:
             texcoords=_QUAD_TEXCOORDS, indices=_QUAD_INDICES,
             material=_expected_material(material, "UnlitDual", base_color=True, occlusion=True,
                                         model="unlit"),
-            dropped_attributes=["normals", "tangents"],
-            dropped_reason="DualTextureEffect's stride-28 layout is Position + two "
-                           "TextureCoordinates and has no normal or tangent slot at all, so both "
-                           "authored streams are "
-                           "discarded at import and the primitive cannot be lit "
-                           "(GLTF-086/GLTF-241, documented limits reported by both loaders).")]},
+            dropped_attributes=["tangents"],
+            dropped_reason="BasicEffect's stride-32 layout retains normals and has no tangent slot.")]},
         l4=world_positions(b, {mesh: list(_QUAD_POSITIONS)}),
     )
 

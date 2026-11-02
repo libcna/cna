@@ -182,17 +182,12 @@ selection rule and **raises** rather than guessing when it meets a shape it does
 new fixture that would need an unmodelled rule fails generation instead of emitting a golden nobody
 verified.
 
-All seven strides the glTF importer can emit have goldens: 28 (`tex-dual-texture-stride`), 24,
-32 (`mat-unlit`), 48, 52 (`skin-unlit`), 56 (`skin-vertex-color`) and 68.
-
-A stride-28 golden needed a *textured* fixture, and the corpus had no image support at all until
-`png.py` (`GLTF-190`) — a PNG encoder written against `zlib` and `struct`, because the generator
-may not take a dependency. Stride 28 is the only stride a texture combination decides: a non-PBR
-material carrying both a base-colour and an occlusion map selects `DualTextureEffect`'s layout,
-whose TextureCoordinate1 carries the occlusion map's set, and every other map is sampled by
-whatever effect the material model already chose. It was stride 20, Position + one
-TextureCoordinate, until CNA refused a `DualTextureEffect` draw without TextureCoordinate1 as XNA
-does (2026-10-15).
+Material and vertex-attribute layouts have byte goldens, including rigid/skinned PBR with
+colour or a second UV channel and unlit BasicEffect/SkinnedEffect. The historical
+`tex-dual-texture-stride` fixture now proves that unlit fallback occlusion does not change the
+stride-32 BasicEffect layout. Its former stride-28 golden encoded CNA-FIX-D07: unlit materials
+must ignore lighting inputs, so their occlusion map must not select DualTextureEffect.
+The stock DualTextureEffect ABI remains covered by the graphics/layout tests independently.
 
 When a golden legitimately changes — a fixed packing defect, a deliberate layout change — the diff
 to review is the `.expected.json` block, which states the stride, the field offsets and the vertex

@@ -120,39 +120,9 @@ def _color_byte(value: float) -> int:
 
 
 def select_stride(primitive: dict[str, Any]) -> int:
-    """The stride ExtractMesh selects for a primitive, for the cases the corpus can express.
-
-    Mirrors `GLTF-215`'s selection rule: what decides PBR is the material *model*, not which
-    texture maps happen to be present. Metallic-roughness is glTF's default in two ways -- a
-    primitive with no material at all gets the default material, and a material that omits the
-    optional ``pbrMetallicRoughness`` object still uses that model with default factors -- so the
-    only exclusions are a material declaring a different model, and a vertex-coloured primitive,
-    whose stride-24 layout no PBR shader reads.
-
-    Textures change the stride in exactly one combination -- a non-PBR material carrying both a
-    base-colour and an occlusion map, which selects DualTextureEffect's stride-28 layout. Every
-    other map is sampled by whatever effect the material model already chose.
-    """
+    """Select the material/attribute layout without sampling unlit fallback lighting maps."""
     material = primitive.get("material") or {}
-    # A material declaring a model CNA's PBR shaders do not implement imports through BasicEffect
-    # instead, which is what reaches the two strides with no tangent slot (32 unskinned, 52
-    # skinned). Those are the layouts most non-PBR content lands on, so leaving them without a
-    # golden left the widest part of the ABI unasserted.
-    #
-    # `unlit` alone since GLTF-349: a specular-glossiness material is CONVERTED to
-    # metallic-roughness rather than excluded from it, so it takes the PBR stride like any other
-    # metallic-roughness material. Listing it here was correct only while the conversion did not
-    # exist -- and it is exactly the kind of second copy of a rule that goes stale silently, which
-    # is why the L5 goldens are byte-compared rather than derived from the same code.
     non_pbr_model = material.get("model") == "unlit"
-    # A textured material only changes the stride in one combination: a NON-PBR material carrying
-    # both a base-colour and an occlusion map selects DualTextureEffect's stride-28 layout. Every
-    # other map is sampled by whatever effect the material model already chose, so the stride is
-    # the untextured one. The refusal is therefore narrowed to that one case rather than to
-    # "textured", which used to exclude the whole corpus from having a texture at all.
-    if (non_pbr_model and material.get("hasBaseColorTexture")
-            and material.get("hasOcclusionTexture")):
-        return 28
     skinned = bool(primitive.get("joints")) and bool(primitive.get("weights"))
     colored = bool(primitive.get("colors"))
     # GLTF-462: a vertex-coloured primitive is no longer excluded from the

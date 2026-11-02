@@ -497,7 +497,6 @@ factor-only metallic-roughness material to an untextured white `BasicEffect`.
 | `KHR_materials_unlit`, no colour | `BasicEffect`, lighting off | 32 |
 | …and skinned | `SkinnedEffect`, white-ambient/no-directional policy | 52 |
 | `KHR_materials_unlit` with `COLOR_0` | `BasicEffect` / `SkinnedEffect` | 24 / 56 |
-| unskinned, uncoloured non-PBR material with base-colour and occlusion images | `DualTextureEffect` | 28; see the unlit occlusion defect below |
 
 Metallic-roughness is glTF's default in two separate ways, so most files take the first row.
 `BasicEffect` and `SkinnedEffect` stay reachable for the content that genuinely is not PBR, and
@@ -532,11 +531,13 @@ changes that material into non-PBR. The historical `GLTF-241` rationale is not c
 SkinnedEffect cannot switch to an unlit shader through `IEffectLights`: its false lighting setter
 refuses. CNA parks all directional lights and supplies white ambient. The registry retains
 `IMPLEMENTED_WITH_A_NAMED_LIMIT`; this configuration is not evidence of every renderer's exact
-unlit parity. A separate current defect is the legacy DualTexture selection: an unskinned,
-uncoloured unlit material with base-colour and occlusion images can sample that occlusion texture,
-although [KHR_materials_unlit](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_unlit)
-requires the base-colour term without lighting-model inputs. See handoff §5.1; the guide must not
-present that branch as an exact mapping.
+unlit parity.
+
+Unlit fallback occlusion maps do not select `DualTextureEffect` or add a second UV stream.
+They are excluded from the base-colour term required by
+[KHR_materials_unlit](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_unlit/README.md).
+Rigid uncoloured unlit materials remain `BasicEffect` on stride 32 with or without occlusion;
+metallic-roughness materials keep their real PBR occlusion map.
 
 ### `KHR_materials_pbrSpecularGlossiness` is converted, not refused
 

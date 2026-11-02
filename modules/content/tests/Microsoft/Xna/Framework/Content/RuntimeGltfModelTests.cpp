@@ -18,6 +18,8 @@
 //     SkinningData/AnimationClip construction, and SkinnedEffect wiring all work when built
 //     directly in-memory (no .skeleton.bin/.clip.cnj round-trip at all).
 
+#include <algorithm>
+#include <vector>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -27,8 +29,12 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
-#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererTestGate.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
@@ -381,11 +387,7 @@ namespace
   ]
 })GLTF";
 
-    // DualTextureEffect occlusion brightness fix (CNB-88, Phase 14E): an unskinned, uncolored mesh
-    // whose material has both a base-color and an occlusion texture, imported through
-    // DualTextureEffect -- identical fixture to GltfToCnjToolTests.cpp's own kDualTextureGltf.
-    // The occlusion image is a solid (255,0,0) 1x1 PNG; RemapOcclusionImageForDualTextureEXT must
-    // halve it (~127,0,0) before it reaches the loaded Texture2D.
+    // Shared base-colour/occlusion fixture for unlit and metallic-roughness selection.
     const char* kDualTextureGltf = R"GLTF({
   "asset": { "version": "2.0" },
   "scene": 0,
@@ -701,16 +703,11 @@ TEST(RuntimeGltfModelTest, LoadsSkinnedPbrMaterialDirectlyFromGltf)
     EXPECT_EQ(skinningData->BoneCount, 1);
 }
 
-// DualTextureEffect occlusion brightness fix (CNB-88, Phase 14E): the runtime glTF path must
-// also apply RemapOcclusionImageForDualTextureEXT before loading the occlusion image into
-// DualTextureEffect::Texture2, not just the offline CLI/.cnj path.
-TEST(RuntimeGltfModelTest, RemapsOcclusionTextureBrightnessForDualTextureEffectFromGltf)
+TEST(RuntimeGltfModelTest, UnlitIgnoresOcclusionWhileMetallicRoughnessRetainsIt)
 {
     ScratchDir contentRoot;
     WriteFile(contentRoot.path() / "dualtex.gltf", kDualTextureGltf);
-    // The same document with KHR_materials_unlit declared, which is what routes it to the
-    // dual-texture lightmap path (GLTF-215/GLTF-337). Built by substitution rather than as a
-    // second literal, so the two cannot drift apart in any way except the extension.
+    // The material model alone differs between these two documents.
     {
         std::string unlit = kDualTextureGltf;
         const std::string material = R"("materials": [ { "pbrMetallicRoughness")";
@@ -734,32 +731,16 @@ TEST(RuntimeGltfModelTest, RemapsOcclusionTextureBrightnessForDualTextureEffectF
     ContentManager cm(nullptr, contentRoot.path().string());
     cm.setGraphicsDevice(gd);
 
-    // The occlusion-as-lightmap approximation is a NON-PBR path, and since GLTF-215 the only way
-    // a base-colour-plus-occlusion material reaches it is by declaring KHR_materials_unlit -- an
-    // ordinary metallic-roughness material now goes to PbrEffect, which has a real occlusion map
-    // and needs no approximation. The corpus fixture `tex-dual-texture-stride` is authored exactly
-    // that way; this one was not, and had been asserting DualTextureEffect against a model that
-    // stopped being one. Both branches are pinned here, because which branch a material takes is
-    // the actual contract.
     Model model = cm.Load<Model>("dualtex-unlit");
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
-    ModelMesh* mesh = model.getMeshesProperty()[0];
-
-    auto* dualFx = dynamic_cast<DualTextureEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(dualFx, nullptr)
-        << "an unlit base-colour + occlusion material must take the dual-texture lightmap path";
-    Texture2D* tex2 = dualFx->getTexture2Property();
-    ASSERT_NE(tex2, nullptr);
-    EXPECT_EQ(tex2->getWidthProperty(), 1);
-
-    // Source occlusion image is solid (255,0,0); the loaded texture must be halved (~127,0,0),
-    // not the raw passthrough value.
-    Color occlusionPixel(0, 0, 0, 0);
-    tex2->GetData(&occlusionPixel, 1);
-    EXPECT_NEAR(occlusionPixel.getRProperty(), 127, 2);
-    EXPECT_EQ(occlusionPixel.getGProperty(), 0);
-    EXPECT_EQ(occlusionPixel.getBProperty(), 0);
-    EXPECT_EQ(occlusionPixel.getAProperty(), 255);
+    auto* basic = dynamic_cast<BasicEffect*>(
+        model.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(basic, nullptr) << "unlit must sample only base colour, with no occlusion slot";
+    EXPECT_FALSE(basic->getLightingEnabledProperty());
+    ASSERT_NE(basic->getTextureProperty(), nullptr);
+    Color basePixel;
+    basic->getTextureProperty()->GetData(&basePixel, 1);
+    EXPECT_EQ(basePixel, Color::Red);
 
     // The other branch: the same material without the extension is metallic-roughness, so it
     // selects PbrEffect and its occlusion map is bound as authored -- the shader applies
@@ -776,6 +757,46 @@ TEST(RuntimeGltfModelTest, RemapsOcclusionTextureBrightnessForDualTextureEffectF
     EXPECT_EQ(rawPixel.getRProperty(), 255)
         << "the PBR path must bind the occlusion map unremapped -- the shader applies the strength "
            "formula itself, so halving it at import would apply the approximation twice";
+}
+
+TEST(RuntimeGltfModelTest, AnUnlitTriangleWithBlackOcclusionStillRendersItsBaseColour)
+{
+    using namespace CNA::Testing::Renderers;
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGPU, SdlGpu, Software);
+    ScratchDir contentRoot;
+    std::string document = kDualTextureGltf;
+    document.insert(1, R"("extensionsUsed": ["KHR_materials_unlit"],)");
+    const std::string material = R"("occlusionTexture": { "index": 1 } } ],)";
+    const auto materialAt = document.find(material);
+    ASSERT_NE(materialAt, std::string::npos);
+    document.replace(materialAt, material.size(),
+        R"("occlusionTexture": { "index": 1 }, "doubleSided": true, "extensions": { "KHR_materials_unlit": {} } } ],)");
+    const std::string secondImage = R"({ "bufferView": 3, "mimeType": "image/png" })";
+    const auto imageAt = document.find(secondImage);
+    ASSERT_NE(imageAt, std::string::npos);
+    document.replace(imageAt, secondImage.size(),
+        R"({ "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==" })");
+    WriteFile(contentRoot.path() / "unlit-black-occlusion.gltf", document);
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("unlit-black-occlusion");
+    RenderTarget2D target(gd, 64, 64);
+    gd.SetRenderTarget(&target);
+    gd.Clear(Color::Black);
+    gd.setBlendStateProperty(BlendState::Opaque);
+    gd.setDepthStencilStateProperty(DepthStencilState::None);
+    gd.setRasterizerStateProperty(RasterizerState::CullNone);
+    model.Draw(Matrix::CreateTranslation(-0.5f, -0.5f, 0.0f) * Matrix::CreateScale(1.5f),
+               Matrix::getIdentityProperty(), Matrix::getIdentityProperty());
+    gd.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    gd.Present();
+    std::vector<Color> pixels(64 * 64);
+    target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    EXPECT_GT(std::count_if(pixels.begin(), pixels.end(), [](const Color& pixel)
+    {
+        return pixel.getRProperty() > 240 && pixel.getGProperty() < 5 && pixel.getBProperty() < 5;
+    }), 200) << "black occlusion must not darken the unlit red base texture";
 }
 
 #ifdef CNA_DRACO_AVAILABLE

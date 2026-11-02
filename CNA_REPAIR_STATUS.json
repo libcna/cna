@@ -81,9 +81,14 @@
       "id": "CNA-FIX-D07",
       "source_section": "5.1 Defects",
       "summary": "glTF unlit material selection can still sample occlusion: ExtractMesh selects DualTextureEffect for an unskinned/uncoloured non-PBR material with base-colour and occlusion images, including KHR_materials_unlit.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Exclude unlit materials from DualTextureEffect selection. Preserve BasicEffect/stride 32 for rigid uncoloured unlit content and real PBR occlusion for metallic-roughness content; correct the independent fixture generator/goldens and affected L7 records.",
+      "evidence": [
+        "Khronos KHR_materials_unlit defines the base-colour term without lighting inputs. All three corrected importer, runtime-effect and black-occlusion framebuffer regressions fail before correction, then pass privately on OPENGLES3, SOFTWARE and SDLGPU.",
+        "622-case glTF/runtime/export/CNB selection: 619 passes and three optional external-asset skips across the broad run and final 19-case corpus rerun after correcting the report digest. Generator --check passes; only the affected expected manifest/vertex golden changes.",
+        "Affected EasyGL and SOFTWARE L7 PNGs are recaptured in two independent byte-identical processes each, using unmodified CI-pinned viewer sources and the existing current multi-renderer CNA library. Asset-level retake fields preserve actual hashes and scope; other captures remain historical.",
+        "Affected target builds; ten provenance/pipeline metadata/C ABI/header/doc gates and docs local links pass. No new stub/package/public API change; no fresh whole-corpus L7, native Windows or other renderer qualification is claimed."
+      ]
     },
     {
       "id": "CNA-FIX-D08",

@@ -1797,7 +1797,7 @@
         "base-colour texture",
         "occlusion texture",
         "KHR_materials_unlit",
-        "vertex stride 28"
+        "vertex stride 32"
       ],
       "auditFixture": null
     },
@@ -5860,8 +5860,8 @@
     },
     {
       "path": "tex-dual-texture-stride.expected.json",
-      "bytes": 9892,
-      "sha256": "e8e456ddbd4e3ffcb1cec3a637ee9cd7ab9785342e0b6c93907d96e85e351c27"
+      "bytes": 9597,
+      "sha256": "50e779c43baa44ee2c155342b3162124d209c984d33ee68026c30765410ab0e0"
     },
     {
       "path": "tex-dual-texture-stride.glb",
@@ -5880,8 +5880,8 @@
     },
     {
       "path": "tex-dual-texture-stride.vb.bin",
-      "bytes": 112,
-      "sha256": "ba7700474d2bb0e9c06896884c08187acb5459c298b2ef1018cba345da6a4f5f"
+      "bytes": 128,
+      "sha256": "59e7d4e9e56a409e4a97a67ddc8c11eafd0354a71d9355a9730d5c77fd9216cb"
     },
     {
       "path": "tex-reference-checkerboard.expected.json",

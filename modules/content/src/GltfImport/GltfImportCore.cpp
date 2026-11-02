@@ -2973,16 +2973,6 @@ namespace CNA::Internal::GltfImport
         }
         out.legacyTangentBasisEXT = hasLegacyTangentBasis;
         out.material.baseColorImage = FindBaseColorImage(prim, &out.unsupportedTextureSourcesEXT);
-        // An unskinned, uncolored primitive with both a base-color and an occlusion texture is
-        // imported through DualTextureEffect (Texture=base color, Texture2=occlusion) instead of
-        // BasicEffect -- real XNA's DualTextureEffect always samples both texture slots (no
-        // TextureEnabled-style toggle), Texture with TextureCoordinate0 and Texture2 with
-        // TextureCoordinate1, and refuses a declaration lacking either. The stride-28 layout
-        // therefore carries both: the base colour's UV set and the occlusion map's own set (the
-        // same coordinates again when both maps use one set). Skinned/colored meshes keep their
-        // existing effect (SkinnedEffect has no Texture2 slot; the colored VertexPositionColor
-        // Texture layout has no room for a second UV/texture either) -- a documented scope cut,
-        // not an oversight.
         // CNJ CNB-59 (Phase 13A): an unskinned, uncolored primitive with a normal map or
         // metallic-roughness map is genuinely PBR-authored content (not just "any glTF material"
         // -- pbrMetallicRoughness is glTF's own default material block even for the simple
@@ -3314,22 +3304,11 @@ namespace CNA::Internal::GltfImport
                                           emissiveStrength;
         }
 
-        // occlusionImage is populated whenever eligible (unskinned, uncolored) regardless of
-        // which effect ends up consuming it -- DualTextureEffect's own Texture2 approximation
-        // (CNB-72/73) only when usePbr is false, or PbrEffect's own real OcclusionMap when true
-        // (see the useDualTexture computation immediately below, and ExtractMesh's caller for the
-        // PbrEffect wiring).
-        // PBR + skinning combo: occlusionImage is now also extracted for skinned, uncolored
-        // primitives (needed for SkinnedPbrEffect's own OcclusionMap), but useDualTexture stays
-        // gated to unskinned primitives -- SkinnedEffect has no Texture2 slot, so a skinned
-        // non-PBR mesh with an occlusion+base-color pair simply leaves occlusionImage unused.
-        // GLTF-462: extracted for a coloured primitive as well, because a coloured metallic-
-        // roughness primitive is now shaded by PbrEffect and PbrEffect samples a real occlusion
-        // map. The DualTextureEffect approximation stays gated on uncoloured, unskinned, non-PBR --
-        // SkinnedEffect has no Texture2 slot and the stride-24 colour layout has no second UV.
+        // Unlit excludes occlusion from the base-colour term, even when an asset supplies
+        // lighting maps as a fallback. Metallic-roughness retains the authored occlusion map.
         out.material.occlusionImage =
             FindOcclusionImage(prim, &out.unsupportedTextureSourcesEXT);
-        out.useDualTexture = (!out.usePbr) && (!out.skinned) && (!out.colored) &&
+        out.useDualTexture = (!out.unlitEXT) && (!out.usePbr) && (!out.skinned) && (!out.colored) &&
                              (out.material.occlusionImage != nullptr) &&
                              (out.material.baseColorImage != nullptr);
 

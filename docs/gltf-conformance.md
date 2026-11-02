@@ -1038,6 +1038,14 @@ tools/platform/run_gpu_tests_private.sh --exec \
 classifications, source/golden hashes, the exact directory set and the two-process policy without
 opening a display. It does not recreate the recorded executable or rerender its images.
 
+On 2026-11-02, CNA-FIX-D07 recaptured only `tex-dual-texture-stride` in two independent
+processes for each of EasyGL and SOFTWARE, using the CI-pinned viewer revision against the
+current multi-renderer CNA library. Its unlit fallback occlusion is ignored, and its generated
+vertex golden now has BasicEffect's stride 32. Each report's asset-level `retake` records the
+viewer/library/patch hashes and environment; other rows keep their historical capture provenance.
+The root corpus digest advances with the matching generated manifest. This is a targeted repair
+retake, not a fresh whole-corpus L7 qualification.
+
 ### 5.5 Pinned reference-renderer subset (`GLTF-411`)
 
 The retained supplementary reference comparison covers 13 generated asset containers: JSON and GLB,
@@ -1325,7 +1333,7 @@ written for this document: two descriptions of the same fixture are two things t
 | `tex-texture-transform` | textures | L1, L2, L3, L4, L5 | KHR_texture_transform; offset; rotation; non-square scale; per-map shader transform |
 | `texture-transform-per-map` | textures | L1, L2, L3, L4, L5 | KHR_texture_transform; per-map transforms; base-colour texture; normal texture; shared UV with independent transforms |
 | `texture-shared-two-samplers` | textures | L1, L2, L3, L4, L5 | shared image; two textures; two samplers; per-slot sampler state; independent U/V addressing |
-| `tex-dual-texture-stride` | textures | L1, L2, L3, L4, L5 | base-colour texture; occlusion texture; KHR_materials_unlit; vertex stride 28 |
+| `tex-dual-texture-stride` | textures | L1, L2, L3, L4, L5 | base-colour texture; occlusion texture; KHR_materials_unlit; vertex stride 32 |
 | `skin-armature-ancestor` | skinning | L1, L2, L3, L4 | skin.joints; skin.inverseBindMatrices; armature ancestor above the joint set; JOINTS_0 / WEIGHTS_0 |
 | `skin-mesh-node-transform` | skinning | L1, L2, L3, L4 | skinned mesh node transform; mesh node transform ignored; skin.inverseBindMatrices; JOINTS_0 / WEIGHTS_0 |
 | `skin-plus-static-mesh` | skinning | L1, L2, L3, L4 | two mesh groups; skinned and unskinned mesh in one file; skin.joints; skin.inverseBindMatrices |
@@ -1470,7 +1478,7 @@ prove a prose claim or detect every missing semantic combination.
 | 15 | `morph-node-weights-override`, `mode-triangle-strip-morph`, `anim-weights-path`, `morph-position-normal-tangent` | `GltfMorphWeights`, `GltfMorphBlending`, `GltfConformanceL4`, `GltfToCnjToolTest` | green; all 13 `morph-*` fixtures now compare direct and offline default blended bytes, including tangent deltas (`GLTF-289`) |
 | 16 | `anim-step`, `anim-cubicspline`, `anim-rigid-node`, `anim-weights-path`, `anim-parent-child`, `anim-two-clips`, `anim-nonzero-start` | `GltfAnimationSampling`, `GltfAnimationRobustness`, `GltfRigidAnimation`, `GltfClipAndLight`, `GltfConformanceL4` | green |
 | 17 | `gltf-required-extension-unsupported` | `GltfContainerValidation`, `GltfExtensionRegistry` | green |
-| 18 | `mat-vertex-color-pbr`, `skin-eight-influences`, `skin-unnormalized`, `lights-over-budget` | `GltfKnownDefect`, `GltfLightBudget`, `GltfAttributeCoverage`, `GltfLimitationsDoc`, `GltfImportReport` | Named counters and direct/offline structured-report witnesses pass. The current unlit-occlusion defect prevents a blanket all-losses/all-combinations claim. |
+| 18 | `mat-vertex-color-pbr`, `skin-eight-influences`, `skin-unnormalized`, `lights-over-budget` | `GltfKnownDefect`, `GltfLightBudget`, `GltfAttributeCoverage`, `GltfLimitationsDoc`, `GltfImportReport` | Named counters and direct/offline structured-report witnesses pass. Unlit fallback occlusion is excluded from effect selection and covered by importer, runtime and framebuffer regressions; named remaining limits still prevent an all-combinations claim. |
 | 19 | the whole corpus | `GltfConformanceL5`, `GltfConformanceL6` across the renderer gate | Historical STUB/HEADLESS/OPENGLES3/VULKAN observations use the same expectations. Current CI configures STUB, HEADLESS, OPENGLES3, SDLGPU, WEBGPU and SOFTWARE; configuration is not a fresh execution. The parity shell wrapper requires independent exit/result checks (§5.3). |
 | 20 | the 15-case Gate C retake matrix of §5.6 (14 rows; sparse attribute/index are distinct) | `GltfFixtureCorpus`, `CnaGltfConformanceL7` | **green:** `scripts/gltf-viewer-retake.py` executed every row through two byte-identical OPENGLES3 viewer processes and the exact viewer-reported camera through the pinned Khronos renderer. All 15 pass IoU/coverage/RGB gates; the ≥50 MiB Sponza row is 52,686,624 bytes / 262,267 triangles (`GLTF-429`, `docs/gltf-viewer-retake-report.json`). `GltfFixtureCorpus.ViewerRetakeMatrixIsPinnedCompleteAndStrict` keeps the pins, row set and thresholds permanent; the required corpus L7 CTest remains the per-commit broad pixel gate. |
 

@@ -7,7 +7,7 @@
   ],
   "capturedOn": "2026-08-18",
   "corpusManifest": "tests/assets/gltf/manifest.json",
-  "corpusManifestSha256": "c5d6ebe9c25116954169efb975f60d6a2a5b879d8b97117c8cd8659cab8650e3",
+  "corpusManifestSha256": "5c5b83de0d906ad10d406237fff79ea604cebd0d1c91480d3ae95ae03fbcd966",
   "distinctAssetCount": 148,
   "capturedAssetCount": 140,
   "rejectedAssetCount": 8,
@@ -2398,24 +2398,41 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/software/tex-dual-texture-stride.png",
-      "goldenPngSha256": "b881c65c06a69ce9eb23b5de7439a05c9ac41dd615c67de1910eedc86150d3aa",
-      "twoProcessPngSha256": "b881c65c06a69ce9eb23b5de7439a05c9ac41dd615c67de1910eedc86150d3aa",
+      "goldenPngSha256": "5cd5b9fae1d91015fbe6dd3957371485c46043c1bc9e6ca1b951adad607d1683",
+      "twoProcessPngSha256": "5cd5b9fae1d91015fbe6dd3957371485c46043c1bc9e6ca1b951adad607d1683",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
         512
       ],
-      "nonClearPixelCount": 45643,
+      "nonClearPixelCount": 46797,
       "nonClearBoundingBox": [
-        183,
-        91,
-        389,
-        369
+        197,
+        111,
+        409,
+        394
       ],
       "emptyForegroundAllowed": false,
       "comparison": {
         "maximumRgbDelta": 0,
         "maximumAlphaDelta": 0
+      },
+      "retake": {
+        "task": "CNA-FIX-D07",
+        "capturedOn": "2026-11-02",
+        "cnaBaseCommit": "136c4a2dad641a66b26669c3d3a0149bc85d831e",
+        "importerPatchSha256": "b6ca085f23569a20797b3482aafa3fa7c244dca332e6c71b190bee44f710e13f",
+        "viewerCommit": "6061bff135c9b0701983ad5950f69da7f3658d1f",
+        "viewerExecutableSha256": "2e684b968734ef417f57c03fae8a01444049b357ef29284849d70319e641a366",
+        "cnaSharedLibrarySha256": "7b1d9dcd3fe828cc58e16fbbfd0cb0d0d34fcef73ad6ff552989402fbea0ed18",
+        "build": "Four unmodified pinned viewer translation units compiled with the existing multi-renderer CNA consumer flags and linked to its current shared library.",
+        "environment": {
+          "SDL_VIDEODRIVER": "x11",
+          "SDL_AUDIODRIVER": "dummy",
+          "CNA_GRAPHICS_RENDERER": "SOFTWARE"
+        },
+        "processes": 2,
+        "scope": "This asset only; other rows retain their historical capture provenance."
       }
     },
     {

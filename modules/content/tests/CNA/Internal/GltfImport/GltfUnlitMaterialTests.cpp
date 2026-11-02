@@ -96,6 +96,25 @@ TEST(GltfUnlitMaterial, AnUnlitMaterialTurnsLightingOffAndCarriesItsBaseColour)
                 kTolerance);
 }
 
+TEST(GltfUnlitMaterial, AnOcclusionMapDoesNotChangeTheUnlitEffectOrVertexLayout)
+{
+    using namespace CNA::Internal::GltfImport;
+    const LoadedFixture fixture("tex-dual-texture-stride");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const auto& data = fixture.Data();
+    const auto& primitive = data.meshes[0].primitives[0];
+    ASSERT_NE(primitive.material->occlusion_texture.texture, nullptr);
+    const auto withOcclusion = ExtractMesh(&data, primitive, "with", nullptr, 1.0f);
+    EXPECT_TRUE(withOcclusion.unlitEXT);
+    EXPECT_FALSE(withOcclusion.useDualTexture);
+    EXPECT_FALSE(withOcclusion.usePbr);
+    EXPECT_EQ(withOcclusion.stride, 32);
+    primitive.material->occlusion_texture.texture = nullptr;
+    const auto withoutOcclusion = ExtractMesh(&data, primitive, "without", nullptr, 1.0f);
+    EXPECT_EQ(withOcclusion.vertexBytes, withoutOcclusion.vertexBytes);
+    EXPECT_EQ(withOcclusion.stride, withoutOcclusion.stride);
+}
+
 TEST(GltfUnlitMaterial, TheDefaultLightingFallbackDoesNotUndoTheUnlitFlag)
 {
     // The failure this exists to catch, and the one that would look like nothing at all. Both

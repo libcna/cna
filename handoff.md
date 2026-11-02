@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D07 (2026-11-02): unlit fallback occlusion no longer selects DualTextureEffect.
+  Uncoloured rigid unlit content stays on BasicEffect/stride 32; PBR retains its authored
+  occlusion map. Three importer/runtime/framebuffer regressions fail before correction and pass
+  on private OPENGLES3, SOFTWARE and SDLGPU afterwards. The black-occlusion pixel witness still
+  renders the red base texture. The 622-case glTF/export/CNB selection has 619 passes and three
+  optional-asset skips after the stale report digest is corrected and all 19 corpus cases rerun.
+  The fixture generator and independent byte goldens are corrected; generation check passes.
+  Only the affected L7 fixture is recaptured, in two independent processes per EasyGL/SOFTWARE
+  renderer, using the CI-pinned human-authored viewer and existing multi-renderer CNA build.
+  Asset-level report provenance records exact viewer/library/patch hashes; other captures retain
+  historical provenance. Ten provenance/metadata/C ABI gates and local docs links pass. No new
+  runtime stub, dependency package or public API change; no fresh full-corpus L7, native Windows
+  or additional renderer qualification is claimed.
 - CNA-FIX-D06 (2026-11-02): selected configured/system fonts now become byte-hashed
   native input dependencies in both the canonical processor and XNA processor bridge. Declared
   source roots retain alias-relative identities; other native inputs use explicit machine-local
@@ -1911,13 +1924,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   `tests/reference/xna40/bitmap-region-overflow/PROVENANCE.json`. No production correction has
   been applied: the owner must choose between measured invalid-input behavior and safe early
   refusal under AGENTS.md's reference rule.
-- glTF unlit material selection can still sample occlusion: ExtractMesh selects DualTextureEffect
-  for an unskinned/uncoloured non-PBR material with base-colour and occlusion images, including
-  KHR_materials_unlit. ApplyUnlitMaterialEXT keeps both textures, although the extension requires
-  baseColorFactor/baseColorTexture/vertex colour without lighting-model inputs. A temporary
-  fixture based on mat-unlit and the dual-texture image inputs exported unlit=true, stride 28,
-  DualTextureEffect and texture2 successfully (2026-11-01). No permanent framebuffer regression
-  or runtime fix was added during the docs/gltf-conventions.md audit.
 - Standalone C network-gamer factories do not retain their session or, for a local gamer, its
   signed-in gamer. `NetworkGamerResource` owns the gamer but stores only the session token, and
   native gamer state holds raw pointers. Source inspection during the 2026-11-01 networking

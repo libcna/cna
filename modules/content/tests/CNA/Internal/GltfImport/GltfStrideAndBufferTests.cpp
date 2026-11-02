@@ -313,7 +313,7 @@ TEST(GltfStrideAndBuffer, EveryImportedGltfStrideCarriesItsCanonicalVertexDeclar
     // the declaration before SetData/SetDataRaw reached the selected renderer.
     struct Case { const char* fixture; int stride; };
     const Case cases[] = {
-        {"tex-dual-texture-stride", 28},
+        {"tex-dual-texture-stride", 32},
         // GLTF-462: a rigid vertex-coloured primitive keeps its metallic-roughness material now,
         // so it takes the rigid PBR layout and its colour rides in stride 60's own colour slot.
         // Stride 24 is reached only by a coloured primitive whose material declares

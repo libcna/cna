@@ -7,7 +7,7 @@
   ],
   "capturedOn": "2026-10-29",
   "corpusManifest": "tests/assets/gltf/manifest.json",
-  "corpusManifestSha256": "c5d6ebe9c25116954169efb975f60d6a2a5b879d8b97117c8cd8659cab8650e3",
+  "corpusManifestSha256": "5c5b83de0d906ad10d406237fff79ea604cebd0d1c91480d3ae95ae03fbcd966",
   "distinctAssetCount": 148,
   "capturedAssetCount": 140,
   "rejectedAssetCount": 8,
@@ -2407,8 +2407,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/easygl/tex-dual-texture-stride.png",
-      "goldenPngSha256": "927788fb3ab540171cad6c22c0400931715793e843728a100e644b76ae802db1",
-      "twoProcessPngSha256": "927788fb3ab540171cad6c22c0400931715793e843728a100e644b76ae802db1",
+      "goldenPngSha256": "6158bfcd0705e33aaabd49e8b415bb88477c782f867a67789f8f2042564f42f7",
+      "twoProcessPngSha256": "6158bfcd0705e33aaabd49e8b415bb88477c782f867a67789f8f2042564f42f7",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -2425,6 +2425,24 @@
       "comparison": {
         "maximumRgbDelta": 0,
         "maximumAlphaDelta": 0
+      },
+      "retake": {
+        "task": "CNA-FIX-D07",
+        "capturedOn": "2026-11-02",
+        "cnaBaseCommit": "136c4a2dad641a66b26669c3d3a0149bc85d831e",
+        "importerPatchSha256": "b6ca085f23569a20797b3482aafa3fa7c244dca332e6c71b190bee44f710e13f",
+        "viewerCommit": "6061bff135c9b0701983ad5950f69da7f3658d1f",
+        "viewerExecutableSha256": "2e684b968734ef417f57c03fae8a01444049b357ef29284849d70319e641a366",
+        "cnaSharedLibrarySha256": "7b1d9dcd3fe828cc58e16fbbfd0cb0d0d34fcef73ad6ff552989402fbea0ed18",
+        "build": "Four unmodified pinned viewer translation units compiled with the existing multi-renderer CNA consumer flags and linked to its current shared library.",
+        "environment": {
+          "SDL_VIDEODRIVER": "x11",
+          "SDL_AUDIODRIVER": "dummy",
+          "LIBGL_ALWAYS_SOFTWARE": "1",
+          "CNA_GRAPHICS_RENDERER": "OPENGLES3"
+        },
+        "processes": 2,
+        "scope": "This asset only; other rows retain their historical capture provenance."
       }
     },
     {

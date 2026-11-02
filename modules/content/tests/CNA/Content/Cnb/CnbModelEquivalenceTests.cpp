@@ -492,7 +492,7 @@ TEST(CnbModelEquivalenceTest, ARepresentativeSliceOfTheCorpusLoadsIdenticallyBot
         "morph-node-weights-override", // non-zero default morph weights
         "mat-normal-occlusion-scale",  // a PBR material with maps and scalars
         "mat-unlit",                   // the unlit lighting branch
-        "tex-dual-texture-stride",     // DualTextureEffect's two-slot layout
+        "tex-dual-texture-stride",     // unlit ignores fallback occlusion
         "two-primitives-one-buffer",   // several primitives grouped into one mesh
         "u32-idx",                     // 32-bit index width
         "mode-triangle-strip",         // a non-triangle-list topology
