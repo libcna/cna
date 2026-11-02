@@ -1818,7 +1818,7 @@ browser are all reached through SDL3's drivers), `HEADLESS`, or POSIX-only `TERM
 | Target | What is actually verified |
 |---|---|
 | Linux x86_64 | Primary host for the recorded native builds and private-display suites. Evidence is scoped to their renderer, driver, feature configuration and fixtures; physical peripherals, services and optional modes retain the limitations in §5 and their subsystem pages. |
-| Windows | MinGW-w64 cross builds run under Wine: `DIRECTX9` through DXVK, `SDLGPU`'s Direct3D 12 backend through vkd3d-proton, `SOFTWARE`. `windows-msvc-ci.yml` now automatically builds and tests an SDL-free native-MSVC contract and an SDLGPU Direct3D 12 smoke set; it was added on 2026-10-30 and no successful run is recorded yet. The deeper `DIRECTX9` workflow remains manual. No real-Windows hardware validation is current (§5.2). |
+| Windows | MinGW-w64 cross builds run under Wine: `DIRECTX9` through DXVK, `SDLGPU`'s Direct3D 12 backend through vkd3d-proton, `SOFTWARE`. `windows-msvc-ci.yml` now automatically builds and tests an SDL-free native-MSVC contract and an SDLGPU Direct3D 12 smoke set; it was added on 2026-10-30 and first passed on 2026-11-02 (`4fef632cf`). The deeper `DIRECTX9` workflow remains manual. No real-Windows hardware validation is current (§5.2). |
 | Web (Emscripten) | `WEBGL2` and `WEBGPU` builds run in Chrome (`docs/web-emscripten-graphics-limitations.md`). |
 | Android | `OPENGLES3`, the default there, on an x86_64 emulator; `SDLGPU` on Android is not qualified (`docs/android-graphics-limitations.md`). |
 | macOS / iOS | macOS CI builds CNA with `SOFTWARE` and runs the portable platform suites and a bundle smoke app, and (gating, since RRC-051, not run yet) builds `SDLGPU` and runs its smoke set on SDL's Metal backend; iOS is a `SOFTWARE` simulator smoke app, with non-gating `SDLGPU` legs. `SDLGPU` is the default on both but is not re-qualified there (§5.2, `docs/apple-platforms.md`). |
@@ -2028,7 +2028,8 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
   the 2026-10-13 retirement of `DIRECTX11` and `METAL` (`docs/removed-renderers.md`). Evidence that
   exists: the full tree passed with `SDLGPU` (Metal backend) on a Mac mini M4 in the AM4 campaign,
   before the retirement; Direct3D 12 runs under Wine. The automatic hosted native-MSVC Direct3D 12
-  smoke gate was added on 2026-10-30, but its first successful run is still pending. Not done:
+  smoke gate (added 2026-10-30) first passed on 2026-11-02 (`4fef632cf`): all eight SDLGPU programs on
+  the hosted runner's Direct3D 12, which multisamples `D32_FLOAT` but neither stencil format. Not done:
   native Windows hardware qualification, a re-run on Apple hardware, and any iOS build (`SDLGPU`
   has never been built for iOS; CI tries it
   as a non-gating leg). Known gaps against the retired native backends, each to be implemented or

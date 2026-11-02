@@ -913,7 +913,8 @@
     "evidence": [
       "origin/next 96298df59: general-tests-ci failed on XnaPipelineParityReportIsCurrent (fixed by 9fdb5aa6c, pushed in 4bfe6a740) and CnaInputTests 'Not Run' (CnaInputModuleTests was EXCLUDE_FROM_ALL; ffc6191ca puts it in all).",
       "Windows MSVC baseline never configured its SDLGPU preset ($<LINK_GROUP:RESCAN> refused by MSVC; 9471be678). It now builds and runs; SdlGpu_Smoke and SdlGpu_Conformance_multisample_count_clamp fail with no output, so 7fe6e3f44 uploads the CTest log for diagnosis.",
-      "4bfe6a740 broke the C API coverage gate, limitations matrix and release gate through CNA-FIX-D23's re-declared SpriteBatch::Begin; 97903d177 re-pins the coverage rule; all three pass on 97903d177."
+      "4bfe6a740 broke the C API coverage gate, limitations matrix and release gate through CNA-FIX-D23's re-declared SpriteBatch::Begin; 97903d177 re-pins the coverage rule; all three pass on 97903d177.",
+      "origin/next 4fef632cf: Windows MSVC baseline passes for the first time (SDLGPU Direct3D 12 smoke: 8/8 after VSIDE-004 -- b06cd1e2b picks a multisampling depth format, 4fef632cf asks the smoke check whether MSAA matches what the back buffer can get, since the hosted runner multisamples neither stencil format); 69c3db303 passed every other workflow, including general-tests-ci."
     ]
   }
 }
