@@ -697,8 +697,8 @@ TEST(Fna3dCompiledEffectTest, CrashCorpusIsRejectedWithoutCrashing)
 
 // CNA-FIX-L14: the compiled-effect fuzzer's draw stage found that a pass binding no shader, applied
 // while no other program was bound, left FNA3D without one: the next draw dereferenced it (SIGSEGV
-// on OpenGL, an SDL assertion on SDL_GPU). Every corpus pass that applies must now either draw or
-// refuse the draw, and the shaderless one refuses it with XNA's CannotDrawNoShader message.
+// on OpenGL, an SDL assertion on the SDLGPU driver). Every corpus pass that applies must now either
+// draw or refuse the draw, and the shaderless one refuses it with XNA's CannotDrawNoShader message.
 TEST(Fna3dCompiledEffectTest, CrashCorpusPassesDrawOrRefuseWithoutCrashing)
 {
     using namespace Microsoft::Xna::Framework;

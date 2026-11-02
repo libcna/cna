@@ -353,8 +353,9 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             // A pass that binds no shader, after nothing else bound one, leaves the native driver
             // without a program, and FNA3D's draw dereferences it (a crash on OpenGL, an SDL
-            // assertion on SDL_GPU; found by the compiled-effect fuzzer, CNA-FIX-L14). XNA refuses
-            // the draw with its CannotDrawNoShader message (Microsoft.Xna.Framework.dll resources).
+            // assertion on the SDLGPU driver; found by the compiled-effect fuzzer, CNA-FIX-L14).
+            // XNA refuses the draw with its CannotDrawNoShader message (Microsoft.Xna.Framework.dll
+            // resources).
             const auto* compiled =
                 dynamic_cast<const Fna3dCompiledEffect*>(params.compiledEffectRuntime);
             if (compiled != nullptr && !compiled->HasDrawableShadersEXT())
