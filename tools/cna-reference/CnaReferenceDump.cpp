@@ -57,6 +57,8 @@
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Short4.hpp"
 
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
@@ -74,6 +76,7 @@
 #include "JsonWriter.hpp"
 
 #include <cmath>
+#include <bit>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -1844,6 +1847,377 @@ namespace
     }
 
 
+    std::string EdgePackingHex(std::uint64_t value)
+    {
+        std::string result(16, '0');
+        constexpr char digits[] = "0123456789abcdef";
+        for (int i = 15; i >= 0; --i) { result[i] = digits[value & 15]; value >>= 4; }
+        return result;
+    }
+
+    template<class T>
+    JsonWriter EdgePackingCase(Vector4 input, T value, T vectorValue, std::uint64_t raw)
+    {
+        auto output = JsonWriter().Add("input", EdgeVector(input))
+            .Add("constructor", EdgePackingHex(value.getPackedValueProperty()))
+            .Add("vectorConstructor", EdgePackingHex(vectorValue.getPackedValueProperty()))
+            .Add("unpack", EdgeVector(value.ToVector4())).Add("vectorUnpack", EdgeVector(vectorValue.ToVector4()));
+        T packed; packed.PackFromVector4(input);
+        output.Add("pack", EdgePackingHex(packed.getPackedValueProperty())).Add("packUnpack", EdgeVector(packed.ToVector4()));
+        packed.setPackedValueProperty(static_cast<decltype(packed.getPackedValueProperty())>(raw));
+        output.Add("raw", EdgePackingHex(packed.getPackedValueProperty())).Add("rawUnpack", EdgeVector(packed.ToVector4()));
+        Vector4 expanded = packed.ToVector4(); packed.PackFromVector4(expanded);
+        return output.Add("repackedRaw", EdgePackingHex(packed.getPackedValueProperty()));
+    }
+
+    Vector4 EdgePackingInput(int index, Vector4 scales, std::uint32_t& state)
+    {
+        float nan = std::bit_cast<float>(0x7fc00000);
+        if (index == 0) return Vector4::Zero;
+        if (index == 1) return Vector4{-0.0f, 0, -0.0f, 0};
+        if (index == 2) return Vector4::One;
+        if (index == 3) return Vector4{-1};
+        if (index == 4) return Vector4{0.25f, 0.5f, 0.75f, 1};
+        auto ties = Vector4{0.5f / scales.X, 1.5f / scales.Y, 2.5f / scales.Z, 3.5f / scales.W};
+        if (index == 5) return ties;
+        if (index == 6 || index == 7)
+        {
+            int step = index == 6 ? -1 : 1;
+            return Vector4{std::bit_cast<float>(std::bit_cast<std::int32_t>(ties.X) + step),
+                std::bit_cast<float>(std::bit_cast<std::int32_t>(ties.Y) + step),
+                std::bit_cast<float>(std::bit_cast<std::int32_t>(ties.Z) + step),
+                std::bit_cast<float>(std::bit_cast<std::int32_t>(ties.W) + step)};
+        }
+        if (index == 8) return Vector4{-1.125f, -1, -0.125f, 0};
+        if (index == 9) return Vector4{0, 0.875f, 1, 1.125f};
+        if (index == 10) return Vector4{-0.5f, 0.5f, 254.5f, 255.5f};
+        if (index == 11) return Vector4{-32769, -32768, 32767, 32768};
+        if (index == 12) return Vector4{1.00048828125f, 1.00146484375f, 65504, 65520};
+        if (index == 13) return Vector4{0.0000000298023223876953125f, 0.0000000894069671630859375f,
+            0.000000059604644775390625f, 0.000060975551605224609375f};
+        if (index == 14) return Vector4{nan, std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(), -0.0f};
+        return Vector4{NextEdgeValue(state) / 8, NextEdgeValue(state) / 8, NextEdgeValue(state) / 8, NextEdgeValue(state) / 8};
+    }
+
+    JsonWriter EdgePackingColor(Color value)
+    {
+        return JsonWriter().Add("packed", EdgePackingHex(value.getPackedValueProperty()))
+            .Add("r", static_cast<int>(value.getRProperty())).Add("g", static_cast<int>(value.getGProperty())).Add("b", static_cast<int>(value.getBProperty())).Add("a", static_cast<int>(value.getAProperty()))
+            .Add("vector3", EdgeVector(value.ToVector3())).Add("vector4", EdgeVector(value.ToVector4()));
+    }
+
+    JsonWriter DumpPackingEdges()
+    {
+        const char* names[] = { "zero", "signedZero", "one", "negative", "quarters", "ties", "belowTies", "aboveTies",
+            "clampLow", "clampHigh", "byteBoundary", "shortBoundary", "halfBoundary", "halfTiny", "nonfinite",
+            "seeded0", "seeded1", "seeded2", "seeded3" };
+        std::uint64_t rawValues[] = { 0ULL, 1ULL, UINT64_MAX, 0x8000800080008000ULL, 0x7fff7fff7fff7fffULL, 0x7e007c00fc008000ULL };
+        auto packedTypes = JsonWriter();
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(255, 255, 255, 255), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & 0xffULL;
+                cases.Add(names[i], EdgePackingCase(input, Alpha8(input.W), Alpha8(input.W), raw));
+            }
+            packedTypes.Add("Alpha8", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(31, 63, 31, 1), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & 0xffffULL;
+                cases.Add(names[i], EdgePackingCase(input, Bgr565(input.X, input.Y, input.Z), Bgr565(Vector3(input.X, input.Y, input.Z)), raw));
+            }
+            packedTypes.Add("Bgr565", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(15, 15, 15, 15), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & 0xffffULL;
+                cases.Add(names[i], EdgePackingCase(input, Bgra4444(input.X, input.Y, input.Z, input.W), Bgra4444(input), raw));
+            }
+            packedTypes.Add("Bgra4444", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(31, 31, 31, 1), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & 0xffffULL;
+                cases.Add(names[i], EdgePackingCase(input, Bgra5551(input.X, input.Y, input.Z, input.W), Bgra5551(input), raw));
+            }
+            packedTypes.Add("Bgra5551", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(1, 1, 1, 1), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & 0xffffffffULL;
+                cases.Add(names[i], EdgePackingCase(input, Byte4(input.X, input.Y, input.Z, input.W), Byte4(input), raw));
+            }
+            packedTypes.Add("Byte4", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(1, 1, 1, 1), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & 0xffffULL;
+                cases.Add(names[i], EdgePackingCase(input, HalfSingle(input.X), HalfSingle(input.X), raw));
+            }
+            packedTypes.Add("HalfSingle", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(1, 1, 1, 1), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & 0xffffffffULL;
+                cases.Add(names[i], EdgePackingCase(input, HalfVector2(input.X, input.Y), HalfVector2(Vector2(input.X, input.Y)), raw));
+            }
+            packedTypes.Add("HalfVector2", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(1, 1, 1, 1), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & UINT64_MAX;
+                cases.Add(names[i], EdgePackingCase(input, HalfVector4(input.X, input.Y, input.Z, input.W), HalfVector4(input), raw));
+            }
+            packedTypes.Add("HalfVector4", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(127, 127, 127, 127), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & 0xffffULL;
+                cases.Add(names[i], EdgePackingCase(input, NormalizedByte2(input.X, input.Y), NormalizedByte2(Vector2(input.X, input.Y)), raw));
+            }
+            packedTypes.Add("NormalizedByte2", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(127, 127, 127, 127), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & 0xffffffffULL;
+                cases.Add(names[i], EdgePackingCase(input, NormalizedByte4(input.X, input.Y, input.Z, input.W), NormalizedByte4(input), raw));
+            }
+            packedTypes.Add("NormalizedByte4", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(32767, 32767, 32767, 32767), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & 0xffffffffULL;
+                cases.Add(names[i], EdgePackingCase(input, NormalizedShort2(input.X, input.Y), NormalizedShort2(Vector2(input.X, input.Y)), raw));
+            }
+            packedTypes.Add("NormalizedShort2", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(32767, 32767, 32767, 32767), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & UINT64_MAX;
+                cases.Add(names[i], EdgePackingCase(input, NormalizedShort4(input.X, input.Y, input.Z, input.W), NormalizedShort4(input), raw));
+            }
+            packedTypes.Add("NormalizedShort4", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(65535, 65535, 65535, 65535), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & 0xffffffffULL;
+                cases.Add(names[i], EdgePackingCase(input, Rg32(input.X, input.Y), Rg32(Vector2(input.X, input.Y)), raw));
+            }
+            packedTypes.Add("Rg32", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(1023, 1023, 1023, 3), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & 0xffffffffULL;
+                cases.Add(names[i], EdgePackingCase(input, Rgba1010102(input.X, input.Y, input.Z, input.W), Rgba1010102(input), raw));
+            }
+            packedTypes.Add("Rgba1010102", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(65535, 65535, 65535, 65535), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & UINT64_MAX;
+                cases.Add(names[i], EdgePackingCase(input, Rgba64(input.X, input.Y, input.Z, input.W), Rgba64(input), raw));
+            }
+            packedTypes.Add("Rgba64", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(1, 1, 1, 1), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & 0xffffffffULL;
+                cases.Add(names[i], EdgePackingCase(input, Short2(input.X, input.Y), Short2(Vector2(input.X, input.Y)), raw));
+            }
+            packedTypes.Add("Short2", cases);
+        }
+        {
+            auto cases = JsonWriter(); std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < std::size(names); ++i)
+            {
+                Vector4 input = EdgePackingInput(i, Vector4(1, 1, 1, 1), state);
+                std::uint64_t raw = rawValues[i % std::size(rawValues)] & UINT64_MAX;
+                cases.Add(names[i], EdgePackingCase(input, Short4(input.X, input.Y, input.Z, input.W), Short4(input), raw));
+            }
+            packedTypes.Add("Short4", cases);
+        }
+        auto colors = JsonWriter(); std::uint32_t colorState = EdgeSeed;
+        for (int i = 0; i < std::size(names); ++i)
+        {
+            Vector4 input = EdgePackingInput(i, Vector4{255}, colorState);
+            Color packed; packed.PackFromVector4(input);
+            auto raw = Color{}; raw.setPackedValueProperty(static_cast<UInt32>(rawValues[i % std::size(rawValues)]));
+            colors.Add(names[i], JsonWriter().Add("input", EdgeVector(input))
+                .Add("vector4", EdgePackingColor(Color{input}))
+                .Add("floats4", EdgePackingColor(Color{input.X, input.Y, input.Z, input.W}))
+                .Add("vector3", EdgePackingColor(Color{Vector3{input.X, input.Y, input.Z}}))
+                .Add("floats3", EdgePackingColor(Color{input.X, input.Y, input.Z}))
+                .Add("pack", EdgePackingColor(packed)).Add("raw", EdgePackingColor(raw))
+                .Add("nonpremultiplied", EdgePackingColor(Color::FromNonPremultiplied(input))));
+        }
+        auto integers = JsonWriter();
+        int integerInputs[][4] = { {0, 1, 254, 255}, {-1, 0, 255, 256}, {1, 2, 3, 128},
+            {32767, -32768, 256, 255}, {INT32_MIN, 0, INT32_MAX, 0}, {255, 254, 1, -1} };
+        for (int i = 0; i < std::size(integerInputs); ++i)
+        {
+            int r = integerInputs[i][0], g = integerInputs[i][1], b = integerInputs[i][2], a = integerInputs[i][3];
+            integers.Add("case" + std::to_string(i), JsonWriter().Add("r", r).Add("g", g).Add("b", b).Add("a", a)
+                .Add("rgb", EdgePackingColor(Color{r, g, b})).Add("rgba", EdgePackingColor(Color{r, g, b, a}))
+                .Add("nonpremultiplied", EdgePackingColor(Color::FromNonPremultiplied(r, g, b, a))));
+        }
+        auto interpolation = JsonWriter();
+        float factors[] = { -1, -0.0f, 0, 0.1f, 0.5f, 0.99999f, 1, 2, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(),
+            -std::numeric_limits<float>::infinity(), 1.0f / 131072, 3.0f / 131072, 0.99999994f };
+        auto first = Color{255, 1, 0, 254}; auto second = Color{0, 254, 1, 0};
+        for (int i = 0; i < std::size(factors) + 4; ++i)
+        {
+            float amount = i < std::size(factors) ? factors[i] : NextEdgeValue(colorState) / 8;
+            auto item = JsonWriter(); EdgeScalar(item, "amount", amount);
+            item.Add("lerp", EdgePackingColor(Color::Lerp(first, second, amount)))
+                .Add("multiply", EdgePackingColor(Color::Multiply(first, amount)))
+                .Add("operator", EdgePackingColor(first * amount));
+            interpolation.Add("case" + std::to_string(i), item);
+        }
+        return JsonWriter().Add("seed", static_cast<double>(EdgeSeed)).Add("packedTypes", packedTypes).Add("colors", colors)
+            .Add("integers", integers).Add("interpolation", interpolation);
+    }
+
+    Curve CurveBuild(const std::vector<Vector4>& keys, bool step, bool restoreOrder = true)
+    {
+        auto curve = Curve{};
+        for (int i = 0; i < std::size(keys); ++i)
+            curve.getKeysProperty().Add(CurveKey{keys[i].X, keys[i].Y, keys[i].Z, keys[i].W,
+                step ? CurveContinuity::Step : CurveContinuity::Smooth});
+        if (restoreOrder)
+            for (int i = 0; i < std::size(keys); ++i)
+                curve.getKeysProperty().setItemProperty(i, CurveKey{keys[i].X, keys[i].Y, keys[i].Z, keys[i].W,
+                    step ? CurveContinuity::Step : CurveContinuity::Smooth});
+        return curve;
+    }
+
+    JsonWriter CurveKeys(Curve curve)
+    {
+        auto result = JsonWriter{};
+        for (int i = 0; i < curve.getKeysProperty().getCountProperty(); ++i)
+        {
+            auto key = curve.getKeysProperty()[i];
+            auto item = JsonWriter{};
+            EdgeScalar(item, "position", key.getPositionProperty()); EdgeScalar(item, "value", key.getValueProperty());
+            EdgeScalar(item, "in", key.getTangentInProperty()); EdgeScalar(item, "out", key.getTangentOutProperty());
+            item.Add("continuity", static_cast<int>(key.getContinuityProperty()));
+            result.Add("k" + std::to_string(i), item);
+        }
+        return result;
+    }
+
+    JsonWriter CurveCase(const std::vector<Vector4>& keys, bool step)
+    {
+        auto curve = CurveBuild(keys, step);
+        auto output = JsonWriter{}.Add("keys", CurveKeys(curve))
+            .Add("insertionKeys", CurveKeys(CurveBuild(keys, step, false))).Add("count", curve.getKeysProperty().getCountProperty())
+            .Add("constant", curve.getIsConstantProperty()).Add("defaultPre", static_cast<int>(curve.getPreLoopProperty())).Add("defaultPost", static_cast<int>(curve.getPostLoopProperty()));
+        auto evaluations = JsonWriter{};
+        float first = std::size(keys) == 0 ? 0 : keys[0].X;
+        float span = std::size(keys) <= 1 ? 1 : keys[std::size(keys) - 1].X - first;
+        float amounts[] = { -2, -1, -0.5f, -0.0f, 0, 0.25f, 0.5f, 1, 1.5f, 2, 3 };
+        for (int pre = 0; pre < 5; ++pre)
+        for (int post = 0; post < 5; ++post)
+        {
+            curve.setPreLoopProperty(static_cast<CurveLoopType>(pre)); curve.setPostLoopProperty(static_cast<CurveLoopType>(post));
+            auto item = JsonWriter{}.Add("pre", static_cast<int>(curve.getPreLoopProperty())).Add("post", static_cast<int>(curve.getPostLoopProperty()));
+            auto values = JsonWriter{};
+            for (int i = 0; i <= std::size(amounts); ++i)
+            {
+                float position = i == std::size(amounts) ? std::numeric_limits<float>::quiet_NaN() : first + span * amounts[i];
+                auto value = JsonWriter{}; EdgeScalar(value, "position", position); EdgeScalar(value, "value", curve.Evaluate(position));
+                values.Add("p" + std::to_string(i), value);
+            }
+            evaluations.Add("pre" + std::to_string(pre) + "post" + std::to_string(post), item.Add("values", values));
+        }
+        auto tangents = JsonWriter{};
+        for (int input = 0; input < 3; ++input)
+        for (int outgoing = 0; outgoing < 3; ++outgoing)
+        {
+            auto both = CurveBuild(keys, step); both.ComputeTangents(static_cast<CurveTangent>(input), static_cast<CurveTangent>(outgoing));
+            auto each = CurveBuild(keys, step);
+            for (int i = 0; i < std::size(keys); ++i) each.ComputeTangent(i, static_cast<CurveTangent>(input), static_cast<CurveTangent>(outgoing));
+            auto single = CurveBuild(keys, step); single.ComputeTangents(static_cast<CurveTangent>(input));
+            auto singleEach = CurveBuild(keys, step);
+            for (int i = 0; i < std::size(keys); ++i) singleEach.ComputeTangent(i, static_cast<CurveTangent>(input));
+            tangents.Add("in" + std::to_string(input) + "out" + std::to_string(outgoing), JsonWriter{}.Add("both", CurveKeys(both))
+                .Add("each", CurveKeys(each)).Add("single", CurveKeys(single)).Add("singleEach", CurveKeys(singleEach)));
+        }
+        try { curve.ComputeTangent(-1, CurveTangent::Flat); output.Add("negativeIndex", std::string("none")); }
+        catch (const System::ArgumentOutOfRangeException&) { output.Add("negativeIndex", std::string("ArgumentOutOfRangeException")); }
+        try { curve.ComputeTangent(static_cast<int>(std::size(keys)), CurveTangent::Flat, CurveTangent::Linear); output.Add("endIndex", std::string("none")); }
+        catch (const System::ArgumentOutOfRangeException&) { output.Add("endIndex", std::string("ArgumentOutOfRangeException")); }
+        return output.Add("evaluations", evaluations).Add("tangents", tangents);
+    }
+
+    JsonWriter DumpCurveEdges()
+    {
+        auto cases = JsonWriter{};
+        cases.Add("empty", CurveCase(std::vector<Vector4>{}, false));
+        cases.Add("single", CurveCase(std::vector<Vector4>{ Vector4{2, 7, 3, 4} }, false));
+        cases.Add("smooth", CurveCase(std::vector<Vector4>{ Vector4{0, 1, 2, 3}, Vector4{1, -2, 4, 5}, Vector4{3, 5, 6, 7} }, false));
+        cases.Add("stepShifted", CurveCase(std::vector<Vector4>{ Vector4{2, 1, 0, 0}, Vector4{4, 9, 0, 0} }, true));
+        cases.Add("duplicateStart", CurveCase(std::vector<Vector4>{ Vector4{0, 0, 0, 0}, Vector4{0, 10, 0, 0}, Vector4{1, 20, 0, 0} }, false));
+        cases.Add("allEqual", CurveCase(std::vector<Vector4>{ Vector4{0, 3, 1, 2}, Vector4{0, 9, 4, 5} }, false));
+        cases.Add("tiny", CurveCase(std::vector<Vector4>{ Vector4{0, 7, 0, 0}, Vector4{1e-11f, 9, 0, 0} }, false));
+        cases.Add("epsilon", CurveCase(std::vector<Vector4>{ Vector4{0, 7, 0, 0}, Vector4{0.00000011920928955078125f, 9, 0, 0} }, false));
+        std::uint32_t state = EdgeSeed;
+        for (int i = 0; i < 4; ++i)
+        {
+            auto keys = std::vector<Vector4>(3);
+            for (int k = 0; k < std::size(keys); ++k)
+                keys[k] = Vector4{static_cast<float>(k == 2 ? 3 : k), NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            cases.Add("seeded" + std::to_string(i), CurveCase(keys, false));
+        }
+        return JsonWriter{}.Add("seed", static_cast<double>(EdgeSeed)).Add("cases", cases);
+    }
+
 }
 
 int main(int argc, char** argv)
@@ -1864,6 +2238,8 @@ int main(int argc, char** argv)
     root.Add("QuaternionEdges", DumpQuaternionEdges());
     root.Add("MatrixEdges", DumpMatrixEdges());
     root.Add("GeometryEdges", DumpGeometryEdges());
+    root.Add("PackingEdges", DumpPackingEdges());
+    root.Add("CurveEdges", DumpCurveEdges());
     root.Add("MatrixPerspectiveEdges", DumpMatrixPerspectiveEdges());
 
     std::string json = root.ToString();

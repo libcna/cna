@@ -935,28 +935,23 @@ TEST(HalfTypeHelperTest, NegativeZero)
 TEST(HalfTypeHelperTest, PositiveInfinity)
 {
     const float inf = std::numeric_limits<float>::infinity();
-    EXPECT_EQ(HalfTypeHelper::Convert(inf), 0x7C00u);
-    EXPECT_TRUE(std::isinf(HalfTypeHelper::Convert(static_cast<uint16_t>(0x7C00u))));
-    EXPECT_GT(HalfTypeHelper::Convert(static_cast<uint16_t>(0x7C00u)), 0.0f);
+    EXPECT_EQ(HalfTypeHelper::Convert(inf), 0x7FFFu);
+    EXPECT_EQ(HalfTypeHelper::Convert(static_cast<uint16_t>(0x7C00u)), 65536.0f);
 }
 
 TEST(HalfTypeHelperTest, NegativeInfinity)
 {
     const float ninf = -std::numeric_limits<float>::infinity();
-    EXPECT_EQ(HalfTypeHelper::Convert(ninf), 0xFC00u);
-    EXPECT_TRUE(std::isinf(HalfTypeHelper::Convert(static_cast<uint16_t>(0xFC00u))));
-    EXPECT_LT(HalfTypeHelper::Convert(static_cast<uint16_t>(0xFC00u)), 0.0f);
+    EXPECT_EQ(HalfTypeHelper::Convert(ninf), 0xFFFFu);
+    EXPECT_EQ(HalfTypeHelper::Convert(static_cast<uint16_t>(0xFC00u)), -65536.0f);
 }
 
-TEST(HalfTypeHelperTest, NaNPreservesNaN)
+TEST(HalfTypeHelperTest, NaNSaturatesToTheFiniteXnaEndpoint)
 {
     const float nan = std::numeric_limits<float>::quiet_NaN();
     const uint16_t h = HalfTypeHelper::Convert(nan);
-    // Must be a NaN half: exponent = 0x1F (all ones), mantissa != 0
-    EXPECT_EQ(h & 0x7C00u, 0x7C00u);
-    EXPECT_NE(h & 0x03FFu, 0u);
-    // Round-trip: Convert(NaN half) must produce a NaN float
-    EXPECT_TRUE(std::isnan(HalfTypeHelper::Convert(h)));
+    EXPECT_EQ(h, 0x7fffu);
+    EXPECT_EQ(HalfTypeHelper::Convert(h), 131008.0f);
 }
 
 TEST(HalfTypeHelperTest, DenormalSmallest)
@@ -986,17 +981,15 @@ TEST(HalfTypeHelperTest, SmallFloatBecomesZero)
 TEST(HalfSingleEdgeTest, PositiveInfinity)
 {
     HalfSingle v(std::numeric_limits<float>::infinity());
-    EXPECT_EQ(v.getPackedValueProperty(), 0x7C00u);
-    EXPECT_TRUE(std::isinf(v.ToSingle()));
-    EXPECT_GT(v.ToSingle(), 0.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0x7FFFu);
+    EXPECT_EQ(v.ToSingle(), 131008.0f);
 }
 
 TEST(HalfSingleEdgeTest, NegativeInfinity)
 {
     HalfSingle v(-std::numeric_limits<float>::infinity());
-    EXPECT_EQ(v.getPackedValueProperty(), 0xFC00u);
-    EXPECT_TRUE(std::isinf(v.ToSingle()));
-    EXPECT_LT(v.ToSingle(), 0.0f);
+    EXPECT_EQ(v.getPackedValueProperty(), 0xFFFFu);
+    EXPECT_EQ(v.ToSingle(), -131008.0f);
 }
 
 TEST(HalfSingleEdgeTest, NegativeZeroRoundTrip)

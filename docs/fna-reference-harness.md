@@ -195,7 +195,7 @@ validation and golden regeneration remain separate integration-owner work.
 `ValueEdgeReference.cs` and the native dump add **Vector2Edges** and
 **MatrixPerspectiveEdges**. They call each implementation directly with identical inputs;
 the strict comparator is unchanged. These categories are explicit opt-ins to its CLI,
-and mandatory in the recipe's ten-category FNA repeatability check alongside the follow-up categories below.
+and mandatory in the recipe's twelve-category FNA repeatability check alongside the follow-up categories below.
 
 | Family | Reviewed input domain and operations |
 |---|---|
@@ -227,7 +227,7 @@ fresh FNA run. No genuine XNA binaries were run for CONF-003.
 
 On Linux x86_64, Release/SOFTWARE/shared CNA and the pinned FNA/net8 reference, the strict
 initial zero-tolerance edge comparison reported **60 differences**, all retained.
-Follow-up 1 expanded the audit to **155**; follow-up 2 brought it to **566**. The current geometry batch has **680 retained and zero undecided** diagnostics; see follow-up 3 below:
+Follow-up 1 expanded the audit to **155**; follow-up 2 brought it to **566**. The geometry batch reached **680 retained and zero undecided** diagnostics. The packing batch reached **807 retained and zero undecided** after the shipped-XNA half IL correction. Current Curve coverage has **1,802 retained and zero undecided** after shipped-XNA Curve IL inspection; see follow-ups 3–5 below:
 
 | Witnesses | Count of comparator diagnostics | Disposition |
 |---|---:|---|
@@ -248,11 +248,12 @@ After generating fresh dumps with the recipe and `cna_reference_dump`, run:
 python3 scripts/compare-fna-reference.py "$FNA_EDGE_REFERENCE" "$CNA_EDGE_CANDIDATE" \
   --category Vector2Edges --category MatrixPerspectiveEdges \
   --category Vector3Edges --category Vector4Edges --category QuaternionEdges \
-  --category MatrixEdges --category GeometryEdges --tolerance 0
-# Expected exit 1: 680 documented retained diagnostics, preserved in the raw diagnostic.
+  --category MatrixEdges --category GeometryEdges --category PackingEdges \
+  --category CurveEdges --tolerance 0
+# Expected exit 1: 1,802 exact retained XNA differences.
 python3 tools/fna-reference/check-value-edges.py "$FNA_EDGE_REFERENCE" "$CNA_EDGE_CANDIDATE"
-# Expected exit 0: exactly 680 retained differences; every other selected field matches.
-# Unlisted, changed or disappearing differences fail review.
+# Expected exit 0: 1,802 exact retained XNA differences, zero undecided.
+# Every other field must match; unlisted, changed or disappearing differences fail.
 export FNA_EDGE_REFERENCE CNA_EDGE_CANDIDATE
 python3 -B tools/fna-reference/test_value_edges.py -v
 ```
@@ -475,3 +476,177 @@ expansion, then Curve, remain unstarted. General geometry precision, invalid fru
 nonfinite convex-volume inputs and unselected array/aliasing routes are not qualified by this
 comparison. The negative-radius disposition preserves the ported algorithm; it is not a
 separate empirical qualification of that input against Microsoft XNA.
+
+
+### Follow-up 4: Color and all 17 PackedVector types
+
+`PackingEdgeReference.cs` and the native dump add **PackingEdges**: **366 cases, 10,654 scalar
+leaves**. Every packed word uses exactly **16 lowercase hexadecimal digits**, including 8/16/32-bit
+storage, so no 64-bit value crosses JSON's floating-point integer boundary. Expanded float channels
+use the same explicit `+zero`/`-zero`/`nan`/`+inf`/`-inf` classifications as earlier probes.
+
+| Group | Cases | Reviewed domain |
+|---|---:|---|
+| packedTypes | 323 (19 per type) | Alpha8, Bgr565, Bgra4444, Bgra5551, Byte4, HalfSingle, HalfVector2, HalfVector4, NormalizedByte2/4, NormalizedShort2/4, Rg32, Rgba1010102, Rgba64, Short2/4. Component and vector constructors (Alpha8/HalfSingle have only scalar constructors), IPackedVector.PackFromVector4/ToVector4, raw PackedValue setter/getter, and re-packing the raw expansion. No universal lossless float round-trip assumption. |
+| colors | 19 | Color(Vector4), Color(Vector3), three/four-float constructors, PackFromVector4, raw PackedValue setter/getter, FromNonPremultiplied(Vector4); each result emits RGBA, packed word, ToVector3 and ToVector4. |
+| integers | 6 | Three/four-int constructors and FromNonPremultiplied(int,int,int,int). Byte boundaries and signed extremes; integer premultiplication products are deliberately within Int32 range. Int32.MinValue/MaxValue are paired with alpha zero; no C++ signed-overflow claim. |
+| interpolation | 18 | Color.Lerp, Multiply and Color*scale between fixed colors (255,1,0,254)/(0,254,1,0), with endpoint/extrapolation/NaN/infinite/subunit fixed-point factors and four seeded factors. |
+
+The 19 vector cases are zero, signed zero, one, negative one, quarters, channel half-ties,
+the immediately preceding/following Single at each tie, low/high clamp vectors, byte/short
+limits, half-float normal/subnormal/overflow boundaries, nonfinite channels and four seeded
+vectors. Tie channels are (0.5/sX,1.5/sY,2.5/sZ,3.5/sW), where s is the format's integer
+channel maximum (31/63/31 for Bgr565, 31/31/31/1 for Bgra5551, 1023/1023/1023/3 for
+Rgba1010102; 255,15,127,32767,65535 as appropriate elsewhere; raw integer and half types use 1).
+Alpha8 consumes W, HalfSingle consumes X, and smaller vector types consume their documented
+leading channels. Only the common IPackedVector ToVector4 expansion is newly compared; natural
+ToVector2/ToVector3/ToAlpha/ToSingle methods remain covered by earlier tests, not a new paired claim.
+
+The half boundary vector is (1.00048828125,1.00146484375,65504,65520); the tiny vector is
+(2^-25,3*2^-25,2^-24,1023*2^-24). The nonfinite vector uses a positive canonical Single NaN
+(bits 7fc00000), +infinity, -infinity and -zero; arbitrary NaN payloads/signs are unassessed.
+For each case, raw words cycle through 0, 1, ffffffffffffffff, 8000800080008000,
+7fff7fff7fff7fff, 7e007c00fc008000, masked to the type's width. This includes the otherwise
+unreachable minimum SNORM codes and exponent-31 half codes.
+
+The deterministic **0xC0FFEE03** LCG resets for every packed type and for the Color vector
+subgroup. Four seeded vectors draw XYZW/8, with C++ brace initialization enforcing draw order.
+The four seeded interpolation factors continue the Color subgroup's state after its 16 vector
+draws. All fixed and seeded input vectors, raw words, integer channels and interpolation factors
+are emitted. No timestamp or standard-library random generator is involved.
+
+The initial strict comparison reported **175 packing diagnostics** before the half correction below:
+
+| Disposition | Count | Evidence boundary |
+|---|---:|---|
+| Minimum SNORM raw-code expansion | 39 retained | `b6f127b15`, inspected PackUtils.UnpackSNorm decision: 0x80/0x8000 expands to exactly -1 in CNA, while FNA divides the signed value by 127/32767. Four NormalizedByte/Short types; the repacked words agree. |
+| Color fixed-point Lerp/Multiply/operator | 40 retained | `1ad0a3916`, ISSUE-132 and its 1,782-check ColorFixedPointOracle: NaN Lerp retains the first color, positive-infinite scaling saturates nonzero channels, and packed-factor boundaries differ from FNA's floating arithmetic. Exact paths/values are frozen, including derived expanded channels. |
+| HalfSingle/HalfVector2/HalfVector4 decode and repack | 96 initially undecided; now settled | The subsequent shipped-XNA HalfUtils IL inspection below requires extended finite decoding and different saturation. These observations are no longer accepted as IEEE behavior or left undecided. |
+
+Before correction, all selected constructor and PackFromVector4 words matched FNA. All Color
+constructors/premultiplication/int/raw conversions still match. The actual pinned FNA Color
+constructors already use Math.Round; historical comments describing truncation are not authoritative.
+
+The initial 96 half observations (15 HalfSingle, 27 HalfVector2, 54 HalfVector4) prompted inspection
+of the installed original Microsoft XNA 4.0 Windows assembly. The types live in
+**Microsoft.Xna.Framework.dll**, SHA-256
+`38e7093f52d7474bbc6256906519781a1210d7da50a1c667b52716fcf49ca130`, version `4.0.0.0`,
+public key token `842cf8be1de50553`. The
+[HalfUtils inspection and local regeneration notes](../tools/fna-reference/xna-half/README.md) identify:
+
+- `Unpack(uint16)`, 139 bytes, IL_005f–IL_008a: exponent 31 is finite, so 7c00/7e00/7fff
+  expand to 65536/98304/131008 (with the stored sign). CNA's former IEEE special case was wrong.
+- `Pack(float32)`, 145 bytes, IL_001b–IL_002c: unsigned absolute bits above 47ffefff saturate
+  to sign|7fff, including NaN/infinity. IL_002e–IL_008e handles subnormals, rebias and ties to even.
+  Exponent-31 finite values are representable. FNA's IEEE-style overflow/NaN packing also differs.
+- Constructors, interface pack/unpack, natural ToSingle/ToVector2/ToVector4 and raw PackedValue
+  paths were inspected: they flow through HalfUtils without normalizing the raw integer setter.
+
+Microsoft disassembly stays outside the repository; the linked notes provide the local
+`ikdasm` regeneration command and original prose summaries, without copied instruction listings.
+CNA now matches the inspected integer/bit behavior. `XnaHalfConversionTest` has three independent
+literal-bit regressions for helper overloads and public paths; all three failed before the fix.
+Old native IEEE expectations were corrected to the authoritative XNA contract. The original
+assembly probe compiles with mcs for all 57 half records, including every originally undecided
+input, but Mono fails in the mixed-mode `<Module>` initializer (`_getFiberPtrId`) before any
+measurement. **No successful XNA runtime measurement is claimed**; the exact shipped IL settles it.
+
+After correction, **57 of the original 96 fields match FNA**, while 39 existing paths have changed
+XNA results and nine constructor/pack paths become new retained differences. The **48 remaining
+half diagnostics** are frozen against the new IL decision: nine constructor/PackFrom words,
+18 expanded constructor/interface channels, 21 raw repacked words. Direct raw expansion agrees
+with FNA. Example: positive Single NaN now packs to 7fff and expands to 131008 in CNA, while FNA
+packs 7e00 and expands to 98304; raw ffff expands to -131008 on both, then repacks to ffff in CNA
+and fc00 in FNA. See `half_retained_differences()` for every exact path and both values.
+
+The eight-edge-category raw comparison now reports **807 retained differences, zero undecided**
+(previous 680 + 39 SNORM + 40 Color + 48 half). The default audit passes only on those exact
+path/value pairs and an equal remainder at tolerance zero. The temporary undecided inventory and
+bypass are removed; changed, unlisted or disappearing differences fail. This remains a bounded
+disposition audit, not FNA parity.
+
+Verification on 2026-11-02, the same Linux x86_64 Release/SOFTWARE/shared build and pinned FNA
+source/assembly: reference recipe **11/11** categories reproduce at zero tolerance, byte-identical
+dumps; no SDL3/FNA3D loaded by the managed probe. Native targets cna_reference_dump, CnaMathTests
+and CnaGraphicsTests built. CnaMathTests **1,023 passed, zero failed, two existing fixture skips**;
+selected CPU-only packed-vector/value-contract/oracle graphics suites **141 passed, zero failed,
+zero skipped**. This includes **20 new tests** (three Color, one for each packed type), using
+literal independent reference words/channel values and the existing measured-XNA fixed-point
+witnesses. Those initial tests left half decoding undecided; the additional IL regressions now settle that contract. Real-dump
+suite **26 passed**; recipe tests **5 passed**. Native executions unset both displays and use
+offscreen video/dummy audio; no GPU/window test is included.
+
+Half correction verification: the affected targets build; the selected CPU packing suites pass
+with **154 tests**, including all three new IL regressions, and CnaMathTests passes **1,023 tests**
+with two existing fixture skips. The real-dump suite passes **26 tests** on the corrected candidate;
+the default audit passes with **807 retained, zero undecided**. FNA source/dumps are unchanged.
+No GraphicsDevice, GPU/window, browser, native-Windows runtime or new original-assembly execution
+success is claimed. General hash/text contracts, all named Color constants, arbitrary NaN payloads,
+integer-overflow domains and every unselected input/array/aliasing path are outside this paired coverage.
+
+
+### Follow-up 5: Curve evaluation and tangents
+
+`CurveEdgeReference.cs` and the native dump add **CurveEdges**, with **12 input curves and
+13,003 scalar leaves**. Each curve runs every **25 pre/post CurveLoopType combination** at
+**12 positions** (3,600 evaluations total), and all **nine in/out CurveTangent combinations**
+through both ComputeTangents overloads and both ComputeTangent overloads. Every tangent run
+uses freshly constructed keys; Curve.Clone reference identity/shallow-copy semantics are not assumed.
+
+Fixed inputs: empty; single (position 2/value 7); smooth keys (position,value,in,out) at
+(0,1,2,3),(1,-2,4,5),(3,5,6,7); shifted Step keys (2,1,0,0),(4,9,0,0); duplicate-start keys
+(0,0,0,0),(0,10,0,0),(1,20,0,0); all-equal keys (0,3,1,2),(0,9,4,5); tiny and epsilon spans
+with value 7 at position 0 and value 9 at 1e-11 or 2^-23, initially zero tangents. Four seeded
+curves use positions 0,1,3 and draw value/TangentIn/TangentOut per key sequentially from the same
+**0xC0FFEE03** LCG. The seed resets once before all four curves (36 coordinate draws).
+
+Finite evaluation positions are first + span * [-2,-1,-0.5,-0,0,0.25,0.5,1,1.5,2,3], followed
+by NaN. Empty/single curves use a synthetic first/span for queries; all-equal curves query only
+their actual position and NaN. This keeps finite cyclic counts small and avoids undefined C++
+float-to-int overflow for nonfinite or very distant cycle counts. Infinity cycle positions and
+zero-span outside-loop behavior are explicitly unassessed. Negative and end key-index exception
+names are recorded through the two single-key tangent overloads.
+
+FNA inserts equal-position keys in a different order from CNA. The initial direct-Add probe
+reported 1,355 diagnostics, many downstream effects of unequal actual evaluation inputs. The
+final probe records **insertionKeys** separately, then replaces indexed keys with fresh keys
+in the intended sorted input order before evaluation/tangent computation. Every input position
+list is nondecreasing, so these replacements keep the position and only restore the intended
+key data. The evidence tests require identical actual evaluation keys on both implementations.
+The insertion discrepancy remains explicit; it is not silently filtered or treated as XNA evidence.
+
+Final Curve diagnostics: **995**:
+
+| Disposition | Count | Evidence / limitation |
+|---|---:|---|
+| Evaluate boundaries | 975 retained | Verified existing `d753d0997`: NaN scan outcome, normalized Step segment threshold, duplicate/tiny segment selection (span <=1e-10), and last-key tangent for post-linear extrapolation. Exact case/query/loop names and both values are frozen by `curve_retained_differences()`; 68 grouped observations expand only to explicitly listed loop keys. |
+| Equal-position insertion ordering | **8 retained** | For duplicateStart, FNA Add gives values [10,0,20], CNA [0,10,20]. For allEqual, FNA reverses the two keys, including their value/in/out fields; CNA preserves insertion order. Local [Curve inspection notes](../tools/fna-reference/xna-curve/README.md), Add `IL_0020`–`IL_005a`, advances past equal keys: CNA agrees. The original direct-Add dumps remain in the lane report. |
+| Tiny-span Smooth outgoing tangent | **12 retained** | Keys at positions [0,1e-11], values [7,9], initially zero tangents. FNA gives first outgoing tangent 0, CNA 2 through the affected bulk/single-key forms. Shipped Curve.ComputeTangent `IL_010e`–`IL_011f` checks the value delta against 2^-23; `IL_012d`–`IL_013e` calculates 2 for this input. Delegating overloads share that calculation. CNA agrees for these selected fields; no production change is needed. |
+
+No Curve production source was changed. Eight new native regressions provide independent literal
+pre/post loop values, empty/single behavior, existing measured-XNA Step/tiny behavior, linear/smooth
+normal-span tangents through every overload, index-refusal state preservation, and the two
+IL-settled contracts above. Shape/omission controls cover every loop/tangent entry;
+mutation/disappearance controls protect all retained observations.
+
+Across nine edge categories, the raw comparison reports **1,802 retained diagnostics and zero
+undecided** (807 earlier + 975 existing Curve evaluation decisions + 20 shipped-IL decisions).
+The default audit passes only with that exact inventory and a remainder equal at tolerance zero.
+The temporary undecided map and inventory-only bypass have been removed. The [local inspection notes](../tools/fna-reference/xna-curve/README.md) record
+`Microsoft.Xna.Framework.dll`, version `4.0.0.0`, public key token `842cf8be1de50553`,
+SHA-256 `38e7093f52d7474bbc6256906519781a1210d7da50a1c667b52716fcf49ca130`,
+method offsets and the command to regenerate disassembly from a maintainer's own copy.
+Microsoft disassembly stays outside the repository and is not required by the audit or tests; the mixed-mode original assembly could not initialize under
+Mono, so this is not a successful original-XNA runtime measurement. The selected tangent result
+does not establish general equality of CNA and XNA tangent implementations.
+
+Verification on 2026-11-02: reference recipe **12/12** categories reproduce at zero tolerance;
+two aligned-fixture FNA dumps are byte-identical, with unchanged pinned source/assembly identity
+and no native SDL3/FNA3D loaded. cna_reference_dump and CnaMathTests build. CnaMathTests
+**1,031 passed, zero failed, two existing ShipGame fixture skips**, including all eight new Curve
+tests. Real-dump tests **30 passed**; recipe tests **5 passed**. The earlier selected CPU half/packing
+run remains **154 passed**. No GPU/window/native-Windows execution is claimed.
+
+All requested bounded families have been attempted and all observed differences are decided. The comparisons do not establish exhaustive
+Curve precision, Clone/collection reference semantics, arbitrary invalid enums, unbounded cycle
+conversion, hashes/text or the complete XNA API's behavior.

@@ -23,8 +23,9 @@ class ValueEdgeEvidenceTests(unittest.TestCase):
         cls.candidate = audit.compare.load_dump(candidate)
 
     def test_reviewed_dispositions_and_zero_tolerance_remainder(self):
-        self.assertEqual(audit.audit(self.reference, self.candidate), 680)
-        self.assertEqual(len(audit.retained_differences()), 680)
+        self.assertEqual(audit.audit(self.reference, self.candidate), 1802)
+        self.assertEqual(len(audit.retained_differences()), 1802)
+        self.assertEqual(len(audit.half_retained_differences()), 48)
 
     def test_independent_literal_witnesses_on_both_implementations(self):
         for document in (self.reference, self.candidate):
@@ -231,6 +232,118 @@ class ValueEdgeEvidenceTests(unittest.TestCase):
         for method in ("sphereIntersectsFrustum", "frustumIntersectsSphere", "frustumIntersectsSphereOut"):
             self.assertIs(self.reference["GeometryEdges"]["relations"]["negativeRadius"][method], False)
             self.assertIs(self.candidate["GeometryEdges"]["relations"]["negativeRadius"][method], True)
+
+    def test_packing_literal_words_and_color_results_on_both_implementations(self):
+        for document in (self.reference, self.candidate):
+            packing = document["PackingEdges"]
+            self.assertEqual(packing["seed"], 3237998083)
+            for name, case, expected in (("Byte4", "ties", "0000000004020200"),
+                                         ("Alpha8", "ties", "0000000000000004"),
+                                         ("HalfSingle", "halfTiny", "0000000000000000"),
+                                         ("HalfVector2", "halfTiny", "0000000000020000")):
+                for field in ("constructor", "vectorConstructor", "pack"):
+                    self.assertEqual(packing["packedTypes"][name][case][field], expected)
+            for field in ("vector4", "floats4", "pack"):
+                color = packing["colors"]["quarters"][field]
+                self.assertEqual(color["packed"], "00000000ffbf8040")
+                self.assertEqual([color[c] for c in "rgba"], [64, 128, 191, 255])
+            self.assertEqual(packing["integers"]["case1"]["rgba"]["packed"], "00000000ffff0000")
+            self.assertEqual(packing["packedTypes"]["Byte4"]["seeded0"]["input"]["X"], -0.78125)
+
+    def test_packing_omissions_on_both_sides_fail_shape_validation(self):
+        for name in self.reference["PackingEdges"]["packedTypes"]:
+            reference = copy.deepcopy(self.reference)
+            candidate = copy.deepcopy(self.candidate)
+            for document in (reference, candidate):
+                del document["PackingEdges"]["packedTypes"][name]["ties"]["vectorConstructor"]
+            with self.assertRaisesRegex(ValueError, "incomplete edge witness shape"):
+                audit.audit(reference, candidate)
+
+    def test_packing_changed_words_and_unlisted_differences_are_rejected(self):
+        changed = copy.deepcopy(self.candidate)
+        changed["PackingEdges"]["packedTypes"]["Byte4"]["ties"]["pack"] = "0000000004030201"
+        with self.assertRaisesRegex(ValueError, "unreviewed differences"):
+            audit.audit(self.reference, changed)
+        changed = copy.deepcopy(self.candidate)
+        changed["PackingEdges"]["packedTypes"]["HalfSingle"]["nonfinite"]["unpack"]["X"] = 98304
+        with self.assertRaisesRegex(ValueError, "missing retained witnesses"):
+            audit.audit(self.reference, changed)
+        changed = copy.deepcopy(self.candidate)
+        changed["PackingEdges"]["packedTypes"]["NormalizedByte2"]["negative"]["rawUnpack"]["Y"] = -2
+        with self.assertRaisesRegex(ValueError, "unreviewed differences"):
+            audit.audit(self.reference, changed)
+
+    def test_half_fields_follow_the_shipped_xna_il_decision(self):
+        reference = self.reference["PackingEdges"]["packedTypes"]["HalfSingle"]
+        candidate = self.candidate["PackingEdges"]["packedTypes"]["HalfSingle"]
+        self.assertEqual(reference["nonfinite"]["constructor"], "0000000000007e00")
+        self.assertEqual(candidate["nonfinite"]["constructor"], "0000000000007fff")
+        self.assertEqual(reference["nonfinite"]["unpack"]["X"], 98304)
+        self.assertEqual(candidate["nonfinite"]["unpack"]["X"], 131008)
+        for document in (reference, candidate):
+            self.assertEqual(document["one"]["rawUnpack"]["X"], -131008)
+        self.assertEqual(candidate["one"]["repackedRaw"], "000000000000ffff")
+        changed = copy.deepcopy(self.candidate)
+        changed["PackingEdges"]["packedTypes"]["HalfSingle"]["one"]["rawUnpack"]["X"] = "nan"
+        with self.assertRaisesRegex(ValueError, "unreviewed differences"):
+            audit.audit(self.reference, changed)
+        self.assertEqual(audit.audit(self.reference, self.candidate), 1802)
+
+    def test_curve_literal_results_and_identical_evaluation_key_data(self):
+        for document in (self.reference, self.candidate):
+            curves = document["CurveEdges"]
+            self.assertEqual(curves["seed"], 3237998083)
+            for name, expected in (("empty", "+zero"), ("single", 7)):
+                for loop in curves["cases"][name]["evaluations"].values():
+                    for point in loop["values"].values():
+                        self.assertEqual(point["value"], expected)
+            smooth = curves["cases"]["smooth"]["evaluations"]["pre0post0"]["values"]
+            self.assertEqual(smooth["p6"]["value"], -0.484375)
+            for case in curves["cases"].values():
+                self.assertEqual(case["negativeIndex"], "ArgumentOutOfRangeException")
+                self.assertEqual(case["endIndex"], "ArgumentOutOfRangeException")
+        for name, reference in self.reference["CurveEdges"]["cases"].items():
+            self.assertEqual(reference["keys"], self.candidate["CurveEdges"]["cases"][name]["keys"])
+        self.assertEqual(self.candidate["CurveEdges"]["cases"]["stepShifted"]["evaluations"]["pre0post0"]["values"]["p6"]["value"], 1)
+
+    def test_curve_matching_witness_omissions_fail_on_both_sides(self):
+        for field in ("evaluations", "tangents"):
+            reference = copy.deepcopy(self.reference)
+            candidate = copy.deepcopy(self.candidate)
+            key = "pre0post0" if field == "evaluations" else "in0out0"
+            for document in (reference, candidate):
+                del document["CurveEdges"]["cases"]["smooth"][field][key]
+            with self.assertRaisesRegex(ValueError, "incomplete edge witness shape"):
+                audit.audit(reference, candidate)
+
+    def test_curve_unlisted_and_changed_retained_values_fail(self):
+        changed = copy.deepcopy(self.candidate)
+        changed["CurveEdges"]["cases"]["smooth"]["evaluations"]["pre0post0"]["values"]["p6"]["value"] = 123
+        with self.assertRaisesRegex(ValueError, "unreviewed differences"):
+            audit.audit(self.reference, changed)
+        changed = copy.deepcopy(self.candidate)
+        changed["CurveEdges"]["cases"]["smooth"]["evaluations"]["pre0post0"]["values"]["p11"]["value"] = "+zero"
+        with self.assertRaisesRegex(ValueError, "missing retained witnesses"):
+            audit.audit(self.reference, changed)
+
+    def test_curve_insertion_and_tiny_tangent_follow_shipped_xna_il(self):
+        self.assertEqual(len(audit.CURVE_IL_RETAINED), 20)
+        for path in audit.CURVE_IL_RETAINED:
+            self.assertIn(path, audit.retained_differences())
+        changed = copy.deepcopy(self.candidate)
+        changed["CurveEdges"]["cases"]["tiny"]["tangents"]["in0out2"]["both"]["k0"]["out"] = 3
+        with self.assertRaisesRegex(ValueError, "unreviewed differences"):
+            audit.audit(self.reference, changed)
+        cases = self.candidate["CurveEdges"]["cases"]
+        self.assertEqual([cases["duplicateStart"]["insertionKeys"][f"k{i}"]["value"]
+                          for i in range(3)], ["+zero", 10, 20])
+        self.assertEqual([cases["allEqual"]["insertionKeys"][f"k{i}"]["value"]
+                          for i in range(2)], [3, 9])
+        self.assertEqual(cases["tiny"]["tangents"]["in0out2"]["both"]["k0"]["out"], 2)
+        changed = copy.deepcopy(self.candidate)
+        changed["CurveEdges"]["cases"]["tiny"]["tangents"]["in0out2"]["both"]["k0"]["out"] = "+zero"
+        with self.assertRaisesRegex(ValueError, "missing retained witnesses"):
+            audit.audit(self.reference, changed)
 
     def test_unexpected_change_is_rejected(self):
         changed = copy.deepcopy(self.candidate)

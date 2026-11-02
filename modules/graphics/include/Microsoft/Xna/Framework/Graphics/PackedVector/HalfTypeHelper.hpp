@@ -7,12 +7,12 @@
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
     /**
-     * @brief Helper providing conversion between 32-bit float and 16-bit half-precision float.
+     * @brief Helper converting Single values and XNA's 16-bit packed half representation.
      */
     struct HalfTypeHelper
     {
         /**
-         * @brief Converts a 32-bit float to a 16-bit half-precision float representation.
+         * @brief Converts a 32-bit float to XNA's 16-bit packed half representation.
          * @param f The 32-bit float to convert.
          * @return The 16-bit half-precision representation.
          */
@@ -24,38 +24,28 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
         }
 
         /**
-         * @brief Converts a 32-bit signed integer bit pattern to a 16-bit half-precision float.
+         * @brief Converts a Single bit pattern to XNA's 16-bit packed half representation.
          * @param i The 32-bit signed integer bit pattern of the source float.
          * @return The 16-bit half-precision representation.
          */
         [[nodiscard]] static uint16_t Convert(int32_t i)
         {
-            int32_t s = (i >> 16) & 0x00008000;
-            int32_t e = ((i >> 23) & 0x000000ff) - (127 - 15);
-            int32_t m = i & 0x007fffff;
-            if (e <= 0)
+            // Microsoft.Xna.Framework 4.0 HalfUtils.Pack IL_001b..IL_008e:
+            // XNA uses exponent 31 for finite values and saturates to sign|7fff.
+            const uint32_t bits = static_cast<uint32_t>(i);
+            const uint32_t sign = (bits & 0x80000000u) >> 16;
+            uint32_t magnitude = bits & 0x7fffffffu;
+            if (magnitude > 0x47ffefffu)
+                return static_cast<uint16_t>(sign | 0x7fffu);
+            if (magnitude < 0x38800000u)
             {
-                if (e < -10) return static_cast<uint16_t>(s);
-                m = m | 0x00800000;
-                int32_t t = 14 - e;
-                int32_t a = (1 << (t - 1)) - 1;
-                int32_t b = (m >> t) & 1;
-                m = (m + a + b) >> t;
-                return static_cast<uint16_t>(s | m);
+                const uint32_t mantissa = (magnitude & 0x007fffffu) | 0x00800000u;
+                const int32_t shift = 113 - static_cast<int32_t>(magnitude >> 23);
+                magnitude = shift > 31 ? 0u : mantissa >> shift;
+                return static_cast<uint16_t>(sign | ((magnitude + 0xfffu + ((magnitude >> 13) & 1u)) >> 13));
             }
-            else if (e == 0xff - (127 - 15))
-            {
-                if (m == 0) return static_cast<uint16_t>(s | 0x7c00);
-                m >>= 13;
-                return static_cast<uint16_t>(s | 0x7c00 | m | ((m == 0) ? 1 : 0));
-            }
-            else
-            {
-                m = m + 0x00000fff + ((m >> 13) & 1);
-                if ((m & 0x00800000) != 0) { m = 0; e += 1; }
-                if (e > 30) return static_cast<uint16_t>(s | 0x7c00);
-                return static_cast<uint16_t>(s | (e << 10) | (m >> 13));
-            }
+            return static_cast<uint16_t>(sign | ((magnitude + 0xc8000000u + 0xfffu +
+                                                   ((magnitude >> 13) & 1u)) >> 13));
         }
 
         /**
@@ -80,8 +70,9 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
                     bits = sign | ((exp + 127 - 15) << 23) | (mantissa << 13);
                 }
             }
-            else if (exp == 31) { bits = sign | 0x7F800000u | (mantissa << 13); }
-            else                { bits = sign | ((exp + 127 - 15) << 23) | (mantissa << 13); }
+            // HalfUtils.Unpack IL_005f..IL_008a applies the same finite exponent
+            // rebias to exponent 31; these codes do not denote IEEE NaN/infinity.
+            else { bits = sign | ((exp + 127 - 15) << 23) | (mantissa << 13); }
             float result;
             std::memcpy(&result, &bits, 4);
             return result;
